@@ -377,19 +377,50 @@ branch before its PR merges.
 - **Clicking a piece (D11):** `Stage3D`'s scene elements take a click with Edit off in every
   camera. Hit priority is fixture, then rigging, then element. A drag or a finger pan never counts as
   a click.
+  *Session 4 amendment:* the scene's surfaces stay deaf to R3F, so the priority is the scene's own —
+  fixtures and rigging take their R3F clicks first, and only a click R3F hands to `onPointerMissed`
+  is cast against the drawn elements (`ScenePicker`, `stage3d/sceneryPick.ts`). The **nearest**
+  surface decides, so a fixed wall in front of a piece hides it as it hides it from the eye, and a
+  click that meets only the venue clears the selection as before. A click on a piece leaves the
+  stage selection alone; a click on a fixture or a bar closes the popover.
 - **The popover (D11, D17):** `stage3d/SceneryPopover.tsx` opens through `EditorSurface`. Its anchor
   is a virtual element fed by `stageLabels`' projection of the piece's centre. It holds:
     - `SceneryControl` writing `programmer.setScenery` at the window's programmer fade;
     - *Release*;
     - *Edit element…*, shown at tablet width and up, where Edit exists;
     - the *Moves with* read-out.
+
+  *Session 4 amendment:* it writes through the rail band's own `useSceneryScope`, so the band and the
+  popover cannot draw or write a piece two ways; the Stage view has no programmer scope, so it is
+  always the Local arm. On a stage that is not the live project's it is read-only, with *Scenery
+  moves on the live project only* — the programmer is the live show's. The anchor follows through a
+  `StageAnchorTracker` on the label store and two new `EditorSurface` options, `followAnchor`
+  (Radix's `updatePositionStrategy="always"`) and `keepOpenWithin` (a drag on the canvas orbits
+  rather than dismisses), and `anchorRef` takes any box, not only an element. The anchor is the
+  piece's projected **box**, not a point at its centre (`elementAnchorBox`; the tracker projects the
+  box's corners too): a zero-size anchor at the centre put the popover over half the piece, found
+  driving the §9 check at desk size. *Edit element…* turns
+  Edit on with the piece selected, so its form opens in the editor panel.
 - **Edit's form:** *Moves with* lists the read, each entry linking to its editor, and the form
   gains `travelS` beside the base states.
+  *Session 4 amendment:* "linking" is opening in place: each entry opens its owner's own sheet over
+  the Stage view (`stage/OwnerEditor.tsx` — Cue properties, the stack form, the Look sheet), since
+  none of the three had a deep link and navigating away would lose the stage, the camera and the
+  form. A cue entry names its stack where the read's cues span more than one, from the stack list
+  the client already holds — the read's shape is the plan's. The read is invalidated by the cue,
+  stack and Look lists and refetched on every mount, because a Look's own scenery write invalidates
+  only that Look.
 - **Blind on stage (D12):** `useResolvedChannelSource` draws `staged` for Output + Programmer and
   Programmer when present.
 - **The Positions plan (D16):** `PositionsPlan` draws the live scenery through the same source. If
   the stage-vis doc records why the plan omits the scene, it draws drapes and Set-layer pieces only,
   and that sentence is amended.
+  *Session 4 amendment:* the doc did record it (§"The scene, built by kind": the collapsed panel
+  stays cheap), so the plan draws every drape and the Set layer (`Stage3D`'s `sceneSubset`,
+  `plansScenery`), and the sentence now says so. It follows the window's Venue · Set · Haze layers
+  as the Stage view does (Chris, 2026-10-07, asked during review), and its haze is never clipped at
+  the proscenium, which it does not draw. A click on a piece there opens nothing: the popover is the
+  Stage route's (`sceneryPopover`).
 - **Tests:** the read; element picking order; a pan never opening the popover; the anchor projection
   for a moved camera; `staged` per source; the form's list and `travelS` field.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Scenery that moves with the show" and §"The

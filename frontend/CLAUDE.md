@@ -279,7 +279,8 @@ so a remount keeps where the operator has looked since and a re-pick lands again
 header's picker, and saved from it with *Save this view…*. **Or an unsaved seat** (session 3):
 *Sit in a seat…* (S) picks one from the seating mesh and holds it as `seat:<uuid>:<seat id>` in the
 same key — no new announce key — until *Save this view…* makes it a `SEAT` row. Scene elements
-(`stage_elements`) are read only by the Stage route's canvas and built per kind in
+(`stage_elements`) are read by the Stage route's canvas — and, drapes and the Set layer only, by
+the Positions plan (scenery-programmer plan D16, `sceneSubset`) — and built per kind in
 `components/stage3d/scene/builders/` — pure functions a node test pins, one per kind, the seats
 exactly `lib/stageSeats.ts`'s. The View menu's Venue · Set · Seating · Haze are per window
 (`sessionStorage`), and so is the **vis source** now, riding `windows.viewOptions` as `source` beside
@@ -427,8 +428,21 @@ form-3 `programmerScenery` (`useProgrammerScenery`), written by `programmerSetSc
 `programmerClearScenery` as operator gestures (`sendGesture`; a refusal is `programmer.error` and the
 existing toast), and edited in the rail's Scenery band (§"The rail's tabs").
 `scenery.state`'s per-entry `source` and blind `staged` list are parsed into `LiveScenery`, both
-optional so an older desk's frame parses as before; the Stage view does not draw `staged` yet (that
-plan's session 4). See the stage-vis doc's §"Scenery that moves with the show".
+optional so an older desk's frame parses as before. **The stage draws Blind** (that plan's D12,
+session 4): the Output + Programmer and Programmer sources lay `staged` over the live scenery
+(`sceneryForSource`, in `StageChannelSourceProvider`), Output draws live. **And a click moves a
+piece** (D11): with Edit off, in every camera, a click on a drawn, flown or Set-layer element —
+once nothing of the rig is under the pointer (fixture, then rigging, then the piece; a drag or a
+finger pan never counts) — opens `stage3d/SceneryPopover.tsx` through `EditorSurface`: its
+`SceneryControl` writing the programmer's scenery at the window's fade (`useSceneryScope`, the
+band's own), *Release*, *Edit element…* where Edit exists, and *Moves with* from `GET
+stage-elements/{id}/scenery` (`MovesWithList`, which the element form draws too, each entry opening
+its owner's editor in place — `stage/OwnerEditor.tsx`; the form also takes `travelS`). The popover
+is anchored at a virtual element fed by the label layer's per-frame projection of the piece's centre
+and box (`labelStore.track`, `EditorSurface`'s `followAnchor`), so it sits beside the piece and
+follows it while orbiting; a
+bottom sheet on an upright phone; never in a `render_view` capture. See the stage-vis doc's
+§"Scenery that moves with the show" and §"The label layer".
 
 **One-shot effects — the cannons** (session 9; lighting7 `docs/fixtures-engineering.md`
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
@@ -470,7 +484,9 @@ carries *Allow fixture commands over remote access* (`allowCommands`), which MCP
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group
 chip dims the units outside it, and the Plan tab is `Stage3D` on the plan section, lazily imported so
-three.js stays out of the app shell. It is mounted on every route, so everything below
+three.js stays out of the app shell — drawing the drapes and the Set layer at the state the
+window's vis source has them (scenery-programmer plan D16) and the window's Venue · Set · Haze
+layers allow, so a closed tab or a flown piece shows where the light lands. It is mounted on every route, so everything below
 `CollapsiblePanel` — queries, channel subscriptions, the canvas — unmounts while it is closed.
 
 **Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*

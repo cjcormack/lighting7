@@ -369,6 +369,21 @@ export function Stage() {
   // the gizmos and side panels need the room.
   const showEditToggle = isTabletOrLarger
   const editingActive = editMode && isTabletOrLarger
+
+  // A clicked piece's popover (scenery-programmer plan D11) offers *Edit element…* where this window
+  // has Edit: it turns Edit on with the piece selected, so its form opens in the editor panel.
+  const sceneryPopover = useMemo(
+    () => ({
+      onEditElement: showEditToggle
+        ? (uuid: string) => {
+            setEditMode(true)
+            selectOne({ kind: 'element', uuid })
+            setPanelCollapsed(false)
+          }
+        : undefined,
+    }),
+    [showEditToggle, selectOne],
+  )
   // Editing on a section: the edit layer over the canvas takes the pointer — marquee, snap, guides,
   // handles, the tray's placements — and draws in the section's metres (D1, session 5).
   const sectionEditing = editingActive && isOrtho
@@ -1298,6 +1313,7 @@ export function Stage() {
                 persistCamera
                 caption={caption}
                 showScene
+                sceneryPopover={sceneryPopover}
                 layers={sceneLayers}
                 lightBudget={lightBudget}
                 goboSurfaces={goboSurfaces}

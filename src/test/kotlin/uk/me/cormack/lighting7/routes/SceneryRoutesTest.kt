@@ -449,6 +449,71 @@ class SceneryRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `an element's scenery read lists every owner that moves it, in show order`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (tabs, moon) = tabsAndMoon(client)
+        val act2 = stack(client, "Act 2")
+        val act1 = stack(client, "Act 1")
+        // Act 2 was made first; put it after Act 1 in the show.
+        client.post("/api/rest/projects/$projectId/cue-stacks/reorder") {
+            contentType(ContentType.Application.Json)
+            setBody(ReorderStacksRequest(stackIds = listOf(act1, act2)))
+        }
+        val q1 = cue(client, act1, "Q1")
+        val q2 = cue(client, act1, "Q2")
+        val q9 = cue(client, act2, "Q9")
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q9", change(moon, trim(3.0))).status)
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q2", change(moon, trim(7.0), transitionMs = 4000)).status)
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q1", change(tabs, open(0.0))).status)
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cue-stacks/$act1", change(moon, buildJsonObject { put("visible", false) })).status)
+        suspend fun look(name: String) = client.post("/api/rest/projects/$projectId/looks") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("name", name) })
+        }.body<JsonObject>()["id"]!!.jsonPrimitive.content.toInt()
+        val night = look("night")
+        val dusk = look("Dusk")
+        assertEquals(HttpStatusCode.OK, putScenery(client, "looks/$night", change(moon, trim(3.0))).status)
+        assertEquals(HttpStatusCode.OK, putScenery(client, "looks/$dusk", change(moon, trim(5.0))).status)
+
+        val moonId = client.get("/api/rest/projects/$projectId/stage-elements").body<List<StageElementDto>>().single { it.uuid == moon }.id
+        val resp = client.get("/api/rest/projects/$projectId/stage-elements/$moonId/scenery")
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val read = resp.body<ElementSceneryDto>()
+
+        // Act 1's Q2 before Act 2's Q9: the stacks' order, not the rows'. Q1 moves only the tabs.
+        assertEquals(listOf(q2 to "2", q9 to "9"), read.cues.map { it.cueId to it.label })
+        assertEquals(listOf(act1, act2), read.cues.map { it.stackId })
+        assertEquals(4000L, read.cues.first().transitionMs)
+        assertEquals(null, read.cues.last().transitionMs, "no clock of its own: moves with the cue's fade")
+        assertEquals("7.0", read.cues.first().state["trimM"]!!.jsonPrimitive.content)
+        assertEquals(listOf(act1 to "Act 1"), read.sets.map { it.stackId to it.name })
+        assertEquals("false", read.sets.single().state["visible"]!!.jsonPrimitive.content)
+        assertEquals(listOf(dusk to "Dusk", night to "night"), read.looks.map { it.lookId to it.name }, "Looks by name, any case")
+
+        // The tabs: one cue, and no set or Look.
+        val tabsId = client.get("/api/rest/projects/$projectId/stage-elements").body<List<StageElementDto>>().single { it.uuid == tabs }.id
+        val tabsRead = client.get("/api/rest/projects/$projectId/stage-elements/$tabsId/scenery").body<ElementSceneryDto>()
+        assertEquals(listOf(q1), tabsRead.cues.map { it.cueId })
+        assertTrue(tabsRead.sets.isEmpty() && tabsRead.looks.isEmpty())
+
+        // A piece nothing moves answers three empty lists, not a 404.
+        val (sofaId, _) = element(client, buildJsonObject {
+            put("name", "Sofa"); put("kind", "OBJECT"); put("layer", "SET")
+            put("widthM", 2.0); put("depthM", 0.9); put("heightM", 0.8)
+        })
+        val sofaRead = client.get("/api/rest/projects/$projectId/stage-elements/$sofaId/scenery")
+        assertEquals(HttpStatusCode.OK, sofaRead.status, sofaRead.bodyAsText())
+        val sofa = sofaRead.body<ElementSceneryDto>()
+        assertTrue(sofa.cues.isEmpty() && sofa.sets.isEmpty() && sofa.looks.isEmpty())
+
+        assertEquals(
+            HttpStatusCode.NotFound,
+            client.get("/api/rest/projects/$projectId/stage-elements/999999/scenery").status,
+        )
+    }
+
+    @Test
     fun `deleting an element sweeps its scenery`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { RotateCcw } from 'lucide-react'
 import { TransformControls } from '@react-three/drei'
-import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
+import { Euler, MathUtils, Mesh, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3, type InstancedMesh, type Intersection } from 'three'
 import { useProjectQuery } from '../../store/projects'
 import { StageRender } from './StageRender'
 import { CaptureCanvas, type StageCapture } from './CaptureCanvas'
@@ -22,7 +22,9 @@ import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageE
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
 import { DEFAULT_WORK_LIGHTS, type WorkLights } from './scene/workLights'
 import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
-import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
+import { SCENE_ELEMENT_UUID, StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
+import { SceneryPopover } from './SceneryPopover'
+import { elementAnchorBox, pickedScenery, pressPicks, type SceneHit } from './sceneryPick'
 import { StageConfetti } from './StageConfetti'
 import {
   BOX_SHADOW_CAPS,
@@ -52,7 +54,7 @@ import { bodySpecOf, emitterNeedsForSpec } from './emitterNeeds'
 import { StageBodies, buildBodyLayout } from './bodies/StageBodies'
 import { mountFor } from './bodies/mount'
 import { StageLabelContext, StageLabelDriver } from './StageLabel'
-import { StageLabelStore } from './stageLabels'
+import { StageLabelStore, type StageAnchorTracker } from './stageLabels'
 import { StageInvalidateProvider } from './stageInvalidate'
 import {
   StageCameraRig,
@@ -64,7 +66,7 @@ import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
 import { isOrthoCamera, type StageCamera } from '../../lib/stageViewpoint'
 import { useStageElementListQuery } from '../../store/stageElements'
 import { useStageScenery } from '../../hooks/stageScenery'
-import { sceneryElements, type SceneryOverlayCache } from '../../lib/scenery'
+import { isSceneryPickable, sceneryElements, type SceneryOverlayCache } from '../../lib/scenery'
 import { useSceneryClock } from './scene/useSceneryClock'
 import type { LightingPoint } from '../../lib/stageProjection'
 import { Button } from '../ui/button'
@@ -200,9 +202,24 @@ interface Stage3DProps {
   caption?: { name: string; note: string } | null
   /**
    * Read the scene document and draw its elements (session 3's builders). The Stage route's canvas
-   * only: the Positions panel's plan is the rig's, and must not subscribe to the scene.
+   * draws the whole of it; the Positions panel's plan draws a [sceneSubset] of it — the drapes and
+   * the Set layer (scenery-programmer plan D16) — and only while the panel is open.
    */
   showScene?: boolean
+  /**
+   * Of the scene document, draw only what this keeps — the Positions panel's plan draws the drapes
+   * and the Set layer, the pieces that change where light lands (scenery-programmer plan D16), and
+   * not the room around them. A module constant, so the filtered list keeps its identity. Absent:
+   * every element.
+   */
+  sceneSubset?: (element: StageElementDto) => boolean
+  /**
+   * Clicking a piece of scenery with Edit off opens its popover (scenery-programmer plan D11): a
+   * drawn, flown or Set-layer element, in any camera, once nothing of the rig is under the pointer.
+   * The Stage route's canvas only, and never a capture. [onEditElement] is *Edit element…*, offered
+   * where the window has Edit.
+   */
+  sceneryPopover?: { onEditElement?: (elementUuid: string) => void } | null
   /** Which of the scene this window draws, and whether the air shows the beams (`scene/sceneView.ts`). */
   layers?: SceneLayers
   /** How many lights the surfaces take (`scene/lightTable.ts`). */
@@ -262,6 +279,8 @@ export function Stage3D({
   persistCamera = false,
   caption = null,
   showScene = false,
+  sceneSubset,
+  sceneryPopover = null,
   layers = DEFAULT_SCENE_LAYERS,
   lightBudget = DEFAULT_LIGHT_BUDGET,
   goboSurfaces = DEFAULT_GOBO_SURFACES,
@@ -286,7 +305,11 @@ export function Stage3D({
   )
 
   const { data: projectElements } = useStageElementListQuery(projectId, { skip: !showScene || harnessElements != null })
-  const storedElements = harnessElements ?? projectElements
+  const allElements = harnessElements ?? projectElements
+  const storedElements = useMemo(
+    () => (sceneSubset == null || allElements == null ? allElements : allElements.filter(sceneSubset)),
+    [allElements, sceneSubset],
+  )
   // The scenery the cues, stacks and Looks have moved (stage-view plan session 8), laid over the
   // elements before they are built — so the builders draw the tabs where they are, and the beam
   // reach below stops at closed ones. The vis source chose it (live, or the Next GO preview); a
@@ -348,6 +371,31 @@ export function Stage3D({
     () => (builds.length === 0 ? EMPTY_ELEMENTS : builds.map((b) => b.element)),
     [builds],
   )
+  // Clicking a piece of scenery (scenery-programmer plan D11): with Edit off, on screen, with no
+  // seat pick armed and nothing being placed. A click R3F hands to `onPointerMissed` found nothing
+  // of the rig under it — fixtures and rigging take their own clicks first — so only then is it cast
+  // against the drawn elements (`ScenePicker`, inside the canvas), and the nearest surface decides.
+  const pickingScenery = sceneryPopover != null && showScene && !editMode && !placing && capture == null && seatPicking == null
+  const pickRef = useRef<((clientX: number, clientY: number) => SceneHit[]) | null>(null)
+  const [popoverUuid, setPopoverUuid] = useState<string | null>(null)
+  useEffect(() => {
+    if (!pickingScenery) setPopoverUuid(null)
+  }, [pickingScenery])
+
+  // What a scenery pick resolves a surface's element by — read through a ref by the click handler,
+  // so the handler does not change identity on every frame a piece moves.
+  const drawnByUuidRef = useRef<ReadonlyMap<string, StageElementDto>>(new Map())
+  drawnByUuidRef.current = useMemo(() => new Map(drawnElements.map((e) => [e.uuid, e])), [drawnElements])
+  // The popover's piece as stored — its presets and range are its own Z and trim, never a moved
+  // state. It closes when the piece leaves the scene or stops being one a click opens.
+  const popoverElement = useMemo(
+    () => (popoverUuid == null ? null : ((storedElements ?? []).find((e) => e.uuid === popoverUuid) ?? null)),
+    [popoverUuid, storedElements],
+  )
+  useEffect(() => {
+    if (popoverUuid != null && storedElements != null && (popoverElement == null || !isSceneryPickable(popoverElement))) setPopoverUuid(null)
+  }, [popoverUuid, popoverElement, storedElements])
+
   // Every surface a beam stops at — the axial reach (`scene/beamReach.ts`). Regions stop a beam
   // only while the Regions layer is on; the beam shaders' own region shadows still test all of them.
   const colliders = useMemo(
@@ -361,10 +409,12 @@ export function Stage3D({
     [stageDims, view.regions, regionGeometry, builds, gridSize],
   )
   const beamClip = useMemo(() => beamClipFor(stageDims, builds), [stageDims, builds])
-  // Only the scene has a house to keep clear: the Positions plan's beams are drawn whole.
+  // Only the whole scene has a house to keep clear: a canvas drawing a subset of it — the Positions
+  // plan's drapes and Set pieces, never the room or the proscenium — draws its beams whole, as it did
+  // before it drew any scene. Read from the stored elements, so hiding Venue does not move the plane.
   const hazeClip = useMemo(
-    () => (showScene ? hazeClipFor(layers.haze, storedElements ?? EMPTY_ELEMENTS) : null),
-    [layers.haze, showScene, storedElements],
+    () => (showScene && sceneSubset == null ? hazeClipFor(layers.haze, storedElements ?? EMPTY_ELEMENTS) : null),
+    [layers.haze, showScene, sceneSubset, storedElements],
   )
   const venueBounds = useMemo(() => sceneElementBounds(builds), [builds])
   // Haze degrades before frame rate (`scene/hazeGovernor.ts`): the governor in the canvas steps it.
@@ -424,15 +474,26 @@ export function Stage3D({
   // clears in view mode too: the fixture card and the aim panel follow the
   // selection, and there was no way to put them away from the canvas.
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null)
+
   const handlePointerMissed = useCallback(
     (e: MouseEvent) => {
       if (placing) return
       if (e.button !== 0) return
       const d = pointerDownRef.current
       if (d && (Math.abs(e.clientX - d.x) > DRAG_PX_THRESHOLD || Math.abs(e.clientY - d.y) > DRAG_PX_THRESHOLD)) return
+      if (pickingScenery) {
+        const press = { button: e.button, down: d, up: { x: e.clientX, y: e.clientY } }
+        const picked = pressPicks(press) ? pickedScenery(pickRef.current?.(e.clientX, e.clientY) ?? [], drawnByUuidRef.current) : null
+        if (picked != null) {
+          clickAtRef.current = { x: e.clientX, y: e.clientY }
+          setPopoverUuid(picked)
+          return
+        }
+        setPopoverUuid(null)
+      }
       onSelectionChange(null)
     },
-    [placing, onSelectionChange],
+    [placing, onSelectionChange, pickingScenery],
   )
 
   const disableOrbit = useCallback(() => {
@@ -459,12 +520,14 @@ export function Stage3D({
   const handleRiggingClick = useCallback(
     (rig: RiggingDto) => {
       if (handlePressRef.current) return
+      setPopoverUuid(null)
       onSelectionChange({ kind: 'rigging', uuid: rig.uuid })
     },
     [onSelectionChange],
   )
   const handleFixtureClick = useCallback(
     (patch: FixturePatch) => {
+      setPopoverUuid(null)
       onSelectionChange({ kind: 'patch', patchKey: patch.key })
     },
     [onSelectionChange],
@@ -585,6 +648,46 @@ export function Stage3D({
     labelStore.setOccluders(colliders)
   }, [labelStore, colliders])
 
+  // The popover's anchor (D11): the piece's centre and the box round it, projected by the label layer
+  // once per frame drawn, so it follows the piece as the camera orbits and as it flies and sits
+  // beside it rather than over it. A virtual element for `EditorSurface`, its box that screen box on
+  // the page; until the first frame lays it out, the click.
+  const trackerRef = useRef<StageAnchorTracker | null>(null)
+  const clickAtRef = useRef<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (popoverUuid == null) return
+    const tracker = labelStore.track(new Vector3(), new Vector3())
+    trackerRef.current = tracker
+    return () => {
+      labelStore.untrack(tracker)
+      trackerRef.current = null
+    }
+  }, [labelStore, popoverUuid])
+  useEffect(() => {
+    const tracker = trackerRef.current
+    if (tracker?.point == null || popoverElement == null) return
+    // The drawn element — overlaid with where the scenery has it now — so a flown piece's anchor flies.
+    const drawn = builds.find((b) => b.element.uuid === popoverElement.uuid)
+    const at = elementAnchorBox(drawn?.element ?? popoverElement, drawn?.build ?? null)
+    tracker.point.set(at.centre.x, at.centre.y, at.centre.z)
+    tracker.half?.set(at.half.x, at.half.y, at.half.z)
+    labelStore.invalidate()
+  }, [labelStore, popoverElement, builds])
+  const [anchorRef] = useState<React.RefObject<{ getBoundingClientRect(): DOMRect }>>(() => ({
+    current: {
+      getBoundingClientRect: () => {
+        const tracker = trackerRef.current
+        const box = labelStore.containerElement?.getBoundingClientRect()
+        if (box != null && tracker != null && Number.isFinite(tracker.box.x) && Number.isFinite(tracker.box.y)) {
+          return new DOMRect(box.left + tracker.box.x, box.top + tracker.box.y, tracker.box.w, tracker.box.h)
+        }
+        const click = clickAtRef.current
+        if (click != null) return new DOMRect(click.x, click.y, 0, 0)
+        return box ?? new DOMRect()
+      },
+    },
+  }))
+
   // Context loss. `canvasKey` remounts the canvas — a fresh renderer and a fresh context — which
   // is *Restore*: a context the browser took back to save memory may never be offered again, so
   // waiting on `webglcontextrestored` alone could leave the view paused for good.
@@ -670,6 +773,7 @@ export function Stage3D({
         onRestored={() => setContextLost(false)}
       />
       <StageLabelDriver store={labelStore} paused={contextLost} />
+      {pickingScenery && <ScenePicker pickRef={pickRef} />}
       <HazeGovernorProbe onChange={setHazeQuality} />
       {liveStats != null && <FrameRateProbe stats={liveStats} />}
       <StageInvalidateProvider>
@@ -826,6 +930,21 @@ export function Stage3D({
         aria-hidden
         className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
       />
+      {popoverElement != null && sceneryPopover != null && capture == null && !contextLost && (
+        <SceneryPopover
+          projectId={projectId}
+          element={popoverElement}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPopoverUuid(null)
+          }}
+          anchorRef={anchorRef}
+          keepOpenWithin={containerRef}
+          onEditElement={
+            sceneryPopover.onEditElement == null ? undefined : () => sceneryPopover.onEditElement?.(popoverElement.uuid)
+          }
+        />
+      )}
       {sectionEditing && isOrthoCamera(camera) && !contextLost && (
         <SectionEditLayer
           projectId={projectId}
@@ -1128,6 +1247,48 @@ function Controls({
       )}
     </>
   )
+}
+
+/**
+ * The scenery pick's cast (scenery-programmer plan D11), lent to `Stage3D`'s click handler through
+ * [pickRef]: every surface of a drawn element the ray from a canvas point meets, nearest included.
+ * The scene's meshes are deaf to R3F (`NO_RAYCAST`), so this calls the mesh's own raycast on each —
+ * a click is rare, a walk of the scene for it costs nothing a frame. Single-sided surfaces are hit
+ * from the front only, as they are drawn; the seats are not cast at (they take the pointer only
+ * while *Sit in a seat…* is armed, which turns this off).
+ */
+function ScenePicker({ pickRef }: { pickRef: React.RefObject<((clientX: number, clientY: number) => SceneHit[]) | null> }) {
+  const get = useThree((s) => s.get)
+  useEffect(() => {
+    const raycaster = new Raycaster()
+    const ndc = new Vector2()
+    const found: Intersection[] = []
+    pickRef.current = (clientX, clientY) => {
+      const { camera, gl, scene } = get()
+      const rect = gl.domElement.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return []
+      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
+      camera.updateMatrixWorld()
+      raycaster.setFromCamera(ndc, camera)
+      const hits: SceneHit[] = []
+      scene.traverse((group) => {
+        const uuid = group.userData[SCENE_ELEMENT_UUID]
+        if (typeof uuid !== 'string') return
+        group.traverse((child) => {
+          const mesh = child as Mesh
+          if (!mesh.isMesh || (child as InstancedMesh).isInstancedMesh) return
+          found.length = 0
+          Mesh.prototype.raycast.call(mesh, raycaster, found)
+          for (const hit of found) hits.push({ elementUuid: uuid, distance: hit.distance })
+        })
+      })
+      return hits
+    }
+    return () => {
+      pickRef.current = null
+    }
+  }, [get, pickRef])
+  return null
 }
 
 // — math helpers ———————————————————————————————————————————————————

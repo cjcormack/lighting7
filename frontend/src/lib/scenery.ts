@@ -368,3 +368,81 @@ export function rangeFromField(range: SceneryRange, typed: number): number {
 export function heldSceneryIn(scenery: ProgrammerScenery, projectId: number): readonly ProgrammerSceneryEntry[] {
   return scenery.projectId == null || scenery.projectId === projectId ? scenery.elements : []
 }
+
+// — the stage's own reads ——————————————————————————————————————————————————————————
+
+/**
+ * The live scenery a vis source draws (scenery-programmer plan D12): **Output** draws the stage as
+ * it is; **Output + Programmer** and **Programmer** draw it with Blind's staged moves laid over —
+ * what leaving Blind would land — the way their channels preview the blind programmer. With nothing
+ * staged (not blind, an older desk) every source draws live, and the frame comes back as the same
+ * object, so a canvas reading it rebuilds nothing. Next GO is not this function's: it draws the
+ * preview's scenery.
+ */
+export function sceneryForSource(live: LiveScenery, source: 'output' | 'outputProgrammer' | 'programmer'): LiveScenery {
+  if (source === 'output' || live.staged == null || Object.keys(live.staged).length === 0) return live
+  return { projectId: live.projectId, entries: { ...live.entries, ...live.staged } }
+}
+
+/**
+ * Whether a click on [element] in the Stage view opens its scenery popover (D11): a piece that
+ * travels — a drawn drape, a flown drape or object — or anything on the Set layer, which can at
+ * least be shown and hidden. The venue's fixed pieces (a room, the proscenium, a dead leg) are
+ * walls a click passes through to nothing, as it always has.
+ */
+export function isSceneryPickable(element: Pick<StageElementDto, 'kind' | 'params' | 'layer'>): boolean {
+  return element.kind !== 'ROOM' && element.kind !== 'SEATING' && (sceneryMoves(element) || element.layer === 'SET')
+}
+
+/** One owner that moves an element, as *Moves with* lists it. */
+export interface MovesWithEntry {
+  kind: 'cue' | 'set' | 'look'
+  /** The owner's id: a cue's, a stack's (its set) or a Look's. */
+  id: number
+  /** The owner, in the list's words: *Q14*, *Main's set*, *Night*. */
+  owner: string
+  /** What it does to the piece: *trim · out · 4 s*, *hidden*. */
+  what: string
+}
+
+/**
+ * The read (`GET stage-elements/{id}/scenery`) as *Moves with* lists it: cues first in show order,
+ * each with its clock, then the stacks' sets, then the Looks — the resolver's own order from the
+ * bottom tier the read can name to the top. [stackName] names a cue's stack where the show has more
+ * than one, so two *Q1*s read apart.
+ */
+export function movesWithEntries(
+  element: StageElementDto | undefined,
+  read: {
+    cues: ReadonlyArray<{ stackId: number; cueId: number; label: string; state: SceneryState; transitionMs: number | null }>
+    sets: ReadonlyArray<{ stackId: number; name: string; state: SceneryState }>
+    looks: ReadonlyArray<{ lookId: number; name: string; state: SceneryState }>
+  },
+  stackName?: (stackId: number) => string | undefined,
+): MovesWithEntry[] {
+  const stacks = new Set(read.cues.map((c) => c.stackId))
+  return [
+    ...read.cues.map((c) => {
+      const stack = stacks.size > 1 ? stackName?.(c.stackId) : undefined
+      return {
+        kind: 'cue' as const,
+        id: c.cueId,
+        owner: stack ? `${stack} · ${cueName(c.label)}` : cueName(c.label),
+        what: describeCueChange(element, c.state, c.transitionMs),
+      }
+    }),
+    ...read.sets.map((s) => ({ kind: 'set' as const, id: s.stackId, owner: `${s.name}'s set`, what: describeSceneryState(element, s.state) })),
+    ...read.looks.map((l) => ({ kind: 'look' as const, id: l.lookId, owner: l.name, what: describeSceneryState(element, l.state) })),
+  ]
+}
+
+/**
+ * What of the scene the Positions panel's plan draws (scenery-programmer plan D16): every drape —
+ * tabs, legs, borders, a cyc, which the venue usually owns — and the Set layer, the pieces that
+ * change where light lands. Not the room, the proscenium or the seats: the plan is the rig's, and a
+ * hall drawn round it would only cover it. A module function, so `Stage3D`'s filtered list keeps
+ * its identity across renders.
+ */
+export function plansScenery(element: Pick<StageElementDto, 'kind' | 'layer'>): boolean {
+  return element.kind === 'DRAPE' || element.layer === 'SET'
+}

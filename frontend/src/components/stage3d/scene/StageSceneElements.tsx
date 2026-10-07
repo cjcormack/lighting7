@@ -22,6 +22,9 @@ import { setPleatShift } from './surfaceShader'
 import { pleatOffset, pleatShift, pleatSlope } from './pleat'
 import { elementBaseZ, elementFinish, finishLobes, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
 
+/** The `userData` key an element's group carries its uuid under, for the scenery pick. */
+export const SCENE_ELEMENT_UUID = 'sceneElementUuid'
+
 /** One element's build, beside the element it was built from — what the scene draws and casts beams at. */
 export interface SceneBuild {
   element: StageElementDto
@@ -38,7 +41,8 @@ export interface SeatPicking {
  * The scene document drawn (stage-view plan session 3): each element's parts, placed at its origin
  * and turned by its yaw, every surface on the light-array receiver (`surfaceShader.ts`). Deaf to the
  * pointer — a click meant for a fixture, a region or a rigging must never land on a wall in front of
- * it — except the seats while *Sit in a seat…* is armed.
+ * it — except the seats while *Sit in a seat…* is armed. A click on scenery is `Stage3D`'s own
+ * cast, made only once R3F has found nothing of the rig under the pointer (`sceneryPick.ts`).
  *
  * Nothing here moves per frame, so nothing here asks for one: a new element list, a layer toggled
  * or a tab drawn is a new prop, and R3F draws it.
@@ -56,6 +60,9 @@ export const StageSceneElements = memo(function StageSceneElements({
         build.parts.length === 0 && build.seats.length === 0 ? null : (
           <group
             key={element.uuid}
+            // What `Stage3D`'s scenery pick reads back off a surface its ray met (`ScenePicker`): the
+            // meshes stay deaf to R3F, and the pick casts against them itself.
+            userData={{ [SCENE_ELEMENT_UUID]: element.uuid }}
             position={toThree(element.positionX, element.positionY, elementBaseZ(element))}
             rotation={[0, MathUtils.degToRad(element.yawDeg), 0]}
           >

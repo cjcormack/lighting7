@@ -120,6 +120,49 @@ export interface StageLabelEntry {
   shown: boolean
 }
 
+/**
+ * Where a point in the scene lands on the canvas: px from the canvas's top-left, and whether it is
+ * in front of the camera (inside the clip volume's depth) — a point behind the eye projects to a
+ * mirrored place that means nothing. The label layer's own projection, for anything else that pins
+ * DOM to the scene: the Stage popover's anchor (scenery-programmer plan D11).
+ */
+export function projectToScreen(
+  point: { x: number; y: number; z: number },
+  camera: Camera,
+  width: number,
+  height: number,
+): { x: number; y: number; inFront: boolean } {
+  PROJECTED.set(point.x, point.y, point.z).project(camera)
+  return {
+    x: (PROJECTED.x * 0.5 + 0.5) * width,
+    y: (-PROJECTED.y * 0.5 + 0.5) * height,
+    inFront: PROJECTED.z >= -1 && PROJECTED.z <= 1,
+  }
+}
+
+/**
+ * A point the layer projects once per rendered frame for something that is not a label — the Stage
+ * popover's anchor, the piece's centre (D11). [point] is in three.js world space; [x] / [y] are px
+ * from the canvas's top-left as of the last frame drawn, and [visible] whether that frame had the
+ * point in front of the camera. A point behind the eye keeps the last place it was seen, so a
+ * popover never jumps to the mirrored one.
+ *
+ * With [half] — the half-extents of a box round [point], three.js axes — the layout also projects
+ * the box's eight corners and keeps their screen box in [box] (px, clamped to the canvas), so a
+ * popover anchored at it sits beside the piece rather than over it. Corners behind the eye are left
+ * out; with none in front the box is the point.
+ */
+export interface StageAnchorTracker {
+  point: Vector3 | null
+  half: Vector3 | null
+  x: number
+  y: number
+  visible: boolean
+  box: ScreenRect
+}
+
+const PROJECTED = new Vector3()
+const CORNER = new Vector3()
 const SCRATCH = new Vector3()
 const ANCHOR = new Vector3()
 const EYE = new Vector3()
@@ -136,8 +179,30 @@ export class StageLabelStore {
   private readonly order: StageLabelEntry[] = []
   private readonly placed: ScreenRect[] = []
   private occluders: readonly Collider[] = []
+  private readonly trackers: StageAnchorTracker[] = []
   mode: StageLabelMode = 'positions'
   invalidate: () => void = () => {}
+
+  /** The layer's element — the canvas's box, which a tracker's px are measured from. */
+  get containerElement(): HTMLElement | null {
+    return this.container
+  }
+
+  /**
+   * Follow [point] (three.js world space) from the next frame on. Asks for that frame: on a
+   * `demand` frameloop nothing else would draw one until something moved.
+   */
+  track(point: Vector3 | null, half: Vector3 | null = null): StageAnchorTracker {
+    const tracker: StageAnchorTracker = { point, half, x: NaN, y: NaN, visible: false, box: { x: NaN, y: NaN, w: 0, h: 0 } }
+    this.trackers.push(tracker)
+    this.invalidate()
+    return tracker
+  }
+
+  untrack(tracker: StageAnchorTracker): void {
+    const i = this.trackers.indexOf(tracker)
+    if (i >= 0) this.trackers.splice(i, 1)
+  }
 
   setContainer(el: HTMLElement | null): void {
     if (el === this.container) return
@@ -225,6 +290,41 @@ export class StageLabelStore {
    * one frame stale stays stale until something else asks for a frame.
    */
   layout(camera: Camera, width: number, height: number): void {
+    for (const t of this.trackers) {
+      if (t.point == null) continue
+      const at = projectToScreen(t.point, camera, width, height)
+      t.visible = at.inFront
+      if (!at.inFront) continue
+      t.x = at.x
+      t.y = at.y
+      let minX = at.x
+      let maxX = at.x
+      let minY = at.y
+      let maxY = at.y
+      if (t.half != null) {
+        for (let i = 0; i < 8; i++) {
+          CORNER.set(
+            t.point.x + (i & 1 ? t.half.x : -t.half.x),
+            t.point.y + (i & 2 ? t.half.y : -t.half.y),
+            t.point.z + (i & 4 ? t.half.z : -t.half.z),
+          )
+          const c = projectToScreen(CORNER, camera, width, height)
+          if (!c.inFront) continue
+          minX = Math.min(minX, c.x)
+          maxX = Math.max(maxX, c.x)
+          minY = Math.min(minY, c.y)
+          maxY = Math.max(maxY, c.y)
+        }
+      }
+      minX = Math.max(0, Math.min(width, minX))
+      maxX = Math.max(0, Math.min(width, maxX))
+      minY = Math.max(0, Math.min(height, minY))
+      maxY = Math.max(0, Math.min(height, maxY))
+      t.box.x = minX
+      t.box.y = minY
+      t.box.w = maxX - minX
+      t.box.h = maxY - minY
+    }
     const order = this.order
     order.length = 0
     for (const e of this.entries) {

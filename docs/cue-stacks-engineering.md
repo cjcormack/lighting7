@@ -491,6 +491,14 @@ cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
   value dirty count, because the include target and the overlay are two flows and a client cannot
   order them. A project switch drops it.
 
+**Read by element, the other way round** (scenery-programmer plan D11, session 4): `GET
+…/stage-elements/{id}/scenery` answers every owner that moves one element — its cues in show order
+with their clocks, the stacks whose set holds it, the Looks that show it — each owner's own row and
+never what a cue only tracks (`elementSceneryOf`, `routes/projectScenery.kt`). It is the Stage
+view's *Moves with*: the popover a click on a piece opens, and the element form, whose entries open
+each owner's editor. The popover itself writes the programmer's overlay (tier 5), as the rail's band
+does; in Blind the Stage view's programmer sources draw `staged` (D12).
+
 ## Events
 
 A cue's **events** fire one-shot triggers — a confetti cannon's tubes — at their offsets after GO

@@ -127,6 +127,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-VECTOR-SPEED`](#fu-stage-vector-speed) | Trigger | Stage | `FU-MANUAL-S8-TRAVEL` times a mover's speed channel, or a slowed head drawn arriving early misleads at a desk check |
 | [`FU-SCENERY-MIDI-TARGET`](#fu-scenery-midi-target) | Trigger | Stage | an operator wants a fader or encoder to ride a tab or a flown piece |
 | [`FU-SCENERY-DRIVEN-BY`](#fu-scenery-driven-by) | Trigger | Stage | a venue's tabs or flys run on a DMX-controlled track the desk patches |
+| [`FU-SCENERY-STAGE-HANDLES`](#fu-scenery-stage-handles) | Trigger | Stage | the Stage popover feels indirect on the rig |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2428,6 +2429,25 @@ element's `open` / `trimM` from the live composed value (0–255 mapped onto 0�
 ignores scenery changes and programmer holds for that key — the channel is the truth, and the
 programmer moves it by moving the fixture's property. `travelS` does not apply; the motor has its own
 speed. An optional params key, so no `formatVersion` bump (`docs/sync-engineering.md` §"Version 18").
+
+### `FU-SCENERY-STAGE-HANDLES`
+
+**A piece on the Stage view is moved through a popover, not by its handles** · Trigger · scenery-programmer plan session 4, 2026-10-07
+
+Since session 4 of the scenery-programmer plan a click on a drawn, flown or Set-layer piece in the
+Stage view, with Edit off, opens its `SceneryControl` in a popover anchored at the piece
+(`stage3d/SceneryPopover.tsx`, D11): presets, a range, *Shown · Hidden*, writing the programmer. Chris
+chose the popover over drag handles on the piece itself (§10, *Stage handles?*), so nothing on the
+canvas can be grabbed: a flown piece is not dragged up and down, a tab is not dragged open.
+**Trigger**: the popover feels indirect on the rig — an operator reaches for the piece rather than
+the slider, or a fly cue is busked with the eye on the stage rather than on a control. **Then**: with
+the popover open, draw handles on its piece in the Stage view's own scene (never in a `render_view`
+capture): a vertical grip at a flown piece's centre that drags `trimM` between its in and its out,
+and a grip on each leading edge of a drawn tab that drags `open`, both writing `programmer.setScenery`
+through `useLivePush` exactly as the popover's slider does (same 33 ms floor, same release). A drag
+must stay a drag and not orbit — the handles take the pointer as `RegionEditHandles` do
+(`onHandlePress` turning the camera's controls off) — and the hit order stays fixture, rigging, then
+the piece. Orthographic sections (Front, Side) are where a trim drag reads best; a plan has no height.
 
 ## Completed
 
