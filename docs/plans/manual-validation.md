@@ -87,7 +87,7 @@ Scenery column and the Prompt Book's glyph, cards and *On GO* line — with a fi
 iPad as well as a pointer on the desk.
 
 **Why it is here**: the scenery-programmer plan's five sessions were each driven in a browser at desk
-(1440×900), iPad (1024×768) and phone (393×852) sizes (`docs/plans/scenery-programmer-plan.md` §9), but
+(1440×900), iPad (1024×768) and phone (393×852) sizes (`docs/plans/completed/scenery-programmer-plan.md` §9), but
 a resized desktop browser is not a device: Safari's toolbar eating the viewport, a finger's slop on
 the `SceneryControl` slider, the bottom sheet over the on-screen keyboard while a time is typed, a tap
 on the book's 12px glyph, and two devices editing one cue at once are the devices' own. Chris's
