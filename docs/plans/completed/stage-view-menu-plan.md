@@ -1,9 +1,11 @@
 # The Stage view's View menu — a popover, work lights, and a frame-rate readout
 
-> **Document status: APPROVED 2026-10-06.** Chris approved the boards and answered §10's questions
-> the same day: work lights are announced, `render_view` draws them off unless asked, level *a*, and
-> the group is called *Work lights* (§10). The boards, the measurements and the record are in
-> [`stage-view-menu-design/INDEX.md`](stage-view-menu-design/INDEX.md).
+> **Document status: DONE — sessions 1–2 shipped 2026-10-06, the last as `f80902ec`
+> ([PR #75](https://github.com/cjcormack/lighting7/pull/75)).** Approved 2026-10-06: Chris approved
+> the boards and answered §10's questions the same day: work lights are announced, `render_view`
+> draws them off unless asked, level *a*, and the group is called *Work lights* (§10). The boards,
+> the measurements and the record are in
+> [`stage-view-menu-design/INDEX.md`](../stage-view-menu-design/INDEX.md).
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins on
 > behaviour and the boards on layout and copy.

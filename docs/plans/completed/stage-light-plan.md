@@ -1,9 +1,12 @@
 # Stage light — pools, cloth and focus
 
-> **Document status: DRAFT — awaiting Chris's approval.** The survey behind it (how each
+> **Document status: DONE — sessions 1–4 shipped 2026-10-05 to 2026-10-06, the last as `48d49f19`
+> ([PR #69](https://github.com/cjcormack/lighting7/pull/69)).** The plan merged as drafted
+> ([PR #65](https://github.com/cjcormack/lighting7/pull/65)) and was built in §5's order; its
+> approval was never written into this header. The survey behind it (how each
 > characteristic should behave, what the Stage view does instead, the options and the numbers) is
-> in [`stage-light-design/INDEX.md`](stage-light-design/INDEX.md). The same survey for human
-> readers is [`stage-light-design/stage-light.html`](stage-light-design/stage-light.html), with a
+> in [`stage-light-design/INDEX.md`](../stage-light-design/INDEX.md). The same survey for human
+> readers is [`stage-light-design/stage-light.html`](../stage-light-design/stage-light.html), with a
 > live copy at <https://claude.ai/artifact/X2ZDbbo6d39wwvUgXJAege> (the checked-in file is the
 > authority).
 >
@@ -191,14 +194,15 @@ cloth at the view's distances, and a weave is below a pixel from the house.
 - **Session 4:** the stage floor shows the rig's reflection from the house; a gobo racked through
   focus blurs without blocks or pulsing.
 
-## 10. Open questions
+## 10. Questions
 
 1. ~~**Exposure:** one realistic look, or a View menu choice between *Realistic* and *Readable* if
    dark venues become hard to plot in?~~ **Answered 2026-10-06:** a View menu choice, named
    **Work lights · Off | On** — the dark lifted, pools at their exposure, per window and announced,
    and an optional `workLights` on `render_view`. See
    [`stage-view-menu-plan.md`](stage-view-menu-plan.md) D2, D6–D9.
-2. **Cylinders between sessions 1 and 3:** is lighting a little of what sits just behind a column
-   acceptable for that stretch?
-3. **Order of sessions 2 and 3:** materials first (the larger visible gain once session 1 lands) is
-   the proposal.
+2. ~~**Cylinders between sessions 1 and 3:** is lighting a little of what sits just behind a column
+   acceptable for that stretch?~~ **Moot:** the stretch was one day. Session 1 shipped the radius
+   skin as proposed, and session 3's box test replaced the surfaces' landing planes the next day.
+3. ~~**Order of sessions 2 and 3:** materials first (the larger visible gain once session 1 lands) is
+   the proposal.~~ **Built as proposed:** materials (`f71576f5`), then boxes (`553ee841`).
