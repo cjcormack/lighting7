@@ -1,7 +1,8 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
-> **Document status: DRAFT — awaiting Chris's approval.** Chris approved the design on 2026-10-07 and
-> answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
+> **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
+> backend) shipped the same day (`32ce090a`); sessions 2–5 to come.** Chris approved the design on
+> 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
 > The design document, with its mock-ups, is at
