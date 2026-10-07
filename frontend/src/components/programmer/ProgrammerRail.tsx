@@ -3,6 +3,7 @@ import { useParams } from 'react-router'
 import {
   ArrowDownUp,
   AudioWaveform,
+  Blinds,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -53,6 +54,8 @@ import { RailBodyFrame, RailHandleFrame, RailStripFrame, useRailArm } from './Pr
 import { RailColourTab } from './RailColourTab'
 import { RailSpreadTab } from './RailSpreadTab'
 import { ScopedEditorContextProvider } from './ScopedEditorContext'
+import { RailSceneryBand } from './RailSceneryBand'
+import { useHeldSceneryCount } from './ProgrammerSceneryList'
 import type { RailTab } from './railTab'
 
 /** One label for every band of the rail: the editor kit's `EditorLabel` (`components/editor/`), in a rail that has no icon room — its own copy, tracked at 0.1em where the kit's is 0.08em. */
@@ -64,13 +67,12 @@ type AddKind = ProgrammerAddLayerKind | 'effect'
 /**
  * Which half of the one scroller a gesture asked for.
  *
- * `PD-SHEET-ICONS-OPEN`: the collapsed arms draw the two bands as two glyph-and-count pairs, so
- * pressing one has to open the rail — and open it *at that band*, since the two are the body's two
- * halves and a press on FX that lands on the top of the layer stack has answered a different
- * question. It is a one-shot request rather than a stored position: `RailBody` scrolls to it and
+ * `PD-SHEET-ICONS-OPEN`: the collapsed arms draw the body's bands — scenery, layers and effects —
+ * as glyph-and-count pairs, so pressing one has to open the rail — and open it *at that band*, since
+ * a press on FX that lands on the top of the layer stack has answered a different question. It is a one-shot request rather than a stored position: `RailBody` scrolls to it and
  * clears it, so the operator's own scrolling afterwards is never undone.
  */
-type RailBand = 'layers' | 'fx'
+type RailBand = 'scenery' | 'layers' | 'fx'
 
 /**
  * The layer stack and the running effects, side by side with the value grid rather than behind
@@ -138,6 +140,9 @@ export function ProgrammerRail() {
   const { data: effects } = useActiveEffectsQuery()
   const layerCount = layers?.length ?? 0
   const fxCount = effects?.length ?? 0
+  // The programmer's held scenery (scenery-programmer plan D1): a count on the strip, the handle and
+  // the faces with room for it, beside the layers' and the effects'.
+  const sceneryCount = useHeldSceneryCount(projectId)
   const [adding, setAdding] = useState<AddKind | null>(null)
   const [diagnosticOpen, setDiagnosticOpen] = useState(false)
   const [band, setBand] = useState<RailBand | null>(null)
@@ -207,6 +212,9 @@ export function ProgrammerRail() {
                 <AudioWaveform className="ml-1.5 size-3 text-violet-400" />
                 <span className="text-violet-400">FX</span>
                 <CountBadge count={fxCount} />
+                <Blinds className="ml-1.5 size-3" />
+                Scenery
+                <CountBadge count={sceneryCount} />
               </SheetTitle>
             </SheetHeader>
             {body}
@@ -216,8 +224,9 @@ export function ProgrammerRail() {
       ) : (
         bodyShown && (
           <RailBodyFrame enter={bodyEnter}>
-            <RailHeader layerCount={layerCount} fxCount={fxCount} />
-            {/* **The Stack tab is the rail as it always was** — the body and its footer, untouched.
+            <RailHeader layerCount={layerCount} fxCount={fxCount} sceneryCount={sceneryCount} />
+            {/* **The Stack tab is the rail's body** — the scenery band, the layers and the effects —
+                and its footer.
                 The other two are the busk sheet's docked editors over the marquee, inside the
                 grid's own `EditorContext` so a value lands where the grid is pointed (a focused
                 Look layer's draft, not Local). One panel mounted at a time, as the busk sheet's. */}
@@ -240,6 +249,7 @@ export function ProgrammerRail() {
         <RailStrip
           layerCount={layerCount}
           fxCount={fxCount}
+          sceneryCount={sceneryCount}
           onAdd={setAdding}
           onBand={setBand}
           addEffect={addEffect}
@@ -250,6 +260,7 @@ export function ProgrammerRail() {
           layers={layers}
           layerCount={layerCount}
           fxCount={fxCount}
+          sceneryCount={sceneryCount}
           onAdd={setAdding}
           onBand={setBand}
           addEffect={addEffect}
@@ -297,20 +308,20 @@ function CountBadge({ count }: { count: number }) {
  * deciding which to do would need the arm in JS, and the two flags stay honest by never being
  * written from the wrong arm (`RailArm`).
  */
-function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: number }) {
+function RailHeader({ layerCount, fxCount, sceneryCount }: { layerCount: number; fxCount: number; sceneryCount: number }) {
   const arm = useRailArm()
   const overlay = useSidePanelMode() === 'overlay'
   return (
     <div className={CHROME_ROW_CLASS}>
       {overlay ? (
         <>
-          <StackLabels layerCount={layerCount} fxCount={fxCount} />
+          <StackLabels layerCount={layerCount} fxCount={fxCount} sceneryCount={sceneryCount} />
           <span className="flex-1" />
         </>
       ) : (
         <>
           <RailTabs layerCount={layerCount} fxCount={fxCount} />
-          <StackLabels layerCount={layerCount} fxCount={fxCount} className="@min-[1200px]:hidden" />
+          <StackLabels layerCount={layerCount} fxCount={fxCount} sceneryCount={sceneryCount} className="@min-[1200px]:hidden" />
           <span className="flex-1 @min-[1200px]:hidden" />
         </>
       )}
@@ -359,8 +370,24 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
   )
 }
 
-/** The rail's face where there are no tabs — the overlay arm and overlay mode: `LAYERS n · FX n`. */
-function StackLabels({ layerCount, fxCount, className }: { layerCount: number; fxCount: number; className?: string }) {
+/**
+ * The rail's face where there are no tabs — the overlay arm and overlay mode: `LAYERS n · FX n ·
+ * SCENERY n`. The docked tab strip's Stack face carries no scenery pair: that strip is 211px at the
+ * rail's 300px default and its three tabs already need 224 with Stack open, so a third
+ * glyph-and-count would push Colour and Spread out of it. The band's own label says the count there,
+ * at the top of the body the tab opens on.
+ */
+function StackLabels({
+  layerCount,
+  fxCount,
+  sceneryCount,
+  className,
+}: {
+  layerCount: number
+  fxCount: number
+  sceneryCount: number
+  className?: string
+}) {
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
@@ -375,6 +402,11 @@ function StackLabels({ layerCount, fxCount, className }: { layerCount: number; f
         <AudioWaveform className="size-3" />
         FX
         <CountBadge count={fxCount} />
+      </span>
+      <span className={LABEL_CLASS} title={`${sceneryCount} held piece${sceneryCount === 1 ? '' : 's'} of scenery`}>
+        <Blinds className="size-3" />
+        Scenery
+        <CountBadge count={sceneryCount} />
       </span>
     </span>
   )
@@ -483,6 +515,7 @@ const RailBody = memo(function RailBody({
   band: RailBand | null
   onBandShown: () => void
 }) {
+  const sceneryRef = useRef<HTMLDivElement>(null)
   const layersRef = useRef<HTMLDivElement>(null)
   const fxRef = useRef<HTMLDivElement>(null)
 
@@ -491,13 +524,19 @@ const RailBody = memo(function RailBody({
   // same batch that sets it — and again on a later press while the body is already up.
   useEffect(() => {
     if (band == null) return
-    const el = band === 'fx' ? fxRef.current : layersRef.current
+    const el = band === 'fx' ? fxRef.current : band === 'scenery' ? sceneryRef.current : layersRef.current
     el?.scrollIntoView({ block: 'start' })
     onBandShown()
   }, [band, onBandShown])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-2">
+      {/* The programmer's scenery first: it is the resolver's top tier (scenery-programmer plan
+          D2), above every value, Look and cue, and drawn rather than output — so it is its own band
+          and not a row of the value stack, which governs channels. A band rather than a tab so it
+          is in every arm, as the effects are. */}
+      <RailSceneryBand ref={sceneryRef} projectId={projectId} />
+      <div className="-mx-2.5 my-0.5 border-t" />
       <div ref={layersRef} className="flex items-center gap-1.5 px-0.5">
         <span className={cn(LABEL_CLASS, 'text-primary')}>Values</span>
         {/* The precedence rule, in two words; the sentence the stack's paragraph used to spend a
@@ -692,12 +731,14 @@ function RailFooter({
 function RailStrip({
   layerCount,
   fxCount,
+  sceneryCount,
   onAdd,
   onBand,
   addEffect,
 }: {
   layerCount: number
   fxCount: number
+  sceneryCount: number
   onAdd: (kind: AddKind) => void
   onBand: (band: RailBand) => void
   addEffect: AddEffectOffer
@@ -745,6 +786,13 @@ function RailStrip({
           </Button>
         </>
       )}
+      <StripCount
+        band="scenery"
+        glyph={<Blinds className="size-3.5" />}
+        count={sceneryCount}
+        title={`${sceneryCount} held piece${sceneryCount === 1 ? '' : 's'} of scenery`}
+        onBand={onBand}
+      />
       <StripCount
         band="layers"
         glyph={<Layers className="size-3.5" />}
@@ -880,6 +928,7 @@ function RailHandle({
   layers,
   layerCount,
   fxCount,
+  sceneryCount,
   onAdd,
   onBand,
   addEffect,
@@ -887,6 +936,7 @@ function RailHandle({
   layers: readonly ProgrammerLayer[] | undefined
   layerCount: number
   fxCount: number
+  sceneryCount: number
   onAdd: (kind: AddKind) => void
   onBand: (band: RailBand) => void
   addEffect: AddEffectOffer
@@ -931,6 +981,18 @@ function RailHandle({
         <AudioWaveform className="size-3" />
         FX
         <CountBadge count={fxCount} />
+      </button>
+      {/* Scenery's door on the phone (scenery-programmer plan D17): the sheet opens at its band. A
+          glyph and a count rather than the word, so the layer names keep the room they have. */}
+      <button
+        type="button"
+        className={cn(LABEL_CLASS, 'rounded px-1 py-1 transition-colors hover:bg-accent/40')}
+        title={`${sceneryCount} held piece${sceneryCount === 1 ? '' : 's'} of scenery`}
+        aria-label="Show the scenery"
+        onClick={() => open('scenery')}
+      >
+        <Blinds className="size-3" />
+        <CountBadge count={sceneryCount} />
       </button>
       {/* `min-w-0` and a truncate: the names give before the counts and the two controls do, and
           they are the only thing on this bar whose length is the rig's business. */}
@@ -991,7 +1053,7 @@ function StripCount({
   className?: string
 }) {
   const arm = useRailArm()
-  const noun = band === 'fx' ? 'effects' : 'layers'
+  const noun = band === 'fx' ? 'effects' : band === 'scenery' ? 'scenery' : 'layers'
   const press = (open: () => void) => () => {
     onBand(band)
     open()

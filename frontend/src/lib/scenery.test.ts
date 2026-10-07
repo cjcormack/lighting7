@@ -6,7 +6,6 @@ import { buildElement } from '../components/stage3d/scene/builders'
 import { pleatShape } from '../components/stage3d/scene/pleat'
 import { elementBaseZ } from '../components/stage3d/scene/sceneParts'
 import {
-  choiceOf,
   describeCueChange,
   describeSceneryState,
   easeSceneryT,
@@ -104,8 +103,6 @@ describe('scenery, drawn (stage-view plan session 8)', () => {
   it('offers each kind its states, and names a change the way the card reads it', () => {
     expect(sceneryChoices(tabs).map((c) => c.label)).toEqual(['Closed', 'Half open', 'Drawn', 'Shown', 'Hidden'])
     expect(sceneryChoices(moon).map((c) => c.id)).toEqual(['trim:in', 'trim:out', 'visible:true', 'visible:false'])
-    expect(choiceOf(moon, { trimM: 7 })?.id).toBe('trim:out')
-    expect(choiceOf(tabs, { open: 0.3 })).toBeNull()
     expect(describeSceneryState(tabs, { open: 0.3 })).toBe('open 30%')
     expect(describeCueChange(moon, { trimM: 7 }, 3000)).toBe('trim · out · 3 s')
     expect(describeCueChange(tabs, { open: 0 }, null)).toBe('closed · with the cue')

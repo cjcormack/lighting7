@@ -360,7 +360,7 @@ changes — and that a Look's scenery shows while it is live, above every cue; t
 
 **Moving scenery now** (scenery-programmer plan D15). `move_scenery` is the live counterpart: `{element,
 visible?, open?, trimM?, fadeSeconds?, release?}` holds one element's states in the **programmer's
-scenery** (`state/ProgrammerScenery.kt`) — the same overlay the Scenery tab and the Stage view write,
+scenery** (`state/ProgrammerScenery.kt`) — the same overlay the programmer rail's Scenery band and the Stage view write,
 the resolver's top tier, above every cue, set and Look — or, with `release: true`, lets it go back to
 what the show holds. The element is named as `set_scenery` names one, and checked against its kind by
 the same `parseSceneryState`. It moves at the element's `travelS` scaled by how far it goes, or over

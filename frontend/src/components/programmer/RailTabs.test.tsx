@@ -37,6 +37,18 @@ vi.mock('./useLocalFamilyCounts', () => ({ useLocalValueCount: () => 0 }))
 // The two tabs have suites of their own; here they only have to be the thing that mounts.
 vi.mock('./RailColourTab', () => ({ RailColourTab: () => <div data-testid="colour-tab" /> }))
 vi.mock('./RailSpreadTab', () => ({ RailSpreadTab: () => <div data-testid="spread-tab" /> }))
+// The Scenery band has a suite of its own (`RailSceneryBand.test.tsx`); here it is a landmark with
+// a ref, and the held count is a value the test sets.
+vi.mock('./RailSceneryBand', async () => {
+  const { forwardRef } = await import('react')
+  return {
+    RailSceneryBand: forwardRef<HTMLDivElement>(function Band(_, ref) {
+      return <div ref={ref} data-testid="scenery-band" />
+    }),
+  }
+})
+vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
+const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
 vi.mock('./ScopedEditorContext', () => ({
   ScopedEditorContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -189,5 +201,20 @@ describe('the tab fact', () => {
     fireEvent.click(screen.getByLabelText('Open the rail'))
     const body = screen.getByRole('complementary', { name: 'Layers and effects' })
     expect(within(body).getByTestId('layers')).toBeInTheDocument()
+  })
+
+  it('counts held scenery on the tabless face, and not on the docked Stack tab, which has no room', () => {
+    // The overlay's `LAYERS n · FX n · SCENERY n`. The docked strip is 211px at the 300 default and
+    // its three tabs already need 224 with Stack open: the Scenery band's label carries the count
+    // there instead, at the top of the body the tab opens on.
+    sceneryHeld.count = 2
+    draw()
+    expect(tab('Stack').textContent).not.toContain('Scenery')
+    act(() => setSidePanelMode('overlay'))
+    fireEvent.click(screen.getByLabelText('Open the rail'))
+    // The strip's and the handle's doors carry the same title; the face is the one with the word.
+    const faces = screen.getAllByTitle('2 held pieces of scenery').filter((el) => el.tagName === 'SPAN')
+    expect(faces.map((el) => el.textContent)).toEqual(['Scenery2'])
+    sceneryHeld.count = 0
   })
 })

@@ -30,6 +30,7 @@ import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { includedCueId, includedTargetParts } from '@/lib/includedTarget'
 import { useProgrammerSheets } from './ProgrammerSheets'
+import { useHeldSceneryCount } from './ProgrammerSceneryList'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -132,7 +133,11 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // the entry count alone would leave the documented escape hatch disabled in exactly the case an
   // operator most needs it.
   const programmerFxCount = activeEffects?.filter((e) => e.programmerOwned).length ?? 0
-  const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0
+  // And held scenery (scenery-programmer plan D1): Clear drops it on the same fade, and a programmer
+  // holding only a flown moon must still be clearable. Counted from `programmer.sceneryState`, since
+  // the desk's `programmer.cleared` reply counts values and effects only.
+  const sceneryCount = useHeldSceneryCount(projectId)
+  const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
 
   // Record reads the programmer, so it is meaningless when the programmer is empty. Include is
   // not: it is how you *fill* the programmer.
@@ -195,17 +200,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           {'Stage — '}
           {!hasSomethingToClear
             ? 'the programmer is empty'
-            : [
-                'Release',
-                entryCount > 0
-                  ? `${entryCount} programmer value${entryCount === 1 ? '' : 's'}`
-                  : null,
-                entryCount > 0 && programmerFxCount > 0 ? 'and' : null,
-                programmerFxCount > 0 ? `${programmerFxCount} programmer FX` : null,
-                fade > 0 ? `over ${fade / 1000}s` : null,
-              ]
-                .filter(Boolean)
-                .join(' ')}
+            : clearSentence(entryCount, programmerFxCount, sceneryCount, fade)}
         </TooltipContent>
       </Tooltip>
 
@@ -317,6 +312,21 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
       </div>
     </div>
   )
+}
+
+/**
+ * What a Clear releases, as its tooltip says it — the one place the programmer states what a Clear
+ * will drop (it has no confirmation): *Release 3 programmer values, 1 programmer FX and 2 pieces of
+ * held scenery over 2s*. Each part only where it is held; the parts joined as a list is read.
+ */
+export function clearSentence(values: number, fx: number, scenery: number, fadeMs: number): string {
+  const parts = [
+    values > 0 ? `${values} programmer value${values === 1 ? '' : 's'}` : null,
+    fx > 0 ? `${fx} programmer FX` : null,
+    scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of held scenery` : null,
+  ].filter((p): p is string => p != null)
+  const list = parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return ['Release', list, fadeMs > 0 ? `over ${fadeMs / 1000}s` : null].filter(Boolean).join(' ')
 }
 
 function MenuItem({

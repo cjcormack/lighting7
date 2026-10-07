@@ -66,9 +66,12 @@ export function withState(params: Params, key: string, value: unknown): Params {
 
 /**
  * [params] with [key] set, then with the states that key's new value takes away taken out too: a
- * drape that stops drawing loses its `open`, a piece that stops flying its `trimM`. Their fields go
- * from the form as the kind stops offering them, and a value left behind would be one the desk
- * refuses and the operator has no field to clear.
+ * drape that stops drawing loses its `open`, a piece that stops flying its `trimM`, and a piece that
+ * stops travelling at all — a drape neither DRAW nor FLY, an object that no longer flies — its
+ * `travelS` (scenery-programmer plan D6). Their fields go from the form as the kind stops offering
+ * them, and a value left behind would be one the desk refuses and the operator has no field to
+ * clear: the form sends `params` whole, so a `travelS` given through `set_scene` would otherwise
+ * make the piece impossible to switch to DEAD from here.
  */
 export function withKindParam(kind: StageElementDto['kind'], params: Params, key: string, value: unknown): Params {
   let next = withParam(params, key, value)
@@ -78,6 +81,7 @@ export function withKindParam(kind: StageElementDto['kind'], params: Params, key
   const states = statesOf(next)
   if (!drawn && 'open' in states) next = withState(next, 'open', null)
   if (!flies && 'trimM' in statesOf(next)) next = withState(next, 'trimM', null)
+  if (!drawn && !flies && 'travelS' in next) next = withParam(next, 'travelS', null)
   return next
 }
 

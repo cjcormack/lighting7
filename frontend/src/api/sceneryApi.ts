@@ -12,6 +12,10 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
  * is live; a Look's show while it is live. Scenery **tracks**: a change stays put until something
  * moves it. Templates carry none (D11), Record captures none (D13), and none of it is DMX (D12).
  *
+ * The programmer holds scenery too (scenery-programmer plan D1): a runtime overlay above every
+ * Look, cue and set, written by `programmer.setScenery` / `programmer.clearScenery` and streamed as
+ * `programmer.sceneryState` — that half's wire is `api/programmerWsApi.ts`; its parse is here.
+ *
  * The desk resolves what the stage shows and pushes it as `scenery.state` — a `StateFlow`, so the
  * subscription is the connect snapshot and there is nothing to re-request on reconnect (no `open`
  * branch here, the `handApi` rule).
@@ -65,6 +69,25 @@ export interface PreviewScenery {
   durationMs: number
 }
 
+/** What holds an element where it is — the tier its highest state comes from (scenery-programmer plan D4). */
+export type ScenerySourceKind = 'base' | 'set' | 'cue' | 'cueLook' | 'programmerLook' | 'programmer'
+
+/**
+ * The source of an element's live state, as `scenery.state` names it on every entry: its `kind`, and
+ * the fields that kind carries — a stack's set (`stackId`, the stack's `name`), a cue (`stackId`,
+ * `cueId`, its `label`), a Look a live cue layers (`stackId`, `lookId`, `name`), a pressed Look
+ * (`lookId`, `name`). The programmer's own hands and the base carry nothing more. Only the top tier
+ * is named: what the tier below would hold is not on the wire.
+ */
+export interface ScenerySource {
+  kind: ScenerySourceKind
+  stackId?: number
+  cueId?: number
+  label?: string
+  lookId?: number
+  name?: string
+}
+
 /**
  * One element's live scenery, anchored to **this** browser's clock: `startedAtMs` is on
  * `performance.now()`'s timeline, computed from the frame's `elapsedMs` at receipt, so a tablet with
@@ -76,6 +99,11 @@ export interface LiveSceneryEntry {
   from: SceneryState
   startedAtMs: number
   durationMs: number
+  /**
+   * What holds the piece there (scenery-programmer plan D4, P3). Optional: an older desk does not
+   * send it, and a staged entry never carries one — it is the programmer's by definition.
+   */
+  source?: ScenerySource
 }
 
 /** The stage's scenery: every element a change names, by element uuid. Absent elements show their base. */
@@ -83,6 +111,12 @@ export interface LiveScenery {
   projectId: number | null
   /** By element uuid. A plain record, not a `Map`: it lives in the RTK store, which wants plain data. */
   entries: Readonly<Record<string, LiveSceneryEntry>>
+  /**
+   * What leaving Blind would land (scenery-programmer plan D12), by element uuid: present only while
+   * the programmer is blind **and** holds a change that differs from live, absent otherwise — and
+   * from an older desk, which never sends it (P3).
+   */
+  staged?: Readonly<Record<string, LiveSceneryEntry>>
 }
 
 export const NO_SCENERY: LiveScenery = { projectId: null, entries: {} }
@@ -98,27 +132,90 @@ export function parseSceneryState(raw: unknown): SceneryState {
   return out
 }
 
-/** A `scenery.state` frame, anchored at [receivedAtMs] (`performance.now()`). */
-export function parseSceneryFrame(raw: unknown, receivedAtMs: number): LiveScenery {
-  if (raw == null || typeof raw !== 'object') return NO_SCENERY
+const SOURCE_KINDS: ReadonlySet<string> = new Set<ScenerySourceKind>(['base', 'set', 'cue', 'cueLook', 'programmerLook', 'programmer'])
+
+/** An entry's `source` off the wire, or undefined for a kind this client does not know (a newer desk's). */
+export function parseScenerySource(raw: unknown): ScenerySource | undefined {
+  if (raw == null || typeof raw !== 'object') return undefined
   const r = raw as Record<string, unknown>
+  if (typeof r.kind !== 'string' || !SOURCE_KINDS.has(r.kind)) return undefined
+  const out: ScenerySource = { kind: r.kind as ScenerySourceKind }
+  if (typeof r.stackId === 'number') out.stackId = r.stackId
+  if (typeof r.cueId === 'number') out.cueId = r.cueId
+  if (typeof r.label === 'string') out.label = r.label
+  if (typeof r.lookId === 'number') out.lookId = r.lookId
+  if (typeof r.name === 'string') out.name = r.name
+  return out
+}
+
+/** One list of a frame — `elements` or `staged` — by element uuid, anchored at [receivedAtMs]. */
+function parseEntries(list: unknown, receivedAtMs: number): Record<string, LiveSceneryEntry> {
   const entries: Record<string, LiveSceneryEntry> = {}
-  for (const item of Array.isArray(r.elements) ? r.elements : []) {
+  for (const item of Array.isArray(list) ? list : []) {
     if (item == null || typeof item !== 'object') continue
     const e = item as Record<string, unknown>
     if (typeof e.elementUuid !== 'string') continue
     // The desk's Json drops defaults, so a missing number is its zero.
     const elapsed = typeof e.elapsedMs === 'number' ? Math.max(0, e.elapsedMs) : 0
     const duration = typeof e.durationMs === 'number' ? Math.max(0, e.durationMs) : 0
-    entries[e.elementUuid] = {
+    const entry: LiveSceneryEntry = {
       elementUuid: e.elementUuid,
       state: parseSceneryState(e.state),
       from: parseSceneryState(e.from),
       startedAtMs: receivedAtMs - elapsed,
       durationMs: duration,
     }
+    const source = parseScenerySource(e.source)
+    if (source != null) entry.source = source
+    entries[e.elementUuid] = entry
   }
-  return { projectId: typeof r.projectId === 'number' ? r.projectId : null, entries }
+  return entries
+}
+
+/**
+ * A `scenery.state` frame, anchored at [receivedAtMs] (`performance.now()`). `source` and `staged`
+ * are read where present and left out where not, so an older desk's frame parses exactly as before.
+ */
+export function parseSceneryFrame(raw: unknown, receivedAtMs: number): LiveScenery {
+  if (raw == null || typeof raw !== 'object') return NO_SCENERY
+  const r = raw as Record<string, unknown>
+  const out: LiveScenery = {
+    projectId: typeof r.projectId === 'number' ? r.projectId : null,
+    entries: parseEntries(r.elements, receivedAtMs),
+  }
+  if (Array.isArray(r.staged)) out.staged = parseEntries(r.staged, receivedAtMs)
+  return out
+}
+
+/**
+ * The programmer's own scenery (scenery-programmer plan D1): every element it holds, with only the
+ * states it holds, in the order first held — `programmer.sceneryState`, the desk's `StateFlow`, so
+ * the subscription is the snapshot. Runtime only; Clear empties it and a project switch drops it.
+ */
+export interface ProgrammerSceneryEntry {
+  elementUuid: string
+  state: SceneryState
+}
+
+export interface ProgrammerScenery {
+  projectId: number | null
+  elements: readonly ProgrammerSceneryEntry[]
+}
+
+export const NO_PROGRAMMER_SCENERY: ProgrammerScenery = { projectId: null, elements: [] }
+
+/** A `programmer.sceneryState` frame. `elements` is always sent by the desk; absent reads as nothing held. */
+export function parseProgrammerSceneryFrame(raw: unknown): ProgrammerScenery {
+  if (raw == null || typeof raw !== 'object') return NO_PROGRAMMER_SCENERY
+  const r = raw as Record<string, unknown>
+  const elements: ProgrammerSceneryEntry[] = []
+  for (const item of Array.isArray(r.elements) ? r.elements : []) {
+    if (item == null || typeof item !== 'object') continue
+    const e = item as Record<string, unknown>
+    if (typeof e.elementUuid !== 'string') continue
+    elements.push({ elementUuid: e.elementUuid, state: parseSceneryState(e.state) })
+  }
+  return { projectId: typeof r.projectId === 'number' ? r.projectId : null, elements }
 }
 
 export interface SceneryWsApi {

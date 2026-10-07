@@ -731,6 +731,82 @@ describe('createProgrammerApi', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
+  describe('the programmer\'s scenery (scenery-programmer plan D1)', () => {
+    it('sends setScenery and clearScenery in the documented shapes', () => {
+      const { conn, sent } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+
+      api.setScenery('moon', { trimM: 3.5 }, 2000)
+      api.setScenery('tabs', { open: 0.5 })
+      api.clearScenery('moon', 1000)
+      api.clearScenery()
+
+      expect(sent).toEqual([
+        { type: 'programmer.setScenery', elementUuid: 'moon', state: { trimM: 3.5 }, fadeMs: 2000 },
+        { type: 'programmer.setScenery', elementUuid: 'tabs', state: { open: 0.5 } },
+        { type: 'programmer.clearScenery', elementUuid: 'moon', fadeMs: 1000 },
+        { type: 'programmer.clearScenery' },
+      ])
+    })
+
+    it('puts nothing on a dead socket (sendGesture announces the drop instead)', () => {
+      const { conn, sent, setOpen } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      setOpen(false)
+      api.setScenery('moon', { visible: false })
+      expect(sent).toEqual([])
+    })
+
+    it('bridges programmer.sceneryState on its own channel, snapshot to a late subscriber', () => {
+      const { conn, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const coarse = vi.fn()
+      api.subscribe(coarse)
+      const early = vi.fn()
+      api.subscribeToScenery(early)
+      // Nothing is known before the first frame: a subscriber is not told an empty overlay it has not seen.
+      expect(early).not.toHaveBeenCalled()
+      expect(api.scenery()).toEqual({ projectId: null, elements: [] })
+
+      frame({
+        type: 'programmer.sceneryState',
+        projectId: 6,
+        elements: [
+          { elementUuid: 'moon', state: { trimM: 3 } },
+          { elementUuid: 'tabs', state: { open: 0.5, visible: true, junk: 'x' } },
+          { state: { open: 1 } },
+        ],
+      })
+
+      const held = { projectId: 6, elements: [
+        { elementUuid: 'moon', state: { trimM: 3 } },
+        { elementUuid: 'tabs', state: { open: 0.5, visible: true } },
+      ] }
+      expect(early).toHaveBeenLastCalledWith(held)
+      expect(api.scenery()).toEqual(held)
+      // The overlay is no cell's business: the coarse state subscribers are not woken by it.
+      expect(coarse).not.toHaveBeenCalled()
+
+      const late = vi.fn()
+      api.subscribeToScenery(late)
+      expect(late).toHaveBeenCalledWith(held)
+
+      // Clear, from any tab: an empty list is a real state, and lands as nothing held.
+      frame({ type: 'programmer.sceneryState', projectId: 6, elements: [] })
+      expect(api.scenery()).toEqual({ projectId: 6, elements: [] })
+      expect(late).toHaveBeenLastCalledWith({ projectId: 6, elements: [] })
+    })
+
+    it('hands a scenery refusal to the error subscribers, which toast it', () => {
+      const { conn, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const errors = vi.fn()
+      api.subscribeToErrors(errors)
+      frame({ type: 'programmer.error', message: "Scenery refused: state ('Moon').open is a drawn drape's" })
+      expect(errors).toHaveBeenCalledWith("Scenery refused: state ('Moon').open is a drawn drape's")
+    })
+  })
+
   // Two `entrySignature` guards stood here, both keyed on palette fields: that a palette *rename*
   // woke the cell (it moves nothing else on the entry, so a signature ignoring it left the cell
   // painting a stale value indistinguishable from a correct one) and that a reference *ceasing to

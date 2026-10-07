@@ -16,6 +16,9 @@ vi.stubGlobal('ResizeObserver', NoopResizeObserver)
 let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null }
 let effects: { programmerOwned: boolean }[] = []
 
+let heldScenery = 0
+vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => heldScenery }))
+
 const programmerClearAll = vi.fn()
 const programmerSetBlind = vi.fn()
 vi.mock('@/store/programmer', () => ({
@@ -39,7 +42,7 @@ const sheets = {
 vi.mock('./ProgrammerSheets', () => ({ useProgrammerSheets: () => sheets }))
 
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
-import { ProgrammerActionBar } from './ProgrammerActionBar'
+import { ProgrammerActionBar, clearSentence } from './ProgrammerActionBar'
 
 /**
  * Radix's DropdownMenuTrigger opens on `pointerdown`, not `click` — so `fireEvent.click` alone
@@ -59,6 +62,7 @@ afterEach(() => {
   summary = { blind: false, entryCount: 0, lastIncluded: null }
   effects = []
   desk.connected = true
+  heldScenery = 0
   resetProgrammerFadeStore()
 })
 
@@ -222,5 +226,25 @@ describe('ProgrammerActionBar', () => {
     expect(trigger.className).toContain('@max-[600px]:justify-center')
     expect(trigger.className).toContain('@max-[600px]:[&_svg]:hidden')
     expect(trigger.textContent).toContain('Snap')
+  })
+
+  describe("Clear counts held scenery (scenery-programmer plan D1)", () => {
+    it('enables Clear for a programmer holding only scenery, and says so on its tooltip', async () => {
+      heldScenery = 2
+      setProgrammerFade('2000')
+      render(<ProgrammerActionBar projectId={1} />)
+      const clear = screen.getByRole('button', { name: 'Clear' })
+      expect(clear).not.toBeDisabled()
+      fireEvent.focus(clear.parentElement!)
+      expect((await screen.findAllByText('Stage — Release 2 pieces of held scenery over 2s'))[0]).toBeTruthy()
+      fireEvent.click(clear)
+      expect(programmerClearAll).toHaveBeenCalledWith(2000)
+    })
+
+    it('lists what a Clear releases as a sentence', () => {
+      expect(clearSentence(3, 0, 0, 0)).toBe('Release 3 programmer values')
+      expect(clearSentence(1, 2, 0, 500)).toBe('Release 1 programmer value and 2 programmer FX over 0.5s')
+      expect(clearSentence(3, 1, 1, 0)).toBe('Release 3 programmer values, 1 programmer FX and 1 piece of held scenery')
+    })
   })
 })

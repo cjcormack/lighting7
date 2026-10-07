@@ -117,4 +117,15 @@ describe('empty numbers and stale states', () => {
     expect(flown.states).toEqual({ visible: false, trimM: 6 })
     expect(withKindParam('OBJECT', { flies: true, states: { trimM: 4 } }, 'flies', null)).toEqual({})
   })
+
+  it('a piece that stops travelling loses its travelS, which the desk refuses on one that does not', () => {
+    // A DRAW drape keeps it as it becomes a FLY drape: both travel.
+    const drawn = { role: 'TABS', operation: 'DRAW', travelS: 4.5 }
+    expect(withKindParam('DRAPE', drawn, 'operation', 'FLY')).toEqual({ role: 'TABS', operation: 'FLY', travelS: 4.5 })
+    // DEAD does not travel: travelS goes with the travel (set_scene could set it; the form must drop it).
+    expect(withKindParam('DRAPE', drawn, 'operation', 'DEAD')).toEqual({ role: 'TABS', operation: 'DEAD' })
+    // An object keeps it while it flies, and loses it with its trim when it stops.
+    expect(withKindParam('OBJECT', { flies: true, travelS: 3 }, 'shape', 'DISC')).toEqual({ flies: true, travelS: 3, shape: 'DISC' })
+    expect(withKindParam('OBJECT', { flies: true, travelS: 3, states: { trimM: 4 } }, 'flies', false)).toEqual({ flies: false })
+  })
 })

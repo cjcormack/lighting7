@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import { ArrowUpDown, Blinds, Box } from 'lucide-react'
 import { describeCueChange, describeSceneryState, sceneryKeysOf } from '@/lib/scenery'
 import { useStageElementListQuery } from '@/store/stageElements'
+import { cn } from '@/lib/utils'
+import { TRACKED_HATCH_CLASS } from './trackedHatch'
 import type { SceneryChange, TrackedScenery } from '@/api/sceneryApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 
-/** A row's icon: a flown piece flies, a drawn drape draws, anything else is a piece. */
-function ElementIcon({ element }: { element: StageElementDto | undefined }) {
+/** A row's icon: a flown piece flies, a drawn drape draws, anything else is a piece. Shared with the programmer rail's scenery rows. */
+export function ElementIcon({ element }: { element: StageElementDto | undefined }) {
   const keys = element ? sceneryKeysOf(element) : []
   const Icon = keys.includes('trimM') ? ArrowUpDown : keys.includes('open') ? Blinds : Box
   return <Icon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -57,7 +59,7 @@ export function CueSceneryReadout({
         return (
           <div
             key={`tracked-${t.elementUuid}`}
-            className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground [background-image:repeating-linear-gradient(135deg,transparent_0_6px,var(--color-muted)_6px_7px)]"
+            className={cn('rounded-md px-2 py-1 text-xs text-muted-foreground', TRACKED_HATCH_CLASS)}
           >
             {`${element?.name ?? t.elementName}: ${describeSceneryState(element, t.state)} (${t.fromSet ? 'held by' : 'tracked from'} ${from})`}
           </div>

@@ -8,6 +8,7 @@ import type {
   ProgrammerLayer,
   ProgrammerTargetType,
 } from '../api/programmerWsApi'
+import { NO_PROGRAMMER_SCENERY, type ProgrammerScenery, type SceneryState } from '../api/sceneryApi'
 
 export type {
   AppliedExtent,
@@ -160,6 +161,39 @@ export const programmerAppliedApi = restApi.injectEndpoints({
 export const { useProgrammerAppliedQuery } = programmerAppliedApi
 
 /**
+ * The programmer's own scenery (scenery-programmer plan D1) — every element it holds and the states
+ * it holds there.
+ *
+ * **Form 3** (CLAUDE.md §"Where a WS bridge subscribes"): `programmer.sceneryState` is a stream with
+ * nothing to refetch — a `StateFlow` on the desk, so the connect snapshot and every broadcast are
+ * the same frame — and it lives in one cache entry fed by the WS layer, seeded from its last frame.
+ * Its own entry rather than a field on [ProgrammerSummary], for that summary's reason: the
+ * always-visible indicator reads the summary, and a scenery drag would re-render it at 30 Hz.
+ */
+export const programmerSceneryApi = restApi.injectEndpoints({
+  endpoints: (build) => ({
+    programmerScenery: build.query<ProgrammerScenery, void>({
+      queryFn: () => ({ data: lightingApi.programmer.scenery() }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.programmer.subscribeToScenery((scenery) => {
+          updateCachedData(() => scenery)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+  }),
+  overrideExisting: false,
+})
+
+/** What the programmer holds of the scenery; nothing before the first frame. */
+export function useProgrammerScenery(enabled = true): ProgrammerScenery {
+  const { data } = programmerSceneryApi.useProgrammerSceneryQuery(undefined, { skip: !enabled })
+  return data ?? NO_PROGRAMMER_SCENERY
+}
+
+/**
  * Re-render on *any* programmer change, including a value edit that leaves the entry count
  * untouched. [useProgrammerSummaryQuery] deliberately only tracks the counters, so a view
  * that reads entry *values* through `lightingApi.programmer.getKeyState` needs this to know
@@ -227,6 +261,21 @@ export function programmerClearAll(fadeMs?: number) {
 
 export function programmerSetBlind(blind: boolean, fadeMs?: number) {
   lightingApi.programmer.setBlind(blind, fadeMs)
+}
+
+/**
+ * Hold [state] on one scene element (scenery-programmer plan D1). A fire-and-forget gesture like the
+ * writers above — a scenery slider calls it through `useLivePush` at the sheet's 33 ms floor — and
+ * answered by the `programmer.sceneryState` broadcast, or a `programmer.error` the toast shows.
+ * A `fadeMs` of 0 is sent as nothing, so the piece moves at its own `travelS`.
+ */
+export function programmerSetScenery(elementUuid: string, state: SceneryState, fadeMs?: number) {
+  lightingApi.programmer.setScenery(elementUuid, state, fadeMs ? fadeMs : undefined)
+}
+
+/** Let one element go, or every one with no uuid; it flies home on [fadeMs] when above 0. */
+export function programmerClearScenery(elementUuid?: string, fadeMs?: number) {
+  lightingApi.programmer.clearScenery(elementUuid, fadeMs ? fadeMs : undefined)
 }
 
 // ── Layer ops ───────────────────────────────────────────────────────────────
