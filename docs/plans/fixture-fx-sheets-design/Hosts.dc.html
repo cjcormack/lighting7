@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The sheet in its hosts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--skyl:oklch(0.83 0.1 230);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:28px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.lede{max-width:920px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.cap{font-size:12px;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.sheet{position:relative;background:var(--panel);border:1px solid var(--bd);overflow:hidden;display:flex;flex-direction:column}
+.st{padding:12px 12px 6px;display:flex;gap:8px;align-items:flex-start}
+.st .nm{font-size:15px;font-weight:600}
+.st .md{font-size:12px;color:var(--mfg)}
+.crow{height:40px;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--bd)}
+.tabs{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+.tab{height:26px;padding:0 9px;border-radius:6px;font-size:12px;font-weight:500;color:var(--mfg);display:inline-flex;align-items:center;gap:6px}
+.tab.on{background:var(--muted);color:var(--fg)}
+.ib{width:28px;height:28px;flex:0 0 auto;border:1px solid var(--bd);border-radius:7px;display:grid;place-items:center;color:var(--fg);background:oklch(0.274 0.006 286 / .3)}
+.ib.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.btn{height:28px;padding:0 10px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;background:oklch(0.274 0.006 286 / .3);color:var(--fg);white-space:nowrap}
+.btn.sm{height:24px;padding:0 8px;font-size:11px}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:oklch(0.21 0.006 286)}
+.scope{height:28px;flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:11px;color:var(--mfg);border-bottom:1px solid var(--bd)}
+.scope b{color:var(--fg);font-weight:500}
+.body{flex:1;min-height:0;overflow:hidden;position:relative}
+.fade{position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(transparent,var(--panel))}
+.fam{display:flex;align-items:center;gap:8px;padding:12px 12px 2px}
+.fam .ln{flex:1;height:1px;background:var(--bd)}
+.prow{position:relative;padding:7px 12px 8px 16px;display:flex;flex-direction:column;gap:6px}
+.prow::before{content:'';position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:0 2px 2px 0;background:var(--mk,transparent)}
+.prow.p{--mk:var(--pri)}.prow.e{--mk:var(--violet)}.prow.c{--mk:var(--sky)}
+.prow.b .nm,.prow.b .ctl{opacity:.62}
+.pl{display:flex;align-items:center;gap:6px;min-height:20px}
+.pl .nm{font-size:12.5px;font-weight:500}
+.src{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid var(--bd);color:var(--mfg);white-space:nowrap}
+.src.p{color:var(--pril);border-color:oklch(0.623 0.214 259.815 / .55);background:oklch(0.623 0.214 259.815 / .14)}
+.src.e{color:var(--violl);border-color:oklch(0.606 0.25 292.717 / .6);background:oklch(0.606 0.25 292.717 / .15)}
+.src.c{color:var(--skyl);border-color:oklch(0.685 0.169 237.323 / .5);background:oklch(0.685 0.169 237.323 / .12)}
+.src.b{border-style:dashed}
+.ctl{display:flex;align-items:center;gap:8px}
+.sl{position:relative;flex:1;height:16px;min-width:50px}
+.sl i{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--muted)}
+.sl b{position:absolute;left:0;top:6px;height:4px;border-radius:2px;background:var(--pri)}
+.sl u{position:absolute;top:1px;width:14px;height:14px;border-radius:50%;background:#fff;margin-left:-7px;box-shadow:0 0 0 2px var(--pri)}
+.sl.n b{background:var(--mfg)}.sl.n u{box-shadow:0 0 0 2px var(--mfg)}
+.sl.c b{background:var(--sky)}.sl.c u{box-shadow:0 0 0 2px var(--sky)}
+.fld{height:28px;width:72px;flex:0 0 auto;padding:0 8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);display:inline-flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px}
+.fld small{color:var(--mfg);font-size:11px}
+.fld.s{width:56px}
+.xb{width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:grid;place-items:center;color:var(--mfg)}
+.ro{font-size:10.5px;color:var(--mfg)}
+.ro b{color:var(--fg);font-weight:500}
+.opt{height:28px;flex:1;display:inline-flex;align-items:center;gap:8px;padding:0 8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);font-size:12px}
+.swb{width:40px;height:40px;border-radius:7px;border:1px solid oklch(1 0 0 / .15);flex:0 0 auto}
+.pad{position:relative;flex:0 0 auto;border:1px solid var(--bd);border-radius:6px;background-color:var(--bg);background-image:linear-gradient(oklch(1 0 0 / .05) 1px,transparent 1px),linear-gradient(90deg,oklch(1 0 0 / .05) 1px,transparent 1px);background-size:25% 25%}
+.pad .dot{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px var(--pri)}
+.tray{flex:0 0 auto;border-top:1px solid var(--bd);background:oklch(0.195 0.006 286)}
+.trh{height:40px;display:flex;align-items:center;gap:6px;padding:0 8px 0 12px}
+.fxc{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:999px;border:1px solid oklch(0.606 0.25 292.717 / .5);background:oklch(0.606 0.25 292.717 / .12);font-size:11px;white-space:nowrap}
+.dot7{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:0 0 auto}
+.picker{height:150px;border-radius:7px;position:relative;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(32 100% 50%))}
+.picker i{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+.hue{height:12px;border-radius:6px;background:linear-gradient(to right,red,#ff0,lime,cyan,blue,#f0f,red);position:relative}
+.canvas{background:radial-gradient(ellipse at 40% 70%, oklch(0.4 0.1 260 / .5), transparent 55%),radial-gradient(ellipse at 70% 40%, oklch(0.5 0.12 70 / .35), transparent 40%),oklch(0.12 0.005 286);position:relative;overflow:hidden}
+.list{background:var(--bg);position:relative;overflow:hidden}
+.lr{height:36px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid oklch(0.3 0.006 286 / .5);font-size:12px;color:var(--mfg)}
+.cell{height:22px;border-radius:4px;flex:0 0 64px;background:var(--muted)}
+.pop{background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+.notes{display:flex;flex-direction:column;gap:12px}
+.note{display:flex;gap:10px;font-size:13px}
+.note p{margin:0;color:var(--mfg)}.note b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 2320px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · hosts</div>
+<h1 class="h1">One body, four hosts: the pop-up, the Stage panel, a phone, the cards page</h1>
+<p class="lede">The hosts differ in width, in whether the sheet can close, and in one tab: <b style="color: var(--fg)">Focus</b> exists only in the Stage view. Everything else — the rows, the marks, the fields, Release and the pinned tray — is the same component.</p>
+</div>
+
+<div class="row" style="gap: 24px">
+
+<!-- desk pop-up -->
+<div class="col" style="gap: 8px; width: 700px">
+<div class="lbl">The pop-up · the programmer grid's Info, 512px, a colour wash with the colour row open</div>
+<div style="display: flex; height: 1000px; border: 1px solid var(--bd); border-radius: 10px; overflow: hidden">
+<div class="list" style="width: 188px">
+<div class="lr" style="height: 40px; color: var(--fg)">Fixtures</div>
+<div class="lr">Wash 1<span class="sp"></span><span class="cell"></span></div>
+<div class="lr" style="background: oklch(0.623 0.214 259.815 / .08); color: var(--fg)">Wash 2<span class="sp"></span><span class="cell" style="background: #ff8a3d"></span></div>
+<div class="lr">Wash 3<span class="sp"></span><span class="cell"></span></div>
+<div class="lr">Wash 4<span class="sp"></span><span class="cell"></span></div>
+<div class="lr">Spot 1<span class="sp"></span><span class="cell"></span></div>
+<div class="lr">Spot 2<span class="sp"></span><span class="cell"></span></div>
+<div class="lr">Spot 3<span class="sp"></span><span class="cell"></span></div>
+<div class="lr">Spot 4<span class="sp"></span><span class="cell"></span></div>
+</div>
+<div class="sheet" style="width: 512px; border: none; border-left: 1px solid var(--bd)">
+<div class="st"><div class="sp"><div class="nm">Wash 2 · FOH</div><div class="md">Shehds LED 19×15 RGBW zoom · 15-ch · U1.031</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="crow"><div class="tabs"><span class="tab on">Values</span><span class="tab">Channels</span></div><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release <span class="mono" style="color: var(--mfg)">2</span></span></div>
+<div class="scope"><span>Writes to <b>Local</b> · fade <b class="mono">0 s</b></span><span class="sp"></span><span>2 values held</span></div>
+<div class="body">
+<div class="fam"><span class="lbl">Intensity</span><span class="ln"></span></div>
+<div class="prow c"><div class="pl"><span class="nm">Dimmer</span><span class="src c">Q12 · Warm</span></div><div class="ctl"><div class="sl c"><i></i><b style="width: 60%"></b><u style="left: 60%"></u></div><span class="fld mono">60<small>%</small></span></div></div>
+<div class="fam"><span class="lbl">Colour</span><span class="ln"></span></div>
+<div class="prow p">
+<div class="pl"><span class="nm">Colour</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><span class="swb" style="background: #ff8a3d"></span><div class="col" style="gap: 2px"><span class="mono" style="font-size: 12px">#ff8a3d · W 120</span><span class="ro">R 255 · G 138 · B 61 · W 120 of 255</span></div></div>
+<div class="col" style="gap: 8px; padding: 6px 0 2px">
+<div style="display: flex; gap: 12px">
+<div class="col" style="gap: 10px; width: 240px"><div class="picker"><i style="left: 76%; top: 2%"></i></div><div class="hue"><i style="position: absolute; left: 8%; top: -2px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff"></i></div></div>
+<div class="col" style="gap: 6px; flex: 1">
+<div class="ctl"><span class="lbl" style="width: 14px">R</span><span class="fld mono s">255</span></div>
+<div class="ctl"><span class="lbl" style="width: 14px">G</span><span class="fld mono s">138</span></div>
+<div class="ctl"><span class="lbl" style="width: 14px">B</span><span class="fld mono s">61</span></div>
+<div class="ctl"><span class="lbl" style="width: 14px">W</span><div class="sl"><i></i><b style="width: 47%"></b><u style="left: 47%"></u></div></div>
+</div>
+</div>
+<div class="ctl"><span class="ro">The editor kit's <b>ColourEditor</b>, docked — Pick and Recent, no Spread</span><span class="sp"></span><span class="btn sm">Pick</span></div>
+</div>
+</div>
+<div class="fam"><span class="lbl">Position</span><span class="ln"></span></div>
+<div class="prow b"><div class="pl"><span class="nm">Position</span><span class="src b">Base</span></div><div class="ctl"><div class="pad" style="width: 64px; height: 64px"><div class="dot" style="left: 50%; top: 50%; box-shadow: 0 0 0 2px var(--mfg)"></div></div><div class="col" style="gap: 6px; flex: 1"><div class="ctl"><span class="lbl" style="width: 28px">Pan</span><div class="sl n"><i></i><b style="width: 50%"></b><u style="left: 50%"></u></div><span class="fld mono">270<small>°</small></span></div><div class="ctl"><span class="lbl" style="width: 28px">Tilt</span><div class="sl n"><i></i><b style="width: 50%"></b><u style="left: 50%"></u></div><span class="fld mono">135<small>°</small></span></div></div></div></div>
+<div class="fam"><span class="lbl">Beam</span><span class="ln"></span></div>
+<div class="prow p"><div class="pl"><span class="nm">Zoom</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><div class="sl"><i></i><b style="width: 30%"></b><u style="left: 30%"></u></div><span class="fld mono">30<small>%</small></span></div><div class="ro">about <b>21°</b></div></div>
+<div class="fade"></div>
+</div>
+<div class="tray"><div class="trh"><span class="lbl">Effects</span><span class="ro">none</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div></div>
+</div>
+</div>
+<p class="cap"><b>From the list, the grid, the overview panel, Channels and a group's members.</b> Same 512px Radix sheet; the row's chevron opens the full editor in place — one open at a time — rather than a popover off a 40px swatch. The sheet guards nothing: every change is already on stage.</p>
+</div>
+
+<!-- stage -->
+<div class="col" style="gap: 8px; width: 540px">
+<div class="lbl">The Stage view · 380px docked, Focus as a tab, Aim on the Position row</div>
+<div style="display: flex; height: 1000px; border: 1px solid var(--bd); border-radius: 10px; overflow: hidden; position: relative">
+<div class="canvas" style="width: 160px"></div>
+<div class="sheet" style="width: 380px; border: none; border-left: 1px solid var(--bd)">
+<div class="st"><div class="sp"><div class="nm">Spot 3 · ADV1 L</div><div class="md">Robe ColorSpot 575 AT · U1.201</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="crow"><div class="tabs"><span class="tab on">Values</span><span class="tab">Channels</span><span class="tab">Focus</span></div><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="ib" title="Release 5"><svg class="i" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg></span></div>
+<div class="scope"><span>Writes to <b>Local</b> · <b class="mono">2.0 s</b></span><span class="sp"></span><span>3 values · 2 effects</span></div>
+<div class="body">
+<div class="fam"><span class="lbl">Intensity</span><span class="ln"></span></div>
+<div class="prow p"><div class="pl"><span class="nm">Dimmer</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><div class="sl"><i></i><b style="width: 80%"></b><u style="left: 80%"></u></div><span class="fld mono">80<small>%</small></span></div></div>
+<div class="fam"><span class="lbl">Position</span><span class="ln"></span></div>
+<div class="prow e"><div class="pl"><span class="nm">Position</span><span class="src e">Circle · around yours</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><div class="pad" style="width: 64px; height: 64px"><div class="dot" style="left: 50%; top: 35%"></div></div><div class="col" style="gap: 6px; flex: 1"><div class="ctl"><span class="lbl" style="width: 28px">Pan</span><div class="sl"><i></i><b style="width: 50%"></b><u style="left: 50%"></u></div><span class="fld mono">270<small>°</small></span></div><div class="ctl"><span class="lbl" style="width: 28px">Tilt</span><div class="sl"><i></i><b style="width: 17%"></b><u style="left: 17%"></u></div><span class="fld mono">45<small>°</small></span></div></div></div>
+<div class="ctl"><span class="ro">Your <b>270°, 45°</b> is the circle's centre</span><span class="sp"></span><span class="btn sm" style="box-shadow: 0 0 0 2px var(--pri)"><svg class="s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>Aim…</span></div>
+</div>
+<div class="fam"><span class="lbl">Colour</span><span class="ln"></span></div>
+<div class="prow c"><div class="pl"><span class="nm">Colour wheel 1</span><span class="src c">Q12 · Night</span></div><div class="ctl"><span class="opt"><span style="width: 14px; height: 14px; border-radius: 4px; background: #1d3fd6"></span>Deep blue</span></div></div>
+<div class="fade"></div>
+</div>
+<div class="tray"><div class="trh"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">2</span><span class="fxc"><span class="dot7"></span>Circle</span><span class="fxc"><span class="dot7"></span>Pulse</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div></div>
+</div>
+<div class="pop" style="position: absolute; left: 12px; top: 330px; width: 270px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div class="ctl"><span class="lbl" style="color: var(--fg)">Aim Spot 3 at</span><span class="sp"></span><span class="ib g" style="width: 22px; height: 22px"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><span class="fld mono" style="width: 100%">0.0<small>X m</small></span><span class="fld mono" style="width: 100%">2.5<small>Y m</small></span><span class="fld mono" style="width: 100%">1.7<small>Z m</small></span></div>
+<div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="btn sm">DSC</span><span class="btn sm">CS</span><span class="btn sm">USC</span><span class="btn sm">SL</span><span class="btn sm">SR</span></div>
+<div class="ctl"><span class="ro">The desk solves pan and tilt.</span><span class="sp"></span><span class="btn sm pri">Aim</span></div>
+</div>
+</div>
+<p class="cap"><b>The foot is the tray's alone.</b> Aim at point moves from a pinned block into an <i>Aim…</i> popover on the Position row, where it belongs; Focus here stays on the Focus tab. Release folds to its glyph at 380px (count on its title). Still outside the vis source: the panel reads real output.</p>
+</div>
+
+</div>
+
+<div class="row" style="gap: 32px">
+
+<!-- phone -->
+<div class="col" style="gap: 8px; width: 390px">
+<div class="lbl">A phone · the Stage view, a bottom sheet at half height</div>
+<div style="width: 390px; height: 844px; border: 1px solid var(--bd); border-radius: 36px; overflow: hidden; position: relative; background: oklch(0.12 0.005 286)">
+<div class="canvas" style="position: absolute; inset: 0"></div>
+<div style="position: absolute; left: 12px; right: 12px; top: 54px; height: 40px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>Stage<span class="sp"></span><span class="btn sm">View</span></div>
+<div class="sheet" style="position: absolute; left: 0; right: 0; bottom: 0; height: 470px; border-radius: 16px 16px 0 0; border-left: none; border-right: none; border-bottom: none">
+<div style="height: 18px; display: grid; place-items: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: var(--muted)"></span></div>
+<div class="st" style="padding-top: 2px"><div class="sp"><div class="nm">Spot 3 · ADV1 L</div><div class="md">Robe ColorSpot 575 AT</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="crow"><div class="tabs"><span class="tab on">Values</span><span class="tab">Channels</span><span class="tab">Focus</span></div><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg></span></div>
+<div class="scope"><span>Writes to <b>Local</b></span><span class="sp"></span><span>3 values · 2 effects</span></div>
+<div class="body">
+<div class="prow p" style="padding-top: 10px"><div class="pl"><span class="nm">Dimmer</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb" style="width: 32px; height: 32px"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><div class="sl" style="height: 24px"><i style="top: 10px"></i><b style="width: 80%; top: 10px"></b><u style="left: 80%; top: 3px; width: 18px; height: 18px; margin-left: -9px"></u></div><span class="fld mono" style="height: 36px">80<small>%</small></span></div></div>
+<div class="prow e"><div class="pl"><span class="nm">Position</span><span class="src e">Circle · around yours</span><span class="sp"></span><span class="xb" style="width: 32px; height: 32px"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><div class="pad" style="width: 64px; height: 64px"><div class="dot" style="left: 50%; top: 35%"></div></div><div class="col" style="gap: 6px; flex: 1"><span class="fld mono" style="width: 100%; height: 36px">270<small>° pan</small></span><span class="fld mono" style="width: 100%; height: 36px">45<small>° tilt</small></span></div></div></div>
+<div class="fade"></div>
+</div>
+<div class="tray"><div class="trh" style="height: 48px"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">2</span><span class="fxc" style="height: 32px"><span class="dot7"></span>Circle</span><span class="fxc" style="height: 32px"><span class="dot7"></span>Pulse</span><span class="sp"></span><span class="ib" style="width: 36px; height: 36px"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div><div style="height: 24px"></div></div>
+</div>
+</div>
+<p class="cap"><b>New: a phone gets the sheet.</b> A tap on a fixture opens it through <span class="code">EditorSurface</span>'s bottom-sheet form with three heights — the header and tray, half, full. Rows take finger sizes (a 36px field, a 32px ×); the tray stays pinned above the home indicator. A landscape phone gets the right-hand sheet.</p>
+</div>
+
+<!-- cards -->
+<div class="col" style="gap: 8px; width: 360px">
+<div class="lbl">The cards page · one card, no sheet</div>
+<div class="sheet" style="width: 360px; border-radius: 10px">
+<div class="st"><div class="sp"><div class="nm" style="font-size: 14px">Wash 2 · FOH</div><div class="md">Shehds LED 19×15 RGBW</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg></span><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span></div>
+<div class="prow c" style="padding-top: 4px"><div class="pl"><span class="nm">Dimmer</span><span class="src c">Q12 · Warm</span></div><div class="ctl"><div class="sl c"><i></i><b style="width: 60%"></b><u style="left: 60%"></u></div><span class="fld mono">60<small>%</small></span></div></div>
+<div class="prow p"><div class="pl"><span class="nm">Colour</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><span class="swb" style="background: #ff8a3d; width: 32px; height: 32px"></span><span class="mono" style="font-size: 12px">#ff8a3d · W 120</span></div></div>
+<div class="prow b"><div class="pl"><span class="nm">Zoom</span><span class="src b">Base</span></div><div class="ctl"><div class="sl n"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="fld mono">0<small>%</small></span></div></div>
+<div class="tray" style="border-radius: 0 0 10px 10px"><div class="trh"><span class="lbl">Effects</span><span class="ro">none</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div></div>
+</div>
+<p class="cap"><b>The same body, unscrolled.</b> No title row of tabs: the page's Properties / Channels toggle stays. The pencil goes with the Edit toggle; the corner opens the pop-up. The tray is the card's foot, so a card's effects are in one place on every card.</p>
+</div>
+
+<!-- notes -->
+<div class="col" style="gap: 16px; flex: 1; padding-top: 22px">
+<div class="note"><span class="n">1</span><div><b>Width is the only ladder.</b><p>At 512 everything has its word; at 380 Release folds to its glyph and the scope line drops <i>· fade</i>; on a phone the rows take finger sizes. The rows are a container query on the sheet, never the viewport, so a pop-up and a panel of one width draw the same.</p></div></div>
+<div class="note"><span class="n">2</span><div><b>A row's editor opens in place.</b><p>Colour and Position have a face and a chevron; one row is open at a time, so the sheet never stacks two pickers. A setting row's list and a row's stack open through <span class="code">EditorSurface</span> — beside the row on a desk, a bottom sheet on a phone.</p></div></div>
+<div class="note"><span class="n">3</span><div><b>The overview panel and Channels open the pop-up</b> as they do today; the Groups route opens the group sheet (Heads and groups board). There is no read-only mode to forward any more.</p></div></div>
+<div class="note"><span class="n">4</span><div><b>Channels stays raw.</b><p>The Channels tab is today's channel list, with a field per channel — it writes raw channels, which the desk lifts into the programmer, and says so in its scope line.</p></div></div>
+<div class="note"><span class="n">5</span><div><b>Focus tab only in the Stage view</b>, as today: it needs the scene to land a beam on.</p></div></div>
+</div>
+
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2320}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

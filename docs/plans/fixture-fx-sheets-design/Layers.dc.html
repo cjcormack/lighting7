@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layers on the sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--skyl:oklch(0.83 0.1 230);--red:oklch(0.704 0.191 22.216);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:30px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.h2{margin:0;font-size:20px;font-weight:600}
+.lede{max-width:920px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:32px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.cap{font-size:12.5px;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.dia{flex:1;border:1px solid var(--bd);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:8px;background:oklch(0.16 0.005 286)}
+.ly{display:flex;align-items:center;gap:12px;height:44px;padding:0 14px;border-radius:8px;border:1px solid var(--bd);background:var(--panel);position:relative}
+.ly .tag{width:118px;flex:0 0 auto;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.ly .what{font-size:13px;flex:1}
+.ly .val{font-size:12px;color:var(--mfg)}
+.ly.p{border-color:oklch(0.623 0.214 259.815 / .6)}.ly.e{border-color:oklch(0.606 0.25 292.717 / .6)}.ly.c{border-color:oklch(0.685 0.169 237.323 / .5)}
+.ly.held{opacity:.55}
+.ly.held .what{text-decoration:line-through}
+.ly.none{border-style:dashed;background:transparent;color:var(--mfg)}
+.win{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:600;background:oklch(0.792 0.209 151.711 / .16);color:var(--green);border:1px solid oklch(0.792 0.209 151.711 / .45)}
+.heldp{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:600;color:var(--amber);border:1px solid oklch(0.828 0.189 84.429 / .55)}
+.out{margin-top:6px;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--bd)}
+.src{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid var(--bd);color:var(--mfg);white-space:nowrap}
+.src.p{color:var(--pril);border-color:oklch(0.623 0.214 259.815 / .55);background:oklch(0.623 0.214 259.815 / .14)}
+.src.po{color:var(--pril);border-color:oklch(0.623 0.214 259.815 / .55)}
+.src.e{color:var(--violl);border-color:oklch(0.606 0.25 292.717 / .6);background:oklch(0.606 0.25 292.717 / .15)}
+.src.c{color:var(--skyl);border-color:oklch(0.685 0.169 237.323 / .5);background:oklch(0.685 0.169 237.323 / .12)}
+.src.k{color:var(--amber);border-color:oklch(0.828 0.189 84.429 / .55);background:oklch(0.828 0.189 84.429 / .12)}
+.src.bl{color:var(--amber);border-color:oklch(0.828 0.189 84.429 / .55);border-style:dashed}
+.src.b{border-style:dashed}
+.pop{width:360px;background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column}
+.poph{height:40px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;border-bottom:1px solid var(--bd)}
+.sr{position:relative;display:flex;gap:10px;padding:9px 12px 9px 16px;border-bottom:1px solid oklch(0.3 0.006 286 / .5)}
+.sr::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 2px 2px 0;background:var(--mk,var(--bd))}
+.sr.p{--mk:var(--pri)}.sr.e{--mk:var(--violet)}.sr.c{--mk:var(--sky)}.sr.k{--mk:var(--amber)}.sr.b{--mk:transparent}
+.sr .t{font-size:12.5px;font-weight:500}
+.sr .d{font-size:11px;color:var(--mfg)}
+.sr .v{font-size:12px;text-align:right;white-space:nowrap}
+.sr.dim{opacity:.55}
+.sr.held .t{text-decoration:line-through;text-decoration-color:oklch(0.828 0.189 84.429 / .8)}
+.popf{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:11px;color:var(--mfg)}
+.btn{height:24px;padding:0 8px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;background:oklch(0.274 0.006 286 / .3);color:var(--fg);white-space:nowrap}
+.btn.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.lg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.lgc{border:1px solid var(--bd);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.edge{position:relative;padding-left:12px;font-size:12.5px}
+.edge::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:2px;background:var(--mk)}
+.lgc p{margin:0;font-size:11.5px;color:var(--mfg)}
+.notes{display:flex;flex-direction:column;gap:14px}
+.note{display:flex;gap:10px;font-size:13px}
+.note p{margin:0;color:var(--mfg)}.note b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1760px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · layers</div>
+<h1 class="h1">Who is driving this value, and what is underneath it</h1>
+<p class="lede">A row's chip names the winner, from the provenance frame the programmer grid already paints with. A press on it opens the property's stack — every layer that has something to say, top wins, with the one on stage ticked and anything held back said out loud.</p>
+</div>
+
+<div class="row" style="gap: 24px">
+<div class="dia">
+<div class="ctl" style="display: flex; align-items: center; gap: 8px"><span class="h2" style="font-size: 16px">Today — set a position, then add a Circle from the sheet</span></div>
+<div class="ly none"><span class="tag">Park</span><span class="what">—</span></div>
+<div class="ly p"><span class="tag">Programmer · web</span><span class="what">Position 270°, 45° <span class="val">— from the sheet's sliders</span></span><span class="win">on stage</span></div>
+<div class="ly e held"><span class="tag">Effect · priority 0</span><span class="what">Circle · Override · centre 128/128</span><span class="heldp">held back</span></div>
+<div class="ly c"><span class="tag">Cue Q12</span><span class="what">Position 180°, 60°</span></div>
+<div class="ly none"><span class="tag">Base</span><span class="what">128, 128</span></div>
+<div class="out"><span class="lbl">On stage</span><span style="font-size: 13px">270°, 45°, still</span><span class="sp"></span><span style="font-size: 12px; color: var(--mfg)">The sheet shows a Circle in its Effects list and nothing else.</span></div>
+<p class="cap" style="margin-top: 4px">The sheet's + makes a manual effect, and the engine skips every non-programmer effect on a property the programmer holds. Released, it would have circled 128/128 — Override replaces the position, it does not orbit it.</p>
+</div>
+<div class="dia">
+<div style="display: flex; align-items: center; gap: 8px"><span class="h2" style="font-size: 16px">New — the same two gestures</span></div>
+<div class="ly none"><span class="tag">Park</span><span class="what">—</span></div>
+<div class="ly e"><span class="tag">Programmer effect</span><span class="what">Circle · around current · 60° × 20°</span><span class="win">on stage</span></div>
+<div class="ly p"><span class="tag">Programmer · web</span><span class="what">Position 270°, 45° <span class="val">— the circle's centre</span></span></div>
+<div class="ly c"><span class="tag">Cue Q12</span><span class="what">Position 180°, 60°</span></div>
+<div class="ly none"><span class="tag">Base</span><span class="what">128, 128</span></div>
+<div class="out"><span class="lbl">On stage</span><span style="font-size: 13px">a 60° × 20° circle around 270°, 45°</span><span class="sp"></span><span class="src e">Circle · around yours</span></div>
+<p class="cap" style="margin-top: 4px">A sheet's effect is a programmer effect, so it plays over the programmer's values; <b>Around current position</b> is Additive with the centre pinned at 128, so it orbits whatever the reset pass put underneath. × on the row clears the centre and the circle carries on around Q12's 180°, 60°.</p>
+</div>
+</div>
+
+<div class="row" style="gap: 28px">
+<div class="col" style="width: 360px">
+<div class="lbl">The stack · Position on Spot 3</div>
+<div class="pop">
+<div class="poph"><span class="lbl" style="color: var(--fg)">Position</span><span class="lbl">· top wins</span><span class="sp"></span><span class="btn g" style="width: 24px; padding: 0; justify-content: center"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="sr e"><div class="sp"><div class="t">Circle</div><div class="d">programmer effect · around current · ½ · M1</div></div><div class="col" style="gap: 4px; align-items: flex-end"><span class="v">orbiting</span><span class="win">on stage</span></div></div>
+<div class="sr p"><div class="sp"><div class="t">You</div><div class="d">programmer · set 2 min ago · the circle's centre</div></div><div class="col" style="gap: 4px; align-items: flex-end"><span class="v mono">270°, 45°</span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>Clear</span></div></div>
+<div class="sr c"><div class="sp"><div class="t">Q12 · Night</div><div class="d">Main · the Look layer <i>Night</i></div></div><span class="v mono">180°, 60°</span></div>
+<div class="sr b dim"><div class="sp"><div class="t">Base</div><div class="d">nothing asserts it</div></div><span class="v mono">271°, 135°</span></div>
+<div class="popf"><span>Clearing yours leaves the circle orbiting Q12's position.</span></div>
+</div>
+</div>
+
+<div class="col" style="width: 360px">
+<div class="lbl">The stack · Dimmer on Wash 2, a cue effect held back</div>
+<div class="pop">
+<div class="poph"><span class="lbl" style="color: var(--fg)">Dimmer</span><span class="lbl">· top wins</span><span class="sp"></span><span class="btn g" style="width: 24px; padding: 0; justify-content: center"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="sr p"><div class="sp"><div class="t">You</div><div class="d">programmer · set just now</div></div><div class="col" style="gap: 4px; align-items: flex-end"><span class="v mono">80%</span><span class="win">on stage</span></div></div>
+<div class="sr e held"><div class="sp"><div class="t">Pulse</div><div class="d">Q12's effect · ¼ · M2 — your value holds it back; it is still running and resumes in phase when you clear</div></div><span class="heldp">held back</span></div>
+<div class="sr c"><div class="sp"><div class="t">Q12 · Warm</div><div class="d">Main · its own row</div></div><span class="v mono">60%</span></div>
+<div class="sr b dim"><div class="sp"><div class="t">Base</div></div><span class="v mono">0%</span></div>
+<div class="popf"><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>Clear yours — let the Pulse run</span></div>
+</div>
+<p class="cap">The row's chip says <span class="src p">Programmer</span> and carries an amber dot: something underneath is held back.</p>
+</div>
+
+<div class="col" style="width: 360px">
+<div class="lbl">The stack · Dimmer on a parked head</div>
+<div class="pop">
+<div class="poph"><span class="lbl" style="color: var(--fg)">Dimmer</span><span class="lbl">· top wins</span><span class="sp"></span><span class="btn g" style="width: 24px; padding: 0; justify-content: center"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="sr k"><div class="sp"><div class="t">Parked</div><div class="d">the rig ignores every layer here</div></div><div class="col" style="gap: 4px; align-items: flex-end"><span class="v mono">100%</span><span class="win">on stage</span></div></div>
+<div class="sr p dim"><div class="sp"><div class="t">You</div><div class="d">programmer · waits under park</div></div><span class="v mono">40%</span></div>
+<div class="sr c dim"><div class="sp"><div class="t">Q12 · Warm</div></div><span class="v mono">60%</span></div>
+<div class="popf"><span class="btn">Unpark…</span><span class="sp"></span><span>The row is read-only while parked.</span></div>
+</div>
+</div>
+</div>
+
+<div class="col" style="gap: 12px">
+<div class="lbl">The vocabulary · the programmer grid's colours, one more mark for held back</div>
+<div class="lg">
+<div class="lgc"><div class="edge" style="--mk: var(--pri)"><span class="src p">Programmer</span></div><p>You set it. Filled once touched since the last Include; an outline while it is only what Include brought in. A Look you pressed in the programmer names itself: <span class="src p">Night · pressed</span>.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--violet)"><span class="src e">Pulse · ¼ · M2</span></div><p>An effect is moving it — its name, division and master. The slider and the pad follow the live value, in violet.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--sky)"><span class="src c">Q12 · Night</span></div><p>A cue holds it: the cue's number, and the Look layer's name when a layer won it, as the grid's hover says today.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--amber)"><span class="src k">Parked</span></div><p>Loud, because edits do nothing: the row's controls are disabled and its stack offers Unpark.</p></div>
+<div class="lgc"><div class="edge" style="--mk: transparent"><span class="src b">Base</span></div><p>Nothing asserts it. The row is drawn at 62% opacity; its controls stay live, since setting it is the commonest gesture.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--amber)"><span class="src bl">Staged · blind</span></div><p>Blind: your value is held but not on stage. The chip names what is on stage; the field shows what leaving Blind would land.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--pri)"><span class="src p">Programmer <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber)"></span></span></div><p>Held back: something under the winner is not running on stage because of it — almost always an effect under your value.</p></div>
+<div class="lgc"><div class="edge" style="--mk: var(--pri); border-style: dashed"><span class="src p" style="border-style: dashed">Programmer · 4 of 6</span></div><p>Mixed, on a group or several heads: the members disagree on the source; the stack lists each source with its heads.</p></div>
+</div>
+</div>
+
+<div class="row" style="gap: 32px">
+<div class="notes" style="flex: 1">
+<div class="note"><span class="n">1</span><div><b>The chip needs nothing new.</b><p><span class="code">provenanceState</span> already names the winner per (target, property) — park, programmer, effect or cue, with the cue, the layer and the effect — and <span class="code">getKeyState</span> joins the programmer's entry. The sheet subscribes per row as the grid does.</p></div></div>
+<div class="note"><span class="n">2</span><div><b>The stack needs one read from the desk.</b><p>What sits under the winner is not on the wire: a held-back effect never appears in provenance, and the cue's value underneath is only resolved for Update (<span class="code">ProvenanceService.underlyingSources</span>). Proposed: <span class="code">programmer.keyStack {target, property}</span>, answered on request, never broadcast — Model board.</p></div></div>
+</div>
+<div class="notes" style="flex: 1">
+<div class="note"><span class="n">3</span><div><b>The held-back dot is cheap.</b><p>The client already has the effect list and the programmer's entries; an effect on a held (fixture, property) that is not a programmer effect is held back — the rule <span class="code">FxSheet</span>'s strike-through already draws. The dot comes from that; the stack's wording from the desk.</p></div></div>
+<div class="note"><span class="n">4</span><div><b>A stack is the popover form of the editor kit's surface.</b><p><span class="code">EditorSurface</span>: a popover beside the row on a desk, a bottom sheet on a phone, a side sheet on a short viewport. Clear in it is the row's ×; Unpark is the header's.</p></div></div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

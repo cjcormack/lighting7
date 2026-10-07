@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The FX tray</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--skyl:oklch(0.83 0.1 230);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:30px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.lede{max-width:920px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.cap{font-size:12px;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.tray{width:304px;border:1px solid var(--bd);border-radius:10px;background:oklch(0.195 0.006 286);display:flex;flex-direction:column;overflow:hidden}
+.trh{height:40px;display:flex;align-items:center;gap:6px;padding:0 8px 0 12px}
+.fxc{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:999px;border:1px solid oklch(0.606 0.25 292.717 / .5);background:oklch(0.606 0.25 292.717 / .12);font-size:11px;white-space:nowrap}
+.fxc.off{border-color:var(--bd);background:transparent;color:var(--mfg)}
+.dot7{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:0 0 auto}
+.dot7.off{background:var(--mfg)}.dot7.sky{background:var(--sky)}
+.mchip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:4px;border:1px solid var(--bd);font-size:9.5px;color:var(--mfg)}
+.home{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;border:1px solid var(--bd);color:var(--mfg)}
+.fxr{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:8px;border:1px solid transparent}
+.fxr.on{border-color:oklch(0.606 0.25 292.717 / .55);background:oklch(0.606 0.25 292.717 / .08)}
+.fxr.ro{opacity:.85}
+.fxr .l1{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500}
+.fxr .l2{font-size:11px;color:var(--mfg);padding-left:13px}
+.ib{width:24px;height:24px;flex:0 0 auto;border-radius:6px;display:grid;place-items:center;color:var(--mfg)}
+.btn{height:24px;padding:0 8px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;background:oklch(0.274 0.006 286 / .3);color:var(--fg);white-space:nowrap}
+.btn.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+.seg span{flex:1;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;font-size:11.5px;color:var(--mfg);padding:0 6px;white-space:nowrap}
+.seg span.on{background:var(--muted);color:var(--fg);box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / .6)}
+.seg span.dis{opacity:.4}
+.ctl{display:flex;align-items:center;gap:8px}
+.sl{position:relative;flex:1;height:16px;min-width:50px}
+.sl i{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--muted)}
+.sl b{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--violet)}
+.sl u{position:absolute;top:1px;width:14px;height:14px;border-radius:50%;background:#fff;margin-left:-7px;box-shadow:0 0 0 2px var(--violet)}
+.fld{height:28px;width:68px;flex:0 0 auto;padding:0 8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);display:inline-flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px}
+.fld small{color:var(--mfg);font-size:11px}
+.ro{font-size:10.5px;color:var(--mfg)}
+.ro b{color:var(--fg);font-weight:500}
+.ed{display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;border-top:1px solid var(--bd)}
+.live{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--mfg)}
+.live i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.erow{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:7px;font-size:12.5px}
+.erow.on{background:oklch(0.606 0.25 292.717 / .12);box-shadow:inset 0 0 0 1px oklch(0.606 0.25 292.717 / .55)}
+.erow .d{font-size:11px;color:var(--mfg)}
+.cs{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px 0 4px;border-radius:999px;border:1px solid var(--bd);font-size:11px}
+.cs i{width:16px;height:16px;border-radius:50%;border:1px solid oklch(1 0 0 / .2)}
+.pad{position:relative;flex:0 0 auto;border:1px solid var(--bd);border-radius:6px;background-color:var(--bg);background-image:linear-gradient(oklch(1 0 0 / .05) 1px,transparent 1px),linear-gradient(90deg,oklch(1 0 0 / .05) 1px,transparent 1px);background-size:25% 25%}
+.pad .dot{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px var(--violet)}
+.pad .orb{position:absolute;border:1.5px dashed var(--violet);border-radius:50%}
+.heldp{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;color:var(--amber);border:1px solid oklch(0.828 0.189 84.429 / .55)}
+.notes{display:flex;flex-direction:column;gap:14px}
+.note{display:flex;gap:10px;font-size:13px}
+.note p{margin:0;color:var(--mfg)}.note b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.prop{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;color:oklch(0.85 0.12 70);border:1px dashed oklch(0.828 0.189 84.429 / .6)}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1820px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · effects</div>
+<h1 class="h1">The FX tray: pinned to the foot, started by a tap, edited live</h1>
+<p class="lede">An effect started on a sheet is a programmer effect — the same kind <b style="color: var(--fg)">+ Effect</b> on the programmer and a busk pad make — so it plays over the programmer's values, Clear sweeps it and Record captures it. There is no Apply: picking one starts it and every change after that is on stage as it is made.</p>
+</div>
+
+<div class="col" style="gap: 10px">
+<div class="lbl">The tray's four states, at a Stage panel's width</div>
+<div class="row" style="gap: 24px">
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh"><span class="lbl">Effects</span><span class="ro">none</span><span class="sp"></span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div>
+</div>
+<p class="cap" style="width: 304px"><b>Empty.</b> One row, still pinned, so the door is always in the same place.</p>
+</div>
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">3</span><span class="fxc"><span class="dot7"></span>Circle</span><span class="fxc off"><span class="dot7 off"></span>Pulse</span><span class="fxc" style="padding: 0 6px">+1</span><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+</div>
+<p class="cap" style="width: 304px"><b>Folded.</b> A chip per effect, dimmed while paused; the overflow folds to <i>+n</i> and <b>+ Effect</b> to its glyph. A chip opens the tray on that effect.</p>
+</div>
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh" style="border-bottom: 1px solid var(--bd)"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">3</span><span class="sp"></span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></div>
+<div class="col" style="gap: 2px; padding: 6px">
+<div class="fxr"><div class="l1"><span class="dot7"></span>Circle<span class="mchip">½</span><span class="sp"></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="l2">→ position · around yours · <span class="home">programmer</span></div></div>
+<div class="fxr"><div class="l1"><span class="dot7 off"></span><span style="color: var(--mfg)">Pulse</span><span class="mchip">¼</span><span class="mchip">M2</span><span class="sp"></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="l2">→ strobe · paused · <span class="home">programmer</span></div></div>
+<div class="fxr ro"><div class="l1"><span class="dot7 sky"></span>Rainbow cycle<span class="mchip">1 bar</span><span class="sp"></span><span class="btn g">Open Q12</span></div><div class="l2">→ colour · via Front wash · <span class="home">on Q12</span> <span class="heldp">held back</span></div></div>
+</div>
+</div>
+<p class="cap" style="width: 304px"><b>Open.</b> The programmer rail's two-line rows. Yours are live; one that belongs to a cue or a Look is read-only, names its home, opens it, and says when your value holds it back.</p>
+</div>
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh" style="border-bottom: 1px solid var(--bd)"><span class="ib" style="margin-left: -6px"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span><span class="lbl" style="color: var(--fg)">Add an effect</span><span class="sp"></span></div>
+<div class="col" style="gap: 8px; padding: 10px 10px 4px">
+<div class="seg"><span>Intensity</span><span>Colour</span><span class="on">Position</span><span class="dis">Controls</span></div>
+</div>
+<div class="col" style="gap: 2px; padding: 4px 6px 8px">
+<div class="erow on"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Circle<span class="sp"></span><span class="live"><i></i>running</span></div>
+<div class="erow"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Figure 8</div>
+<div class="erow"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Sweep</div>
+<div class="erow"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Pan sweep</div>
+<div class="erow"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Tilt sweep</div>
+<div class="erow"><svg class="s" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Random position</div>
+</div>
+<div class="ctl" style="padding: 8px 12px; border-top: 1px solid var(--bd)"><span class="ro">A tap starts it; another tap swaps it, phase kept.</span><span class="sp"></span><span class="btn">Edit Circle</span></div>
+</div>
+<p class="cap" style="width: 304px"><b>Adding.</b> The family opens on the row you came from; a family the head cannot take is disabled. A tap is the start — audition by tapping down the list.</p>
+</div>
+
+</div>
+</div>
+
+<div class="col" style="gap: 10px">
+<div class="lbl">The live editor · three families, one anatomy</div>
+<div class="row" style="gap: 24px">
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh" style="border-bottom: 1px solid var(--bd)"><span class="ib" style="margin-left: -6px"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span><span class="dot7"></span><span style="font-size: 12.5px; font-weight: 500">Pulse</span><span class="ro">→ dimmer</span><span class="sp"></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ed" style="border-top: none">
+<div class="ctl"><span class="lbl">Speed</span><span class="sp"></span><span class="btn" style="height: 22px">M2 · <span class="mono">96</span></span></div>
+<div class="seg"><span>⅛</span><span class="on">¼</span><span>½</span><span>1</span><span>2</span><span>4</span></div>
+<div class="col" style="gap: 6px"><div class="ctl"><span class="lbl">Over the level underneath</span><span class="prop">proposal</span></div><div class="seg"><span>Replace it</span><span class="on">Within it</span></div><div class="ro">Pulses between 0 and your <b>80%</b>.</div></div>
+<div class="ctl"><span class="lbl" style="width: 44px">Low</span><div class="sl"><i></i><b style="left: 0; width: 0%"></b><u style="left: 0%"></u></div><span class="fld mono">0<small>%</small></span></div>
+<div class="ctl"><span class="lbl" style="width: 44px">High</span><div class="sl"><i></i><b style="left: 0; width: 100%"></b><u style="left: 100%"></u></div><span class="fld mono">100<small>%</small></span></div>
+<div class="ctl" style="color: var(--mfg); font-size: 11.5px"><svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Shape · attack 10% · hold 30% · quad out</div>
+<div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px"><span class="live"><i></i>Live</span><span class="sp"></span><span class="btn g"><svg class="s" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Revert</span><span class="btn">Done</span></div>
+</div>
+</div>
+<p class="cap" style="width: 304px">A level effect's question is the position effect's, asked of a level: replace what is underneath, or move <i>within</i> it (Multiply). Drawn as a proposal — Model, open call 2.</p>
+</div>
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh" style="border-bottom: 1px solid var(--bd)"><span class="ib" style="margin-left: -6px"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span><span class="dot7"></span><span style="font-size: 12.5px; font-weight: 500">Colour cycle</span><span class="ro">→ colour</span><span class="sp"></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ed" style="border-top: none">
+<div class="ctl"><span class="lbl">Speed</span><span class="sp"></span><span class="btn" style="height: 22px">M3 · <span class="mono">60</span></span></div>
+<div class="seg"><span>½</span><span>1</span><span>2</span><span class="on">4</span><span>8</span><span>16</span></div>
+<div class="col" style="gap: 6px"><span class="lbl">Colours</span>
+<div style="display: flex; flex-wrap: wrap; gap: 4px"><span class="cs"><i style="background: #ff5a1f"></i>Amber wash</span><span class="cs"><i style="background: #1d3fd6"></i>#1d3fd6</span><span class="cs"><i style="background: #d61d8a"></i>Rose</span><span class="cs" style="padding: 0 8px; color: var(--mfg)">+ Colour</span></div>
+<div class="ro">Named templates move with their template; literals stay put.</div></div>
+<div class="ctl"><span class="lbl" style="width: 44px">Fade</span><div class="sl"><i></i><b style="left: 0; width: 40%"></b><u style="left: 40%"></u></div><span class="fld mono">40<small>%</small></span></div>
+<div class="ctl" style="color: var(--mfg); font-size: 11.5px"><svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Advanced · phase 0° · step timing off</div>
+<div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px"><span class="live"><i></i>Live</span><span class="sp"></span><span class="btn g"><svg class="s" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Revert</span><span class="btn">Done</span></div>
+</div>
+</div>
+<p class="cap" style="width: 304px">The colour list is today's <span class="code">FxColourListPicker</span>, chips first; a chip opens the editor kit's colour editor beside it.</p>
+</div>
+
+<div class="col" style="gap: 8px">
+<div class="tray">
+<div class="trh" style="border-bottom: 1px solid var(--bd)"><span class="ib" style="margin-left: -6px"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span><span class="dot7"></span><span style="font-size: 12.5px; font-weight: 500">Circle</span><span class="ro">→ position</span><span class="sp"></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ed" style="border-top: none">
+<div class="ctl"><span class="lbl">Speed</span><span class="sp"></span><span class="btn" style="height: 22px">M1 · <span class="mono">124</span></span></div>
+<div class="seg"><span>½</span><span>1</span><span class="on">2</span><span>4</span><span>8</span><span>16</span></div>
+<div class="col" style="gap: 6px"><span class="lbl">Centre</span><div class="seg"><span>Around current position</span><span class="on">Absolute</span></div></div>
+<div class="ctl" style="align-items: flex-start">
+<div class="pad" style="width: 96px; height: 96px"><div class="orb" style="left: 18%; top: 30%; width: 50%; height: 30%"></div><div class="dot" style="left: 43%; top: 45%"></div></div>
+<div class="col" style="gap: 6px; flex: 1">
+<div class="ctl"><span class="lbl" style="width: 24px">Pan</span><span class="fld mono" style="width: 100%">230<small>°</small></span></div>
+<div class="ctl"><span class="lbl" style="width: 24px">Tilt</span><span class="fld mono" style="width: 100%">120<small>°</small></span></div>
+</div>
+</div>
+<div class="ctl"><span class="lbl" style="width: 56px">Pan size</span><div class="sl"><i></i><b style="left: 0; width: 25%"></b><u style="left: 25%"></u></div><span class="fld mono">50<small>°</small></span></div>
+<div class="ctl"><span class="lbl" style="width: 56px">Tilt size</span><div class="sl"><i></i><b style="left: 0; width: 15%"></b><u style="left: 15%"></u></div><span class="fld mono">15<small>°</small></span></div>
+<div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px"><span class="live"><i></i>Live</span><span class="sp"></span><span class="btn g"><svg class="s" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Revert</span><span class="btn">Done</span></div>
+</div>
+</div>
+<p class="cap" style="width: 304px"><b>Absolute</b> shows the centre the Around arm hides — the editor kit's 120px pad in degrees, made smaller — and the circle is drawn on it.</p>
+</div>
+
+<div class="col" style="gap: 8px; width: 304px">
+<div class="notes" style="padding-top: 4px">
+<div class="note"><span class="n">1</span><div><b>Live is the only mode.</b><p>Every control goes through <span class="code">useLivePush</span> — a 50 ms floor, deduplicated, the release always lands — into <span class="code">PUT /fx/{id}</span>, which swaps the parameters and keeps the phase. Typed fields commit on Enter.</p></div></div>
+<div class="note"><span class="n">2</span><div><b>Revert, Done, ×.</b><p>Revert puts back the snapshot taken when the editor opened, in one write. Done goes back to the list and changes nothing. × stops the effect.</p></div></div>
+<div class="note"><span class="n">3</span><div><b>Sizes in degrees.</b><p>Where both axes carry a travel range, a radius is shown in degrees (60° = 28 of 255 on a 540° pan), with the byte as a read-out — the position cell's rule. Elsewhere, bytes.</p></div></div>
+<div class="note"><span class="n">4</span><div><b>One editor, three surfaces.</b><p>The tray's editor is the body of today's <span class="code">EffectParameterForm</span>, rebuilt on the editor kit. The programmer rail's <i>Edit…</i> and <span class="code">FxSheet</span>'s chips open the same editor in <span class="code">EditorSurface</span>, so <span class="code">ActiveEffectSheet</span> and <span class="code">AddEditFxSheet</span>'s configure step go.</p></div></div>
+<div class="note"><span class="n">5</span><div><b>Groups and heads.</b><p>On a group, or a fixture with heads, the editor's Advanced gains Distribution and Element mode, as today.</p></div></div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="row" style="gap: 28px">
+<div class="notes" style="flex: 1">
+<div class="note"><span class="n">6</span><div><b>Around current position is Additive with the centre pinned.</b><p>The desk's position blend adds <span class="code">effect − 128</span> to what the reset pass put underneath — the programmer's value, else the cue's, else the base. The arm hides the centre and sends 128; Absolute is Override with the centre shown. Movement effects start in Around (agreed); a stored effect with Additive and a centre of 128 reads back as Around.</p></div></div>
+<div class="note"><span class="n">7</span><div><b>Nothing held back without saying so.</b><p>A programmer effect is never held back by a programmer value. An effect that is — a cue's, a Look's, or an older manual one — is listed with an amber <span class="heldp">held back</span>, and its row's chip carries the dot (Layers).</p></div></div>
+</div>
+<div class="notes" style="flex: 1">
+<div class="note"><span class="n">8</span><div><b>Where a started effect lives.</b><p><span class="code">programmerOwned: true</span>: Clear sweeps it, Blind stages it, Record and Record look capture it, ⌫ on its cell stops it. The sheet's Release stops it with the values. The ⌘K <i>Apply FX</i> sheet follows the same rule.</p></div></div>
+<div class="note"><span class="n">9</span><div><b>What does not change.</b><p>Effect templates, busk pads and cue effects are untouched; an effect a cue or a Look holds is still edited in its home. The FX Library is still where an effect type is defined.</p></div></div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

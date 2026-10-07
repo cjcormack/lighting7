@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Model and open calls</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.45}
+.app *{box-sizing:border-box}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:28px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.h2{margin:0;font-size:17px;font-weight:600}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:10px}
+.box{border:1px solid var(--bd);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px;background:oklch(0.16 0.005 286)}
+.tbl{display:grid;gap:0;font-size:12.5px}
+.tbl > span{padding:7px 10px;border-bottom:1px solid oklch(0.3 0.006 286 / .6);color:var(--mfg)}
+.tbl > span.k{color:var(--fg);font-weight:600;white-space:nowrap}
+.tbl > span.h{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg);border-bottom:1px solid var(--bd)}
+.ag{display:inline-flex;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;color:var(--green);border:1px solid oklch(0.792 0.209 151.711 / .5);vertical-align:1px}
+.pr{display:inline-flex;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;color:oklch(0.85 0.12 70);border:1px dashed oklch(0.828 0.189 84.429 / .6);vertical-align:1px}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+.q{display:flex;gap:10px}
+.q p{margin:0;color:var(--mfg);font-size:12.5px}.q b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.sess{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid oklch(0.3 0.006 286 / .6)}
+.sess .t{width:28px;flex:0 0 auto;font-weight:700;color:var(--fg)}
+.sess p{margin:0;color:var(--mfg);font-size:12.5px}.sess b{color:var(--fg);font-weight:600}
+.lane{display:inline-flex;height:16px;padding:0 6px;border-radius:4px;font-size:9.5px;font-weight:600;border:1px solid var(--bd);color:var(--mfg);margin-right:4px}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1760px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · model</div>
+<h1 class="h1">Decisions, the wire, the code, the sessions and the open calls</h1>
+</div>
+
+<div class="row">
+<div class="box" style="flex: 1.25">
+<div class="h2">Decisions</div>
+<div class="tbl" style="grid-template-columns: 44px 1fr">
+<span class="h">#</span><span class="h">Decision</span>
+<span class="k">D1</span><span><b style="color: var(--fg)">One sheet body</b> for a fixture and a group in every host — the pop-up, the Stage panel, a phone's bottom sheet, the cards page and the group sheet. <span class="ag">agreed</span></span>
+<span class="k">D2</span><span><b style="color: var(--fg)">No Edit / Done.</b> Live while the desk is connected; read-only offline or on a parked property. <span class="ag">agreed</span></span>
+<span class="k">D3</span><span>Rows grouped by family: Intensity · Colour · Position · Beam · Controls.</span>
+<span class="k">D4</span><span><b style="color: var(--fg)">A source mark on every row</b> — edge and chip in the grid's colours, from <span class="code">provenanceState</span> and <span class="code">getKeyState</span>; an amber dot where something underneath is held back. <span class="ag">agreed</span></span>
+<span class="k">D5</span><span><b style="color: var(--fg)">The chip opens the property's stack</b>, top wins, through <span class="code">EditorSurface</span>, fed by a new desk read (W1). <span class="ag">agreed</span></span>
+<span class="k">D6</span><span><b style="color: var(--fg)">× clears one value</b> (<span class="code">programmer.clearEntry</span> at the programmer fade); <b style="color: var(--fg)">Release n</b> clears every value and local effect on the fixture (W2). <span class="ag">agreed</span></span>
+<span class="k">D7</span><span><b style="color: var(--fg)">Editor-kit controls</b>: an <span class="code">EditorField</span> with its unit on every row, <span class="code">ColourEditor</span> docked in the colour row, the pad in degrees, the setting type-ahead; one row open at a time. <span class="ag">agreed</span></span>
+<span class="k">D8</span><span>Pan and tilt write <span class="code">programmer.setPosition</span> — degrees where annotated — never raw channels.</span>
+<span class="k">D9</span><span><b style="color: var(--fg)">The FX tray is pinned to the sheet's foot</b>: folded chips, the open list, the picker, the live editor. <span class="ag">issue 6</span></span>
+<span class="k">D10</span><span><b style="color: var(--fg)">A sheet's effect is a programmer effect</b> (<span class="code">programmerOwned</span>), and so is ⌘K's <i>Apply FX</i>. <span class="ag">agreed</span></span>
+<span class="k">D11</span><span><b style="color: var(--fg)">Effects are edited live</b>: no Apply; <span class="code">useLivePush</span> into <span class="code">PUT /fx/{id}</span>, phase kept; Revert and Done. <span class="ag">agreed</span></span>
+<span class="k">D12</span><span><b style="color: var(--fg)">Movement starts Around current position</b> (Additive, centre pinned at 128); Absolute is Override with the centre shown. <span class="ag">agreed</span></span>
+<span class="k">D13</span><span><b style="color: var(--fg)">A strip picks heads or members</b>; All writes the fixture's all-heads properties or one group entry, a subset writes each. <span class="ag">agreed</span></span>
+<span class="k">D14</span><span><b style="color: var(--fg)">A phone gets the sheet</b> in the Stage view as a bottom sheet; Aim moves to an <i>Aim…</i> popover on the Position row. <span class="ag">agreed</span></span>
+<span class="k">D15</span><span><b style="color: var(--fg)">One effect editor</b> for the tray, the rail's <i>Edit…</i> and <span class="code">FxSheet</span>'s chips; <span class="code">ActiveEffectSheet</span> and <span class="code">AddEditFxSheet</span> retire.</span>
+</div>
+</div>
+
+<div class="col" style="flex: 1; gap: 28px">
+<div class="box">
+<div class="h2">The wire</div>
+<div class="tbl" style="grid-template-columns: 34px 1fr">
+<span class="k">W1</span><span><span class="code">programmer.keyStack {targetType, targetKey, propertyName}</span> → the layers under one property, top first: park · programmer effects · programmer slots (owner, value) · effects, each with <span class="code">heldBack</span> · the cue's contributor (cue, stack, Look layer, value) · base. Request and reply on one socket, never broadcast; built from <span class="code">ProvenanceService.underlyingSources</span> and the engine's suppression map. Re-asked while the stack is open on <span class="code">provenanceState</span>.</span>
+<span class="k">W2</span><span><span class="code">programmer.clearTarget {targetType, targetKey, fadeMs}</span> — every entry on the fixture (its heads included) or the group, and every local effect on it, in one pass and one republish. Answers what it released, which Release's toast names.</span>
+<span class="k">W3</span><span>No new route for effects: <span class="code">POST /fx/add</span> with <span class="code">programmerOwned: true</span>; Around is <span class="code">blendMode: ADDITIVE</span> plus the centre at 128. Live edits are <span class="code">PUT /fx/{id}</span> at a 50 ms floor (open call 1).</span>
+<span class="k">W4</span><span>A bug to fix beside it: provenance counts the programmer's raw-channel side track as holding a property, though the engine holds no effect back for it, so a Channels-tab pan reads <i>Programmer</i> while an effect is what is on stage.</span>
+</div>
+</div>
+
+<div class="box">
+<div class="h2">The code</div>
+<div class="tbl" style="grid-template-columns: 150px 1fr">
+<span class="k">New</span><span><span class="code">components/fixtureSheet/</span> — <span class="code">FixtureSheet</span> (body), <span class="code">SheetHeader</span>, <span class="code">PropertyRow</span>, <span class="code">SourceChip</span> + <span class="code">useRowSource</span>, <span class="code">LayerStack</span>, <span class="code">HeadStrip</span>, <span class="code">FxTray</span>, <span class="code">FxEditor</span>, <span class="code">FxPicker</span>, <span class="code">useRelease</span></span>
+<span class="k">Hosts</span><span><span class="code">FixtureDetailModal</span>, <span class="code">StageFixtureControlPanel</span>, a phone arm in <span class="code">routes/Stage.tsx</span>, the card in <span class="code">routes/Fixtures.tsx</span>, a group sheet replacing <span class="code">GroupDetailModal</span> and <span class="code">GroupCard</span>'s body</span>
+<span class="k">Goes</span><span><span class="code">PropertyVisualizers</span>, <span class="code">GroupPropertyVisualizers</span>, <span class="code">FixtureContent</span>'s properties view and <span class="code">ElementsView</span>, <span class="code">FxSection</span>, <span class="code">ActiveEffectSheet</span>, <span class="code">AddEditFxSheet</span>, <span class="code">EditModeContext</span></span>
+<span class="k">Reused</span><span>the editor kit, <span class="code">useLivePush</span>, <span class="code">ownership.ts</span>'s vocabulary, <span class="code">ProgrammerFxList</span>'s row, <span class="code">EffectParameterForm</span>'s parameter inputs, the busk pip</span>
+</div>
+</div>
+</div>
+</div>
+
+<div class="row">
+<div class="box" style="flex: 1.25">
+<div class="h2">Sessions — one PR each</div>
+<div class="sess"><span class="t">1</span><p><span class="lane">backend</span><span class="lane">api</span><b>The desk's half.</b> W1 and W2 with their tests, W4's fix, and the client API and store hooks for both. Nothing drawn yet.</p></div>
+<div class="sess"><span class="t">2</span><p><span class="lane">frontend</span><b>The sheet.</b> <span class="code">FixtureSheet</span> in the pop-up and the Stage panel: the header, the scope line, families, rows with marks, fields, ×, Release, D8's position writes, the stack popover. Today's FX section rides along unchanged at the foot.</p></div>
+<div class="sess"><span class="t">3</span><p><span class="lane">frontend</span><b>The FX tray.</b> The tray, the picker, the live editor with Around / Absolute; programmer-owned starts; the rail's <i>Edit…</i> and <span class="code">FxSheet</span> on the same editor; the two old sheets deleted.</p></div>
+<div class="sess"><span class="t">4</span><p><span class="lane">frontend</span><b>Heads and groups.</b> The strip, mixed reads, group writes, the group sheet; the accordions and the group visualisers deleted.</p></div>
+<div class="sess" style="border-bottom: none"><span class="t">5</span><p><span class="lane">frontend</span><b>The rest of the hosts.</b> The phone's bottom sheet, the cards page, <i>Aim…</i> on the Position row; docs and the follow-ups.</p></div>
+</div>
+
+<div class="box" style="flex: 1">
+<div class="h2">Open calls — each drawn one way</div>
+<div class="q"><span class="n">1</span><p><b>Live FX over REST or a socket frame?</b> Drawn: <span class="code">PUT /fx/{id}</span> through <span class="code">useLivePush</span> at 50 ms — no new protocol, about 20 requests a second while dragging. The alternative is a WS <span class="code">fx.update</span> beside <span class="code">pauseFx</span>.</p></div>
+<div class="q"><span class="n">2</span><p><b>A level effect over a held level: Replace or Within?</b> Drawn as a proposal on Pulse — <i>Within it</i> is Multiply, pulsing between 0 and your 80%. Leaving it out keeps today's Override.</p></div>
+<div class="q"><span class="n">3</span><p><b>Release asks nothing.</b> Drawn without a confirm, like the programmer's Clear: it fades at the programmer fade and the toast names what went.</p></div>
+<div class="q"><span class="n">4</span><p><b>The strip's pick is the sheet's own</b>, not the desk selection; it resets when the sheet opens on another fixture.</p></div>
+<div class="q"><span class="n">5</span><p><b>A row's editor opens inline</b> (colour, position) rather than as a popover beside the sheet; one open at a time.</p></div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
