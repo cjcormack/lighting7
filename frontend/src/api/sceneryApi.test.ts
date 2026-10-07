@@ -85,4 +85,11 @@ describe('parseProgrammerSceneryFrame', () => {
   it('reads an absent list as nothing held', () => {
     expect(parseProgrammerSceneryFrame({ type: 'programmer.sceneryState' })).toEqual({ projectId: null, elements: [] })
   })
+
+  it('carries the desk\'s changed-since-Include count only when it sends one', () => {
+    expect(parseProgrammerSceneryFrame({ projectId: 6, elements: [], changedSinceInclude: 2 })).toEqual({
+      projectId: 6, elements: [], changedSinceInclude: 2,
+    })
+    expect('changedSinceInclude' in parseProgrammerSceneryFrame({ projectId: 6, elements: [] })).toBe(false)
+  })
 })

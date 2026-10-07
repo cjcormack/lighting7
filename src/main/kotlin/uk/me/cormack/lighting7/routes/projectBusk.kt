@@ -663,6 +663,7 @@ internal class BuskRecordCache(private val state: State) {
     private val cueDtos = HashMap<Int, BuskCueDto>()
     private var templateUsages: Map<Int, TemplateUsage>? = null
     private var lookUsages: Map<Int, LookUsage>? = null
+    private var lookScenery: Map<Int, List<LookScenerySummaryDto>>? = null
 
     /**
      * Read the usage every record on [pages] needs, one batched call per kind, before any DTO is
@@ -678,7 +679,9 @@ internal class BuskRecordCache(private val state: State) {
         val pads = contents.pads.values
         if (pads.isEmpty()) return
         templateUsages = templateUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.template]?.value }.distinct())
-        lookUsages = lookUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct())
+        val lookIds = pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct()
+        lookUsages = lookUsageFor(lookIds)
+        lookScenery = lookScenerySummariesFor(lookIds)
     }
 
     fun template(project: DaoProject, id: Int): DaoTemplate? =
@@ -696,7 +699,9 @@ internal class BuskRecordCache(private val state: State) {
         }
 
     fun dto(look: DaoLook): LookDto =
-        lookDtos.getOrPut(look.id.value) { look.toSummaryDto(state, lookUsages?.get(look.id.value)) }
+        lookDtos.getOrPut(look.id.value) {
+            look.toSummaryDto(state, lookUsages?.get(look.id.value), lookScenery?.let { it[look.id.value].orEmpty() })
+        }
 
     fun dto(cue: DaoCue): BuskCueDto = cueDtos.getOrPut(cue.id.value) {
         val stack = cue.cueStack

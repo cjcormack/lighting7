@@ -715,6 +715,31 @@ Creating a **bound** Look and **update-back after Include** both work now —
 `RecordLookSheet` (`POST /programmer/record-look`) and `updateIncludedLook`. `includedTargetIsReadOnly`
 and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them.
 
+**Record, Include and Update carry the programmer's scenery** (scenery-programmer plan session 3,
+D7, D8; the rules are lighting7 `docs/lighting-composition-model.md` §"Record / Include / Update").
+Both Record sheets draw a ***Record scenery too*** row — `RecordSceneryRow`, beside *Record effects
+too* on `RecordSheet` and after the effects on `RecordLookSheet` — **absent while the programmer holds
+no scenery and ticked on every open while it holds some**, its hint naming the held pieces in the
+order first held (`useHeldSceneryNames`, *a piece* for one the element list has not loaded) and saying
+what the destination does with them: a cue gets a row for each piece it would not already show, a
+Look keeps every held piece. It sends `scenery` on the request; neither the mask nor *Selected
+fixtures only* narrows it (D3), so the hint does not mention them. The result panels add
+`describeSceneryWrite`'s notes (*1 scenery change*, *2 held pieces already shown there*). The action
+bar's **Record is enabled for a programmer holding only scenery** (`hasContent` counts it) — a Look of
+only the moon is the busk pad that flies it. Include needs nothing on this side: the desk loads the
+source's rows into the overlay and the band shows them. **Update's dirty count adds the desk's**
+`changedSinceInclude` from `programmer.sceneryState` (`withSceneryChanges` in `lib/includeBaseline.ts`,
+read by `useIncludeBaseline`), because a client snapshot of the overlay at the include transition
+could land on either side of the overlay's Include — the two frames are unordered — and without it a
+moved tab after Include left Update disabled as *in sync*. `null` stays `null`: a tab that did not
+see the Include still claims nothing. `UpdateDialog`'s result line adds *, 1 scenery change* where one
+was written, so a scenery-only Update does not read as *0 values written* and nothing else; the
+Include sheet's result line counts `sceneryIncluded` the same way, Record's menu heading names held
+scenery (`recordMenuLabel`), and a busk pad's face counts a Look's scenery (`padFace.ts`'s
+`describeLookContents`, *1 scenery*), so a scenery Look is never an *empty* pad. A Record or Update
+that wrote scenery invalidates every `Cue` entry, as `setCueScenery` does, since a row moves what
+every later cue tracks.
+
 **All three Make Hard routes are gone, and nothing replaced them.** They existed to swap
 value-level palette references for the literals they resolved to, and the `ref:` grammar retired,
 so there is nothing left to harden. A successor gesture — "promote a layer's *cooked* values into
@@ -2958,8 +2983,14 @@ Four things about it are easy to get wrong:
 - **Off the current project the live bank is not read at all** — no beat, the stored tempo shown —
   because a cloned project's masters can share uuids with the running ones.
 
-**The Looks sheet** (`components/looks/LookSheet.tsx`) is Families · Preview · Contents · Notes · Cue
-layers · Busk pages; **the Templates sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
+**The Looks sheet** (`components/looks/LookSheet.tsx`) is Families · Preview · Contents · Scenery ·
+Notes · Cue layers · Busk pages — **Scenery** a read-out since the scenery-programmer plan's session 3
+(D10): a `Blinds` glyph and a summary such as *Moon in · Sofa shown* off `LookSummary.scenery`
+(`describeLookScenery`, `summariseSceneryState` in `lib/scenery.ts`; a flown piece's in and out named
+from the scene's element list, metres until it loads), blank for a Look with none, and *Scenery only*
+in Contents for a Look that lights nothing. Its 120px floor puts the sheet past the 1180×820 iPad
+frame's ~940 with the sidebar open, so there it scrolls sideways under the sticky name, as the plan's
+§4 has it; **the Templates sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
 Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the route under family dividers
 (§Looks, templates and layers). Session 2's facts:
 

@@ -614,6 +614,11 @@ internal val recordCueTool = ToolDef(
     description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue. " +
             "CREATE makes a new cue in a stack; MERGE adds the recorded values to an existing cue; " +
             "UPDATE_EXISTING replaces that cue's in-mask content; REMOVE deletes the rows the recording names. " +
+            "Scenery the programmer holds (move_scenery; `programmer.scenery` in get_current_state) is recorded too unless " +
+            "scenery is false: a change row for each held piece the cue would not show anyway — a held state equal to what " +
+            "the cue tracks from earlier cues, its stack's set or the piece's base writes nothing, and a row the cue already " +
+            "has for that piece is replaced. REMOVE deletes the cue's rows for the held pieces. The mask and targets never " +
+            "narrow scenery. " +
             "Check `programmer` in get_current_state first: an empty programmer records an empty cue.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -648,6 +653,10 @@ internal val recordCueTool = ToolDef(
                 put("items", targetSchema)
                 put("description", "Record only these fixtures (groups are expanded). Omit to record the whole programmer.")
             })
+            put("scenery", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Record the scenery the programmer holds as well. Default true.")
+            })
         })
     }
 )
@@ -657,7 +666,9 @@ internal val includeIntoProgrammerTool = ToolDef(
     description = "Load a cue or a look back into the programmer as an edit buffer — the desk's Include. " +
             "Name exactly one of cueId or lookId. The included thing becomes the update target, so the " +
             "follow-up is: include, change what you want, then update_from_programmer with no targets, which " +
-            "writes back only what changed and leaves everything else alone.",
+            "writes back only what changed and leaves everything else alone. The source's own scenery rows are held " +
+            "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
+            "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -678,7 +689,9 @@ internal val updateFromProgrammerTool = ToolDef(
             "writes only what changed since the last include_into_programmer, into that same cue or look. " +
             "With targets it writes each named cue exactly the keys the programmer is currently overriding it " +
             "on. With preview=true it writes nothing and returns the checklist of which cues the programmer is " +
-            "sitting on top of, which is the safe thing to call first.",
+            "sitting on top of, which is the safe thing to call first. With no targets, the scenery the programmer " +
+            "holds is written back too — into the cue as change rows (an included row with its own transition time, " +
+            "a held piece the cue already shows skipped), into a look as its scenery; with targets it is not.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -865,7 +878,7 @@ internal val MOVE_SCENERY_KEYS = MOVE_SCENERY_STATES + setOf("element", "fadeSec
 
 /**
  * Move scenery now, through the programmer (scenery-programmer plan D15): the same overlay the
- * Scenery tab and the Stage view write. Not held to a remote-access setting — scenery is drawn, never
+ * programmer rail's Scenery band and the Stage view write. Not held to a remote-access setting — scenery is drawn, never
  * output, so moving it reaches nothing physical.
  */
 internal val moveSceneryTool = ToolDef(
@@ -873,7 +886,8 @@ internal val moveSceneryTool = ToolDef(
     description = "Move one scene element now — fly a piece in or out, draw or close the tabs, show or hide a piece — by holding it in the programmer, above every cue, stack set and Look until it is released or the programmer is cleared. " +
         "It moves at the element's own travel time (set_scene's travelS) scaled by how far it goes, or over fadeSeconds when given; with neither it snaps. " +
         "While the programmer is blind the move is staged and lands when Blind is left. Writes nothing stored: to make a cue or Look move it, use set_scenery. " +
-        "Give states to hold (merged over what the programmer already holds on the element), or release: true to let it go back to what the show holds. Current project only.",
+        "Give states to hold (merged over what the programmer already holds on the element), or release: true to let it go back to what the show holds. Current project only. " +
+        "record_cue (and update_from_programmer after include_into_programmer) writes what the programmer holds into a cue or look.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

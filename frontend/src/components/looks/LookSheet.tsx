@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { ArrowRight, AudioWaveform, Clapperboard, CopyPlus, Download, Hand, LayoutGrid, Trash2, X } from 'lucide-react'
+import { ArrowRight, AudioWaveform, Blinds, Clapperboard, CopyPlus, Download, Hand, LayoutGrid, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { CopyToProjectSheet } from '@/components/sheet/CopyToProjectSheet'
@@ -16,13 +16,16 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { useDuplicateBatch } from '@/components/sheet/useDuplicateBatch'
 import { useInclude } from '@/components/programmer/useInclude'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
+import { summariseSceneryState } from '@/lib/scenery'
+import type { StageElementDto } from '@/api/stageElementApi'
+import { useStageElementListQuery } from '@/store/stageElements'
 import { handPickUp } from '@/store/hand'
 import { useCopyLookMutation, useSaveLookMutation } from '@/store/looks'
 import type { LookSummary } from '@/api/looksApi'
 import { LookPreviewSwatches } from './lookValueChips'
 import { useLookDelete } from './useLookDelete'
 
-export type LookColumnKey = 'families' | 'preview' | 'contents' | 'notes' | 'layers' | 'pages'
+export type LookColumnKey = 'families' | 'preview' | 'contents' | 'scenery' | 'notes' | 'layers' | 'pages'
 
 export interface LookSheetRow extends SheetRow {
   look: LookSummary
@@ -68,6 +71,9 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
   const [saveLook] = useSaveLookMutation()
   const [copyLook] = useCopyLookMutation()
   const { include, isLoading: isIncluding } = useInclude(projectId)
+  // Only for the Scenery read-out's *in* / *out* words: a trim reads as metres until it lands.
+  const hasScenery = looks.some((look) => (look.scenery?.length ?? 0) > 0)
+  const { data: elements } = useStageElementListQuery(projectId, { skip: !hasScenery })
   const scope = useMemo(() => libraryPermission(isCurrentProject, projectName), [isCurrentProject, projectName])
 
   const rows = useMemo<LookSheetRow[]>(() => looks.map((look) => ({ id: lookRowId(look.id), look })), [looks])
@@ -132,6 +138,23 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
         ),
       },
       {
+        key: 'scenery',
+        label: 'Scenery',
+        width: 'minmax(120px, 180px)',
+        value: () => undefined,
+        // What the Look shows while live (scenery-programmer plan D10) — a read-out, edited in the
+        // Look's sheet or by Include and Update, as the rest of what a Look holds is.
+        display: (row) => {
+          const summary = describeLookScenery(row.look, elements)
+          return summary ? (
+            <span className="mx-1.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title={summary}>
+              <Blinds className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">{summary}</span>
+            </span>
+          ) : null
+        },
+      },
+      {
         key: 'notes',
         label: 'Notes',
         kind: 'notes',
@@ -187,7 +210,7 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
         ),
       },
     ],
-    [put],
+    [elements, put],
   )
 
   const openRow = useCallback((row: LookSheetRow) => onOpenLook(row.look), [onOpenLook])
@@ -335,11 +358,13 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
 }
 
 /**
- * The name column's track. With the other tracks' floors (120 + 120 + 140 + 140 + 88 + 88 = 696)
- * the sheet needs 896px, inside the ~940 the iPad frame (1180×820) leaves it with the sidebar open.
+ * The name column's track. With the other tracks' floors (120 + 120 + 140 + 120 + 140 + 88 + 88 =
+ * 816) the sheet needs 1016px — past the ~940 the iPad frame (1180×820) leaves it with the sidebar
+ * open since the Scenery column joined, so there it scrolls sideways under the sticky name column,
+ * as the scenery-programmer plan's §4 has the Looks column do on an iPad and a phone.
  */
 const NAME_WIDTH = 200
-const MIN_TRACKS = 696
+const MIN_TRACKS = 816
 
 function lookRowName(row: LookSheetRow): string {
   return row.look.name
@@ -360,11 +385,26 @@ function cellsInert(): boolean {
  * badge of its own. A Look with deferred effects says so: that is what makes it pad-eligible.
  */
 export function describeLookContents(look: LookSummary): string {
-  if (look.targetCount === 0 && look.effectCount === 0) return 'Empty'
+  if (look.targetCount === 0 && look.effectCount === 0) {
+    // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10) — the busk
+    // pad that flies the moon — and its Scenery column says what it moves.
+    return (look.scenery?.length ?? 0) > 0 ? 'Scenery only' : 'Empty'
+  }
   const parts: string[] = []
   if (look.targetCount > 0) parts.push(`${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`)
   if (look.rowCount > 0) parts.push(`${look.rowCount} row${look.rowCount === 1 ? '' : 's'}`)
   if (look.effectCount > 0) parts.push(`${look.effectCount} fx`)
   if (look.hasDeferredEffects) parts.push('effects follow the layer')
   return parts.join(' · ')
+}
+
+/**
+ * A Look's scenery as its library row reads it — *Moon in · Sofa shown* — or null when it moves
+ * none. [elements] names a flown piece's *in* and *out*; until it has loaded a trim reads in metres.
+ */
+export function describeLookScenery(look: LookSummary, elements: readonly StageElementDto[] | undefined): string | null {
+  const items = look.scenery ?? []
+  if (items.length === 0) return null
+  const byUuid = new Map((elements ?? []).map((e) => [e.uuid, e]))
+  return items.map((item) => summariseSceneryState(byUuid.get(item.elementUuid), item.elementName, item.state)).join(' · ')
 }

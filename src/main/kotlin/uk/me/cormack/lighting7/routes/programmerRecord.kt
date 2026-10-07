@@ -81,6 +81,8 @@ data class CueWriteOutcome(
     val fxWritten: Int,
     val preserved: ProgrammerPreservedCounts,
     val warnings: List<String>,
+    /** The programmer's held scenery written into the cue (scenery-programmer plan D7). */
+    val scenery: SceneryRecordOutcome = SceneryRecordOutcome(),
 )
 
 /** A child with timing belongs to `CueTriggerManager`, not to Record. */

@@ -421,6 +421,11 @@ data class ProgrammerSceneryEntryDto(
  * subscription is the connect snapshot and every change is broadcast to every tab — the programmer
  * is shared. [elements] is `@EncodeDefault(ALWAYS)`: an empty overlay is a real state (Clear just
  * ran), and must arrive as "nothing held", not as a field an older desk did not send.
+ *
+ * [changedSinceInclude] (scenery-programmer plan session 3) is how many held elements Update would
+ * write that the included cue or Look does not already say — the scenery half of the source strip's
+ * dirty count, which a client cannot diff for itself: the include target and this frame travel on
+ * two flows, so nothing orders them. Absent until an Include, a Record or an Update set a baseline.
  */
 @Serializable
 @SerialName("programmer.sceneryState")
@@ -428,11 +433,13 @@ data class ProgrammerSceneryStateOutMessage(
     val projectId: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val elements: List<ProgrammerSceneryEntryDto> = emptyList(),
+    val changedSinceInclude: Int? = null,
 ) : ProgrammerOutMessage()
 
 internal fun ProgrammerScenery.Snapshot.toMessage() = ProgrammerSceneryStateOutMessage(
     projectId = projectId,
     elements = elements.map { (uuid, held) -> ProgrammerSceneryEntryDto(uuid.toString(), sceneryStateObject(held.state)) },
+    changedSinceInclude = changedSinceInclude,
 )
 
 @Serializable

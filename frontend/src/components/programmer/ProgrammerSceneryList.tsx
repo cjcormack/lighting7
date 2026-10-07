@@ -12,7 +12,7 @@ import { TRACKED_HATCH_CLASS } from '@/components/scenery/trackedHatch'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { formatError } from '@/lib/formatError'
 import { useProgrammerFade } from '@/lib/programmerFade'
-import { describeScenerySource, sceneryKindLabel, sceneryMoves, shownSceneryState } from '@/lib/scenery'
+import { describeScenerySource, heldSceneryIn, sceneryKindLabel, sceneryMoves, shownSceneryState } from '@/lib/scenery'
 import { cn } from '@/lib/utils'
 import { useLookQuery } from '@/store/looks'
 import {
@@ -283,8 +283,7 @@ export function useSceneryScope(projectId: number): SceneryScope {
 
 /** How many pieces the programmer holds in [projectId] — what Clear will drop, and the rail's count. */
 export function useHeldSceneryCount(projectId: number): number {
-  const scenery = useProgrammerScenery()
-  return scenery.projectId == null || scenery.projectId === projectId ? scenery.elements.length : 0
+  return heldSceneryIn(useProgrammerScenery(), projectId).length
 }
 
 /**

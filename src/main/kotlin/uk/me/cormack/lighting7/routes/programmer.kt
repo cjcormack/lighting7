@@ -65,5 +65,11 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     // plan D1). Here rather than in `ProgrammerStore.clearAll`, which takes no fade and which
     // `ProgrammerWriter.clearAll` skips when no value is held — a programmer holding only scenery.
     state.programmerScenery.clear(fadeMs)
+    // And the include target, which `ProgrammerStore.clearAll` drops only when a value was held. A
+    // cue Included for its scenery or its layers alone left it set while every client's
+    // `programmer.cleared` dropped its copy — so Including that cue again changed nothing the
+    // StateFlow would re-send, and the source strip read *No source* with Update out of reach.
+    state.show.programmerStore.lastIncludedTarget = null
+    state.show.programmerStore.includedLayerSnapshot = emptyList()
     return ProgrammerClearOutcome(entryCount, effectsCleared)
 }

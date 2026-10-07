@@ -379,8 +379,8 @@ A cue, a stack and a Look can each carry **scenery changes** — an element of t
 the states it takes (`visible`, a drawn drape's `open`, a flown piece's `trimM`) — in
 `cue_scenery`, `cue_stack_scenery` and `look_scenery` (`models/scenery.kt`; stage-view plan session 8,
 D11–D13). Scenery sits **beside** the composition model, not in it: nothing here is a DMX channel,
-Record does not capture it (yet — the scenery-programmer plan's D7, its session 3), and a template
-never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
+Record captures only what the programmer **holds** (the scenery-programmer plan's D7, its session 3;
+below), and a template never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
 hands hold now (scenery-programmer plan D1). See `docs/lighting-composition-model.md`
 §"Scenery — beside the layers".
 
@@ -458,8 +458,38 @@ A move's `from` is where the piece is drawn at that moment, so a retarget mid-mo
 transitionMs?}]}`, every problem at once (a state its element's kind cannot take, an element named
 twice, a `transitionMs` off a cue, a MARKER or a separator). The owners' read DTOs carry the lists:
 `CueDetails.scenery` (plus `trackedScenery`, what the cue shows without moving it and where from),
-`CueStackDetails.scenery`, `LookDetails.scenery`. Deleting an element sweeps its changes; deleting a
+`CueStackDetails.scenery`, `LookDetails.scenery` — and the Look list's and busk pads' `LookDto`
+carries a summary, `scenery: [{elementUuid, elementName, state}]` (`@EncodeDefault(ALWAYS)`, one
+batched query per list, `lookScenerySummariesFor`), for the Looks sheet's Scenery column. Deleting an element sweeps its changes; deleting a
 cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
+
+**Record, Include and Update** (scenery-programmer plan session 3, D7, D8;
+`routes/programmerSceneryRecord.kt`). Record (`POST /programmer/record`, `record-look`, the AI's
+`record_cue`) writes the programmer's held scenery into the owner's rows unless its request says
+`scenery: false`; no mask, source or fixture scope narrows it.
+
+- **Into a cue**, a held piece the cue has no row for is written only where it differs from what the
+  cue shows without it — `sceneryBeneathCue`: the base, the stack's set, then every earlier STANDARD
+  cue of the list, the resolver's own fold with the cue's own rows left out. Equal, it is counted as
+  `sceneryAlreadyTracked` and not written. A row the cue already has is replaced, whatever it says —
+  its clock kept unless the held piece carries one from Include — and a row already saying exactly
+  that is left alone and not counted. MERGE and UPDATE_EXISTING are that; REMOVE deletes the cue's
+  rows for the held pieces; a MARKER records none and warns. A new cue is read at its own place in
+  the list, after it is created.
+- **Into a Look**, every held state is written, merged per element over the Look's rows; REMOVE
+  deletes them. A Look recorded with only scenery held is a scenery Look.
+- **Include** (`programmer/include`, `include_into_programmer`) holds the source's own rows in the
+  overlay (`ProgrammerScenery.include`), each replacing what it held on that element — never merged,
+  never the tracked state, never masked — on the Include's fade, a cue row's `transitionMs` kept on
+  the held entry (a later move keeps it). A cue with only scenery sets the include target.
+- **Update** writes the held scenery back in Mode A only — into the cue by the MERGE rule above, into
+  a Look as its scenery. Mode B writes none.
+- **The baseline.** Include sets one (the source's rows) when it moves the include target — an Include that stages nothing leaves both where they were — a Record that retargets the include target
+  resets it to what the cue now says (all held, or none when the Record left scenery out or removed
+  it), and a Mode A Update to everything held. `programmer.sceneryState` carries
+  `changedSinceInclude` — the held pieces that differ from it — which the source strip adds to its
+  value dirty count, because the include target and the overlay are two flows and a client cannot
+  order them. A project switch drops it.
 
 ## Events
 

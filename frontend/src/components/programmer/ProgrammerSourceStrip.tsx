@@ -98,7 +98,8 @@ const BUSK_STATE = 'Busking'
  * Record anywhere — which is the rule the bar already keeps (Record reads the programmer, so it
  * is meaningless when the programmer is empty) finally applying to this state too, rather than a
  * gap. The busking arm never had the question: `resolveProgrammerSource` only answers `busking`
- * when there are entries or programmer FX, which is `hasContent` exactly.
+ * when there are entries or programmer FX, which is `hasContent` but for held scenery — a
+ * programmer holding only scenery names no busk source, and the bar's Record still reaches it.
  *
  * **It was a full-width band of its own until the space plan's session 1**, sitting above a
  * second full-width band of verbs. Two bands each spending a line on one sentence is 101px of an

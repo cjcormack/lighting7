@@ -605,7 +605,7 @@ class AiTools(private val state: State) {
                             target.cueStackId?.let { put("cueStackId", it) }
                         })
                     }
-                    // The scenery the programmer holds (move_scenery, the Scenery tab): each element
+                    // The scenery the programmer holds (move_scenery, the rail's Scenery band): each element
                     // by name with the states held. Staged rather than shown while `blind`.
                     put("scenery", programmerSceneryJson())
                 })
@@ -1119,7 +1119,7 @@ class AiTools(private val state: State) {
 
     /**
      * `move_scenery` (scenery-programmer plan D15): one element's states held in the programmer, or
-     * let go — the same overlay the Scenery tab and the Stage view write, checked against the
+     * let go — the same overlay the rail's Scenery band and the Stage view write, checked against the
      * element's kind. Current project only. Scenery is drawn and never output, so unlike arming,
      * firing and fixture commands this needs no remote-access gate.
      */
@@ -1494,6 +1494,7 @@ class AiTools(private val state: State) {
             cueNumber = input["cueNumber"]?.jsonPrimitive?.contentOrNull,
             sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull,
             targets = input.targetList("targets").getOrElse { return errorResult(it.message ?: "Bad targets") },
+            scenery = input["scenery"]?.jsonPrimitive?.booleanOrNull ?: true,
         )
 
         return when (result) {
@@ -1502,7 +1503,8 @@ class AiTools(private val state: State) {
                 success = true,
                 description = (if (result.outcome.created) "Recorded new cue" else "Recorded into cue") +
                     " '${result.details.name}' (id=${result.outcome.cueId}) — " +
-                    "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} effect(s)",
+                    "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} effect(s)" +
+                    (if (result.outcome.scenery.written > 0) ", ${result.outcome.scenery.written} scenery change(s)" else ""),
                 result = buildJsonObject {
                     put("cueId", result.outcome.cueId)
                     put("cueName", result.details.name)
@@ -1511,6 +1513,9 @@ class AiTools(private val state: State) {
                     put("assignmentsWritten", result.outcome.assignmentsWritten)
                     put("assignmentsRemoved", result.outcome.assignmentsRemoved)
                     put("fxWritten", result.outcome.fxWritten)
+                    put("sceneryWritten", result.outcome.scenery.written)
+                    put("sceneryRemoved", result.outcome.scenery.removed)
+                    put("sceneryAlreadyTracked", result.outcome.scenery.alreadyTracked)
                     put("republishedLive", result.republishedLive)
                     putSkips(result.skipped)
                     putStrings("warnings", result.outcome.warnings)
@@ -1536,13 +1541,14 @@ class AiTools(private val state: State) {
             is IncludeCoreResult.Cue -> ToolExecutionResult(
                 success = true,
                 description = "Included cue '${result.cueData.cueName}' — ${result.outcome.entriesWritten} " +
-                    "value(s) and ${result.outcome.fxSpawned} effect(s) staged in the programmer",
+                    "value(s), ${result.outcome.fxSpawned} effect(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
                 result = buildJsonObject {
                     put("kind", "CUE")
                     put("cueId", result.cueData.cueId)
                     put("name", result.cueData.cueName)
                     put("entriesWritten", result.outcome.entriesWritten)
                     put("fxSpawned", result.outcome.fxSpawned)
+                    put("sceneryIncluded", result.sceneryIncluded)
                     putStrings("fixtureKeys", result.outcome.fixtureKeys)
                     putSkips(result.outcome.skipped)
                     putStrings("warnings", result.outcome.warnings)
@@ -1551,15 +1557,16 @@ class AiTools(private val state: State) {
             is IncludeCoreResult.Look -> ToolExecutionResult(
                 success = true,
                 description = "Included look '${result.lookName}' — ${result.outcome.entriesWritten} " +
-                    "value(s) staged in the programmer",
+                    "value(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
                 result = buildJsonObject {
                     put("kind", "LOOK")
                     put("lookId", result.lookId)
                     put("name", result.lookName)
                     put("entriesWritten", result.outcome.entriesWritten)
+                    put("sceneryIncluded", result.sceneryIncluded)
                     putStrings("fixtureKeys", result.outcome.fixtureKeys)
                     putSkips(result.outcome.skipped)
-                    putStrings("warnings", lookIncludeWarnings(result.lookName, result.outcome))
+                    putStrings("warnings", lookIncludeWarnings(result.lookName, result.outcome, result.sceneryIncluded))
                 }.toString()
             )
         }
@@ -1609,13 +1616,15 @@ class AiTools(private val state: State) {
             )
             is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
                 success = true,
-                description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s) written",
+                description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s) and " +
+                    "${result.result.sceneryWritten} scenery change(s) written",
                 result = buildJsonObject {
                     put("mode", "A")
-                    put("applied", result.result.rowsWritten > 0)
+                    put("applied", result.result.rowsWritten + result.result.sceneryWritten > 0)
                     put("lookId", result.result.lookId)
                     put("lookName", result.result.lookName)
                     put("rowsWritten", result.result.rowsWritten)
+                    put("sceneryWritten", result.result.sceneryWritten)
                     putSkips(result.skipped)
                 }.toString()
             )
@@ -1624,7 +1633,10 @@ class AiTools(private val state: State) {
                 description = if (result.results.isEmpty()) {
                     "Nothing written"
                 } else {
-                    "Updated " + result.results.joinToString { "'${it.cueName}' (${it.assignmentsWritten} value(s))" }
+                    "Updated " + result.results.joinToString {
+                        "'${it.cueName}' (${it.assignmentsWritten} value(s)" +
+                            (if (it.sceneryWritten > 0) ", ${it.sceneryWritten} scenery change(s)" else "") + ")"
+                    }
                 },
                 result = buildJsonObject {
                     put("mode", result.mode)
@@ -1636,6 +1648,7 @@ class AiTools(private val state: State) {
                                 put("cueName", r.cueName)
                                 put("assignmentsWritten", r.assignmentsWritten)
                                 put("fxWritten", r.fxWritten)
+                                put("sceneryWritten", r.sceneryWritten)
                                 put("republishedLive", r.republishedLive)
                             }
                         }

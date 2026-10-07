@@ -92,6 +92,12 @@ internal data class ProgrammerRecordRequest(
      * usually exactly what was meant.
      */
     val targets: List<CueTargetDto>? = null,
+    /**
+     * Record the programmer's held scenery too (scenery-programmer plan D7): a change row for each
+     * held piece the cue would not show anyway. Not governed by [mask] or [targets] — scenery is
+     * addressed by element, never by the selection.
+     */
+    val scenery: Boolean = true,
 )
 
 @Serializable
@@ -106,6 +112,12 @@ internal data class ProgrammerRecordResponse(
     val republishedLive: Boolean,
     val skipped: List<ProgrammerSkipDto> = emptyList(),
     val warnings: List<String> = emptyList(),
+    /** Scenery change rows written into the cue. */
+    val sceneryWritten: Int = 0,
+    /** Scenery change rows deleted from the cue (REMOVE). */
+    val sceneryRemoved: Int = 0,
+    /** Held pieces left out because the cue already shows them there — tracked, or at their base. */
+    val sceneryAlreadyTracked: Int = 0,
 )
 
 internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
@@ -152,6 +164,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 cueNumber = request.cueNumber,
                 sortOrder = request.sortOrder,
                 targets = request.targets,
+                scenery = request.scenery,
             )
         ) {
             is RecordCoreResult.Failure -> call.respond(
@@ -172,6 +185,9 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     republishedLive = result.republishedLive,
                     skipped = result.skipped.map { it.toDto() },
                     warnings = result.outcome.warnings,
+                    sceneryWritten = result.outcome.scenery.written,
+                    sceneryRemoved = result.outcome.scenery.removed,
+                    sceneryAlreadyTracked = result.outcome.scenery.alreadyTracked,
                 ),
             )
         }
@@ -215,6 +231,8 @@ internal data class ProgrammerIncludeResponse(
     val lastIncluded: IncludedTargetDto? = null,
     val skipped: List<ProgrammerSkipDto> = emptyList(),
     val warnings: List<String> = emptyList(),
+    /** The source's own scenery rows now held in the programmer's scenery (scenery-programmer plan D8). */
+    val sceneryIncluded: Int = 0,
 )
 
 internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
@@ -257,6 +275,7 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                     lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
                     skipped = result.outcome.skipped.map { it.toDto() },
                     warnings = result.outcome.warnings,
+                    sceneryIncluded = result.sceneryIncluded,
                 ),
             )
 
@@ -275,7 +294,8 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                     fxTimedSkipped = 0,
                     lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
                     skipped = result.outcome.skipped.map { it.toDto() },
-                    warnings = lookIncludeWarnings(result.lookName, result.outcome),
+                    warnings = lookIncludeWarnings(result.lookName, result.outcome, result.sceneryIncluded),
+                    sceneryIncluded = result.sceneryIncluded,
                 ),
             )
         }
@@ -305,6 +325,8 @@ internal data class ProgrammerUpdateResult(
     val assignmentsWritten: Int,
     val fxWritten: Int,
     val republishedLive: Boolean,
+    /** Scenery change rows written back (Mode A only — scenery says nothing about Mode B's cues). */
+    val sceneryWritten: Int = 0,
 )
 
 /**
@@ -320,6 +342,8 @@ internal data class ProgrammerLookUpdateResult(
     val lookId: Int,
     val lookName: String,
     val rowsWritten: Int,
+    /** Scenery rows written back into the Look. */
+    val sceneryWritten: Int = 0,
     /** What the re-resolve moved: live consumers of the Look. */
     val programmerKeysRefreshed: Int,
     val cuesRepublished: List<Int>,
@@ -380,7 +404,7 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
             is UpdateCoreResult.LookUpdated -> call.respond(
                 ProgrammerUpdateResponse(
-                    applied = result.result.rowsWritten > 0,
+                    applied = result.result.rowsWritten + result.result.sceneryWritten > 0,
                     mode = "A",
                     lookResult = result.result,
                     skipped = result.skipped.map { it.toDto() },

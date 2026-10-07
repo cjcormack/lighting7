@@ -2401,8 +2401,8 @@ read it.
 The programmer holds scenery since session 1 of the scenery-programmer plan (`state/ProgrammerScenery.kt`,
 `programmer.setScenery`, `move_scenery`), but a control surface cannot write it: `BindingTarget` has no
 arm for an element, and the plan's D3 keeps scenery out of the desk selection, so no strip, encoder bank
-or `SelectionProperty` reaches it either. The tabs are moved from the Scenery tab, the Stage view or
-the AI. **Trigger**: an operator wants a fader or encoder to ride a tab's `open` or a flown piece's
+or `SelectionProperty` reaches it either. The tabs are moved from the programmer rail's Scenery band,
+the Stage view or the AI. **Trigger**: an operator wants a fader or encoder to ride a tab's `open` or a flown piece's
 `trimM` (a fly cue busked by hand), or a button to toggle a piece's `visible`. **Then**: a
 `BindingTarget.SceneryElement(elementUuid, key)` — by uuid, as `FireCue` carries one beside its id,
 since a binding outlives a rename — whose fader writes `programmer.setScenery` through the same

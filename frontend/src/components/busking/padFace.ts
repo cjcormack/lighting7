@@ -44,7 +44,11 @@ export function templateSwatch(template: TemplateSummary): string | null {
   return templateRowsSwatch(template.rows)
 }
 
-/** `2 effects · 3 values`, or `empty`. */
+/**
+ * `2 effects · 3 values · 1 scenery`, or `empty`. A Look that only moves scenery is the busk
+ * vehicle for it (scenery-programmer plan D9, D10) — the pad that flies the moon — so its scenery
+ * counts as contents.
+ */
 export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.effectCount > 0) {
@@ -53,6 +57,8 @@ export function describeLookContents(look: LookSummary): string {
   if (look.rowCount > 0) {
     parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
   }
+  const scenery = look.scenery?.length ?? 0
+  if (scenery > 0) parts.push(`${scenery} scenery`)
   return parts.length === 0 ? 'empty' : parts.join(' · ')
 }
 

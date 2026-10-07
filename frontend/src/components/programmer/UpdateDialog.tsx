@@ -138,7 +138,8 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
           {includeTarget && !result && (
             <p className="text-sm text-muted-foreground">
               Only the values you changed since including are written — anything you left alone
-              keeps whatever the cue already stored, palette references included.
+              keeps whatever the cue already stored, palette references included. Scenery the
+              programmer holds goes back too, a cue’s own clock kept.
             </p>
           )}
 
@@ -174,6 +175,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                   <p key={r.cueId}>
                     Updated “{r.cueName}” — {r.assignmentsWritten} value
                     {r.assignmentsWritten === 1 ? '' : 's'} written
+                    {sceneryClause(r.sceneryWritten)}
                     {r.republishedLive ? ' (live cue republished)' : ''}.
                   </p>
                 ))}
@@ -186,6 +188,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                   <p>
                     Updated “{result.lookResult.lookName}” — {result.lookResult.rowsWritten} row
                     {result.lookResult.rowsWritten === 1 ? '' : 's'} written
+                    {sceneryClause(result.lookResult.sceneryWritten)}
                     {result.lookResult.cuesRepublished.length > 0
                       ? `, ${result.lookResult.cuesRepublished.length} live cue(s) moved with it`
                       : ''}
@@ -305,4 +308,9 @@ function ChecklistRow({
       </span>
     </label>
   )
+}
+
+/** `, 1 scenery change` beside an Update's written count — nothing when no scenery moved. */
+function sceneryClause(written: number | undefined): string {
+  return written ? `, ${written} scenery change${written === 1 ? '' : 's'}` : ''
 }

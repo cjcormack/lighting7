@@ -60,7 +60,7 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // element, and that empty frame is still what a Stage view starts from.
         SceneryStateOutMessage::class,
         // The programmer's scenery (scenery-programmer plan D1), a StateFlow: an empty overlay is
-        // still a real state — "nothing held" — and the Scenery tab starts from it.
+        // still a real state — "nothing held" — and the rail's Scenery band starts from it.
         ProgrammerSceneryStateOutMessage::class,
         // The arm, in the show band: on a fresh desk it is disarmed with nothing spent, and that is
         // still the frame every window's ARMED chip and cannon panel start from (stage-view session 9).

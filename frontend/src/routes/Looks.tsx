@@ -11,8 +11,9 @@ import { LibraryRow } from '../components/sheet/LibraryRow'
 import { SheetPage } from '../components/sheet/SheetPage'
 import { duplicateName } from '../lib/duplicateName'
 import { formatError } from '../lib/formatError'
+import { heldSceneryIn } from '../lib/scenery'
 import type { LookSummary } from '../api/looksApi'
-import { useProgrammerSummaryQuery } from '../store/programmer'
+import { useProgrammerScenery, useProgrammerSummaryQuery } from '../store/programmer'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import { toast } from 'sonner'
@@ -59,9 +60,11 @@ export function ProjectLooks() {
   const isCurrentProject = currentProject?.id === projectIdNum
 
   // Gates Record. Recording an empty programmer would make a Look with no rows, which reads as a
-  // broken save rather than as "there was nothing to record".
+  // broken save rather than as "there was nothing to record". Held scenery is something to record:
+  // a Look of only the moon is the busk pad that flies it (scenery-programmer plan D10).
   const { data: programmerSummary } = useProgrammerSummaryQuery()
-  const programmerEntryCount = programmerSummary?.entryCount ?? 0
+  const heldScenery = heldSceneryIn(useProgrammerScenery(), projectIdNum).length
+  const programmerEntryCount = (programmerSummary?.entryCount ?? 0) + heldScenery
 
   // `?action=record` opens the record sheet and strips the param — the command palette's way in.
   useEffect(() => {

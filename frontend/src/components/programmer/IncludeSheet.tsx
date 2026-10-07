@@ -139,6 +139,11 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                 Included “{result.name}” — {result.entriesWritten} value
                 {result.entriesWritten === 1 ? '' : 's'}
                 {result.fxSpawned > 0 ? `, ${result.fxSpawned} effect(s)` : ''}
+                {/* The source's own scenery rows, now held in the programmer (scenery-programmer D8) —
+                    a cue that only moves scenery would otherwise read as "0 values". */}
+                {(result.sceneryIncluded ?? 0) > 0
+                  ? `, ${result.sceneryIncluded} scenery change${result.sceneryIncluded === 1 ? '' : 's'}`
+                  : ''}
                 {result.fxAlreadyRunning > 0
                   ? `. ${result.fxAlreadyRunning} effect(s) were already running on stage.`
                   : '.'}

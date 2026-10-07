@@ -91,6 +91,12 @@ export interface RecordRequest {
    * the Look record's own `targets`, and `OUT_OF_SCOPE`.
    */
   targets?: CueTarget[]
+  /**
+   * Record the scenery the programmer holds too (scenery-programmer plan D7) — a change row for each
+   * held piece the cue would not show anyway. The desk defaults it on; neither the mask nor
+   * `targets` narrows it, since scenery is addressed by element, never by the selection.
+   */
+  scenery?: boolean
 }
 
 export interface RecordResponse {
@@ -104,6 +110,12 @@ export interface RecordResponse {
   republishedLive: boolean
   skipped: ProgrammerSkip[]
   warnings: string[]
+  /** Scenery change rows written into the cue. Absent from a desk before scenery-programmer session 3. */
+  sceneryWritten?: number
+  /** Scenery change rows deleted (REMOVE). */
+  sceneryRemoved?: number
+  /** Held pieces left out because the cue already shows them there. */
+  sceneryAlreadyTracked?: number
 }
 
 // ── Record into a Look ──────────────────────────────────────────────────────
@@ -146,6 +158,11 @@ export interface RecordLookRequest {
    * becomes the *layer's* delay rather than something baked into the Look.
    */
   effectIds?: number[]
+  /**
+   * Record the scenery the programmer holds too (scenery-programmer plan D7, D10): every held state,
+   * since a Look asserts rather than tracks. Defaults on at the desk.
+   */
+  scenery?: boolean
 }
 
 export interface RecordLookResponse {
@@ -160,6 +177,10 @@ export interface RecordLookResponse {
   /** Set when the Look was already live: what the re-resolve moved. */
   programmerKeysRefreshed: number
   cuesRepublished: number[]
+  /** Scenery rows written into the Look. */
+  sceneryWritten?: number
+  /** Scenery rows deleted from the Look (REMOVE). */
+  sceneryRemoved?: number
 }
 
 export interface IncludeRequest {
@@ -198,6 +219,8 @@ export interface IncludeResponse {
   lastIncluded?: IncludedTarget | null
   skipped: ProgrammerSkip[]
   warnings: string[]
+  /** The source's own scenery rows now held in the programmer (scenery-programmer plan D8). */
+  sceneryIncluded?: number
 }
 
 /** One (fixture, property) the programmer is currently overriding. */
@@ -253,6 +276,8 @@ export interface UpdateResult {
   assignmentsWritten: number
   fxWritten: number
   republishedLive: boolean
+  /** Scenery change rows written back (Mode A only). */
+  sceneryWritten?: number
 }
 
 /**
@@ -265,6 +290,8 @@ export interface LookUpdateResult {
   lookId: number
   lookName: string
   rowsWritten: number
+  /** Scenery rows written back into the Look. */
+  sceneryWritten?: number
   /** What the re-resolve moved: the live consumers of the Look. */
   programmerKeysRefreshed: number
   cuesRepublished: number[]
@@ -457,6 +484,9 @@ export const programmerOpsApi = restApi.injectEndpoints({
               'CueList',
               // Only a CREATE changes stack membership.
               ...(result.created ? (['CueStackList'] as const) : []),
+              // A scenery row moves what every later cue in the stack *tracks*, so — as
+              // `setCueScenery` does — every cue entry, not just this one (scenery-programmer D7).
+              ...((result.sceneryWritten ?? 0) + (result.sceneryRemoved ?? 0) > 0 ? (['Cue'] as const) : []),
             ],
     }),
 
@@ -519,6 +549,8 @@ export const programmerOpsApi = restApi.injectEndpoints({
           ? [
               { type: 'CueList', id: projectId },
               'CueList',
+              // Scenery written back moves what later cues track: every cue entry, as a Record's.
+              ...(result.results.some((r) => (r.sceneryWritten ?? 0) > 0) ? (['Cue'] as const) : []),
             ]
           : [],
     }),

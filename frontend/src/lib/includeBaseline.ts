@@ -43,3 +43,17 @@ export function diffAgainstBaseline(
   }
   return changed
 }
+
+/**
+ * [values] (from [diffAgainstBaseline]) with the held scenery Update would write added
+ * (scenery-programmer plan session 3). The scenery half is the desk's own count —
+ * `programmer.sceneryState`'s `changedSinceInclude` — because the include target and the scenery
+ * frame arrive on two streams nothing orders, so a snapshot taken here at the include transition
+ * could land on either side of the overlay's Include. **`null` stays `null`**: a tab that cannot
+ * count the values cannot claim the total either; an absent scenery count (an older desk, or no
+ * baseline yet) adds nothing.
+ */
+export function withSceneryChanges(values: number | null, scenery: number | undefined): number | null {
+  if (values == null) return null
+  return values + (scenery ?? 0)
+}

@@ -32,11 +32,32 @@ class ProgrammerScenery(
     /** The project's scene elements by uuid, as a scenery write checks them. Opens its own transaction. */
     private val elementsOf: (projectId: Int) -> Map<UUID, SceneryElementInfo>,
 ) {
-    /** One element the programmer holds: the states it sets, and the fade it was moved on. */
-    data class Held(val state: ElementStates, val fadeMs: Long?)
+    /**
+     * One element the programmer holds: the states it sets, the fade it was moved on, and — when
+     * Include loaded it from a cue — that cue row's own [transitionMs], kept so Update writes the
+     * row back on the clock it had (scenery-programmer plan D8). A later move keeps it.
+     */
+    data class Held(val state: ElementStates, val fadeMs: Long?, val transitionMs: Long? = null)
 
-    /** The whole overlay: the project it belongs to, and each held element in the order first held. */
-    data class Snapshot(val projectId: Int?, val elements: Map<UUID, Held>)
+    /**
+     * The whole overlay: the project it belongs to, and each held element in the order first held.
+     * [baseline] is what the last Include (or a Record or Update that wrote the overlay back) left
+     * the source holding, by element — null until one has — so a client can tell "the tabs moved
+     * since Include" from "the moon is what Include loaded" ([changedSinceInclude]).
+     */
+    data class Snapshot(
+        val projectId: Int?,
+        val elements: Map<UUID, Held>,
+        val baseline: Map<UUID, ElementStates>? = null,
+    ) {
+        /**
+         * How many held elements Update would write that the source does not already say: each held
+         * state that differs from [baseline]'s, or that [baseline] does not name. Null with no
+         * baseline. A released piece is not counted — Update writes what is held, never a release.
+         */
+        val changedSinceInclude: Int?
+            get() = baseline?.let { base -> elements.count { (uuid, held) -> base[uuid] != held.state } }
+    }
 
     private val lock = Any()
     private val _flow = MutableStateFlow(Snapshot(null, emptyMap()))
@@ -83,9 +104,58 @@ class ProgrammerScenery(
                 trimM = parsed.trimM ?: was?.trimM,
             )
             releases.remove(elementUuid)
-            _flow.value = current.copy(elements = LinkedHashMap(current.elements).apply { put(elementUuid, Held(merged, fadeMs)) })
+            val transitionMs = current.elements[elementUuid]?.transitionMs
+            _flow.value = current.copy(elements = LinkedHashMap(current.elements).apply { put(elementUuid, Held(merged, fadeMs, transitionMs)) })
         }
         return emptyList()
+    }
+
+    /** One element as Include loads it: the source's own states for it, and a cue row's clock. */
+    data class Included(val elementUuid: UUID, val state: ElementStates, val transitionMs: Long?)
+
+    /**
+     * Include (scenery-programmer plan D8): hold the source's own scenery rows — each replacing what
+     * the programmer held on that element, never merged into it — moved on [fadeMs]. Elements the
+     * source does not name keep what they hold. [projectId] guards an Include that read the rows of a
+     * project this overlay has left. Answers how many elements were loaded.
+     *
+     * The [Snapshot.baseline] is not touched here: it belongs to the include target, which an Include
+     * that stages nothing does not move — the caller takes it with [includedBaseline] once it knows.
+     */
+    fun include(projectId: Int, rows: List<Included>, fadeMs: Long?): Int = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != projectId) return 0
+        val fade = fadeMs?.takeIf { it > 0 }?.coerceAtMost(MAX_SCENERY_TRANSITION.toMillis())
+        val elements = LinkedHashMap(current.elements)
+        for (row in rows) {
+            releases.remove(row.elementUuid)
+            elements[row.elementUuid] = Held(row.state, fade, row.transitionMs)
+        }
+        _flow.value = current.copy(elements = elements)
+        rows.size
+    }
+
+    /**
+     * The include target has moved to the source whose own [rows] Include just loaded: they are what
+     * Update compares the held pieces against from now on.
+     */
+    fun includedBaseline(projectId: Int, rows: List<Included>): Unit = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != projectId) return
+        _flow.value = current.copy(baseline = rows.associate { it.elementUuid to it.state })
+    }
+
+    /**
+     * The source now says what the programmer holds — a Record or an Update wrote the overlay into
+     * it — so nothing held is "changed since Include". [written] false (a Record told to leave the
+     * scenery out) leaves the source saying none of it.
+     */
+    fun rebaseline(projectId: Int, written: Boolean): Unit = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != projectId) return
+        _flow.value = current.copy(
+            baseline = if (written) current.elements.mapValues { it.value.state } else emptyMap(),
+        )
     }
 
     /**

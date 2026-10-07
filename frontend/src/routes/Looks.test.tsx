@@ -24,7 +24,13 @@ vi.mock('@/store/projects', () => ({
   useProjectQuery: () => ({ data: project, isLoading: false }),
   useProjectListQuery: () => ({ data: [] }),
 }))
-vi.mock('@/store/programmer', () => ({ useProgrammerSummaryQuery: () => ({ data: { entryCount: 3 } }) }))
+const programmer = { entryCount: 3, scenery: { projectId: null as number | null, elements: [] as { elementUuid: string; state: object }[] } }
+vi.mock('@/store/programmer', () => ({
+  useProgrammerSummaryQuery: () => ({ data: { entryCount: programmer.entryCount } }),
+  useProgrammerScenery: () => programmer.scenery,
+}))
+// The Scenery column names a flown piece's in and out from the scene.
+vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: () => true }))
 vi.mock('@/components/programmer/useInclude', () => ({ useInclude: () => ({ include: vi.fn(), isLoading: false }) }))
 vi.mock('@/components/programmer/RecordLookSheet', () => ({
@@ -77,6 +83,8 @@ function names(): string[] {
 }
 
 beforeEach(() => {
+  programmer.entryCount = 3
+  programmer.scenery = { projectId: null, elements: [] }
   looks = [look(1, { name: 'Warm Wash', notes: 'Act 1 base', layerCount: 5 }), look(2, { name: 'Cool Fill', layerCount: 3 })]
   current = { id: 1, name: 'Hamlet' }
   project = { id: 1, name: 'Hamlet', isCurrent: true }
@@ -118,6 +126,16 @@ describe('ProjectLooks', () => {
     project = { id: 2, name: 'Rehearsal Room', isCurrent: false }
     renderAt('/projects/2/looks')
     expect(screen.queryByRole('button', { name: /Record from programmer/ })).not.toBeInTheDocument()
+  })
+
+  it('records from a programmer holding only scenery — a Look of only the moon is a pad that flies it', () => {
+    programmer.entryCount = 0
+    renderAt('/projects/1/looks')
+    expect(screen.getByRole('button', { name: /Record from programmer/ })).toBeDisabled()
+    cleanup()
+    programmer.scenery = { projectId: 1, elements: [{ elementUuid: 'moon', state: { trimM: 3 } }] }
+    renderAt('/projects/1/looks')
+    expect(screen.getByRole('button', { name: /Record from programmer/ })).toBeEnabled()
   })
 
   it('opens the record sheet from ?action=record, for the command palette', () => {
