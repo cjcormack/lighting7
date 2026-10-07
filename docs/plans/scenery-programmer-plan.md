@@ -1,8 +1,9 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
-> backend) shipped the same day (`32ce090a`), and session 2 (`SceneryControl` and the rail's
-> Scenery band, frontend) the same day (`95fe24e4`); sessions 3–5 to come.** Chris approved the design on
+> backend) shipped the same day (`32ce090a`), session 2 (`SceneryControl` and the rail's
+> Scenery band, frontend) the same day (`95fe24e4`), and session 3 (Record, Include and Update,
+> backend + frontend) the same day (`1e83f790`); sessions 4–5 to come.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -337,7 +338,7 @@ branch before its PR merges.
 - **Docs:** `frontend/CLAUDE.md` §"The rail's tabs", §"The editor kit" (a `SceneryControl` entry)
   and §"Scenery moves with the show".
 
-### Session 3 — Record, Include and Update (backend + frontend)
+### ~~Session 3 — Record, Include and Update (backend + frontend)~~ — done, `1e83f790`
 
 - **Capture (D7):** `routes/programmerCapture.kt` takes the overlay; `programmerRecord.kt` and
   `lookRecord.kt` apply the four modes against `trackedSceneryAt`; the requests carry `scenery`.
