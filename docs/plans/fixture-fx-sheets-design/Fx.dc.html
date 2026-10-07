@@ -146,14 +146,14 @@ svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-
 <div class="ed" style="border-top: none">
 <div class="ctl"><span class="lbl">Speed</span><span class="sp"></span><span class="btn" style="height: 22px">M2 · <span class="mono">96</span></span></div>
 <div class="seg"><span>⅛</span><span class="on">¼</span><span>½</span><span>1</span><span>2</span><span>4</span></div>
-<div class="col" style="gap: 6px"><div class="ctl"><span class="lbl">Over the level underneath</span><span class="prop">proposal</span></div><div class="seg"><span>Replace it</span><span class="on">Within it</span></div><div class="ro">Pulses between 0 and your <b>80%</b>.</div></div>
+<div class="col" style="gap: 6px"><div class="ctl"><span class="lbl">Over the level underneath</span></div><div class="seg"><span class="on">Replace it</span><span>Within it</span></div><div class="ro">Replace pulses 0–100% whatever you set; Within pulses between 0 and your <b>80%</b>.</div></div>
 <div class="ctl"><span class="lbl" style="width: 44px">Low</span><div class="sl"><i></i><b style="left: 0; width: 0%"></b><u style="left: 0%"></u></div><span class="fld mono">0<small>%</small></span></div>
 <div class="ctl"><span class="lbl" style="width: 44px">High</span><div class="sl"><i></i><b style="left: 0; width: 100%"></b><u style="left: 100%"></u></div><span class="fld mono">100<small>%</small></span></div>
 <div class="ctl" style="color: var(--mfg); font-size: 11.5px"><svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Shape · attack 10% · hold 30% · quad out</div>
 <div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px"><span class="live"><i></i>Live</span><span class="sp"></span><span class="btn g"><svg class="s" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Revert</span><span class="btn">Done</span></div>
 </div>
 </div>
-<p class="cap" style="width: 304px">A level effect's question is the position effect's, asked of a level: replace what is underneath, or move <i>within</i> it (Multiply). Drawn as a proposal — Model, open call 2.</p>
+<p class="cap" style="width: 304px">A level effect's question is the position effect's, asked of a level: replace what is underneath (the default, as today), or move <i>within</i> it (Multiply).</p>
 </div>
 
 <div class="col" style="gap: 8px">
@@ -197,7 +197,7 @@ svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-
 
 <div class="col" style="gap: 8px; width: 304px">
 <div class="notes" style="padding-top: 4px">
-<div class="note"><span class="n">1</span><div><b>Live is the only mode.</b><p>Every control goes through <span class="code">useLivePush</span> — a 50 ms floor, deduplicated, the release always lands — into <span class="code">PUT /fx/{id}</span>, which swaps the parameters and keeps the phase. Typed fields commit on Enter.</p></div></div>
+<div class="note"><span class="n">1</span><div><b>Live is the only mode.</b><p>Every control goes through <span class="code">useLivePush</span> — a 50 ms floor, deduplicated, the release always lands — into a new socket frame, <span class="code">fx.update</span>, which swaps the parameters and keeps the phase as <span class="code">PUT /fx/{id}</span> does. Typed fields commit on Enter.</p></div></div>
 <div class="note"><span class="n">2</span><div><b>Revert, Done, ×.</b><p>Revert puts back the snapshot taken when the editor opened, in one write. Done goes back to the list and changes nothing. × stops the effect.</p></div></div>
 <div class="note"><span class="n">3</span><div><b>Sizes in degrees.</b><p>Where both axes carry a travel range, a radius is shown in degrees (60° = 28 of 255 on a 540° pan), with the byte as a read-out — the position cell's rule. Elsewhere, bytes.</p></div></div>
 <div class="note"><span class="n">4</span><div><b>One editor, three surfaces.</b><p>The tray's editor is the body of today's <span class="code">EffectParameterForm</span>, rebuilt on the editor kit. The programmer rail's <i>Edit…</i> and <span class="code">FxSheet</span>'s chips open the same editor in <span class="code">EditorSurface</span>, so <span class="code">ActiveEffectSheet</span> and <span class="code">AddEditFxSheet</span>'s configure step go.</p></div></div>

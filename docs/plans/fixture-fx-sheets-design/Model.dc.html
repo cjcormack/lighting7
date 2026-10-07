@@ -59,7 +59,7 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <span class="k">D8</span><span>Pan and tilt write <span class="code">programmer.setPosition</span> — degrees where annotated — never raw channels.</span>
 <span class="k">D9</span><span><b style="color: var(--fg)">The FX tray is pinned to the sheet's foot</b>: folded chips, the open list, the picker, the live editor. <span class="ag">issue 6</span></span>
 <span class="k">D10</span><span><b style="color: var(--fg)">A sheet's effect is a programmer effect</b> (<span class="code">programmerOwned</span>), and so is ⌘K's <i>Apply FX</i>. <span class="ag">agreed</span></span>
-<span class="k">D11</span><span><b style="color: var(--fg)">Effects are edited live</b>: no Apply; <span class="code">useLivePush</span> into <span class="code">PUT /fx/{id}</span>, phase kept; Revert and Done. <span class="ag">agreed</span></span>
+<span class="k">D11</span><span><b style="color: var(--fg)">Effects are edited live</b>: no Apply; <span class="code">useLivePush</span> into the new <span class="code">fx.update</span> frame (W3), phase kept; Revert and Done. <span class="ag">agreed</span></span>
 <span class="k">D12</span><span><b style="color: var(--fg)">Movement starts Around current position</b> (Additive, centre pinned at 128); Absolute is Override with the centre shown. <span class="ag">agreed</span></span>
 <span class="k">D13</span><span><b style="color: var(--fg)">A strip picks heads or members</b>; All writes the fixture's all-heads properties or one group entry, a subset writes each. <span class="ag">agreed</span></span>
 <span class="k">D14</span><span><b style="color: var(--fg)">A phone gets the sheet</b> in the Stage view as a bottom sheet; Aim moves to an <i>Aim…</i> popover on the Position row. <span class="ag">agreed</span></span>
@@ -79,7 +79,7 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <div class="tbl" style="grid-template-columns: 34px 1fr">
 <span class="k">W1</span><span><span class="code">programmer.keyStack {targetType, targetKey, propertyName}</span> → the layers under one property, top first: park · programmer effects · programmer slots (owner, value) · effects, each with <span class="code">heldBack</span> · the cue's contributor (cue, stack, Look layer, value) · base. Request and reply on one socket, never broadcast; built from <span class="code">ProvenanceService.underlyingSources</span> and the engine's suppression map. Re-asked while the stack is open on <span class="code">provenanceState</span>.</span>
 <span class="k">W2</span><span><span class="code">programmer.clearTarget {targetType, targetKey, fadeMs}</span> — every entry on the fixture (its heads included) or the group, and every local effect on it, in one pass and one republish. Answers what it released, which Release's toast names.</span>
-<span class="k">W3</span><span>No new route for effects: <span class="code">POST /fx/add</span> with <span class="code">programmerOwned: true</span>; Around is <span class="code">blendMode: ADDITIVE</span> plus the centre at 128. Live edits are <span class="code">PUT /fx/{id}</span> at a 50 ms floor (open call 1).</span>
+<span class="k">W3</span><span>Effects: <span class="code">POST /fx/add</span> with <span class="code">programmerOwned: true</span>; Around is <span class="code">blendMode: ADDITIVE</span> plus the centre at 128. Live edits go over a new socket frame, <span class="code">fx.update {effectId, …}</span> — the <span class="code">PUT /fx/{id}</span> body, the same <span class="code">FxEngine.updateEffect</span>, phase kept — gated like <span class="code">pauseFx</span> and <span class="code">removeFx</span>, a refusal answered as <span class="code">fx.error</span> keyed by effect. Sent through <span class="code">useLivePush</span> at a 50 ms floor.</span>
 <span class="k">W4</span><span>A bug to fix beside it: provenance counts the programmer's raw-channel side track as holding a property, though the engine holds no effect back for it, so a Channels-tab pan reads <i>Programmer</i> while an effect is what is on stage.</span>
 <span class="k">W5</span><span><span class="code">POST /fx/{id}/reset</span> — put a template layer's running instance back to its template's effect in place, phase kept; refused for an instance no template spawned.</span>
 </div>
@@ -109,13 +109,13 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 </div>
 
 <div class="box" style="flex: 1">
-<div class="h2">Open calls — each drawn one way</div>
-<div class="q"><span class="n">1</span><p><b>Live FX over REST or a socket frame?</b> Drawn: <span class="code">PUT /fx/{id}</span> through <span class="code">useLivePush</span> at 50 ms — no new protocol, about 20 requests a second while dragging. The alternative is a WS <span class="code">fx.update</span> beside <span class="code">pauseFx</span>.</p></div>
-<div class="q"><span class="n">2</span><p><b>A level effect over a held level: Replace or Within?</b> Drawn as a proposal on Pulse — <i>Within it</i> is Multiply, pulsing between 0 and your 80%. Leaving it out keeps today's Override.</p></div>
-<div class="q"><span class="n">3</span><p><b>Release asks nothing.</b> Drawn without a confirm, like the programmer's Clear: it fades at the programmer fade and the toast names what went.</p></div>
-<div class="q"><span class="n">4</span><p><b>The strip's pick is the sheet's own</b>, not the desk selection; it resets when the sheet opens on another fixture.</p></div>
-<div class="q"><span class="n">5</span><p><b>A row's editor opens inline</b> (colour, position) rather than as a popover beside the sheet; one open at a time.</p></div>
-<div class="q"><span class="n">6</span><p><b>Stock movement templates stay Override</b> (read as Absolute); only new ones start Around. Flipping existing ones would move shows already built on them.</p></div>
+<div class="h2">Open calls — called by Chris, 2026-10-07</div>
+<div class="q"><span class="n">1</span><p><b>Live FX: a new socket frame.</b> <span class="code">fx.update</span>, beside <span class="code">pauseFx</span> and <span class="code">removeFx</span> and gated as they are, with an <span class="code">fx.error</span> refusal keyed by effect (W3).</p></div>
+<div class="q"><span class="n">2</span><p><b>Level effects offer Replace it / Within it, defaulting to Replace</b> (Override, today's behaviour); Within is Multiply.</p></div>
+<div class="q"><span class="n">3</span><p><b>Release asks nothing</b>, like Clear; it fades at the programmer fade and the toast names what went.</p></div>
+<div class="q"><span class="n">4</span><p><b>The strip's pick is the sheet's own</b>, never the desk selection, and resets when the sheet opens on another fixture.</p></div>
+<div class="q"><span class="n">5</span><p><b>A row's colour or position editor opens inline</b>, one row at a time.</p></div>
+<div class="q"><span class="n">6</span><p><b>Existing movement templates stay Override</b> and read as Absolute; only new ones start Around.</p></div>
 </div>
 </div>
 

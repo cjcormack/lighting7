@@ -85,3 +85,17 @@ to carry over:
 
 For the Effects tab he decided that a pad's effect is edited as the running instance only, with a
 button to update the template from it and one to reset it to the template.
+
+## Open calls, as called
+
+Chris called the six open calls interactively on 2026-10-07:
+
+1. **Live FX edits travel over a new socket frame**, `fx.update`. It goes beside `pauseFx` and
+   `removeFx`, is gated as they are, and is refused with an `fx.error` keyed by the effect.
+2. **Level effects offer Replace it / Within it**, defaulting to Replace (Override, today's
+   behaviour). Within is Multiply.
+3. **Release asks for no confirmation.**
+4. **The strip's pick belongs to the sheet**, not to the desk selection.
+5. **A row's colour or position editor opens inline**, one row at a time.
+6. **Existing movement templates stay Override** and read as Absolute. Only new templates start
+   Around.
