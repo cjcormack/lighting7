@@ -3,8 +3,9 @@
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
 > backend) shipped the same day (`32ce090a`), session 2 (`SceneryControl` and the rail's
 > Scenery band, frontend) the same day (`95fe24e4`), session 3 (Record, Include and Update,
-> backend + frontend) the same day (`1e83f790`), and session 4 (the Stage view and the Positions
-> plan, backend + frontend) the same day (`a68e3a73`); session 5 to come.** Chris approved the design on
+> backend + frontend) the same day (`1e83f790`), session 4 (the Stage view and the Positions
+> plan, backend + frontend) the same day (`a68e3a73`), and session 5 (the cue table and the Prompt
+> Book, frontend + one backend DTO field) the same day (`d809c58c`) — all five sessions shipped.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -427,7 +428,7 @@ branch before its PR merges.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Scenery that moves with the show" and §"The
   label layer" (the anchor); `frontend/CLAUDE.md` §Stage views.
 
-### Session 5 — the cue table and the Prompt Book (frontend)
+### ~~Session 5 — the cue table and the Prompt Book (frontend)~~ — done, `d809c58c`
 
 - **The cue table (D13):** a Scenery `SheetColumn` in `CueSheet.tsx`:
     - a read-out showing the cue's changes as *Tabs → closed · 4 s*, or the tracked hatch when it
