@@ -1,7 +1,8 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
-> backend) shipped the same day (`32ce090a`); sessions 2–5 to come.** Chris approved the design on
+> backend) shipped the same day (`32ce090a`), and session 2 (`SceneryControl` and the rail's
+> Scenery band, frontend) the same day (`95fe24e4`); sessions 3–5 to come.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -260,7 +261,7 @@ branch before its PR merges.
     - `docs/sync-engineering.md` (the params field, P2);
     - root `CLAUDE.md`'s `scenery.state` line, and a line for the `programmer.*Scenery` frames.
 
-### Session 2 — `SceneryControl` and the Scenery tab (frontend)
+### ~~Session 2 — `SceneryControl` and the Scenery tab (frontend)~~ — done, `95fe24e4`
 
 - **The control (D5, D17):** `components/scenery/SceneryControl.tsx` on the editor kit; presets and
   ranges come from `lib/scenery.ts` (in and out from Z and the stored trim). `SceneryEditor`'s rows
