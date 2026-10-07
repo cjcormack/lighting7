@@ -119,4 +119,35 @@ class ProgrammerSceneryTest {
         overlay.forget(projectId = 1, uuids = listOf(tabs.uuid))
         assertEquals(setOf(moon.uuid), held().keys)
     }
+
+    @Test
+    fun `include replaces each named element whole, keeps a cue row's clock through a later move, and the baseline follows the target`() {
+        overlay.set(moon.uuid, state(visible = false), null)
+        overlay.set(tabs.uuid, state(open = 0.2), null)
+        assertEquals(null, overlay.flow.value.changedSinceInclude, "no baseline before an Include")
+
+        val rows = listOf(ProgrammerScenery.Included(moon.uuid, ElementStates(trimM = 3.0), 4000))
+        val loaded = overlay.include(1, rows, fadeMs = 1500)
+        assertEquals(1, loaded)
+        assertEquals(null, overlay.flow.value.changedSinceInclude, "the baseline is the include target's, set by the caller")
+        overlay.includedBaseline(1, rows)
+        assertEquals(ProgrammerScenery.Held(ElementStates(trimM = 3.0), 1500, 4000), held()[moon.uuid], "replaced, not merged over visible")
+        assertEquals(ElementStates(open = 0.2), held()[tabs.uuid]?.state, "an element the source does not name keeps what it holds")
+        assertEquals(1, overlay.flow.value.changedSinceInclude, "the tabs are not the source's")
+
+        overlay.set(moon.uuid, state(trimM = 5.0), null)
+        assertEquals(4000L, held()[moon.uuid]?.transitionMs, "a later move keeps the row's own clock")
+        assertEquals(2, overlay.flow.value.changedSinceInclude)
+
+        overlay.rebaseline(1, written = true)
+        assertEquals(0, overlay.flow.value.changedSinceInclude)
+        overlay.rebaseline(1, written = false)
+        assertEquals(2, overlay.flow.value.changedSinceInclude)
+        overlay.release(null)
+        assertEquals(0, overlay.flow.value.changedSinceInclude, "a release is not something Update writes")
+
+        assertEquals(0, overlay.include(2, listOf(ProgrammerScenery.Included(moon.uuid, ElementStates(trimM = 3.0), null)), null), "another project's rows")
+        overlay.attach(2)
+        assertEquals(null, overlay.flow.value.changedSinceInclude, "a project switch drops the baseline")
+    }
 }

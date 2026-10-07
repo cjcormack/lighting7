@@ -155,13 +155,30 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
   children are never touched by any mode** — they are not programmer state, and `CueTriggerManager`
   owns the timed ones. Recording into the live cue of a stack republishes its Layer 4, or the DB
   and the published layer would disagree and the next Clear would snap the rig back.
+- **Scenery** — `scenery` (default true) records what the programmer's scenery overlay **holds**,
+  never what the stage merely shows, whatever the `source`, `mask` or `targets` say: scenery is
+  addressed by element, not through the selection (scenery-programmer plan D3, D7). Into a cue, a
+  held piece the cue has **no row for** is written only where its held state differs from what the
+  cue would show without it — the piece's base, then the stack's set, then every earlier STANDARD cue
+  of the stack (`sceneryBeneathCue`, the cue card's "tracked" taken over the base too) — and skipped
+  when it equals it (`sceneryAlreadyTracked`). A row the cue **already has** is replaced whatever it
+  says, since it is the cue's own assertion; it keeps its clock unless the held piece came from
+  Include with one. `MERGE` and `UPDATE_EXISTING` replace per element (the mask that narrows a
+  lighting Replace says nothing about scenery); `REMOVE` deletes the rows for the held pieces; a
+  MARKER records none and warns. `routes/programmerSceneryRecord.kt` holds the rules. Recording a
+  **Look** (`record-look`) writes **every** held state, since a Look asserts rather than tracks — so
+  a Look recorded with only the moon held is a scenery Look, the busk pad that flies it.
 
 **`include { cueId, mask? }`** loads a cue's assignments and immediate FX into the programmer as
 `INCLUDE`-owned slots and programmer-band effects, and returns the fixture keys for the sheet to
 select (MagicQ's "Select Heads on Include"). Two details earn their keep: an FX child the cue is
 already running is *not* re-spawned (there is no FX-vs-FX suppression, so a band duplicate would
 double-apply), and spawned instances leave `cueId` null so `removeEffectsForCue` can't sweep the
-operator's programmer out from under them when the cue stops.
+operator's programmer out from under them when the cue stops. A cue's or Look's **own scenery
+rows** go into the programmer's scenery overlay with them (D8), each replacing what the overlay held
+on that element, a cue row's `transitionMs` kept beside the held state so Update writes it back on
+the clock it had — never the scenery the cue only tracks, and never masked. A cue that only moves
+scenery is something to include: it sets the include target.
 
 **`update { targets?, mask? }`** writes back.
 
@@ -176,6 +193,14 @@ operator's programmer out from under them when the cue stops.
   are bucketed separately ("record a new cue instead"). A commit writes each cue only the keys it
   was actually underneath.
 - Update applies MERGE semantics and never deletes. Removing content from a cue is `record REMOVE`.
+- **Scenery** goes back in Mode A only, by the record's MERGE rules — into the cue as change rows (an
+  included row with its own clock, a held piece the cue already shows skipped, a row already saying
+  exactly the held state left untouched), into a Look as its scenery. Mode B writes none, for the
+  reason it leaves the layer stack alone: scenery held over a cue the operator never included says
+  nothing about which of the named cues it belongs to. The overlay keeps a **baseline** — what the
+  last Include, Record or Update left the source saying — and `programmer.sceneryState` carries
+  `changedSinceInclude` against it, so the source strip's Update is enabled by a moved tab as by a
+  moved value.
 
 There used to be a **cueEdit guard** here — an asymmetric one, because the risks were: Record and
 Update targeting a cue with an open cue-edit session answered **409 unless forced** (`beginEdit`
@@ -1036,11 +1061,15 @@ not be a virtual fixture"):
   (D3): masks, subselect, spread, MIDI strips and the busk rig learn no new target kind. Clear drops
   it on the Clear fade; a project switch drops it. Blind takes both programmer tiers off stage with
   its values and *stages* them instead — `scenery.state`'s `staged` — and leaving Blind lands them.
-- **Record does not capture it yet.** Stage-view D13 said Record never captures scenery, because
-  there was nothing in the programmer to capture. The scenery-programmer plan's D7 **narrows** D13
-  rather than reversing it: Record will capture what the programmer **holds** — never what the stage
-  merely shows — writing into a cue only what differs from the state that cue would track, and into a
-  Look every held state. That lands in the plan's session 3; until then Record takes no scenery.
+- **Record captures what the programmer holds.** Stage-view D13 said Record never captures
+  scenery, because there was nothing in the programmer to capture. The scenery-programmer plan's D7
+  **narrows** D13 rather than reversing it (its session 3): Record captures what the programmer
+  **holds** — never what the stage merely shows — writing into a cue a row for a held piece only
+  where it differs from what that cue would show anyway (a row the cue already has is replaced), and
+  into a Look every held state. The attribute mask does not govern it; the Record sheets' *Record
+  scenery too* row and the requests' `scenery` flag do. Include loads a cue's or Look's own rows back
+  into the programmer, with a cue row's clock, and Update writes them back (D8). §"Record / Include /
+  Update" has the rules.
 - **A template never carries it** (D11, reaffirmed as the scenery-programmer plan's D9): a template
   names no targets of its own, so it has nothing to say about a particular sofa. A Look that holds
   only scenery is the busk vehicle.

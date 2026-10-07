@@ -140,8 +140,9 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
 
   // Record reads the programmer, so it is meaningless when the programmer is empty. Include is
-  // not: it is how you *fill* the programmer.
-  const hasContent = entryCount > 0 || programmerFxCount > 0
+  // not: it is how you *fill* the programmer. Held scenery is content: Record writes it into a cue
+  // or a Look (scenery-programmer plan D7), and a Look of only the moon is a busk pad that flies it.
+  const hasContent = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
 
   const cueId = includedCueId(target)
   const includedCue = target?.kind === 'CUE' ? includedTargetParts(target) : null
@@ -271,7 +272,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[238px]">
             <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-              Write {entryCount} value{entryCount === 1 ? '' : 's'} into
+              {recordMenuLabel(entryCount, sceneryCount)}
             </DropdownMenuLabel>
             {cueId != null && (
               <MenuItem
@@ -349,4 +350,17 @@ function MenuItem({
       </span>
     </DropdownMenuItem>
   )
+}
+
+/**
+ * The Record menu's heading: what a Record would write — `Write 3 values into`, `Write 2 pieces of
+ * scenery into`, or both. Record is enabled for a programmer holding only scenery (scenery-programmer
+ * plan D7), and *Write 0 values into* would say it holds nothing.
+ */
+export function recordMenuLabel(values: number, scenery: number): string {
+  const parts = [
+    values > 0 || scenery === 0 ? `${values} value${values === 1 ? '' : 's'}` : null,
+    scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of scenery` : null,
+  ].filter(Boolean)
+  return `Write ${parts.join(' and ')} into`
 }

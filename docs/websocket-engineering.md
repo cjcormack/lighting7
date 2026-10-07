@@ -880,7 +880,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | **Broadcast** — every tab, on `layersFlow` |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String` | Unicast reply |
-| `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
+| `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
 
 `applied` is the same stack resolved: one entry per Look or template with every target it covers,
@@ -898,6 +898,12 @@ desk".
 state object holding only the states held. `elements` is always sent, empty included: an empty
 overlay is a real state, and must reach a client as "nothing held". What the stage then *shows* is
 `scenery.state`'s job, where a held element's entry names `source.kind: "programmer"`.
+`changedSinceInclude` (scenery-programmer plan session 3) counts the held elements Update would write
+that the included cue or Look does not already say — against a baseline Include, a retargeting
+Record and a Mode A Update set — and is absent until one has. It rides this frame rather than the
+client diffing a snapshot of its own because the include target and the overlay are two flows, and
+nothing orders their frames: a snapshot taken at the include transition could land on either side
+of the overlay's Include. The source strip adds it to its value dirty count.
 
 The four broadcast frames are broadcast for the same reason: the programmer is shared, so a
 second tab reordering the stack or pressing Include must not leave the first showing a stale view.

@@ -35,6 +35,7 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, describeSkips } from './maskPicker'
+import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
@@ -128,6 +129,7 @@ export function RecordLookSheet({
   const [mask, setMask] = useState<PropertyMaskGroup[]>([])
   const [selectedOnly, setSelectedOnly] = useState(true)
   const [effectIds, setEffectIds] = useState<number[]>([])
+  const [includeScenery, setIncludeScenery] = useState(true)
   const [lookId, setLookId] = useState<string>('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -154,6 +156,9 @@ export function RecordLookSheet({
     // certainly part of the look; a chase they started to see what it looked like very often is not,
     // and folding one in moves a running effect out of their hands.
     setEffectIds([])
+    // On whenever anything is held (the row is absent otherwise): a look recorded with only the moon
+    // held is a scenery look, the busk pad that flies it (D9, D10).
+    setIncludeScenery(true)
     setLookId(targetLookId != null ? String(targetLookId) : '')
     setName('')
     setNotes('')
@@ -179,6 +184,7 @@ export function RecordLookSheet({
         notes: creating && notes.trim() !== '' ? notes.trim() : undefined,
         targets: scoped ? selection : undefined,
         effectIds: effectIds.length > 0 ? effectIds : undefined,
+        scenery: includeScenery,
       }).unwrap()
       setResult(response)
     } catch {
@@ -308,6 +314,13 @@ export function RecordLookSheet({
 
           <RecordableEffects value={effectIds} onChange={setEffectIds} />
 
+          <RecordSceneryRow
+            projectId={projectId}
+            checked={includeScenery}
+            onCheckedChange={setIncludeScenery}
+            destination="look"
+          />
+
           {error != null && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
@@ -433,6 +446,7 @@ function RecordLookResult({ result }: { result: RecordLookResponse }) {
   if (result.programmerKeysRefreshed > 0) {
     notes.push(`${result.programmerKeysRefreshed} live programmer value(s) re-resolved`)
   }
+  notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved))
   if (result.cuesRepublished.length > 0) {
     notes.push(`${result.cuesRepublished.length} live cue(s) moved with it`)
   }

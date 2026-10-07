@@ -1,5 +1,5 @@
 import type { StageElementDto } from '../api/stageElementApi'
-import type { LiveScenery, LiveSceneryEntry, PreviewScenery, ScenerySource, SceneryState } from '../api/sceneryApi'
+import type { LiveScenery, LiveSceneryEntry, PreviewScenery, ProgrammerScenery, ProgrammerSceneryEntry, ScenerySource, SceneryState } from '../api/sceneryApi'
 import { elementFlies, elementStates } from '../components/stage3d/scene/sceneParts'
 
 /**
@@ -193,6 +193,26 @@ export function describeSceneryState(element: StageElementDto | undefined, state
   return parts.join(' · ') || 'no state'
 }
 
+/**
+ * One element's scenery in a library row's words — `Moon in`, `Tabs drawn`, `Sofa shown`,
+ * `Cloth 4.2 m, hidden` — the short form of [describeSceneryState], without its `trim ·` prefix,
+ * since a row of several elements has no room for it. [element] may be missing; the numbers then
+ * read plainly.
+ */
+export function summariseSceneryState(element: StageElementDto | undefined, name: string, state: SceneryState): string {
+  const parts: string[] = []
+  if (state.open != null) {
+    parts.push(state.open <= 0 ? 'closed' : state.open >= 1 ? 'drawn' : `open ${Math.round(state.open * 100)}%`)
+  }
+  if (state.trimM != null) {
+    const trims = element ? trimsOf(element) : null
+    const near = (m: number | null | undefined) => m != null && Math.abs(m - state.trimM!) < 1e-6
+    parts.push(trims && near(trims.inM) ? 'in' : trims && near(trims.outM) ? 'out' : formatMetres(state.trimM))
+  }
+  if (state.visible != null) parts.push(state.visible ? 'shown' : 'hidden')
+  return parts.length > 0 ? `${name} ${parts.join(', ')}` : name
+}
+
 /** A cue change as its card reads it: what it does to the element, and on whose clock. */
 export function describeCueChange(element: StageElementDto | undefined, state: SceneryState, transitionMs: number | null | undefined): string {
   const what = describeSceneryState(element, state)
@@ -337,4 +357,14 @@ export function rangeFieldValue(range: SceneryRange, value: number): number {
 export function rangeFromField(range: SceneryRange, typed: number): number {
   const raw = range.unit === '%' ? typed / 100 : typed
   return Math.min(range.max, Math.max(range.min, raw))
+}
+
+/**
+ * What the programmer holds of [projectId]'s scenery: the overlay's elements when the overlay is
+ * that project's — or names no project yet, before its first frame — and nothing otherwise. The one
+ * rule for every reader (Clear's count, the rail's, Record's gates and the Record sheets' row), so a
+ * switch mid-frame cannot leave Record enabled on one surface and not another.
+ */
+export function heldSceneryIn(scenery: ProgrammerScenery, projectId: number): readonly ProgrammerSceneryEntry[] {
+  return scenery.projectId == null || scenery.projectId === projectId ? scenery.elements : []
 }

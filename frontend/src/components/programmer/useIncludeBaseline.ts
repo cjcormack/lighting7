@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { lightingApi } from '@/api/lightingApi'
-import { diffAgainstBaseline, snapshotEntries, type ValueSnapshot } from '@/lib/includeBaseline'
+import { diffAgainstBaseline, snapshotEntries, withSceneryChanges, type ValueSnapshot } from '@/lib/includeBaseline'
 import { includedTargetKey } from '@/lib/includedTarget'
+import { useProgrammerScenery } from '@/store/programmer'
 
 /**
  * How many values have moved since this tab watched Include load something — or `null` if it did
@@ -14,6 +15,10 @@ import { includedTargetKey } from '@/lib/includedTarget'
  * The `null` case is not an edge case to tidy away — it is the honest answer for a reloaded tab or
  * a second tab, and `programmerSource.canClaimInSync` is built around never rendering "in sync"
  * without one. See `lib/includeBaseline.ts` for why the server's real answer is out of reach.
+ *
+ * Held scenery adds to the count (scenery-programmer plan session 3): Update writes it back too, so
+ * moving the tabs after Include must un-grey Update. That half the desk counts itself
+ * (`changedSinceInclude` on `programmer.sceneryState`) — see `withSceneryChanges`.
  */
 export function useIncludeBaseline(): number | null {
   const baselineRef = useRef<ValueSnapshot | null>(null)
@@ -50,5 +55,6 @@ export function useIncludeBaseline(): number | null {
     return () => subscription.unsubscribe()
   }, [])
 
-  return dirty
+  const scenery = useProgrammerScenery()
+  return withSceneryChanges(dirty, scenery.changedSinceInclude)
 }

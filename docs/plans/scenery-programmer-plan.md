@@ -1,8 +1,9 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
-> backend) shipped the same day (`32ce090a`), and session 2 (`SceneryControl` and the rail's
-> Scenery band, frontend) the same day (`95fe24e4`); sessions 3–5 to come.** Chris approved the design on
+> backend) shipped the same day (`32ce090a`), session 2 (`SceneryControl` and the rail's
+> Scenery band, frontend) the same day (`95fe24e4`), and session 3 (Record, Include and Update,
+> backend + frontend) the same day (`1e83f790`); sessions 4–5 to come.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -136,9 +137,30 @@ The plan adds three decisions of its own:
     - REMOVE deletes rows for the held elements.
     - UPDATE_EXISTING is MERGE into Include's source.
   A Look takes every held state.
+  *Session 3 amendment:* the held overlay is read beside the recording (`heldSceneryOf`) rather than
+  carried on `ProgrammerRecording`, and the rules live in `routes/programmerSceneryRecord.kt`. The
+  "tracked" a held piece is compared with is `sceneryBeneathCue` — the base, the stack's set and
+  every earlier STANDARD cue, the resolver's own fold without the cue's rows — not
+  `trackedSceneryAt`, which hides the keys the cue sets itself and leaves out the base, so a piece
+  held at its base would have read as a change. "Equal to tracked writes nothing" holds only where
+  the cue has **no row** for the piece: a row the cue already has is replaced whatever it says (it is
+  the cue's own assertion, and leaving it would make Record not record what is on stage), its clock
+  kept unless the held piece brought one from Include, and a row already saying exactly the held
+  state is left untouched and not counted. UPDATE_EXISTING is MERGE into the cue the record names,
+  not into Include's source — Record takes its target from the request. A MARKER records none and
+  warns.
 - **Include** (D8). `routes/programmerInclude.kt` and `programmerLookInclude.kt` replace the overlay
   entries for the elements the source names with its own rows. A cue's per-row `transitionMs` is
   kept beside the entry, so Update writes it back unchanged.
+  *Session 3 amendment:* the load is `ProgrammerScenery.include`, called from
+  `performProgrammerInclude` (`routes/programmerSurface.kt`), the one sequence both include routes
+  and the AI share, rather than from the two route files; a later move keeps the held entry's
+  `transitionMs`, and a cue that only moves scenery sets the include target. Update writes the
+  overlay back in **Mode A only** — Mode B leaves it, for the reason it leaves the layer stack: held
+  scenery says nothing about which of the named cues it belongs to. And the overlay keeps a
+  **baseline** (what the last Include, retargeting Record or Mode A Update left the source saying),
+  because the source strip's Update counted values only and stayed disabled as *in sync* after the
+  tabs moved — the §9 check could not have been run; see §3.3.
 
 ### 3.3 The wire
 
@@ -160,6 +182,14 @@ The plan adds three decisions of its own:
   state}]}`, read from the three owner tables.
 - **Record** requests gain `scenery: Boolean`, default true. `LookDto` gains `scenery: [{elementName,
   state}]`, with `@EncodeDefault(ALWAYS)` and optional on the client, for D10's column.
+  *Session 3 amendment:* each `LookDto.scenery` entry carries `elementUuid` too, so the column names
+  a flown piece's *in* and *out* from the scene, batched in one query for a list
+  (`lookScenerySummariesFor`). `programmer.sceneryState` gains an optional `changedSinceInclude` —
+  the held pieces Update would write that the source does not already say — which the source strip
+  adds to its dirty count; the client cannot diff the overlay itself because the include target and
+  the overlay arrive on two unordered flows. Record, Include and Update responses carry
+  `sceneryWritten` / `sceneryRemoved` / `sceneryAlreadyTracked` / `sceneryIncluded`. All additive;
+  no stored or synced shape changed, so no `formatVersion` bump.
 - **`move_scenery`** (D15) is in `ai/AiTools.kt`. `get_current_state`'s `programmer` section gains the
   overlay, and `record_cue`, `update_from_programmer` and `include_into_programmer` mention scenery in
   their descriptions.
@@ -308,7 +338,7 @@ branch before its PR merges.
 - **Docs:** `frontend/CLAUDE.md` §"The rail's tabs", §"The editor kit" (a `SceneryControl` entry)
   and §"Scenery moves with the show".
 
-### Session 3 — Record, Include and Update (backend + frontend)
+### ~~Session 3 — Record, Include and Update (backend + frontend)~~ — done, `1e83f790`
 
 - **Capture (D7):** `routes/programmerCapture.kt` takes the overlay; `programmerRecord.kt` and
   `lookRecord.kt` apply the four modes against `trackedSceneryAt`; the requests carry `scenery`.
@@ -318,6 +348,17 @@ branch before its PR merges.
   such as *Moon in · Sofa shown*).
 - **Record sheet:** a *Record scenery too* checkbox row with its hint, which names the held elements.
   It is ticked by default when the overlay is non-empty and absent when it is empty.
+  *Session 3 amendment:* the Record look sheet carries the same row (`RecordSceneryRow`), since its
+  request carries `scenery` too and §9's scenery Look is recorded there; and Record is enabled for a
+  programmer holding only scenery — the action bar's and the Looks page's *Record from programmer* —
+  which neither was. `UpdateDialog`'s result line counts scenery changes, or a scenery-only Update
+  read *0 values written*.
+- *Session 3 amendment:* **Clear drops the include target itself** (`clearProgrammerCompletely`).
+  `ProgrammerStore.clearAll` drops it only when a value is held, so a cue Included for its scenery
+  alone kept its target on the desk while every client's `programmer.cleared` dropped its copy, and
+  Including that cue again changed nothing the StateFlow would re-send — the source strip read *No
+  source* with Update out of reach. Found running §9's check; it predates this session for a cue of
+  layers alone, but scenery-only Includes made it the ordinary case.
 - **MCP:** `record_cue`, `update_from_programmer` and `include_into_programmer` describe scenery;
   `record_cue` takes `scenery`.
 - **Tests:**

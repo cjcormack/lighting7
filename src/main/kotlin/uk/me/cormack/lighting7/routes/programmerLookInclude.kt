@@ -169,8 +169,8 @@ internal data class LookIncludeOutcome(
  * button. The two reasons point at different places — the Look editor, or the patch — so they are
  * two messages rather than one hedged one.
  */
-internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome): List<String> = when {
-    outcome.entriesWritten > 0 -> emptyList()
+internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome, sceneryIncluded: Int = 0): List<String> = when {
+    outcome.entriesWritten > 0 || sceneryIncluded > 0 -> emptyList()
     outcome.skipped.isNotEmpty() -> listOf(
         "None of '$lookName''s rows could be staged: the fixtures or properties they " +
             "name are not in the current patch, or the mask excluded them.",

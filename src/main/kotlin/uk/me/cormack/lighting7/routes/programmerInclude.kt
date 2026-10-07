@@ -61,6 +61,11 @@ internal fun includeCueIntoProgrammer(
     cueData: CueApplyData,
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
+    /**
+     * Scenery rows the caller has already loaded into the programmer's scenery for this cue
+     * (scenery-programmer plan D8) — a cue that only moves scenery has something to include.
+     */
+    sceneryIncluded: Int = 0,
 ): IncludeOutcome {
     val engine = state.show.fxEngine
     val fixtures = state.show.fixtures
@@ -134,7 +139,7 @@ internal fun includeCueIntoProgrammer(
 
     val nothingIncluded = writes.isEmpty() &&
         fx.spawned == 0 && fx.alreadyRunning == 0 &&
-        state.show.programmerStore.layers.isEmpty()
+        state.show.programmerStore.layers.isEmpty() && sceneryIncluded == 0
     if (nothingIncluded) {
         warnings += "Cue '${cueData.cueName}' has nothing to include" +
             if (mask != null) " under this mask" else ""

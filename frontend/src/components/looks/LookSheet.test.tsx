@@ -31,6 +31,19 @@ vi.mock('@/components/programmer/useInclude', () => ({
   useInclude: () => ({ include: (...a: unknown[]) => include(...a), isLoading: false }),
 }))
 vi.mock('@/store/hand', () => ({ handPickUp: (...a: unknown[]) => pickUp(...a) }))
+// The Scenery read-out's in / out words come from the scene: the moon is in at its Z (3 m), out at
+// its stored trim (7 m).
+vi.mock('@/store/stageElements', () => ({
+  useStageElementListQuery: () => ({
+    data: [
+      {
+        id: 2, uuid: 'moon', name: 'Moon', kind: 'OBJECT', layer: 'SET', positionX: 0, positionY: 0, positionZ: 3,
+        yawDeg: 0, widthM: 1, depthM: 1, heightM: 1, finishColour: null, finishPattern: null, emissive: false,
+        params: { flies: true, states: { trimM: 7 } }, hidden: false, sortOrder: 0,
+      },
+    ],
+  }),
+}))
 vi.mock('@/store/projects', () => ({
   useProjectListQuery: () => ({
     data: [
@@ -40,7 +53,7 @@ vi.mock('@/store/projects', () => ({
   }),
 }))
 
-import { LookSheet, describeLookContents } from './LookSheet'
+import { LookSheet, describeLookContents, describeLookScenery } from './LookSheet'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
@@ -306,5 +319,35 @@ describe('describeLookContents', () => {
     expect(describeLookContents(LOOKS[3])).toBe('8 fixtures · 8 rows')
     expect(describeLookContents(look(5, { effectCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 fx')
     expect(describeLookContents(look(6, { targetCount: 0, effectCount: 0 }))).toBe('Empty')
+    // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10).
+    expect(
+      describeLookContents(look(7, { targetCount: 0, effectCount: 0, rowCount: 0, scenery: [{ elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }] })),
+    ).toBe('Scenery only')
+  })
+})
+
+describe('the Scenery column', () => {
+  const night = look(9, {
+    name: 'Night', families: [], rowCount: 0, targetCount: 0, preview: [],
+    scenery: [
+      { elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } },
+      { elementUuid: 'sofa', elementName: 'Sofa', state: { visible: true } },
+    ],
+  })
+
+  it('reads a Look\'s scenery as a Blinds summary, a trim as in or out', () => {
+    draw({ looks: [...LOOKS, night], library: [...LOOKS, night] })
+    // A read-out draws no `data-cell`; its summary is its own title.
+    const cell = row(9).querySelector('[title="Moon in · Sofa shown"]') as HTMLElement
+    expect(cell.textContent).toBe('Moon in · Sofa shown')
+    expect(cell.querySelector('svg.lucide-blinds')).toBeTruthy()
+    // A Look with none draws no glyph.
+    expect(row(3).querySelector('svg.lucide-blinds')).toBeNull()
+  })
+
+  it('names the states it cannot place plainly', () => {
+    const out = look(10, { scenery: [{ elementUuid: 'moon', elementName: 'Moon', state: { trimM: 7, visible: false } }] })
+    expect(describeLookScenery(out, undefined)).toBe('Moon 7 m, hidden')
+    expect(describeLookScenery(look(11), undefined)).toBeNull()
   })
 })

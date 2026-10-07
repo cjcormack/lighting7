@@ -293,6 +293,12 @@ internal data class ProgrammerRecordLookRequest(
      * belongs to the layer applying the Look, so it is per-use rather than baked in.
      */
     val effectIds: List<Long> = emptyList(),
+    /**
+     * Record the programmer's held scenery too (scenery-programmer plan D7, D10): every held state,
+     * since a Look asserts rather than tracks — so a Look recorded with only the moon held is a
+     * scenery Look, a busk pad that flies it. Not governed by [mask] or [targets].
+     */
+    val scenery: Boolean = true,
 )
 
 @Serializable
@@ -308,6 +314,10 @@ internal data class ProgrammerRecordLookResponse(
     /** Set when the Look was already live: what the re-resolve moved. */
     val programmerKeysRefreshed: Int = 0,
     val cuesRepublished: List<Int> = emptyList(),
+    /** Scenery rows written into the Look. */
+    val sceneryWritten: Int = 0,
+    /** Scenery rows deleted from the Look (REMOVE). */
+    val sceneryRemoved: Int = 0,
 )
 
 /**
@@ -369,8 +379,9 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
         // resolved by id rather than re-derived, so a chase that started between the operator
         // ticking it and pressing Record cannot be swept in.
         val bandEffects = programmerBandEffectsById(state, request.effectIds)
+        val held = if (request.scenery) heldSceneryOf(state, project.id.value) else emptyMap()
 
-        val outcome = transaction(state.database) {
+        val (outcome, scenery) = transaction(state.database) {
             val look = existing ?: DaoLook.new {
                 this.project = project
                 this.name = request.name!!.trim()
@@ -378,7 +389,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             }
             val written = writeRecordingIntoLook(look, collapsed, mode, inRemit, elementParents)
             writeLookEffects(look, bandEffects, mode)
-            written
+            written to writeHeldSceneryIntoLook(look, held, mode)
         }
 
         // Only once the rows are committed: the layer applying this Look starts running these the
@@ -410,6 +421,8 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 effectsWritten = bandEffects.size,
                 programmerKeysRefreshed = republish.programmerKeysRefreshed,
                 cuesRepublished = republish.cuesRepublished,
+                sceneryWritten = scenery.written,
+                sceneryRemoved = scenery.removed,
             )
         )
     }
@@ -556,12 +569,18 @@ internal fun updateIncludedLook(
     val (changed, skips) = changedSinceInclude(state, mask)
     val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures)
     val elementParents = elementParentsOf(state.show.fixtures, collapsed)
+    // The held scenery goes back too (scenery-programmer plan D8): every held state, as a Look takes
+    // it, merged over the Look's own rows so a piece the operator never held keeps its row.
+    val held = heldSceneryOf(state, project.id.value)
 
-    val outcome = transaction(state.database) {
+    val (outcome, scenery) = transaction(state.database) {
+        val look = DaoLook.findById(lookId)!!
         // MERGE never deletes, so the remit predicate is never consulted; passing "nothing is in
         // remit" states that rather than leaving a live predicate a later edit could start reading.
-        writeRecordingIntoLook(DaoLook.findById(lookId)!!, collapsed, RecordMode.MERGE, { false }, elementParents)
+        writeRecordingIntoLook(look, collapsed, RecordMode.MERGE, { false }, elementParents) to
+            writeHeldSceneryIntoLook(look, held, RecordMode.MERGE)
     }
+    state.programmerScenery.rebaseline(project.id.value, written = true)
     val republish = republishForLookEdit(state, outcome.lookUuid)
     state.show.fixtures.lookListChanged()
 
@@ -575,6 +594,7 @@ internal fun updateIncludedLook(
             lookId = lookId,
             lookName = located,
             rowsWritten = outcome.written,
+            sceneryWritten = scenery.written,
             programmerKeysRefreshed = republish.programmerKeysRefreshed,
             cuesRepublished = republish.cuesRepublished,
         ),

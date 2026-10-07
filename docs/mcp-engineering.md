@@ -367,7 +367,13 @@ the same `parseSceneryState`. It moves at the element's `travelS` scaled by how 
 `fadeSeconds` when given; with neither it snaps. Blind stages it, Clear releases it, and it writes
 nothing stored — `set_scenery` is how a cue or Look learns a move. Current project only.
 `get_current_state`'s `programmer` section lists what is held as `scenery: [{element, elementUuid,
-visible?, open?, trimM?}]`. **It needs no remote-access gate**, unlike arming, firing and fixture
+visible?, open?, trimM?}]`. **Recording it** (scenery-programmer plan session 3): `record_cue` takes
+`scenery` (default true) and writes what the programmer holds into the cue as change rows — only a
+piece the cue would not show anyway, a row the cue already has replaced — answering `sceneryWritten`,
+`sceneryRemoved` and `sceneryAlreadyTracked`; `include_into_programmer` holds a cue's or Look's own
+scenery rows in the programmer (`sceneryIncluded`), a cue row's transition kept, and
+`update_from_programmer` with no targets writes them back (`sceneryWritten`). Their descriptions say
+so, and that neither the mask nor `targets` narrows scenery. **It needs no remote-access gate**, unlike arming, firing and fixture
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
 motor, nothing in a room the model cannot see.
 

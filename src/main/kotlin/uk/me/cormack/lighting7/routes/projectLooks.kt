@@ -13,6 +13,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -48,6 +49,7 @@ import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.SceneryChangeDto
 import uk.me.cormack.lighting7.models.deleteLookScenery
 import uk.me.cormack.lighting7.models.lookSceneryOf
+import uk.me.cormack.lighting7.models.storedParamsObject
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.LookEffectDto
@@ -90,7 +92,8 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     .orderBy(DaoLooks.name to SortOrder.ASC)
                     .toList()
                 val usage = lookUsageFor(all.map { it.id.value })
-                all.map { it.toSummaryDto(state, usage[it.id.value]) }
+                val scenery = lookScenerySummariesFor(all.map { it.id.value })
+                all.map { it.toSummaryDto(state, usage[it.id.value], scenery[it.id.value].orEmpty()) }
             }
             // Banked by *derived* family, so the filter is applied after the summaries are built —
             // there is no stored column to query on, by design (§3.1).
@@ -676,6 +679,22 @@ internal data class LookDto(
      * keep a zero off the wire, and a copier that forgets it should fail to compile.
      */
     val buskPageCount: Int,
+    /**
+     * What this Look shows while live, one entry per element in its own order — the library's
+     * Scenery read-out (scenery-programmer plan D10), a summary such as *Moon in · Sofa shown*.
+     * `@EncodeDefault(ALWAYS)` so an empty list arrives as "no scenery" rather than as a field an
+     * older desk never sent; the client treats it as optional all the same.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val scenery: List<LookScenerySummaryDto> = emptyList(),
+)
+
+/** One element a Look's scenery moves, as the library row summarises it: the element and its states. */
+@Serializable
+internal data class LookScenerySummaryDto(
+    val elementUuid: String,
+    val elementName: String,
+    val state: JsonObject,
 )
 
 @Serializable
@@ -1005,8 +1024,32 @@ internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = whe
     else -> null
 }
 
-/** Must be called inside a transaction. */
-internal fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
+/**
+ * Every Look's scenery as its library row summarises it, by Look id — one query for a list, as
+ * [lookUsageFor] batches the counts. A Look with none is absent. Must be called inside a transaction.
+ */
+internal fun lookScenerySummariesFor(lookIds: Collection<Int>): Map<Int, List<LookScenerySummaryDto>> {
+    if (lookIds.isEmpty()) return emptyMap()
+    return DaoLookSceneryRow.find { DaoLookScenery.look inList lookIds.toList() }
+        .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+        .groupBy({ it.look.id.value }) { it.toSummaryDto() }
+}
+
+private fun DaoLookSceneryRow.toSummaryDto() = LookScenerySummaryDto(
+    elementUuid = element.uuid.toString(),
+    elementName = element.name,
+    state = storedParamsObject(stateJson),
+)
+
+/**
+ * Must be called inside a transaction. [scenery] is the batched read of [lookScenerySummariesFor];
+ * null reads this Look's own.
+ */
+internal fun DaoLook.toSummaryDto(
+    state: State,
+    usage: LookUsage?,
+    scenery: List<LookScenerySummaryDto>? = null,
+): LookDto {
     val rowList = rows.toList()
     val effectList = effects.toList()
     val resolvedUsage = usage ?: lookUsage(id.value)
@@ -1028,6 +1071,7 @@ internal fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
             .map { it.key },
         layerCount = resolvedUsage.layerCount,
         buskPageCount = resolvedUsage.buskPageCount,
+        scenery = scenery ?: lookSceneryOf(id).map { it.toSummaryDto() },
     )
 }
 

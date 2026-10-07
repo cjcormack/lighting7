@@ -33,6 +33,7 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, describeSkips } from './maskPicker'
+import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
 
 export interface RecordSheetProps {
   open: boolean
@@ -104,6 +105,7 @@ export function RecordSheet({
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<PropertyMaskGroup[]>([])
   const [includeFx, setIncludeFx] = useState(true)
+  const [includeScenery, setIncludeScenery] = useState(true)
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [stackId, setStackId] = useState<string>('')
   const [name, setName] = useState('')
@@ -130,6 +132,9 @@ export function RecordSheet({
     setSource('TOUCHED')
     setMask([])
     setIncludeFx(true)
+    // On whenever anything is held (the row is absent otherwise): held scenery is part of what the
+    // operator busked, and the cue writes only the pieces it would not already show (D7).
+    setIncludeScenery(true)
     // Off on every open, even with heads selected. Narrowing is the surprising outcome, so it
     // should be something the operator asked for on this Record, not a setting that persisted.
     setSelectedOnly(false)
@@ -159,6 +164,7 @@ export function RecordSheet({
       source,
       mask: mask.length > 0 ? mask : undefined,
       includeFx,
+      scenery: includeScenery,
       targets: scoped
         ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
         : undefined,
@@ -295,6 +301,13 @@ export function RecordSheet({
             Record effects too
           </label>
 
+          <RecordSceneryRow
+            projectId={projectId}
+            checked={includeScenery}
+            onCheckedChange={setIncludeScenery}
+            destination="cue"
+          />
+
           {error != null && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
@@ -330,6 +343,7 @@ function RecordResult({ result }: { result: RecordResponse }) {
     notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
   }
   if (result.fxWritten > 0) notes.push(`${result.fxWritten} effect${result.fxWritten === 1 ? '' : 's'}`)
+  notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved, result.sceneryAlreadyTracked))
   const triggersKept = preserved.triggers ?? 0
   // One sentence for both kinds of timed child: what the operator needs to know is that a timed
   // thing was preserved rather than dropped, not which shape it had.

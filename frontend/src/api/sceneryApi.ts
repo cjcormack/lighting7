@@ -10,7 +10,9 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
  * (any element), `open` (a drawn drape — 0 closed … 1 drawn) and `trimM` (a flown piece's height).
  * A cue's changes move on GO into it, each on its own clock; a stack's are its *set*, held while it
  * is live; a Look's show while it is live. Scenery **tracks**: a change stays put until something
- * moves it. Templates carry none (D11), Record captures none (D13), and none of it is DMX (D12).
+ * moves it. Templates carry none (D11) and none of it is DMX (D12). Record captures what the
+ * programmer holds (scenery-programmer plan D7, narrowing D13), and Include loads an owner's own rows
+ * back into it (D8).
  *
  * The programmer holds scenery too (scenery-programmer plan D1): a runtime overlay above every
  * Look, cue and set, written by `programmer.setScenery` / `programmer.clearScenery` and streamed as
@@ -200,6 +202,13 @@ export interface ProgrammerSceneryEntry {
 export interface ProgrammerScenery {
   projectId: number | null
   elements: readonly ProgrammerSceneryEntry[]
+  /**
+   * How many held pieces Update would write that the included cue or Look does not already say
+   * (scenery-programmer plan session 3) — the scenery half of the source strip's dirty count, counted
+   * by the desk because the include target and this frame arrive on two unordered streams. Absent
+   * until an Include, a Record or an Update set a baseline, and from an older desk.
+   */
+  changedSinceInclude?: number
 }
 
 export const NO_PROGRAMMER_SCENERY: ProgrammerScenery = { projectId: null, elements: [] }
@@ -215,7 +224,11 @@ export function parseProgrammerSceneryFrame(raw: unknown): ProgrammerScenery {
     if (typeof e.elementUuid !== 'string') continue
     elements.push({ elementUuid: e.elementUuid, state: parseSceneryState(e.state) })
   }
-  return { projectId: typeof r.projectId === 'number' ? r.projectId : null, elements }
+  return {
+    projectId: typeof r.projectId === 'number' ? r.projectId : null,
+    elements,
+    ...(typeof r.changedSinceInclude === 'number' ? { changedSinceInclude: r.changedSinceInclude } : {}),
+  }
 }
 
 export interface SceneryWsApi {

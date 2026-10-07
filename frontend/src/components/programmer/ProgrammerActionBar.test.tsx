@@ -42,7 +42,7 @@ const sheets = {
 vi.mock('./ProgrammerSheets', () => ({ useProgrammerSheets: () => sheets }))
 
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
-import { ProgrammerActionBar, clearSentence } from './ProgrammerActionBar'
+import { ProgrammerActionBar, clearSentence, recordMenuLabel } from './ProgrammerActionBar'
 
 /**
  * Radix's DropdownMenuTrigger opens on `pointerdown`, not `click` — so `fireEvent.click` alone
@@ -239,6 +239,25 @@ describe('ProgrammerActionBar', () => {
       expect((await screen.findAllByText('Stage — Release 2 pieces of held scenery over 2s'))[0]).toBeTruthy()
       fireEvent.click(clear)
       expect(programmerClearAll).toHaveBeenCalledWith(2000)
+    })
+
+    it('enables Record for a programmer holding only scenery (session 3, D7) — a look of only the moon is a pad', () => {
+      heldScenery = 1
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(screen.getByRole('button', { name: 'Record' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Record destination' })).not.toBeDisabled()
+    })
+
+    it("heads Record's menu with what it would write, scenery included", () => {
+      expect(recordMenuLabel(3, 0)).toBe('Write 3 values into')
+      expect(recordMenuLabel(0, 0)).toBe('Write 0 values into')
+      expect(recordMenuLabel(0, 1)).toBe('Write 1 piece of scenery into')
+      expect(recordMenuLabel(2, 2)).toBe('Write 2 values and 2 pieces of scenery into')
+    })
+
+    it('keeps Record disabled with nothing at all held', () => {
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled()
     })
 
     it('lists what a Clear releases as a sentence', () => {

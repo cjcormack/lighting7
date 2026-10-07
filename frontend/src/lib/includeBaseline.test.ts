@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProgrammerEntry } from '@/api/programmerWsApi'
-import { diffAgainstBaseline, snapshotEntries } from './includeBaseline'
+import { diffAgainstBaseline, snapshotEntries, withSceneryChanges } from './includeBaseline'
 
 const snap = (o: Record<string, string>) => new Map(Object.entries(o))
 
@@ -37,5 +37,17 @@ describe('snapshotEntries', () => {
     })
     const result = snapshotEntries(new Map([['f:1|dimmer', entry('255')]]))
     expect([...result]).toEqual([['f:1|dimmer', '255']])
+  })
+})
+
+describe('withSceneryChanges', () => {
+  it('adds the held scenery Update would write, so moving the tabs after Include un-greys Update', () => {
+    expect(withSceneryChanges(0, 1)).toBe(1)
+    expect(withSceneryChanges(3, 2)).toBe(5)
+  })
+
+  it('adds nothing for an absent count, and never turns an unknown value count into a number', () => {
+    expect(withSceneryChanges(0, undefined)).toBe(0)
+    expect(withSceneryChanges(null, 2)).toBeNull()
   })
 })

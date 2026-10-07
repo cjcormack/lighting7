@@ -29,9 +29,10 @@ import java.util.UUID
 // flown piece's `trimM` — attached to one of three owners: a cue (moved on GO, on its own clock),
 // a cue stack (its *set*: held while the stack is live) or a Look (shown while the Look is live).
 // Not a template (D11: a template names no targets of its own), and not a virtual DMX fixture (D12):
-// nothing here reaches the composition pipeline. Record does not capture it yet (D13, which the
-// scenery-programmer plan's D7 narrows in its session 3). Above all three sits the programmer's own
-// scenery (`state/ProgrammerScenery.kt`, runtime only). How the changes resolve into what the stage
+// nothing here reaches the composition pipeline. Above all three sits the programmer's own scenery
+// (`state/ProgrammerScenery.kt`, runtime only), which Record writes into a cue's or a Look's rows
+// and Include loads back out of them (the scenery-programmer plan's D7, narrowing D13, and D8;
+// `routes/programmerSceneryRecord.kt`). How the changes resolve into what the stage
 // shows is `show/SceneryResolver.kt`.
 //
 // One row per (owner, element): an owner says one thing about each element. The element is a

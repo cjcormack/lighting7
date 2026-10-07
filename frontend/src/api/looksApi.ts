@@ -1,4 +1,4 @@
-import type { SceneryChange } from './sceneryApi'
+import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
 
@@ -125,6 +125,18 @@ export interface LookSummary {
    * places they would have to go and look.
    */
   buskPageCount: number
+  /**
+   * What this Look shows while live, one entry per element in its own order — the library's Scenery
+   * read-out (scenery-programmer plan D10). Optional: a desk before that plan's session 3 sends none.
+   */
+  scenery?: LookScenerySummary[]
+}
+
+/** One element a Look's scenery moves, as the library row summarises it. */
+export interface LookScenerySummary {
+  elementUuid: string
+  elementName: string
+  state: SceneryState
 }
 
 /**
