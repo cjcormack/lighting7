@@ -55,6 +55,20 @@ describe('buildSheetRows', () => {
     expect(row.keys).toEqual(['position'])
   })
 
+  it('reads a position descriptor in degrees where its axes annotate travel', () => {
+    const [group] = buildSheetRows([
+      positionProp('position', chan(1), chan(3)),
+      sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 530 }),
+      sliderProp('panFine', 'pan_fine', chan(2)),
+      sliderProp('tilt', 'tilt', chan(3), { axis: 'TILT', degMin: 0, degMax: 280 }),
+      sliderProp('tiltFine', 'tilt_fine', chan(4)),
+    ])
+    expect(group.rows.map((r) => r.id)).toEqual(['position'])
+    const row = group.rows[0]
+    expect(row.kind === 'position' && row.degrees).toBe(true)
+    expect(row.keys).toEqual(['position', 'pan', 'tilt'])
+  })
+
   it('gives a colour head with no dimmer an Intensity row over its colour, without a badge', () => {
     const groups = buildSheetRows([colourProp('rgbColour', chan(1), chan(2), chan(3))])
     expect(groups.map((g) => g.family)).toEqual(['INTENSITY', 'COLOUR'])
