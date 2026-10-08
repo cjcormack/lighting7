@@ -1,8 +1,8 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–2 shipped (`1d4a7660`, `50691dd`).** Chris approved the
-> design on 2026-10-07 and called its six open calls the same day (§10). Session 1 (the desk's
-> half) and session 2 (the sheet) are done; sessions 3–6 are not started.
+> **Document status: APPROVED, 2026-10-07 — sessions 1–3 shipped (`1d4a7660`, `50691dd`, `eff39ab`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> (§10). Session 1 (the desk's half), session 2 (the sheet) and session 3 (the tray and the live
+> editor) are done; sessions 4–6 are not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -388,7 +388,7 @@ Where session 2 departed from the bullets above, and why:
 - **The colour row's swatch is dimmed by the dimmer, with the UV dot** (Chris, the same review) — the
   old visualiser's reading; the value is the text beside it.
 
-### Session 3 — the FX tray and the live editor (frontend)
+### ~~Session 3 — the FX tray and the live editor (frontend)~~ — done, `eff39ab`
 
 - **`FxPicker` (D9).** Family segment, effect rows. A tap starts the effect with defaults on the
   property the sheet came from; another tap swaps the type through `updateFx` (phase kept).
@@ -414,6 +414,55 @@ Where session 2 departed from the bullets above, and why:
   - `frontend/CLAUDE.md` §"The fixture sheet" (the tray) and §"Speed Masters" (the editor's
     master chip);
   - `docs/fx-engineering.md` §"Blend Modes" (Around and Within as the UI's names).
+
+#### Session 3 amendment
+
+Where session 3 departed from the bullets above, and why:
+
+- **The tray edits inline; the other hosts use `EditorSurface` or a sheet.** The boards draw the
+  tray's editor under its row (Main B, Fx) and the picker in the open tray, so that is where they
+  are; the rail's *Edit…* and `FxSheet`'s chips open `FxEditorPopover` (the editor in
+  `EditorSurface`), and ⌘K *Apply FX* and the rail's `+ Effect` open `FxAddSheet` — the picker,
+  then the editor, whose **Done closes the sheet** with the effect running (a sheet has no list to
+  go back to but the picker, which *Effects* returns to).
+- **A swap carries the new type's defaults and starting blend.** `updateFx` without parameters
+  would hand a Figure 8 the Circle's map; the picker sends the new type's defaults, so a movement
+  swap stays *Around*; a swap across timing sources (a beat effect for a wall-clock flicker) lands
+  on one cycle, since the number would otherwise change units. A tap that resolves to a **different property** (another family, another
+  setting) cannot be a swap — an instance keeps its target — so it stops the auditioned effect and
+  starts afresh, and a session still holds one effect. The old sheet's *Target setting* / *Target
+  property* pickers survive as the picker's *On* row.
+- **The raw blend stays under Advanced for every effect.** The two questions are views of it; a
+  stored blend neither answers (`MAX`, an `ADDITIVE` with a centre of its own) presses neither and
+  is still reachable there, so nothing the old form reached is out of reach.
+- **Shape is a rule** (`paramRole`): curves and switches always, and a ratio when the effect also
+  has levels — a Pulse's attack and hold are its shape, a Colour Cycle's fade is the effect.
+- **Speed is beats a cycle, ⅛ to 16** (the board's segment), where the old form spoke note values;
+  any other division (a triplet's ⅓) is typed in the *Beats a cycle* field beside the read-out. The tray's chips keep the note-value
+  label (`effectDetail`) — two vocabularies for one number, left for a later pass.
+- **Revert puts a never-assigned master back as master 1's uuid** — `updateFx` has no spelling for
+  null. A **rate** master set in the editor cannot be put back to *unscaled* the same way (unscaled
+  is not a master); that needs a clear on the wire and is recorded rather than built, and until
+  then Revert leaves the chip naming the master the desk still runs, never *Unscaled*.
+- **Pause and resume are in the editor's header** beside ×: the rail and `FxSheet` reached them only
+  through `ActiveEffectSheet`, and their rows have no other door.
+- **Absolute's centre is two slider rows** (Pan, Tilt, in degrees where the head annotates), not
+  the board's small pad with the circle drawn on it.
+- **The picker always starts on the beat**, the old sheet's default; its *Start on beat* checkbox
+  had no live meaning once an effect starts on the tap.
+- **A cue's or a Look's effect stays editable in the tray**, as `ActiveEffectSheet` let it be; the
+  board's read-only row for one is left to session 5, which owns instance edits (D20).
+- **In a focused Look layer, `+ Effect` absorbs when the session ends**, not on the first tap, so the
+  Look takes the effect the operator kept at the settings they left it at — once, however the sheet
+  goes (closed, or unmounted when the selection it was opened for goes), by the id the create
+  answered, after the editor lands any move its floor still held.
+- **Deleted with the two sheets:** `EffectCategoryPicker`, `EffectTypePicker` (the wizard's steps)
+  and `toEffectContext` / `ActiveEffectContext`. `EffectParameterForm` stays as `TemplateEditor`'s
+  draft form until session 5.
+- **Found, not fixed:** the sheet's Position row (session 2) takes `resolveCell`'s resolution, which
+  for a mover with a real `position` descriptor carries no `panProperty`, so a Robe ColorSpot whose
+  pan and tilt annotate travel types **bytes** there while the editor speaks degrees for its sizes
+  (D14's rule, read from the axis sliders). The programmer grid's position cell shares the rule.
 
 ### Session 4 — heads and groups (frontend)
 

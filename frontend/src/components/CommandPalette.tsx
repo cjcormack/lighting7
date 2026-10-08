@@ -22,7 +22,7 @@ import {
 } from "@/navigation"
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
-import type { FxTarget } from "@/components/fx/AddEditFxSheet"
+import type { FxTarget } from "@/components/fx/FxPicker"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 

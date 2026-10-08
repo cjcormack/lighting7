@@ -13,6 +13,7 @@ import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
 import { ChannelsView } from './ChannelsView'
 import { FamilyGroups } from './FamilyGroups'
 import { FxTray } from './FxTray'
+import { pickerFamilyForSheet } from '../fx/fxEditorModel'
 import { HeadsSection } from './HeadsSection'
 import { ScopeLine } from './ScopeLine'
 import { SheetHeader, type SheetView } from './SheetHeader'
@@ -85,6 +86,13 @@ export function FixtureSheet({
     [fixture, host, connected, blind, effects, cueLabel, effectDetail, openRowId, aim],
   )
   const trayTarget = useMemo(() => ({ type: 'fixture' as const, fixture }), [fixture])
+  // The picker opens on the family of the row open on the sheet, and starts its effect on that
+  // row's property where the effect can take it (Fx board, "Adding"). An open row is keyed by its
+  // head and its id (`PropertyRow`'s `openKey`); a head's row of the same id is the same family.
+  const openRow = useMemo(() => {
+    const rowId = openRowId?.split('\u0000')[1]
+    return rowId == null ? null : (groups.flatMap((g) => g.rows).find((r) => r.id === rowId) ?? null)
+  }, [groups, openRowId])
 
   const card = host === 'card'
   const shownView: SheetView = view === 'focus' && focus == null ? 'values' : view
@@ -117,7 +125,11 @@ export function FixtureSheet({
           )}
           {shownView === 'focus' && <div className="px-3 py-2">{focus}</div>}
         </div>
-        <FxTray target={trayTarget} />
+        <FxTray
+          target={trayTarget}
+          initialFamily={pickerFamilyForSheet(openRow?.family)}
+          preferredProperty={openRow?.keys[0] ?? null}
+        />
       </div>
     </FixtureSheetContext.Provider>
   )

@@ -607,6 +607,28 @@ How effect output combines with fixture's base value:
 | `MAX` | Maximum of both | Ensure minimums |
 | `MIN` | Minimum of both | Limit maximums |
 
+### What the UI calls them: *Around* and *Within*
+
+The live effect editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows the operator
+`ADDITIVE` or `MULTIPLY` for the two effects where the choice is the whole point; it asks a question
+in the desk's words and sends an existing spelling (plan P2 — no new field, no `formatVersion`):
+
+- **Movement — *Centre: Around current position | Absolute*.** A position effect with a centre pair
+  (Circle, Figure 8, Random position). **Around** is `ADDITIVE` with `panCenter` and `tiltCenter` at
+  **128**: the position blend is `base + effect − 128`, so a shape centred on 128 orbits whatever the
+  reset pass put underneath — the programmer's value, else the cue's, else the base. That is the only
+  way a Circle orbits a set position; under `OVERRIDE` it circles its own 128/128. **Absolute** is
+  `OVERRIDE` with the centre shown. The picker starts movement effects Around.
+- **Level — *Over the level underneath: Replace it | Within it*.** The dimmer category. **Replace**
+  is `OVERRIDE` (today's default); **Within** is `MULTIPLY`, so the effect runs inside the level
+  underneath, scaled by it.
+
+Reading back is by spelling, not by flag: a stored `ADDITIVE` with both centres at 128 **is**
+Around, whoever stored it; `OVERRIDE` is Absolute or Replace; anything else (`MAX`, an `ADDITIVE`
+with a centre of its own) presses neither and the editor's Advanced section still shows the raw
+blend, which stays editable there for every effect. Effect templates ask the same Centre question
+in session 5 (D16); stored templates keep `OVERRIDE` and read as Absolute (call 6).
+
 ### Reading `blendMode` and friends out of a string
 
 `blendMode`, `distributionStrategy`, `elementMode` and `elementFilter` all arrive as strings —
@@ -695,6 +717,9 @@ instance's id, phase, layer identity and fade. A type swap takes the new type's 
 (`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
 running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
 `FX_NOT_FOUND`) is decided before anything moves: a 400 / 404 on REST, an `fxError` on the socket.
+Its client is the live editor (`FxEditor`, session 3): every control writes the draft through
+`useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per effect
+(`store/fixtureFx.ts`), so a drag refused on every frame is one toast.
 
 **Reset to template** (W5). `POST /fx/{id}/reset` re-applies a programmer template layer's
 **current** effect to the instance it spawned, through `updateEffect` — id and phase kept — with

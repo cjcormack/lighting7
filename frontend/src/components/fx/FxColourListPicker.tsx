@@ -68,10 +68,10 @@ export function FxColourListPicker({
   const lastEmitted = useRef(value)
 
   // `items` is otherwise seeded only at mount, but this instance can outlive the
-  // value it was seeded from: ParameterInput keys on `param.name`, so editing
-  // the same effect on a second target — busking's ActiveEffectSheet swaps its
-  // context without closing — reuses this picker, and the previous target's
-  // swatches would stay on screen and get written back on the next edit.
+  // value it was seeded from: a parameter input keys on `param.name`, so a
+  // host that swaps the value under a mounted picker — `FxEditor` after a
+  // Revert, a template form switching effects — reuses this picker, and the
+  // previous swatches would stay on screen and get written back on the next edit.
   useEffect(() => {
     if (value === lastEmitted.current) return
     lastEmitted.current = value

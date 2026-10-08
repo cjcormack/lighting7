@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { Layers, LayoutGrid, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,8 +15,8 @@ import { useActiveEffectsQuery, useEffectLibraryQuery, useRemoveFxMutation } fro
 import { useRemoveGroupFxMutation } from '@/store/groups'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { familyCanHoldEffect, familyForEffectCategory } from '@/lib/attributeFamily'
-import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
-import { findEffectEntry, toEffectContext } from '../busking/buskingTypes'
+import { findEffectEntry } from '../busking/buskingTypes'
+import { FxEditorPopover } from '../fx/FxEditorPopover'
 import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
 
@@ -40,10 +40,10 @@ import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
  * beside the layer count, its `EFFECTS` label sits over these rows under the values/effects
  * boundary, and its footer owns `+ Effect` (`useProgrammerAddEffect`).
  *
- * The row menu keeps to that, and each item pays for itself. **Edit…** goes through
- * `toEffectContext`, which maps an `ActiveEffect` to the parameter sheet's shape with no fixture or
- * group lookup at all — the sheet it opens does subscribe to the fixture list, which is why it is
- * mounted only while editing rather than sitting there empty. **Stop** is the same two mutations
+ * The row menu keeps to that, and each item pays for itself. **Edit…** opens the live `FxEditor`
+ * beside the row, in `EditorSurface` (fixture-fx-sheets plan D17): every change lands as it is made,
+ * through `updateFx`, with the phase kept. The editor subscribes to the fixture list, which is why
+ * it is mounted only while editing rather than sitting there empty. **Stop** is the same two mutations
  * `FxSheet`'s chip calls. The one standing query added is the FX **library**, which
  * *Save as template…* needs to read an effect's category: a single shared cache entry the whole app
  * already subscribes to, not a fetch per row.
@@ -54,15 +54,15 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   const { data: library } = useEffectLibraryQuery()
   const [removeFx] = useRemoveFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
-  /** Both sheets mount once, at the list, rather than one pair per row. */
-  const [editing, setEditing] = useState<ActiveEffect | null>(null)
+  /** The editor and the save sheet mount once, at the list, rather than one pair per row. */
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState<ActiveEffect | null>(null)
-  // Memoised on the effect being edited, not rebuilt per render: `ActiveEffectSheet` seeds its
-  // draft from `context` in an effect keyed on that object's *identity*, and this band re-renders
-  // on every `FixtureEffects` invalidation — which the FX socket raises constantly. A fresh object
-  // each render would re-seed the open sheet mid-edit and throw away whatever was being adjusted.
-  const editingContext = useMemo(() => (editing == null ? null : toEffectContext(editing)), [editing])
+  /** The row *Edit…* was chosen on — where the editor's popover is anchored. */
+  const editAnchor = useRef<HTMLElement | null>(null)
   const running = effects ?? []
+  // Read from the running list each render, so the editor is always handed the live instance, and
+  // an effect stopped elsewhere closes it rather than leaving an editor on an id the desk dropped.
+  const editing = editingId != null ? running.find((e) => e.id === editingId) ?? null : null
   // Named from the same broadcast the stack rail draws, so a row cannot claim a layer the list
   // beside it does not show.
   const layerHomes = useMemo(
@@ -99,7 +99,10 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
               effect={effect}
               home={homeOf(effect, layerHomes)}
               saveAsTemplate={saveAsTemplateOffer(effect, library)}
-              onEdit={() => setEditing(effect)}
+              onEdit={(row) => {
+                editAnchor.current = row
+                setEditingId(effect.id)
+              }}
               onSaveAsTemplate={() => setSaving(effect)}
               onStop={() => stopEffect(effect)}
             />
@@ -107,11 +110,19 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
         </div>
       )}
       {/* Mounted only while editing, unlike `FxSheet`'s copy — that one is already a
-          mount-on-demand diagnostic, while this band is always on screen, and `ActiveEffectSheet`
+          mount-on-demand diagnostic, while this band is always on screen, and the editor
           subscribes to the fixture list. Mounting it eagerly would put back exactly the standing
           subscription this band's docblock keeps it clear of. */}
-      {editingContext != null && (
-        <ActiveEffectSheet context={editingContext} onClose={() => setEditing(null)} />
+      {editing != null && (
+        <FxEditorPopover
+          effect={editing}
+          anchorRef={editAnchor}
+          onClose={() => setEditingId(null)}
+          onStop={(effect) => {
+            stopEffect(effect)
+            setEditingId(null)
+          }}
+        />
       )}
       <NewTemplateFromEffectSheet
         open={saving != null}
@@ -233,13 +244,16 @@ function FxRow({
   effect: ActiveEffect
   home: ReturnType<typeof homeOf>
   saveAsTemplate: { enabled: boolean; reason?: string }
-  onEdit: () => void
+  /** Handed the row, which the editor's popover is anchored at. */
+  onEdit: (row: HTMLElement | null) => void
   onSaveAsTemplate: () => void
   onStop: () => void
 }) {
   const TargetGlyph = effect.isGroupTarget ? Layers : LayoutGrid
+  const rowRef = useRef<HTMLDivElement>(null)
   return (
     <div
+      ref={rowRef}
       className={cn(
         'min-w-0 rounded-md border bg-card px-2 py-1.5 text-xs',
         !effect.isRunning && 'opacity-60',
@@ -272,8 +286,10 @@ function FxRow({
               <MoreHorizontal className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
+          {/* No focus back to the trigger on close: *Edit…* opens a popover in the same gesture,
+              and focus returning outside it would count as a press outside and shut it. */}
+          <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem onClick={() => onEdit(rowRef.current)}>
               <Pencil className="size-3.5" />
               Edit…
             </DropdownMenuItem>

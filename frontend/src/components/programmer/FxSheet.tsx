@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Layers, Loader2, Search, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,9 +17,8 @@ import { useProgrammerRevision } from '../../store/programmer'
 import { COLUMN_DEFS, resolutionPropertyNames } from '../fixtures-list/columns'
 import { cellEffectKey, membersByGroupOf } from '../fixtures-list/cellEffects'
 import { buildRows, resolveTargetCells, rowWriteTargets } from '../fixtures-list/rowModel'
-import { ActiveEffectSheet } from '../busking/ActiveEffectSheet'
+import { FxEditorPopover } from '../fx/FxEditorPopover'
 import type { ActiveEffect } from '../../store/fixtureFx'
-import { toEffectContext } from '../busking/buskingTypes'
 import type { ColumnKey } from '../fixtures-list/columns'
 import type { Row } from '../fixtures-list/rowModel'
 import type { Fixture } from '../../store/fixtures'
@@ -68,11 +67,12 @@ export function FxSheet() {
   const [filter, setFilter] = useState('')
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set())
-  const [editing, setEditing] = useState<ActiveEffect | null>(null)
-  // Memoised on `editing` rather than rebuilt inline: `ActiveEffectSheet` re-seeds its draft
-  // whenever this object's identity changes, and this component re-renders on every
-  // `FixtureEffects` invalidation — so a fresh context per render discards an in-progress edit.
-  const editingContext = useMemo(() => (editing == null ? null : toEffectContext(editing)), [editing])
+  // A chip opens the live `FxEditor` beside itself (fixture-fx-sheets plan D17). The id, not the
+  // instance: the editor is handed the live one from the running list each render, and closes when
+  // it stops.
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const editAnchor = useRef<HTMLElement | null>(null)
+  const editing = editingId != null ? effects.find((e) => e.id === editingId) ?? null : null
 
   // Suppression is read from live programmer state (see `isSuppressed`), which no query
   // covers — without this subscription a locate would grey the stage but leave every chip
@@ -313,7 +313,10 @@ export function FxSheet() {
                             key={effect.id}
                             effect={effect}
                             suppressed={isSuppressed(row, col, effect)}
-                            onOpen={() => setEditing(effect)}
+                            onOpen={(chip) => {
+                              editAnchor.current = chip
+                              setEditingId(effect.id)
+                            }}
                             onStop={() => stopEffect(effect)}
                           />
                         ))}
@@ -327,7 +330,15 @@ export function FxSheet() {
         </div>
       )}
 
-      <ActiveEffectSheet context={editingContext} onClose={() => setEditing(null)} />
+      <FxEditorPopover
+        effect={editing}
+        anchorRef={editAnchor}
+        onClose={() => setEditingId(null)}
+        onStop={(effect) => {
+          stopEffect(effect)
+          setEditingId(null)
+        }}
+      />
     </div>
   )
 }
@@ -340,7 +351,8 @@ function EffectChip({
 }: {
   effect: ActiveEffect
   suppressed: boolean
-  onOpen: () => void
+  /** Handed the chip, which the editor's popover is anchored at. */
+  onOpen: (chip: HTMLElement) => void
   onStop: () => void
 }) {
   const intensityPct = Math.round(effect.intensityMultiplier * 100)
@@ -373,7 +385,7 @@ function EffectChip({
           )}
         >
           {effect.programmerOwned && <Sparkles className="size-3 shrink-0" />}
-          <button type="button" onClick={onOpen} className="truncate hover:underline">
+          <button type="button" onClick={(e) => onOpen(e.currentTarget)} className="truncate hover:underline">
             {effect.effectType}
           </button>
           {masterLabel && (

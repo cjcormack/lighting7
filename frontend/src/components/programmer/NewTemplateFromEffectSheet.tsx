@@ -69,8 +69,8 @@ export function NewTemplateFromEffectSheet({
   const { placeAfterCreate } = useAddToBuskPage(projectIdNum, null)
 
   // Normalised, not `===`: a running instance spells its `effectType` as it was minted, which need
-  // not match the library entry's `name` character for character — the divergence `ActiveEffectSheet`
-  // has always matched through. An exact lookup misses an effect the library really has, and every
+  // not match the library entry's `name` character for character — the divergence `findEffectEntry`
+  // matches through. An exact lookup misses an effect the library really has, and every
   // gate below then reads that miss as "still loading" and disables Create for good.
   const entry = useMemo(() => findEffectEntry(library, effect?.effectType), [library, effect])
   const category = entry?.category ?? null
@@ -107,8 +107,8 @@ export function NewTemplateFromEffectSheet({
       elementMode: null,
       beatDivision: effect.beatDivision,
       blendMode: effect.blendMode,
-      // The same rename `toEffectContext` documents: the fixture DTO reports the spread as
-      // `distributionStrategy`, and `LINEAR` is the vocabulary the write boundary accepts.
+      // The fixture DTO reports the spread as `distributionStrategy`, and absent means `LINEAR`, the
+      // vocabulary the write boundary accepts.
       distribution: effect.distributionStrategy ?? 'LINEAR',
       phaseOffset: effect.phaseOffset,
       // Dropped with the two above, and for the same reason (D3): both are questions about a

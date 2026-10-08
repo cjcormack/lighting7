@@ -7,14 +7,13 @@ import type { AddFixtureFxRequest } from '@/store/fixtureFx'
  * The two create routes differ in more than a key name — a group carries a `distribution` and an
  * `elementMode`, a fixture carries `startOnBeat` and spells its distribution `distributionStrategy`
  * — so every surface that starts an effect used to write the branch out for itself. There were four
- * copies between the add/edit sheet and the busking pad, and they had already drifted: only some of
+ * copies between the old add/edit sheet and the busking pad, and they had already drifted: only some of
  * them sent `stepTiming`, and the sheet suppressed a fixture's distribution while the pad sent it
  * unconditionally.
  *
- * This does **not** cover the two *update* routes. They take a nested `body` with a shape of their
- * own (a group update spells its distribution `distributionStrategy`, unlike a group create), and
- * only the sheet issues them — so there is nothing to share and folding them in here would mean
- * inventing a union that fits neither well.
+ * This does **not** cover updates. A running effect is edited over the `updateFx` frame
+ * (`lightingApi.fx.updateFx`, the live editor's), whose body is the same for a fixture's effect and a
+ * group's — there is nothing route-shaped left to share.
  */
 
 /** A target, reduced to the one field its create route addresses it by. */

@@ -31,7 +31,7 @@ vi.mock('@/store/programmer', () => ({
 vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null }))
 vi.mock('./ProgrammerAddEffect', () => ({ ProgrammerAddEffect: () => <button>+ Effect</button> }))
 vi.mock('./NewTemplateFromEffectSheet', () => ({ NewTemplateFromEffectSheet: () => null }))
-vi.mock('../busking/ActiveEffectSheet', () => ({ ActiveEffectSheet: () => null }))
+vi.mock('../fx/FxEditorPopover', () => ({ FxEditorPopover: () => null }))
 
 import { ProgrammerFxList } from './ProgrammerFxList'
 

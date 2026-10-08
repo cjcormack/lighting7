@@ -1,13 +1,33 @@
+import { toast } from 'sonner'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type { BlendMode } from '../api/groupsApi'
-import type { UpdateFxRequest } from '../api/fxApi'
+import type { FxError } from '../api/fxApi'
 
 // WebSocket subscription: invalidate fixture effects when any FX changes
 lightingApi.fx.subscribe(() => {
   store.dispatch(restApi.util.invalidateTags(['FixtureEffects']))
 })
+
+/**
+ * Shared sonner id for every refused `updateFx`, **per effect** (fixture-fx-sheets plan W3).
+ *
+ * The live editor writes on every move of a drag, so a refused field is refused once per frame;
+ * keying the toast by effect makes sonner replace rather than stack, while two effects refused at
+ * once still each say their piece — `speedMasterErrorToastId`'s reasoning, per master.
+ */
+export const fxErrorToastId = (effectId: number) => `fx-error-${effectId}`
+
+/** `fxError` as the operator reads it: the desk's own prose, keyed by the effect. */
+export function toastFxError(error: FxError) {
+  toast.error(error.message, { id: fxErrorToastId(error.effectId) })
+}
+
+// …and `fxError`, the live editor's refusals. Unicast to the socket that sent the `updateFx`, so a
+// second tab never toasts for someone else's edit; nothing to invalidate — a refused update changed
+// nothing. Module scope, beside the subscription above (form 1).
+lightingApi.fx.subscribeToErrors(toastFxError)
 
 // …and `fxDefinitionListChanged` for the effect *library* — the vocabulary an effect is chosen
 // from, which changes for entirely unrelated reasons to the running set above.
@@ -179,9 +199,6 @@ export interface ActiveEffect {
   rateSpeedMasterUuid: string | null
 }
 
-/** The body of `PUT /fx/{id}` and the `updateFx` frame alike — declared beside the frame. */
-export type { UpdateFxRequest }
-
 // === RTK Query Endpoints ===
 
 export const fixtureFxApi = restApi.injectEndpoints({
@@ -209,17 +226,6 @@ export const fixtureFxApi = restApi.injectEndpoints({
         url: 'fx/add',
         method: 'POST',
         body: request,
-      }),
-      invalidatesTags: (_result, _error, { fixtureKey }) => [
-        { type: 'FixtureEffects', id: fixtureKey },
-      ],
-    }),
-
-    updateFx: build.mutation<void, { id: number; fixtureKey: string; body: UpdateFxRequest }>({
-      query: ({ id, body }) => ({
-        url: `fx/${id}`,
-        method: 'PUT',
-        body,
       }),
       invalidatesTags: (_result, _error, { fixtureKey }) => [
         { type: 'FixtureEffects', id: fixtureKey },
@@ -278,7 +284,6 @@ export const {
   useActiveEffectsQuery,
   useEffectLibraryQuery,
   useAddFixtureFxMutation,
-  useUpdateFxMutation,
   useRemoveFxMutation,
   usePauseFxMutation,
   useResumeFxMutation,

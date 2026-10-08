@@ -1,5 +1,6 @@
 import { useSelector } from 'react-redux'
-import { AddEditFxSheet, type FxTarget } from '@/components/fx/AddEditFxSheet'
+import { FxAddSheet } from '@/components/fx/FxAddSheet'
+import type { FxTarget } from '@/components/fx/FxPicker'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
 import { useAbsorbLookEffectsMutation } from '@/store/looks'
@@ -14,7 +15,7 @@ export interface AddEffectOffer {
   reason: string
   /** The head the sheet is authored against; null is one of the disabled cases. */
   target: FxTarget | null
-  /** Where a created effect goes after the sheet reports it. */
+  /** Where an added effect goes once the operator has finished with it (the sheet closes). */
   onCreated: (effectId: number) => void
 }
 
@@ -37,10 +38,12 @@ export interface AddEffectOffer {
  * has to be mounted once, above both, where it outlives the rail body. `ProgrammerRail` calls
  * the hook, hands the offer to both doors and mounts `ProgrammerAddEffectSheet` beside them.
  *
- * The authoring UI is unchanged — `AddEditFxSheet` as it stands, which is deliberate: this changes
- * where an effect *lands*, not how a parameter is set. The layer case creates the instance in the
- * band exactly as Local does and then moves it, because that is the only order in which the effect
- * is a real running thing the server can describe rather than a form the client is guessing at.
+ * The authoring UI is `FxAddSheet` — the picker and the live editor (fixture-fx-sheets plan D17) —
+ * and this changes where an effect *lands*, not how a parameter is set. The layer case creates the
+ * instance in the band exactly as Local does and then moves it, because that is the only order in
+ * which the effect is a real running thing the server can describe rather than a form the client
+ * is guessing at; and it moves it **when the sheet closes**, so the Look takes the effect the
+ * operator settled on, at the settings they left it at, rather than the first one auditioned.
  */
 export function useProgrammerAddEffect(): AddEffectOffer {
   const scope = useProgrammerScope()
@@ -61,8 +64,8 @@ export function useProgrammerAddEffect(): AddEffectOffer {
   const templateFocused = scope?.kind === 'layer' && store == null
 
   // An effect needs one target to be authored against. The selection is the operator's own answer
-  // to "which heads?", and `AddEditFxSheet` offers the distribution controls once it knows whether
-  // that target is multi-head — so a group beats a fixture where the selection is a group.
+  // to "which heads?", and the editor offers the distribution controls once it knows whether that
+  // target is multi-head — so a group beats a fixture where the selection is a group.
   const group = groups?.find((g) => selectedKeys.includes(g.name))
   const fixture = fixtures?.find((f) => selectedKeys.includes(f.key))
   const target: FxTarget | null = group
@@ -112,13 +115,5 @@ export function ProgrammerAddEffectSheet({
   onClose: () => void
 }) {
   if (!open || offer.target == null) return null
-  return (
-    <AddEditFxSheet
-      target={offer.target}
-      mode={{ mode: 'add' }}
-      programmerOwned
-      onCreated={offer.onCreated}
-      onClose={onClose}
-    />
-  )
+  return <FxAddSheet target={offer.target} open onFinished={offer.onCreated} onClose={onClose} />
 }
