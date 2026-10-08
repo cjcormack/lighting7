@@ -117,7 +117,7 @@ export interface FxApi {
    * toasts and answers false.
    */
   updateFx(effectId: number, update: UpdateFxRequest): boolean
-  /** Every `fxError` this socket is sent. Nothing toasts them yet; the live editor will. */
+  /** Every `fxError` this socket is sent — `store/fixtureFx.ts` toasts each, keyed per effect. */
   subscribeToErrors(fn: (error: FxError) => void): Subscription
 }
 

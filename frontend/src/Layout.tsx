@@ -25,7 +25,8 @@ import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
 import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
 import CommandPalette from "./components/CommandPalette"
-import { AddEditFxSheet, type FxTarget } from "./components/fx/AddEditFxSheet"
+import { FxAddSheet } from "./components/fx/FxAddSheet"
+import type { FxTarget } from "./components/fx/FxPicker"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
@@ -350,13 +351,9 @@ export default function Layout() {
           mode={channelDialogMode ?? "set"}
         />
 
-        {/* Apply FX Sheet (triggered by command palette) */}
+        {/* Apply FX (⌘K): the picker and the live editor, starting a programmer effect (D10) */}
         {applyFxTarget && (
-          <AddEditFxSheet
-            target={applyFxTarget}
-            mode={{ mode: "add" }}
-            onClose={() => setApplyFxTarget(null)}
-          />
+          <FxAddSheet target={applyFxTarget} open onClose={() => setApplyFxTarget(null)} />
         )}
       </div>
       </MobileDrawerContext.Provider>

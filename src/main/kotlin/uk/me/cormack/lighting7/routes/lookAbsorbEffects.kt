@@ -18,8 +18,8 @@ private val logger = LoggerFactory.getLogger("lookAbsorbEffects")
  * Move running programmer-band effects **into** a Look.
  *
  * This is what `+ Effect` does when the programmer's grid is focused on a layer. The effect is
- * authored exactly as it always was — the busking flow, `AddEditFxSheet`, whichever surface the
- * operator reached for, all of which put it in the programmer band — and then this moves it to
+ * authored exactly as it always was — the busking flow, the picker and live editor (`FxAddSheet`),
+ * whichever surface the operator reached for, all of which put it in the programmer band — and then this moves it to
  * where the focused scope says it belongs. Session 2a changes where an effect *lands*, not how it
  * is configured, and this route is that seam.
  *

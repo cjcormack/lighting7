@@ -60,14 +60,14 @@ vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow:
 vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => <button type="button">Locate</button> }))
 vi.mock('../fixtures/FixtureParkButton', () => ({ FixtureParkButton: () => <button type="button">Park</button> }))
 vi.mock('../fx/LookTogglePicker', () => ({ LookTogglePicker: () => null }))
-const added = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
-vi.mock('../fx/AddEditFxSheet', () => ({
-  AddEditFxSheet: (props: Record<string, unknown>) => {
-    added.props = props
-    return null
+const picker = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
+vi.mock('../fx/FxPicker', () => ({
+  FxPicker: (props: Record<string, unknown>) => {
+    picker.props = props
+    return <div data-testid="fx-picker" />
   },
 }))
-vi.mock('../busking/ActiveEffectSheet', () => ({ ActiveEffectSheet: () => null }))
+vi.mock('../fx/FxEditor', () => ({ FxEditor: () => <div data-testid="fx-editor" /> }))
 
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
@@ -131,7 +131,7 @@ beforeEach(() => {
   wire.parked = new Set()
   wire.connected = true
   wire.effects = []
-  added.props = null
+  picker.props = null
   programmerWs.reset()
   resetProgrammerFadeStore()
   localStorage.clear()
@@ -293,10 +293,22 @@ describe('FixtureSheet — the shape', () => {
     expect(removeGroupFx).toHaveBeenCalledWith({ id: 4, groupName: 'Front wash' })
   })
 
-  it('opens + Effect as a programmer effect', () => {
+  it('opens + Effect as the picker in the tray, on the family of the row open on the sheet', () => {
     render(<FixtureSheet fixture={SPOT} host="popup" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open the position editor' }))
     fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
-    expect(added.props).toMatchObject({ programmerOwned: true, mode: { mode: 'add' } })
+    const tray = document.querySelector('[data-fx-tray]') as HTMLElement
+    expect(within(tray).getByTestId('fx-picker')).toBeTruthy()
+    expect(picker.props).toMatchObject({ target: { type: 'fixture', fixture: SPOT }, initialFamily: 'POSITION', preferredProperty: 'position' })
+  })
+
+  it("opens a row's effect in the live editor inline, under its row", () => {
+    wire.effects = [makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    fireEvent.click(screen.getByRole('button', { name: /^Circle/ }))
+    const tray = document.querySelector('[data-fx-tray]') as HTMLElement
+    expect(tray.getAttribute('data-open')).toBe('true')
+    expect(within(tray).getByTestId('fx-editor')).toBeTruthy()
   })
 
   it('has no Edit toggle', () => {

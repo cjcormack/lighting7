@@ -476,9 +476,9 @@ export function TemplateEditor({
  *
  * **The family is the filter**, so there is no category step to repeat — choosing Colour has already
  * said `colour`, and offering the picker's category pane again would ask the same question twice.
- * That is also why this is a plain `Select` rather than `EffectTypePicker`: that component is a
- * full-pane step with a back button, built for the add-effect wizard's three-step flow, and wrong
- * for one field inside a form.
+ * That is also why this is a plain `Select`: the add-effect wizard's full-pane type step (deleted
+ * with that wizard, fixture-fx-sheets session 3) had a back button and was wrong for one field
+ * inside a form.
  *
  * **`EffectParameterForm` is reused as it stands**, with no target. Every target-bound row it draws
  * is behind an optional prop, and nothing inside it reads a target — it is the *caller* that derives

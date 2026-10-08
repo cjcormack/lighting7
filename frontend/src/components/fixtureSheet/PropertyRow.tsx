@@ -12,21 +12,18 @@ import { useColourAppearance } from '@/hooks/useColourAppearance'
 import { useVirtualDimmer } from '@/hooks/useVirtualDimmer'
 import { usePropertyParkStatus } from '@/hooks/usePropertyParkStatus'
 import type { SliderPropertyDescriptor } from '@/store/fixtures'
-import { EditorField } from '../editor/EditorField'
 import { EditorLabel } from '../editor/EditorLabel'
 import { ColourEditor } from '../editor/ColourEditor'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
+import { SheetField } from './SheetField'
 import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
 import { useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
 import { clearSheetRow, writeSheetLevel, writeSheetPosition } from './sheetWrites'
 import type { RowSource } from './rowSource'
 import type { SheetRow } from './sheetRows'
-
-/** The row's field: the board's 76px, room for `100` and its unit. */
-const FIELD_CLASS = 'w-[76px]'
 
 /**
  * One property of the sheet (D4–D8): its name, its source chip, an × while the programmer holds it,
@@ -200,60 +197,6 @@ function LevelControl({
         onEnter={(pct) => onTyped(Math.max(min, Math.min(max, fromPct(Math.max(0, Math.min(100, pct))))))}
       />
     </>
-  )
-}
-
-/**
- * The row's typed field: the kit's `EditorField` in the row's unit, committing on **Enter** rather
- * than per keystroke (Main board, note 5) — a sheet value takes the programmer fade, and `8`, `80`
- * written on the way to `80` would be two fades. The field shows the desk's value again after the
- * commit (the blur drops the draft); leaving the field without Enter writes nothing.
- */
-function SheetField({
-  label,
-  unit,
-  value,
-  min,
-  max,
-  disabled,
-  onEnter,
-}: {
-  label: string
-  unit?: string
-  value: number
-  min: number
-  max: number
-  disabled: boolean
-  onEnter: (n: number) => void
-}) {
-  const pending = useRef<number | null>(null)
-  return (
-    <div
-      className={cn('shrink-0', FIELD_CLASS)}
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter') return
-        e.preventDefault()
-        const n = pending.current
-        pending.current = null
-        if (n != null) onEnter(n)
-        ;(e.target as HTMLElement).blur?.()
-      }}
-    >
-      <EditorField
-        label={label}
-        unit={unit}
-        value={value}
-        min={min}
-        max={max}
-        disabled={disabled}
-        onCommit={(n) => {
-          pending.current = n
-        }}
-        onDraft={(raw) => {
-          if (raw == null || raw.trim() === '') pending.current = null
-        }}
-      />
-    </div>
   )
 }
 

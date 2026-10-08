@@ -8,7 +8,6 @@ import {
   ApplyFxResponse,
   GroupActiveEffect,
   GroupPropertyDescriptor,
-  type ElementMode,
 } from "../api/groupsApi"
 
 // `GroupList` freshness is not wired here: the group register only changes inside
@@ -22,18 +21,6 @@ lightingApi.fx.subscribe(() => {
 })
 
 // === Types ===
-
-export interface UpdateGroupFxRequest {
-  effectType?: string
-  parameters?: Record<string, string>
-  beatDivision?: number
-  blendMode?: string
-  phaseOffset?: number
-  distributionStrategy?: string
-  elementMode?: ElementMode
-  elementFilter?: string
-  stepTiming?: boolean
-}
 
 export const groupsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
@@ -121,19 +108,6 @@ export const groupsApi = restApi.injectEndpoints({
         'FixtureEffects',
       ],
     }),
-
-    // Update a single group effect
-    updateGroupFx: build.mutation<void, { id: number; groupName: string; body: UpdateGroupFxRequest }>({
-      query: ({ id, body }) => ({
-        url: `fx/${id}`,
-        method: 'PUT',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { groupName }) => [
-        { type: 'GroupActiveEffects', id: groupName },
-        'FixtureEffects',
-      ],
-    }),
   }),
   overrideExisting: false,
 })
@@ -147,5 +121,4 @@ export const {
   usePauseGroupFxMutation,
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,
-  useUpdateGroupFxMutation,
 } = groupsApi

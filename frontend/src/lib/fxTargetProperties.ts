@@ -9,7 +9,7 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
  * The one answer to "what properties does this FX target have, which effects fit them, and which
  * property does a chosen effect actually write".
  *
- * Every surface that offers effects — the add/edit sheet, the busking pad — has to ask the same
+ * Every surface that offers effects — the FX picker, the busking pad — has to ask the same
  * three questions, and they used to be answered separately in each, with the extra-slider predicate
  * spelled out four times between them. Adding an emitter category was then a two-file edit with
  * nothing tying the halves together.
@@ -31,7 +31,7 @@ export const SLIDER_SENTINEL = 'slider'
 /**
  * An FX target with its member fixtures already resolved.
  *
- * Callers hold their own target unions (`FxTarget` in the sheet, `BuskingTarget` on the pad) and
+ * Callers hold their own target unions (`FxTarget` in the picker, `BuskingTarget` on the pad) and
  * their own route to a fixture list, so they narrow to this rather than this module reaching for
  * the store.
  */
@@ -160,7 +160,7 @@ function distinctByName(
  * The property an effect would write on one target, or null if it fits nothing there.
  *
  * A sentinel match resolves to a real descriptor: `preferred` is the operator's explicit pick where
- * a surface offers one (the sheet's setting/slider dropdowns), honoured only while it still names a
+ * a surface offers one (the picker's *On* row), honoured only while it still names a
  * property this target has, and otherwise the first such property.
  */
 export function resolveEffectProperty(

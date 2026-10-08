@@ -573,22 +573,67 @@ Release folds to its glyph and the scope line drops the fade.
   it left running in `partialSweepMessage`'s vocabulary (`outside: 'this fixture'`); no confirm, like
   Clear (call 3). Its count (`heldOnFixture`) is the entries on the fixture and its heads whatever the
   owner but a layer's, the sideband inside its footprint, and its local effects.
-- **The tray** (`FxTray`, D9's first half): folded, one 40px row — the count, a chip per effect
-  (dimmed while paused, *+n* past three), the Look picker and **+ Effect**; open, the rail's two-line
-  rows with pause and stop, up to half the sheet. A group's effect on the fixture reads *via <group>*
-  (with its element mode), and its stop **asks first** — it stops the effect on every member, since
-  the effect is the group's. A fixture's head row sees an effect on the fixture, which the desk
-  paints onto the heads (`effectsReaching`, the one filter the rows and the tray share).
-  Until session 3's live editor a row edits through `ActiveEffectSheet`, and **+ Effect** opens
-  `AddEditFxSheet` with `programmerOwned: true` (D10) — so it plays over the programmer's values
-  instead of being held back by them.
+- **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
+  count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ Effect**);
+  **open**, the rail's two-line rows with pause and stop, up to half the sheet, scrolling itself; and
+  **adding**, `FxPicker` in the open tray. A group's effect on the fixture reads *via <group>* (with
+  its element mode), and its stop **asks first** — the editor's × too — since it stops the effect on
+  every member. A fixture's head row sees an effect on the fixture, which the desk paints onto the
+  heads (`effectsReaching`, the one filter the rows and the tray share).
+- **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
+  Position · Controls, a family the target cannot take disabled) opening on the family of the row
+  open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
+  defaults, on that row's property where the effect can take it, as a **programmer effect**
+  (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
+  it), a movement effect starting *Around*. **Another tap swaps it** through `updateFx` — the new
+  type with its own defaults and starting blend, id and phase kept — so the operator auditions by
+  tapping down the list; a tap that lands on another *property* cannot be a swap (an instance keeps
+  its target), so it stops the auditioned effect and starts afresh. An effect offered through a
+  sentinel (`setting`, `slider`) draws an *On* row where the target has several properties it could
+  land on. *Edit <name>* opens the editor.
+- **The live editor** (`components/fx/FxEditor.tsx`, D11, D12, D12a, D15): `EffectParameterForm`'s
+  inputs rebuilt on the editor kit, **inline under its row** in the tray (Main board B). **No
+  Apply**: every control writes the draft through `useLivePush` (50 ms floor, deduplicated, the
+  release always lands) into `lightingApi.fx.updateFx` — parameters, speed, blend and phase every
+  time, a distribution, element field or master only once the operator has set it, since the DTO
+  leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
+  (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
+  (a never-assigned master as master 1's uuid — the frame cannot say null; a rate master once set
+  cannot be put back to *unscaled* the same way, so the chip keeps naming it); **Done** comes back
+  to the list, landing any move the floor still held; **×** stops the effect, and pause / resume sit
+  beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
+  refetch never pulls a slider back under a finger; hosts key it on the effect's id *and* type, so
+  the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** (⅛ … 16), any other
+  division typed beside it, with the master as a chip; a wall-clock effect types seconds and its chip is the rate master. A movement
+  effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
+  pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
+  reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
+  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is
+  **degrees of travel** where every head annotates both axes (`positionAxesOf`), bytes elsewhere, and
+  a centre or a sweep's end a position on its axis. Curves, switches and ratios beside levels sit
+  behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
+  blend (every effect, so nothing is out of reach), and — on a group or a fixture with heads — step
+  timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
+  The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
+  (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
+  a sheet (`FxAddSheet`, whose Done closes it; in a focused Look layer the effect is absorbed into the
+  Look once the session ends — closed or unmounted — by the id the create answered, after the editor
+  lands its held move). The popover is bounded by the room Radix measures beside its anchor and
+  scrolls inside it. `ActiveEffectSheet` and
+  `AddEditFxSheet` are deleted; `EffectParameterForm` stays as `TemplateEditor`'s draft form until
+  session 5. A refused write comes back as `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
 - **Heads, until session 4's strip** (`HeadsSection`): the all-heads controls are still the group
   visualisers, and each head is a disclosure of the sheet's own rows against its key.
 
 `FixtureSheet.test.tsx` pins the plan's list — family order, each source kind's chip and edge, the
 dot, × drawn only while held and its words, Release's frame and toast, Enter with the unit,
 `setPosition` and never `channels.update`, the tray outside the scroller, no Edit toggle, read-only
-offline and on a parked row — and `hosts.test.tsx` the two hosts.
+offline and on a parked row, the picker and the inline editor in the tray — and `hosts.test.tsx`
+the two hosts. Session 3's list is `FxPicker.test.tsx` (a tap starts a programmer-owned effect; a
+second tap is one `updateFx` and no add), `FxEditor.test.tsx` (a drag at most one frame per 50 ms
+with the release landing, Revert's snapshot, Around as `ADDITIVE` + 128 with the centre hidden and
+read back, Within as `MULTIPLY`) `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect) and `FxAddSheet.test.tsx` (the layer
+absorb, once, after the editor's flush).
 
 ### Looks, templates and layers
 
@@ -4310,7 +4355,13 @@ Two independent per-effect references, both uuid-addressed:
 `EffectParameterForm` gates on the library entry's `timingSource`: a wall-clock effect
 gets "Cycle length (seconds)" and the rate picker, a beat effect gets beat divisions and
 the speed picker. Showing both to both was the pre-existing bug — a wall-clock effect's
-"Speed Master" did nothing at all.
+"Speed Master" did nothing at all. **The live effect editor keeps that gate and draws the
+master as a chip** (`FxEditor`'s `MasterChip`, fixture-fx-sheets D11): on a beat effect it is
+the speed master (`M2 · 96`, master 1 when none is stored), on a wall-clock one the **rate**
+master (*Rate M2 · 96*, or *Unscaled*), beside the Speed label rather than as a select under it.
+It lists the live bank and always sends a concrete uuid — choosing M1 sends master 1's uuid,
+`SpeedMasterSelect`'s rule, because `updateFx`'s absent field means "keep" — and it reads the live
+BPM, never the stored one.
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
 legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the
@@ -5043,8 +5094,8 @@ not stylistic:
    own per-key subscription through `useSyncExternalStore` instead — `useChannelValue` and its
    neighbours in `hooks/usePropertyValues.ts`.
 
-The census as of this writing, so a new slice can see which company it is in: **27 module-scope
-sites across 20 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
+The census as of this writing, so a new slice can see which company it is in: **33 module-scope
+sites across 23 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
 started from `main.tsx` — `oauthGithub`, `looks`, `templates`, `programmerErrors`. The imbalance is
 the rule working, not drift: form 1 is the default and form 2 is the exception, and the four are
 exactly the slices the sidebar and the first paint reach. `store/windows.ts` is on the sidebar's
@@ -5316,7 +5367,7 @@ path may quietly change where it lands.
   to "what tempo is the desk at" — narrower because it only ever spoke for master 1 — and the
   busk view has a speed rail and pad presence rings besides. **The count and Kill All were not
   moved anywhere.** What is running is listed, effect by effect and removable by name, in the
-  programmer's FX band and in `ActiveEffectSheet`; a "stop everything" gesture, if it is wanted
+  programmer's FX band and in its live editor; a "stop everything" gesture, if it is wanted
   again, belongs beside blackout in the ShowBar rather than in a panel the operator has to open
   first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
   `store/groups.ts` still subscribes to the frame.
