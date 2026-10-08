@@ -50,6 +50,24 @@ describe('resolveCell', () => {
     })
   })
 
+  it('carries the axis sliders beside a position descriptor on the same channels, for their degrees', () => {
+    // The Robe ColorSpot 575's shape: a `position` descriptor built from annotated pan and tilt.
+    const pos = positionProp('position', chan(1), chan(3))
+    const pan = sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 530 })
+    const tilt = sliderProp('tilt', 'tilt', chan(3), { axis: 'TILT', degMin: 0, degMax: 280 })
+
+    const res = resolveCell([pos, pan, tilt], 'position')
+    expect(res).toMatchObject({ kind: 'position', property: pos, panProperty: pan, tiltProperty: tilt })
+    // The descriptor is still what the cell reads and writes.
+    expect(resolutionPropertyNames(res)).toEqual(['position'])
+    expect(resolutionChannels(res)).toEqual([chan(1), chan(3)])
+
+    // An axis on another channel is not the descriptor's, so it is not attached.
+    const elsewhere = resolveCell([positionProp('position', chan(5), chan(6)), pan, tilt], 'position')
+    expect(elsewhere).not.toHaveProperty('panProperty')
+    expect(elsewhere).not.toHaveProperty('tiltProperty')
+  })
+
   it('requires both pan and tilt sliders', () => {
     const pan = sliderProp('pan', 'pan', chan(3), { axis: 'PAN' })
     expect(resolveCell([pan], 'position')).toBeNull()

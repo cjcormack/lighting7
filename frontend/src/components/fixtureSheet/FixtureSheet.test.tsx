@@ -72,7 +72,7 @@ vi.mock('../busking/ActiveEffectSheet', () => ({ ActiveEffectSheet: () => null }
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { programmerWs } from '@/test/backendMock'
-import { chan, makeActiveEffect, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveEffect, makeFixture, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 import type { ProgrammerEntry, ProvenanceEntry } from '@/api/programmerWsApi'
 import type { Fixture } from '@/store/fixtures'
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
@@ -261,6 +261,36 @@ describe('FixtureSheet — writes', () => {
     fireEvent.keyDown(pan, { key: 'Enter' })
     // 270° of a 540° pan is byte 128; tilt is kept from the wire.
     expect(setPosition).toHaveBeenCalledWith('fixture', 'spot-3', 128, 64, 0)
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('types degrees on a head whose position descriptor sits over annotated axes', () => {
+    // The Robe ColorSpot 575's shape: a `position` descriptor beside pan 0–530° and tilt 0–280°.
+    const robe = makeFixture(
+      'robe-1',
+      [
+        sliderProp('dimmer', 'dimmer', chan(10)),
+        positionProp('position', chan(11), chan(13)),
+        sliderProp('pan', 'pan', chan(11), { axis: 'PAN', degMin: 0, degMax: 530 }),
+        sliderProp('panFine', 'pan_fine', chan(12)),
+        sliderProp('tilt', 'tilt', chan(13), { axis: 'TILT', degMin: 0, degMax: 280 }),
+        sliderProp('tiltFine', 'tilt_fine', chan(14)),
+      ],
+      { name: 'Robe 1', universe: 0, firstChannel: 10, channelCount: 5, manufacturer: 'Robe', model: 'ColorSpot 575' },
+    )
+    const setPosition = vi.spyOn(lightingApi.programmer, 'setPosition')
+    const update = vi.fn()
+    ;(lightingApi as unknown as { channels: Record<string, unknown> }).channels = {
+      update,
+      get: (universe: number, channelNo: number) => wire.values.get(`${universe}:${channelNo}`) ?? 0,
+    }
+    render(<FixtureSheet fixture={robe} host="popup" />)
+    fireEvent.click(within(row('position')).getByRole('button', { name: 'Open the position editor' }))
+    const pan = within(row('position')).getByLabelText('Pan degrees') as HTMLInputElement
+    fireEvent.change(pan, { target: { value: '265' } })
+    fireEvent.keyDown(pan, { key: 'Enter' })
+    // 265° of a 530° pan is byte 128, not 255 — the descriptor's entry, never the axes.
+    expect(setPosition).toHaveBeenCalledWith('fixture', 'robe-1', 128, 0, 0)
     expect(update).not.toHaveBeenCalled()
   })
 })

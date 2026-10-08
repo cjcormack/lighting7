@@ -136,12 +136,12 @@ export function cellFamilies(cells: readonly { col: ColumnKey }[]): AttributeFam
  * plain channel refs + ranges so cells don't care whether the fixture exposes a
  * `position`-type descriptor or separate pan/tilt sliders.
  *
- * Position additionally keeps the *descriptors* it was built from. Cells don't need them,
- * but the programmer does: it is keyed by (target, property name), not by channel, and the
- * two position shapes must be written differently — a real `position` descriptor takes one
- * `programmer.setPosition`, while a pan/tilt slider pair takes one `programmer.set` per
- * axis (lifting a single axis into a `position` entry would freeze the other). See
- * [resolutionPropertyNames].
+ * Position additionally keeps descriptors. Cells don't need them, but the programmer does: it
+ * is keyed by (target, property name), not by channel, and the two position shapes must be
+ * written differently — a real `position` descriptor takes one `programmer.setPosition`, while
+ * a pan/tilt slider pair takes one `programmer.set` per axis (lifting a single axis into a
+ * `position` entry would freeze the other). `property` alone says which shape it is; the axis
+ * sliders ride on both, for their degree annotations. See [resolutionPropertyNames].
  */
 export type CellResolution =
   | { kind: 'slider'; property: SliderPropertyDescriptor }
@@ -157,14 +157,21 @@ export type CellResolution =
       panMax: number
       tiltMin: number
       tiltMax: number
-      /** Set when the fixture exposes a real `position` descriptor. */
+      /** Set when the fixture exposes a real `position` descriptor; writes then go to it. */
       property?: PositionPropertyDescriptor
-      /** Set instead when the position was paired from two axis sliders. */
+      /**
+       * The axis sliders, whenever the fixture declares them — what the position was paired from
+       * when there is no descriptor, and where the degree annotations live either way.
+       */
       panProperty?: SliderPropertyDescriptor
       tiltProperty?: SliderPropertyDescriptor
     }
   | { kind: 'setting'; property: SettingPropertyDescriptor }
   | null
+
+function sameChannel(a: ChannelRef, b: ChannelRef): boolean {
+  return a.universe === b.universe && a.channelNo === b.channelNo
+}
 
 /** A wheel-like channel (slider or setting) as a cell resolution. */
 function findWheelLike(
@@ -205,6 +212,10 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
       // Prefer a real position descriptor; otherwise pair the pan/tilt sliders.
       const posProp = properties.find((p) => p.type === 'position')
       if (posProp) {
+        // The descriptor carries no degrees, so the axes ride along for their annotations — only
+        // when they are the descriptor's own channels.
+        const panAxis = findPanProperty(properties)
+        const tiltAxis = findTiltProperty(properties)
         return {
           kind: 'position',
           pan: posProp.panChannel,
@@ -214,6 +225,8 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
           tiltMin: posProp.tiltMin,
           tiltMax: posProp.tiltMax,
           property: posProp,
+          ...(panAxis && sameChannel(panAxis.channel, posProp.panChannel) ? { panProperty: panAxis } : {}),
+          ...(tiltAxis && sameChannel(tiltAxis.channel, posProp.tiltChannel) ? { tiltProperty: tiltAxis } : {}),
         }
       }
       const pan = findPanProperty(properties)

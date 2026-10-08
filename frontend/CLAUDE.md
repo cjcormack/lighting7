@@ -3430,8 +3430,9 @@ proportion of its angles.
 **Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
 draws a 120px XY pad beside Pan · Tilt — a drag writes both axes in one commit — and where **every**
 head in the batch carries `degMin` / `degMax` on both its pan and tilt sliders (the movers, 10 of
-the 28 models; a real `position` descriptor carries none), the fields and sliders are in travel
-degrees and the commit carries **`panDeg` / `tiltDeg`** rather than bytes. `clampCommitToResolution`
+the 28 models; a `position` descriptor carries none of its own, so `resolveCell` attaches the axis
+sliders on its channels beside it), the fields and sliders are in travel degrees and the commit
+carries **`panDeg` / `tiltDeg`** rather than bytes. `clampCommitToResolution`
 resolves a degree to **each head's own byte** — 270° is 128 on a 540° mover and 109 on a 630° one —
 through `lib/axisDegrees.ts`, which is `dmxToDegrees` (moved out of `stageCoords.ts`, re-exported
 there) beside its inverse; a head whose axis carries no annotation is left alone on that axis. A
