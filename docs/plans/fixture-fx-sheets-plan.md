@@ -1,8 +1,8 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — session 1 shipped (`1d4a7660`).** Chris approved the
+> **Document status: APPROVED, 2026-10-07 — sessions 1–2 shipped (`1d4a7660`, `50691dd`).** Chris approved the
 > design on 2026-10-07 and called its six open calls the same day (§10). Session 1 (the desk's
-> half) is done; sessions 2–6 are not started.
+> half) and session 2 (the sheet) are done; sessions 3–6 are not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -325,7 +325,7 @@ What session 1 found, and where it departed from the bullets above:
 - **Slot age** is a runtime `writtenAtMs` on `ProgrammerStore.Slot` — no schema (P2). A layer slot
   is re-installed by every recook, so its age is since the stack last moved it.
 
-### Session 2 — the sheet (frontend)
+### ~~Session 2 — the sheet (frontend)~~ — done, `50691dd`
 
 - **The body (D1–D3, D7, D8).**
   - `FixtureSheet` with `SheetHeader` (name, model, Values · Channels · Focus, Locate, Park,
