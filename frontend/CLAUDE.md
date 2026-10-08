@@ -494,8 +494,8 @@ layers allow, so a closed tab or a flown piece shows where the light lands. It i
 besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
 height, sent to `POST /programmer/aim` for the selected moving heads — from the single fixture's
 sheet as an *Aim…* popover on its Position row (fixture-fx-sheets session 2; it was a block pinned
-under the panel), or its own docked panel for a multi-selection in view mode, and only on the live
-project.
+under the panel; on a phone, session 6, the same popover over the phone sheet), or its own docked
+panel for a multi-selection in view mode (tablet width and up), and only on the live project.
 The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
 point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
 
@@ -515,9 +515,36 @@ table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` �
 (`FixtureDetailModal`, the 512px Radix sheet the list, the grid's Info, the overview panel and Channels
 open; and `GroupDetailModal`, the **group sheet**), `stage` (`StageFixtureControlPanel`, 380px, with
 the **Focus** tab and the *Aim…* popover), `card` (the cards page: no header, unscrolled, the page's
-Properties / Channels toggle kept; and `GroupCard`, under the card's own header) and `phone` (session
-6). The context a row reads (`sheetContext.ts`) carries the target and a `reachOf(head)` —
-`effectsReaching`'s arguments for one head — rather than a fixture.
+Properties / Channels toggle kept; and `GroupCard`, under the card's own header) and `phone` (the
+Stage view and the busk view's *Fixture sheet…* on a phone, in `PhoneSheet` — below). The context a
+row reads (`sheetContext.ts`) carries the target and a `reachOf(head)` — `effectsReaching`'s
+arguments for one head — rather than a fixture.
+
+**The phone host** (session 6, D14; Hosts board) is the sheet in `useEditorForm`'s two touch forms,
+`components/fixtureSheet/PhoneSheet.tsx`: held upright a **bottom sheet with three heights** — *peek*
+(the header, the scope line and the tray; the properties fold away, `[data-sheet-body]` hidden), half
+(where every open starts), full (88svh, `EditorSurface`'s cap) — with a **grabber**: a drag follows
+the finger and settles on the nearest (`settleHeight`), a drag well below the peek closes it, a tap
+or Enter steps it taller, round from full to the peek, the arrow keys step it either way. Held
+landscape (short beats narrow) it is the **right-hand sheet**, the Stage panel's 380px plus the
+safe-area inset, full height, no grabber. Both pad the safe-area inset **under the tray** (a class,
+`SAFE_BOTTOM_CLASS`, dropped while the keyboard is up), so the tray — always the column's foot,
+outside the scroller — sits above the home indicator, and both give back the keyboard's bite from
+`visualViewport` as `EditorSurface` does (its `useKeyboardInset`, exported for this): the bottom sheet
+rises, the side sheet shortens. On the phone host the rows take **finger sizes** (§4) through
+`useFingerSized()` — the host, which is the form, never a `sm:` width: a 36px field at 16px text
+(below 16px iOS zooms the page on a field's focus), a setting's 36px box, a 32px × and editor chevron,
+and in the tray 32px chips and **+ Effect** in a 48px row. The Stage's is **not modal** — the canvas
+stays live, so another fixture's tap moves the sheet and empty stage closes it, as the docked panel
+behaves — and keeps both Stage extras, Focus and *Aim…* (live project only); the busk view's is
+modal, opened from a menu. `StageFixtureControls` picks the docked panel or the phone sheet.
+
+**The cards page's corner** (session 6, Hosts board): each card's header actions end in
+`OpenSheetButton` (⤢), which opens the fixture's 512px pop-up — the one `FixtureDetailModal` the page
+holds — for what the card host leaves out (the views, Release, the scope line); the page's Properties
+/ Channels toggle stays. A **group card** has the same corner, opening the group sheet
+(`GroupDetailModal`, now mounted by the Groups route): D1's one sheet for a group, and the only place a
+group has Park, Release and the scope line.
 
 **It is a programmer surface, and it says so.** Every value lands in Local; every effect it starts is
 a programmer effect. `FixtureContent`'s properties view, `PropertyVisualizers`, `FxSection`,
@@ -695,6 +722,13 @@ Release folds to its glyph and the scope line drops the fade.
   group visualisers' Edit toggle are deleted. A group's rows come from its members' own fixture
   properties; a group of multi-head fixtures shows its members' fixture-level rows, and each member's
   heads are that member's own sheet.
+
+Session 6's list: `hosts.test.tsx` — the phone host opens on a fixture tap below `sm` and no docked
+`stage` panel draws there, the desk still docks, the landscape side form (380px, no grabber), the
+sheet not modal; `PhoneSheet`'s three heights, the grabber's tap, keys and drag (its click swallowed),
+the dismiss below the peek, the safe-area class and the keyboard's bite; a card's corner opening the
+pop-up and a group card's the group sheet — and `FixtureSheet.test.tsx`'s finger sizes and the tray
+outside the scroller at the bottom sheet's foot.
 
 `FixtureSheet.test.tsx` pins the plan's list — family order, each source kind's chip and edge, the
 dot, × drawn only while held and its words, Release's frame and toast, Enter with the unit,
@@ -2080,8 +2114,9 @@ summary, the verbs menu — and their Focus words fold at that row's own measure
 (`COMPACT_FOCUS_WORD_CLASS`, 680), not the desk row's. **A
 tile's cross and menu sit inside its top-right corner**, and **a tile's menu has *Fixture
 sheet…*** (fixture-fx-sheets plan D21, session 5) — *Group sheet…* on a group tile — which opens
-D1's sheet over the busk view (`BuskFixtureSheet`: a bottom sheet on an upright phone by
-`useEditorForm`, the pop-up's own 512px right-hand sheet otherwise, `host="popup"`; a group's member
+D1's sheet over the busk view (`BuskFixtureSheet`: on a phone the sheet's `phone` host in
+`PhoneSheet` by `useEditorForm`, modal, the same three-height bottom sheet the Stage view opens —
+session 6 — and on a desk the pop-up's own 512px right-hand sheet, `host="popup"`; a group's member
 opens in place). In play mode it is the tile's right-click or long-press menu (`useLongPress`
 dispatching the context menu as a pad's hold does, the click that ends a hold swallowed); in edit
 mode it joins the tile menu's items. The band holds which sheet is open and hands tiles the door

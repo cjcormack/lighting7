@@ -640,6 +640,45 @@ Where session 5 departed from the bullets above, and why:
   - `manual-validation.md` rows (§9);
   - move this plan and its record to `completed/`.
 
+#### Session 6 amendment
+
+Where session 6 departed from the bullets above, and why:
+
+- **The host is picked by the form, not by `sm`.** `StageFixtureControls` mounts the docked 380px
+  panel where `useEditorForm` answers *popover*, and the phone host everywhere else — a bottom sheet
+  held upright, the right-hand sheet on a short viewport. So a **landscape phone** (844×390, wider than
+  `sm`) now gets the side sheet where it used to get the docked panel beside a 464px canvas, and so
+  does a desk window under 500px tall — the cell editor's own rule ("short beats narrow"), and the one
+  answer to "is a finger on this" the frontend has.
+- **One phone sheet, `PhoneSheet`, for both phone hosts.** The busk view's *Fixture sheet…*
+  (session 5's `BuskFixtureSheet`: a fixed 88svh bottom sheet with `host="popup"`, the 512px side
+  sheet held landscape) moved onto it: on a phone it is the `phone` host with the three heights,
+  finger sizes and the 380px side form, **modal** there because it opens from a menu. The desk's
+  512px pop-up form is unchanged.
+- **The Stage's phone sheet is not modal.** The canvas behind stays live: a tap on another fixture
+  moves the sheet onto it and a tap on empty stage closes it, as the docked panel behaves; an outside
+  press is the stage's, not a dismiss, and opening it takes no focus. The peek is what makes that
+  usable — the properties fold away (`[data-sheet-body]` hidden) and the stage is in view.
+- **The grabber's gestures**, which the board does not spell: a drag follows the finger and settles on
+  the nearest height; a drag well below the peek (64px) closes the sheet; a tap or Enter steps it
+  taller, round from full to the peek; the arrow keys step it either way. Every open starts at half.
+- **The phone drops nothing the Stage panel has.** The Hosts board draws Focus on the phone, and the
+  Focus tab lands its beam on the canvas the sheet sits over; *Aim…* opens its popover over the
+  sheet, on the live project only, as on the panel. The multi-selection's docked aim panel stays at
+  tablet width and up (D14 is one fixture's sheet).
+- **Finger sizes go a little past §4's three.** The 36px field types at **16px** — below that iOS
+  zooms the page on a field's focus and the sheet slides half off the screen; a setting's box is 36px
+  too, the row's editor chevron 32px beside the ×, and the tray's **+ Effect** 32px in a 48px row (the
+  board's). `useFingerSized()` reads the host, so `FxEditor`'s fields in the phone's tray take them
+  and its popover elsewhere does not.
+- **A group card has the corner too**, opening the group sheet (`GroupDetailModal`, which the Groups
+  route now mounts): D1's one sheet for a group, and the one place a group has Park, Release and the
+  scope line. The corner is `Maximize2`, the board's glyph, last in each card's header actions.
+- **The safe-area inset was not seen on glass.** Chromium's iPhone emulation reports
+  `env(safe-area-inset-bottom)` as 0, so the review run proved the tray is the sheet's foot, the inset
+  is its bottom padding, and the keyboard's bite against an emulated `visualViewport`; the home
+  indicator itself is §9 item 5's (`FU-MANUAL-FIXTURE-FX-SHEETS`).
+
 ## 6. Migration
 
 None. Stored templates keep Override and read as Absolute (call 6). No table or column changes.

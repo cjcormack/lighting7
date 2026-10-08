@@ -13,7 +13,7 @@ import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { AxisControl, LevelControl, OpenToggle, openKey, PositionPad } from './PropertyRow'
 import { MIXED_EDGE_CLASS, SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
-import { useFixtureSheet } from './sheetContext'
+import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { usePickSource } from './useRowSource'
 import { useChannelValues } from './useChannelValues'
 import {
@@ -116,6 +116,7 @@ function PickFrame({
   children: ReactNode
 }) {
   const { openRowId, connected } = useFixtureSheet()
+  const finger = useFingerSized()
   const { row } = pickRow
   const name = row.label
   const heads = useMemo(() => pickRow.heads.map((h) => ({ key: h.key, name: h.name })), [pickRow])
@@ -155,9 +156,12 @@ function PickFrame({
             title={`Clear your ${name.toLowerCase()} on ${pickRow.heads.length === 1 ? pickRow.heads[0].name : `these ${pickRow.heads.length}`} — it falls to what is underneath`}
             disabled={!connected}
             onClick={() => clearPickRow(write, row.keys, getProgrammerFadeMs())}
-            className="grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className={cn(
+              'grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
+              finger && FINGER_BUTTON_CLASS,
+            )}
           >
-            <X className="size-3" />
+            <X className={finger ? 'size-4' : 'size-3'} />
           </button>
         )}
       </div>
@@ -245,9 +249,10 @@ function SettingPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: He
     [write, property.name],
   )
   const noop = useCallback(() => {}, [])
+  const finger = useFingerSized()
   return (
     <PickFrame pickRow={pickRow} write={write} source={source} readOnly={readOnly} parked={parked}>
-      <div className="flex h-7 min-w-0 flex-1 items-center rounded-md border bg-background">
+      <div className={cn('flex h-7 min-w-0 flex-1 items-center rounded-md border bg-background', finger && FINGER_HEIGHT_CLASS)}>
         <SettingCell value={cellValue} resolutions={resolutions} label={pickRow.row.label} disabled={readOnly} onCommit={onCommit} onBeginEdit={noop} />
       </div>
     </PickFrame>

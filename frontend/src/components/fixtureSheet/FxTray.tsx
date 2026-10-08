@@ -22,6 +22,7 @@ import { EditorLabel } from '../editor/EditorLabel'
 import { fixtureHeadKeys } from './useRelease'
 import { useCueLabel, useEffectDetail } from './effectLabels'
 import { effectsReaching } from './rowSource'
+import { FINGER_CHIP_CLASS, useFingerSized } from './sheetContext'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
 
@@ -81,6 +82,8 @@ export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, ta
  *
  * **+ Effect** starts a programmer effect (D10), so it plays over the programmer's values instead
  * of being held back by them; the picker opens on the family of the row the sheet came from.
+ *
+ * On the phone host its row is 48px and its chips and **+ Effect** 32px, a finger's size (§4).
  */
 export function FxTray({
   target,
@@ -102,6 +105,7 @@ export function FxTray({
     [all, target, pick],
   )
   const connected = useIsDeskConnected()
+  const finger = useFingerSized()
   const effectDetail = useEffectDetail()
   const cueLabel = useCueLabel()
   const [open, setOpen] = useState(false)
@@ -201,7 +205,7 @@ export function FxTray({
       data-open={open || undefined}
       className={cn('flex flex-none flex-col border-t bg-muted/40', open && 'max-h-[50%] min-h-0')}
     >
-      <div className={cn('flex h-10 shrink-0 items-center gap-1.5 pr-2 pl-3', open && 'border-b')}>
+      <div className={cn('flex h-10 shrink-0 items-center gap-1.5 pr-2 pl-3', finger && 'h-12', open && 'border-b')}>
         {open && adding ? (
           <>
             <button
@@ -231,6 +235,7 @@ export function FxTray({
                 onClick={() => (isCueEffect(e) ? setOpen(true) : edit(e))}
                 className={cn(
                   'inline-flex h-6 min-w-0 shrink items-center gap-1.5 rounded-full border px-2 text-[11px] whitespace-nowrap',
+                  finger && cn(FINGER_CHIP_CLASS, 'px-2.5 text-xs'),
                   e.isRunning
                     ? 'border-violet-500/50 bg-violet-500/10'
                     : 'border-border text-muted-foreground',
@@ -242,7 +247,11 @@ export function FxTray({
               </button>
             ))}
             {more > 0 && (
-              <button type="button" className="shrink-0 px-1 text-[11px] text-muted-foreground" onClick={() => setOpen(true)}>
+              <button
+                type="button"
+                className={cn('shrink-0 px-1 text-[11px] text-muted-foreground', finger && cn(FINGER_CHIP_CLASS, 'px-2 text-xs'))}
+                onClick={() => setOpen(true)}
+              >
                 +{more}
               </button>
             )}
@@ -255,7 +264,7 @@ export function FxTray({
             <Button
               variant="outline"
               size="sm"
-              className="h-6 shrink-0 gap-1 px-2 text-[11px]"
+              className={cn('h-6 shrink-0 gap-1 px-2 text-[11px]', finger && cn(FINGER_CHIP_CLASS, 'px-2.5 text-xs'))}
               disabled={!connected || cannotStart != null}
               title={cannotStart ?? undefined}
               onClick={startAdding}
@@ -270,7 +279,10 @@ export function FxTray({
           aria-expanded={open}
           aria-label={open ? 'Fold the effects' : 'Open the effects'}
           onClick={() => setOpen((o) => !o)}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className={cn(
+            'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
+            finger && 'size-9',
+          )}
         >
           {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
         </button>

@@ -67,7 +67,8 @@ interface SheetProps {
 
 /**
  * The fixture sheet (fixture-fx-sheets plan D1–D13): one body for a fixture **or a group** in every
- * host — the list's pop-up, the Stage panel, the cards page, the group sheet and `GroupCard`.
+ * host — the list's pop-up, the Stage panel, a phone's bottom sheet (`PhoneSheet`), the cards page,
+ * the group sheet and `GroupCard`.
  *
  * It is a **programmer surface**, like a busk tab: every value lands in Local, and every effect it
  * starts is a programmer effect. It says so — a scope line under the header, a source mark on every

@@ -152,7 +152,7 @@ import {
   type StageEditorTarget,
 } from '../components/stage3d/StageEditorPanel'
 import { StageEditorPickerPanel } from '../components/stage3d/StageEditorPickerPanel'
-import { StageFixtureControlPanel } from '../components/stage3d/StageFixtureControlPanel'
+import { StageFixtureControls } from '../components/stage3d/StageFixtureControlPanel'
 import { StageAimPanel, isAimable } from '../components/stage3d/StageAimControls'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
@@ -971,12 +971,12 @@ export function Stage() {
   const showPanelStub = editingActive && !showBulkPanel && panelTarget != null && panelCollapsed
   const showPicker =
     editingActive && !showBulkPanel && panelTarget == null && placing == null
-  // View-mode (non-editing) fixture control card. Shares the selection state, so
-  // it works in both 3D and the 2D overview; gated to tablet+ like the edit panels.
-  // Requires exactly one selected object — live controls for "5 fixtures" would be
-  // ambiguous about which one they were driving.
-  const showControlPanel =
-    !editingActive && sel.count === 1 && selection?.kind === 'patch' && isTabletOrLarger
+  // View-mode (non-editing) fixture sheet. Shares the selection state, so it works in both 3D and
+  // the 2D overview. Docked at 380px on a desk or a tablet, and on a phone the sheet's phone host —
+  // a bottom sheet, or the right-hand sheet held landscape — which `StageFixtureControls` decides by
+  // the cell editor's form (fixture-fx-sheets plan D14). Requires exactly one selected object — live
+  // controls for "5 fixtures" would be ambiguous about which one they were driving.
+  const showControlPanel = !editingActive && sel.count === 1 && selection?.kind === 'patch'
   const showAimPanel = !editingActive && sel.count > 1 && isTabletOrLarger && aimableKeys.length > 0
 
   const handleSelectionChange = (s: Selection, intent: SelectIntent = 'replace') => {
@@ -1302,9 +1302,9 @@ export function Stage() {
         </header>
         <main className="flex flex-1 min-h-0 overflow-hidden">
           <div className="flex flex-1 min-w-0 flex-col">
-            {/* Only the canvas goes inside the vis-source provider. The docked
-                StageFixtureControlPanel below is a live editing surface and has to keep
-                reading real output whatever the selector is previewing. */}
+            {/* Only the canvas goes inside the vis-source provider. The fixture sheet below
+                (StageFixtureControls: docked, or a phone's portalled sheet) is a live editing
+                surface and has to keep reading real output whatever the selector is previewing. */}
             <StageChannelSourceProvider>
               <Stage3D
                 projectId={projectId}
@@ -1409,14 +1409,14 @@ export function Stage() {
               onSelect={handleSelectionChange}
             />
           )}
-          {showControlPanel && selection?.kind === 'patch' && (
-            <StageFixtureControlPanel
-              patchKey={selection.patchKey}
-              projectId={projectId}
-              canAim={project?.isCurrent ?? false}
-              onClose={() => clearSelection()}
-            />
-          )}
+          {/* Always mounted, so the phone's sheet can animate shut; it draws nothing docked while
+              no fixture is selected. */}
+          <StageFixtureControls
+            patchKey={showControlPanel && selection?.kind === 'patch' ? selection.patchKey : null}
+            projectId={projectId}
+            canAim={project?.isCurrent ?? false}
+            onClose={() => clearSelection()}
+          />
           {showAimPanel && (
             <StageAimPanel
               projectId={projectId}

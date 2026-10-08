@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useGroupListQuery } from '../store/groups'
 import { GroupCard } from '../components/groups/GroupCard'
+import { GroupDetailModal } from '../components/fixtures/GroupDetailModal'
 import { FixtureDetailModal } from '../components/groups/FixtureDetailModal'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -81,6 +82,7 @@ function GroupsLoading() {
 function GroupsContainer() {
   const { data: groups, isLoading } = useGroupListQuery()
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
+  const [sheetGroup, setSheetGroup] = useState<string | null>(null)
 
   if (isLoading) {
     return <GroupsLoading />
@@ -102,9 +104,12 @@ function GroupsContainer() {
             key={group.name}
             group={group}
             onFixtureClick={setSelectedFixture}
+            onOpenSheet={setSheetGroup}
           />
         ))}
       </div>
+
+      <GroupDetailModal groupName={sheetGroup} onClose={() => setSheetGroup(null)} />
 
       <FixtureDetailModal
         fixtureKey={selectedFixture}

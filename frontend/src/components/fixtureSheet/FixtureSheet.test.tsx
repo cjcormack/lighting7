@@ -83,6 +83,8 @@ import type { ProgrammerEntry, ProvenanceEntry } from '@/api/programmerWsApi'
 import type { Fixture } from '@/store/fixtures'
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
 import { FixtureSheet } from './FixtureSheet'
+import { PhoneSheet, SAFE_BOTTOM_CLASS } from './PhoneSheet'
+import { SheetTitle } from '@/components/ui/sheet'
 
 /**
  * The fixture sheet as a host draws it (fixture-fx-sheets plan §5, session 2's tests). Every write
@@ -389,5 +391,51 @@ describe('FixtureSheet — the shape', () => {
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     expect((within(row('zoom')).getByLabelText('zoom percent') as HTMLInputElement).disabled).toBe(true)
     expect((within(row('dimmer')).getByLabelText('dimmer percent') as HTMLInputElement).disabled).toBe(false)
+  })
+})
+
+/** Session 6: the phone host (D14, §4) — finger sizes, in the bottom sheet that holds it. */
+describe('FixtureSheet — the phone host', () => {
+  it('takes finger sizes: a 36px field, a 32px ×, 32px tray chips — and the desk hosts keep theirs', () => {
+    hold([entry('dimmer')], [prov('dimmer', {})])
+    wire.effects = [makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    const { unmount } = render(<FixtureSheet fixture={SPOT} host="phone" />)
+    const field = within(row('dimmer')).getByLabelText('dimmer percent')
+    expect(field.className).toContain('h-9')
+    // 16px text: below it iOS zooms the page on a field's focus.
+    expect(field.className).toContain('text-base')
+    expect(within(row('dimmer')).getByRole('button', { name: 'Clear your dimmer' }).className).toContain('size-8')
+    expect(screen.getByRole('button', { name: /^Circle/ }).className).toContain('h-8')
+    expect(screen.getByRole('button', { name: 'Effect' }).className).toContain('h-8')
+    unmount()
+
+    render(<FixtureSheet fixture={SPOT} host="stage" />)
+    expect(within(row('dimmer')).getByLabelText('dimmer percent').className).toContain('h-7')
+    expect(within(row('dimmer')).getByRole('button', { name: 'Clear your dimmer' }).className).not.toContain('size-8')
+    expect(screen.getByRole('button', { name: /^Circle/ }).className).toContain('h-6')
+  })
+
+  it('keeps the tray outside the scroller, at the foot of the bottom sheet, above the home indicator', () => {
+    render(
+      <PhoneSheet open onClose={() => {}} form="bottom-sheet" modal={false} description="Spot 3">
+        <FixtureSheet fixture={SPOT} host="phone" titleComponent={SheetTitle} />
+      </PhoneSheet>,
+    )
+    const content = document.querySelector('[data-phone-sheet]') as HTMLElement
+    const body = content.querySelector('[data-sheet-body]') as HTMLElement
+    const tray = content.querySelector('[data-fx-tray]') as HTMLElement
+    expect(body.className).toContain('overflow-y-auto')
+    expect(body.contains(tray)).toBe(false)
+    // The tray is the column's last child, and the column the sheet's foot: nothing lies between
+    // the tray and the sheet's bottom edge but the safe-area padding.
+    expect(tray.parentElement?.lastElementChild).toBe(tray)
+    expect(content.className).toContain(SAFE_BOTTOM_CLASS)
+    expect(screen.getByRole('dialog', { name: 'Spot 3' })).toBeTruthy()
+    // The grabber sits above the sheet, the peek folding its rows away.
+    const grabber = content.querySelector('[data-sheet-grabber]') as HTMLElement
+    fireEvent.click(grabber)
+    fireEvent.click(grabber)
+    expect(content.dataset.height).toBe('peek')
+    expect(content.contains(tray)).toBe(true)
   })
 })

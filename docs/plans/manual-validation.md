@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update template, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
@@ -76,6 +77,49 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-FIXTURE-FX-SHEETS`
+
+**What it proves**: *the fixture sheet answers Chris's six problems on the rig* — a row says who
+drives it and what is held back underneath, × lets the value go, a typed value lands, an effect added
+over a set position orbits it and is edited live, a head pick and a group's *All* write what they
+say, the busk view's pad effects carry *edited* and Update template, and a phone gets the sheet.
+
+**Why it is here**: the fixture-fx-sheets plan's six sessions were driven in a browser
+(`docs/plans/fixture-fx-sheets-plan.md` §9 lists these five checks, one per session that changed
+what an operator sees), but each needs real heads moving — an orbit around a set position, a Pulse
+running in phase after ×, four pixels of a bar changing alone — and the last a real iPhone: Safari's
+toolbar, the home indicator and the keyboard over the bottom sheet are the device's own. Session 6's
+browser run (iPhone 13 emulation, 390×844 and 844×390) proved the tap, the three heights, the peek,
+the tray's place, the landscape side form and the keyboard's bite against an emulated
+`visualViewport`; the inset itself is 0 in an emulator.
+
+**Test**, on the rig with Spot 3 (a mover), the 12-pixel bar, *Front wash*, a cue with a Pulse on a
+dimmer, a position template pad and a Circle effect-template pad:
+
+1. **Session 2 — the sheet.** Set Spot 3's position on the sheet: the row reads *Programmer*. Fire the
+   cue with the Pulse and set that dimmer by hand: the row carries the amber dot, the chip's stack
+   names the Pulse as held back, and × lets it run, in phase.
+2. **Session 3 — the tray and the live editor.** Set a position, then add a Circle from the tray: it
+   starts on the tap and orbits the set position. Drag its pan size: the rig follows with no restart.
+   Revert snaps back.
+3. **Session 4 — heads and groups.** Pick heads 1–4 of the 12-pixel bar and set a colour: only those
+   four change. On *Front wash*'s *All*, Record writes a group row.
+4. **Session 5 — the Busk and Programmer views.** Press the Circle pad after the position pad: it
+   orbits. In the busk Effects tab, widen it: *edited*. Press the pad off and on: the template's size
+   returns. Widen again and choose Update template: the next press keeps it.
+5. **Session 6 — the phone.** On an iPhone, tap a fixture in the Stage view: the bottom sheet opens at
+   half with the tray above the home indicator. Drag the grabber to full and down to the peek (header
+   and tray); tap another fixture through the peek and the sheet moves onto it; tap empty stage and it
+   closes. Type a dimmer value: the sheet clears the keyboard and the page does not zoom. Turn the
+   phone: the right-hand sheet. On the Mac, a card's ⤢ opens its pop-up and a group card's the group
+   sheet.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+30 minutes.
 
 ---
 

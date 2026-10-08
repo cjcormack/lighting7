@@ -6,10 +6,24 @@ import type { GroupSheetMember } from './sheetPick'
 
 /**
  * Where the sheet is mounted (fixture-fx-sheets plan §3.3). The rows are the same in every host;
- * what differs is the chrome — Focus exists only on the Stage panel, the cards page draws no tab
- * row — and the width, which the sheet answers with container queries, never this.
+ * what differs is the chrome — Focus exists only in the Stage view, the cards page draws no tab
+ * row — and the width, which the sheet answers with container queries, never this. `phone` is the
+ * one host that also changes the rows' sizes: it is the sheet in `useEditorForm`'s two touch forms
+ * (`PhoneSheet`), so it is the form — never a viewport width — that says a finger is on it.
  */
 export type SheetHost = 'popup' | 'stage' | 'phone' | 'card'
+
+/** The phone host's finger sizes (§4): a 36px field (a setting's box too), … */
+export const FINGER_HEIGHT_CLASS = 'h-9'
+/**
+ * … whose typed text is 16px — below that iOS zooms the page in on a field's focus, and the sheet
+ * would slide half off the screen the moment a value was typed, …
+ */
+export const FINGER_FIELD_CLASS = `${FINGER_HEIGHT_CLASS} text-base`
+/** … a 32px × (and the row's editor chevron beside it), … */
+export const FINGER_BUTTON_CLASS = 'size-8'
+/** … and 32px tray chips. */
+export const FINGER_CHIP_CLASS = 'h-8'
 
 /**
  * What one sheet is about (D1): a fixture, or a group with the members it draws pips for — the
@@ -57,4 +71,13 @@ export function useFixtureSheet(): FixtureSheetContextValue {
   const value = useContext(FixtureSheetContext)
   if (!value) throw new Error('useFixtureSheet outside a FixtureSheet')
   return value
+}
+
+/**
+ * Whether a control is on the **phone** host and takes finger sizes. Answers `false` outside a sheet
+ * rather than throwing: `SheetField` is the live FX editor's field too, which also opens in a
+ * popover with no sheet around it.
+ */
+export function useFingerSized(): boolean {
+  return useContext(FixtureSheetContext)?.host === 'phone'
 }
