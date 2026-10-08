@@ -35,6 +35,7 @@ export function EditorField({
   prefix,
   unit,
   value,
+  mixed,
   onCommit,
   min,
   max,
@@ -56,6 +57,12 @@ export function EditorField({
   unit?: string
   /** What the desk holds. The field shows it whenever the operator has no draft. */
   value: number
+  /**
+   * The heads it covers hold different values (the fixture sheet's rows over a pick, D13): the box
+   * is empty and says so — `40–80` as its placeholder — until the operator types the one value
+   * every head takes. [value] is then only what the arrow keys step from.
+   */
+  mixed?: string
   /** A parsed number the operator typed. Clamp it here: the field does not. */
   onCommit: (next: number) => void
   min?: number
@@ -76,7 +83,7 @@ export function EditorField({
   /** On the input itself — a width, most often. */
   fieldClassName?: string
 }) {
-  const draft = useNumberFieldDraft(String(value), onCommit)
+  const draft = useNumberFieldDraft(mixed != null ? '' : String(value), onCommit)
 
   // Through a ref so the effect depends on the seed alone: `draft` is rebuilt on every render, and
   // depending on it would re-seed the field on the operator's next keystroke.
@@ -101,6 +108,7 @@ export function EditorField({
           step={step}
           disabled={disabled}
           aria-label={label}
+          placeholder={mixed}
           className={cn(
             'h-7 min-w-0 px-2 text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
             unit != null && 'pr-6',

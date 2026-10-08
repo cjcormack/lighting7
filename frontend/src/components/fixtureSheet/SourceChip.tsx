@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AudioWaveform, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { RowSource, RowSourceKind } from './rowSource'
+import type { PickSource, RowSource, RowSourceKind } from './rowSource'
 import { LayerStack } from './LayerStack'
 
 /**
@@ -35,6 +35,18 @@ function chipClass(source: RowSource): string {
 }
 
 /**
+ * The row's 3px edge over a pick whose heads disagree on their source (D13): the shown source's
+ * colour, dashed — a repeating gradient in place of the solid fill.
+ */
+export const MIXED_EDGE_CLASS: Record<RowSourceKind, string> = {
+  programmer: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-primary)_0_4px,transparent_4px_7px)]',
+  effect: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-violet-500)_0_4px,transparent_4px_7px)]',
+  cue: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-sky-500)_0_4px,transparent_4px_7px)]',
+  parked: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-amber-500)_0_4px,transparent_4px_7px)]',
+  base: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-border)_0_4px,transparent_4px_7px)]',
+}
+
+/**
  * The row's source chip (D4) — and its door to the property's stack (D5): a press opens
  * `LayerStack` through `EditorSurface`. An amber dot rides it while something underneath is held
  * back; a dashed amber *Staged* mark beside it while the programmer is blind and holds the row (the
@@ -42,25 +54,33 @@ function chipClass(source: RowSource): string {
  */
 export function SourceChip({
   source,
-  headKey,
+  heads,
+  group,
   propertyName,
   label,
 }: {
-  source: RowSource
-  /** The head the row writes — the stack is asked of it. */
-  headKey: string
+  /** The row's source; over a pick, with how many heads it holds (D13). */
+  source: RowSource | PickSource
+  /** The heads the row writes — the stack is asked of them. One, for a row on one head. */
+  heads: readonly { key: string; name: string }[]
+  /** A group's *All*: the stack is asked of the group. */
+  group?: string
   /** The row's first key: the property the stack is asked about. */
   propertyName: string
   /** The row's name, for the stack's title. */
   label: string
 }) {
   const [open, setOpen] = useState(false)
+  // *Programmer · 2 of 4* — how many of the picked heads the shown source holds (note 4).
+  const count = 'mixed' in source && source.mixed ? `${source.count} of ${source.of}` : null
+  const words = count ? `${source.label} · ${count}` : source.label
   return (
     <span className="flex min-w-0 items-center gap-1">
       <LayerStack
         open={open}
         onOpenChange={setOpen}
-        headKey={headKey}
+        heads={heads}
+        group={group}
         propertyName={propertyName}
         label={label}
         trigger={
@@ -68,15 +88,17 @@ export function SourceChip({
             type="button"
             data-source={source.kind}
             data-held-back={source.heldBack || undefined}
-            title={source.heldBack ? `${source.label} — something underneath is held back` : `${source.label} — show what is underneath`}
+            data-mixed={count != null || undefined}
+            title={source.heldBack ? `${words} — something underneath is held back` : `${words} — show what is underneath`}
             className={cn(
               'relative inline-flex h-[18px] min-w-0 max-w-full items-center gap-1 rounded-full border px-[7px] text-[10px] font-medium whitespace-nowrap',
               chipClass(source),
+              count != null && 'border-dashed',
             )}
           >
             {source.kind === 'effect' && <AudioWaveform className="size-3 shrink-0" aria-hidden />}
             {source.kind === 'parked' && <Lock className="size-3 shrink-0" aria-hidden />}
-            <span className="truncate">{source.label}</span>
+            <span className="truncate">{words}</span>
             {source.heldBack && (
               <span
                 data-testid="held-back-dot"

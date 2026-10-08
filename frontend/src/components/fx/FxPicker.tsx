@@ -78,8 +78,14 @@ export function FxPicker({
   current,
   onCurrent,
   onEdit,
+  elementFilter,
 }: {
   target: FxTarget
+  /**
+   * Start on some of a multi-head fixture's heads — the sheet's head strip picking exactly the odd,
+   * even or a half of them (`elementFilterFor`). Absent: every head.
+   */
+  elementFilter?: string
   /** The row the sheet came from, as a picker family. */
   initialFamily?: PickerFamily | null
   /** The property that row writes, preferred over the effect's first compatible one. */
@@ -194,6 +200,7 @@ export function FxPicker({
           phaseOffset: 0,
           parameters: spec.parameters,
           programmerOwned: true,
+          ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
         },
       )
       const created = await (addition.kind === 'group'

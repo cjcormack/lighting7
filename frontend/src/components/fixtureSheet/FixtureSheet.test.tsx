@@ -56,9 +56,15 @@ vi.mock('./effectLabels', () => ({
   useEffectDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
 }))
-vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null }))
-vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => <button type="button">Locate</button> }))
-vi.mock('../fixtures/FixtureParkButton', () => ({ FixtureParkButton: () => <button type="button">Park</button> }))
+vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
+vi.mock('../fixtures/LocateButton', () => ({
+  LocateButton: () => <button type="button">Locate</button>,
+  LocateTargetsButton: () => <button type="button">Locate</button>,
+}))
+vi.mock('../fixtures/FixtureParkButton', () => ({
+  FixtureParkButton: () => <button type="button">Park</button>,
+  ParkButton: () => <button type="button">Park</button>,
+}))
 vi.mock('../fx/LookTogglePicker', () => ({ LookTogglePicker: () => null }))
 const picker = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
 vi.mock('../fx/FxPicker', () => ({
@@ -243,7 +249,7 @@ describe('FixtureSheet — writes', () => {
     expect(set).not.toHaveBeenCalled()
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(set).toHaveBeenCalledTimes(1)
-    expect(set).toHaveBeenCalledWith('fixture', 'spot-3', 'dimmer', '128', 2000)
+    expect(set).toHaveBeenCalledWith('fixture', 'spot-3', 'dimmer', '128', 2000, undefined)
   })
 
   it('writes Position as one setPosition in degrees — never channels.update', () => {
@@ -260,7 +266,7 @@ describe('FixtureSheet — writes', () => {
     fireEvent.change(pan, { target: { value: '270' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
     // 270° of a 540° pan is byte 128; tilt is kept from the wire.
-    expect(setPosition).toHaveBeenCalledWith('fixture', 'spot-3', 128, 64, 0)
+    expect(setPosition).toHaveBeenCalledWith('fixture', 'spot-3', 128, 64, 0, undefined)
     expect(update).not.toHaveBeenCalled()
   })
 })

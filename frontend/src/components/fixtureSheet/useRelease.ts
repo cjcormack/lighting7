@@ -7,6 +7,7 @@ import { isLocalEffect, partialSweepMessage } from '../fixtures-list/cellEffects
 import type { TargetCleared } from '@/api/programmerWsApi'
 import type { ActiveEffect } from '@/store/fixtureFx'
 import type { Fixture } from '@/store/fixtures'
+import { sheetTargetKey, type SheetTarget } from './sheetContext'
 
 /** What this fixture holds in the programmer — what *Release n* takes and the scope line counts. */
 export interface HeldOnFixture {
@@ -28,7 +29,23 @@ export function fixtureHeadKeys(fixture: Fixture): Set<string> {
  * effects targeted at it. A group effect is not counted — Release leaves it running and names it.
  */
 export function heldOnFixture(fixture: Fixture, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
-  const keys = fixtureHeadKeys(fixture)
+  return heldOnTarget({ type: 'fixture', fixture }, effects)
+}
+
+/**
+ * [heldOnFixture] for any sheet target. A group's Release takes every member and its heads (the
+ * desk's `clearTarget` walks the group's fixtures), their sideband, the members' own local effects
+ * and the group's own; another group's effect is left running and is not counted.
+ */
+export function heldOnTarget(target: SheetTarget, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
+  // The desk's roots: the fixture, or the group's members — a member that is one head of a bar is
+  // that head alone, with no footprint of its own (`clearTarget` walks only DMX fixtures' channels).
+  const fixtures =
+    target.type === 'fixture' ? [target.fixture] : target.members.filter((m) => m.elementIndex == null).map((m) => m.fixture)
+  const keys = new Set([
+    ...fixtures.flatMap((f) => [...fixtureHeadKeys(f)]),
+    ...(target.type === 'group' ? target.members.map((m) => m.key) : []),
+  ])
   const state = lightingApi.programmer.getState()
   let values = 0
   for (const entry of state.entries.values()) {
@@ -36,11 +53,15 @@ export function heldOnFixture(fixture: Fixture, effects: readonly ActiveEffect[]
     const owners = entry.owners?.length ? entry.owners : [entry.owner]
     if (owners.some((o) => o !== 'layers')) values += 1
   }
-  const last = fixture.firstChannel + fixture.channelCount - 1
   for (const ch of state.channels) {
-    if (ch.universe === fixture.universe && ch.channel >= fixture.firstChannel && ch.channel <= last) values += 1
+    if (fixtures.some((f) => ch.universe === f.universe && ch.channel >= f.firstChannel && ch.channel <= f.firstChannel + f.channelCount - 1)) {
+      values += 1
+    }
   }
-  const local = (effects ?? []).filter((e) => !e.isGroupTarget && keys.has(e.targetKey) && isLocalEffect(e)).length
+  const ownGroup = target.type === 'group' ? target.group.name : null
+  const local = (effects ?? []).filter(
+    (e) => isLocalEffect(e) && (e.isGroupTarget ? e.targetKey === ownGroup : keys.has(e.targetKey)),
+  ).length
   return { values, effects: local }
 }
 
@@ -54,12 +75,12 @@ export function heldLine({ values, effects }: HeldOnFixture): string | null {
 }
 
 /** Re-counted on every programmer event; cheap — one pass over the entries. */
-export function useHeldOnFixture(fixture: Fixture, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
+export function useHeldOnTarget(target: SheetTarget, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
   const revision = useProgrammerRevision()
   return useMemo(() => {
     void revision
-    return heldOnFixture(fixture, effects)
-  }, [revision, fixture, effects])
+    return heldOnTarget(target, effects)
+  }, [revision, target, effects])
 }
 
 /** The toast a Release answers with, in the desk's own count. */
@@ -73,21 +94,24 @@ export function releaseMessage(name: string, cleared: TargetCleared): string {
 }
 
 /**
- * *Release n* (D6, W2): one `programmer.clearTarget` for the fixture and its heads at the
- * programmer fade — its values and its local effects in one pass — toasting the desk's reply,
- * including the group effects it left running (`partialSweepMessage`'s vocabulary). No confirm,
- * like Clear (call 3).
+ * *Release n* (D6, W2): one `programmer.clearTarget` for the fixture and its heads — or the group
+ * and its members — at the programmer fade, its values and its local effects in one pass, toasting
+ * the desk's reply, including the effects it left running (`partialSweepMessage`'s vocabulary). No
+ * confirm, like Clear (call 3).
  */
-export function useRelease(fixture: Fixture): () => Promise<void> {
+export function useRelease(target: SheetTarget): () => Promise<void> {
+  const type = target.type
+  const key = sheetTargetKey(target)
+  const name = target.type === 'fixture' ? target.fixture.name : target.group.name
   return useCallback(async () => {
     try {
-      const cleared = await lightingApi.programmer.clearTarget('fixture', fixture.key, getProgrammerFadeMs())
-      toast.success(releaseMessage(fixture.name, cleared))
-      if (cleared.partial.length > 0) toast.warning(partialSweepMessage(cleared.partial, 'this fixture'))
+      const cleared = await lightingApi.programmer.clearTarget(type, key, getProgrammerFadeMs())
+      toast.success(releaseMessage(name, cleared))
+      if (cleared.partial.length > 0) toast.warning(partialSweepMessage(cleared.partial, type === 'fixture' ? 'this fixture' : 'this group'))
     } catch (e) {
       // A closed socket was already toasted by the gesture send; anything else is the desk's word.
       const message = e instanceof Error ? e.message : String(e)
       if (message !== 'The desk is not connected') toast.error(`Release failed: ${message}`)
     }
-  }, [fixture.key, fixture.name])
+  }, [type, key, name])
 }

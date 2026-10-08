@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { dmxToDegrees } from '@/lib/axisDegrees'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { useChannelValue, useSettingValue, useSliderValue, useUpdateFixtureColour } from '@/hooks/usePropertyValues'
+import { useChannelValue, useSettingValue, useSliderValue } from '@/hooks/usePropertyValues'
 import { useColourAppearance } from '@/hooks/useColourAppearance'
 import { useVirtualDimmer } from '@/hooks/useVirtualDimmer'
 import { usePropertyParkStatus } from '@/hooks/usePropertyParkStatus'
@@ -21,7 +21,7 @@ import { SheetField } from './SheetField'
 import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
 import { useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
-import { clearSheetRow, writeSheetLevel, writeSheetPosition } from './sheetWrites'
+import { clearSheetRow, writePickColour, writePickVirtualDimmer, writeSheetLevel, writeSheetPosition } from './sheetWrites'
 import type { RowSource } from './rowSource'
 import type { SheetRow } from './sheetRows'
 
@@ -30,25 +30,46 @@ import type { SheetRow } from './sheetRows'
  * and an editor-kit control in the row's unit. A row is live while the desk is connected and is
  * read-only only offline, or while one of its channels is parked (D2).
  */
-export const PropertyRow = memo(function PropertyRow({ row, headKey }: { row: SheetRow; headKey: string }) {
+export const PropertyRow = memo(function PropertyRow({
+  row,
+  headKey,
+  headName,
+  sourceGroup,
+}: {
+  row: SheetRow
+  headKey: string
+  /** The head's name, for the stack's section line. */
+  headName?: string
+  /** A group sheet's one picked member: its writes carry the group (D13). */
+  sourceGroup?: string
+}) {
+  const head = { headKey, headName: headName ?? headKey, sourceGroup }
   switch (row.kind) {
     case 'slider':
-      return <SliderRow row={row} headKey={headKey} />
+      return <SliderRow row={row} {...head} />
     case 'virtual-dimmer':
-      return <VirtualDimmerRow row={row} headKey={headKey} />
+      return <VirtualDimmerRow row={row} {...head} />
     case 'setting':
-      return <SettingRow row={row} headKey={headKey} />
+      return <SettingRow row={row} {...head} />
     case 'colour':
-      return <ColourRow row={row} headKey={headKey} />
+      return <ColourRow row={row} {...head} />
     case 'position':
-      return <PositionRow row={row} headKey={headKey} />
+      return <PositionRow row={row} {...head} />
   }
 })
+
+/** Which head a row is on, and the group a member's write carries. */
+interface RowHead {
+  headKey: string
+  headName: string
+  sourceGroup?: string
+}
 
 /** The frame every row shares: the edge, the name line, and the control beneath it. */
 function RowFrame({
   row,
   headKey,
+  headName,
   source,
   readOnly,
   parked,
@@ -57,6 +78,7 @@ function RowFrame({
 }: {
   row: SheetRow
   headKey: string
+  headName: string
   source: RowSource
   readOnly: boolean
   parked: boolean
@@ -81,7 +103,7 @@ function RowFrame({
     >
       <div className="flex min-h-5 min-w-0 items-center gap-1.5">
         <span className={cn('shrink-0 text-[12.5px] font-medium', source.kind === 'base' && 'opacity-60')}>{name}</span>
-        <SourceChip source={source} headKey={headKey} propertyName={row.keys[0]} label={name} />
+        <SourceChip source={source} heads={[{ key: headKey, name: headName }]} propertyName={row.keys[0]} label={name} />
         <span className="flex-1" />
         {trailing}
         {source.holds && (
@@ -112,14 +134,14 @@ function useRowReadOnly(parked: boolean): boolean {
 
 // ─── Slider ────────────────────────────────────────────────────────────────
 
-function SliderRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'slider' }>; headKey: string }) {
+function SliderRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'slider' }> } & RowHead) {
   const { property } = row
   const source = useRowSource(headKey, row.keys)
   const { isAnyParked } = usePropertyParkStatus(property)
   const readOnly = useRowReadOnly(isAnyParked)
   const value = useSliderValue(property)
   return (
-    <RowFrame row={row} headKey={headKey} source={source} readOnly={readOnly} parked={isAnyParked}>
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked}>
       <LevelControl
         label={row.label}
         value={value}
@@ -127,28 +149,34 @@ function SliderRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'slider' }
         max={property.max}
         readOnly={readOnly}
         // A drag follows the hand; a typed value takes the programmer fade.
-        onDrag={(v) => writeSheetLevel(headKey, property.name, v)}
-        onTyped={(v) => writeSheetLevel(headKey, property.name, v, getProgrammerFadeMs())}
+        onDrag={(v) => writeSheetLevel(headKey, property.name, v, undefined, sourceGroup)}
+        onTyped={(v) => writeSheetLevel(headKey, property.name, v, getProgrammerFadeMs(), sourceGroup)}
       />
     </RowFrame>
   )
 }
 
-function VirtualDimmerRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'virtual-dimmer' }>; headKey: string }) {
+function VirtualDimmerRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'virtual-dimmer' }> } & RowHead) {
   const source = useRowSource(headKey, row.keys)
   const { isAnyParked } = usePropertyParkStatus(row.property)
   const readOnly = useRowReadOnly(isAnyParked)
   const { value, setValue } = useVirtualDimmer(row.property, headKey)
+  // A group's member carries the group, which `useVirtualDimmer` cannot say: the pick's write is the
+  // same scaling with `sourceGroup` on it.
+  const write = (v: number, fadeMs?: number) =>
+    sourceGroup == null
+      ? setValue(v, fadeMs)
+      : writePickVirtualDimmer({ kind: 'heads', keys: [headKey], sourceGroup }, [{ key: headKey, property: row.property }], v, fadeMs)
   return (
-    <RowFrame row={row} headKey={headKey} source={source} readOnly={readOnly} parked={isAnyParked}>
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked}>
       <LevelControl
         label={row.label}
         value={value}
         min={0}
         max={255}
         readOnly={readOnly}
-        onDrag={(v) => setValue(v)}
-        onTyped={(v) => setValue(v, getProgrammerFadeMs())}
+        onDrag={(v) => write(v)}
+        onTyped={(v) => write(v, getProgrammerFadeMs())}
       />
     </RowFrame>
   )
@@ -158,7 +186,7 @@ function VirtualDimmerRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'vi
  * A slider in bytes beside a **percent** field — the programmer grid's unit (editor-kit D13), so
  * the sheet and the grid read one number. Enter commits the field; the slider writes as it moves.
  */
-function LevelControl({
+export function LevelControl({
   label,
   value,
   min,
@@ -166,15 +194,24 @@ function LevelControl({
   readOnly,
   onDrag,
   onTyped,
+  lowest,
 }: {
   label: string
+  /** The value — over a pick of heads (D13), the highest, where the thumb sits. */
   value: number
   min: number
   max: number
   readOnly: boolean
   onDrag: (v: number) => void
   onTyped: (v: number) => void
+  /**
+   * Over a pick whose heads differ: the lowest, so the track draws the range between the two (the
+   * group visualisers' reading) and the field says `40–80`.
+   */
+  lowest?: number
 }) {
+  const mixed = lowest != null && lowest !== value
+  const span = Math.max(1, max - min)
   return (
     <>
       <Slider
@@ -185,11 +222,23 @@ function LevelControl({
         step={1}
         disabled={readOnly}
         onValueChange={([v]) => v !== undefined && onDrag(v)}
-        className="min-w-[60px] flex-1"
+        className={cn(
+          'min-w-[60px] flex-1',
+          // The range: the fill runs to the highest head, and the track's own colour masks it below
+          // the lowest, so what is drawn is the band between the two with the thumb at its top —
+          // the group visualisers' reading (HeadsGroups board, note 4).
+          mixed &&
+            "after:pointer-events-none after:absolute after:top-1/2 after:left-0 after:h-1.5 after:w-[var(--range-from)] after:-translate-y-1/2 after:rounded-l-full after:bg-muted after:content-[''] [&_[data-slot=slider-thumb]]:z-10",
+        )}
+        style={mixed ? ({ '--range-from': `${((lowest - min) / span) * 100}%` } as React.CSSProperties) : undefined}
+        data-range={mixed ? `${lowest}-${value}` : undefined}
       />
       <SheetField
         label={`${label} percent`}
         unit="%"
+        mixed={mixed ? `${toPct(lowest)}–${toPct(value)}` : undefined}
+        // Room for `100–100` and its unit while the heads differ.
+        className={mixed ? 'w-[96px]' : undefined}
         value={toPct(value)}
         min={0}
         max={100}
@@ -202,7 +251,7 @@ function LevelControl({
 
 // ─── Setting ───────────────────────────────────────────────────────────────
 
-function SettingRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'setting' }>; headKey: string }) {
+function SettingRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'setting' }> } & RowHead) {
   const { property } = row
   const source = useRowSource(headKey, row.keys)
   const { isAnyParked } = usePropertyParkStatus(property)
@@ -213,13 +262,13 @@ function SettingRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'setting'
   const index = option ? property.options.findIndex((o) => o.name === option.name) : -1
   const onCommit = useCallback(
     (commit: CellCommit) => {
-      if (commit.kind === 'setting') writeSheetLevel(headKey, property.name, commit.level, getProgrammerFadeMs())
+      if (commit.kind === 'setting') writeSheetLevel(headKey, property.name, commit.level, getProgrammerFadeMs(), sourceGroup)
     },
-    [headKey, property.name],
+    [headKey, property.name, sourceGroup],
   )
   const noop = useCallback(() => {}, [])
   return (
-    <RowFrame row={row} headKey={headKey} source={source} readOnly={readOnly} parked={isAnyParked}>
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked}>
       {/* The programmer grid's setting cell, type-ahead and all (D7): one list for a step on both
           surfaces. Its trigger is the row's field here. */}
       <div className="flex h-7 min-w-0 flex-1 items-center rounded-md border bg-background">
@@ -237,11 +286,11 @@ function SettingRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'setting'
 // ─── Colour ────────────────────────────────────────────────────────────────
 
 /** A row's identity for "the one open row": the row on its head, since every head has a Position. */
-function openKey(headKey: string, row: SheetRow): string {
+export function openKey(headKey: string, row: SheetRow): string {
   return `${headKey}\u0000${row.id}`
 }
 
-function OpenToggle({ row, headKey, label }: { row: SheetRow; headKey: string; label: string }) {
+export function OpenToggle({ row, headKey, label }: { row: SheetRow; headKey: string; label: string }) {
   const { openRowId, setOpenRowId } = useFixtureSheet()
   const key = openKey(headKey, row)
   const open = openRowId === key
@@ -258,7 +307,7 @@ function OpenToggle({ row, headKey, label }: { row: SheetRow; headKey: string; l
   )
 }
 
-function ColourRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'colour' }>; headKey: string }) {
+function ColourRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'colour' }> } & RowHead) {
   const { property } = row
   const { openRowId } = useFixtureSheet()
   const open = openRowId === openKey(headKey, row)
@@ -269,14 +318,19 @@ function ColourRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'colour' }
   // text beside it is the value (Chris's call, session 2 review).
   const colour = useColourAppearance(property, row.dimmer, SWATCH_FLOOR)
   const uvLit = colour.uv !== undefined && colour.uv > 0
-  const update = useUpdateFixtureColour(property, headKey)
+  // One entry for the whole colour, only the extended components the head has a channel for.
+  const update = useCallback(
+    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) =>
+      writePickColour({ kind: 'heads', keys: [headKey], sourceGroup }, [{ key: headKey, property }], { r, g, b, w, a, uv }),
+    [headKey, property, sourceGroup],
+  )
   const extended = [
     colour.w !== undefined && `W ${colour.w}`,
     colour.a !== undefined && `A ${colour.a}`,
     colour.uv !== undefined && `UV ${colour.uv}`,
   ].filter(Boolean)
   return (
-    <RowFrame row={row} headKey={headKey} source={source} readOnly={readOnly} parked={isAnyParked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex h-7 min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-xs">
           <span
@@ -330,7 +384,7 @@ function ColourRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'colour' }
 
 // ─── Position ──────────────────────────────────────────────────────────────
 
-function axisText(byte: number, slider: SliderPropertyDescriptor | undefined, degrees: boolean): string {
+export function axisText(byte: number, slider: SliderPropertyDescriptor | undefined, degrees: boolean): string {
   if (degrees && slider) {
     const deg = dmxToDegrees(byte, slider)
     if (deg != null) return `${Math.round(deg)}°`
@@ -338,9 +392,9 @@ function axisText(byte: number, slider: SliderPropertyDescriptor | undefined, de
   return String(byte)
 }
 
-function PositionRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'position' }>; headKey: string }) {
+function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'position' }> } & RowHead) {
   const { resolution, degrees } = row
-  const { openRowId, aim, fixture } = useFixtureSheet()
+  const { openRowId, aim, target } = useFixtureSheet()
   const open = openRowId === openKey(headKey, row)
   const source = useRowSource(headKey, row.keys)
   const panPark = usePropertyParkStatus(resolution.property ?? resolution.panProperty!)
@@ -354,8 +408,8 @@ function PositionRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'positio
 
   const write = useCallback(
     (commit: Extract<CellCommit, { kind: 'position' }>, typed: boolean) =>
-      writeSheetPosition(headKey, resolution, commit, typed ? getProgrammerFadeMs() : undefined),
-    [headKey, resolution],
+      writeSheetPosition(headKey, resolution, commit, typed ? getProgrammerFadeMs() : undefined, sourceGroup),
+    [headKey, resolution, sourceGroup],
   )
 
   const panNorm = (pan - resolution.panMin) / Math.max(1, resolution.panMax - resolution.panMin)
@@ -364,7 +418,7 @@ function PositionRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'positio
   const aimButton =
     // Aim is the fixture's (`StageAimControls` over its key), so only the fixture's own Position row
     // offers it — a head's row would aim the whole fixture.
-    aim != null && degrees && headKey === fixture.key ? (
+    aim != null && degrees && target.type === 'fixture' && headKey === target.fixture.key ? (
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px]" disabled={readOnly}>
@@ -379,7 +433,7 @@ function PositionRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'positio
     ) : null
 
   return (
-    <RowFrame row={row} headKey={headKey} source={source} readOnly={readOnly} parked={parked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={parked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex min-w-0 items-start gap-2">
           <PositionPad
@@ -442,7 +496,7 @@ function PositionRow({ row, headKey }: { row: Extract<SheetRow, { kind: 'positio
   )
 }
 
-function AxisControl({
+export function AxisControl({
   label,
   axis,
   byte,
@@ -498,7 +552,7 @@ function AxisControl({
 }
 
 /** The XY pad: a press or a drag writes both axes in one `setPosition`. */
-function PositionPad({
+export function PositionPad({
   size,
   pan,
   tilt,

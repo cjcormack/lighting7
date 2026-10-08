@@ -1,121 +1,46 @@
-import { useState, useEffect } from 'react'
-import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Loader2 } from 'lucide-react'
-import { useGroupListQuery, useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
-import { GroupPropertiesSection } from '../groups/GroupCard'
-import { GroupMembersSection } from '../groups/GroupMembersSection'
-import { useVisibleGroupMembers } from '../groups/useVisibleGroupMembers'
+import { useEffect, useState } from 'react'
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { useGroupListQuery } from '../../store/groups'
+import { FixtureSheet } from '../fixtureSheet/FixtureSheet'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
-import { LocateButton } from './LocateButton'
 
 interface GroupDetailModalProps {
   groupName: string | null
   onClose: () => void
 }
 
-export function GroupDetailModal({
-  groupName,
-  onClose,
-}: GroupDetailModalProps) {
+/**
+ * The **group sheet** (fixture-fx-sheets plan D1, session 4): the fixture sheet's body on a group, in
+ * the same 512px Radix sheet as a fixture's pop-up — *Values · Members*, Locate, Park and Release,
+ * the head strip of members, rows that write the group, and the FX tray. It replaced the group
+ * visualisers and their Edit toggle, which wrote one raw channel per member for a slider.
+ *
+ * A member opens its own sheet over this one, where a group's effect reads *via <group>*.
+ */
+export function GroupDetailModal({ groupName, onClose }: GroupDetailModalProps) {
   const { data: groupList } = useGroupListQuery()
   const group = groupName ? groupList?.find((g) => g.name === groupName) : null
-  const { data: groupDetail, isLoading: membersLoading } = useGroupQuery(groupName ?? '', {
-    skip: !groupName,
-  })
-  const { data: properties, isLoading: propertiesLoading } = useGroupPropertiesQuery(
-    groupName ?? '',
-    { skip: !groupName }
-  )
-  // What the member list shows — infrastructure members left out — so the header agrees with it.
-  const memberCount = useVisibleGroupMembers(groupDetail?.members)?.length ?? group?.memberCount
-  const [isEditing, setIsEditing] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
 
-  // Reset edit mode when modal closes or group changes
+  // A member's sheet belongs to the group it was opened from.
   useEffect(() => {
-    setIsEditing(false)
     setSelectedFixture(null)
   }, [groupName])
 
   return (
     <Sheet open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col sm:max-w-lg">
-        <SheetHeader>
-          <div className="flex items-center justify-between pr-8">
-            <div>
-              <SheetTitle>{group?.name ?? 'Group'}</SheetTitle>
-              {group && memberCount != null && (
-                <p className="text-sm text-muted-foreground">
-                  {memberCount} fixture{memberCount !== 1 ? 's' : ''}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {groupName && (
-                <LocateButton type="group" targetKey={groupName} name={groupName} iconOnly />
-              )}
-              <Button
-                variant={isEditing ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                {isEditing ? 'Done' : 'Edit'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Capability badges */}
-          {group && group.capabilities.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {group.capabilities.map((cap) => (
-                <Badge key={cap} variant="outline" className="capitalize">
-                  {cap}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </SheetHeader>
-
-        <SheetBody>
-        {groupName && (
-          <div className="space-y-4">
-            {/* Inline properties section */}
-            <GroupPropertiesSection
-              properties={properties}
-              isLoading={propertiesLoading}
-              isEditing={isEditing}
-            />
-
-            {/* Compact fixture member grid */}
-            {membersLoading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="size-6 animate-spin" />
-              </div>
-            ) : (
-              <GroupMembersSection
-                members={groupDetail?.members}
-                isLoading={false}
-                onFixtureClick={setSelectedFixture}
-              />
-            )}
-          </div>
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
+        <SheetDescription className="sr-only">The group&apos;s values, its members and its effects</SheetDescription>
+        {group ? (
+          // Keyed by group so the view and the open row reset when the sheet moves to another.
+          <FixtureSheet key={group.name} group={group} host="popup" titleComponent={SheetTitle} onOpenMember={setSelectedFixture} />
+        ) : (
+          <SheetTitle className="p-4">{groupName ?? 'Group'}</SheetTitle>
         )}
-        </SheetBody>
       </SheetContent>
 
-      {/* Nested fixture modal */}
-      <FixtureDetailModal
-        fixtureKey={selectedFixture}
-        onClose={() => setSelectedFixture(null)}
-      />
+      {/* A member's own sheet, over the group's. */}
+      <FixtureDetailModal fixtureKey={selectedFixture} onClose={() => setSelectedFixture(null)} />
     </Sheet>
   )
 }

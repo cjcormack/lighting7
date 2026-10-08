@@ -483,6 +483,62 @@ Where session 3 departed from the bullets above, and why:
   - no raw channel write for a group.
 - **Docs:** `frontend/CLAUDE.md`; `docs/groups-engineering.md`'s UI paragraph.
 
+#### Session 4 amendment
+
+Where session 4 departed from the bullets above, and why:
+
+- **The writes do not go through `useGroupPropertyValues`.** `sheetWrites.ts` sends a group's *All*
+  as `programmer.set('group', …)` / `setColour` / `setPosition` itself — the frame those hooks sent
+  with a `groupName` — because the rows read the members' own descriptors, not the group's. The
+  hooks' update half went with the group visualisers, **raw-channel fallback included** (the path
+  §3.3 says goes), and so did the position and setting value hooks only the visualisers read,
+  `useUpdateFixtureColour` (its raw-channel branch had no caller left) and `categoriseProperties`
+  (its last consumer was `GroupCard`). `ElementsView` was already gone before this session.
+- **A fixture's *All* writes each head's key.** D13's "the fixture's all-heads properties" has no
+  property on the desk to write — `elementGroupProperties` is a client-side grouping, which the
+  interim section wrote as one raw channel per head for a slider. Its controls are the heads' rows
+  over *All*.
+- **A group's rows come from its members' own fixture properties**, intersected by name and kind
+  (the desk's aggregation rule). The group descriptor's element-group half — *all heads* of a group
+  of multi-head fixtures — is not offered: a group op resolves each member's fixture-level property
+  and, on a member whose colour lives on its heads, resolves no channels, so the visualiser offering
+  it was already a write that failed. A member's heads are that member's own sheet. A member key
+  that names a single head (`GroupMember.tags` allows it; a group loaded from the patch never holds
+  one today) is a pip too, resolved by key among the fixtures' elements — defensive, since the desk's
+  group op would skip it.
+- **A position over a group's *All* is one group entry only when every member lands on the same
+  bytes** — a group of one model. Otherwise each member's own entry carries the group, since a degree
+  or a pad point lands on different bytes per model and one group entry would hand every member the
+  first's. A dimmerless colour's *Dimmer* is always per member (each colour scales differently).
+- **A row over a pick is drawn only where every head can take one write.** A setting needs the same
+  options, level for level, on every head (the desk's own group-setting rule), and a colour fills an
+  emitter it does not say from each head's channel, since the desk reads a missing W / A / UV as 0;
+  a group's *All* colour is one group entry only over members with the same emitters.
+- **Effects follow the pick as far as one effect can.** *All* starts on the fixture or the group;
+  one head or member starts on it alone (the desk takes a head's key as an effect target); a pick
+  that is exactly the odd, even or a half of a fixture's heads starts on the fixture with that
+  **element filter**; any other subset says why + Effect cannot start — one instance per head would
+  make the live editor edit one of them and the tray list twelve. The board's *Rainbow · heads* chip is
+  the row's *on Head 3* / *first half heads*. On a group the tray lists what reaches the members (the
+  group's effects, the members' own, another group's *via*), not only the group's own, so *All* reads
+  like a fixture's tray. The tray's **Look picker**, which neither the plan nor the board placed,
+  follows the same rule (Chris's call in session 4's review): the whole target on *All*, the one head
+  or member when one is picked, absent for any other pick.
+- **The group sheet's header has Park and Release**, which `GroupDetailModal` never had: Park over the
+  members' channels (a member that is one head of a bar brings that head's channels), Release as
+  `clearTarget('group', …)`. Locate acts on the pick (board note 1); Park and Release stay the whole
+  target's. `GroupDetailModal`'s capability badges went with its body; `GroupCard` keeps its header
+  and badges, and the group's surface-binding badges are one row above the rows
+  (`GroupBoundControlsRow`, a strip on the group counted under its dimmer as the old badge did).
+- **The kit's `EditorField` gained `mixed`** — an empty box with the range as its placeholder — for
+  the rows' `40–80`; typing still commits one value to every picked head.
+- **The pip gesture is one hook**, `hooks/usePipRun.ts`, factored out of `RigTile` unchanged, so the
+  strip and the rig tile cannot drift.
+- **Left as found:** session 3's Position-bytes issue. `resolveCell`'s real-descriptor branch sets no
+  `panProperty` because that field is what tells the grid to write two axes rather than one
+  `setPosition`, so the fix belongs to the grid's resolution and its writes together, not to this
+  session; rows over a pick read the same resolution and type bytes on such a mover too.
+
 ### Session 5 — the Busk and Programmer views (frontend, W5's client)
 
 - **D16.**

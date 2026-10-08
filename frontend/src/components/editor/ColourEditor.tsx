@@ -134,8 +134,8 @@ export interface ColourEditorProps {
   /**
    * Which emitters the editor offers rows for — the **union** over the heads it is editing, read
    * off their colour descriptors. The hosts with targets derive it with [emitterHeadCounts], the
-   * same probe the read-out's count line runs, so the rows and the line cannot disagree; the two
-   * property visualisers read their one descriptor.
+   * same probe the read-out's count line runs, so the rows and the line cannot disagree; the
+   * fixture sheet's colour rows read their heads' own descriptors.
    */
   hasWhiteChannel: boolean
   hasAmberChannel: boolean
@@ -162,7 +162,7 @@ export interface ColourEditorProps {
    * write targets in rig order, the programmer's marquee column in row order (D12). Three things
    * read them: the count line, the hidden appearance leaves (one per parent fixture) and *Pick*,
    * which reads the first head's colour and says *mixed* where the rest disagree. Absent or empty
-   * for the visualisers and the Spread endpoint, which have none of the three.
+   * for the fixture sheet's colour rows and the Spread endpoint, which have none of the three.
    */
   targets?: readonly WriteTarget[]
   /**
@@ -172,7 +172,7 @@ export interface ColourEditorProps {
   headOrder?: readonly string[]
   /**
    * The project whose patch list the hidden leaves read. Absent, no leaf is mounted and Pick
-   * answers that nothing is on screen — the visualisers' and a read-only cell's case.
+   * answers that nothing is on screen — the fixture sheet's and a read-only cell's case.
    */
   projectId?: number
   /**
@@ -183,11 +183,11 @@ export interface ColourEditorProps {
   pickOnTargets?: boolean
   /** The Recent chips. Absent, none are drawn. */
   recent?: ColourRecentSource
-  /** Draw the footer — *Save as template… · Pick · Spread…*. Default true; the visualisers pass false. */
+  /** Draw the footer — *Save as template… · Pick · Spread…*. Default true; the fixture sheet passes false. */
   footer?: boolean
   /**
    * Draw the read-out line — the emitter counts, *mixed*, the swatch, the hex. Default true; the
-   * visualisers pass false and keep their own `R:… G:… B:…` line.
+   * fixture sheet's colour rows pass false and keep their own swatch line above the editor.
    */
   counts?: boolean
   /**
@@ -289,7 +289,8 @@ export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<Colou
  * popover did not get them back. They are the editor's now, and the hosts say only which pieces
  * they draw: the programmer's colour cell (a 352px popover and both sheets), the busk tab
  * (docked), the Spread tab's colour endpoint (the picker and R/G/B alone — a colour intent has no
- * emitter component) and the two property visualisers (picker only, unchanged).
+ * emitter component) and the fixture sheet's colour rows (docked in the row: the picker and the
+ * typed channels, no footer, no read-out).
  *
  * **Pick reads the heads this editor is editing** (D12), through one hidden
  * `FixtureAppearanceSource` leaf per parent fixture mounted here, reporting into
@@ -594,9 +595,9 @@ export function ColourEditor({
         )}
       </div>
       {!channelFields && (
-        // The readout row the two property visualisers have always had. They own their own full
-        // channel bank outside this popover, so a field here would be a second live editor for the
-        // same byte — see `channelFields`.
+        // The readout row of a host that types no channels here — the property visualisers', until
+        // fixture-fx-sheets session 4: a host with its own channel bank outside would otherwise have
+        // a second live editor for the same byte — see `channelFields`.
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="font-mono">
             R:{r} G:{g} B:{b}

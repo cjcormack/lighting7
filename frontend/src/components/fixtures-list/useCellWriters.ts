@@ -48,10 +48,10 @@ export interface CellWriters {
 }
 
 /**
- * EditorContext-aware imperative writers. Unlike useUpdateChannel /
- * useUpdateFixtureColour (which close over one descriptor), these take the
- * target as an argument so a single hook instance serves every cell in the
- * table — batch apply is a loop over these calls.
+ * EditorContext-aware imperative writers. Like useUpdateChannel, these take the
+ * target as an argument rather than closing over one descriptor, so a single
+ * hook instance serves every cell in the table — batch apply is a loop over
+ * these calls.
  *
  * Routing: live → the **programmer** (Layer 2) at property level. Look contexts are a no-op or go
  * to the row draft: Look rows are property-name-keyed, which this channel-level layer doesn't

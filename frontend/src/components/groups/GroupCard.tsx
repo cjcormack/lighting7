@@ -1,17 +1,11 @@
-import React, { useMemo, useState } from 'react'
+import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Loader2 } from 'lucide-react'
-import { useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
-import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/GroupPropertyVisualizers'
-import { GroupMembersSection } from './GroupMembersSection'
+import { useGroupQuery } from '../../store/groups'
 import { LocateButton } from '../fixtures/LocateButton'
 import { FxBadge } from '../fx/FxBadge'
-import { FxTray } from '../fixtureSheet/FxTray'
-import { BoundControlBadge } from '../surfaces/BoundControlBadge'
-import { categoriseProperties } from '@/hooks/useTargetProperties'
-import type { GroupMember, GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import { FixtureSheet } from '../fixtureSheet/FixtureSheet'
+import type { GroupMember, GroupSummary } from '../../api/groupsApi'
 import { useVisibleGroupMembers } from './useVisibleGroupMembers'
 
 interface GroupCardProps {
@@ -19,58 +13,27 @@ interface GroupCardProps {
   onFixtureClick: (fixtureKey: string) => void
 }
 
+/**
+ * One card per group on the Groups page: the group sheet's **card** host (fixture-fx-sheets plan §4,
+ * session 4) under the card's own header — the head strip of members, rows that write the group, the
+ * members' grid, and the FX tray at the foot. There is no Edit toggle any more: a card is live while
+ * the desk is connected (D2), and a slider writes one group entry, never a raw channel per member.
+ */
 function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const { data: groupDetail, isLoading: membersLoading } = useGroupQuery(group.name)
-  const { data: properties, isLoading: propertiesLoading } = useGroupPropertiesQuery(group.name)
-  const trayTarget = useMemo(() => ({ type: 'group' as const, group }), [group])
-
+  const { data: groupDetail } = useGroupQuery(group.name)
   return (
-    // The FX tray is the card's foot, as on the fixture sheet (fixture-fx-sheets plan §4); the rest
-    // of the card is session 4's group sheet.
     <Card className="gap-0 overflow-hidden pb-0">
-      <GroupCardHeader
-        group={group}
-        members={groupDetail?.members}
-        isEditing={isEditing}
-        onToggleEdit={() => setIsEditing(!isEditing)}
-      />
-      <CardContent className="space-y-4">
-        {/* Inline properties section */}
-        <GroupPropertiesSection
-          groupName={group.name}
-          properties={properties}
-          isLoading={propertiesLoading}
-          isEditing={isEditing}
-        />
-
-        {/* Compact fixture member grid */}
-        <GroupMembersSection
-          members={groupDetail?.members}
-          isLoading={membersLoading}
-          onFixtureClick={onFixtureClick}
-        />
+      <GroupCardHeader group={group} members={groupDetail?.members} />
+      <CardContent className="px-0">
+        <FixtureSheet group={group} host="card" onOpenMember={onFixtureClick} />
       </CardContent>
-      <div className="mt-4">
-        <FxTray target={trayTarget} />
-      </div>
     </Card>
   )
 }
 
 export const GroupCard = React.memo(GroupCardInner)
 
-function GroupCardHeader({
-  group,
-  members,
-  isEditing,
-  onToggleEdit,
-}: {
-  group: GroupSummary
-  members: GroupMember[] | undefined
-  isEditing: boolean
-  onToggleEdit: () => void
-}) {
+function GroupCardHeader({ group, members }: { group: GroupSummary; members: GroupMember[] | undefined }) {
   // The count the member list below shows — infrastructure members left out of both — and the
   // summary's own until the detail lands.
   const count = useVisibleGroupMembers(members)?.length ?? group.memberCount
@@ -85,13 +48,6 @@ function GroupCardHeader({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <LocateButton type="group" targetKey={group.name} name={group.name} iconOnly />
-          <Button
-            variant={isEditing ? 'default' : 'outline'}
-            size="sm"
-            onClick={onToggleEdit}
-          >
-            {isEditing ? 'Done' : 'Edit'}
-          </Button>
         </div>
       </div>
       <div className="flex flex-wrap gap-1 mt-1">
@@ -105,121 +61,3 @@ function GroupCardHeader({
     </CardHeader>
   )
 }
-
-export function GroupPropertiesSection({
-  groupName,
-  properties,
-  isLoading,
-  isEditing,
-}: {
-  groupName?: string
-  properties: GroupPropertyDescriptor[] | undefined
-  isLoading: boolean
-  isEditing: boolean
-}) {
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-2">
-        <Loader2 className="size-4 animate-spin" />
-      </div>
-    )
-  }
-
-  if (!properties || properties.length === 0) {
-    return null
-  }
-
-  const grouped = categoriseProperties(properties)
-
-  // Virtual dimmer: group has colour but no dimmer
-  const hasRealDimmer = grouped.dimmer.length > 0
-  const virtualDimmerColourProp = !hasRealDimmer
-    ? grouped.colour.find((p) => p.type === 'colour') as GroupColourPropertyDescriptor | undefined
-    : undefined
-
-  const virtualBadge = virtualDimmerColourProp ? (
-    <Badge
-      variant="outline"
-      className="ml-1 text-[10px] leading-tight px-1 py-0 text-muted-foreground align-middle"
-    >
-      Virtual
-    </Badge>
-  ) : null
-
-  const badgeFor = (name: string) =>
-    groupName ? (
-      <BoundControlBadge
-        className="inline-flex ml-1 align-middle"
-        match={{ type: "groupProperty", groupName, propertyName: name }}
-      />
-    ) : null
-
-  return (
-    <div className="space-y-1">
-      {/* Colour properties first (most visually prominent) */}
-      {grouped.colour.map((prop) => (
-        <GroupPropertyVisualizer
-          key={prop.name}
-          property={prop}
-          groupName={groupName}
-          isEditing={isEditing}
-          nameExtra={badgeFor(prop.name)}
-        />
-      ))}
-
-      {/* Position properties */}
-      {grouped.position.map((prop) => (
-        <GroupPropertyVisualizer
-          key={prop.name}
-          property={prop}
-          groupName={groupName}
-          isEditing={isEditing}
-          nameExtra={badgeFor(prop.name)}
-        />
-      ))}
-
-      {/* Dimmer properties */}
-      {grouped.dimmer.map((prop) => (
-        <GroupPropertyVisualizer
-          key={prop.name}
-          property={prop}
-          groupName={groupName}
-          isEditing={isEditing}
-          nameExtra={badgeFor(prop.name)}
-        />
-      ))}
-
-      {/* Virtual dimmer (colour but no real dimmer) */}
-      {virtualDimmerColourProp && (
-        <GroupVirtualDimmerSlider
-          colourProp={virtualDimmerColourProp}
-          isEditing={isEditing}
-          nameExtra={virtualBadge}
-        />
-      )}
-
-      {/* Other slider properties */}
-      {grouped.slider.map((prop) => (
-        <GroupPropertyVisualizer
-          key={prop.name}
-          property={prop}
-          groupName={groupName}
-          isEditing={isEditing}
-          nameExtra={badgeFor(prop.name)}
-        />
-      ))}
-
-      {/* Setting properties */}
-      {grouped.setting.map((prop) => (
-        <GroupPropertyVisualizer
-          key={prop.name}
-          property={prop}
-          groupName={groupName}
-          isEditing={isEditing}
-          nameExtra={badgeFor(prop.name)}
-        />
-      ))}
-    </div>
-  )
-}
-

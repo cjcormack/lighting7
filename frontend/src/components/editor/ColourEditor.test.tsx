@@ -194,7 +194,7 @@ describe('the pieces, and which host draws which', () => {
     expect(recent()).toBeNull()
   })
 
-  it('property visualisers: picker only, the R:G:B line and read-out sliders, nothing else', () => {
+  it('picker-only form (no typed channels): the R:G:B line and read-out sliders, nothing else', () => {
     draw({ channelFields: false, footer: false, counts: false, hasWhiteChannel: true, w: 40 })
     expect(screen.queryByRole('spinbutton', { name: 'R' })).toBeNull()
     expect(screen.getByText('R:10 G:20 B:30')).toBeInTheDocument()

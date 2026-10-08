@@ -1,10 +1,8 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
-import { lightingApi } from '../api/lightingApi'
 import { getChannelValue, subscribeToChannels } from './usePropertyValues'
 import { useChannelSource } from './useChannelSource'
 import { colourFactor } from './useNormalizedIntensity'
 import { foldChannels } from '../lib/colourMath'
-import { serializeLevel } from '../lib/programmerValue'
 import { aggregateCellValue } from '../components/fixtures-list/useRowValues'
 import { outputChannelSource, type ChannelSource } from '../api/channelSource'
 import type { CellResolution } from '../components/fixtures-list/columns'
@@ -12,8 +10,6 @@ import type { ChannelRef, PropertyCategory } from '../store/fixtures'
 import type {
   GroupSliderPropertyDescriptor,
   GroupColourPropertyDescriptor,
-  GroupPositionPropertyDescriptor,
-  GroupSettingPropertyDescriptor,
 } from '../api/groupsApi'
 
 // `channelKey` / `getChannelValue` / `subscribeToChannels` used to be private copies here.
@@ -83,40 +79,6 @@ function colourResolutions(property: GroupColourPropertyDescriptor): Resolutions
         whiteChannel: m.whiteChannel,
         amberChannel: m.amberChannel,
         uvChannel: m.uvChannel,
-      },
-    })),
-  )
-}
-
-function positionResolutions(property: GroupPositionPropertyDescriptor): Resolutions {
-  // Ranges come from each member, and `aggregateCellValue` normalises against the first — the
-  // same "they should all be the same" assumption this file made before the collapse.
-  return cachedResolutions(property, () =>
-    property.memberPositionChannels.map((m) => ({
-      kind: 'position',
-      pan: m.panChannel,
-      tilt: m.tiltChannel,
-      panMin: m.panMin,
-      panMax: m.panMax,
-      tiltMin: m.tiltMin,
-      tiltMax: m.tiltMax,
-    })),
-  )
-}
-
-function settingResolutions(property: GroupSettingPropertyDescriptor): Resolutions {
-  // `property.options` is passed by reference, so the resolved option is an element of the
-  // caller's own array — the group `Select` matches on it by identity.
-  return cachedResolutions(property, () =>
-    property.memberChannels.map((m) => ({
-      kind: 'setting',
-      property: {
-        type: 'setting',
-        name: property.name,
-        displayName: property.displayName,
-        category: asCategory(property.category),
-        channel: m.channel,
-        options: property.options,
       },
     })),
   )
@@ -204,37 +166,6 @@ export function useGroupSliderValues(
   }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
-/**
- * Hook to update all slider channels in a group to the same value.
- *
- * Pass [groupName] for a real backend group: the write then goes out as a single
- * group-targeted programmer op, and the backend fans it to members *and* records
- * `sourceGroup` on each entry so the programmer sheet can show where the value came from.
- *
- * Without it — the element-group controls inside a multi-head fixture, which are a
- * client-side grouping the backend has no name for — the write falls back to one raw channel
- * update per member. Those still reach the programmer through the compatibility shim; this
- * descriptor is the one group shape that carries no per-member fixture key, so there is no
- * property-level middle ground.
- */
-export function useUpdateGroupSlider(
-  property: GroupSliderPropertyDescriptor,
-  groupName?: string,
-) {
-  return useCallback(
-    (value: number) => {
-      if (groupName) {
-        lightingApi.programmer.set('group', groupName, property.name, serializeLevel(value))
-        return
-      }
-      property.memberChannels.forEach((channel) => {
-        lightingApi.channels.update(channel.universe, channel.channelNo, value)
-      })
-    },
-    [groupName, property.memberChannels, property.name]
-  )
 }
 
 // === Colour Group Values ===
@@ -442,239 +373,4 @@ export function useGroupColourValues(
   }, [property, source])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
-/**
- * Hook to update all colour channels in a group to the same values.
- *
- * In cue mode the backend rejects setChannel on R/G/B (they're sub-channels of rgbColour), so
- * we send one setProperty per fixture for RGB and fall through to setChannel for W/A/UV.
- */
-export function useUpdateGroupColour(
-  property: GroupColourPropertyDescriptor,
-  groupName?: string,
-) {
-  return useCallback(
-    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (groupName) {
-        lightingApi.programmer.setColour('group', groupName, property.name, { r, g, b, w, a, uv })
-        return
-      }
-      property.memberColourChannels.forEach((m) => {
-        // One entry per member covering the whole colour: only send the extended components
-        // the member actually has a channel for, so a fixture without a white channel isn't
-        // handed a white it can't render.
-        lightingApi.programmer.setColour('fixture', m.fixtureKey, property.name, {
-          r,
-          g,
-          b,
-          w: m.whiteChannel ? w : undefined,
-          a: m.amberChannel ? a : undefined,
-          uv: m.uvChannel ? uv : undefined,
-        })
-      })
-    },
-    [groupName, property.memberColourChannels, property.name]
-  )
-}
-
-// === Position Group Values ===
-
-export type GroupPositionValueResult = {
-  isUniform: boolean
-  displayText: string
-  avgPan: number
-  avgTilt: number
-  avgPanNormalized: number
-  avgTiltNormalized: number
-}
-
-const EMPTY_POSITION_RESULT: GroupPositionValueResult = {
-  isUniform: true,
-  displayText: 'No members',
-  avgPan: 128,
-  avgTilt: 128,
-  avgPanNormalized: 0.5,
-  avgTiltNormalized: 0.5,
-}
-
-/**
- * Hook to get aggregated position values from all group members.
- */
-export function useGroupPositionValues(
-  property: GroupPositionPropertyDescriptor
-): GroupPositionValueResult {
-  const cachedRef = useRef<GroupPositionValueResult | null>(null)
-  const source = useChannelSource()
-
-  const allChannels = useMemo(() => {
-    const channels: ChannelRef[] = []
-    property.memberPositionChannels.forEach((m) => {
-      channels.push(m.panChannel, m.tiltChannel)
-    })
-    return channels
-  }, [property.memberPositionChannels])
-
-  const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(allChannels, callback, source),
-    [allChannels, source]
-  )
-
-  const getSnapshot = useCallback((): GroupPositionValueResult => {
-    const read = readerFor(source)
-    const aggregate = aggregateCellValue(positionResolutions(property), read)
-    if (aggregate?.kind !== 'position') return EMPTY_POSITION_RESULT
-
-    const {
-      pan: avgPan,
-      tilt: avgTilt,
-      panNormalized: avgPanNormalized,
-      tiltNormalized: avgTiltNormalized,
-      isUniform,
-    } = aggregate
-
-    const displayText = isUniform
-      ? `Pan:${avgPan} Tilt:${avgTilt}`
-      : 'Mixed'
-
-    // Check cache
-    const cached = cachedRef.current
-    if (
-      cached &&
-      cached.avgPan === avgPan &&
-      cached.avgTilt === avgTilt &&
-      cached.isUniform === isUniform
-    ) {
-      return cached
-    }
-
-    const result: GroupPositionValueResult = {
-      isUniform,
-      displayText,
-      avgPan,
-      avgTilt,
-      avgPanNormalized,
-      avgTiltNormalized,
-    }
-    cachedRef.current = result
-    return result
-  }, [property, source])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
-/**
- * Hook to update all position channels in a group to the same values.
- *
- * See [useUpdateGroupSlider] for what [groupName] buys. Without it the members are still
- * written at property level, one `setPosition` each — the descriptor carries a fixture key
- * per member, so an element group inside a multi-head fixture stays property-shaped.
- */
-export function useUpdateGroupPosition(
-  property: GroupPositionPropertyDescriptor,
-  groupName?: string,
-) {
-  return useCallback(
-    (pan: number, tilt: number) => {
-      if (groupName) {
-        lightingApi.programmer.setPosition('group', groupName, Math.round(pan), Math.round(tilt))
-        return
-      }
-      property.memberPositionChannels.forEach((m) => {
-        lightingApi.programmer.setPosition(
-          'fixture',
-          m.fixtureKey,
-          Math.round(pan),
-          Math.round(tilt),
-        )
-      })
-    },
-    [groupName, property.memberPositionChannels]
-  )
-}
-
-// === Setting Group Values ===
-
-export type GroupSettingValueResult = {
-  isUniform: boolean
-  displayText: string
-  currentOption?: GroupSettingPropertyDescriptor['options'][number]
-}
-
-const EMPTY_SETTING_RESULT: GroupSettingValueResult = {
-  isUniform: true,
-  displayText: 'No members',
-}
-
-/**
- * Hook to get aggregated setting values from all group members.
- */
-export function useGroupSettingValues(
-  property: GroupSettingPropertyDescriptor
-): GroupSettingValueResult {
-  const cachedRef = useRef<GroupSettingValueResult | null>(null)
-  const source = useChannelSource()
-
-  const allChannels = useMemo(
-    () => property.memberChannels.map((m) => m.channel),
-    [property.memberChannels]
-  )
-
-  const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(allChannels, callback, source),
-    [allChannels, source]
-  )
-
-  const getSnapshot = useCallback((): GroupSettingValueResult => {
-    const read = readerFor(source)
-    const aggregate = aggregateCellValue(settingResolutions(property), read)
-    if (aggregate?.kind !== 'setting') return EMPTY_SETTING_RESULT
-
-    // `option` is already gated on uniformity — a mixed wheel names no position.
-    const { isUniform, option: currentOption } = aggregate
-    const displayText = isUniform
-      ? currentOption?.displayName ?? 'Unknown'
-      : 'Mixed'
-
-    // Check cache
-    const cached = cachedRef.current
-    if (
-      cached &&
-      cached.isUniform === isUniform &&
-      cached.displayText === displayText
-    ) {
-      return cached
-    }
-
-    const result: GroupSettingValueResult = {
-      isUniform,
-      displayText,
-      currentOption,
-    }
-    cachedRef.current = result
-    return result
-  }, [property, source])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
-/**
- * Hook to update all setting channels in a group to the same value.
- */
-export function useUpdateGroupSetting(
-  property: GroupSettingPropertyDescriptor,
-  groupName?: string,
-) {
-  return useCallback(
-    (level: number) => {
-      if (groupName) {
-        lightingApi.programmer.set('group', groupName, property.name, serializeLevel(level))
-        return
-      }
-      property.memberChannels.forEach((m) => {
-        lightingApi.programmer.set('fixture', m.fixtureKey, property.name, serializeLevel(level))
-      })
-    },
-    [groupName, property.memberChannels, property.name]
-  )
 }

@@ -273,11 +273,11 @@ export const ColourCell = memo(function ColourCell({
         // so it draws no footer rather than an enabled Pick that toasts.
         footer={batch != null}
         // The grid cell's only editor, so this is where the typed R/G/B and emitter boxes belong
-        // (`PD-COLOUR-EDITOR-INPUTS`). The two property visualizers leave it off: they draw their own
-        // channel bank beside the swatch already.
+        // (`PD-COLOUR-EDITOR-INPUTS`). Off by default, for a caller with its own channel bank beside
+        // the swatch — the property visualisers were, until fixture-fx-sheets session 4.
         channelFields
-        // Same reasoning, same two exempt callers: a grid cell's editor has nowhere good to float on
-        // a portrait phone, and the two property visualizers do. See `sheetWhenNarrow`.
+        // Same reasoning: a grid cell's editor has nowhere good to float on a portrait phone. See
+        // `sheetWhenNarrow`.
         sheetWhenNarrow
         title={label}
         compact={compact}

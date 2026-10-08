@@ -349,8 +349,9 @@ wheel's slots and a media frame's gel are **fitted media** on the patch and each
 patch's, else the stock — by `lib/fittedMedia.ts`'s `fittedProperties`, which `FixtureModel` and
 `FixtureAppearanceSource` both run before they dispatch, so every finder in the two dispatches reads
 the unit's own. A gel in a filter slot (a media frame in, a dichroic) multiplies the beam on both
-dispatches. The controls that *set* a slot — the programmer's setting cell, the property
-visualisers, the fixture card — still name the type's stock string (`FU-MEDIA-CONTROL-SWATCHES`).
+dispatches. The controls that *set* a slot — the programmer's setting cell, the fixture sheet's
+setting rows (the same cell), the fixture card — still name the type's stock string
+(`FU-MEDIA-CONTROL-SWATCHES`).
 The gel library is the desk's (`GET /gels`, `useGelIndex`; `data/gels.ts` is gone — a test reads
 `src/main/resources/gels.json`), and the Stage view reads it in `useStageData` and passes it down
 like the lanterns, never inside the scene, which a `render_view` capture would not bridge. The patch
@@ -448,7 +449,7 @@ bottom sheet on an upright phone; never in a `render_view` capture. See the stag
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
 **triggers**, never values: a `TriggerPropertyDescriptor` (`type: 'trigger'`, `triggersOf` in
 `store/fixtures.ts`) at the end of a fixture's properties, which every control-drawing switch skips
-(the fixture sheet's `buildSheetRows`, `categoriseProperties`, the programmer's channel map). `api/effectsApi.ts` reads
+(the fixture sheet's `buildSheetRows`, the programmer's channel map). `api/effectsApi.ts` reads
 the three outbound frames — `effects.armed` (form 3 in `store/effects.ts`, its countdown anchored to
 this browser's clock from the frame's `remainingMs`), `effects.fired`, `effects.skipped` — and the
 REST verbs (arm, fire, reload, a cue's whole-list events) are `store/effects.ts`'s; there is no inbound
@@ -508,14 +509,15 @@ table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` �
 
 ### The fixture sheet
 
-**One body for a fixture in every host** (fixture-fx-sheets plan session 2, D1–D10;
+**One body for a fixture or a group in every host** (fixture-fx-sheets plan sessions 2 and 4, D1–D13;
 `../docs/plans/fixture-fx-sheets-plan.md`, the boards in `../docs/plans/fixture-fx-sheets-design/`):
-`components/fixtureSheet/FixtureSheet` takes a fixture and a `host` — `popup` (`FixtureDetailModal`,
-the 512px Radix sheet the list, the grid's Info, the overview panel and Channels open), `stage`
-(`StageFixtureControlPanel`, 380px, with the **Focus** tab and the *Aim…* popover), `card` (the cards
-page: no header, unscrolled, the page's Properties / Channels toggle kept) and `phone` (session 6).
-Groups get it in session 4; until then `GroupDetailModal` and `GroupCard` keep the group visualisers
-and their Edit toggle, and `GroupCard`'s foot is the sheet's `FxTray`.
+`components/fixtureSheet/FixtureSheet` takes a `fixture` **or** a `group` and a `host` — `popup`
+(`FixtureDetailModal`, the 512px Radix sheet the list, the grid's Info, the overview panel and Channels
+open; and `GroupDetailModal`, the **group sheet**), `stage` (`StageFixtureControlPanel`, 380px, with
+the **Focus** tab and the *Aim…* popover), `card` (the cards page: no header, unscrolled, the page's
+Properties / Channels toggle kept; and `GroupCard`, under the card's own header) and `phone` (session
+6). The context a row reads (`sheetContext.ts`) carries the target and a `reachOf(head)` —
+`effectsReaching`'s arguments for one head — rather than a fixture.
 
 **It is a programmer surface, and it says so.** Every value lands in Local; every effect it starts is
 a programmer effect. `FixtureContent`'s properties view, `PropertyVisualizers`, `FxSection`,
@@ -622,8 +624,61 @@ Release folds to its glyph and the scope line drops the fade.
   scrolls inside it. `ActiveEffectSheet` and
   `AddEditFxSheet` are deleted; `EffectParameterForm` stays as `TemplateEditor`'s draft form until
   session 5. A refused write comes back as `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
-- **Heads, until session 4's strip** (`HeadsSection`): the all-heads controls are still the group
-  visualisers, and each head is a disclosure of the sheet's own rows against its key.
+- **The head strip** (`HeadStrip`, D13; HeadsGroups board): on a multi-head fixture, under the
+  fixture's own rows and a *Heads · 4 of 12* line; on a group, fixed under the scope line, outside the
+  scroller, the group's whole subject. **All**, then a pip per head or member in its **live colour**
+  (`FixtureAppearanceSource` — one leaf for a fixture, whose heads are its `segments`; one per member,
+  a member key naming one head of a bar — defensive, a patch-loaded group never holds one — coloured
+  by that segment), a floor so a dark head is still a target. The gesture is the busk pip's, shared
+  through `hooks/usePipRun.ts` with `RigTile`: **a tap toggles, a mouse drag runs, a held finger
+  runs**, the release's click swallowed. **The pick is the
+  sheet's own** — never the desk selection (call 4) — remembered against the target it was made on, so
+  it reads as *All* the moment the sheet shows another target (the Stage panel keeps one sheet mounted
+  across fixtures). `sheetPick.ts` is the pure model: a `HeadPick` is `null` for *All* or a set that is
+  never empty and never every head (`normalisePick`), so *All* is one state; a group's members are
+  resolved by key among the fixtures and their elements, never parsed (`groupSheetMembers`). Locate
+  acts on the pick (`LocateTargetsButton`); Park and Release stay the whole target's.
+- **Rows over a pick** (`rowsOverHeads`, `PickPropertyRow`, `FamilyGroups`' `PickFamilyGroups`): a row
+  is drawn where **every** picked head has it, the desk's own group-aggregation rule — a setting only
+  where every head's options match, level for level, since one level is another option elsewhere. One picked head
+  — or one member — draws that head's own `PropertyRow`; several draw a `PickPropertyRow`, which reads
+  every head through one subscription (`useChannelValues`). **Mixed values** read as a range — the
+  fill masked below the lowest head, the thumb at the highest, the field empty with `40–80` as its
+  placeholder (`EditorField`'s `mixed`) — a strip of the heads' swatches for a colour, and a hollow dot
+  per extra head on the position pad; whatever is set lands on every picked head. **Mixed sources**
+  dash the edge (`MIXED_EDGE_CLASS`) and the chip counts the heads its source holds — *Programmer · 2
+  of 4* (`mergeRowSources`: the strongest source, the grid's collapse) — and its stack
+  (`LayerStack` over several heads) is one section per distinct stack with the heads that share it.
+- **Writes over a pick** (`PickWrite`, `sheetWrites.ts`): a group's *All* is **one group entry**
+  (`programmer.set('group', …)`, which the desk fans to the members with `sourceGroup` — Record turns
+  it back into a group row); a subset of members is each member's own entry carrying the group as
+  `sourceGroup`; a fixture's heads — *All* included, since the desk has no all-heads property to write
+  — are each head's own entry. **Never a raw channel**: the group visualisers' sliders sent one per
+  member, and `useGroupPropertyValues`' update hooks went with their raw-channel fallback. A position
+  is resolved per head; a group's *All* stays one entry only where every member lands on the same
+  bytes (one model), else each member's own. A colour fills an emitter it does not say from each
+  head's own channel (the desk reads a missing one as 0), and is one group entry only over members
+  with the same emitters. A dimmerless colour's *Dimmer* scales each head's colour,
+  so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
+- **Effects follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
+  (`effectsReaching`, still the one filter), an effect on one head reading *on Head 3*. **+ Effect**
+  starts on the fixture or the group for *All* (a group's with its distribution, Element mode in the
+  editor's Advanced), on that head or member alone for one (`headAsFixture` — the desk resolves a
+  head's key as an effect target), on the fixture with the **element filter** that names a pick of
+  exactly the odd, even or a half of the heads (`elementFilterFor`, the desk's `ElementFilter` clause
+  for clause), and otherwise says why it cannot — one effect has no target for heads 1, 2 and 7. A
+  pick that moves under an open picker re-keys it. The tray's **Look picker** follows the same rule
+  (Chris's call): the whole target on *All*, the one head or member when one is picked, and absent for
+  any other pick, a filtered one included.
+- **The group sheet**: *Values · Members* (`GroupMembersSection`, a member opening its own sheet, where
+  a group's effect reads *via <group>*), Locate, **Park** over the members' channels (a member that is
+  one head brings that head's channels, not the bar's — `ParkButton`, unpark confirmed) and **Release**
+  (`clearTarget('group', …)`), the model line `Group · 6 × <model>`, the scope line *Writes the group
+  to Local* or *Writes 2 members to Local*, and the group's surface-binding badges
+  (`GroupBoundControlsRow`). `GroupPropertyVisualizers`, `HeadsSection`, the "Virtual" badges and the
+  group visualisers' Edit toggle are deleted. A group's rows come from its members' own fixture
+  properties; a group of multi-head fixtures shows its members' fixture-level rows, and each member's
+  heads are that member's own sheet.
 
 `FixtureSheet.test.tsx` pins the plan's list — family order, each source kind's chip and edge, the
 dot, × drawn only while held and its words, Release's frame and toast, Enter with the unit,
@@ -634,6 +689,13 @@ second tap is one `updateFx` and no add), `FxEditor.test.tsx` (a drag at most on
 with the release landing, Revert's snapshot, Around as `ADDITIVE` + 128 with the centre hidden and
 read back, Within as `MULTIPLY`) `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect) and `FxAddSheet.test.tsx` (the layer
 absorb, once, after the editor's flush).
+
+Session 4's list is `HeadsGroups.test.tsx` — the pick resets when the target changes, a run selects,
+*All* on a group sends one group write, a subset sends member writes carrying the group, no raw channel
+write for a group — beside heads 1–4 of a 12-pixel bar written alone, the range and the swatch strip,
+*n of m*, and the tray following the pick; `sheetPick.test.ts` (the model, the element filter, the
+position write's group rule), `rowSource.test.ts`'s merge, `LayerStack.test.tsx`'s group sections and
+`hosts.test.tsx`'s two group hosts.
 
 ### Looks, templates and layers
 
@@ -3377,8 +3439,9 @@ each was:
   and at 352 it wrapped under, costing the height compact exists to save; and both sheets, `wide`
   on the side sheet),
   the busk tab docked, the Spread tab's colour endpoint (`footer` and `counts` off — a colour intent
-  has no emitter component) and the two property visualisers (`channelFields` off as well: the
-  picker-only form, in a 224px popover measured the same day). **Pick reads the heads the editor is
+  has no emitter component) and the fixture sheet's colour rows (docked in the row, `footer` and
+  `counts` off, the typed channels on). The picker-only form in a 224px popover was the property
+  visualisers', which fixture-fx-sheets session 4 deleted. **Pick reads the heads the editor is
   editing** through one hidden `FixtureAppearanceSource` leaf per parent fixture, mounted by the
   editor itself in a store-bound child (`AppearanceLeaves`) so a cell mounted with no project pays
   nothing — the grid's rows do not report into `lib/liveAppearance.ts` and are not made to; it moves

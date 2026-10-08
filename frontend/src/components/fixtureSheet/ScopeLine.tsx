@@ -9,11 +9,25 @@ export function formatFade(ms: string | number): string {
 
 /**
  * Where a write goes (Main board, note 2): **Local**, at the programmer fade — the rail's picker,
- * read here and never set. A blind programmer turns it amber, *values staged, not on stage*;
+ * read here and never set — and, on a group, what a write lands on. A blind programmer turns it amber, *values staged, not on stage*;
  * offline it says the sheet is read-only. On the right, what this fixture holds — what Release
  * takes. Below 400px of sheet the fade drops off (§4).
  */
-export function ScopeLine({ blind, connected, held }: { blind: boolean; connected: boolean; held: string | null }) {
+export function ScopeLine({
+  blind,
+  connected,
+  held,
+  what,
+}: {
+  blind: boolean
+  connected: boolean
+  held: string | null
+  /**
+   * What a write lands on, where it is not simply the fixture — a group sheet's *the group* (one
+   * group entry) or *2 members* (each member's own, carrying the group; HeadsGroups board).
+   */
+  what?: string
+}) {
   const fade = useProgrammerFade()
   return (
     <div data-scope-line className="flex h-7 flex-none items-center gap-1.5 border-b px-3 text-[11px] text-muted-foreground">
@@ -29,7 +43,8 @@ export function ScopeLine({ blind, connected, held }: { blind: boolean; connecte
         </>
       ) : (
         <span className="truncate">
-          Writes to <b className="font-medium text-foreground">Local</b>
+          Writes {what != null && <b className="font-medium text-foreground">{what} </b>}to{' '}
+          <b className="font-medium text-foreground">Local</b>
           <span className="@max-[400px]/sheet:hidden">
             {' · fade '}
             <b className="font-mono font-medium text-foreground">{formatFade(fade)}</b>

@@ -260,7 +260,7 @@ function useKeyboardInset(open: boolean | undefined): number {
 }
 
 interface EditorSurfaceProps {
-  /** Undefined leaves the popover to hold its own state — the two property visualizers do. */
+  /** Undefined leaves the popover to hold its own state. */
   open?: boolean
   onOpenChange: (open: boolean) => void
   /**
@@ -330,9 +330,9 @@ interface EditorSurfaceProps {
    * back open again, which is a worse answer than the one a click already gives. The two plain
    * fixture/group list routes were in this list until they gained a cell selection of their own.
    *
-   * `ColourPickerPopover`'s two visualizer callers are **not** in that list, though its own doc
-   * comment says they are: they pass no `sheetWhenNarrow`, so they take its plain-`Popover` branch
-   * and never mount this component at all. Nothing here decides anything for them.
+   * A `ColourPickerPopover` without `sheetWhenNarrow` (the property visualisers' form, until
+   * fixture-fx-sheets session 4) takes its plain-`Popover` branch and never mounts this component,
+   * so nothing here decides anything for it.
    */
   triggerOpens?: boolean
   /**

@@ -8,30 +8,30 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
   /**
    * Drive the popover from outside instead of letting it keep its own open state. Pass both or
    * neither — `ColourCell` does, so the container's request (Enter over a selection, or the
-   * selection bar's Set) can open the picker with no click; the two property visualizers have no
-   * such door to offer and leave it uncontrolled.
+   * selection bar's Set) can open the picker with no click. Uncontrolled was the property
+   * visualisers' form, until fixture-fx-sheets session 4 deleted the last of them.
    */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /**
    * Draw the typed R/G/B and per-emitter fields (`PD-COLOUR-EDITOR-INPUTS`). **Opt-in, and off by
-   * default**, because the finding is about the *cell* editor and this popover has two callers.
-   * The other — `GroupPropertyVisualizers` (`PropertyVisualizers` went with the fixture sheet) — renders a full
-   * always-visible `ColourChannelSlider` bank for R/G/B and every emitter beside the same swatch,
-   * so fields in here would be a second live editor for the same six values, opened over the first.
-   * `ColourCell` has no such bank: the popover is the only editor a grid cell has, which is the
-   * whole reason the numbers had nowhere to be typed.
+   * default**, because the finding was about the *cell* editor and this popover then had a second
+   * caller — `GroupPropertyVisualizers`, which drew a full always-visible `ColourChannelSlider` bank
+   * beside the same swatch, so fields in here would have been a second live editor over the first.
+   * That caller went in fixture-fx-sheets session 4 (the fixture sheet's colour rows dock
+   * `ColourEditor` directly), leaving `ColourCell`, which passes it: the popover is the only editor
+   * a grid cell has, which is the whole reason the numbers had nowhere to be typed.
    */
   channelFields?: boolean
   /**
    * Open in the shared cell-editor surface, which folds to a bottom sheet at phone widths
    * (`EditorSurface`) — instead of always being a floating popover.
    *
-   * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same other
-   * caller. The fold exists because a grid cell's popover has nowhere good to sit on a
-   * 390px screen; `GroupPropertyVisualizers` opens this from a page it already owns the width of,
-   * beside its own always-visible channel bank, and a modal sheet over
-   * that bank would cover the very thing it is editing.
+   * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same
+   * former caller. The fold exists because a grid cell's popover has nowhere good to sit on a
+   * 390px screen; the group visualisers (deleted in fixture-fx-sheets session 4) opened this from a
+   * page they owned the width of, beside their own channel bank, where a modal sheet would have
+   * covered the very thing it edited.
    */
   sheetWhenNarrow?: boolean
   /** Titles the editor where it is a bottom sheet — required by [sheetWhenNarrow], unused without. */
@@ -59,8 +59,8 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
    */
   keyboardOpen?: string | null
   /**
-   * `ColourCell`'s, and meaningless without [sheetWhenNarrow] — the plain-popover branch below is
-   * the two visualizers', where a click on the swatch is the only way in. See `CellClickBehaviour`.
+   * `ColourCell`'s, and meaningless without [sheetWhenNarrow] — the plain-popover branch below was
+   * the property visualisers', where a click on the swatch was the only way in. See `CellClickBehaviour`.
    */
   triggerOpens?: boolean
   /** `ColourCell`'s. See `EditorSurface`'s own `anchorRef`. */
@@ -82,9 +82,9 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
  * (256 + 16 + 208 = 480px of flex items), which at 352 wrapped under it and cost the ~110px the
  * layout exists to save, exactly where `EditorSurface` says a popover gets flipped and clipped.
  * Measured 2026-09-22 at a 1100×700 viewport: 528 wide, emitters on the picker row's line. The
- * two visualisers' plain popover is `w-56` — measured 224, the picker at 198×200 inside the
- * popover's 12px gutters and its own borders — so their picker-only form is the size it always was,
- * now that nothing pins `react-colorful` to 200 and the square takes its row's width instead.
+ * plain popover (the property visualisers' form, which none use since fixture-fx-sheets session 4)
+ * is `w-56` — measured 224, the picker at 198×200 inside the popover's 12px gutters and its own
+ * borders — now that nothing pins `react-colorful` to 200 and the square takes its row's width.
  */
 export function ColourPickerPopover({
   open: controlledOpen,
@@ -116,11 +116,11 @@ export function ColourPickerPopover({
   )
   // Enter closes, comma steps R → G → B → the emitters and round again, and a keyboard-opened
   // editor focuses R. Shared with the four cell editors, which is the point: this popover *is* the
-  // colour cell's editor. The two property visualizers pass no `keyboardOpen`, so nothing here
-  // takes focus for them; their popovers hold no text field to type Enter or a comma into either.
+  // colour cell's editor. A caller passing no `keyboardOpen` gets no focus taken, and without
+  // [channelFields] its popover holds no text field to type Enter or a comma into either.
   const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
-    // The two property visualizers draw no text fields here (see [channelFields]), so there is
-    // nothing for focus to land on and taking it would only move it off the swatch they opened.
+    // Without [channelFields] there are no text fields here, so there is nothing for focus to land
+    // on and taking it would only move it off the swatch that opened it.
     autoFocus: channelFields,
     onDone: useCallback(() => setIsOpen(false), [setIsOpen]),
   })
