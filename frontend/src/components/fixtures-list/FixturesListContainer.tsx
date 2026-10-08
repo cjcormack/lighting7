@@ -72,7 +72,9 @@ import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SelectionBar as ListSelectionBar } from '../programmer/SelectionBar'
 import { SheetPage } from '../sheet/SheetPage'
-import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
+import { PHONE_FOLDED_CLASS, WORD_CLASS } from '../sheet/toolbarFolds'
+import { ReleaseTargetsButton } from '../fixtureSheet/ReleaseTargetsButton'
+import type { ReleaseTarget } from '../fixtureSheet/useRelease'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { SpreadPopover, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
 import type { SpreadSeed } from '../editor/SpreadPanel'
@@ -505,6 +507,15 @@ export function FixturesListContainer({
   const locateTargets = useMemo<LocateTarget[]>(
     () => selectedRowTargets(rows, selectedRowIds),
     [rows, selectedRowIds],
+  )
+  const releaseTargets = useMemo<ReleaseTarget[]>(
+    () =>
+      locateTargets.map((t) => ({
+        type: t.type === 'group' ? 'group' : 'fixture',
+        key: t.key,
+        name: t.type === 'group' ? t.key : headName(fixtures, t.key),
+      })),
+    [locateTargets, fixtures],
   )
 
   // Where a template press lands, and what those heads can take — the one selection's rows, which
@@ -1370,6 +1381,24 @@ export function FixturesListContainer({
   // by dragging the name column or by ⌘A, and spreading a colour across eight whole heads without
   // first drawing a rectangle over one of their columns is a real gesture those two views already
   // offered.
+  // *Release n* (fixture-fx-sheets plan D18): on the programmer, over the rows the selection covers —
+  // a marquee's rows or a row selection — one `clearTarget` per target, after Spread. The targets
+  // are Locate's (`selectedRowTargets`): a group row stays the group, an element row is that head,
+  // by its own key (the desk resolves it). Live in Local and Output — it is a programmer verb, like
+  // the action bar's Clear, and Output is a view — and refused with the reason while a Look or
+  // template layer is focused, where the band says writes go to the layer and a Local wipe would
+  // surprise (Chris's call, session 5 review).
+  const releaseControl =
+    showOwnership && locateTargets.length > 0 ? (
+      <ReleaseTargetsButton
+        targets={releaseTargets}
+        wordClass={WORD_CLASS}
+        className={PHONE_FOLDED_CLASS}
+        disabledReason={
+          scope?.kind === 'layer' ? `Release clears Local — focus Local first; edits here go to ${scopeLabel}` : undefined
+        }
+      />
+    ) : null
   const selectionActions =
     cellCount > 0 ? (
       <CellSelectionActions
@@ -1392,8 +1421,11 @@ export function FixturesListContainer({
             className={PHONE_FOLDED_CLASS}
           />
         }
+        release={releaseControl}
       />
-    ) : !showOwnership && selectedTargets.length > 0 ? (
+    ) : showOwnership ? (
+      releaseControl
+    ) : selectedTargets.length > 0 ? (
       <SpreadPopover columns={rowSpreadColumns} projectId={routeProjectId} desk={selectionScope === 'programmer'} scopeLabel={scopeLabel} />
     ) : null
 
@@ -1570,4 +1602,14 @@ function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {
   if (a.size !== b.size) return false
   for (const id of a) if (!b.has(id)) return false
   return true
+}
+
+/** A fixture's name, or a head's as *Bar 1 Head 3* — Release's toast names what it took. */
+function headName(fixtures: readonly Fixture[], key: string): string {
+  for (const fixture of fixtures) {
+    if (fixture.key === key) return fixture.name
+    const element = fixture.elements?.find((e) => e.key === key)
+    if (element) return `${fixture.name} ${element.displayName}`
+  }
+  return key
 }

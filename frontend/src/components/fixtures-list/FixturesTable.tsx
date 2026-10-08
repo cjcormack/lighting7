@@ -31,6 +31,9 @@ import { effectSpeedLabel } from '../fx/fxConstants'
 import { useIsDeskConnected } from '../../store/status'
 import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
+import { useHeldBackReach } from './useHeldBackReach'
+import { cellHoldsBack } from '../../lib/heldBack'
+import { lightingApi } from '../../api/lightingApi'
 import { applyStagedValue, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from '../sheet/cellSelection'
 import { useCellMarquee } from '../sheet/useCellMarquee'
@@ -227,6 +230,8 @@ export function FixturesTable({
   const scrollRef = useRef<HTMLDivElement>(null)
   // One subscription for the whole grid; every row takes the answer as a prop.
   const deskConnected = useIsDeskConnected()
+  // What an effect could be held back on, for the corner dot (D19) — one subscription, every row.
+  const heldBackReach = useHeldBackReach(showOwnership)
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -483,6 +488,7 @@ export function FixturesTable({
                     showOwnership={showOwnership}
                     cellSelection={cellSelection}
                     deskConnected={deskConnected}
+                    heldBackReach={heldBackReach}
                     autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
                     autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
                     autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
@@ -600,6 +606,8 @@ interface RowViewProps {
    * Read once by the table and passed down rather than read per row — a rig fills this grid.
    */
   deskConnected: boolean
+  /** Every `(head, property)` an effect that can be held back paints (`useHeldBackReach`). */
+  heldBackReach: ReadonlySet<string>
   /**
    * The container asked for this row's cell in this column to open its editor — Enter over the
    * selection, or the selection bar's Set — and null on every other row, which is all of them but
@@ -656,6 +664,9 @@ function useInertColumns(visibleColumns: readonly ColumnKey[]): ReadonlySet<Colu
 /** Name-cell indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
+const programmerHolds = (headKey: string, propertyName: string) =>
+  lightingApi.programmer.getKeyState(headKey, propertyName).entry != null
+
 /** Stable identity for the ownership-off path, so the hook's memos never churn. */
 const EMPTY_CELLS: RowCell[] = []
 
@@ -676,6 +687,7 @@ const RowView = React.memo(function RowView({
   showOwnership,
   cellSelection,
   deskConnected,
+  heldBackReach,
   autoOpenCol,
   autoOpenSeed,
   autoOpenAtButton,
@@ -902,6 +914,13 @@ const RowView = React.memo(function RowView({
         }
         const owned = ownership[col]
         const layer = owned?.layer
+        // **Held back** (fixture-fx-sheets plan D19): an effect runs under this cell's value and
+        // the programmer's entry is what stops it painting — `lib/heldBack.ts`'s rule, the sheet's
+        // amber dot's. Asked only where ownership is drawn: the row re-renders on its keys' moves,
+        // the reach moves with the effect list, and blind is read as the desk's empty snapshot.
+        const heldBack =
+          owned != null &&
+          cellHoldsBack(cell.keys, heldBackReach, programmerHolds, lightingApi.programmer.isBlind())
         // Layered OVER whatever ownership produced, as a fill rather than a seventh ring colour —
         // see `cellSelection.ts`.
         const selectedCell = cellSelection.isSelected(row.id, col)
@@ -956,9 +975,22 @@ const RowView = React.memo(function RowView({
             title={
               cellsInert && state?.editable !== false
                 ? DESK_OFFLINE_LABEL
-                : ownershipTitle(owned)
+                : heldBack
+                  ? `${ownershipTitle(owned) ?? 'Programmer'} · holds an effect back — open the cell for its stack`
+                  : ownershipTitle(owned)
             }
           >
+            {/* The held-back dot (D19): an amber corner dot in the top-right, inside the ownership
+                ring and absolutely placed, so it never moves the value — the corner the effect badge
+                takes, and never both, since a held-back cell is the programmer's and a badged one
+                the effect's. The cell editor's label line carries the chip that opens the stack. */}
+            {heldBack && (
+              <span
+                data-testid="held-back-dot"
+                aria-hidden
+                className="pointer-events-none absolute top-1 right-1 size-[7px] rounded-full bg-amber-500"
+              />
+            )}
             {/* The winning Look layer, layered around the cell rather than inside it — the same
                 choice `ownershipCellClass` documents. The four cell editors already encode value
                 shape, and a marker drawn inside one of them would have to be drawn four times.
@@ -1049,6 +1081,10 @@ const RowView = React.memo(function RowView({
               editorAnchorRef={editorAnchorRef}
               onBeginEdit={() => onBeginCellEdit(row, col)}
               onCommit={(commit) => onCellCommit(row, col, commit)}
+              // The source chip on the editor's label line (D19) wherever ownership is drawn — Local
+              // scope on the programmer; Output's cells take no edit, and a focused Look layer's
+              // draft has no stack (§8).
+              sourceKeys={owned != null ? cell.keys : undefined}
             />
             {scope?.kind === 'output' && <OwnerJumpOverlay owned={owned} />}
           </div>
@@ -1123,6 +1159,7 @@ function PropertyCell({
   editorAnchorRef,
   onBeginEdit,
   onCommit,
+  sourceKeys,
 }: {
   cell: RowCell
   /**
@@ -1187,6 +1224,8 @@ function PropertyCell({
   selectionEmpty?: boolean
   onBeginEdit: () => void
   onCommit: (commit: CellCommit) => void
+  /** The cell's keys for the editor's source chip (D19) — only where the grid draws ownership. */
+  sourceKeys?: RowCell['keys']
 } & CellClickBehaviour) {
   switch (value.kind) {
     case 'slider':
@@ -1208,6 +1247,7 @@ function PropertyCell({
           editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
+          sourceKeys={sourceKeys}
         />
       )
     case 'colour':
@@ -1231,6 +1271,7 @@ function PropertyCell({
           editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
+          sourceKeys={sourceKeys}
         />
       )
     case 'position':
@@ -1252,6 +1293,7 @@ function PropertyCell({
           editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
+          sourceKeys={sourceKeys}
         />
       )
     case 'setting':
@@ -1273,6 +1315,7 @@ function PropertyCell({
           editorAnchorRef={editorAnchorRef}
           onCommit={onCommit}
           onBeginEdit={onBeginEdit}
+          sourceKeys={sourceKeys}
         />
       )
   }

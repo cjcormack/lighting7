@@ -115,3 +115,52 @@ export function useRelease(target: SheetTarget): () => Promise<void> {
     }
   }, [type, key, name])
 }
+
+/** One target of a *Release n* over a selection — what `clearTarget` addresses, and its name. */
+export interface ReleaseTarget {
+  type: 'fixture' | 'group'
+  key: string
+  name: string
+}
+
+/** The toast a Release over several targets answers with — the desk's counts, summed. */
+export function releaseAllMessage(targets: readonly ReleaseTarget[], cleared: readonly TargetCleared[]): string {
+  if (targets.length === 1 && cleared.length === 1) return releaseMessage(targets[0].name, cleared[0])
+  const values = cleared.reduce((n, c) => n + c.values, 0)
+  const effects = cleared.reduce((n, c) => n + c.effects, 0)
+  const on = `${targets.length} ${targets.length === 1 ? 'target' : 'targets'}`
+  return releaseMessage(on, { targetType: 'fixture', targetKey: '', values, effects, partial: [] })
+}
+
+/**
+ * *Release n* over a selection (fixture-fx-sheets plan D18, W2): **one `programmer.clearTarget`
+ * per target**, at the programmer fade — the programmer's row C over a row selection and the busk
+ * rig row over the busk selection. Each frame is the fixture sheet's own Release on that target:
+ * its values and its local effects in one pass, pad and Look layers untouched (a lit pad still goes
+ * off by its own press). One toast for the lot, in the desk's summed count, and the group effects
+ * it left running named as the sheet's Release names them. No confirm, like Clear (call 3).
+ */
+export function useReleaseTargets(targets: readonly ReleaseTarget[]): () => Promise<void> {
+  return useCallback(async () => {
+    if (targets.length === 0) return
+    const fade = getProgrammerFadeMs()
+    const results = await Promise.allSettled(targets.map((t) => lightingApi.programmer.clearTarget(t.type, t.key, fade)))
+    const cleared = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    if (cleared.length > 0) toast.success(releaseAllMessage(targets, cleared))
+    // A group effect left running on a member is named once — and not at all where the group itself
+    // was in the selection, whose own frame stopped it.
+    const groups = new Set(targets.filter((t) => t.type === 'group').map((t) => t.key))
+    const partial = [
+      ...new Map(
+        cleared.flatMap((c) => c.partial).filter((p) => !(p.isGroupTarget && groups.has(p.targetKey))).map((p) => [p.effectId, p]),
+      ).values(),
+    ]
+    if (partial.length > 0) {
+      toast.warning(targets.length === 1 ? partialSweepMessage(partial, `this ${targets[0].type}`) : partialSweepMessage(partial))
+    }
+    const failed = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []))
+    // A closed socket was already toasted by the gesture send; anything else is the desk's word.
+    const message = failed.map((e) => (e instanceof Error ? e.message : String(e))).find((m) => m !== 'The desk is not connected')
+    if (message != null) toast.error(`Release failed: ${message}`)
+  }, [targets])
+}

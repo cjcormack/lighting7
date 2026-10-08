@@ -29,12 +29,28 @@ vi.mock('./useRowValues', async () => ({
         },
       ],
       targetKeys: ['a'],
-      keys: [],
+      keys: [{ targetKey: 'a', propertyName: 'dimmer' }],
     },
   ],
 }))
 const ownership = vi.hoisted(() => ({ current: {} as Record<string, unknown> }))
 vi.mock('./useRowOwnership', () => ({ useRowOwnership: () => ownership.current }))
+/** The grid's held-back reach and the programmer's entries, for the corner dot (D19). */
+const heldBack = vi.hoisted(() => ({ reach: new Set<string>(), holds: new Set<string>(), blind: false }))
+vi.mock('./useHeldBackReach', () => ({ useHeldBackReach: () => heldBack.reach }))
+vi.mock('../../api/lightingApi', async () => {
+  const { lightingApiMock } = await import('@/test/backendMock')
+  const base = lightingApiMock().lightingApi as Record<string, unknown>
+  const programmer = new Proxy(base.programmer as Record<string, unknown>, {
+    get: (target, prop: string) =>
+      prop === 'getKeyState'
+        ? (key: string, property: string) => ({ entry: heldBack.holds.has(`${key}|${property}`) ? { value: '200' } : null })
+        : prop === 'isBlind'
+          ? () => heldBack.blind
+          : target[prop],
+  })
+  return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'programmer' ? programmer : target[prop]) }) }
+})
 
 // The programmer's scope, driven directly rather than through its provider — that one needs a
 // Redux store, and what is under test here is how a *cell* renders per scope.
@@ -286,6 +302,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  heldBack.reach = new Set()
+  heldBack.holds = new Set()
+  heldBack.blind = false
   vi.clearAllMocks()
   // `clearAllMocks` resets call history and NOT a spy's installed implementation, so without this
   // `stubFlatLayout`'s `getBoundingClientRect` would keep answering with its fake flat rect for
@@ -758,6 +777,38 @@ describe('FixturesTable scopes', () => {
     for (const badge of badges) {
       expect(badge.closest('[data-cell]')).toHaveAttribute('data-cell', 'dimmer')
     }
+  })
+
+  it('marks a cell whose value holds a cue effect back with an amber corner dot, never moving the value (D19)', () => {
+    // Q12's Pulse paints `a`'s dimmer (a cue effect, not programmer-band); the programmer holds an
+    // entry there, so the Pulse runs held back — the sheet's dot, now on the grid.
+    ownership.current = { dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'] } }
+    heldBack.reach = new Set(['a\u0000dimmer'])
+    heldBack.holds = new Set(['a|dimmer'])
+    render(<Harness />)
+    const dot = screen.getAllByTestId('held-back-dot')[0]
+    expect(dot.closest('[data-cell]')).toHaveAttribute('data-cell', 'dimmer')
+    // Absolutely placed in the corner, so the value's own box is untouched.
+    expect(dot.className).toContain('absolute')
+    expect(dot.className).toContain('top-1 right-1')
+    expect(dot.closest('[data-cell]')?.getAttribute('title')).toMatch(/holds an effect back/)
+  })
+
+  it('draws no dot where nothing is held back — no entry, no reach, or blind', () => {
+    ownership.current = { dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'] } }
+    heldBack.reach = new Set(['a\u0000dimmer'])
+    render(<Harness />)
+    expect(screen.queryByTestId('held-back-dot')).toBeNull()
+    cleanup()
+    heldBack.holds = new Set(['a|dimmer'])
+    heldBack.blind = true
+    render(<Harness />)
+    expect(screen.queryByTestId('held-back-dot')).toBeNull()
+    cleanup()
+    heldBack.blind = false
+    heldBack.reach = new Set()
+    render(<Harness />)
+    expect(screen.queryByTestId('held-back-dot')).toBeNull()
   })
 
   it('makes an Output tint a destination — clicking jumps to the layer that won it', () => {

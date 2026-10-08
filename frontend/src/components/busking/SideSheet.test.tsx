@@ -9,11 +9,11 @@ import { resetSidePanelModeStore, setSidePanelMode } from '@/lib/sidePanelMode'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
- * The side sheet (busk-further plan D7): four live tabs — Speed, Colour (session 5), Spread
- * (session 6) and Show (the busk-chrome plan's session A) — and the fold; the fold keeps the beat,
- * master 1's tempo, the tab glyphs, the live cue number under the Show glyph and the selection's
- * colour; off the desk board the sheet is an overlay carrying Colour, Spread and Show and no Speed
- * tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
+ * The side sheet (busk-further plan D7): five live tabs — Speed, Colour (session 5), Spread
+ * (session 6), Show (the busk-chrome plan's session A) and Effects (fixture-fx-sheets plan D20,
+ * between Spread and Show) — and the fold; the fold keeps the beat, master 1's tempo, the tab
+ * glyphs, the live cue number under the Show glyph and the selection's colour; off the desk board
+ * the sheet is an overlay carrying Colour, Spread, Effects and Show and no Speed tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
  * *Spread to a second colour…* button opens Spread with *From* set through the host's seed.
  */
 
@@ -32,6 +32,7 @@ vi.mock('./SpreadSheet', () => ({
     </div>
   ),
 }))
+vi.mock('./EffectsSheet', () => ({ EffectsSheet: () => <div data-testid="effects-sheet" /> }))
 vi.mock('./ShowTab', () => ({
   ShowTab: ({ show }: { show: { transport: { serverActiveCueId: number | null } } }) => (
     <div data-testid="show-tab" data-live={String(show.transport.serverActiveCueId)} />
@@ -117,14 +118,14 @@ afterEach(() => {
 })
 
 describe('docked, on the desk board', () => {
-  it('offers Speed, Colour, Spread and Show', () => {
+  it('offers Speed, Colour, Spread, Effects and Show', () => {
     setBuskSheet('speed')
     render(<SideSheet {...props} />)
     const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour', 'Spread', 'Show'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour', 'Spread', 'Effects', 'Show'])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('speed-rail')).toBeInTheDocument()
-    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour', 'spread', 'show'])
+    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour', 'spread', 'effects', 'show'])
   })
 
   it('mounts the Show tab — the phone runner over the route’s transport — when the fact names it (busk-chrome D1)', () => {
@@ -135,7 +136,7 @@ describe('docked, on the desk board', () => {
     expect(screen.queryByTestId('speed-rail')).toBeNull()
   })
 
-  it('folds the tab words to glyphs below 400px of sheet, keeping only the open tab’s word — the strip is the container (D3)', () => {
+  it('folds the tab words to glyphs below 460px of sheet, keeping only the open tab’s word — the strip is the container (D3)', () => {
     setBuskSheet('colour')
     render(<SideSheet {...props} />)
     const strip = screen.getByRole('tablist', { name: 'Side sheet' })
@@ -151,11 +152,13 @@ describe('docked, on the desk board', () => {
         expect(word.className).not.toContain('hidden')
       } else {
         expect(word.className).toContain('hidden')
-        expect(word.className).toContain('@[400px]:inline')
+        // 460, not D3's 400: five worded tabs measure 455 of sheet with the chrome.
+        expect(word.className).toContain('@[460px]:inline')
       }
     }
     expect(tabWordClass(true)).not.toContain('hidden')
     expect(tabWordClass(false)).toBe('hidden @[400px]:inline')
+    expect(tabWordClass(false, 460)).toBe('hidden @[460px]:inline')
   })
 
   it('mounts the Spread tab in the panel when the fact names it', () => {
@@ -251,7 +254,7 @@ describe('docked, on the desk board', () => {
       expect(show.querySelector('[data-busk-blind-dot]')).toHaveAttribute('aria-hidden')
       expect(show.textContent).toBe('Show')
       expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
-      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Speed', 'Colour', 'Spread', 'Show — programmer blind'])
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Speed', 'Colour', 'Spread', 'Effects', 'Show — programmer blind'])
       // A mark, not a control: the dot is inert and the tab still opens Show.
       fireEvent.click(show)
       expect(getBuskSheet()).toBe('show')
@@ -389,12 +392,12 @@ describe('docked, on the desk board', () => {
 })
 
 describe('the overlay, off the desk board', () => {
-  it('carries Colour, Spread and Show and no Speed tab in any overlay form — the Show strip has the tempo chip (D6, D7)', () => {
-    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
-    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
+  it('carries Colour, Spread, Effects and Show and no Speed tab in any overlay form — the Show strip has the tempo chip (D6, D7)', () => {
+    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'effects', 'show'])
+    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'effects', 'show'])
     // `popover` is what a 640–767px window answers, where the rail is still not drawn: an overlay
     // with a Speed tab there would open onto nothing.
-    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
+    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread', 'effects', 'show'])
   })
 
   it('marks the overlay strip’s Show tab the same way while blind', () => {
@@ -408,7 +411,7 @@ describe('the overlay, off the desk board', () => {
       expect(show.querySelector('[data-busk-blind-dot]')).not.toBeNull()
       expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
       // The other tabs keep their plain names, and every tab is named whatever the width.
-      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Colour', 'Spread', 'Show — programmer blind'])
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Colour', 'Spread', 'Effects', 'Show — programmer blind'])
     } finally {
       programmer.blind = false
     }
@@ -419,7 +422,7 @@ describe('the overlay, off the desk board', () => {
     setBuskSheet('show')
     render(<SideSheetOverlay {...props} />)
     const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Colour', 'Spread', 'Show'])
+    expect(within(dialog).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Colour', 'Spread', 'Effects', 'Show'])
     expect(within(dialog).getByRole('tab', { name: 'Show' })).toHaveAttribute('aria-selected', 'true')
     expect(within(dialog).getByTestId('show-tab')).toHaveAttribute('data-live', '12')
   })
@@ -440,7 +443,7 @@ describe('the overlay, off the desk board', () => {
     for (const tab of within(strip).getAllByRole('tab')) {
       expect(tab.className).toContain('shrink-0')
       const word = [...tab.querySelectorAll('span')].find((el) => el.textContent === tab.textContent)!
-      expect(word.className).toBe(tabWordClass(tab.getAttribute('aria-selected') === 'true'))
+      expect(word.className).toBe(tabWordClass(tab.getAttribute('aria-selected') === 'true', 460))
     }
   })
 
@@ -482,5 +485,37 @@ describe('the overlay, off the desk board', () => {
     setBuskSheet('speed')
     render(<SideSheetOverlay {...props} />)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+describe('the Effects tab (fixture-fx-sheets plan D20) is in every place LIVE_SHEET_TABS reaches', () => {
+  it('is live, between Spread and Show', () => {
+    expect(LIVE_SHEET_TABS).toEqual(['speed', 'colour', 'spread', 'effects', 'show'])
+  })
+
+  it('is a tab on the docked strip, folding to its glyph below 460px of sheet, and mounts the tab', () => {
+    setBuskSheet('effects')
+    render(<SideSheet {...props} />)
+    const tab = screen.getByRole('tab', { name: 'Effects' })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('effects-sheet')).toBeInTheDocument()
+    // Open, its word stays at every width; another tab's is the strip's container fold.
+    expect(tab.querySelector('span:last-child')?.className).toBe(tabWordClass(true, 460))
+    expect(screen.getByRole('tab', { name: 'Spread' }).querySelector('span:last-child')?.className).toBe(tabWordClass(false, 460))
+  })
+
+  it('is a tab on the overlay strip, and mounts the tab there', () => {
+    surface({ narrow: true })
+    setBuskSheet('effects')
+    render(<SideSheetOverlay {...props} />)
+    expect(screen.getByRole('tab', { name: 'Effects' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('effects-sheet')).toBeInTheDocument()
+  })
+
+  it('is a glyph on the fold, which opens it', () => {
+    setBuskSheet('none')
+    render(<SideSheet {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Effects tab' }))
+    expect(getBuskSheet()).toBe('effects')
   })
 })

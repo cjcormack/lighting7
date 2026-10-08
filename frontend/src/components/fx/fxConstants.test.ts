@@ -3,7 +3,7 @@ import { effectSpeedLabel, getBeatDivisionLabel } from './fxConstants'
 
 /**
  * `beatDivision` carries two readings on one field, and they are a tempo apart. Every surface that
- * renders an effect's speed away from `EffectParameterForm` goes through `effectSpeedLabel`, so the
+ * renders an effect's speed away from the editor's own fields (`FxEffectFields`) goes through `effectSpeedLabel`, so the
  * rule lives here rather than in three components that could each get it half right.
  */
 describe('effectSpeedLabel', () => {

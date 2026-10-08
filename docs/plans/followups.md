@@ -1123,6 +1123,13 @@ instance's spawn key stale and respawns it from the template with its phase rest
 `POST /fx/{id}/reset` is the per-instance answer (it re-keys the instance); `FxLiveEditRoutesTest`
 pins both.
 
+**Since fixture-fx-sheets session 5 the busk Effects tab makes it visible both ways.** A pad's running
+instance is edited as that instance only, and reads ***edited*** while it differs from its template.
+*Update template* writes the instance's settings to the template and resets that one instance
+(re-keying it); **every other running instance of the same template then reads *edited*** — it holds
+the old settings — and *Reset to template* tours them one by hand. It stays a Trigger: the automatic
+tour is still not built.
+
 This is **inherited from Looks unchanged**, not new: a deferred Look effect behaves identically, and
 has since the layer stack was written. It is recorded here because an effect template makes it much
 more visible — the whole *point* of an effect template is the one thing the operator retunes, so
@@ -2062,7 +2069,8 @@ frontend sweep `FS-COORD-FXLIBRARY-PARAMS`, 2026-08-29
 
 `GET /fx/library` describes each parameter with `name` / `type` / `defaultValue` / `description`
 (`FxRegistry.ParameterInfo`, filled from each `.fx.kts` file's frontmatter via `FxFileParameter`)
-and nothing else. `EffectParameterForm.ParameterInput` therefore has to invent the slider range for
+and nothing else. The effect editor's fields (`FxEffectFields`' `ParamControl`, which replaced
+`EffectParameterForm.ParameterInput` in fixture-fx-sheets session 5) therefore have to invent the slider range for
 every numeric control: a `double` gets 0–1 when its default is `<= 1.0` and 0–10 otherwise, and an
 `int` gets `max(255, default * 2)`.
 
@@ -2337,7 +2345,8 @@ unpublished, replace the cues' rows, publish), and fires `cuesRecomposed` for th
 Fitted media is overlaid by the surfaces that *draw* a unit — the Stage view, the 2D appearance
 leaf, the Media box and the Focus tab (`frontend/docs/stage-vis-engineering.md` §"Fitted media") —
 and not by the ones that *set* a slot: the programmer's setting cell and its column, the property
-visualisers, the fixture card and `EffectParameterForm` list a Revolution's scroller frames with the
+visualisers, the fixture card and the effect editor's setting list (`FxEffectFields`, once
+`EffectParameterForm`) list a Revolution's scroller frames with the
 type's stock swatches and names. They write a DMX slot, which is the type's, and on a fixture with
 extra placements one cell drives several units with different strings, so there is no single fitted
 colour to show. **Trigger**: an operator picks a frame by its stock swatch on a unit fitted with

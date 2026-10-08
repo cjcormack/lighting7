@@ -7,6 +7,7 @@ import { EditorSurface, type CellClickBehaviour } from '../../editor/EditorSurfa
 import { EditorField } from '../../editor/EditorField'
 import { EditorLabel } from '../../editor/EditorLabel'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
@@ -65,6 +66,12 @@ interface SliderCellOwnProps {
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
+  /**
+   * The cell's `(head, property)` keys, for the source chip on the editor's label line
+   * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
+   * no chip — the plain lists, a focused Look layer, `CueValueGrid`.
+   */
+  sourceKeys?: readonly CellKey[]
 }
 
 type SliderCellProps = SliderCellOwnProps & CellClickBehaviour
@@ -109,6 +116,7 @@ export const SliderCell = memo(function SliderCell({
   editorAnchorRef,
   onCommit,
   onBeginEdit,
+  sourceKeys,
 }: SliderCellProps) {
   const first = resolutions[0]
   const range = first.kind === 'slider' ? { min: first.property.min, max: first.property.max } : { min: 0, max: 255 }
@@ -202,7 +210,11 @@ export const SliderCell = memo(function SliderCell({
       {/* The wrapper is the editor's keyboard: Enter closes, comma steps between fields, and a
           keyboard-opened editor focuses the first of them. See `useEditorKeyboard`. */}
       <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-2">
-        <EditorLabelLine subject={headsLine(heads.count, scopeLabel)} column={label} />
+        <EditorLabelLine
+          subject={headsLine(heads.count, scopeLabel)}
+          column={label}
+          chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
+        />
         <div className="space-y-1">
           {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
           <EditorLabel>{label}</EditorLabel>

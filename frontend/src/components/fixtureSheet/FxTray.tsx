@@ -20,7 +20,7 @@ import type { PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
 import { fixtureHeadKeys } from './useRelease'
-import { useEffectDetail } from './effectLabels'
+import { useCueLabel, useEffectDetail } from './effectLabels'
 import { effectsReaching } from './rowSource'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
@@ -38,6 +38,16 @@ export interface TrayPick {
   nameOf: (key: string) => string | undefined
   /** The empty list's words — `these 4 heads`. */
   noun: string
+}
+
+/**
+ * **A cue's effect is read-only in the tray** (Fx board, *Open*; fixture-fx-sheets session 5): it
+ * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put
+ * back anything changed here (W5 refuses a cue's instance for the same reason). Session 3 left it
+ * editable, as `ActiveEffectSheet` had; a *pad's* instance is edited (D20), being the programmer's.
+ */
+export function isCueEffect(effect: Pick<ActiveEffect, 'programmerOwned' | 'cueId'>): boolean {
+  return !effect.programmerOwned && effect.cueId != null
 }
 
 /** How many chips the folded tray draws before *+n*. */
@@ -93,6 +103,7 @@ export function FxTray({
   )
   const connected = useIsDeskConnected()
   const effectDetail = useEffectDetail()
+  const cueLabel = useCueLabel()
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   // The auditioned effect belongs to the start it was made on: a new pick is a new picker session,
@@ -216,8 +227,8 @@ export function FxTray({
               <button
                 key={e.id}
                 type="button"
-                title={`${e.effectType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''} — edit`}
-                onClick={() => edit(e)}
+                title={`${e.effectType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''}${isCueEffect(e) ? ' — the cue’s' : ' — edit'}`}
+                onClick={() => (isCueEffect(e) ? setOpen(true) : edit(e))}
                 className={cn(
                   'inline-flex h-6 min-w-0 shrink items-center gap-1.5 rounded-full border px-2 text-[11px] whitespace-nowrap',
                   e.isRunning
@@ -297,8 +308,13 @@ export function FxTray({
           )}
           {effects.map((e) => {
             const group = via(e)
-            const home = e.programmerOwned ? 'programmer' : e.cueId != null ? 'cue' : e.sourceName ?? null
-            const isEditing = editingLive?.id === e.id
+            const cue = isCueEffect(e)
+            const home = e.programmerOwned
+              ? 'programmer'
+              : e.cueId != null
+                ? `on ${cueLabel(e.cueId) ?? 'a cue'}`
+                : (e.sourceName ?? null)
+            const isEditing = !cue && editingLive?.id === e.id
             return (
               <Fragment key={e.id}>
                 <div
@@ -310,28 +326,36 @@ export function FxTray({
                 >
                   <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
                     <span className={cn('size-[7px] shrink-0 rounded-full', e.isRunning ? 'bg-violet-500' : 'bg-muted-foreground')} />
-                    <button
-                      type="button"
-                      className="min-w-0 truncate text-left hover:underline"
-                      aria-expanded={isEditing}
-                      onClick={() => setEditingId(isEditing ? null : e.id)}
-                    >
-                      {e.effectType}
-                    </button>
+                    {cue ? (
+                      <span className="min-w-0 truncate" data-read-only title="The cue’s effect — edit it in the cue">
+                        {e.effectType}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="min-w-0 truncate text-left hover:underline"
+                        aria-expanded={isEditing}
+                        onClick={() => setEditingId(isEditing ? null : e.id)}
+                      >
+                        {e.effectType}
+                      </button>
+                    )}
                     <span className="inline-flex h-4 items-center rounded border px-1 text-[9.5px] text-muted-foreground">
                       {effectDetail(e)}
                     </span>
                     <span className="flex-1" />
-                    <button
-                      type="button"
-                      aria-label={e.isRunning ? `Pause ${e.effectType}` : `Resume ${e.effectType}`}
-                      disabled={!connected}
-                      onClick={() => togglePause(e)}
-                      className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                    >
-                      {e.isRunning ? <Pause className="size-3" /> : <Play className="size-3" />}
-                    </button>
-                    {!isEditing && (
+                    {!cue && (
+                      <button
+                        type="button"
+                        aria-label={e.isRunning ? `Pause ${e.effectType}` : `Resume ${e.effectType}`}
+                        disabled={!connected}
+                        onClick={() => togglePause(e)}
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      >
+                        {e.isRunning ? <Pause className="size-3" /> : <Play className="size-3" />}
+                      </button>
+                    )}
+                    {!isEditing && !cue && (
                       <button
                         type="button"
                         aria-label={`Stop ${e.effectType}`}

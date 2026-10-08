@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -8,8 +8,11 @@ import { getBeatDivisionLabel } from '../fx/fxConstants'
 import { EditorSurface } from '../editor/EditorSurface'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
-import { useFixtureSheet } from './sheetContext'
+import { FixtureSheetContext } from './sheetContext'
 import type { KeyStack, KeyStackLayer } from '@/api/programmerWsApi'
+
+/** What the stack calls a cue where no sheet supplies a name. */
+const NO_CUE_LABEL = () => undefined
 
 /** How a slot's age reads: *just now*, *40 s ago*, *2 min ago*. */
 export function formatAge(ageMs: number | null | undefined): string | null {
@@ -142,6 +145,8 @@ export function LayerStack({
   propertyName,
   label,
   trigger,
+  cueLabel: cueLabelProp,
+  connected: connectedProp,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -152,8 +157,16 @@ export function LayerStack({
   propertyName: string
   label: string
   trigger: ReactNode
+  /**
+   * Outside a fixture sheet — the programmer grid's cell editor (D19) — the host hands in what the
+   * sheet's context otherwise carries: the cue names and whether the desk is reachable.
+   */
+  cueLabel?: (cueId: number) => string | undefined
+  connected?: boolean
 }) {
-  const { cueLabel, connected } = useFixtureSheet()
+  const sheet = useContext(FixtureSheetContext)
+  const cueLabel = cueLabelProp ?? sheet?.cueLabel ?? NO_CUE_LABEL
+  const connected = connectedProp ?? sheet?.connected ?? true
   const [answer, setAnswer] = useState<{ blind: boolean; stacks: KeyStack[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)

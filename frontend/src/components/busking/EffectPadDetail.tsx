@@ -1,5 +1,6 @@
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { isAroundSpelling } from '@/components/fx/centreMode'
 import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
@@ -31,5 +32,9 @@ export function EffectPadDetail({ template }: { template: TemplateSummary }) {
         : isWallClock && template.effect.rateSpeedMasterUuid == null
           ? 'unscaled'
           : 'M1'
-  return [template.effect.effectType, speed, masterLabel].filter(Boolean).join(' · ')
+  // *around* (fixture-fx-sheets plan D16): the movement template orbits whatever holds the position
+  // underneath — the one thing about a Circle pad an operator needs before pressing it after a
+  // position pad. An Absolute one (every stored Override, call 6) says nothing.
+  const around = isAroundSpelling(template.effect) ? 'around' : null
+  return [template.effect.effectType, speed, masterLabel, around].filter(Boolean).join(' · ')
 }

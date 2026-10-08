@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LookSummary } from '@/api/looksApi'
-import { describeLookContents } from './padFace'
+import type { TemplateSummary } from '@/api/templatesApi'
+import { describeLookContents, describeTemplate } from './padFace'
 
 function look(over: Partial<LookSummary>): LookSummary {
   return {
@@ -19,5 +20,34 @@ describe('describeLookContents (pad face)', () => {
     const moon = { elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }
     expect(describeLookContents(look({ scenery: [moon] }))).toBe('1 scenery')
     expect(describeLookContents(look({ rowCount: 1, scenery: [moon, { ...moon, elementUuid: 'tabs' }] }))).toBe('1 value · 2 scenery')
+  })
+})
+
+describe('describeTemplate — around (fixture-fx-sheets plan D16)', () => {
+  const circle = (blendMode: string, centre: string): TemplateSummary =>
+    ({
+      id: 1,
+      uuid: 'u',
+      name: 'Big circle',
+      kind: 'effect',
+      family: 'POSITION',
+      isGeneric: true,
+      effect: {
+        effectType: 'Circle',
+        category: 'position',
+        beatDivision: 0.5,
+        blendMode,
+        distribution: 'LINEAR',
+        parameters: { panCenter: centre, tiltCenter: centre, panRadius: '64', tiltRadius: '64' },
+        timingSource: 'BEAT',
+      },
+    }) as unknown as TemplateSummary
+
+  it('says around for a movement template spelled Around, and nothing for an Absolute one', () => {
+    expect(describeTemplate(circle('ADDITIVE', '128'))).toMatch(/· around$/)
+    // A stored Override movement template reads as Absolute (call 6): no word.
+    expect(describeTemplate(circle('OVERRIDE', '128'))).not.toMatch(/around/)
+    // Additive with a centre of its own is neither question's answer.
+    expect(describeTemplate(circle('ADDITIVE', '90'))).not.toMatch(/around/)
   })
 })

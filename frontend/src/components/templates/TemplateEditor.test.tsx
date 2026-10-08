@@ -39,6 +39,20 @@ const library: EffectLibraryEntry[] = [
     compatibleProperties: ['rgbColour'],
   },
   {
+    name: 'Circle',
+    category: 'position',
+    outputType: 'POSITION',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [
+      { name: 'panCenter', type: 'UByte', defaultValue: '128', description: '' },
+      { name: 'tiltCenter', type: 'UByte', defaultValue: '128', description: '' },
+      { name: 'panRadius', type: 'UByte', defaultValue: '64', description: '' },
+      { name: 'tiltRadius', type: 'UByte', defaultValue: '64', description: '' },
+    ],
+    compatibleProperties: ['position'],
+  },
+  {
     name: 'Sine Dim',
     category: 'dimmer',
     outputType: 'LEVEL',
@@ -126,7 +140,7 @@ function chooseEffect(name: string) {
 }
 
 // Radix's Slider (the beam and intensity controls) measures its thumb; jsdom has no
-// ResizeObserver, so stub an inert one — the same stub `EffectParameterForm.test.tsx` uses.
+// ResizeObserver, so stub an inert one — the same stub the effect editor's own tests use.
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
@@ -363,3 +377,59 @@ describe('validity and the save body', () => {
   })
 })
 
+describe('Around in templates (fixture-fx-sheets plan D16)', () => {
+  it('saves a new movement template as ADDITIVE with its centre pinned at 128, the centre hidden', async () => {
+    // The bug that started the plan, in the busk view: a template stored Override, so a Circle pad
+    // pressed after a position pad circled 128/128. A new one starts Around.
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Position' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Big circle' } })
+    chooseEffect('Circle')
+
+    expect(screen.getByRole('radio', { name: 'Around current position' })).toHaveAttribute('data-state', 'on')
+    // Around hides the centre: it is pinned, and a knob there would turn the orbit into an offset.
+    expect(screen.queryByRole('slider', { name: 'Pan' })).toBeNull()
+    expect(screen.getByRole('slider', { name: 'Pan size' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /create template/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({ effectType: 'Circle', blendMode: 'ADDITIVE' })
+    expect(body.effect?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
+  })
+
+  it('reads a stored Override movement template as Absolute, with its centre shown (call 6)', async () => {
+    const { onSave } = renderEditor({
+      template: template({
+        name: 'Old circle',
+        family: 'POSITION',
+        kind: 'effect',
+        rows: undefined,
+        effect: {
+          effectType: 'Circle',
+          category: 'position',
+          propertyName: null,
+          beatDivision: 1,
+          blendMode: 'OVERRIDE',
+          distribution: 'LINEAR',
+          phaseOffset: 0,
+          parameters: { panCenter: '90', tiltCenter: '100', panRadius: '64', tiltRadius: '64' },
+          speedMasterUuid: null,
+          rateSpeedMasterUuid: null,
+          timingSource: 'BEAT',
+        },
+      }),
+    })
+    expect(screen.getByRole('radio', { name: 'Absolute' })).toHaveAttribute('data-state', 'on')
+    expect(screen.getByRole('slider', { name: 'Pan' })).toBeTruthy()
+
+    // Choosing Around is an edit like any other, and saves the D12 spelling.
+    fireEvent.click(screen.getByRole('radio', { name: 'Around current position' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({ blendMode: 'ADDITIVE' })
+    expect(body.effect?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
+  })
+})

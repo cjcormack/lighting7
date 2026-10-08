@@ -23,6 +23,7 @@ vi.mock('@/store/templates', () => ({
   useCopyTemplateMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useEffectLibraryQuery: () => ({ data: [] }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: () => true }))
 vi.mock('@/store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),

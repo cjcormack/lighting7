@@ -72,7 +72,10 @@ import { NameField } from './NameField'
 import { RigEditProvider, useRigEdit } from './RigEditProvider'
 import { PAGE_MIN_HEIGHT_PX, RIG_MIN_HEIGHT_PX, RigHandle, clampRigHeight, lineEdges } from './RigHandle'
 import { RigDropSlot, RigTile, type TileLookup } from './RigTile'
-import { summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
+import { BuskFixtureSheet, BuskFixtureSheetContext, type BuskSheetTarget } from './BuskFixtureSheet'
+import { buskReleaseTargets, summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
+import { ReleaseTargetsButton } from '@/components/fixtureSheet/ReleaseTargetsButton'
+import { useReleaseTargets, type ReleaseTarget } from '@/components/fixtureSheet/useRelease'
 import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selectionVerbs'
 
 /**
@@ -218,8 +221,9 @@ export interface RigBandProps {
  *    within its own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the icons.
  * 5. **The words come back under the floor** (D19). Each row then has its whole line, so what the
  *    ladder took is drawn again while the line holds it and folds again below a second, measured
- *    rung — the verbs' words and then the *Cells:* prefix on the first line, *Edit layout*'s word
- *    and then the Focus words and the chip's subject on the second. Every re-expansion is a
+ *    rung — the *Cells:* prefix on the first line, *Edit layout*'s word and then the Focus words
+ *    and the chip's subject on the second. The verbs' own words do not come back since *Release n*
+ *    joined them (fixture-fx-sheets plan D18): their worded line is wider than the floor. Every re-expansion is a
  *    **stacked** `@min-[…]:@max-[floor]:` variant, a closed range that overlaps no rung above the
  *    floor, so no rung depends on the order Tailwind emits the rules in; the label does not come
  *    back, since under the floor the row is plainly the rig's.
@@ -233,37 +237,37 @@ export interface RigBandProps {
  * so without that last resort the verbs painted over the sheet. That wrap is under the designed
  * break, never instead of it: above the floor the row is `flex-nowrap`.
  *
- * **The numbers are the app's, measured in the browser on 2026-09-21 (evening) and re-measured on
- * 2026-09-23 for the link badge** (desk-follow plan D8), at the desk's control sizes, with a
- * one-family pill drawn (~60; the row has to hold when a mask is set) and **the badge drawn** (21,
- * plus a gap: a following window always shows it, and Pads and Rig always follow). Unlinked, the
- * chip takes the badge's place and folds and truncates on its own; its floor is 35, which the 14px
- * of slack at the floor covers exactly. Worded, the row is 972px — the verbs group 573 (`RIG` 19,
- * Cells 107, the steps 58, the four verbs 93 · 81 · 94 · 72, six 8px gaps), the state group 391
- * (pill 60, badge 21, Focus 183, *Edit layout* 103, four gaps round the spacer), 8 between — so the
- * verbs' words and *Edit layout*'s go at **990**; iconic (36 each, the Cells control 71), the row
- * is 704, so the *Cells:* prefix (36) and the Focus words (85) go at **730**; with those gone it is
- * 583, the label (19 + a gap) goes at **610**, and with it gone the row is 556, so the floor is
- * **570**. Under it the verbs line has no label and is 546 fully worded, but the verbs' words still
- * return only with the prefix folded (510), from **520**, and the prefix on the iconic line (349)
- * from **350** up to that 520, where the words take its place — conservative by 24px, kept so the
- * two never share the line; the state line is 399 worded, so *Edit layout*'s word returns from
- * **400**, and 332 with it iconic (the toggle is 36, not the 32 the first note assumed), so the
- * Focus words and the chip's subject return from **340**. Checked in the browser with the band
- * forced to each rung and one below it, and a 60px stand-in for the mask pill: the row's
- * `scrollWidth` never exceeded its `clientWidth`. They were 960 / 700 / 580 / 540 with no chip or
- * badge on the row, 1100 / 820 / 700 with the chip, and 860 / 680 while the summary had a row of
- * its own.
+ * **The numbers are the app's, measured in the browser on 2026-09-21 (evening), re-measured on
+ * 2026-09-23 for the link badge** (desk-follow plan D8) **and on 2026-10-08 for *Release n***
+ * (fixture-fx-sheets plan D18), at the desk's control sizes, with a one-family pill drawn (~60; the
+ * row has to hold when a mask is set) and **the badge drawn** (21, plus a gap: a following window
+ * always shows it, and Pads and Rig always follow). Unlinked, the chip takes the badge's place and
+ * folds and truncates on its own; its floor is 35, which the 15px of slack at the floor covers.
+ * Worded, the row is 1078px — the verbs group 679 (`RIG` 17, Cells 107, the steps 58, the five
+ * verbs 94 · 81 · 93 · 100 · 73 — Release with a one-digit count — seven 8px gaps), the state
+ * group 391 (pill 60, badge 21, Focus 183, *Edit layout* 103, four gaps round the spacer), 8
+ * between — so the verbs' words and *Edit layout*'s go at **1100**; iconic (36 each, the Cells
+ * control 71), the row is 748, so the *Cells:* prefix (36) and the Focus words (85) go at **780**;
+ * with those gone it is 627, the label (17 + a gap) goes at **660**, and with it gone the row is
+ * 600, so the floor is **615**. Under it the verbs line has no label and its words cannot return:
+ * worded with the prefix folded it is 618, wider than the floor, so they stay icons there (before
+ * Release they returned from 520); the prefix on the iconic line (393) returns from **395** up to
+ * the floor. The state line is 399 worded, so *Edit layout*'s word returns from **400**, and 332
+ * with it iconic, so the Focus words and the chip's subject return from **340**. Checked in the
+ * browser with the band forced to each rung and one below it, and a 60px stand-in for the mask
+ * pill: the row's `scrollWidth` never exceeded its `clientWidth` and no control ran past its edge.
+ * Before Release the rungs were 990 / 730 / 610 / 570; with no chip or badge on the row 960 / 700
+ * / 580 / 540, with the chip 1100 / 820 / 700, and 860 / 680 while the summary had a row of its own.
  *
  * **The blind pill is not in those numbers, by design.** `BlindPill` (`BlindMarks.tsx`) is drawn
  * only while the programmer is blind — 63px worded, 26 iconic, plus a gap — so the ladder is
  * measured without it, as it is measured with a one-family pill: the row must hold for the state
  * that lasts all night, not for the one that is an operator's mistake. Its word therefore has a
- * rung of its own above every other (`BLIND_WORD_CLASS`, 1050, and 470 on the state line under the
+ * rung of its own above every other (`BLIND_WORD_CLASS`, 1150, and 470 on the state line under the
  * floor), and the pill is `min-w-0 shrink` — the one thing on the row besides the chip that may
- * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 990
- * (18 spare), 730 (26), 610 (27) and 570 (14) — so in the bands 990–1006, 730–738, 610–617 and
- * 570–590 the pill squashes to an amber sliver rather than pushing the Focus control under the
+ * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 1100
+ * (22 spare), 780 (32), 660 (33) and 615 (15) — so in the bands 1100–1112, 780–782, 660–661 and
+ * 615–634 the pill squashes to an amber sliver rather than pushing the Focus control under the
  * sheet. Measured 2026-09-21: the pill on the desk row at 738 of band is 62.5 worded and 26 iconic,
  * and the row's `scrollWidth` equalled its `clientWidth` at 738, 616, 540 and 496 with no mask.
  */
@@ -277,44 +281,48 @@ export { snapRigHeight, stepRigHeight } from './RigHandle'
  * `${…}` is in no file — the first cut did that, and the built CSS had no floor and no
  * re-expansion at all. `RigBand.test.tsx` pins that each literal's floor equals this constant.
  */
-export const RIG_ROW_FLOOR_PX = 570
+export const RIG_ROW_FLOOR_PX = 615
 
-/** The verbs' words: first to fold above the floor, and back on their own line from 520 under it. */
-export const VERB_WORD_CLASS = 'hidden @[990px]:inline @min-[520px]:@max-[570px]:inline'
+/**
+ * The verbs' words: first to fold above the floor — and, since *Release n* joined the verbs
+ * (fixture-fx-sheets plan D18), **not back under it**: the worded verbs line with the prefix folded
+ * is 618, wider than the floor, so there is no width under the floor that holds it.
+ */
+export const VERB_WORD_CLASS = 'hidden @[1100px]:inline'
 /** *Edit layout*'s word, folded with the verbs' above the floor; under it, on the state line, from 400. */
-export const EDIT_WORD_CLASS = 'hidden @[990px]:inline @min-[400px]:@max-[570px]:inline'
+export const EDIT_WORD_CLASS = 'hidden @[1100px]:inline @min-[400px]:@max-[615px]:inline'
 
 /**
  * The *Cells:* prefix, which goes a step after the verbs' words; the mode word beside it never
- * does. Under the floor it is drawn on the iconic line from 350 **up to 520, where the verbs' words
- * return**: the fully worded line is six pixels wider than the floor, so the two never share it.
+ * does. Under the floor it is drawn on the iconic line from 395 up to the floor — the verbs' words
+ * no longer return there, so it shares the line with nothing that would.
  */
-const CELLS_PREFIX_CLASS = 'hidden @[730px]:inline @min-[350px]:@max-[520px]:inline'
+const CELLS_PREFIX_CLASS = 'hidden @[780px]:inline @min-[395px]:@max-[615px]:inline'
 /** The mode word's *short* form, drawn while the prefix is folded — `1st`, not `1st half`. */
-const CELLS_SHORT_CLASS = 'inline @[730px]:hidden @min-[350px]:@max-[520px]:hidden'
+const CELLS_SHORT_CLASS = 'inline @[780px]:hidden @min-[395px]:@max-[615px]:hidden'
 /** The mode word's full form, drawn beside the prefix. */
 const CELLS_FULL_CLASS = CELLS_PREFIX_CLASS
 
 /** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 340. */
-export const FOCUS_WORD_CLASS = 'hidden @[730px]:inline @min-[340px]:@max-[570px]:inline'
+export const FOCUS_WORD_CLASS = 'hidden @[780px]:inline @min-[340px]:@max-[615px]:inline'
 /**
  * The blind pill's word (`BlindMarks.tsx`): worded only where the fully-worded row has room for
- * its 71 (63 + a gap) — from **1050**, above every other rung — and, under the floor, on the state
+ * its 71 (63 + a gap) — from **1150**, above every other rung — and, under the floor, on the state
  * line from **470** (391 worded + 71). Its glyph stays at every width; see the ladder note above
  * for the four bands where the pill itself gives.
  */
-export const BLIND_WORD_CLASS = 'hidden @[1050px]:inline @min-[470px]:@max-[570px]:inline'
+export const BLIND_WORD_CLASS = 'hidden @[1150px]:inline @min-[470px]:@max-[615px]:inline'
 /** The desk chip's *Targets:* subject — the chip's second part to go (D19), at the prefix's rung. */
-export const CHIP_SUBJECT_CLASS = 'hidden @[730px]:inline @min-[340px]:@max-[570px]:inline'
+export const CHIP_SUBJECT_CLASS = 'hidden @[780px]:inline @min-[340px]:@max-[615px]:inline'
 
-/** The `RIG` label: folded to nothing below 610, the rung before the floor (D20). */
-export const RIG_LABEL_CLASS = 'hidden @[610px]:block'
+/** The `RIG` label: folded to nothing below 660, the rung before the floor (D20). */
+export const RIG_LABEL_CLASS = 'hidden @[660px]:block'
 
 /** The floor: below it the row wraps once, at the state group, into two rows by design. */
-export const TWO_ROWS_CLASS = '@max-[570px]:flex-wrap'
-export const SECOND_ROW_CLASS = '@max-[570px]:basis-full'
-/** Under the floor the verbs group takes its whole line and may wrap within it — the last resort under ~330px. */
-export const FIRST_ROW_CLASS = '@max-[570px]:w-full @max-[570px]:flex-wrap'
+export const TWO_ROWS_CLASS = '@max-[615px]:flex-wrap'
+export const SECOND_ROW_CLASS = '@max-[615px]:basis-full'
+/** Under the floor the verbs group takes its whole line and may wrap within it — the last resort under ~375px. */
+export const FIRST_ROW_CLASS = '@max-[615px]:w-full @max-[615px]:flex-wrap'
 
 /**
  * The Focus control's labels on the **compact** boards — `RigStrip` and the short board's merged
@@ -343,10 +351,16 @@ export function RigBand(props: RigBandProps) {
   const { data: patches } = usePatchListQuery(projectId)
   const ids = useMemo(() => rigIdsFromPatches(patches), [patches])
   const document = useMemo(() => rig ?? { rows: [] }, [rig])
+  // *Fixture sheet…* on a tile (fixture-fx-sheets plan D21): the band holds which sheet is open and
+  // draws it over the busk view; a tile reaches it through the context.
+  const [sheetTarget, setSheetTarget] = useState<BuskSheetTarget | null>(null)
   return (
-    <RigEditProvider editing={editing} projectId={projectId} rig={document} ids={ids}>
-      <RigBandBody {...props} rigLoaded={rig != null || rigFailed} />
-    </RigEditProvider>
+    <BuskFixtureSheetContext.Provider value={setSheetTarget}>
+      <RigEditProvider editing={editing} projectId={projectId} rig={document} ids={ids}>
+        <RigBandBody {...props} rigLoaded={rig != null || rigFailed} />
+      </RigEditProvider>
+      <BuskFixtureSheet target={sheetTarget} onClose={() => setSheetTarget(null)} />
+    </BuskFixtureSheetContext.Provider>
   )
 }
 
@@ -548,6 +562,7 @@ function RigBandBody({
   // ── The row's verbs ── (Spread…, Locate and Highlight are the host's, in `verbs`)
   const selected = [...selectedTargets.values()]
   const summary = summariseSelection(selected)
+  const releaseTargets = useMemo(() => buskReleaseTargets([...selectedTargets.values()]), [selectedTargets])
 
   const [confirmingReset, setConfirmingReset] = useState(false)
   const draggingRow = source?.type === 'rig-row'
@@ -634,6 +649,7 @@ function RigBandBody({
               onClear={onClear}
               canClear={selected.length > 0}
               verbs={verbs}
+              releaseTargets={releaseTargets}
             />
           )}
           {editing && resetButton}
@@ -662,6 +678,10 @@ function RigBandBody({
                 {/* The three selection verbs, the pad row's too (`selectionVerbs.tsx`), and Clear
                     after them — the one verb that releases a selection made on these tiles. */}
                 <SelectionVerbButtons verbs={verbs} wordClass={VERB_WORD_CLASS} />
+                {/* *Release n* (fixture-fx-sheets plan D18): the selection's values and local
+                    effects out of the programmer, one `clearTarget` per target, after the verbs and
+                    folding with them; Clear only empties the selection. Pad layers stay. */}
+                <ReleaseTargetsButton targets={releaseTargets} wordClass={VERB_WORD_CLASS} className={VERB_CLASS} />
                 <Button
                   variant="outline"
                   size="sm"
@@ -935,12 +955,15 @@ function CompactVerbs({
   onClear,
   canClear,
   verbs,
+  releaseTargets,
 }: {
   onSubselect: (mode: SubselectMode) => void
   onClear: () => void
   canClear: boolean
   verbs: SelectionVerbs
+  releaseTargets: readonly ReleaseTarget[]
 }) {
+  const release = useReleaseTargets(releaseTargets)
   return (
     <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -971,6 +994,13 @@ function CompactVerbs({
                 {verbs.locate.label}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={releaseTargets.length === 0}
+                onSelect={() => void release()}
+                title="Every value and local effect the selection holds in the programmer; pads stay lit"
+              >
+                Release {releaseTargets.length}
+              </DropdownMenuItem>
               <DropdownMenuItem disabled={!canClear} onSelect={onClear}>
                 Clear
               </DropdownMenuItem>

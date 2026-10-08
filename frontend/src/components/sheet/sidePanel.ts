@@ -53,9 +53,10 @@ export const SIDE_PANEL_STRIP_CELL_CLASS =
 export const SIDE_PANEL_HEADER_BUTTON_CLASS = 'size-6 text-muted-foreground'
 
 /**
- * A header tab's word: drawn at 400px of tab strip and up, and below that only on the **open** tab
- * (busk-chrome plan D3). Both panels' headers are tab strips — the busk sheet's four tabs and the
- * rail's Stack · Colour · Spread — and each strip's **unpadded wrapper** is the `@container`
+ * A header tab's word: drawn at 400px of tab strip and up — 460 on the busk sheet's five-tab strip
+ * ([BUSK_TAB_WORDS_FROM]) — and below that only on the **open** tab (busk-chrome plan D3). Both
+ * panels' headers are tab strips — the busk sheet's five tabs and the rail's Stack · Colour ·
+ * Spread — and each strip's **unpadded wrapper** is the `@container`
  * (`sheetFrame.ts`'s convention for a chrome row: a size query measures the content box, and the
  * row's own `px-3` would fire the threshold 24px early). Every tab keeps its glyph at every width.
  *
@@ -65,9 +66,19 @@ export const SIDE_PANEL_HEADER_BUTTON_CLASS = 'size-6 text-muted-foreground'
  * ceiling it is still under 400 — the fold holds at every width the rail has, which is what the
  * board draws.
  */
-export function tabWordClass(open: boolean): string {
-  return open ? 'inline' : 'hidden @[400px]:inline'
+export function tabWordClass(open: boolean, wordsFrom: 400 | 460 = 400): string {
+  if (open) return 'inline'
+  // Literals, never assembled: Tailwind generates a utility only for a candidate in the source.
+  return wordsFrom === 460 ? 'hidden @[460px]:inline' : 'hidden @[400px]:inline'
 }
+
+/**
+ * The busk sheet's strip holds **five** tabs since the fixture-fx-sheets plan's Effects tab (D20),
+ * and five worded tabs measure 378px (73 · 75 · 77 · 77 · 68 and four gaps) — with the mode toggle,
+ * the chevron and the row's gutters, 455px of sheet. At 400 the last tab was clipped, so that strip
+ * keeps its words from **460**, not 400; the rail's three tabs keep the shared 400.
+ */
+export const BUSK_TAB_WORDS_FROM = 460
 
 /**
  * Where an **overlay**-mode panel sits: over the content, against the right edge, under nothing.

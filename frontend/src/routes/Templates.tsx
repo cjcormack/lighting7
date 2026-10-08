@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useCreateTemplateMutation, useSaveTemplateMutation, useTemplateListQuery } from '../store/templates'
 import { useSpeedMasterListQuery } from '../store/speedMasters'
+import { useEffectLibraryQuery } from '../store/fixtureFx'
 import { TemplateEditor } from '../components/templates/TemplateEditor'
 import { TemplateSheet, templateRowId, type TemplateSheetRow } from '../components/templates/TemplateSheet'
 import { useTemplateDelete } from '../components/templates/useTemplateDelete'
@@ -55,6 +56,7 @@ export function ProjectTemplates() {
   const { data: templates, isLoading: templatesLoading } = useTemplateListQuery({ projectId: projectIdNum })
   // The Master column's options — this project's bank, as stored; a template names masters by uuid.
   const { data: masters } = useSpeedMasterListQuery({ projectId: projectIdNum })
+  const { data: effectLibrary } = useEffectLibraryQuery()
   const [createTemplate, { isLoading: isCreating }] = useCreateTemplateMutation()
   const [saveTemplate, { isLoading: isSaving }] = useSaveTemplateMutation()
 
@@ -242,6 +244,7 @@ export function ProjectTemplates() {
           rows={sheetRows}
           library={library}
           masters={bank}
+          effectLibrary={effectLibrary}
           isCurrentProject={isCurrentProject}
           projectName={project.name}
           onOpenTemplate={openTemplate}

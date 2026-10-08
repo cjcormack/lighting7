@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
@@ -53,11 +53,19 @@ vi.mock('@/api/lightingApi', async () => {
 
 const library = vi.hoisted(() => ({ entries: [] as EffectLibraryEntry[] }))
 const pauseFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve() })))
+const resetFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve(arm.resetAnswer) })))
+const saveTemplate = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({}) })))
+/** What `useSpawningTemplate` answers — null for an effect no pad spawned. */
+const arm = vi.hoisted(() => ({ spawning: null as unknown, resetAnswer: null as unknown }))
 vi.mock('@/store/fixtureFx', () => ({
   useEffectLibraryQuery: () => ({ data: library.entries }),
   usePauseFxMutation: () => [pauseFx],
   useResumeFxMutation: () => [vi.fn()],
+  useResetFxToTemplateMutation: () => [resetFx, { isLoading: false }],
 }))
+vi.mock('@/store/templates', () => ({ useSaveTemplateMutation: () => [saveTemplate, { isLoading: false }] }))
+vi.mock('./useSpawningTemplate', () => ({ useSpawningTemplate: () => arm.spawning }))
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/store/groups', () => ({
   usePauseGroupFxMutation: () => [vi.fn()],
   useResumeGroupFxMutation: () => [vi.fn()],
@@ -132,6 +140,10 @@ beforeEach(() => {
   library.entries = [CIRCLE, PULSE]
   lookup.fixtures = [SPOT]
   updateFx.mockClear()
+  resetFx.mockClear()
+  saveTemplate.mockClear()
+  arm.spawning = null
+  arm.resetAnswer = null
 })
 
 afterEach(() => {
@@ -306,5 +318,84 @@ describe('FxEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(updateFx).not.toHaveBeenCalled()
+  })
+})
+
+describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, D20)', () => {
+  /** The *Big circle* template a pad pressed: Around, a 64-byte orbit, master 1. */
+  const BIG_CIRCLE = {
+    id: 7,
+    name: 'Big circle',
+    kind: 'effect',
+    effect: {
+      effectType: 'Circle',
+      category: 'position',
+      beatDivision: 1,
+      blendMode: 'ADDITIVE',
+      distribution: 'LINEAR',
+      phaseOffset: 0,
+      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      speedMasterUuid: null,
+      rateSpeedMasterUuid: null,
+    },
+  }
+  const padCircle = () => ({ ...aroundCircle(), templateId: 7, programmerLayerId: 3, cueId: null, programmerOwned: true })
+
+  beforeEach(() => {
+    arm.spawning = { template: BIG_CIRCLE, projectId: 1 }
+  })
+
+  it('is marked edited while it differs from its template, and Reset to template calls W5 in place of Revert', async () => {
+    arm.resetAnswer = padCircle()
+    render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
+    // As spawned, it is the template: no mark, and nothing to update or reset.
+    expect(screen.queryByText('edited')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reset to template' })).toBeDisabled()
+
+    const size = screen.getByRole('slider', { name: 'Pan size' })
+    fireEvent.change(size, { target: { value: '120' } })
+    fireEvent.pointerUp(size)
+    expect(screen.getByText('edited')).toBeTruthy()
+    // The edit is the instance's alone: it went to the instance and nowhere near the template.
+    expect(updateFx.mock.calls.at(-1)?.[0]).toBe(21)
+    expect(saveTemplate).not.toHaveBeenCalled()
+
+    updateFx.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to template' }))
+    await waitFor(() => expect(resetFx).toHaveBeenCalledWith({ id: 21 }))
+    // The desk put the template back on the instance: the draft reads it, and the mark goes.
+    await waitFor(() => expect(screen.queryByText('edited')).toBeNull())
+    expect(updateFx).not.toHaveBeenCalled()
+  })
+
+  it("Update template PUTs the instance's settings as the template's effect, then re-keys the instance", async () => {
+    arm.resetAnswer = { ...padCircle(), parameters: { ...padCircle().parameters, panRadius: '120' }, beatDivision: 2 }
+    render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
+    const size = screen.getByRole('slider', { name: 'Pan size' })
+    fireEvent.change(size, { target: { value: '120' } })
+    fireEvent.pointerUp(size)
+    fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update template' }))
+    await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(1))
+    expect(saveTemplate.mock.calls[0][0]).toEqual({
+      projectId: 1,
+      templateId: 7,
+      effect: {
+        ...BIG_CIRCLE.effect,
+        beatDivision: 2,
+        parameters: { panCenter: '128', tiltCenter: '128', panRadius: '120', tiltRadius: '64' },
+      },
+    })
+    // Then W5 on this instance: the PUT alone would respawn it at the stack's next recook.
+    await waitFor(() => expect(resetFx).toHaveBeenCalledWith({ id: 21 }))
+  })
+
+  it('keeps Revert for an effect no pad spawned', () => {
+    arm.spawning = null
+    render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Revert' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Update template' })).toBeNull()
   })
 })

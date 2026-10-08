@@ -80,6 +80,23 @@ vi.mock('../../store/fixtures', async (importOriginal) => ({
   useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
 vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
+/** Every `programmer.clearTarget` *Release n* sent — the frame the desk's W2 answers. */
+const releaseFrames = vi.hoisted(() => ({ calls: [] as unknown[][] }))
+vi.mock('@/api/lightingApi', async () => {
+  const { lightingApiMock } = await import('@/test/backendMock')
+  const base = lightingApiMock().lightingApi as Record<string, unknown>
+  const programmer = new Proxy(base.programmer as Record<string, unknown>, {
+    get: (target, prop: string) =>
+      prop === 'clearTarget'
+        ? (...args: unknown[]) => {
+            releaseFrames.calls.push(args)
+            return Promise.resolve({ targetType: args[0], targetKey: args[1], values: 1, effects: 0, partial: [] })
+          }
+        : target[prop],
+  })
+  return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'programmer' ? programmer : target[prop]) }) }
+})
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 vi.mock('./useLitFixtureKeys', () => ({ useLitFixtureKeys: () => new Set<string>() }))
 vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} }))
 // The plain lists' row C reads the press mask through the store; there is no Provider here, and
@@ -188,6 +205,7 @@ vi.mock('./FixturesTable', () => ({
 const { FixturesListContainer } = await import('./FixturesListContainer')
 
 beforeEach(() => {
+  releaseFrames.calls = []
   rowSelection.ids = new Set()
   rowSelection.select.mockClear()
   rowSelection.clear.mockClear()
@@ -502,5 +520,35 @@ describe('FixturesListContainer with the rail Colour tab open', () => {
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(rail.focusColour).not.toHaveBeenCalled()
     expect(table.keyboardOpens.map((open) => open.col)).toEqual(['colour'])
+  })
+})
+
+describe('Release over a row selection on the programmer (fixture-fx-sheets plan D18)', () => {
+  it('sends one programmer.clearTarget per selected row, at the programmer fade', async () => {
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    // A rows-only selection on the programmer: Release is row C's verb there, counting the rows.
+    fireEvent.click(screen.getByRole('button', { name: 'Release 2' }))
+    await vi.waitFor(() => expect(releaseFrames.calls).toHaveLength(2))
+    expect(releaseFrames.calls.map(([type, key]) => `${type}:${key}`)).toEqual(['fixture:a', 'fixture:b'])
+  })
+
+  it('is refused, with its reason, while a Look or template layer is focused — live in Output (Chris’s call)', () => {
+    rowSelection.ids = new Set(['fixture:a'])
+    programmerScope.value = { kind: 'layer', layerId: 3 } as ProgrammerScope
+    const { unmount } = render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    const release = screen.getByRole('button', { name: 'Release 1' })
+    expect(release).toBeDisabled()
+    expect(release.getAttribute('title')).toMatch(/Release clears Local/)
+    unmount()
+    programmerScope.value = { kind: 'output' } as ProgrammerScope
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    expect(screen.getByRole('button', { name: 'Release 1' })).toBeEnabled()
+  })
+
+  it('is not on the plain lists — the programmer is what it releases', () => {
+    rowSelection.ids = new Set(['fixture:a'])
+    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    expect(screen.queryByRole('button', { name: /^Release/ })).toBeNull()
   })
 })

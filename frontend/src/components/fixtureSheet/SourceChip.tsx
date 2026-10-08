@@ -58,6 +58,8 @@ export function SourceChip({
   group,
   propertyName,
   label,
+  cueLabel,
+  connected,
 }: {
   /** The row's source; over a pick, with how many heads it holds (D13). */
   source: RowSource | PickSource
@@ -69,6 +71,9 @@ export function SourceChip({
   propertyName: string
   /** The row's name, for the stack's title. */
   label: string
+  /** Outside a fixture sheet (the grid's cell editor), what its context would carry — see `LayerStack`. */
+  cueLabel?: (cueId: number) => string | undefined
+  connected?: boolean
 }) {
   const [open, setOpen] = useState(false)
   // *Programmer · 2 of 4* — how many of the picked heads the shown source holds (note 4).
@@ -83,6 +88,8 @@ export function SourceChip({
         group={group}
         propertyName={propertyName}
         label={label}
+        cueLabel={cueLabel}
+        connected={connected}
         trigger={
           <button
             type="button"

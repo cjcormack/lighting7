@@ -57,22 +57,22 @@ import { relinkBuskPage, showingBuskPage, unlinkBuskPage, useBuskPageFollow, use
  */
 
 export type BuskFocus = 'split' | 'pads' | 'rig'
-export type BuskSheet = 'none' | 'speed' | 'colour' | 'spread' | 'show'
+export type BuskSheet = 'none' | 'speed' | 'colour' | 'spread' | 'effects' | 'show'
 /** A tab the sheet can open onto — every sheet value but the fold. */
 export type BuskSheetTab = Exclude<BuskSheet, 'none'>
 
 export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
-export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread', 'show']
+export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread', 'effects', 'show']
 
 /**
- * The tabs that have landed — all four, since the busk-chrome plan's session A lit Show, the
- * phone runner in the sheet. The list stays the one gate rather than collapsing into
- * [BUSK_SHEETS]: Show landed exactly the way Colour and Spread did, and a fifth tab would too —
+ * The tabs that have landed — all five, since the fixture-fx-sheets plan's session 5 lit
+ * **Effects** (D20) between Spread and Show, the way Show had landed in the busk-chrome plan's
+ * session A. The list stays the one gate rather than collapsing into [BUSK_SHEETS]: a tab is
  * hidden here until its session, because a tab with an empty state is a promise the desk cannot
  * keep, and a fact naming a hidden tab draws the fold. Adding a tab here lights it in the sheet's
  * strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread', 'show']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread', 'effects', 'show']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_HEIGHT_KEY = 'busk.rigHeight'
