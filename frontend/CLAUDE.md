@@ -510,7 +510,7 @@ table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` �
 ### The fixture sheet
 
 **One body for a fixture or a group in every host** (fixture-fx-sheets plan sessions 2 and 4, D1–D13;
-`../docs/plans/fixture-fx-sheets-plan.md`, the boards in `../docs/plans/fixture-fx-sheets-design/`):
+`../docs/plans/completed/fixture-fx-sheets-plan.md`, the boards in `../docs/plans/completed/fixture-fx-sheets-design/`):
 `components/fixtureSheet/FixtureSheet` takes a `fixture` **or** a `group` and a `host` — `popup`
 (`FixtureDetailModal`, the 512px Radix sheet the list, the grid's Info, the overview panel and Channels
 open; and `GroupDetailModal`, the **group sheet**), `stage` (`StageFixtureControlPanel`, 380px, with

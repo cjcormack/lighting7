@@ -1,9 +1,11 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–5 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`, `2664955`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> **Document status: COMPLETE, 2026-10-08 — all six sessions shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`, `2664955`, `887edc2`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
 > (§10). Session 1 (the desk's half), session 2 (the sheet), session 3 (the tray and the live
-> editor), session 4 (heads and groups) and session 5 (the Busk and Programmer views) are done;
-> session 6 is not started.
+> editor), session 4 (heads and groups), session 5 (the Busk and Programmer views) and session 6
+> (the remaining hosts: the phone, the cards' corner) are done. The plan and its design record
+> moved to `completed/` with session 6; §8's follow-ups are in `../followups.md` and §9's rig checks
+> in `../manual-validation.md` (`FU-MANUAL-FIXTURE-FX-SHEETS`).
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -629,7 +631,7 @@ Where session 5 departed from the bullets above, and why:
 - **The pad face's *around* comes last** (*Circle · ½ · M1 · around*, the board's order), so a
   narrow pad's line truncates it first; the template sheet's Value column says it in full.
 
-### Session 6 — the remaining hosts (frontend)
+### ~~Session 6 — the remaining hosts (frontend)~~ — done, `887edc2`
 
 - **The phone (D14).** The Stage route's phone arm mounts `FixtureSheet` in the bottom-sheet form
   with three heights. A landscape phone gets the side form.

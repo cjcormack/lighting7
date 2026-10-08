@@ -88,7 +88,7 @@ over a set position orbits it and is edited live, a head pick and a group's *All
 say, the busk view's pad effects carry *edited* and Update template, and a phone gets the sheet.
 
 **Why it is here**: the fixture-fx-sheets plan's six sessions were driven in a browser
-(`docs/plans/fixture-fx-sheets-plan.md` §9 lists these five checks, one per session that changed
+(`docs/plans/completed/fixture-fx-sheets-plan.md` §9 lists these five checks, one per session that changed
 what an operator sees), but each needs real heads moving — an orbit around a set position, a Pulse
 running in phase after ×, four pixels of a bar changing alone — and the last a real iPhone: Safari's
 toolbar, the home indicator and the keyboard over the bottom sheet are the device's own. Session 6's
@@ -2135,7 +2135,7 @@ from "it ran and stayed attached to the right thing".
    instance keeps its old division until the pad is re-pressed **or the programmer's stack next
    recooks for any reason** (a layer patch, a move, another pad) — which respawns it at the new
    division with its phase restarted (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look
-   effects; `fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip click never
+   effects; `completed/fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip click never
    follows the template at all.
 4. In the programmer, ⌥click the chip with two heads selected, then Record → the cue holds a
    template *layer*; GO on that cue runs the effect; the cue editor's layer panel shows tempo and
