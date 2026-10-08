@@ -4,7 +4,7 @@ import { useGetChannelParkStateQuery } from "../store/park"
 /**
  * Extract all ChannelRef values from a property descriptor.
  */
-function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] {
+export function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] {
   switch (property.type) {
     case "slider":
       return [property.channel]

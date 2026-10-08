@@ -18,6 +18,7 @@ export function SheetField({
   label,
   unit,
   value,
+  mixed,
   min,
   max,
   step,
@@ -28,6 +29,8 @@ export function SheetField({
   label: string
   unit?: string
   value: number
+  /** The heads hold different values: the range, as the empty box's placeholder (`EditorField`). */
+  mixed?: string
   min: number
   max: number
   step?: number
@@ -53,6 +56,7 @@ export function SheetField({
         label={label}
         unit={unit}
         value={value}
+        mixed={mixed}
         min={min}
         max={max}
         step={step}

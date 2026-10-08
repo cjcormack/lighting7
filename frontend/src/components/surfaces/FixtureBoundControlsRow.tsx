@@ -3,6 +3,7 @@ import { useParams } from "react-router"
 import { useSurfaceBindingsQuery } from "@/store/surfaces"
 import { BoundControlBadge } from "./BoundControlBadge"
 import { effectiveTarget } from "./targetUtils"
+import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
 
 /**
  * Renders a small chip row listing every surface-binding whose target is a
@@ -36,6 +37,49 @@ export function FixtureBoundControlsRow({ fixtureKey }: { fixtureKey: string }) 
             match={{ type: "fixtureProperty", fixtureKey, propertyName }}
             preFiltered={list}
           />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The group sheet's twin: every surface binding whose target is a `groupProperty` on this group —
+ * the badges `GroupCard` drew beside each group visualiser's name until the group sheet replaced
+ * them (fixture-fx-sheets plan session 4). Silent when nothing is bound.
+ */
+export function GroupBoundControlsRow({ groupName }: { groupName: string }) {
+  const { projectId } = useParams()
+  const projectIdNum = Number(projectId)
+  const { data: bindings } = useSurfaceBindingsQuery(projectIdNum, { skip: !projectIdNum })
+
+  const byProperty = useMemo(() => {
+    const map = new Map<string, typeof bindings>()
+    for (const b of bindings ?? []) {
+      const eff = effectiveTarget(b.target)
+      // A strip on the group drives its dimmer, as `matchesBindingTarget` reads it for the badge.
+      const propertyName =
+        eff.type === "groupProperty" && eff.groupName === groupName
+          ? eff.propertyName
+          : eff.type === "strip" && eff.target.type === "group" && eff.target.key === groupName
+            ? STRIP_FADER_PROPERTY
+            : null
+      if (propertyName == null) continue
+      const list = map.get(propertyName) ?? []
+      list.push(b)
+      map.set(propertyName, list)
+    }
+    return map
+  }, [bindings, groupName])
+
+  if (byProperty.size === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 -mt-1">
+      {Array.from(byProperty.entries()).map(([propertyName, list]) => (
+        <div key={propertyName} className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground font-mono">{propertyName}:</span>
+          <BoundControlBadge match={{ type: "groupProperty", groupName, propertyName }} preFiltered={list} />
         </div>
       ))}
     </div>

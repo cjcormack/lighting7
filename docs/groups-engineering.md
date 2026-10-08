@@ -605,9 +605,28 @@ transaction.commit()
 
 ### Frontend Integration
 
-The frontend Properties dialog in "By Group" view uses WebSocket `updateChannel` messages
-to set values. When editing a group property, it sends individual channel updates for each
-member fixture, which the backend processes and broadcasts as `channelState` updates.
+A group is edited on the **group sheet** — the fixture sheet's body on a group (fixture-fx-sheets
+plan D1, D13; lighting7 `frontend/CLAUDE.md` §"The fixture sheet"), in `GroupDetailModal` and on
+each `GroupCard`. A strip of member pips picks what the rows edit, and every write is a programmer
+write, never a raw channel:
+
+- **All** sends one group-targeted programmer op (`programmer.set` / `setColour` / `setPosition`
+  with `targetType: "group"`). `ProgrammerWriter.writeGroupProperty` fans it to the members and
+  tags each slot with the group as `sourceGroup`, which is what lets Record write the value back as
+  one group row.
+- **A subset of members** sends one fixture-targeted op per member, each carrying the group as
+  `sourceGroup` (`validateSourceGroup` drops it unless the group really contains the fixture), so
+  Record can still tell the values came through the group.
+- A position is resolved per member from the operator's degrees, and stays one group op only where
+  every member lands on the same bytes; a colour head's level with no dimmer scales each member's
+  own colour, so it is always per member.
+
+The rows a group offers are the properties every picked member has, matched by name and type — the
+rule `generateGroupPropertyDescriptors` applies — read from the members' own fixture descriptors. A
+group property descriptor's element-group half (a group of multi-head fixtures' *all heads*
+properties) is not offered there: a group op resolves each member's fixture-level property, so on a
+member whose colour lives on its heads it resolves no channels. Each member's heads are edited on
+that member's own sheet.
 
 ## WebSocket Messages
 

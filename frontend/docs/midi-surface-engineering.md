@@ -221,10 +221,11 @@ no layout.
 
 ## `hooks/useTargetProperties.ts`
 
-Closes `FU-FE-USE-TARGET-PROPERTIES`, and lands as **two** exports rather than one hook, because the
-consumers want different halves: `categoriseProperties` (pure, generic, narrowing) for the surfaces
-that *render* properties and need the descriptors, and `useTargetProperties` / `useRigProperties`
-(flat) for the surfaces that *bind* them and need names plus "can a fader drive this".
+Closes `FU-FE-USE-TARGET-PROPERTIES`: `useTargetProperties` / `useRigProperties` (flat) for the
+surfaces that *bind* properties and need names plus "can a fader drive this". It landed beside a
+second export, `categoriseProperties`, for the surfaces that *rendered* group properties; its last
+consumer, `GroupCard`'s group visualisers, became the fixture sheet's rows (fixture-fx-sheets plan
+session 4), and it went with them.
 
 `continuous` mirrors `PropertyChannelResolver`: sliders and colours only. A position pair or a
 setting on a fader would be a control that does nothing, so the library does not offer one.

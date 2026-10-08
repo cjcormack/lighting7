@@ -321,48 +321,6 @@ export function useUpdateChannel() {
 }
 
 /**
- * Update all colour channels of a fixture-level colour property. In look mode writes go to the
- * local draft keyed by `property.name`, with W/A/UV serialised into the extended-colour suffix.
- * Mirrors [useUpdateGroupColour].
- */
-export function useUpdateFixtureColour(
-  property: ColourPropertyDescriptor,
-  fixtureKey: string | undefined,
-) {
-  return useCallback(
-    (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => {
-      if (fixtureKey) {
-        // One programmer entry for the whole colour, extended channels included. Writing
-        // the components separately would make each one a distinct write that freezes its
-        // siblings, which is what the raw-channel shim has to do and what we're avoiding.
-        lightingApi.programmer.setColour('fixture', fixtureKey, property.name, {
-          r,
-          g,
-          b,
-          w: property.whiteChannel ? w : undefined,
-          a: property.amberChannel ? a : undefined,
-          uv: property.uvChannel ? uv : undefined,
-        })
-        return
-      }
-      lightingApi.channels.update(property.redChannel.universe, property.redChannel.channelNo, r)
-      lightingApi.channels.update(property.greenChannel.universe, property.greenChannel.channelNo, g)
-      lightingApi.channels.update(property.blueChannel.universe, property.blueChannel.channelNo, b)
-      if (property.whiteChannel && w !== undefined) {
-        lightingApi.channels.update(property.whiteChannel.universe, property.whiteChannel.channelNo, w)
-      }
-      if (property.amberChannel && a !== undefined) {
-        lightingApi.channels.update(property.amberChannel.universe, property.amberChannel.channelNo, a)
-      }
-      if (property.uvChannel && uv !== undefined) {
-        lightingApi.channels.update(property.uvChannel.universe, property.uvChannel.channelNo, uv)
-      }
-    },
-    [fixtureKey, property]
-  )
-}
-
-/**
  * Hook to get the colourPreview from a setting's current option (if it has one)
  */
 export function useSettingColourPreview(property: SettingPropertyDescriptor): string | undefined {

@@ -16,9 +16,9 @@ import { ColourPickerPopover } from './ColourPickerPopover'
  *    two and every emitter alone. Folding it into the picker's handler would zero the emitters on
  *    every keystroke.
  *
- * And the fields are **opt-in**: this popover has three callers, and only the grid cell's editor
- * asks for them — the second block pins that, with the visualisers' picker-only form (no footer,
- * no read-out) unchanged by the editor kit.
+ * And the fields are **opt-in**: only the grid cell's editor asks for them — the second block pins
+ * the picker-only form (no footer, no read-out) the property visualisers used, kept as the default
+ * though fixture-fx-sheets session 4 deleted the last of them.
  */
 function open(props: Partial<React.ComponentProps<typeof ColourPickerPopover>> = {}) {
   const onColourChange = vi.fn()
@@ -128,14 +128,14 @@ describe('ColourPickerPopover without channelFields', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   /**
-   * `GroupPropertyVisualizers` draws its own always-visible (as `PropertyVisualizers` did until the fixture sheet)
-   * `ColourChannelSlider` bank for every channel beside the same swatch. A typed field in here
-   * would be a second live editor for the same byte, opened over the first — so the default is the
-   * shape those two have always had: the `R:… G:… B:…` readout and the emitter sliders.
+   * The property visualisers drew their own always-visible `ColourChannelSlider` bank beside the
+   * same swatch, where a typed field in here would have been a second live editor for the same byte
+   * — so the default is the shape they always had: the `R:… G:… B:…` readout and the emitter
+   * sliders. They are gone (fixture-fx-sheets sessions 2 and 4); the default stays opt-in.
    */
   it('draws the readout and no typed fields for a caller that does not ask for them', () => {
     open({ channelFields: false, footer: false, counts: false, hasWhiteChannel: true, w: 40 })
-    // The picker-only form: no footer verbs, no read-out line — the visualisers' bank is both.
+    // The picker-only form: no footer verbs, no read-out line — the caller's own bank is both.
     expect(document.querySelector('[data-editor-footer]')).toBeNull()
     expect(document.querySelector('[data-editor-readout]')).toBeNull()
     expect(screen.queryByLabelText('R')).toBeNull()

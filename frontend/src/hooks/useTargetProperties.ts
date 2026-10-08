@@ -4,17 +4,15 @@ import { useGroupPropertiesQuery } from '@/store/groups'
 import type { GroupPropertyDescriptor } from '@/api/groupsApi'
 
 /**
- * Fixture and group property lookup, in the two shapes surfaces actually want.
+ * Fixture and group property lookup, in the shape the binding surfaces want.
  *
  * This closes `FU-FE-USE-TARGET-PROPERTIES`, whose trigger — a further consumer of the same
  * fetch-and-categorise — fired with the MIDI surface library's per-target property chips. The
- * follow-up asked for one hook; there are **two exports**, because the consumers want different
- * halves of the same data and folding them together would lose one:
+ * follow-up asked for one hook. A second export, `categoriseProperties`, bucketed descriptors for
+ * the surfaces that *rendered* group properties; its last consumer, `GroupCard`'s group
+ * visualisers, became the fixture sheet's rows (fixture-fx-sheets plan session 4), which group by
+ * `lib/attributeFamily.ts`'s families instead, so it went.
  *
- * - [categoriseProperties] is pure and generic over both descriptor unions. The surfaces that
- *   *render* properties — `GroupCard` (and through it `GroupDetailModal`) — need
- *   the descriptors themselves, `min` / `max` and channel refs included, because they draw live
- *   controls. All they ever duplicated was the bucketing, in two byte-identical copies.
  * - [useTargetProperties] is the flat, uniform list: a name, a label, and whether the property can
  *   be driven from a fader or encoder at all. The surfaces that *bind* properties never touch a
  *   channel — they mint a `fixtureProperty` / `groupProperty` / `selectionProperty` target and let
@@ -49,67 +47,6 @@ export interface AvailableProperty {
 }
 
 type AnyPropertyDescriptor = PropertyDescriptor | GroupPropertyDescriptor
-
-/**
- * The buckets every property-rendering surface splits into, each narrowed to its own descriptor.
- *
- * `Extract` rather than a bare `P[]`: the callers hand these straight to controls that need the
- * shape (`GroupSliderControl` wants `memberChannels`, the colour visualiser wants the emitter
- * channels), and the hand-rolled copies this replaces narrowed by `.filter(p => p.type === …)`.
- * Returning the union would have pushed a cast into every call site.
- */
-export interface CategorisedProperties<P extends AnyPropertyDescriptor> {
-  colour: Extract<P, { type: 'colour' }>[]
-  position: Extract<P, { type: 'position' }>[]
-  /** Sliders whose category is `dimmer` — drawn first and largest by every caller. */
-  dimmer: Extract<P, { type: 'slider' }>[]
-  /** Every other slider. */
-  slider: Extract<P, { type: 'slider' }>[]
-  setting: Extract<P, { type: 'setting' }>[]
-}
-
-/**
- * Split properties into the five buckets the fixture and group views draw.
- *
- * Generic over the descriptor rather than narrowed to a union of both, so a caller keeps the exact
- * type it passed in: `GroupCard` gets `GroupSliderPropertyDescriptor[]` out of `.dimmer` and can
- * hand it straight to the control that needs `memberChannels`.
- */
-export function categoriseProperties<P extends AnyPropertyDescriptor>(
-  properties: readonly P[] | undefined,
-): CategorisedProperties<P> {
-  const result: CategorisedProperties<P> = {
-    colour: [],
-    position: [],
-    dimmer: [],
-    slider: [],
-    setting: [],
-  }
-  // `switch` narrows `property.type` but cannot narrow `P` itself, so each push asserts what the
-  // discriminant has already established. The assertion is at the one place rather than at four
-  // call sites, which is the whole point of the `Extract` return type.
-  for (const property of properties ?? []) {
-    switch (property.type) {
-      case 'colour':
-        result.colour.push(property as Extract<P, { type: 'colour' }>)
-        break
-      case 'position':
-        result.position.push(property as Extract<P, { type: 'position' }>)
-        break
-      case 'slider':
-        if (property.category === 'dimmer') {
-          result.dimmer.push(property as Extract<P, { type: 'slider' }>)
-        } else {
-          result.slider.push(property as Extract<P, { type: 'slider' }>)
-        }
-        break
-      case 'setting':
-        result.setting.push(property as Extract<P, { type: 'setting' }>)
-        break
-    }
-  }
-  return result
-}
 
 function isContinuous(type: TargetPropertyType): boolean {
   return type === 'slider' || type === 'colour'

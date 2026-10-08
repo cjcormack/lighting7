@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { Layers, LayoutGrid, MoreHorizontal, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ import type { FixturePatch } from '@/api/patchApi'
 import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRigApi'
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
 import { FixtureAppearanceSource, type FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
-import { useLongPress } from '@/hooks/useLongPress'
+import { usePipRun } from '@/hooks/usePipRun'
 import { rigTileId, tileOwnName, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
 import { LiveAppearanceReporter } from '@/lib/liveAppearance'
 import type { EffectPresence } from './buskingTypes'
@@ -494,14 +494,12 @@ function LiveBar({
   )
 }
 
-/** How long a finger must hold still on a pip before a drag across the row is a run — the marquee's number. */
-const PIP_HOLD_MS = 500
-
 /**
  * The pips: one checkbox-role button per cell, and the run gesture across them — see the file
- * note for the rules. The row takes pointer capture for a live run, so every pip the pointer
- * crosses is found by `elementFromPoint`; a test dispatching a `pointermove` at a pip reaches the
- * same code through the event's own target.
+ * note for the rules, which `usePipRun` holds (the fixture sheet's head strip shares them). The row
+ * takes pointer capture for a live run, so every pip the pointer crosses is found by
+ * `elementFromPoint`; a test dispatching a `pointermove` at a pip reaches the same code through the
+ * event's own target.
  */
 function Pips({
   pips,
@@ -520,129 +518,18 @@ function Pips({
   inert: boolean
   onPressCell: (element: BuskRigElement) => void
 }) {
-  const rowRef = useRef<HTMLSpanElement | null>(null)
-  /** The live run: the pointer that owns it and the cells it has already toggled. */
-  const run = useRef<{ pointerId: number; toggled: Set<string> } | null>(null)
-  /** A touch press waiting for its hold, and the pip it landed on. */
-  const pending = useRef<{ pointerId: number; key: string | null } | null>(null)
-  /** Set by a run's release: the click the browser is about to deliver is not a second toggle. */
-  const swallowClick = useRef(false)
-  /** The pip under a live touch run — the one drawn at 44px. */
-  const [hot, setHot] = useState<string | null>(null)
-  const touchGuard = useRef<((e: TouchEvent) => void) | null>(null)
-
-  const pressRef = useRef(onPressCell)
-  pressRef.current = onPressCell
   const pipsRef = useRef(pips)
   pipsRef.current = pips
-
-  const releaseTouchGuard = useCallback(() => {
-    if (touchGuard.current) {
-      window.removeEventListener('touchmove', touchGuard.current)
-      touchGuard.current = null
-    }
-  }, [])
-  useEffect(() => releaseTouchGuard, [releaseTouchGuard])
-
-  const toggle = useCallback((key: string | null) => {
-    const live = run.current
-    if (key == null || live == null || live.toggled.has(key)) return
-    const cell = pipsRef.current.find((pip) => pip.key === key)
-    if (cell == null) return
-    live.toggled.add(key)
-    pressRef.current(cell)
-  }, [])
-
-  const start = useCallback(
-    (pointerId: number, key: string | null, held: boolean) => {
-      run.current = { pointerId, toggled: new Set() }
-      // A finger's run is followed off the row and the browser's pan is refused for as long as
-      // it lasts (`useCellMarquee`'s `touchmove` guard, for its reason).
-      if (held) {
-        const guard = (e: TouchEvent) => e.preventDefault()
-        window.addEventListener('touchmove', guard, { passive: false })
-        touchGuard.current = guard
-        setHot(key)
-      }
-      try {
-        rowRef.current?.setPointerCapture(pointerId)
-      } catch {
-        // jsdom has no pointer capture; the browser always does.
-      }
-      toggle(key)
-    },
-    [toggle],
-  )
-
-  const end = useCallback(() => {
-    if (run.current != null) {
-      run.current = null
-      // The click this release generates lands on a pip (or the row, with capture) in the same
-      // task or the next; a click that never comes must not eat the next keyboard activation.
-      swallowClick.current = true
-      setTimeout(() => {
-        swallowClick.current = false
-      }, 350)
-    }
-    pending.current = null
-    setHot(null)
-    releaseTouchGuard()
-  }, [releaseTouchGuard])
-
-  // The touch arm: armed by time, never by distance, so a finger that moves before the hold is the
-  // browser's scroll and `useLongPress` cancels the hold on its travel.
-  const { handlers: hold } = useLongPress({
-    delayMs: PIP_HOLD_MS,
-    onLongPress: () => {
-      const press = pending.current
-      if (press == null || run.current != null) return
-      start(press.pointerId, press.key, true)
+  const pressRef = useRef(onPressCell)
+  pressRef.current = onPressCell
+  const { rowRef, hot, rowHandlers } = usePipRun<HTMLSpanElement>({
+    attribute: 'data-rig-pip',
+    inert,
+    onToggle: (key) => {
+      const cell = pipsRef.current.find((pip) => pip.key === key)
+      if (cell != null) pressRef.current(cell)
     },
   })
-
-  const pipAt = (e: React.PointerEvent): string | null => {
-    const direct = (e.target as Element | null)?.closest?.('[data-rig-pip]')
-    const under = direct ?? document.elementFromPoint?.(e.clientX, e.clientY)?.closest('[data-rig-pip]') ?? null
-    return under?.getAttribute('data-rig-pip') ?? null
-  }
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (inert || e.button !== 0 || run.current != null || pending.current != null) return
-    // The tile's own press must not see this: the row overlays the button.
-    e.stopPropagation()
-    const key = pipAt(e)
-    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
-      pending.current = { pointerId: e.pointerId, key }
-      hold.onPointerDown(e)
-      return
-    }
-    start(e.pointerId, key, false)
-  }
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const live = run.current
-    if (live != null) {
-      if (e.pointerId !== live.pointerId) return
-      const key = pipAt(e)
-      if (touchGuard.current) setHot(key)
-      toggle(key)
-      return
-    }
-    if (pending.current?.pointerId === e.pointerId) hold.onPointerMove(e)
-  }
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (run.current != null && e.pointerId !== run.current.pointerId) return
-    if (pending.current != null && pending.current.pointerId !== e.pointerId) return
-    hold.onPointerUp()
-    end()
-  }
-
-  const onPointerCancel = (e: React.PointerEvent) => {
-    if (run.current != null && e.pointerId !== run.current.pointerId) return
-    hold.onPointerCancel()
-    end()
-  }
 
   return (
     <span
@@ -654,16 +541,7 @@ function Pips({
         'absolute right-3.5 bottom-[5px] left-3.5 flex items-end gap-0.5',
         inert ? 'pointer-events-none' : 'touch-manipulation',
       )}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onClickCapture={(e) => {
-        if (!swallowClick.current) return
-        swallowClick.current = false
-        e.preventDefault()
-        e.stopPropagation()
-      }}
+      {...rowHandlers}
     >
       {pips.map((cell) => {
         const index = allCells.findIndex((candidate) => candidate.key === cell.key)

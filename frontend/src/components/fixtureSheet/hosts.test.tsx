@@ -5,15 +5,16 @@ import type { ReactNode } from 'react'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
-const sheets = vi.hoisted(() => ({ props: [] as { host: string; aim?: ReactNode; focus?: ReactNode }[] }))
+type SheetProps = { host: string; aim?: ReactNode; focus?: ReactNode; group?: { name: string }; onOpenMember?: unknown }
+const sheets = vi.hoisted(() => ({ props: [] as SheetProps[] }))
 vi.mock('./FixtureSheet', () => ({
-  FixtureSheet: (props: { host: string; aim?: ReactNode; focus?: ReactNode }) => {
+  FixtureSheet: (props: SheetProps) => {
     sheets.props.push(props)
     return <div data-testid="sheet">{props.aim}</div>
   },
 }))
 
-import { chan, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import { chan, groupSummary, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
 const MOVER = makeFixture('spot-3', [
   sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540 }),
@@ -34,9 +35,17 @@ vi.mock('../stage3d/StageAimControls', async (importOriginal) => ({
   StageAimControls: () => <div data-testid="aim-body" />,
 }))
 vi.mock('../stage3d/StageFocusPanel', () => ({ StageFocusPanel: () => null }))
+vi.mock('../../store/groups', () => ({
+  useGroupListQuery: () => ({ data: [groupSummary('front', 2)] }),
+  useGroupQuery: () => ({ data: { members: [] } }),
+}))
+vi.mock('../fx/FxBadge', () => ({ FxBadge: () => null }))
+vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => <button type="button">Locate</button> }))
 
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { StageFixtureControlPanel } from '../stage3d/StageFixtureControlPanel'
+import { GroupDetailModal } from '../fixtures/GroupDetailModal'
+import { GroupCard } from '../groups/GroupCard'
 
 /** The two hosts session 2 moves onto the sheet (§3.3, §4): neither draws an Edit toggle any more. */
 describe('fixture sheet hosts', () => {
@@ -62,5 +71,24 @@ describe('fixture sheet hosts', () => {
     sheets.props = []
     render(<StageFixtureControlPanel patchKey="spot-3" projectId={1} canAim={false} onClose={() => {}} />)
     expect(sheets.props.at(-1)?.aim).toBeUndefined()
+  })
+})
+
+/** Session 4's two group hosts: the group sheet is the fixture sheet's body on a group (D1). */
+describe('group sheet hosts', () => {
+  it('the group sheet mounts the sheet on the group as a popup, its members opening their own', () => {
+    sheets.props = []
+    render(<GroupDetailModal groupName="front" onClose={() => {}} />)
+    expect(screen.getByTestId('sheet')).toBeTruthy()
+    expect(sheets.props.at(-1)).toMatchObject({ host: 'popup', group: { name: 'front' } })
+    expect(typeof sheets.props.at(-1)?.onOpenMember).toBe('function')
+    expect(screen.queryByRole('button', { name: /^(edit|done)$/i })).toBeNull()
+  })
+
+  it('a group card mounts the card host, with no Edit toggle', () => {
+    sheets.props = []
+    render(<GroupCard group={groupSummary('front', 2)} onFixtureClick={() => {}} />)
+    expect(sheets.props.at(-1)).toMatchObject({ host: 'card', group: { name: 'front' } })
+    expect(screen.queryByRole('button', { name: /^(edit|done)$/i })).toBeNull()
   })
 })

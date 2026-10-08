@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Crosshair } from "lucide-react"
 import { useLocate } from "@/hooks/useLocate"
-import type { LocateTargetType } from "@/store/locate"
+import { useLocateStateQuery, useToggleLocateMutation, type LocateTargetType } from "@/store/locate"
 
 /**
  * Toggle Locate on a fixture or group: centre pan/tilt and force an open white beam so
@@ -48,6 +48,57 @@ export function LocateButton({
           >
             <Crosshair className="size-3.5" />
             {!iconOnly && (isActive ? " Located" : " Locate")}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * Locate over several targets at once — the fixture sheet's header acting on its head strip's pick
+ * (HeadsGroups board, note 1: "Locate and Highlight act on the pick"): the picked heads of a fixture,
+ * or the picked members of a group, each its own locate target. Lit while every one is located; a
+ * press locates the ones that are not, or releases them all when every one is.
+ */
+export function LocateTargetsButton({
+  targets,
+  name,
+}: {
+  targets: readonly { type: LocateTargetType; key: string }[]
+  name: string
+}) {
+  const { data, isFetching } = useLocateStateQuery()
+  const [toggleLocate, { isLoading }] = useToggleLocateMutation()
+  const located = (t: { type: LocateTargetType; key: string }) =>
+    data?.targets.some((l) => l.type === t.type && l.key === t.key) ?? false
+  const isActive = targets.length > 0 && targets.every(located)
+  const tooltip = isActive ? `Release locate on ${name}` : `Locate ${name}: white beam at centre position`
+  const toggle = () => {
+    for (const t of targets) {
+      if (isActive || !located(t)) {
+        toggleLocate({ type: t.type, key: t.key })
+          .unwrap()
+          .catch((err) => console.error(`Locate toggle failed for ${t.type} '${t.key}'`, err))
+      }
+    }
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            variant={isActive ? "default" : "outline"}
+            size="icon"
+            // Busy until the invalidated refetch lands, as `useLocate` is, so a quick second press
+            // does not toggle against a stale state.
+            disabled={isLoading || isFetching || targets.length === 0}
+            aria-label={tooltip}
+            className={[isActive ? "bg-sky-500 hover:bg-sky-600 text-white" : "", "size-8"].filter(Boolean).join(" ")}
+            onClick={toggle}
+          >
+            <Crosshair className="size-3.5" />
           </Button>
         </span>
       </TooltipTrigger>

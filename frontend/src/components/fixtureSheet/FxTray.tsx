@@ -14,16 +14,31 @@ import { useIsDeskConnected } from '@/store/status'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import { FxEditor } from '../fx/FxEditor'
-import { FxPicker, type AuditionedEffect } from '../fx/FxPicker'
+import { FxPicker, type AuditionedEffect, type FxTarget } from '../fx/FxPicker'
 import { LookTogglePicker } from '../fx/LookTogglePicker'
 import type { PickerFamily } from '../fx/fxEditorModel'
-import { getElementModeLabel } from '../fx/fxConstants'
+import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
 import { fixtureHeadKeys } from './useRelease'
 import { useEffectDetail } from './effectLabels'
 import { effectsReaching } from './rowSource'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
+
+/**
+ * The head strip's pick, which the tray follows (fixture-fx-sheets plan D13, note 5): it lists what
+ * reaches the picked heads or members, and **+ Effect** starts there.
+ */
+export interface TrayPick {
+  /** `effectsReaching`'s arguments for the pick — its keys (heads, and their fixture) and their groups. */
+  reach: { keys: readonly string[]; groups: readonly string[] }
+  /** Where **+ Effect** starts — the picker's target and any element filter — or why it cannot. */
+  start: { target: FxTarget; elementFilter?: string } | { reason: string }
+  /** An effect on one head or member names it: `on Head 3`. */
+  nameOf: (key: string) => string | undefined
+  /** The empty list's words — `these 4 heads`. */
+  noun: string
+}
 
 /** How many chips the folded tray draws before *+n*. */
 const FOLDED_CHIPS = 3
@@ -59,22 +74,35 @@ export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, ta
  */
 export function FxTray({
   target,
+  pick,
   initialFamily,
   preferredProperty,
 }: {
   target: FxTrayTarget
+  /** The strip's pick; absent, the tray is the whole target's. */
+  pick?: TrayPick
   /** The family of the row open on the sheet, which the picker opens on. */
   initialFamily?: PickerFamily | null
   /** That row's property, preferred over an effect's first compatible one. */
   preferredProperty?: string | null
 }) {
   const { data: all } = useActiveEffectsQuery()
-  const effects = useMemo(() => effectsOnTarget(all ?? EMPTY, target), [all, target])
+  const effects = useMemo(
+    () => (pick != null ? effectsReaching(all ?? EMPTY, pick.reach.keys, pick.reach.groups) : effectsOnTarget(all ?? EMPTY, target)),
+    [all, target, pick],
+  )
   const connected = useIsDeskConnected()
   const effectDetail = useEffectDetail()
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [auditioned, setAuditioned] = useState<AuditionedEffect | null>(null)
+  // The auditioned effect belongs to the start it was made on: a new pick is a new picker session,
+  // so a tap there starts afresh rather than swapping an effect on the heads picked before.
+  const start = pick?.start
+  const startKey =
+    start == null ? 'whole' : 'reason' in start ? null : `${start.target.type === 'group' ? start.target.group.name : start.target.fixture.key}\u0000${start.elementFilter ?? ''}`
+  const [audition, setAudition] = useState<{ startKey: string | null; effect: AuditionedEffect } | null>(null)
+  const auditioned = audition != null && audition.startKey === startKey ? audition.effect : null
+  const setAuditioned = (effect: AuditionedEffect | null) => setAudition(effect == null ? null : { startKey, effect })
   const [editingId, setEditingId] = useState<number | null>(null)
   const editingLive = editingId != null ? effects.find((e) => e.id === editingId) ?? null : null
 
@@ -122,11 +150,36 @@ export function FxTray({
     if (editingId === e.id) setEditingId(null)
   }
 
+  // The Look picker follows the pick by + Effect's rule (Chris's call, session 4): the whole target
+  // on *All*, the one head or member when one is picked — a Look press takes a head's key as a target
+  // — and absent for any other pick, where a press would land on more than the rows below edit. A
+  // filtered start (*first half*) has no one target for a Look either.
+  const lookFrom: FxTarget | null =
+    start == null
+      ? target.type === 'fixture'
+        ? { type: 'fixture', fixture: target.fixture }
+        : { type: 'group', group: target.group }
+      : 'reason' in start || start.elementFilter != null
+        ? null
+        : start.target
   const lookTarget =
-    target.type === 'fixture'
-      ? { targetType: 'fixture' as const, targetKey: target.fixture.key, compatibleLookIds: target.fixture.compatibleLookIds }
-      : { targetType: 'group' as const, targetKey: target.group.name, compatibleLookIds: target.group.compatibleLookIds }
-  const addTarget = target.type === 'fixture' ? { type: 'fixture' as const, fixture: target.fixture } : { type: 'group' as const, group: target.group }
+    lookFrom == null
+      ? null
+      : lookFrom.type === 'fixture'
+        ? { targetType: 'fixture' as const, targetKey: lookFrom.fixture.key, compatibleLookIds: lookFrom.fixture.compatibleLookIds }
+        : { targetType: 'group' as const, targetKey: lookFrom.group.name, compatibleLookIds: lookFrom.group.compatibleLookIds }
+  const addTarget: FxTarget | null =
+    start == null
+      ? target.type === 'fixture'
+        ? { type: 'fixture', fixture: target.fixture }
+        : { type: 'group', group: target.group }
+      : 'reason' in start
+        ? null
+        : start.target
+  const cannotStart = start != null && 'reason' in start ? start.reason : null
+  const ownKey = target.type === 'fixture' ? target.fixture.key : null
+  // An effect on one head or one member, rather than on the sheet's own target, says which.
+  const onWhom = (e: ActiveEffect) => (e.isGroupTarget || e.targetKey === ownKey ? null : (pick?.nameOf(e.targetKey) ?? null))
 
   const shown = effects.slice(0, FOLDED_CHIPS)
   const more = effects.length - shown.length
@@ -187,12 +240,13 @@ export function FxTray({
         {open && !adding && <span className="flex-1" />}
         {!(open && adding) && (
           <>
-            <LookTogglePicker {...lookTarget} />
+            {lookTarget != null && <LookTogglePicker key={lookTarget.targetKey} {...lookTarget} />}
             <Button
               variant="outline"
               size="sm"
               className="h-6 shrink-0 gap-1 px-2 text-[11px]"
-              disabled={!connected}
+              disabled={!connected || cannotStart != null}
+              title={cannotStart ?? undefined}
               onClick={startAdding}
             >
               <Plus className="size-3" />
@@ -210,10 +264,18 @@ export function FxTray({
           {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
         </button>
       </div>
-      {open && adding && (
+      {open && adding && cannotStart != null && (
+        // The pick moved under the picker to one no single effect can start on: say why, in place.
+        <p className="px-3 py-3 text-xs text-muted-foreground" data-fx-tray-list>
+          {cannotStart}.
+        </p>
+      )}
+      {open && adding && addTarget != null && (
         <div className="min-h-0 flex-1 overflow-y-auto p-2.5" data-fx-tray-list>
           <FxPicker
+            key={startKey ?? ''}
             target={addTarget}
+            elementFilter={start != null && !('reason' in start) ? start.elementFilter : undefined}
             initialFamily={initialFamily}
             preferredProperty={preferredProperty}
             current={auditioned}
@@ -229,7 +291,9 @@ export function FxTray({
       {open && !adding && (
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-fx-tray-list>
           {effects.length === 0 && (
-            <p className="px-2 py-3 text-xs text-muted-foreground">No effects on this {target.type === 'group' ? 'group' : 'fixture'}.</p>
+            <p className="px-2 py-3 text-xs text-muted-foreground">
+              {pick != null ? `No effects reach ${pick.noun}.` : `No effects on this ${target.type === 'group' ? 'group' : 'fixture'}.`}
+            </p>
           )}
           {effects.map((e) => {
             const group = via(e)
@@ -281,6 +345,8 @@ export function FxTray({
                   </div>
                   <div className="pl-[13px] text-[11px] text-muted-foreground">
                     → {e.propertyName}
+                    {onWhom(e) && ` · on ${onWhom(e)}`}
+                    {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}
                     {e.isGroupTarget && e.elementMode && ` · ${getElementModeLabel(e.elementMode)}`}
                     {home && ` · ${home}`}

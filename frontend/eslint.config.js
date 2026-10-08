@@ -122,6 +122,7 @@ export default [
       "src/components/busking/useBuskingSelection.ts",
       "src/components/cues/CueValueGrid.tsx",
       "src/components/editor/ColourEditor.tsx",
+      "src/components/fixtureSheet/HeadStrip.tsx",
       "src/components/fixtures-list/useClearCellEffects.ts",
       "src/components/groups/CompactFixtureCard.tsx",
       "src/components/groups/FixtureDetailModal.tsx",

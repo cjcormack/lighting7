@@ -2,8 +2,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Lock, LockOpen } from "lucide-react"
-import type { Fixture } from "@/store/fixtures"
-import { useFixturePark } from "@/hooks/useFixturePark"
+import type { ChannelRef, Fixture } from "@/store/fixtures"
+import { useMemo } from "react"
+import { fixtureChannelRefs, useChannelsPark } from "@/hooks/useFixturePark"
 
 /**
  * Park / unpark every channel of a fixture.
@@ -24,8 +25,27 @@ export function FixtureParkButton({
   isEditing: boolean
   iconOnly?: boolean
 }) {
+  const channels = useMemo(() => fixtureChannelRefs(fixture), [fixture])
+  return <ParkButton channels={channels} name={fixture.name} isEditing={isEditing} iconOnly={iconOnly} />
+}
+
+/**
+ * Park / unpark every channel of a set — the group sheet's header (D1), over its members' channels.
+ * The same button, the same confirm on unpark.
+ */
+export function ParkButton({
+  channels,
+  name,
+  isEditing,
+  iconOnly = false,
+}: {
+  channels: readonly ChannelRef[]
+  name: string
+  isEditing: boolean
+  iconOnly?: boolean
+}) {
   const { parkedCount, totalChannels, isPartiallyParked, isAnyParked, parkFixture, unparkFixture } =
-    useFixturePark(fixture)
+    useChannelsPark(channels)
 
   const canUnpark = isAnyParked && isEditing
 
@@ -35,7 +55,7 @@ export function FixtureParkButton({
       return
     }
     if (!canUnpark) return
-    if (confirm(`Unpark ${parkedCount} channel(s) on ${fixture.name}?`)) {
+    if (confirm(`Unpark ${parkedCount} channel(s) on ${name}?`)) {
       unparkFixture()
     }
   }

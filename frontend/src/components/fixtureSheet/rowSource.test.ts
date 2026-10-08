@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeActiveEffect } from '@/test/fixtureFactories'
 import type { ProgrammerEntry, ProgrammerKeyState, ProvenanceEntry } from '@/api/programmerWsApi'
-import { effectsReaching, rowSourceOf, type RowSourceInput } from './rowSource'
+import { effectsReaching, mergeRowSources, rowSourceOf, type RowSource, type RowSourceInput } from './rowSource'
 
 const entry = (over: Partial<ProgrammerEntry> = {}): ProgrammerEntry => ({
   targetKey: 'spot-3',
@@ -129,5 +129,29 @@ describe('effectsReaching', () => {
       effectDetail: () => '',
     })
     expect(s.heldBack).toBe(true)
+  })
+})
+
+describe('mergeRowSources — a row over a pick of heads (D13)', () => {
+  const programmer: RowSource = { kind: 'programmer', label: 'Programmer', holds: true, touched: true, heldBack: false, staged: false }
+  const cue: RowSource = { kind: 'cue', label: 'Q8', holds: false, touched: false, heldBack: true, staged: false }
+  const parked: RowSource = { kind: 'parked', label: 'Parked', holds: false, touched: false, heldBack: false, staged: false }
+
+  it('shows the strongest source with how many heads it holds, dashed where they differ', () => {
+    const merged = mergeRowSources([
+      { key: 'h1', source: programmer },
+      { key: 'h2', source: programmer },
+      { key: 'h3', source: cue },
+      { key: 'h4', source: cue },
+    ])
+    expect(merged).toMatchObject({ kind: 'programmer', label: 'Programmer', count: 2, of: 4, mixed: true, holds: true, heldBack: true })
+  })
+
+  it('is not mixed when every head says the same', () => {
+    expect(mergeRowSources([{ key: 'h1', source: cue }, { key: 'h2', source: cue }])).toMatchObject({ count: 2, of: 2, mixed: false })
+  })
+
+  it('puts a park first, as the grid’s collapse does', () => {
+    expect(mergeRowSources([{ key: 'h1', source: programmer }, { key: 'h2', source: parked }])).toMatchObject({ kind: 'parked', count: 1 })
   })
 })

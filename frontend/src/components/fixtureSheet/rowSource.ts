@@ -137,3 +137,40 @@ export function effectsReaching(
   const inGroup = new Set(groups)
   return effects.filter((e) => (e.isGroupTarget ? inGroup.has(e.targetKey) : keys.has(e.targetKey)))
 }
+
+/**
+ * A row's source over several heads (D13; HeadsGroups board, note 4): the strongest head's source
+ * — the grid's collapse, so a parked head is the thing to know about first — on the chip, with how
+ * many heads share it (*Programmer · 2 of 4*), and [mixed] where they do not all say the same, which
+ * the row draws as a dashed edge. The × and the dot are any head's: a × clears every head that holds.
+ */
+export interface PickSource extends RowSource {
+  /** Heads whose own source is the one shown. */
+  count: number
+  /** Heads in the pick. */
+  of: number
+  /** The heads disagree on their source. */
+  mixed: boolean
+  /** Each head's own, in pick order. */
+  perHead: { key: string; source: RowSource }[]
+}
+
+const sameSource = (a: RowSource, b: RowSource) => a.kind === b.kind && a.label === b.label
+
+/** Pure, so the merge reads as a table a test can check. [perHead] is never empty. */
+export function mergeRowSources(perHead: { key: string; source: RowSource }[]): PickSource {
+  let shown = perHead[0].source
+  for (const { source } of perHead) if (RANK[source.kind] > RANK[shown.kind]) shown = source
+  const count = perHead.filter((h) => sameSource(h.source, shown)).length
+  return {
+    ...shown,
+    holds: perHead.some((h) => h.source.holds),
+    touched: perHead.some((h) => h.source.holds && h.source.touched),
+    heldBack: perHead.some((h) => h.source.heldBack),
+    staged: perHead.some((h) => h.source.staged),
+    count,
+    of: perHead.length,
+    mixed: count < perHead.length,
+    perHead,
+  }
+}
