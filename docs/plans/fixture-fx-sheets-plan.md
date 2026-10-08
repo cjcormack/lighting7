@@ -1,7 +1,8 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — no session started.** Chris approved the design on
-> 2026-10-07 and called its six open calls the same day (§10).
+> **Document status: APPROVED, 2026-10-07 — session 1 shipped (`1d4a7660`).** Chris approved the
+> design on 2026-10-07 and called its six open calls the same day (§10). Session 1 (the desk's
+> half) is done; sessions 2–6 are not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -244,7 +245,7 @@ Each session is one PR. Every session ends with:
 - its done-marker here: a one-line row with the session's commit SHA, added on the branch before
   its PR merges.
 
-### Session 1 — the desk's half (backend + client API)
+### ~~Session 1 — the desk's half (backend + client API)~~ — done, `1d4a7660`
 
 - **W1 `programmer.keyStack`.** The suppression rule is factored out of `FxEngine.isSuppressed` into
   one function that the tick and the read share.
@@ -290,6 +291,39 @@ Each session is one PR. Every session ends with:
     `updateFx`, reset);
   - `docs/lighting-composition-model.md` (the stack read);
   - root `CLAUDE.md`'s WebSocket list and FX endpoints.
+
+#### Session 1 amendment
+
+What session 1 found, and where it departed from the bullets above:
+
+- **Check 1 holds; `syncEffects` is unchanged.** It already matches a live instance by the
+  `EffectEntry` it was spawned from (`ProgrammerLayerEffectKey`), and `updateEffect` carries that key
+  across its swap, so an instance edited through `updateFx` survives a patch, a move and an
+  unrelated add (`FxLiveEditRoutesTest`).
+- **Check 2: a template-effect `PUT` reaches an applied instance at the stack's next recook, not
+  never.** The `PUT` recooks values only and leaves the instance alone, but the next recook *for
+  any reason* reads the edited template, whose entry no longer matches the instance's key, and
+  respawns it — phase restarted, any instance edit gone. `FU-TMPL-FX-EDIT-NO-RETIME` said "until the
+  layer is re-applied" and is corrected. Session 5's *edited* mark should expect it.
+- **W5 re-keys.** Reset moves the instance's spawn key to the template's current entry (under the
+  stack's effects lock), so a recook after a template edit keeps a reset instance rather than
+  respawning it. It covers **programmer** template layers — the pads; a cue's template-layer
+  instance is refused with `FX_NOT_FROM_TEMPLATE`, since the next GO respawns it. `FX_TEMPLATE_GONE`
+  (409) is a second refusal, for a template that no longer holds an effect.
+- **W4 is wider than the sideband.** On a head that declares pan as a property (the Fusion spot),
+  `updateChannel` lifts a Channels-tab pan to a `pan` **entry**, not the sideband; it still holds
+  nothing back, because a Circle is keyed `position`. So provenance credits an effect that paints
+  **every** channel of a programmer-held key under a sibling key, as well as one on a sideband key —
+  asking `EffectSuppression` of the key the effect paints. Partial overlap (a UV wave beside an RGBW
+  colour entry) keeps the programmer's answer. `keyStack` lists such an effect on the key's stack.
+- **`updateFx` and `PUT /fx/{id}` carry the timing source on a type swap** (`newTimingSource`), as
+  the add path does; before, a beat effect swapped for a wall-clock one ran on the beat loop. Session
+  3's picker swap relies on it.
+- **Both request/reply frames carry a client `requestId`**, echoed, and answer an unresolvable
+  target with an `error` field rather than `programmer.error`, so a promise is answered rather than
+  timed out.
+- **Slot age** is a runtime `writtenAtMs` on `ProgrammerStore.Slot` — no schema (P2). A layer slot
+  is re-installed by every recook, so its age is since the stack last moved it.
 
 ### Session 2 — the sheet (frontend)
 

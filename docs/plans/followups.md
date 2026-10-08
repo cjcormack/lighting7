@@ -1117,7 +1117,11 @@ snapshot refreshes, and the next application runs the new effect. But
 `ProgrammerLayerStack.recookIfReferences` cooks `withEffects = false` on purpose — an edit touring
 to an already-applied layer "is not the layer arriving", and re-spawning would restart the effect
 mid-show on every nudge of a parameter. So the live instance keeps its timing until the layer is
-re-applied.
+re-applied — or, as `fixture-fx-sheets-plan.md` session 1 found, until the stack next recooks for
+any reason (a patch, a move, an unrelated add), which reads the edited template, finds the
+instance's spawn key stale and respawns it from the template with its phase restarted.
+`POST /fx/{id}/reset` is the per-instance answer (it re-keys the instance); `FxLiveEditRoutesTest`
+pins both.
 
 This is **inherited from Looks unchanged**, not new: a deferred Look effect behaves identically, and
 has since the layer stack was written. It is recorded here because an effect template makes it much
@@ -1378,6 +1382,9 @@ REST behind the gate they have today.
 Nor by `stage-view-plan.md` session 4 (`render_view`): its `stageRender.request` is outbound-only
 and unicast, and the window answers over REST (`POST /stage-renders/{id}`), so the socket gained no
 inbound message.
+Nor by `fixture-fx-sheets-plan.md` session 1: `updateFx` is `pauseFx`'s tier (an operator gesture on
+both roles, gated as `pauseFx` / `removeFx` are), `programmer.clearTarget` is `programmer.clearEntry`'s,
+and `programmer.keyStack` is a read.
 
 **Trigger**: an admin-only operation gains a socket command, or `FU-AUTH-OPERATOR-LOCKDOWN` lands
 and a locked-down control is also reachable over WS — otherwise the two are the same change made

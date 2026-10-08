@@ -202,6 +202,13 @@ class ProgrammerStore {
          * sideband value).
          */
         val seq: Long,
+        /**
+         * Wall-clock time of the write that installed this slot — what `programmer.keyStack`
+         * reports as an owner's age. Runtime only, like everything else here. A layer slot is
+         * re-installed by every recook of the stack, so its age is "since the stack last moved
+         * it", not since the layer arrived.
+         */
+        val writtenAtMs: Long = System.currentTimeMillis(),
     )
 
     /** Two or more owners on one key, most recent write first. Always size >= 2. */
@@ -760,6 +767,15 @@ class ProgrammerStore {
         }
     }
 
+    /**
+     * The rank of the layer that wrote [slot], when it is a [ProgrammerOwner.LAYERS] slot — the
+     * same decode [layerWinnerRankByKey] makes, for a slot that need not be winning. Null for any
+     * other owner. Cold path: `programmer.keyStack` names every slot on a key, the layer's among
+     * them, with the layer it came from.
+     */
+    fun layerRankOf(slot: Slot): Int? =
+        if (slot.owner == ProgrammerOwner.LAYERS) (slot.seq - LAYER_SEQ_BASE).toInt() else null
+
     /** Snapshot of every sideband entry. Cold path. */
     fun channelEntries(): List<ChannelEntryView> = buildList {
         for ((packed, holder) in channels) {
@@ -781,6 +797,16 @@ class ProgrammerStore {
      * suppression snapshot; cache the result keyed on [coverageEpoch] — [epoch] moves on
      * every value rewrite and is stamped before the write lands, so it can neither pace
      * this scan nor guarantee the scan sees the mutation that bumped it.
+     *
+     * **This is the programmer's one "holds and suppresses" predicate** (fixture-fx-sheets plan
+     * W4). A key here is one the programmer holds *and* one on which it holds every non-band
+     * effect back ([EffectSuppression.heldBackByProgrammer]) — on **that key**, and no other: a
+     * `pan` entry holds back an effect on `pan`, not a Circle on `position` painting the same
+     * channel. The raw-channel sideband is absent altogether: a sideband slot holds a value —
+     * provenance attributes it to the property covering its channel — but the engine suppresses
+     * nothing for it. So provenance asks the same predicate, over the engine's same snapshot, of
+     * the key an effect paints before it names the programmer as a key's winner. Two readers, one
+     * map.
      */
     fun activePropertiesByFixture(): Map<String, Set<String>> {
         if (properties.isEmpty()) return emptyMap()

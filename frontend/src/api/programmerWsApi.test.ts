@@ -4,6 +4,7 @@ import { fakeWsConnection } from '../test/fakeWsConnection'
 import type { LayerSource } from './cuesApi'
 import {
   createProgrammerApi,
+  PROGRAMMER_REQUEST_TIMEOUT_MS,
   programmerKey,
   type ProgrammerEntry,
   type ProgrammerLayer,
@@ -818,4 +819,121 @@ describe('createProgrammerApi', () => {
   // `paletteType`. `IncludedTargetDto` carries none of those — they went with the palette tables,
   // and its `kind` is `CUE` or `LOOK` — so the test pinned a payload the server cannot emit, which
   // certifies the drift rather than catching it.
+
+  describe('keyStack and clearTarget — request and reply', () => {
+    it('asks for a key stack with a request id and resolves with the answer it echoes', async () => {
+      const { conn, sent, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+
+      const answer = api.keyStack('fixture', 'hex-1', 'dimmer')
+      expect(sent).toHaveLength(1)
+      const { requestId, ...rest } = sent[0]
+      expect(rest).toEqual({ type: 'programmer.keyStack', targetType: 'fixture', targetKey: 'hex-1', propertyName: 'dimmer' })
+      expect(typeof requestId).toBe('string')
+
+      frame({
+        type: 'programmer.keyStack',
+        requestId,
+        targetType: 'fixture',
+        targetKey: 'hex-1',
+        propertyName: 'dimmer',
+        blind: false,
+        stacks: [{ targetKey: 'hex-1', layers: [{ kind: 'PROGRAMMER', onStage: true, value: '200', owner: 'web' }] }],
+      })
+      await expect(answer).resolves.toEqual({
+        targetType: 'fixture',
+        targetKey: 'hex-1',
+        propertyName: 'dimmer',
+        blind: false,
+        stacks: [{ targetKey: 'hex-1', layers: [{ kind: 'PROGRAMMER', onStage: true, value: '200', owner: 'web' }] }],
+      })
+    })
+
+    it('matches overlapping requests to their own answers', async () => {
+      const { conn, sent, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const first = api.keyStack('fixture', 'hex-1', 'dimmer')
+      const second = api.keyStack('fixture', 'hex-2', 'dimmer')
+      const reply = (index: number, key: string) =>
+        frame({
+          type: 'programmer.keyStack', requestId: sent[index].requestId, targetType: 'fixture',
+          targetKey: key, propertyName: 'dimmer', blind: false, stacks: [],
+        })
+      reply(1, 'hex-2')
+      reply(0, 'hex-1')
+      await expect(first).resolves.toMatchObject({ targetKey: 'hex-1' })
+      await expect(second).resolves.toMatchObject({ targetKey: 'hex-2' })
+    })
+
+    it('rejects on the desk\'s error, and reads an absent stack list as empty', async () => {
+      const { conn, sent, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const refused = api.keyStack('fixture', 'nope', 'dimmer')
+      frame({
+        type: 'programmer.keyStack', requestId: sent[0].requestId, targetType: 'fixture',
+        targetKey: 'nope', propertyName: 'dimmer', blind: false, error: "Unknown fixture 'nope'",
+      })
+      await expect(refused).rejects.toThrow("Unknown fixture 'nope'")
+
+      const empty = api.keyStack('fixture', 'hex-1', 'dimmer')
+      frame({
+        type: 'programmer.keyStack', requestId: sent[1].requestId, targetType: 'fixture',
+        targetKey: 'hex-1', propertyName: 'dimmer', blind: true,
+      })
+      await expect(empty).resolves.toMatchObject({ blind: true, stacks: [] })
+    })
+
+    it('rejects when no answer comes, and at once on a dead socket', async () => {
+      const { conn, setOpen } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const late = api.keyStack('fixture', 'hex-1', 'dimmer')
+      vi.advanceTimersByTime(PROGRAMMER_REQUEST_TIMEOUT_MS)
+      await expect(late).rejects.toThrow('not answered')
+
+      setOpen(false)
+      await expect(api.keyStack('fixture', 'hex-1', 'dimmer')).rejects.toThrow('not connected')
+    })
+
+    it('a key stack answer does not wake the state subscribers', () => {
+      const { conn, sent, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const listener = vi.fn()
+      api.subscribe(listener)
+      void api.keyStack('fixture', 'hex-1', 'dimmer')
+      frame({
+        type: 'programmer.keyStack', requestId: sent[0].requestId, targetType: 'fixture',
+        targetKey: 'hex-1', propertyName: 'dimmer', blind: false, stacks: [],
+      })
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('sends clearTarget with the fade and resolves with what was released', async () => {
+      const { conn, sent, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const cleared = api.clearTarget('group', 'front', 1500)
+      const { requestId, ...rest } = sent[0]
+      expect(rest).toEqual({ type: 'programmer.clearTarget', targetType: 'group', targetKey: 'front', fadeMs: 1500 })
+
+      frame({
+        type: 'programmer.targetCleared', requestId, targetType: 'group', targetKey: 'front',
+        values: 4, effects: 1,
+        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+      })
+      await expect(cleared).resolves.toEqual({
+        targetType: 'group',
+        targetKey: 'front',
+        values: 4,
+        effects: 1,
+        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+      })
+    })
+
+    it('clearTarget is a gesture: a dead socket puts nothing on the wire and rejects', async () => {
+      const { conn, sent, setOpen } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      setOpen(false)
+      await expect(api.clearTarget('fixture', 'hex-1')).rejects.toThrow('not connected')
+      expect(sent).toEqual([])
+    })
+  })
 })

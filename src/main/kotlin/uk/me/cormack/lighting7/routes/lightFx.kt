@@ -91,66 +91,27 @@ internal fun Route.routeApiRestFx(state: State) {
             call.respond(HttpStatusCode.OK)
         }
 
-        // Update a running effect
+        // Update a running effect. The parsing is [applyEffectUpdate]'s, shared with the
+        // `updateFx` socket frame so the two doors cannot drift.
         put<EffectId> { resource ->
             val request = call.receive<UpdateEffectRequest>()
-            try {
-                val engine = state.show.fxEngine
-                val existing = engine.getEffect(resource.id)
-                if (existing == null) {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found"))
-                    return@put
-                }
+            when (val outcome = applyEffectUpdate(state, resource.id, request)) {
+                is EffectUpdateOutcome.Updated -> call.respond(state.show.fxEngine.effectDto(outcome.instance))
+                EffectUpdateOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found", CODE_FX_NOT_FOUND))
+                is EffectUpdateOutcome.Refused ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, CODE_FX_UPDATE_REFUSED))
+            }
+        }
 
-                // Resolve new effect if type or parameters changed
-                val newEffect = if (request.effectType != null || request.parameters != null) {
-                    // `existing.effectTypeId`, not the display name: a parameters-only edit of a
-                    // user-defined effect otherwise looks up a type the registry has never heard
-                    // of and the whole update 400s.
-                    val effectType = request.effectType ?: existing.effectTypeId
-                    val params = request.parameters ?: existing.effect.parameters
-                    state.show.fxRegistry.createEffectWithTemplates(
-                        state.show.templateRegistry, effectType, params,
-                    )
-                } else null
-
-                // An effect-type swap keeps the instance's existing target, so it can land an
-                // effect whose output that target discards. Reject rather than silently going
-                // dark — same rule the add path applies.
-                newEffect?.let { requireOutputTypeMatch(it, existing.target) }
-
-                val newTiming = request.beatDivision?.let { FxTiming(it, existing.timing.startOnBeat) }
-                val newBlendMode = request.blendMode?.let { EffectSpecCoercion.Strict.blendMode(it) }
-                val newDistribution = request.distributionStrategy?.let { EffectSpecCoercion.Strict.distribution(it) }
-                val newElementMode = request.elementMode?.let { EffectSpecCoercion.Strict.elementMode(it) }
-                val newElementFilter = request.elementFilter?.let { EffectSpecCoercion.Strict.elementFilter(it) }
-
-                val updated = engine.updateEffect(
-                    effectId = resource.id,
-                    newEffect = newEffect,
-                    newTiming = newTiming,
-                    newBlendMode = newBlendMode,
-                    newPhaseOffset = request.phaseOffset,
-                    newDistributionStrategy = newDistribution,
-                    newElementMode = newElementMode,
-                    newElementFilter = newElementFilter,
-                    newStepTiming = request.stepTiming,
-                    newSpeedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid),
-                    newRateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid),
-                    // Only when the client actually renamed the type; a parameters-only edit
-                    // leaves the instance's registration id alone.
-                    newRegistrationId = request.effectType?.let {
-                        state.show.fxRegistry.getRegistration(it)?.id
-                    },
-                )
-
-                if (updated != null) {
-                    call.respond(engine.effectDto(updated))
-                } else {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found"))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to update effect"))
+        // Re-apply a template layer's current effect to the instance it spawned, phase kept.
+        post<EffectId.Reset> { resource ->
+            when (val outcome = state.show.programmerLayerStack.resetEffectToTemplate(resource.parent.id)) {
+                is ResetToTemplateOutcome.Reset -> call.respond(state.show.fxEngine.effectDto(outcome.instance))
+                ResetToTemplateOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found", CODE_FX_NOT_FOUND))
+                is ResetToTemplateOutcome.Refused ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, outcome.code))
             }
         }
 
@@ -185,6 +146,9 @@ data class EffectId(val id: Long) {
 
     @Resource("/resume")
     data class Resume(val parent: EffectId)
+
+    @Resource("/reset")
+    data class Reset(val parent: EffectId)
 }
 
 @Resource("/fixture/{fixtureKey}")
@@ -282,6 +246,83 @@ data class UpdateEffectRequest(
 
 
 // Helper functions
+
+/** The effect an update or reset names is not running (404 / `fxError`). */
+internal const val CODE_FX_NOT_FOUND = "FX_NOT_FOUND"
+
+/** An update named a field value the strict policy refuses, an unknown effect type, a bad master (400 / `fxError`). */
+internal const val CODE_FX_UPDATE_REFUSED = "FX_UPDATE_REFUSED"
+
+/** What [applyEffectUpdate] did. */
+internal sealed interface EffectUpdateOutcome {
+    data class Updated(val instance: FxInstance) : EffectUpdateOutcome
+    data object NotFound : EffectUpdateOutcome
+    data class Refused(val message: String) : EffectUpdateOutcome
+}
+
+/**
+ * Apply [request] to running effect [effectId] through [FxEngine.updateEffect] — the id and the
+ * phase kept. **The one parse of an effect update**: `PUT /fx/{id}` and the `updateFx` socket frame
+ * (fixture-fx-sheets plan W3) both call it, so the strict coercion
+ * ([EffectSpecCoercion.Strict]), the output-type check and the master-uuid check cannot be one
+ * thing on one door and another on the other.
+ *
+ * Every refusal is decided before anything moves, so a refused update changes nothing.
+ */
+internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffectRequest): EffectUpdateOutcome {
+    val engine = state.show.fxEngine
+    val existing = engine.getEffect(effectId) ?: return EffectUpdateOutcome.NotFound
+    return try {
+        // Resolve new effect if type or parameters changed
+        val newEffect = if (request.effectType != null || request.parameters != null) {
+            // `existing.effectTypeId`, not the display name: a parameters-only edit of a
+            // user-defined effect otherwise looks up a type the registry has never heard
+            // of and the whole update 400s.
+            val effectType = request.effectType ?: existing.effectTypeId
+            val params = request.parameters ?: existing.effect.parameters
+            state.show.fxRegistry.createEffectWithTemplates(
+                state.show.templateRegistry, effectType, params,
+            )
+        } else null
+
+        // An effect-type swap keeps the instance's existing target, so it can land an
+        // effect whose output that target discards. Reject rather than silently going
+        // dark — same rule the add path applies.
+        newEffect?.let { requireOutputTypeMatch(it, existing.target) }
+
+        val newTiming = request.beatDivision?.let { FxTiming(it, existing.timing.startOnBeat) }
+        val newBlendMode = request.blendMode?.let { EffectSpecCoercion.Strict.blendMode(it) }
+        val newDistribution = request.distributionStrategy?.let { EffectSpecCoercion.Strict.distribution(it) }
+        val newElementMode = request.elementMode?.let { EffectSpecCoercion.Strict.elementMode(it) }
+        val newElementFilter = request.elementFilter?.let { EffectSpecCoercion.Strict.elementFilter(it) }
+        val newSpeedMaster = requireSpeedMasterUuid(request.speedMasterUuid)
+        val newRateSpeedMaster = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
+        // Only when the client actually renamed the type; a parameters-only edit leaves the
+        // instance's registration id — and the clock it runs on — alone. A type swap takes the new
+        // type's timing source with it, as the add path does, or a beat effect swapped for a
+        // wall-clock one would run on the beat loop.
+        val registration = request.effectType?.let { state.show.fxRegistry.getRegistration(it) }
+
+        val updated = engine.updateEffect(
+            effectId = effectId,
+            newEffect = newEffect,
+            newTiming = newTiming,
+            newBlendMode = newBlendMode,
+            newPhaseOffset = request.phaseOffset,
+            newDistributionStrategy = newDistribution,
+            newElementMode = newElementMode,
+            newElementFilter = newElementFilter,
+            newStepTiming = request.stepTiming,
+            newSpeedMasterUuid = newSpeedMaster,
+            newRateSpeedMasterUuid = newRateSpeedMaster,
+            newRegistrationId = registration?.id,
+            newTimingSource = request.effectType?.let { registration?.timingSource ?: TimingSource.BEAT },
+        )
+        if (updated != null) EffectUpdateOutcome.Updated(updated) else EffectUpdateOutcome.NotFound
+    } catch (e: Exception) {
+        EffectUpdateOutcome.Refused(e.message ?: "Failed to update effect")
+    }
+}
 
 /**
  * Stamp an effect into the programmer's reserved priority band when the request asked for

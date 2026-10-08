@@ -424,6 +424,8 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST /api/rest/fx/add` - Add effect to fixture
 - `DELETE /api/rest/fx/{id}` - Remove effect
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
+- `PUT /api/rest/fx/{id}` - Edit a running effect in place (id and phase kept); one parse with the `updateFx` frame (`applyEffectUpdate`), 400 `FX_UPDATE_REFUSED` / 404 `FX_NOT_FOUND`
+- `POST /api/rest/fx/{id}/reset` - Re-apply a programmer template layer's **current** effect to the instance it spawned, id and phase kept, and re-key it so the next recook keeps it (fixture-fx-sheets plan W5); 409 `FX_NOT_FROM_TEMPLATE` / `FX_TEMPLATE_GONE`. See `docs/fx-engineering.md` §"Programmer suppression and the priority band"
 - `GET /api/rest/fx/library` - Available effect types
 
 ### Library Endpoints
@@ -487,6 +489,9 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `fxState` - Request/receive the active-effect list (incl. per-effect speed master). Carries no tempo — that is the `speedMasters.*` family's job
 - `speedMasters.state` / `speedMasters.setBpm` / `speedMasters.tap` - Keyed per-master tempo control, the only WS tempo surface; `speedMasters.changed` streams live BPM moves, `speedMasters.beat` beat boundaries, `speedMasters.listChanged` signals CRUD, `speedMasters.error` acks a refused (`SPEED_MASTER_FOLLOWER`) or dropped (`SPEED_MASTER_UNKNOWN`) tempo write before the state reply
 - `removeFx` / `pauseFx` / `resumeFx` / `clearFx` - Effect control
+- `updateFx` / `fxError` - `PUT /fx/{id}` as a frame, for the live FX editor (fixture-fx-sheets plan W3): `{effectId, …UpdateEffectRequest}`, the same parse and strict coercion, answered `fxChanged(UPDATED)` or a unicast `fxError {effectId, code, message}` (`FX_NOT_FOUND` / `FX_UPDATE_REFUSED`). Gated as `pauseFx` is — an operator gesture, so `FU-AUTH-WS-PER-MESSAGE` does not fire
+- `programmer.keyStack` - What sits under one property, top first (W1): park, programmer-band effects, each owner's slot, other effects with `heldBack`, the cue contributor, the base, each with `onStage`; a group per member. Request/reply on the asking socket with a client `requestId`, never broadcast. `heldBack` is `fx/EffectSuppression.kt` — the one rule the tick and provenance ask too, against the engine's own snapshot. See `docs/lighting-composition-model.md` §"Reading one property's stack"
+- `programmer.clearTarget` / `programmer.targetCleared` - A fixture's (heads included) or group's *Release* (W2): its local effects (`FxInstance.isLocalEffect`) stopped first, then every non-layer slot and the sideband on its channels released in one pass and one republish at `fadeMs`; a local effect that also drives heads outside it is left running and named in `partial`. Unicast reply
 - `fxChanged` - Broadcast on effect add/remove/update
 - `groupsState` - Request/receive fixture groups state
 - `clearGroupFx` - Clear all effects for a group

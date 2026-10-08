@@ -99,6 +99,70 @@ data class UnderlyingSource(
 )
 
 /**
+ * One property's whole stack, top first — what `programmer.keyStack` answers (fixture-fx-sheets
+ * plan W1). See [ProvenanceService.keyStack].
+ */
+data class KeyStack(
+    val targetKey: String,
+    val propertyName: String,
+    /** The programmer is blind: its slots are listed but none is on stage, and nothing is held back by it. */
+    val blind: Boolean,
+    val layers: List<KeyStackLayer>,
+)
+
+/** One parked channel and the value park holds it at. */
+data class ParkedChannelValue(val universe: Int, val channel: Int, val value: UByte)
+
+/**
+ * One layer of a [KeyStack]. Which fields are set follows [kind]; every one carries [onStage] —
+ * whether it contributes to what the rig is showing on this property now.
+ */
+data class KeyStackLayer(
+    val kind: Kind,
+    val onStage: Boolean,
+    /** The literal this layer holds, where it holds one (a programmer slot, the cue's value, the base). */
+    val value: CueAssignmentResolver.PropertyValue? = null,
+    /** [Kind.PARK]: the property's parked channels. */
+    val parkedChannels: List<ParkedChannelValue> = emptyList(),
+    /** [Kind.PROGRAMMER]: the slot's owner, and its age at the read. */
+    val owner: ProgrammerOwner? = null,
+    val ageMs: Long? = null,
+    /** [Kind.PROGRAMMER]: set when this is a raw-channel sideband slot rather than a property entry. */
+    val channel: Pair<Int, Int>? = null,
+    /** The two effect kinds: the running instance. */
+    val effect: FxInstance? = null,
+    /**
+     * The two effect kinds: [EffectSuppression.isSuppressed]'s answer for this key, against the
+     * engine's own snapshot — the effect is running but not painting here.
+     */
+    val heldBack: Boolean = false,
+    val cueId: Int? = null,
+    val cueStackId: Int? = null,
+    /** The layer that produced this one: a programmer layer's id, or a cue layer's (`DaoCueLayer`). */
+    val layerId: Int? = null,
+    val layerSource: LayerSource? = null,
+) {
+    enum class Kind {
+        PARK,
+
+        /** An effect in the programmer priority band — it modulates on top of the programmer. */
+        PROGRAMMER_EFFECT,
+
+        /** One owner's programmer slot (or a sideband slot on one of the property's channels). */
+        PROGRAMMER,
+
+        /** Any other effect — a cue's, a manual one. Held back while the programmer holds the key. */
+        EFFECT,
+
+        /** What the cues compose to on this key. */
+        CUE,
+
+        /** The fixture default ([LayerResolver.baselineFor]). */
+        BASE,
+    }
+}
+
+/**
  * Provenance computation and broadcast — the "who owns this value" answer for every
  * (target, property) any layer covers — extracted from [FxEngine] (sweep item E1).
  *
@@ -123,6 +187,13 @@ class ProvenanceService internal constructor(
      * winner reported here is the effect actually painting on top.
      */
     private val effectOrder: Comparator<FxInstance>,
+    /**
+     * The engine's programmer-suppression snapshot ([FxEngine.programmerSuppression]) — the very
+     * map its tick reads, empty while blind. Provenance and [keyStack] ask
+     * [EffectSuppression] against it rather than rebuilding a coverage map of their own, so "the
+     * programmer holds this effect back" has one answer on the rig and on the wire (W1, W4).
+     */
+    private val programmerSuppression: () -> Map<String, Set<String>>,
 ) {
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
@@ -211,20 +282,44 @@ class ProvenanceService internal constructor(
      * Compute the winning contributor for every key any layer currently covers. Winner
      * order mirrors the output stack: park → programmer (unless blind) → highest-priority
      * running effect → cue layer. Keys nothing covers are omitted (baseline).
+     *
+     * **The programmer outranks an effect only where the engine holds that effect back**
+     * (fixture-fx-sheets plan W4), and both ask [EffectSuppression.heldBackByProgrammer] over one
+     * snapshot to find out — of the key the effect *paints*, since that is the key the tick asks
+     * about. The effect is the key's own, or, for a key the programmer holds with none of its own,
+     * one painting **every** channel of the key under a sibling key ([siblingPaintings]).
+     *
+     * That second arm is the Channels tab's pan. `updateChannel` lifts a raw pan write to a `pan`
+     * entry on a head that declares pan as a property, and keeps it in the sideband (filed under
+     * `position`) on one that does not. A Circle is keyed `position` either way, so the engine never
+     * holds it back for either — a `pan` entry is not a `position` entry, and a sideband slot
+     * suppresses nothing — and the Circle is what is on stage. Before W4 both read *Programmer*.
      */
     fun compute(): List<ProvenanceEntry> {
-        val programmerKeys = if (programmerStore.blind) {
-            emptySet()
-        } else {
-            val keys = HashSet(programmerStore.activeKeys())
-            // Sideband slots drive the wire too (raw pan/tilt drags, unpark hand-downs):
-            // attribute them to the property covering the channel. Channels with no
-            // backing property stay unreported — there is no (target, property) to name.
-            for (entry in programmerStore.channelEntries()) {
-                publisher.resolveChannelCoveringKey(entry.universe, entry.channel)?.let { keys.add(it) }
+        // One snapshot, the engine's own: empty while blind, so neither half below can name the
+        // programmer under blind, exactly as before.
+        val suppressing = programmerSuppression()
+        val propertyKeys: Set<CueAssignmentResolver.Key> = buildSet {
+            for ((fixtureKey, properties) in suppressing) {
+                for (propertyName in properties) add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
             }
-            keys
         }
+        // Sideband slots drive the wire too (raw pan/tilt drags, unpark hand-downs): attribute
+        // each to the property covering its channel, remembering which channels, so an effect
+        // painting one of them through any key can be found. Channels with no backing property
+        // stay unreported — there is no (target, property) to name.
+        val sidebandChannels: Map<CueAssignmentResolver.Key, List<Pair<Int, Int>>> =
+            if (programmerStore.blind) {
+                emptyMap()
+            } else {
+                val out = HashMap<CueAssignmentResolver.Key, MutableList<Pair<Int, Int>>>()
+                for (entry in programmerStore.channelEntries()) {
+                    val key = publisher.resolveChannelCoveringKey(entry.universe, entry.channel) ?: continue
+                    out.getOrPut(key) { ArrayList(1) }.add(entry.universe to entry.channel)
+                }
+                out
+            }
+        val programmerKeys = HashSet<CueAssignmentResolver.Key>(propertyKeys).apply { addAll(sidebandChannels.keys) }
 
         // Which programmer layer won each key it covers, so a programmer-won cell can name
         // *Warm Wash* rather than just "the programmer" — the same answer the cue branch below
@@ -265,6 +360,8 @@ class ProvenanceService internal constructor(
             keys.add(CueAssignmentResolver.Key.fixture(pair.first, pair.second))
         }
 
+        val siblings = siblingPaintings(programmerKeys, propertyKeys, sidebandChannels, effectByKey)
+
         val entries = ArrayList<ProvenanceEntry>(keys.size)
         for (key in keys) {
             val fixture = try {
@@ -275,15 +372,20 @@ class ProvenanceService internal constructor(
             val target = publisher.inferTargetForProperty(fixture, key)
 
             val parked = target != null && publisher.allChannelsParked(target, fixture)
-            val programmerActive = key in programmerKeys
-            val effect = effectByKey[key.targetKey to key.propertyName]
-            // A programmer entry suppresses non-band effects, so it outranks them here too;
-            // a band effect modulates on top of the programmer and wins the provenance.
-            val bandEffect = effect != null && FxEngine.isProgrammerFxPriority(effect.priority)
+            // The effect painting this key: its own, or one painting all of it under a sibling key.
+            val painting: Painting? = effectByKey[key.targetKey to key.propertyName]
+                ?.let { Painting(key.targetKey, key.propertyName, it) }
+                ?: siblings[key]
+            val effect = painting?.effect
+            val programmerWins = key in programmerKeys && (
+                painting == null || EffectSuppression.heldBackByProgrammer(
+                    suppressing, painting.fixtureKey, painting.propertyName, painting.effect.priority,
+                )
+            )
 
             val entry = when {
                 parked -> ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PARKED)
-                programmerActive && (effect == null || !bandEffect) -> {
+                programmerWins -> {
                     val layer = programmerLayerWinners[key]
                     ProvenanceEntry(
                         key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER,
@@ -313,6 +415,69 @@ class ProvenanceService internal constructor(
         }
         entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
         return entries
+    }
+
+    /** An effect and the key it paints, which need not be the key being asked about — see [compute]. */
+    private data class Painting(val fixtureKey: String, val propertyName: String, val effect: FxInstance)
+
+    /**
+     * For each programmer-held key with no running effect of its own, the top effect that paints
+     * **every** channel the programmer holds there under some other key — a Circle on `position`
+     * over a `pan` entry. Every channel, not any: a white effect on a bundled emitter paints one
+     * channel of an RGBW colour entry and leaves the rest the programmer's, so the colour stays
+     * the programmer's.
+     *
+     * Walked from the effects' side, so a rig-wide programmer layer costs nothing here unless an
+     * effect shares its channels: only a key found on an address some effect paints is ever
+     * resolved to its own channels.
+     */
+    private fun siblingPaintings(
+        programmerKeys: Set<CueAssignmentResolver.Key>,
+        propertyKeys: Set<CueAssignmentResolver.Key>,
+        sidebandChannels: Map<CueAssignmentResolver.Key, List<Pair<Int, Int>>>,
+        effectByKey: Map<Pair<String, String>, FxInstance>,
+    ): Map<CueAssignmentResolver.Key, Painting> {
+        if (programmerKeys.isEmpty() || effectByKey.isEmpty()) return emptyMap()
+        val painted = HashMap<Pair<Int, Int>, MutableSet<Painting>>()
+        for ((paintKey, effect) in effectByKey) {
+            val fixture = try {
+                fixtures.untypedGroupableFixture(paintKey.first)
+            } catch (_: Exception) {
+                continue
+            }
+            val painting = Painting(paintKey.first, paintKey.second, effect)
+            for (write in PropertyChannelWriter.channelsFor(fixture, paintKey.second)) {
+                painted.getOrPut(write.universe.universe to write.channel) { HashSet(1) }.add(painting)
+            }
+        }
+        val candidates = HashSet<CueAssignmentResolver.Key>()
+        for ((universe, channel) in painted.keys) {
+            for (key in publisher.resolveChannelPropertyKeys(universe, channel)) {
+                if (key in programmerKeys && (key.targetKey to key.propertyName) !in effectByKey) candidates += key
+            }
+        }
+        val out = HashMap<CueAssignmentResolver.Key, Painting>()
+        for (key in candidates) {
+            val held: List<Pair<Int, Int>> = if (key in propertyKeys) {
+                val fixture = try {
+                    fixtures.untypedGroupableFixture(key.targetKey)
+                } catch (_: Exception) {
+                    continue
+                }
+                PropertyChannelWriter.channelsFor(fixture, key.propertyName).map { it.universe.universe to it.channel }
+            } else {
+                sidebandChannels[key] ?: continue
+            }
+            if (held.isEmpty()) continue
+            var common: Set<Painting>? = null
+            for (address in held) {
+                val here = painted[address] ?: emptySet()
+                common = common?.intersect(here) ?: here
+                if (common.isEmpty()) break
+            }
+            common?.maxWithOrNull { a, b -> effectOrder.compare(a.effect, b.effect) }?.let { out[key] = it }
+        }
+        return out
     }
 
     /**
@@ -415,6 +580,236 @@ class ProvenanceService internal constructor(
                 UnderlyingSource(key, effect?.cueId, effect?.cueStackId, effect?.id)
             }
         }
+    }
+
+    /**
+     * Every layer under one property, top first: park, programmer-band effects, programmer slots,
+     * other effects (each with `heldBack`), the cue contributor, the base — the read behind the
+     * fixture sheet's stack (fixture-fx-sheets plan W1, D5). Null for a key that names no fixture.
+     *
+     * Each part is asked of the code that decides it, against **one** snapshot of each input:
+     * - held back is [EffectSuppression.isSuppressed] over the engine's suppression snapshot and
+     *   its stomp check — the tick's own question, so the sheet cannot mark an effect held back
+     *   that is painting, or the reverse;
+     * - the cue contributor is [underlyingSources] against the one Layer 4 snapshot this read
+     *   takes, which is also where its value and layer come from, so a cue apply landing mid-read
+     *   cannot pair one cue's value with another's attribution;
+     * - the base is [LayerResolver.baselineFor].
+     *
+     * [KeyStackLayer.onStage] walks the output order — park, effects by priority, the programmer,
+     * the cue, the base — with an on-stage OVERRIDE effect, a programmer value, a cue value or a
+     * full park covering everything below it. The layers are then *listed* in the plan's order,
+     * which puts the programmer's own effects above its slots and the others below: on a key the
+     * programmer holds, those are exactly the ones it is holding back.
+     *
+     * Cold path: on a socket that asked. A group's members go through [keyStacks], which takes
+     * every snapshot once for all of them.
+     */
+    fun keyStack(fixtureKey: String, propertyName: String): KeyStack? =
+        keyStacks(listOf(fixtureKey), propertyName).singleOrNull()
+
+    /**
+     * [keyStack] for several keys at once — a group target's members — against **one** snapshot of
+     * every input, taken once per request rather than once per member: the suppression map, the
+     * Layer 4 snapshot, the effect list with each effect's coverage, the sideband, and the cue
+     * attribution ([underlyingSources] asked once for every key). The per-effect channel walk the
+     * sibling rule needs is memoised across members, so a group of N heads under E effects resolves
+     * each painted (key, property) once, not N times. A key naming no fixture is left out.
+     */
+    fun keyStacks(fixtureKeys: List<String>, propertyName: String): List<KeyStack> {
+        val read = KeyStackRead(
+            blind = programmerStore.blind,
+            held = programmerSuppression(),
+            cueLayer = layerResolver.current,
+            now = System.currentTimeMillis(),
+            effects = activeEffects().map { it to coverageKeys(it) },
+            channelEntries = programmerStore.channelEntries(),
+            programmerLayers = programmerStore.layers,
+        )
+        val keys = fixtureKeys.map { CueAssignmentResolver.Key.fixture(it, propertyName) }
+        val underlying = underlyingSources(keys, read.cueLayer).associateBy { it.key }
+        return keys.mapNotNull { key -> keyStackOf(key, read, underlying.getValue(key)) }
+    }
+
+    /** The inputs one [keyStacks] request reads, each taken once. */
+    private inner class KeyStackRead(
+        val blind: Boolean,
+        val held: Map<String, Set<String>>,
+        val cueLayer: LayerResolver.CueLayerSnapshot,
+        val now: Long,
+        val effects: List<Pair<FxInstance, List<String>>>,
+        val channelEntries: List<ProgrammerStore.ChannelEntryView>,
+        val programmerLayers: List<ProgrammerLayer>,
+    ) {
+        private val painted = HashMap<Pair<String, String>, Set<Pair<Int, Int>>>()
+
+        /** The channels (fixture/element key, property) drives — memoised for the request. */
+        fun channelsOf(fixtureKey: String, propertyName: String): Set<Pair<Int, Int>> =
+            painted.getOrPut(fixtureKey to propertyName) {
+                val fixture = try {
+                    fixtures.untypedGroupableFixture(fixtureKey)
+                } catch (_: Exception) {
+                    return@getOrPut emptySet()
+                }
+                PropertyChannelWriter.channelsFor(fixture, propertyName).mapTo(HashSet()) { it.universe.universe to it.channel }
+            }
+    }
+
+    private fun keyStackOf(key: CueAssignmentResolver.Key, read: KeyStackRead, underlying: UnderlyingSource): KeyStack? {
+        val fixtureKey = key.targetKey
+        val propertyName = key.propertyName
+        val fixture = try {
+            fixtures.untypedGroupableFixture(fixtureKey)
+        } catch (_: Exception) {
+            return null
+        }
+        val blind = read.blind
+        val cueLayer = read.cueLayer
+        val target = publisher.inferTargetForProperty(fixture, key)
+        val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+
+        // ── Park ──
+        val parkedChannels = channels.mapNotNull { write ->
+            publisher.parkedValue(write.universe.universe, write.channel)
+                ?.let { ParkedChannelValue(write.universe.universe, write.channel, it) }
+        }
+        val fullyParked = target != null && publisher.allChannelsParked(target, fixture)
+
+        // ── Effects on the key, top first: its own, and any painting all of its channels under a
+        // sibling key ([siblingPaintings]' rule) — a Circle on `position` is on a `pan` row's stack.
+        // Held back is asked of the key each one paints, the tick's own question. ──
+        val channelSet = channels.mapTo(HashSet()) { it.universe.universe to it.channel }
+        val paintings = ArrayList<Painting>()
+        for ((effect, covered) in read.effects) {
+            if (effect.target.propertyName == propertyName && fixtureKey in covered) {
+                paintings += Painting(fixtureKey, propertyName, effect)
+                continue
+            }
+            if (channelSet.isEmpty()) continue
+            for (paintKey in covered) {
+                if (read.channelsOf(paintKey, effect.target.propertyName).containsAll(channelSet)) {
+                    paintings += Painting(paintKey, effect.target.propertyName, effect)
+                    break
+                }
+            }
+        }
+        paintings.sortWith { a, b -> effectOrder.compare(b.effect, a.effect) }
+        val onKey = paintings.map { it.effect }
+        val heldBack = paintings.associate {
+            it.effect to EffectSuppression.isSuppressed(read.held, it.fixtureKey, it.propertyName, it.effect, isLayerStomped)
+        }
+
+        // ── Programmer: property slots (most recent first) and sideband slots on its channels ──
+        val slots = programmerStore.slotsFor(fixtureKey, propertyName)
+        val sideband = read.channelEntries
+            .filter { (it.universe to it.channel) in channelSet }
+            .map { it to it.slots.first() }
+        val programmerLayers = read.programmerLayers
+        val now = read.now
+
+        // ── The cue contributor, from the request's one Layer 4 snapshot ──
+        val cueValue = cueLayer.index[fixtureKey]?.get(propertyName)
+        val cueLayerWinner = cueLayer.layerWinners[key]
+
+        // ── Base ──
+        val base = target?.let { layerResolver.baselineFor(it, fixture).asPropertyValueFor(it) }
+
+        // ── On stage: the output order, top first ──
+        var covered = fullyParked
+        val effectOnStage = HashMap<FxInstance, Boolean>()
+        for (effect in onKey) {
+            val on = !covered && effect.isRunning && heldBack[effect] != true
+            effectOnStage[effect] = on
+            if (on && effect.blendMode == BlendMode.OVERRIDE) covered = true
+        }
+        // Within the programmer, recency arbitrates across granularities (`ProgrammerStore.Slot.seq`):
+        // a sideband slot newer than the top property slot is what its channel carries. On a
+        // one-channel property such a slot is the whole value, so the property slot is not on stage;
+        // on a wider one (a pan byte under a `position` entry) both are, each on its own channels.
+        val programmerVisible = !covered && !blind
+        val topSlot = slots.firstOrNull()
+        val newerSideband = sideband.filter { (_, slot) -> topSlot == null || slot.seq > topSlot.seq }
+        val sidebandTakesAll = channels.size == 1 && newerSideband.isNotEmpty()
+        val topSlotOnStage = topSlot != null && programmerVisible && !sidebandTakesAll
+        val sidebandOnStage = sideband.associate { (entry, slot) ->
+            (entry.universe to entry.channel) to (programmerVisible && newerSideband.any { it.second === slot })
+        }
+        if (topSlotOnStage || (programmerVisible && sidebandTakesAll)) covered = true
+        val cueOnStage = cueValue != null && !covered
+        if (cueOnStage) covered = true
+        val baseOnStage = !covered
+
+        // ── Listed in the plan's order ──
+        val layers = ArrayList<KeyStackLayer>()
+        if (parkedChannels.isNotEmpty()) {
+            layers += KeyStackLayer(KeyStackLayer.Kind.PARK, onStage = true, parkedChannels = parkedChannels)
+        }
+        fun effectLayer(kind: KeyStackLayer.Kind, effect: FxInstance) = KeyStackLayer(
+            kind = kind,
+            onStage = effectOnStage[effect] == true,
+            effect = effect,
+            heldBack = heldBack[effect] == true,
+            cueId = effect.cueId,
+            cueStackId = effect.cueStackId,
+            layerId = effect.programmerLayerId ?: effect.cueLayerId,
+            layerSource = effect.source,
+        )
+        for (effect in onKey) {
+            if (FxEngine.isProgrammerFxPriority(effect.priority)) {
+                layers += effectLayer(KeyStackLayer.Kind.PROGRAMMER_EFFECT, effect)
+            }
+        }
+        for ((index, slot) in slots.withIndex()) {
+            val layer = programmerStore.layerRankOf(slot)?.let { programmerLayers.getOrNull(it) }
+            layers += KeyStackLayer(
+                kind = KeyStackLayer.Kind.PROGRAMMER,
+                onStage = index == 0 && topSlotOnStage,
+                value = slot.value.resolved,
+                owner = slot.owner,
+                ageMs = (now - slot.writtenAtMs).coerceAtLeast(0),
+                layerId = layer?.layerId,
+                layerSource = layer?.source,
+            )
+        }
+        for ((entry, slot) in sideband) {
+            layers += KeyStackLayer(
+                kind = KeyStackLayer.Kind.PROGRAMMER,
+                onStage = sidebandOnStage[entry.universe to entry.channel] == true,
+                value = slot.value.resolved,
+                owner = slot.owner,
+                ageMs = (now - slot.writtenAtMs).coerceAtLeast(0),
+                channel = entry.universe to entry.channel,
+            )
+        }
+        for (effect in onKey) {
+            if (!FxEngine.isProgrammerFxPriority(effect.priority)) {
+                layers += effectLayer(KeyStackLayer.Kind.EFFECT, effect)
+            }
+        }
+        if (cueValue != null) {
+            layers += KeyStackLayer(
+                kind = KeyStackLayer.Kind.CUE,
+                onStage = cueOnStage,
+                value = cueValue,
+                cueId = underlying.cueId,
+                cueStackId = underlying.cueStackId,
+                layerId = cueLayerWinner?.layerId,
+                layerSource = cueLayerWinner?.source,
+            )
+        }
+        if (base != null) {
+            layers += KeyStackLayer(KeyStackLayer.Kind.BASE, onStage = baseOnStage, value = base)
+        }
+        return KeyStack(fixtureKey, propertyName, blind, layers)
+    }
+
+    /** An [FxOutput] in the literal grammar of [target]'s property. */
+    private fun FxOutput.asPropertyValueFor(target: FxTarget): CueAssignmentResolver.PropertyValue = when (this) {
+        is FxOutput.Slider ->
+            if (target is SettingTarget) CueAssignmentResolver.PropertyValue.Setting(value)
+            else CueAssignmentResolver.PropertyValue.Slider(value)
+        is FxOutput.Colour -> CueAssignmentResolver.PropertyValue.Colour(color)
+        is FxOutput.Position -> CueAssignmentResolver.PropertyValue.Position(pan, tilt)
     }
 
     companion object {

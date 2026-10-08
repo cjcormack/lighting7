@@ -230,6 +230,88 @@ export interface ProgrammerKeyState {
   provenance?: ProvenanceEntry
 }
 
+/** Which layer of a property's stack a `programmer.keyStack` entry is. */
+export type KeyStackLayerKind = 'PARK' | 'PROGRAMMER_EFFECT' | 'PROGRAMMER' | 'EFFECT' | 'CUE' | 'BASE'
+
+/**
+ * One layer under a property, as `programmer.keyStack` reports it (lighting7's `KeyStackLayerDto`,
+ * fixture-fx-sheets plan W1). [kind] decides which of the optional fields are present; the desk's
+ * socket encodes no default, so an absent field is "not this kind's". Every layer says whether it
+ * is [onStage] — contributing to what the rig shows on the property now.
+ */
+export interface KeyStackLayer {
+  kind: KeyStackLayerKind
+  onStage: boolean
+  /** The literal it holds, in the cue-assignment grammar: a programmer slot, the cue's value, the base. */
+  value?: string | null
+  /** `PARK`: the parked channels. */
+  parkedChannels?: { universe: number; channel: number; value: number }[] | null
+  /** `PROGRAMMER`: the slot's owner (`web`, `surface`, `layers`…) and how long ago it was written. */
+  owner?: string | null
+  ageMs?: number | null
+  /** `PROGRAMMER`: present on a raw-channel sideband slot, naming its channel. */
+  universe?: number | null
+  channel?: number | null
+  /** The two effect kinds. */
+  effectId?: number | null
+  effectType?: string | null
+  effectName?: string | null
+  beatDivision?: number | null
+  blendMode?: string | null
+  running?: boolean | null
+  speedMasterUuid?: string | null
+  rateSpeedMasterUuid?: string | null
+  /** The two effect kinds: running, but not painting this key — the desk's own suppression answer. */
+  heldBack?: boolean | null
+  cueId?: number | null
+  cueStackId?: number | null
+  /** A programmer layer's id or a cue layer's, whichever produced this one. */
+  layerId?: number | null
+  layerSource?: LayerSource | null
+}
+
+/** One fixture's (or one member's) stack, top first. */
+export interface KeyStack {
+  targetKey: string
+  layers: KeyStackLayer[]
+}
+
+/** The answer to [ProgrammerApi.keyStack]: one stack for a fixture, one per member for a group. */
+export interface KeyStackAnswer {
+  targetType: ProgrammerTargetType
+  targetKey: string
+  propertyName: string
+  /** The programmer is blind: its slots are listed, none is on stage, and it holds nothing back. */
+  blind: boolean
+  stacks: KeyStack[]
+}
+
+/** A local effect a release left running, because it also drives heads outside the target. */
+export interface TargetClearedPartial {
+  effectId: number
+  effectType: string
+  targetKey: string
+  isGroupTarget: boolean
+  propertyName: string
+}
+
+/** The answer to [ProgrammerApi.clearTarget]. */
+export interface TargetCleared {
+  targetType: ProgrammerTargetType
+  targetKey: string
+  /** Property entries and raw channels released. */
+  values: number
+  /** Local effects stopped. */
+  effects: number
+  partial: TargetClearedPartial[]
+}
+
+/**
+ * How long a `keyStack` / `clearTarget` promise waits for its answer. Both are answered in one
+ * handler pass on the desk, so this only ever fires for a socket that dropped mid-request.
+ */
+export const PROGRAMMER_REQUEST_TIMEOUT_MS = 5_000
+
 // ── Outgoing ────────────────────────────────────────────────────────────────
 
 interface ProgrammerSetOutgoing {
@@ -356,7 +438,25 @@ interface ProgrammerClearSceneryOutgoing {
   fadeMs?: number
 }
 
+interface ProgrammerKeyStackOutgoing {
+  type: 'programmer.keyStack'
+  targetType: ProgrammerTargetType
+  targetKey: string
+  propertyName: string
+  requestId: string
+}
+
+interface ProgrammerClearTargetOutgoing {
+  type: 'programmer.clearTarget'
+  targetType: ProgrammerTargetType
+  targetKey: string
+  fadeMs?: number
+  requestId: string
+}
+
 export type ProgrammerOutgoingMessage =
+  | ProgrammerKeyStackOutgoing
+  | ProgrammerClearTargetOutgoing
   | ProgrammerSetOutgoing
   | ProgrammerSetColourOutgoing
   | ProgrammerSetPositionOutgoing
@@ -451,7 +551,31 @@ interface ProvenanceStateIncoming {
   programmerRevision?: number
 }
 
+interface ProgrammerKeyStackIncoming {
+  type: 'programmer.keyStack'
+  requestId?: string | null
+  targetType: ProgrammerTargetType
+  targetKey: string
+  propertyName: string
+  blind: boolean
+  stacks?: KeyStack[]
+  error?: string | null
+}
+
+interface ProgrammerTargetClearedIncoming {
+  type: 'programmer.targetCleared'
+  requestId?: string | null
+  targetType: ProgrammerTargetType
+  targetKey: string
+  values: number
+  effects: number
+  partial?: TargetClearedPartial[]
+  error?: string | null
+}
+
 type ProgrammerIncomingMessage =
+  | ProgrammerKeyStackIncoming
+  | ProgrammerTargetClearedIncoming
   | ProgrammerStateIncoming
   | ProgrammerIncludeTargetIncoming
   | ProgrammerLayerStateIncoming
@@ -568,6 +692,26 @@ export interface ProgrammerApi {
       fadeMs?: number
     },
   ): void
+
+  /**
+   * What sits under one property, top first — park, the programmer's own effects, each owner's
+   * slot, the other effects with whether each is held back, the cue's value, the base (W1). Asked of
+   * the desk and answered to this socket only, so it is a promise rather than a subscription: the
+   * sheet's stack re-asks when `provenanceState` moves. Rejects when the desk answers an error, the
+   * socket is down, or no answer comes within [PROGRAMMER_REQUEST_TIMEOUT_MS].
+   */
+  keyStack(
+    targetType: ProgrammerTargetType,
+    targetKey: string,
+    propertyName: string,
+  ): Promise<KeyStackAnswer>
+  /**
+   * Release everything the programmer holds on a fixture (and its heads) or a group, plus the
+   * local effects on it, at [fadeMs] — the sheet's *Release* (W2). An operator gesture: a closed
+   * socket toasts and rejects. Resolves with what the desk released, including the effects it left
+   * running because they also drive heads outside the target.
+   */
+  clearTarget(targetType: ProgrammerTargetType, targetKey: string, fadeMs?: number): Promise<TargetCleared>
 
   /** Fires on any change to the programmer or provenance. Drives coarse consumers. */
   subscribe(fn: (state: ProgrammerState) => void): Subscription
@@ -870,8 +1014,63 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     notifyState()
   }
 
+  // The two request/reply frames. Replies are unicast to this socket, so a counter is unique
+  // enough; the id is echoed so overlapping requests (a stack re-asked while the last is in
+  // flight) each resolve with their own answer.
+  let nextRequestId = 1
+  const pending = new Map<
+    string,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >()
+
+  const request = <T,>(build: (requestId: string) => ProgrammerOutgoingMessage, gesture: boolean): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const requestId = `req-${nextRequestId++}`
+      const message = build(requestId)
+      const sent = gesture ? sendGesture(conn, message) : conn.send(JSON.stringify(message))
+      if (!sent) {
+        reject(new Error('The desk is not connected'))
+        return
+      }
+      const timer = setTimeout(() => {
+        pending.delete(requestId)
+        reject(new Error(`${message.type} was not answered`))
+      }, PROGRAMMER_REQUEST_TIMEOUT_MS)
+      pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject, timer })
+    })
+
+  const settle = (requestId: string | null | undefined, error: string | null | undefined, value: unknown) => {
+    if (requestId == null) return
+    const waiting = pending.get(requestId)
+    if (!waiting) return
+    pending.delete(requestId)
+    clearTimeout(waiting.timer)
+    if (error != null) waiting.reject(new Error(error))
+    else waiting.resolve(value)
+  }
+
   const handleMessage = (message: ProgrammerIncomingMessage) => {
     switch (message.type) {
+      case 'programmer.keyStack':
+        settle(message.requestId, message.error, {
+          targetType: message.targetType,
+          targetKey: message.targetKey,
+          propertyName: message.propertyName,
+          blind: message.blind,
+          stacks: message.stacks ?? [],
+        } satisfies KeyStackAnswer)
+        break
+      case 'programmer.targetCleared':
+        // Nothing to apply locally: the release moves provenance, whose broadcast re-reads the
+        // values on every tab, this one included.
+        settle(message.requestId, message.error, {
+          targetType: message.targetType,
+          targetKey: message.targetKey,
+          values: message.values,
+          effects: message.effects,
+          partial: message.partial ?? [],
+        } satisfies TargetCleared)
+        break
       case 'programmer.state':
         applyStateSnapshot(message)
         break
@@ -992,6 +1191,19 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     },
     clearAll(fadeMs) {
       send({ type: 'programmer.clearAll', fadeMs })
+    },
+    // A read, so a dead socket rejects without the gesture toast; the caller decides what to say.
+    keyStack(targetType, targetKey, propertyName) {
+      return request<KeyStackAnswer>(
+        (requestId) => ({ type: 'programmer.keyStack', targetType, targetKey, propertyName, requestId }),
+        false,
+      )
+    },
+    clearTarget(targetType, targetKey, fadeMs) {
+      return request<TargetCleared>(
+        (requestId) => ({ type: 'programmer.clearTarget', targetType, targetKey, fadeMs, requestId }),
+        true,
+      )
     },
     setBlind(blindOn, fadeMs) {
       send({ type: 'programmer.setBlind', blind: blindOn, fadeMs })
