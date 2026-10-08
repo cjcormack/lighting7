@@ -296,7 +296,7 @@ describe('FixtureSheet — writes', () => {
     fireEvent.change(pan, { target: { value: '265' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
     // 265° of a 530° pan is byte 128, not 255 — the descriptor's entry, never the axes.
-    expect(setPosition).toHaveBeenCalledWith('fixture', 'robe-1', 128, 0, 0)
+    expect(setPosition).toHaveBeenCalledWith('fixture', 'robe-1', 128, 0, 0, undefined)
     expect(update).not.toHaveBeenCalled()
   })
 })

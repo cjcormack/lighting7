@@ -534,10 +534,10 @@ Where session 4 departed from the bullets above, and why:
   the rows' `40–80`; typing still commits one value to every picked head.
 - **The pip gesture is one hook**, `hooks/usePipRun.ts`, factored out of `RigTile` unchanged, so the
   strip and the rig tile cannot drift.
-- **Left as found:** session 3's Position-bytes issue. `resolveCell`'s real-descriptor branch sets no
-  `panProperty` because that field is what tells the grid to write two axes rather than one
-  `setPosition`, so the fix belongs to the grid's resolution and its writes together, not to this
-  session; rows over a pick read the same resolution and type bytes on such a mover too.
+- **Session 3's Position-bytes issue was fixed beside this session, not in it** (#87, `17a9e7d`:
+  `resolveCell`'s descriptor branch attaches the axis sliders, `property` still choosing one
+  `setPosition`). Rows over a pick read the same resolution, so a pick of such movers types degrees
+  too, each head's degree resolved to its own byte.
 
 ### Session 5 — the Busk and Programmer views (frontend, W5's client)
 
