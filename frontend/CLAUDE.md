@@ -629,12 +629,14 @@ Release folds to its glyph and the scope line drops the fade.
   leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
   (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
   (a never-assigned master as master 1's uuid — the frame cannot say null; a rate master once set
-  cannot be put back to *unscaled* the same way, so the chip keeps naming it); **Done** comes back
+  cannot be put back to *unscaled* the same way, so the chip keeps naming it —
+  `FU-FX-RATE-MASTER-CLEAR`); **Done** comes back
   to the list, landing any move the floor still held; **×** stops the effect, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
   refetch never pulls a slider back under a finger; hosts key it on the effect's id *and* type, so
   the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** (⅛ … 16), any other
-  division typed beside it, with the master as a chip; a wall-clock effect types seconds and its chip is the rate master. A movement
+  division typed beside it (the chips elsewhere still speak note values, `FU-FE-FX-SPEED-SPELLING`),
+  with the master as a chip; a wall-clock effect types seconds and its chip is the rate master. A movement
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
@@ -666,7 +668,15 @@ Release folds to its glyph and the scope line drops the fade.
   is optional: the busk Effects tab leaves it off a pad's effect, which its pad releases.
 - **A cue's effect is read-only in the tray** (Fx board, *Open*; session 5, `isCueEffect`): it names
   its cue (*on Q12*) and draws no editor, pause or stop — its home is the cue, whose next GO would
-  put back anything changed here. Session 3 had left it editable.
+  put back anything changed here. Session 3 had left it editable. **Its cue opens it** (the board's
+  *opens it*, built after the plan): the open row's *on Q12* is a button onto that cue's **Cue
+  properties**, in place, through `stage/OwnerEditor` — the Stage view's *Moves with* path, not a
+  second one — over whichever host the sheet is in, Escape or Close returning to the sheet. The
+  project is the current one (a cue effect is always its), and the row is a button only once the cue
+  is named from that project's stack list, so a press never lands before the project has. Its name
+  is its visible text, never an `aria-label`. The editor is mounted by the tray on first use and
+  kept, so a card page's trays mount nothing until pressed. A folded chip for one still
+  only opens the tray, where the row names the cue before anything opens over the sheet.
 - **The head strip** (`HeadStrip`, D13; HeadsGroups board): on a multi-head fixture, under the
   fixture's own rows and a *Heads · 4 of 12* line; on a group, fixed under the scope line, outside the
   scroller, the group's whole subject. **All**, then a pip per head or member in its **live colour**

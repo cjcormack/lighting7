@@ -758,3 +758,15 @@ The open calls:
 | 4 | Whose pick the strip is | The sheet's own, never the desk selection. |
 | 5 | Where a row's colour or position editor opens | Inline, one row at a time. |
 | 6 | Existing movement templates | Stay Override, read as Absolute; only new ones start Around. |
+
+## 11. Where the deferrals went
+
+Closing note, 2026-10-08, after the plan was archived. The amendments above stay as written; this
+says where each thing they deferred lives now, so none lives only here.
+
+- **Session 5's *opens it*** — a cue's effect row naming its cue is a button onto that cue's Cue
+  properties, through `stage/OwnerEditor`. Built after the plan, `SHA-PENDING`.
+- **Session 3's two vocabularies for one speed** — `FU-FE-FX-SPEED-SPELLING` in
+  `../followups.md`, a Trigger waiting on which spelling wins.
+- **Session 3's rate master that Revert cannot clear** — `FU-FX-RATE-MASTER-CLEAR` in
+  `../followups.md`, a Trigger: the wire needs an explicit clear first.

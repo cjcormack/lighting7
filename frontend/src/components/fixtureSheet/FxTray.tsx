@@ -10,6 +10,7 @@ import {
   type ActiveEffect,
 } from '@/store/fixtureFx'
 import { usePauseGroupFxMutation, useRemoveGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
+import { useCurrentProjectQuery } from '@/store/projects'
 import { useIsDeskConnected } from '@/store/status'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
@@ -19,6 +20,7 @@ import { LookTogglePicker } from '../fx/LookTogglePicker'
 import type { PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
+import { OwnerEditor } from '../stage/OwnerEditor'
 import { fixtureHeadKeys } from './useRelease'
 import { useCueLabel, useEffectDetail } from './effectLabels'
 import { effectsReaching } from './rowSource'
@@ -46,6 +48,8 @@ export interface TrayPick {
  * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put
  * back anything changed here (W5 refuses a cue's instance for the same reason). Session 3 left it
  * editable, as `ActiveEffectSheet` had; a *pad's* instance is edited (D20), being the programmer's.
+ * The open row's naming of the cue is the board's *opens it*: a button that opens the cue's **Cue
+ * properties** in place, through `OwnerEditor` — the Stage view's *Moves with* path, not a second one.
  */
 export function isCueEffect(effect: Pick<ActiveEffect, 'programmerOwned' | 'cueId'>): boolean {
   return !effect.programmerOwned && effect.cueId != null
@@ -119,6 +123,14 @@ export function FxTray({
   const auditioned = audition != null && audition.startKey === startKey ? audition.effect : null
   const setAuditioned = (effect: AuditionedEffect | null) => setAudition(effect == null ? null : { startKey, effect })
   const [editingId, setEditingId] = useState<number | null>(null)
+  // The cue whose properties are open over the sheet. Held here, not on its row, so the sheet stays
+  // open if the cue's effect stops under it.
+  const [openCueId, setOpenCueId] = useState<number | null>(null)
+  const [cueSheetMounted, setCueSheetMounted] = useState(false)
+  const openCue = (cueId: number) => {
+    setCueSheetMounted(true)
+    setOpenCueId(cueId)
+  }
   const editingLive = editingId != null ? effects.find((e) => e.id === editingId) ?? null : null
 
   const edit = (e: ActiveEffect) => {
@@ -321,6 +333,10 @@ export function FxTray({
           {effects.map((e) => {
             const group = via(e)
             const cue = isCueEffect(e)
+            // A button only once the cue is named: its name comes from the current project's stack
+            // list, so a named cue means the project the cue sheet opens in has loaded too.
+            const cueId = cue ? e.cueId : null
+            const cueName = cueId != null ? cueLabel(cueId) : undefined
             const home = e.programmerOwned
               ? 'programmer'
               : e.cueId != null
@@ -385,7 +401,25 @@ export function FxTray({
                     {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}
                     {e.isGroupTarget && e.elementMode && ` · ${getElementModeLabel(e.elementMode)}`}
-                    {home && ` · ${home}`}
+                    {cueId != null && cueName != null ? (
+                      <>
+                        {' · '}
+                        <button
+                          type="button"
+                          data-open-cue={cueId}
+                          // Dotted, since a touch screen has no hover to say it is a press; on the
+                          // phone host a finger's height of hit area, as inline padding so the line
+                          // itself does not grow.
+                          className={cn('underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid', finger && 'py-2.5')}
+                          title={`The cue’s effect — open ${cueName}’s properties to change it`}
+                          onClick={() => openCue(cueId)}
+                        >
+                          {home}
+                        </button>
+                      </>
+                    ) : (
+                      home && ` · ${home}`
+                    )}
                   </div>
                 </div>
                 {isEditing && (
@@ -403,6 +437,20 @@ export function FxTray({
           })}
         </div>
       )}
+      {cueSheetMounted && <CueSheet cueId={openCueId} onClose={() => setOpenCueId(null)} />}
     </div>
   )
+}
+
+/**
+ * A cue's **Cue properties** over the sheet, mounted the first time a cue row is pressed and kept so
+ * it can animate closed — a card page holds a tray per card, and each would otherwise mount the
+ * owner editor's three closed sheets. A cue effect is the current project's, so that is the project.
+ * Rendered inside the sheet's own tree, so Radix layers it over the host — the pop-up, the docked
+ * panel, either phone sheet or a card — and Escape or a click outside closes it alone.
+ */
+function CueSheet({ cueId, onClose }: { cueId: number | null; onClose: () => void }) {
+  const { data: project } = useCurrentProjectQuery()
+  if (project == null) return null
+  return <OwnerEditor projectId={project.id} entry={cueId == null ? null : { kind: 'cue', id: cueId }} onClose={onClose} />
 }
