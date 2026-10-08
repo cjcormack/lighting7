@@ -1,7 +1,6 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–3 shipped (`1d4a7660`, `50691dd`, session 3
-> below).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> **Document status: APPROVED, 2026-10-07 — sessions 1–3 shipped (`1d4a7660`, `50691dd`, `eff39ab`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
 > (§10). Session 1 (the desk's half), session 2 (the sheet) and session 3 (the tray and the live
 > editor) are done; sessions 4–6 are not started.
 >
@@ -389,7 +388,7 @@ Where session 2 departed from the bullets above, and why:
 - **The colour row's swatch is dimmed by the dimmer, with the UV dot** (Chris, the same review) — the
   old visualiser's reading; the value is the text beside it.
 
-### Session 3 — the FX tray and the live editor (frontend)
+### ~~Session 3 — the FX tray and the live editor (frontend)~~ — done, `eff39ab`
 
 - **`FxPicker` (D9).** Family segment, effect rows. A tap starts the effect with defaults on the
   property the sheet came from; another tap swaps the type through `updateFx` (phase kept).
