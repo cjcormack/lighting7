@@ -1,8 +1,8 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–3 shipped (`1d4a7660`, `50691dd`, `eff39ab`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
-> (§10). Session 1 (the desk's half), session 2 (the sheet) and session 3 (the tray and the live
-> editor) are done; sessions 4–6 are not started.
+> **Document status: APPROVED, 2026-10-07 — sessions 1–4 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> (§10). Session 1 (the desk's half), session 2 (the sheet), session 3 (the tray and the live
+> editor) and session 4 (heads and groups) are done; sessions 5–6 are not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -464,7 +464,7 @@ Where session 3 departed from the bullets above, and why:
   pan and tilt annotate travel types **bytes** there while the editor speaks degrees for its sizes
   (D14's rule, read from the axis sliders). The programmer grid's position cell shares the rule.
 
-### Session 4 — heads and groups (frontend)
+### ~~Session 4 — heads and groups (frontend)~~ — done, `7ee8347`
 
 - **`HeadStrip` (D13).**
   - *All*, plus pips in live colours from `FixtureAppearanceSource`.
