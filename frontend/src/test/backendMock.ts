@@ -539,6 +539,12 @@ export function lightingApiMock() {
         patchLayer: () => {},
         setScenery: () => {},
         clearScenery: () => {},
+        // The two request/reply frames (fixture-fx-sheets W1, W2) answer promises. A test that cares
+        // about the answer spies on these; the defaults are an empty stack and an empty release.
+        keyStack: (targetType: string, targetKey: string, propertyName: string) =>
+          Promise.resolve({ targetType, targetKey, propertyName, blind: false, stacks: [] }),
+        clearTarget: (targetType: string, targetKey: string) =>
+          Promise.resolve({ targetType, targetKey, values: 0, effects: 0, partial: [] }),
       },
       // Spelled out for the reason `status` is: `store/selection.ts`'s `queryFn` seeds its cache
       // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which

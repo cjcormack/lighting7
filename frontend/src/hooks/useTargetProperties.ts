@@ -12,7 +12,7 @@ import type { GroupPropertyDescriptor } from '@/api/groupsApi'
  * halves of the same data and folding them together would lose one:
  *
  * - [categoriseProperties] is pure and generic over both descriptor unions. The surfaces that
- *   *render* properties — `FixtureContent`, `GroupCard` (and through it `GroupDetailModal`) — need
+ *   *render* properties — `GroupCard` (and through it `GroupDetailModal`) — need
  *   the descriptors themselves, `min` / `max` and channel refs included, because they draw live
  *   controls. All they ever duplicated was the bucketing, in two byte-identical copies.
  * - [useTargetProperties] is the flat, uniform list: a name, a label, and whether the property can

@@ -20,7 +20,7 @@ import { useVisSource, type VisSource } from './useVisSource'
  * Which [ChannelSource] the value hooks in this subtree read from.
  *
  * Defaults to the wire, so every surface that doesn't opt in — the fixtures sheet, the busking
- * pads, `FixtureDetailView` — keeps showing real output with no change. Only the stage canvases
+ * pads, the fixture sheet — keeps showing real output with no change. Only the stage canvases
  * mount a provider. Same shape as `EditorContext`, which already switches these hooks between live
  * and Look-draft values.
  */

@@ -38,6 +38,8 @@ export function LocateButton({
             variant={isActive ? "default" : "outline"}
             size={iconOnly ? "icon" : "sm"}
             disabled={isToggling}
+            // The tooltip is not an accessible name, so the icon-only form carries its own.
+            aria-label={iconOnly ? tooltip : undefined}
             className={[
               isActive ? "bg-sky-500 hover:bg-sky-600 text-white" : "",
               iconOnly ? "size-8" : "",

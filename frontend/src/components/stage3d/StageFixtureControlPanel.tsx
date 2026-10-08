@@ -1,6 +1,6 @@
 import { Loader2, X } from 'lucide-react'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { FixtureDetailView } from '@/components/fixtures/FixtureDetailView'
+import { FixtureSheet } from '@/components/fixtureSheet/FixtureSheet'
 import { StageAimControls, isAimable } from './StageAimControls'
 import { StageFocusPanel } from './StageFocusPanel'
 import { useVisiblePatchListQuery } from '@/store/patches'
@@ -17,13 +17,12 @@ interface StageFixtureControlPanelProps {
 }
 
 /**
- * Docked, sheet-styled fixture control panel shown when a fixture is selected
- * on the stage in view mode. Reuses the same live-control view as the
- * `FixtureDetailModal` (colour, dimmer, position, channels…) — always editable,
- * no edit button — but docked inline rather than overlaying the page. A moving head also gets
- * "Aim at point" underneath, pinned to the panel's foot, and every fixture a **Focus** view
- * (`StageFocusPanel`): a conventional's lanterns focused on the stage, or what a DMX fixture's own
- * channels drive.
+ * The fixture sheet's **Stage** host (fixture-fx-sheets plan §4): docked at 380px beside the canvas
+ * when a fixture is selected in view mode. The same body as the pop-up — live while the desk is
+ * connected, no Edit / Done — with the Stage's two extras: a **Focus** tab (`StageFocusPanel`: a
+ * conventional's lanterns focused on the stage, or what a DMX head's own channels drive), and
+ * *Aim at point* as an **Aim…** popover on the Position row (D14's half), where it used to be a
+ * block pinned under the panel. The panel's foot is the FX tray's alone.
  */
 export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose }: StageFixtureControlPanelProps) {
   const { fixtureByKey, typeByKey } = useFixtureLookup()
@@ -44,33 +43,35 @@ export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose 
         <X className="size-4" />
       </button>
       {fixture ? (
-        <>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <FixtureDetailView
-              key={patchKey}
-              fixture={fixture}
-              isEditing
-              focus={
-                patch ? (
-                  <StageFocusPanel
-                    key={patch.id}
-                    projectId={projectId}
-                    patch={patch}
-                    fixture={fixture}
-                    fixtureType={fixtureType}
-                    lanterns={lanterns}
-                    canFocus={canAim}
-                  />
-                ) : undefined
-              }
-            />
-          </div>
-          {canAim && isAimable(fixture) && (
-            <div className="border-t p-4">
-              <StageAimControls key={patchKey} projectId={projectId} fixtureKeys={[patchKey]} />
-            </div>
-          )}
-        </>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <FixtureSheet
+            key={patchKey}
+            fixture={fixture}
+            host="stage"
+            focus={
+              patch ? (
+                <StageFocusPanel
+                  key={patch.id}
+                  projectId={projectId}
+                  patch={patch}
+                  fixture={fixture}
+                  fixtureType={fixtureType}
+                  lanterns={lanterns}
+                  canFocus={canAim}
+                />
+              ) : undefined
+            }
+            aim={
+              canAim && isAimable(fixture) ? (
+                <StageAimControls
+                  key={patchKey}
+                  projectId={projectId}
+                  fixtureKeys={[patchKey]}
+                />
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />

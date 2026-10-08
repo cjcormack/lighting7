@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from '../fixtures/G
 import { GroupMembersSection } from './GroupMembersSection'
 import { LocateButton } from '../fixtures/LocateButton'
 import { FxBadge } from '../fx/FxBadge'
-import { FxSection } from '../fx/FxSection'
+import { FxTray } from '../fixtureSheet/FxTray'
 import { BoundControlBadge } from '../surfaces/BoundControlBadge'
 import { categoriseProperties } from '@/hooks/useTargetProperties'
 import type { GroupMember, GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
@@ -23,9 +23,12 @@ function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const { data: groupDetail, isLoading: membersLoading } = useGroupQuery(group.name)
   const { data: properties, isLoading: propertiesLoading } = useGroupPropertiesQuery(group.name)
+  const trayTarget = useMemo(() => ({ type: 'group' as const, group }), [group])
 
   return (
-    <Card>
+    // The FX tray is the card's foot, as on the fixture sheet (fixture-fx-sheets plan §4); the rest
+    // of the card is session 4's group sheet.
+    <Card className="gap-0 overflow-hidden pb-0">
       <GroupCardHeader
         group={group}
         members={groupDetail?.members}
@@ -41,9 +44,6 @@ function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
           isEditing={isEditing}
         />
 
-        {/* Effects section */}
-        <FxSection group={group} />
-
         {/* Compact fixture member grid */}
         <GroupMembersSection
           members={groupDetail?.members}
@@ -51,6 +51,9 @@ function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
           onFixtureClick={onFixtureClick}
         />
       </CardContent>
+      <div className="mt-4">
+        <FxTray target={trayTarget} />
+      </div>
     </Card>
   )
 }

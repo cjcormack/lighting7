@@ -360,6 +360,34 @@ What session 1 found, and where it departed from the bullets above:
 - **Docs:** `frontend/CLAUDE.md` gains §"The fixture sheet"; `docs/stage-vis-engineering.md` gets
   Aim's move.
 
+#### Session 2 amendment
+
+Where session 2 departed from the bullets above, and why:
+
+- **The cards page and `GroupCard` moved a session early, as far as the deletions forced.** Deleting
+  `FixtureContent`'s properties view, `FxSection` and `EditModeContext` left the cards page and the
+  group card nothing to draw with. So the cards page mounts the sheet's `card` host now (rows and
+  tray, the page's Properties / Channels toggle kept, the per-card pencil gone), and `GroupCard`'s
+  effects are the sheet's `FxTray` at its foot — so a group card's **+ Effect** is a programmer effect
+  too (D10), where `FxSection` added one the programmer's values held back. Session 6 keeps the card's corner pop-up button;
+  session 4 keeps the group sheet — `GroupCard` and `GroupDetailModal` still draw the group
+  visualisers and their own Edit toggle until then.
+- **The Channels cards lost their Edit toggle too** (`EditModeContext` was theirs as well). They are
+  live while the desk is connected, as the DMX sheet already was, and a single channel's unpark now
+  asks first, as the fixture's Park and Unpark All do.
+- **A typed field commits on Enter, a drag as it moves.** The kit's `EditorField` writes per
+  keystroke; the sheet wraps it (`SheetField`) so a typed value is one write at the programmer fade.
+  A drag writes at no fade — it follows the hand. Setting picks and × take the fade.
+- **The heads are an interim section.** Without the head strip (session 4), a multi-head fixture
+  shows its all-heads controls through the group visualisers and one disclosure per head of the
+  sheet's own rows; `HeadsSection` is what session 4 replaces.
+- **The tray keeps the Look picker** `FxSection` carried, beside **+ Effect**, rather than dropping a
+  way to press a Look onto one fixture.
+- **A group's effect in a fixture's tray keeps pause and stop, and stop asks first** (Chris, in
+  session 2's review): it stops the effect on every member. `FxSection` showed these read-only.
+- **The colour row's swatch is dimmed by the dimmer, with the UV dot** (Chris, the same review) — the
+  old visualiser's reading; the value is the text beside it.
+
 ### Session 3 — the FX tray and the live editor (frontend)
 
 - **`FxPicker` (D9).** Family segment, effect rows. A tap starts the effect with defaults on the

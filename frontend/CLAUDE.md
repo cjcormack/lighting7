@@ -448,14 +448,14 @@ bottom sheet on an upright phone; never in a `render_view` capture. See the stag
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
 **triggers**, never values: a `TriggerPropertyDescriptor` (`type: 'trigger'`, `triggersOf` in
 `store/fixtures.ts`) at the end of a fixture's properties, which every control-drawing switch skips
-(`PropertyVisualizer`, `categoriseProperties`, the programmer's channel map). `api/effectsApi.ts` reads
+(the fixture sheet's `buildSheetRows`, `categoriseProperties`, the programmer's channel map). `api/effectsApi.ts` reads
 the three outbound frames — `effects.armed` (form 3 in `store/effects.ts`, its countdown anchored to
 this browser's clock from the frame's `remainingMs`), `effects.fired`, `effects.skipped` — and the
 REST verbs (arm, fire, reload, a cue's whole-list events) are `store/effects.ts`'s; there is no inbound
 frame (lighting7 P2). Four surfaces: the red **`ArmedChip`** on the app header and, while immersive, on
 the `ShowHeader` row (`components/effects/`; a tap disarms, nothing is drawn disarmed);
 **`EffectsAnnouncer`**, mounted once in `Layout`, toasting every skip on every window; the
-**`CannonPanel`**, which `FixtureContent` draws in place of controls for a fixture with triggers —
+**`CannonPanel`**, which the fixture sheet (§The fixture sheet) draws above its rows for a fixture with triggers —
 loaded/spent per tube, arm/disarm, **hold-to-fire** (`HoldToFireButton`, 700 ms, a brush fires
 nothing), a confirmed reload, and a fire **rehearsed** while the programmer is blind or this window's
 vis source is the programmer (`rehearse: true`: drawn on every window, nothing sent); and
@@ -470,7 +470,7 @@ instanced mesh pooled per canvas, unlit, invalidating each frame only while a fl
 `docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
 `CommandPropertyDescriptor` (`type: 'command'`, `commandsOf` in `store/fixtures.ts`) at the very end of
 a fixture's properties, skipped by every control-drawing switch and by `useTargetProperties`' `expand`
-(which now drops triggers too — a picker offering either offered only a 400). `FixtureContent` draws
+(which now drops triggers too — a picker offering either offered only a 400). The fixture sheet draws
 **`FixtureCommandsMenu`** (`components/fixtures/`) above the controls: a *Commands* dropdown, each item
 its hold, each behind an `AlertDialog` naming the unit and the command with its description, its hold
 and what it sets for the hold (`alongside`). Confirmed, it is one REST call
@@ -491,8 +491,10 @@ layers allow, so a closed tab or a flown piece shows where the light lands. It i
 
 **Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*
 besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
-height, sent to `POST /programmer/aim` for the selected moving heads — under the single fixture's
-panel, or its own docked panel for a multi-selection in view mode, and only on the live project.
+height, sent to `POST /programmer/aim` for the selected moving heads — from the single fixture's
+sheet as an *Aim…* popover on its Position row (fixture-fx-sheets session 2; it was a block pinned
+under the panel), or its own docked panel for a multi-selection in view mode, and only on the live
+project.
 The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
 point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
 
@@ -503,6 +505,90 @@ on-screen canvas only) to `POST /programmer/focus`, and the desk solves the focu
 distance. The blur that makes the result visible is a relative focus error times a per-type depth of
 field (`beamMask.ts`'s `focusBlur`; the GLSL and its twin change together), packed into the light
 table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` §"Focus".
+
+### The fixture sheet
+
+**One body for a fixture in every host** (fixture-fx-sheets plan session 2, D1–D10;
+`../docs/plans/fixture-fx-sheets-plan.md`, the boards in `../docs/plans/fixture-fx-sheets-design/`):
+`components/fixtureSheet/FixtureSheet` takes a fixture and a `host` — `popup` (`FixtureDetailModal`,
+the 512px Radix sheet the list, the grid's Info, the overview panel and Channels open), `stage`
+(`StageFixtureControlPanel`, 380px, with the **Focus** tab and the *Aim…* popover), `card` (the cards
+page: no header, unscrolled, the page's Properties / Channels toggle kept) and `phone` (session 6).
+Groups get it in session 4; until then `GroupDetailModal` and `GroupCard` keep the group visualisers
+and their Edit toggle, and `GroupCard`'s foot is the sheet's `FxTray`.
+
+**It is a programmer surface, and it says so.** Every value lands in Local; every effect it starts is
+a programmer effect. `FixtureContent`'s properties view, `PropertyVisualizers`, `FxSection`,
+`FixtureDetailView` and `EditModeContext` are deleted, and with them **every Edit / Done toggle on
+the fixture sheet, the cards page and the Channels cards** (D2): a surface is live while the desk is
+connected and read-only only offline, or per row on a parked property. Unpark keeps its confirm in
+both places that offer it. Don't bring a mode back — the confirm is the guard.
+
+The column (Main board): `SheetHeader` — name, the model line (heads, mode, footprint, address),
+then a 40px row of **Values · Channels** (· **Focus**), Locate, Park and **Release n** — then
+`ScopeLine` (*Writes to Local · fade 2.0 s*, the programmer fade read from `lib/programmerFade.ts` and
+never set here; amber *BLIND* while blind; *Offline* when it is; the held count on the right), then
+the properties — **the only scroller** — then `FxTray`, **outside** the scroller at the foot, so the
+effects never scroll away after the last property (issue 6). The root is a size container named `sheet`: the
+width ladder is a container query on the sheet, never the viewport (§4) — below 400px of sheet
+Release folds to its glyph and the scope line drops the fade.
+
+- **Rows** (`sheetRows.ts`, `buildSheetRows`): grouped by family in D3's order — Intensity · Colour ·
+  Position · Beam · **Controls** (macros, speeds, mode settings and timing channels, which
+  `lib/attributeFamily.ts` files under Beam as its catch-all). Triggers, commands and fine halves are
+  not rows. **Pan and tilt are one Position row** keyed `position` first (then the axis names), from
+  the grid's own `resolveCell(…, 'position')`. A colour head with no dimmer gets an Intensity *Dimmer*
+  row over its colour — no "Virtual" badge.
+- **Controls are the editor kit's** (D7): a slider beside an `EditorField` in the row's unit — a
+  **percent** for a level, as the grid reads; **degrees** for a Position whose axes annotate travel,
+  bytes otherwise. A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
+  takes the programmer fade, and `8` on the way to `80` would be a fade of its own; a drag writes as
+  it moves, at no fade. A setting row mounts the grid's `SettingCell` — one type-ahead for a step on
+  both surfaces. **Colour and Position open inline, one row at a time** (call 5): the colour row
+  docks `ColourEditor` with its typed channels, the position row grows its pad and Pan / Tilt fields.
+  The colour row's swatch is how the head **looks** — dimmed by its dimmer (a head's own, else the
+  fixture's), with the UV dot — and the text beside it is the value.
+- **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
+  goes through `clampCommitToResolution`'s degree rule, so 270° lands where the programmer's position
+  cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
+  the wire. A raw pan landed in the sideband, held nothing back and read *Programmer* while an effect
+  was on stage — the bug that started the plan.
+- **Source marks** (D4): `useRowSource` subscribes per key (`subscribeToKey`) and joins `getKeyState`
+  with the active-effect list through `rowSourceOf` (pure) — a 3px edge and a `SourceChip` in the
+  grid's colours: *Programmer* (filled once touched), *Night · pressed* for a pressed layer, the effect
+  as *Pulse · ¼ · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
+  something under the winner is held back, by `lib/heldBack.ts` — the desk's
+  `EffectSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
+  programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
+  head). `FxSheet`'s strike-through reads the same function. A dashed amber *Staged* sits beside the
+  chip while blind and held.
+- **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
+  asked on open and **again whenever the key's provenance moves** while open, every layer top first,
+  the one on stage ticked, held-back layers struck through and said out loud. The client never works
+  out what is underneath.
+- **Clearing** (D6): a row's × is drawn only while the programmer holds the row by an owner
+  `clearEntry` releases (a slot only a pressed layer holds is not the operator's to clear), and sends
+  `programmer.clearEntry` per held key at the programmer fade. **Release n** (`useRelease`) is one
+  `programmer.clearTarget` at the programmer fade, toasted in the desk's count, with the group effects
+  it left running in `partialSweepMessage`'s vocabulary (`outside: 'this fixture'`); no confirm, like
+  Clear (call 3). Its count (`heldOnFixture`) is the entries on the fixture and its heads whatever the
+  owner but a layer's, the sideband inside its footprint, and its local effects.
+- **The tray** (`FxTray`, D9's first half): folded, one 40px row — the count, a chip per effect
+  (dimmed while paused, *+n* past three), the Look picker and **+ Effect**; open, the rail's two-line
+  rows with pause and stop, up to half the sheet. A group's effect on the fixture reads *via <group>*
+  (with its element mode), and its stop **asks first** — it stops the effect on every member, since
+  the effect is the group's. A fixture's head row sees an effect on the fixture, which the desk
+  paints onto the heads (`effectsReaching`, the one filter the rows and the tray share).
+  Until session 3's live editor a row edits through `ActiveEffectSheet`, and **+ Effect** opens
+  `AddEditFxSheet` with `programmerOwned: true` (D10) — so it plays over the programmer's values
+  instead of being held back by them.
+- **Heads, until session 4's strip** (`HeadsSection`): the all-heads controls are still the group
+  visualisers, and each head is a disclosure of the sheet's own rows against its key.
+
+`FixtureSheet.test.tsx` pins the plan's list — family order, each source kind's chip and edge, the
+dot, × drawn only while held and its words, Release's frame and toast, Enter with the unit,
+`setPosition` and never `channels.update`, the tray outside the scroller, no Edit toggle, read-only
+offline and on a parked row — and `hosts.test.tsx` the two hosts.
 
 ### Looks, templates and layers
 

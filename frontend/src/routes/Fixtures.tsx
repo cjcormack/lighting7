@@ -2,15 +2,12 @@ import React, { Suspense, useState, useMemo, createContext, useContext } from "r
 import { useParams, useLocation, Navigate } from "react-router"
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
-import { Search, Loader2, Settings2, SlidersHorizontal, Pencil, Check } from "lucide-react"
+import { Search, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useVisibleFixtureListQuery } from "../store/fixtures"
 import { filterTerms, fixtureMatchesTerms } from "../lib/fixtureSearch"
-import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
 import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
 import { LocateButton } from "../components/fixtures/LocateButton"
@@ -20,10 +17,16 @@ import {
   FixturesViewSwitcher,
   stickyRedirectsToList,
 } from "../components/ViewSwitcher"
-import { FixtureContent, FixtureViewMode } from "../components/fixtures/FixtureContent"
+import { FixtureSheet } from "../components/fixtureSheet/FixtureSheet"
+import { ChannelsView } from "../components/fixtureSheet/ChannelsView"
+import { GroupMembershipSection } from "../components/fixtures/GroupMembershipSection"
+import { useIsDeskConnected } from "../store/status"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
+
+/** The page's Properties / Channels toggle, which every card follows. */
+type FixtureViewMode = 'properties' | 'channels'
 
 // Context for global view mode
 const ViewModeContext = createContext<FixtureViewMode>('properties')
@@ -174,16 +177,20 @@ function AllFixturesView({
   )
 }
 
+/**
+ * One card per fixture: the fixture sheet's **card** host (fixture-fx-sheets plan §4) — the same
+ * rows and FX tray as the pop-up, unscrolled, under the card's own header. There is no per-card
+ * Edit pencil any more: a card is live while the desk is connected (D2). Session 6 gives the card
+ * its corner pop-up button.
+ */
 const FixtureCard = React.memo(function FixtureCard({ fixture, onGroupClick }: { fixture: Fixture; onGroupClick: (groupName: string) => void }) {
   return (
-    <EditModeProvider>
-      <Card>
-        <FixtureCardHeader fixture={fixture} />
-        <CardContent>
-          <FixtureCardContent fixture={fixture} onGroupClick={onGroupClick} />
-        </CardContent>
-      </Card>
-    </EditModeProvider>
+    <Card className="gap-0 overflow-hidden pb-0">
+      <FixtureCardHeader fixture={fixture} />
+      <CardContent className="px-0">
+        <FixtureCardContent fixture={fixture} onGroupClick={onGroupClick} />
+      </CardContent>
+    </Card>
   )
 })
 
@@ -194,21 +201,30 @@ function FixtureCardContent({
   fixture: Fixture
   onGroupClick: (groupName: string) => void
 }) {
-  const { isEditing } = useEditMode()
   const viewMode = useViewMode()
+  const connected = useIsDeskConnected()
 
+  if (viewMode === 'channels') {
+    return (
+      <div className="px-6 pb-4">
+        <ChannelsView fixture={fixture} span={1} isEditing={connected} />
+      </div>
+    )
+  }
   return (
-    <FixtureContent
-      fixture={fixture}
-      isEditing={isEditing}
-      onGroupClick={onGroupClick}
-      viewMode={viewMode}
-    />
+    <>
+      {fixture.groups.length > 0 && (
+        <div className="px-6 pb-2">
+          <GroupMembershipSection groups={fixture.groups} onGroupClick={onGroupClick} />
+        </div>
+      )}
+      <FixtureSheet fixture={fixture} host="card" />
+    </>
   )
 }
 
 function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
-  const { isEditing, toggleEditing } = useEditMode()
+  const connected = useIsDeskConnected()
   const hasElements = (fixture.elements?.length ?? 0) > 0
 
   return (
@@ -221,20 +237,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
       )}
       <CardAction className="flex items-center gap-1">
         <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
-        <FixtureParkButton fixture={fixture} isEditing={isEditing} iconOnly />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={isEditing ? "default" : "outline"}
-              size="icon"
-              className="size-8"
-              onClick={toggleEditing}
-            >
-              {isEditing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isEditing ? "Done editing" : "Edit"}</TooltipContent>
-        </Tooltip>
+        <FixtureParkButton fixture={fixture} isEditing={connected} iconOnly />
       </CardAction>
       <div className="flex flex-wrap gap-1">
         {hasElements && (
