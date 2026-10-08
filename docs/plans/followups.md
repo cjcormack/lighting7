@@ -52,6 +52,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-PROG-FX-HELDBACK-COUNT`](#fu-prog-fx-heldback-count) | Trigger | Prog | an operator misses a held-back effect the grid's dot and the strike-through both show |
 | [`FU-PROG-LAYER-ROW-STACK`](#fu-prog-layer-row-stack) | Trigger | Prog | an operator asks what sits under a focused Look layer's own row |
+| [`FU-FX-RATE-MASTER-CLEAR`](#fu-fx-rate-master-clear) | Trigger | FX | an operator reverts a wall-clock effect and expects *Unscaled* back |
+| [`FU-FE-FX-SPEED-SPELLING`](#fu-fe-fx-speed-spelling) | Trigger | FE | an operator misreads a speed because the chip and the editor disagree, or Chris picks a spelling |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
@@ -962,6 +964,72 @@ If it fires, the answer is a client-side stack, not a new frame: the layer's own
 previous self). Don't send the draft to the desk to resolve.
 
 **Trigger**: an operator asks what sits under a focused Look layer's own row.
+
+---
+
+### `FU-FX-RATE-MASTER-CLEAR`
+
+**Nothing on the wire can put a running effect's rate master back to *unscaled*** · Trigger ·
+fixture-fx-sheets plan session 3 amendment, recorded at the plan's close-out, 2026-10-08
+
+A wall-clock effect's rate master scales its cycle by `bpm / 120`, and `null` is *unscaled*.
+`UpdateEffectRequest.rateSpeedMasterUuid` (`routes/lightFx.kt`) reads null as **no change**, as
+every field of that request does, and `FxEngine.updateEffect` keeps the existing master
+(`rateSpeedMasterUuid = newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid`). So neither door —
+`PUT /fx/{id}` nor the `updateFx` frame, which share one parse, `applyEffectUpdate` — can say
+"unscaled". The speed master has no such gap: master 1 is a real uuid and explicit master 1 behaves
+as the null default, but *unscaled* is not a master.
+
+What it costs today: the live editor's **Revert** (`components/fx/FxEditor.tsx`) cannot undo a rate
+master set in the editor. It sends the snapshot taken at open (`revert`), but `updateRequestOf`
+(`components/fx/fxEditorModel.ts`) leaves a null rate master out of the request, so the wire carries
+nothing for it and the desk reads that as no change: the effect keeps running on the master, and the
+editor keeps the draft's master on screen, so the chip names the master the desk still runs rather
+than claiming *Unscaled* (the plan's session 3 amendment, and `frontend/CLAUDE.md` §"The fixture
+sheet"). A template's draft can hold *Unscaled* (`TemplateEditor`'s
+`FxEffectFields`), because its PUT replaces the whole effect; only the running instance cannot.
+
+If it fires, the shape is an **explicit clear field** on `UpdateEffectRequest` —
+`clearRateSpeedMaster: Boolean`, refused beside a `rateSpeedMasterUuid` — carried by both doors
+through their one parse (`applyEffectUpdate`, and `UpdateFxInMessage.toRequest()` in
+`plugins/FxSocket.kt`), with `FxEngine.updateEffect` taking it to drop the rate slot. Never a
+sentinel uuid: a uuid that means "no master" is one that some bank could one day hold, and every
+reader of the field would have to know the exception. `FxLiveEditRoutesTest` pins the frame's exact
+key set, so the new key is added there on purpose; the client's Revert then sends the clear where
+the snapshot's rate master was null, and the chip can say *Unscaled* again.
+
+**Trigger**: an operator reverts a wall-clock effect in the live editor and expects *Unscaled* back.
+
+---
+
+### `FU-FE-FX-SPEED-SPELLING`
+
+**One effect speed, two spellings** · Trigger · fixture-fx-sheets plan session 3 amendment ("two
+vocabularies for one number, left for a later pass"), recorded at the plan's close-out, 2026-10-08
+
+The same `beatDivision` reads differently depending on where it is drawn:
+
+- **Beats a cycle** in the live editor and the template editor: the speed segment in
+  `components/fx/FxEffectFields.tsx` (`SPEED_BEATS`, ⅛ … 16), any other division typed beside it.
+- **Note values** everywhere else, through `getBeatDivisionLabel` in `components/fx/fxConstants.ts`
+  (`BEAT_DIVISION_OPTIONS`: `1/32` … `2 Bars`, else `${n}x`): via `effectSpeedLabel` on the fixture
+  sheet's tray chips and source chips (`useEffectDetail`, `components/fixtureSheet/effectLabels.ts`),
+  the busk Effects tab, the busk pad faces (`EffectPadDetail`, `padFace.ts`), the template sheet and
+  the grid's effect badge; directly on the programmer rail's FX strip (`ProgrammerFxList`) and the
+  stack (`LayerStack`).
+
+The two disagree on every beat value, not only at the edges: one beat is *1* in the editor and *1/4* on
+the chip, and 0.125 beats is *⅛* in the editor and *1/32* on the chip — the same glyph-shape for
+different numbers. Sixteen beats has no note value at all and reads *16x*.
+
+The decision it needs is which spelling wins, and it is Chris's: the pad faces are the busk view's
+vocabulary (a Pulse pad on one beat reads `Pulse · 1/4 · M2`), the editor's segment is the Fx
+board's. If it fires, the change is one label function used by both — the editor's segment labels
+and `getBeatDivisionLabel` reading the same table — never a third spelling, and the tests that pin
+either spelling move with it.
+
+**Trigger**: an operator misreads a speed because the chip and the editor disagree, or Chris picks a
+spelling.
 
 ---
 

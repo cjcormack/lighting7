@@ -74,6 +74,18 @@ vi.mock('../fx/FxPicker', () => ({
   },
 }))
 vi.mock('../fx/FxEditor', () => ({ FxEditor: () => <div data-testid="fx-editor" /> }))
+vi.mock('@/store/projects', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/projects')>()),
+  useCurrentProjectQuery: () => ({ data: { id: 7 } }),
+}))
+/** What the tray's cue button opens: the owner editor the Stage view's *Moves with* opens. */
+const ownerEditor = vi.hoisted(() => ({ props: null as null | { projectId: number; entry: { kind: string; id: number } | null; onClose: () => void } }))
+vi.mock('../stage/OwnerEditor', () => ({
+  OwnerEditor: (props: { projectId: number; entry: { kind: string; id: number } | null; onClose: () => void }) => {
+    ownerEditor.props = props
+    return props.entry ? <div data-testid="owner-editor">{`${props.entry.kind} ${props.entry.id} in ${props.projectId}`}</div> : null
+  },
+}))
 
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
@@ -349,16 +361,30 @@ describe('FixtureSheet — the shape', () => {
     expect(within(tray).getByTestId('fx-editor')).toBeTruthy()
   })
 
-  it("shows a cue's effect read-only in the tray — its cue named, no editor, pause or stop (session 5)", () => {
+  it("shows a cue's effect read-only in the tray — its cue named, no editor, pause or stop (session 5) — and its cue opens the cue", () => {
     wire.effects = [makeActiveEffect({ id: 9, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open the effects' }))
+    // Its folded chip opens the tray, where the row names the cue — never the cue itself.
+    fireEvent.click(screen.getByTitle('Pulse on dimmer — the cue’s'))
+    expect(document.querySelector('[data-fx-tray]')?.getAttribute('data-open')).toBe('true')
+    expect(screen.queryByTestId('owner-editor')).toBeNull()
     const row = document.querySelector('[data-effect-row="9"]') as HTMLElement
     expect(within(row).getByText(/on Q12/)).toBeTruthy()
     expect(within(row).queryByRole('button', { name: /^Pulse/ })).toBeNull()
     expect(within(row).queryByRole('button', { name: 'Pause Pulse' })).toBeNull()
     expect(within(row).queryByRole('button', { name: 'Stop Pulse' })).toBeNull()
     expect(screen.queryByTestId('fx-editor')).toBeNull()
+    // Its home opens it: the cue's naming is a button onto that cue's Cue properties, in place.
+    expect(screen.queryByTestId('owner-editor')).toBeNull()
+    // Named by its visible text (WCAG 2.5.3), so "click on Q12" reaches it.
+    fireEvent.click(within(row).getByRole('button', { name: 'on Q12' }))
+    expect(screen.getByTestId('owner-editor').textContent).toBe('cue 12 in 7')
+    expect(screen.queryByTestId('fx-editor')).toBeNull()
+    // Closing it closes only the cue sheet: the tray, and the sheet around it, stay open.
+    act(() => ownerEditor.props?.onClose())
+    expect(screen.queryByTestId('owner-editor')).toBeNull()
+    expect(document.querySelector('[data-fx-tray]')?.getAttribute('data-open')).toBe('true')
+    expect(document.querySelector('[data-effect-row="9"]')).not.toBeNull()
   })
 
   it('has no Edit toggle', () => {
