@@ -1,8 +1,9 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–4 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> **Document status: APPROVED, 2026-10-07 — sessions 1–5 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`, `2664955`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
 > (§10). Session 1 (the desk's half), session 2 (the sheet), session 3 (the tray and the live
-> editor) and session 4 (heads and groups) are done; sessions 5–6 are not started.
+> editor), session 4 (heads and groups) and session 5 (the Busk and Programmer views) are done;
+> session 6 is not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -539,7 +540,7 @@ Where session 4 departed from the bullets above, and why:
   `setPosition`). Rows over a pick read the same resolution, so a pick of such movers types degrees
   too, each head's degree resolved to its own byte.
 
-### Session 5 — the Busk and Programmer views (frontend, W5's client)
+### ~~Session 5 — the Busk and Programmer views (frontend, W5's client)~~ — done, `2664955`
 
 - **D16.**
   - The Centre segment in `TemplateEditor` and the template sheet's Value cell; new movement
