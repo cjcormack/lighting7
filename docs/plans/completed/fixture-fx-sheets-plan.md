@@ -765,7 +765,7 @@ Closing note, 2026-10-08, after the plan was archived. The amendments above stay
 says where each thing they deferred lives now, so none lives only here.
 
 - **Session 5's *opens it*** — a cue's effect row naming its cue is a button onto that cue's Cue
-  properties, through `stage/OwnerEditor`. Built after the plan, `SHA-PENDING`.
+  properties, through `stage/OwnerEditor`. Built after the plan, `afb9504`.
 - **Session 3's two vocabularies for one speed** — `FU-FE-FX-SPEED-SPELLING` in
   `../followups.md`, a Trigger waiting on which spelling wins.
 - **Session 3's rate master that Revert cannot clear** — `FU-FX-RATE-MASTER-CLEAR` in
