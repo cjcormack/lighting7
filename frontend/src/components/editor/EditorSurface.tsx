@@ -230,9 +230,10 @@ export function useEditorForm(): EditorForm {
  * covered strip; both sheet forms give the strip back — the bottom one by rising, the side one by
  * shortening.
  *
- * Only measured while the sheet is [open], so a closed editor costs no listeners.
+ * Only measured while the sheet is [open], so a closed editor costs no listeners. The fixture
+ * sheet's phone host (`fixtureSheet/PhoneSheet.tsx`) reads it too, so both give the bite back alike.
  */
-function useKeyboardInset(open: boolean | undefined): number {
+export function useKeyboardInset(open: boolean | undefined): number {
   const [inset, setInset] = useState(0)
 
   useEffect(() => {

@@ -159,7 +159,7 @@ allocation-free, which is what that frame loop requires.
 
 **The provider wraps only the canvases** — the `Stage3D` element in `routes/Stage.tsx`
 and the Positions panel's rows and Plan tab (`components/positions/`). Not `<main>`: the docked
-`StageFixtureControlPanel` renders the fixture sheet (`components/fixtureSheet/FixtureSheet`), a
+`StageFixtureControlPanel` (and the phone's `PhoneSheet`, portalled outside it) renders the fixture sheet (`components/fixtureSheet/FixtureSheet`), a
 live editing surface that must keep reading and writing the real wire whatever the stage is
 previewing. The same reasoning keeps
 `useVirtualDimmer` on the default source — all of its consumers are editing controls.
@@ -1969,7 +1969,31 @@ Position row (D14's half), holding the same `StageAimControls` body — so the p
 tray's alone. `StageFixtureControlPanel` passes that body as the sheet's `aim` prop only on the live
 project and for a head whose pan and tilt annotate degrees (`isAimable`), and the row draws the
 button only then; a multi-selection's docked aim panel in view mode is unchanged. The panel still
-reads the real wire whatever the vis source says. The phone's bottom sheet is session 6.
+reads the real wire whatever the vis source says.
+
+**On a phone the same sheet is the `phone` host** (fixture-fx-sheets plan session 6, D14): before it,
+a fixture tap below 640px opened nothing, because the docked panel was gated to tablet width and up.
+`StageFixtureControls` (in `StageFixtureControlPanel.tsx`) now picks the host by the cell editor's
+form, `useEditorForm` — never a `sm:` width: the docked 380px panel where a cell editor would be a
+popover, and `fixtureSheet/PhoneSheet` otherwise. Held upright that is a **bottom sheet with three
+heights** — the header and tray (*peek*), half (where it opens), full (88svh, `EditorSurface`'s own
+cap) — and a grabber: a drag follows the finger and settles on the nearest height, a drag well below
+the peek closes it, a tap or Enter steps it taller (round from full to the peek), the arrow keys step
+it either way. At the peek the properties fold away, so the stage stays in view. Held landscape (a
+short viewport, which beats narrow) it is the **right-hand sheet**, 380px plus the safe-area inset,
+full height. Both put the safe-area inset under the tray, which is always the column's foot, so the
+tray sits above the home indicator, and both give back the keyboard's bite from `visualViewport`
+(`EditorSurface`'s `useKeyboardInset`) — the bottom sheet rises by it, the side sheet shortens. The
+rows take finger sizes there (a 36px field at 16px text, so iOS does not zoom the page on focus; a
+32px × and editor chevron; 32px tray chips, in a 48px tray row).
+
+The phone sheet is **not modal**: the canvas behind stays live, so a tap on another fixture moves the
+sheet onto it and a tap on empty stage closes it, as the docked panel behaves — an outside press is
+the stage's to answer, not a dismiss, and opening it takes no focus from the canvas. It drops
+**nothing** the panel has: the Focus tab lands its beam on the canvas the sheet sits over (the board
+draws it on the phone), and *Aim…* opens its popover over the sheet, on the live project only, as on
+the panel. The busk view's *Fixture sheet…* uses the same `PhoneSheet` on a phone — modal there, as
+it opens from a menu — so a phone has one fixture sheet.
 
 **The Focus tab** (`StageFocusPanel`, a tab of `StageFixtureControlPanel`) and the patch editor's
 **Lantern** box both mount `components/lanterns/FocusCard.tsx`: the lantern and a live cross-section

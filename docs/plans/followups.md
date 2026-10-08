@@ -50,6 +50,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
+| [`FU-PROG-FX-HELDBACK-COUNT`](#fu-prog-fx-heldback-count) | Trigger | Prog | an operator misses a held-back effect the grid's dot and the strike-through both show |
+| [`FU-PROG-LAYER-ROW-STACK`](#fu-prog-layer-row-stack) | Trigger | Prog | an operator asks what sits under a focused Look layer's own row |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
@@ -922,6 +924,47 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 ---
 
+### `FU-PROG-FX-HELDBACK-COUNT`
+
+**No held-back *count* in the programmer rail's FX strip** · Trigger · fixture-fx-sheets plan §8,
+recorded at session 6, 2026-10-08
+
+The plan marks a held-back effect in three places, all per effect or per cell: the fixture sheet's
+amber dot on a row, the programmer grid's amber corner dot (D19), and `FxSheet`'s strike-through on
+an effect chip (`isSuppressed`, `lib/heldBack.ts` — the desk's `EffectSuppression` rule copied clause
+for clause). The rail's FX strip (`ProgrammerFxList`) draws no **count** — "2 effects held back" —
+on the strip itself, so a held-back effect is only seen once the operator is looking at the row,
+the cell or the chip that carries it. The plan judged the dot enough and left the count out.
+
+If it fires, the count is a sum the client can already make: `isHeldBack` over the active-effect
+list against `programmerHolds`, one subscription the strip has, no new frame. Keep it a read-out —
+a tap on it should open the stack (`LayerStack`) for one of the keys, never clear anything.
+
+**Trigger**: an operator, on the rig, misses that an effect is held back while the dot and the
+strike-through are both on screen.
+
+---
+
+### `FU-PROG-LAYER-ROW-STACK`
+
+**A focused Look layer's own row has no stack** · Trigger · fixture-fx-sheets plan §8, recorded at
+session 6, 2026-10-08
+
+`programmer.keyStack` (W1) answers what sits under a property **on the rig**: park, the programmer
+band, each owner's slot, effects held back, the cue contributor, the base. The source chip that
+opens it (`LayerStack`, D5 / D19) is drawn where ownership is — Local scope on the programmer's grid.
+With a Look or template layer **focused**, the grid edits the layer's **draft**, which is not on the
+desk's stack at all, so the cell's editor draws no chip (`FixturesTable`'s `sourceKeys` is undefined
+there). An operator editing a layer cannot ask "what would this row sit over".
+
+If it fires, the answer is a client-side stack, not a new frame: the layer's own row on top, then
+`keyStack`'s answer for the key with the focused layer's own slot taken out (it is the draft's
+previous self). Don't send the draft to the desk to resolve.
+
+**Trigger**: an operator asks what sits under a focused Look layer's own row.
+
+---
+
 ### `FU-API-FORCE-FIELDS`
 
 **`force` survives inert on the Record and Update request bodies** · Ready · frontend sweep §14
@@ -1117,7 +1160,7 @@ snapshot refreshes, and the next application runs the new effect. But
 `ProgrammerLayerStack.recookIfReferences` cooks `withEffects = false` on purpose — an edit touring
 to an already-applied layer "is not the layer arriving", and re-spawning would restart the effect
 mid-show on every nudge of a parameter. So the live instance keeps its timing until the layer is
-re-applied — or, as `fixture-fx-sheets-plan.md` session 1 found, until the stack next recooks for
+re-applied — or, as `completed/fixture-fx-sheets-plan.md` session 1 found, until the stack next recooks for
 any reason (a patch, a move, an unrelated add), which reads the edited template, finds the
 instance's spawn key stale and respawns it from the template with its phase restarted.
 `POST /fx/{id}/reset` is the per-instance answer (it re-keys the instance); `FxLiveEditRoutesTest`
@@ -1389,7 +1432,7 @@ REST behind the gate they have today.
 Nor by `stage-view-plan.md` session 4 (`render_view`): its `stageRender.request` is outbound-only
 and unicast, and the window answers over REST (`POST /stage-renders/{id}`), so the socket gained no
 inbound message.
-Nor by `fixture-fx-sheets-plan.md` session 1: `updateFx` is `pauseFx`'s tier (an operator gesture on
+Nor by `completed/fixture-fx-sheets-plan.md` session 1: `updateFx` is `pauseFx`'s tier (an operator gesture on
 both roles, gated as `pauseFx` / `removeFx` are), `programmer.clearTarget` is `programmer.clearEntry`'s,
 and `programmer.keyStack` is a read.
 

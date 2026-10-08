@@ -19,7 +19,7 @@ import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { SheetField } from './SheetField'
 import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
-import { useFixtureSheet } from './sheetContext'
+import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
 import { clearSheetRow, writePickColour, writePickVirtualDimmer, writeSheetLevel, writeSheetPosition } from './sheetWrites'
 import type { RowSource } from './rowSource'
@@ -86,6 +86,7 @@ function RowFrame({
   children: ReactNode
 }) {
   const { openRowId, connected } = useFixtureSheet()
+  const finger = useFingerSized()
   const name = row.label
   return (
     <div
@@ -114,9 +115,12 @@ function RowFrame({
             title={`Clear your ${name.toLowerCase()} — it falls to what is underneath`}
             disabled={!connected}
             onClick={() => clearSheetRow(headKey, row.keys, getProgrammerFadeMs())}
-            className="grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className={cn(
+              'grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
+              finger && FINGER_BUTTON_CLASS,
+            )}
           >
-            <X className="size-3" />
+            <X className={finger ? 'size-4' : 'size-3'} />
           </button>
         )}
       </div>
@@ -267,11 +271,12 @@ function SettingRow({ row, headKey, headName, sourceGroup }: { row: Extract<Shee
     [headKey, property.name, sourceGroup],
   )
   const noop = useCallback(() => {}, [])
+  const finger = useFingerSized()
   return (
     <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked}>
       {/* The programmer grid's setting cell, type-ahead and all (D7): one list for a step on both
           surfaces. Its trigger is the row's field here. */}
-      <div className="flex h-7 min-w-0 flex-1 items-center rounded-md border bg-background">
+      <div className={cn('flex h-7 min-w-0 flex-1 items-center rounded-md border bg-background', finger && FINGER_HEIGHT_CLASS)}>
         <SettingCell value={cellValue} resolutions={resolutions} label={row.label} disabled={readOnly} onCommit={onCommit} onBeginEdit={noop} />
       </div>
       {index >= 0 && property.options.length > 1 && (
@@ -292,6 +297,7 @@ export function openKey(headKey: string, row: SheetRow): string {
 
 export function OpenToggle({ row, headKey, label }: { row: SheetRow; headKey: string; label: string }) {
   const { openRowId, setOpenRowId } = useFixtureSheet()
+  const finger = useFingerSized()
   const key = openKey(headKey, row)
   const open = openRowId === key
   return (
@@ -300,7 +306,10 @@ export function OpenToggle({ row, headKey, label }: { row: SheetRow; headKey: st
       aria-expanded={open}
       aria-label={open ? `Close the ${label.toLowerCase()} editor` : `Open the ${label.toLowerCase()} editor`}
       onClick={() => setOpenRowId(open ? null : key)}
-      className="grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      className={cn(
+        'grid size-[22px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
+        finger && FINGER_BUTTON_CLASS,
+      )}
     >
       {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
     </button>

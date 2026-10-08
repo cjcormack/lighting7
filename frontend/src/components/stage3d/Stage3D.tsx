@@ -175,7 +175,7 @@ interface Stage3DProps {
    *  that cannot edit (the Positions panel's plan), which snaps nothing. */
   snap?: SnapGrid
   /** Suppress the bottom-center patch info overlay — set when the parent shows
-   *  the right-hand fixture control card, so the name isn't shown twice. */
+   *  the fixture sheet (docked, or a phone's bottom or side sheet), so the name isn't shown twice. */
   hidePatchSelectionInfo?: boolean
   onSelectionChange: (s: Selection, intent?: SelectIntent) => void
   /** A marquee on a section while editing: the fixtures inside it, and how they join the selection. */

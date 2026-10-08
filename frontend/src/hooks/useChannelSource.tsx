@@ -150,8 +150,9 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
  * the wire while it is built, which the live canvas shows for a frame and a one-frame render must
  * wait out.
  *
- * Wrap **only the canvas**. The Stage route's docked `StageFixtureControlPanel` is a live editor
- * and has to keep reading real output, so this must not go around a subtree that contains it.
+ * Wrap **only the canvas**. The Stage route's fixture sheet — the docked `StageFixtureControlPanel`,
+ * or on a phone the `PhoneSheet` (portalled, so outside it regardless) — is a live editor and has to
+ * keep reading real output, so this must not go around a subtree that contains it.
  */
 export function StageChannelSourceProvider({
   source: named,

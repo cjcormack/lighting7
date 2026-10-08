@@ -607,7 +607,7 @@ transaction.commit()
 
 A group is edited on the **group sheet** — the fixture sheet's body on a group (fixture-fx-sheets
 plan D1, D13; lighting7 `frontend/CLAUDE.md` §"The fixture sheet"), in `GroupDetailModal` and on
-each `GroupCard`. A strip of member pips picks what the rows edit, and every write is a programmer
+each `GroupCard`, whose corner opens the former. A strip of member pips picks what the rows edit, and every write is a programmer
 write, never a raw channel:
 
 - **All** sends one group-targeted programmer op (`programmer.set` / `setColour` / `setPosition`

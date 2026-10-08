@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { useEditorForm } from '@/components/editor/EditorSurface'
 import { FixtureSheet } from '@/components/fixtureSheet/FixtureSheet'
+import { PhoneSheet } from '@/components/fixtureSheet/PhoneSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { cn } from '@/lib/utils'
 import { useGroupListQuery } from '@/store/groups'
 import type { RenderTile } from '@/lib/buskRig'
 
@@ -33,11 +33,12 @@ export function useOpenBuskFixtureSheet(): ((target: BuskSheetTarget) => void) |
  * D1's sheet — or the group sheet for a group tile — opened from a rig tile's *Fixture sheet…*, to
  * see one head's layers and clear what it holds without leaving the busk view.
  *
- * Its form is the editor kit's (`useEditorForm`): a **bottom sheet** on an upright phone, and the
- * right-hand sheet everywhere else — the pop-up's own 512px Radix sheet on a desk rather than
- * `EditorSurface`'s narrower side form, since the sheet is the pop-up's body (`host="popup"`) and
- * draws its own header. A group's member opens its own sheet in place, as the group sheet's
- * Members view does.
+ * Its form is the editor kit's (`useEditorForm`). On a desk it is the pop-up's own 512px right-hand
+ * Radix sheet (`host="popup"`) rather than `EditorSurface`'s narrower side form, since the sheet
+ * draws its own header. On a phone it is the fixture sheet's **phone** host (`PhoneSheet`, session 6
+ * — the Stage view's, so a phone has one fixture sheet): the three-height bottom sheet held upright,
+ * the right-hand sheet held landscape, finger-sized rows, modal here since it opens from a menu. A
+ * group's member opens its own sheet in place, as the group sheet's Members view does.
  */
 export function BuskFixtureSheet({ target, onClose }: { target: BuskSheetTarget | null; onClose: () => void }) {
   const form = useEditorForm()
@@ -54,23 +55,37 @@ export function BuskFixtureSheet({ target, onClose }: { target: BuskSheetTarget 
   const fixtureKey = member ?? (shown?.type === 'fixture' ? shown.key : null)
   const fixture = fixtureKey != null ? fixtureByKey.get(fixtureKey) : undefined
   const group = member == null && shown?.type === 'group' ? groups?.find((g) => g.name === shown.name) : undefined
-  const bottom = form === 'bottom-sheet'
+  const host = form === 'popover' ? 'popup' : 'phone'
+  const description = 'The values, effects and layers of what this rig tile holds'
 
+  const body =
+    fixture != null ? (
+      <FixtureSheet key={fixture.key} fixture={fixture} host={host} titleComponent={SheetTitle} />
+    ) : group != null ? (
+      <FixtureSheet key={group.name} group={group} host={host} titleComponent={SheetTitle} onOpenMember={setMember} />
+    ) : (
+      <SheetTitle className="p-4">{shown?.type === 'group' ? shown.name : 'Fixture'}</SheetTitle>
+    )
+
+  if (form !== 'popover') {
+    return (
+      <PhoneSheet
+        open={target != null}
+        onClose={onClose}
+        form={form}
+        modal
+        description={description}
+        data-busk-fixture-sheet={form === 'bottom-sheet' ? 'bottom' : 'side'}
+      >
+        {body}
+      </PhoneSheet>
+    )
+  }
   return (
     <Sheet open={target != null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side={bottom ? 'bottom' : 'right'}
-        data-busk-fixture-sheet={bottom ? 'bottom' : 'side'}
-        className={cn('flex flex-col gap-0 p-0', bottom ? 'h-[88svh] rounded-t-xl' : 'sm:max-w-lg')}
-      >
-        <SheetDescription className="sr-only">The values, effects and layers of what this rig tile holds</SheetDescription>
-        {fixture != null ? (
-          <FixtureSheet key={fixture.key} fixture={fixture} host="popup" titleComponent={SheetTitle} />
-        ) : group != null ? (
-          <FixtureSheet key={group.name} group={group} host="popup" titleComponent={SheetTitle} onOpenMember={setMember} />
-        ) : (
-          <SheetTitle className="p-4">{shown?.type === 'group' ? shown.name : 'Fixture'}</SheetTitle>
-        )}
+      <SheetContent side="right" data-busk-fixture-sheet="side" className="flex flex-col gap-0 p-0 sm:max-w-lg">
+        <SheetDescription className="sr-only">{description}</SheetDescription>
+        {body}
       </SheetContent>
     </Sheet>
   )

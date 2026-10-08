@@ -22,6 +22,8 @@ import { ChannelsView } from "../components/fixtureSheet/ChannelsView"
 import { GroupMembershipSection } from "../components/fixtures/GroupMembershipSection"
 import { useIsDeskConnected } from "../store/status"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
+import { FixtureDetailModal } from "../components/groups/FixtureDetailModal"
+import { OpenSheetButton } from "../components/fixtureSheet/OpenSheetButton"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
 
@@ -143,7 +145,8 @@ function FixturesContainer() {
   )
 }
 
-function AllFixturesView({
+/** The cards themselves, with the group sheet a card's group chip opens and the pop-up its corner opens. */
+export function AllFixturesView({
   fixtureList,
   filteredFixtures,
 }: {
@@ -151,6 +154,7 @@ function AllFixturesView({
   filteredFixtures: Fixture[]
 }) {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [sheetKey, setSheetKey] = useState<string | null>(null)
 
   if (filteredFixtures.length === 0) {
     return (
@@ -166,13 +170,14 @@ function AllFixturesView({
     <>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(340px,100%),1fr))] gap-4">
         {filteredFixtures.map((fixture) => (
-          <FixtureCard fixture={fixture} key={fixture.key} onGroupClick={setSelectedGroup} />
+          <FixtureCard fixture={fixture} key={fixture.key} onGroupClick={setSelectedGroup} onOpenSheet={setSheetKey} />
         ))}
       </div>
       <GroupDetailModal
         groupName={selectedGroup}
         onClose={() => setSelectedGroup(null)}
       />
+      <FixtureDetailModal fixtureKey={sheetKey} onClose={() => setSheetKey(null)} />
     </>
   )
 }
@@ -180,13 +185,22 @@ function AllFixturesView({
 /**
  * One card per fixture: the fixture sheet's **card** host (fixture-fx-sheets plan §4) — the same
  * rows and FX tray as the pop-up, unscrolled, under the card's own header. There is no per-card
- * Edit pencil any more: a card is live while the desk is connected (D2). Session 6 gives the card
- * its corner pop-up button.
+ * Edit pencil any more: a card is live while the desk is connected (D2). Its **corner** opens the
+ * fixture's 512px pop-up (session 6, the Hosts board), for what the card leaves out — the Channels
+ * view on its own, Release, the scope line.
  */
-const FixtureCard = React.memo(function FixtureCard({ fixture, onGroupClick }: { fixture: Fixture; onGroupClick: (groupName: string) => void }) {
+const FixtureCard = React.memo(function FixtureCard({
+  fixture,
+  onGroupClick,
+  onOpenSheet,
+}: {
+  fixture: Fixture
+  onGroupClick: (groupName: string) => void
+  onOpenSheet: (fixtureKey: string) => void
+}) {
   return (
     <Card className="gap-0 overflow-hidden pb-0">
-      <FixtureCardHeader fixture={fixture} />
+      <FixtureCardHeader fixture={fixture} onOpenSheet={onOpenSheet} />
       <CardContent className="px-0">
         <FixtureCardContent fixture={fixture} onGroupClick={onGroupClick} />
       </CardContent>
@@ -223,7 +237,7 @@ function FixtureCardContent({
   )
 }
 
-function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
+function FixtureCardHeader({ fixture, onOpenSheet }: { fixture: Fixture; onOpenSheet: (fixtureKey: string) => void }) {
   const connected = useIsDeskConnected()
   const hasElements = (fixture.elements?.length ?? 0) > 0
 
@@ -238,6 +252,7 @@ function FixtureCardHeader({ fixture }: { fixture: Fixture }) {
       <CardAction className="flex items-center gap-1">
         <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
         <FixtureParkButton fixture={fixture} isEditing={connected} iconOnly />
+        <OpenSheetButton name={fixture.name} onOpen={() => onOpenSheet(fixture.key)} />
       </CardAction>
       <div className="flex flex-wrap gap-1">
         {hasElements && (
