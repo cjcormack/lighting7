@@ -38,7 +38,9 @@ import {
   type TemplateSummary,
 } from '@/api/templatesApi'
 import { formatError } from '@/lib/formatError'
-import { EffectParameterForm } from '@/components/fx/EffectParameterForm'
+import { FxEffectFields } from '@/components/fx/FxEffectFields'
+import { startingSpec, templateDraftOf, withTemplateDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
+import { EditorReadout } from '@/components/editor/EditorReadout'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
 import { useSpeedMasterForCategory } from '@/store/speedMasters'
@@ -65,8 +67,8 @@ import {
  *
  * **Holds** is the second identity choice, and it sits beside the family rather than under it: a
  * template holds a *value* or an *effect*, never both, and like the family it is fixed at creation
- * (fx-templates D1). Choosing Effect swaps the family-native control for `EffectParameterForm` —
- * the desk's own effect editor, reused rather than redrawn, minus every row that needs a fixture —
+ * (fx-templates D1). Choosing Effect swaps the family-native control for `FxEffectFields` —
+ * the live effect editor's fields, reused rather than redrawn, minus every row that needs a fixture —
  * and swaps the resolves-to panel for `TemplateRunsOn`. *Effect* is disabled under **Beam**: the
  * effect library has no beam category, and the backend refuses one by name so a script-registered
  * beam effect cannot mint a Beam effect template behind the rule.
@@ -225,18 +227,24 @@ export function TemplateEditor({
         // would silently become ten beats — the same units trap `effectSpeedLabel` exists for.
         const previousEntry = prev == null ? undefined : findEffectEntry(library, prev.effectType)
         const sameTiming = (previousEntry?.timingSource ?? 'BEAT') === (entry.timingSource ?? 'BEAT')
+        // The blend and the parameters are the effect's own **starting spec** — the picker's rule
+        // (fixture-fx-sheets plan D16): a movement effect starts *Around* (`ADDITIVE`, its centre
+        // pinned at 128), so a Circle pad pressed after a position pad orbits it; anything else
+        // starts on Override. The blend is not carried from the last effect — it was the hard-coded
+        // Override that made every Circle template circle 128/128.
+        const spec = startingSpec(entry)
         return {
           effectType: entry.name,
           category: entry.category,
           propertyName: null,
           beatDivision: sameTiming ? (prev?.beatDivision ?? 1.0) : 1.0,
-          blendMode: prev?.blendMode ?? 'OVERRIDE',
+          blendMode: spec.blendMode,
           distribution: prev?.distribution ?? 'LINEAR',
           phaseOffset: prev?.phaseOffset ?? 0,
           elementMode: null,
           elementFilter: null,
           stepTiming: null,
-          parameters: Object.fromEntries(entry.parameters.map((p) => [p.name, p.defaultValue])),
+          parameters: spec.parameters,
           // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere,
           // and this is the surface `useSpeedMasterForCategory` was kept uncalled for.
           speedMasterUuid: masterForCategory(entry.category),
@@ -247,8 +255,8 @@ export function TemplateEditor({
     [masterForCategory, library],
   )
 
-  const patchEffect = useCallback((patch: Partial<TemplateEffect>) => {
-    setEffectDraft((prev) => (prev == null ? prev : { ...prev, ...patch }))
+  const patchEffect = useCallback((patch: Partial<FxDraft>) => {
+    setEffectDraft((prev) => (prev == null ? prev : withTemplateDraft(prev, { ...templateDraftOf(prev), ...patch })))
   }, [])
 
   const handleSave = async () => {
@@ -419,7 +427,6 @@ export function TemplateEditor({
               library={library}
               draft={effectDraft}
               entry={effectEntry}
-              isEdit={template != null}
               onChoose={chooseEffect}
               onPatch={patchEffect}
             />
@@ -480,31 +487,30 @@ export function TemplateEditor({
  * with that wizard, fixture-fx-sheets session 3) had a back button and was wrong for one field
  * inside a form.
  *
- * **`EffectParameterForm` is reused as it stands**, with no target. Every target-bound row it draws
- * is behind an optional prop, and nothing inside it reads a target — it is the *caller* that derives
- * a property name, setting descriptors and element modes from one. So the omissions here are the
- * whole of the adaptation:
+ * **The fields are the live editor's** (`FxEffectFields`, fixture-fx-sheets plan D16), over the
+ * template's draft rather than a running instance: speed in beats a cycle with the master as a chip,
+ * a movement effect's ***Centre: Around current position | Absolute*** and a level effect's
+ * *Replace it | Within it*, the parameters in their roles, Shape and Advanced. It replaced
+ * `EffectParameterForm`, which was this editor's draft form until session 5 and nothing else's.
+ * What a template cannot answer is left out by its scope:
  *
- *  - no `settingProperties` / `sliderProperties` / `settingOptions` / `targetPropertyName` — a
- *    template effect names no property on no fixture;
- *  - no `elementMode` / `elementFilter` / `stepTiming` — all three are questions about a *specific*
+ *  - no setting or slider *On* — a template effect names no property on no fixture;
+ *  - no element mode, head filter or step timing — all three are questions about a *specific*
  *    multi-element head;
- *  - no `startOnBeat` — that is a fact about the moment an instance is spawned, and a template is
- *    not an instance;
- *  - no `extendedChannels`, so the colour picker offers RGB only. That is correct rather than
+ *  - no degrees — a size is in bytes, since there is no head to read a travel range from;
+ *  - no extended colour channels, so the colour picker offers RGB only. That is correct rather than
  *    lazy, and it matches the backend: `resolveColourGeneric` resolves a template's colour without
  *    a head, so what is authored here is what any head will be asked for.
  *
- * `distribution` **is** offered, and is not target-bound despite the form gating it on
- * `showDistribution`: how an effect's phase spreads across the heads it lands on is a property of
- * the effect, and the layer supplies the heads later.
+ * `distribution` **is** offered (Advanced): how an effect's phase spreads across the heads it lands
+ * on is a property of the effect, and the layer supplies the heads later. A wall-clock effect's rate
+ * master offers *Unscaled*, which a draft can hold and a live frame cannot.
  */
 function EffectControls({
   family,
   library,
   draft,
   entry,
-  isEdit,
   onChoose,
   onPatch,
 }: {
@@ -512,9 +518,8 @@ function EffectControls({
   library: EffectLibraryEntry[] | undefined
   draft: TemplateEffect | null
   entry: EffectLibraryEntry | undefined
-  isEdit: boolean
   onChoose: (entry: EffectLibraryEntry) => void
-  onPatch: (patch: Partial<TemplateEffect>) => void
+  onPatch: (patch: Partial<FxDraft>) => void
 }) {
   const category = effectCategoryForFamily(family)
   // Filtered through the same map the write boundary derives the family with, rather than by string
@@ -528,6 +533,7 @@ function EffectControls({
         : (library ?? []).filter((e) => familyForEffectCategory(e.category) === family),
     [library, category, family],
   )
+  const fxDraft = useMemo(() => (draft == null ? null : templateDraftOf(draft)), [draft])
 
   return (
     <div className="space-y-3">
@@ -555,48 +561,43 @@ function EffectControls({
             ))}
           </SelectContent>
         </Select>
-        {/* No description here: `EffectParameterForm`'s header already draws the name and the
-            description of the chosen effect, immediately below, and saying it twice reads as two
-            different facts. Only the filter's own count belongs to this field. */}
         <p className="text-[11px] text-muted-foreground">
           {offered.length} {FAMILY_LABELS[family].singular.toLowerCase()} effect
           {offered.length === 1 ? '' : 's'} — the family is the filter.
         </p>
       </div>
 
-      {draft != null && entry != null && (
-        // The form brings its own `p-4`; the border makes it read as one block inside the sheet's
-        // own spacing rather than as a run of loose fields.
-        <div className="rounded-md border">
-          <EffectParameterForm
-            effect={entry}
-            isEdit={isEdit}
-            targetPropertyName={null}
-            beatDivision={draft.beatDivision}
-            onBeatDivisionChange={(beatDivision) => onPatch({ beatDivision })}
-            blendMode={draft.blendMode}
-            onBlendModeChange={(blendMode) => onPatch({ blendMode })}
-            phaseOffset={draft.phaseOffset ?? 0}
-            onPhaseOffsetChange={(phaseOffset) => onPatch({ phaseOffset })}
-            parameters={draft.parameters}
-            onParametersChange={(parameters) => onPatch({ parameters })}
-            startOnBeat={false}
-            onStartOnBeatChange={() => {}}
-            showStartOnBeat={false}
-            showDistribution
-            distributionStrategy={draft.distribution}
-            onDistributionStrategyChange={(distribution) => onPatch({ distribution })}
-            speedMasterUuid={draft.speedMasterUuid}
-            onSpeedMasterChange={(speedMasterUuid) => onPatch({ speedMasterUuid })}
-            speedMasterDescription="Defaults to the master whose usage matches this family. Stored on the template, so every layer applying it follows the same tempo."
-            rateSpeedMasterUuid={draft.rateSpeedMasterUuid}
-            onRateSpeedMasterChange={(rateSpeedMasterUuid) => onPatch({ rateSpeedMasterUuid })}
+      {draft != null && fxDraft != null && entry != null && (
+        // The live editor's own column of fields, bordered so it reads as one block inside the
+        // sheet's spacing. The description is said once, here, under the picker that chose it.
+        <div className="flex flex-col gap-3 rounded-md border p-3" data-template-effect-fields>
+          {entry.description && <EditorReadout>{entry.description}</EditorReadout>}
+          <FxEffectFields
+            entry={entry}
+            timingSource={draft.timingSource}
+            draft={fxDraft}
+            scope={TEMPLATE_SCOPE}
+            axes={null}
+            extendedChannels={undefined}
+            settingProperty={undefined}
+            readOnly={false}
+            allowUnscaledRate
+            set={(patch) => onPatch(patch)}
+            setParam={(name, value) => onPatch({ parameters: { ...fxDraft.parameters, [name]: value } })}
           />
+          {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
+          <EditorReadout>
+            The master defaults to the one whose usage matches this family, and is stored on the
+            template — every layer applying it follows the same tempo.
+          </EditorReadout>
         </div>
       )}
     </div>
   )
 }
+
+/** Distribution under Advanced, and nothing that needs a head. */
+const TEMPLATE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, stepTiming: false }
 
 /**
  * A per-fixture template's values, read-only.

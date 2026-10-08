@@ -846,6 +846,26 @@ so retuning the template afterwards cannot move it, and without the source both 
 as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templateApply.kt` holds the
 four-point version of that reasoning.
 
+**An edit to a pad's running effect is the instance's alone** (fixture-fx-sheets plan D20, sessions
+1 and 5). The busk view's Effects tab, the fixture sheet's tray and the rail's *Edit…* all edit the
+**instance** the layer spawned, through `updateFx` (`FxEngine.updateEffect`: id and phase kept), and
+never the template. The layer stack keys that instance by the `EffectEntry` it was spawned from
+(`ProgrammerLayerEffectKey`), and `updateEffect` carries the key across its swap, so the edit
+**survives** every recook that leaves the template alone — a patch, a move, an unrelated add — and
+goes when the pad goes: pressing it off and on spawns the template's settings again. The client marks
+such an instance ***edited*** by comparing it with the template's effect, and offers two ways back
+to agreement. **Reset to template** is `POST /fx/{id}/reset` (W5): the template's current effect
+re-applied to the instance in place, phase kept, and the instance **re-keyed** to the template's
+current entry under the stack's effects lock. **Update template** is the template's `PUT {effect}`
+from the instance's settings **then** W5 on that instance — the PUT alone recooks values only and
+leaves applied instances, but the next recook for any reason reads the edited template, finds the
+instance's key stale and respawns it, phase restarted; the reset re-keys it first, so it keeps
+running. Every *other* applied instance of that template still holds the old settings and still
+carries the old key: it reads *edited*, and is respawned at its stack's next recook unless reset by
+hand (`FU-TMPL-FX-EDIT-NO-RETIME`). A **cue's** template-layer instance is refused by W5
+(`FX_NOT_FROM_TEMPLATE`, 409) — the next GO respawns it — and the fixture sheet's tray shows a cue's
+effect read-only.
+
 Fan-out is the same on both gestures: `CueComposer.effectsForLayer` spawns over a layer's targets *as
 authored*, and the click arm matches it, so a group selection stays one group-targeted effect with
 its distribution intact rather than becoming one instance per member. The click arm does have to test

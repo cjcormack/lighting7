@@ -347,6 +347,18 @@ describe('FixtureSheet — the shape', () => {
     expect(within(tray).getByTestId('fx-editor')).toBeTruthy()
   })
 
+  it("shows a cue's effect read-only in the tray — its cue named, no editor, pause or stop (session 5)", () => {
+    wire.effects = [makeActiveEffect({ id: 9, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open the effects' }))
+    const row = document.querySelector('[data-effect-row="9"]') as HTMLElement
+    expect(within(row).getByText(/on Q12/)).toBeTruthy()
+    expect(within(row).queryByRole('button', { name: /^Pulse/ })).toBeNull()
+    expect(within(row).queryByRole('button', { name: 'Pause Pulse' })).toBeNull()
+    expect(within(row).queryByRole('button', { name: 'Stop Pulse' })).toBeNull()
+    expect(screen.queryByTestId('fx-editor')).toBeNull()
+  })
+
   it('has no Edit toggle', () => {
     render(<FixtureSheet fixture={SPOT} host="stage" focus={<div>focus</div>} />)
     expect(screen.queryByRole('button', { name: /^(edit|done)$/i })).toBeNull()

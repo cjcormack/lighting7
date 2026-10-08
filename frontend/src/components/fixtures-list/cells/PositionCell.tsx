@@ -5,6 +5,7 @@ import type { CellBatch, CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { EditorSurface, type CellClickBehaviour } from '../../editor/EditorSurface'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
@@ -51,6 +52,12 @@ interface PositionCellOwnProps {
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
+  /**
+   * The cell's `(head, property)` keys, for the source chip on the editor's label line
+   * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
+   * no chip — the plain lists, a focused Look layer, `CueValueGrid`.
+   */
+  sourceKeys?: readonly CellKey[]
 }
 
 type PositionCellProps = PositionCellOwnProps & CellClickBehaviour
@@ -98,6 +105,7 @@ export const PositionCell = memo(function PositionCell({
   editorAnchorRef,
   onCommit,
   onBeginEdit,
+  sourceKeys,
 }: PositionCellProps) {
   const first = resolutions[0]
   const ranges =
@@ -252,7 +260,11 @@ export const PositionCell = memo(function PositionCell({
       {/* The wrapper is the editor's keyboard: Enter closes, comma steps Pan → Tilt, and a
           keyboard-opened editor focuses Pan. See `useEditorKeyboard`. */}
       <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-2">
-        <EditorLabelLine subject={headsLine(heads.count, scopeLabel)} column={label} />
+        <EditorLabelLine
+          subject={headsLine(heads.count, scopeLabel)}
+          column={label}
+          chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
+        />
         <div className="flex items-start gap-3">
           {/* The thumb sits where the pad's drag would put it: on the degree scale in degree mode,
               since an annotated axis may run `inverted` and the byte-normalised position would

@@ -111,7 +111,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
  * a row chip, and Rig focus is the whole rig stacked. Below `md` the side sheet is a bottom sheet
  * or a right-hand overlay through `useEditorForm`, opened from the page strip's button onto
- * Colour, since that sheet carries no Speed tab (D7) — Colour, Spread and Show.
+ * Colour, since that sheet carries no Speed tab (D7) — Colour, Spread, Effects and Show.
  *
  * **Three boards, and short beats narrow** (`Phones.dc.html`, `Tablets.dc.html`). `md` says
  * whether this is the desk board or the narrow one; the short-viewport fold — `SHORT_VIEWPORT`,

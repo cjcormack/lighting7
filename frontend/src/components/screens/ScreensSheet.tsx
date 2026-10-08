@@ -483,8 +483,8 @@ function EnumOption({
   disabledReason?: string
 }) {
   return (
-    <div className="flex items-center gap-1.5 text-xs">
-      <span className="text-muted-foreground">{option.label}</span>
+    <div className="flex min-w-0 items-center gap-1.5 text-xs">
+      <span className="shrink-0 text-muted-foreground">{option.label}</span>
       <ToggleGroup
         type="single"
         size="sm"
@@ -492,7 +492,10 @@ function EnumOption({
         onValueChange={(next) => next !== '' && onSet(next)}
         disabled={disabledReason != null}
         aria-label={`${option.name ?? option.label} on ${rowName}`}
-        className="h-7 gap-0.5 p-0.5"
+        // **Wraps inside its pill** where the row is narrower than its values, rather than running
+        // off the sheet: the busk Sheet segment holds six since the Effects tab (fixture-fx-sheets
+        // plan D20), and at a 375px phone *Show* was clipped. One line wherever it fits.
+        className="h-auto min-h-7 min-w-0 flex-wrap justify-start gap-0.5 p-0.5"
       >
         {option.values.map((v) => {
           // The wire's spelling unless the descriptor says otherwise — the Chrome segment says

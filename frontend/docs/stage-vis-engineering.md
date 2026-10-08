@@ -273,7 +273,7 @@ when nothing is fitted, so a memo keyed on it does not churn for the common rig.
 view, the 2D appearance leaf (the Positions chips, the busk tiles, the side sheet's fold, the colour
 editor's Pick) and the patch sheet's Media box and the Focus tab's list. The surfaces that *set* a
 value do not: the programmer's setting cell and its column, the fixture sheet's setting rows, the
-fixture card and `EffectParameterForm` list a setting's options with the type's stock `colourPreview`,
+fixture card and the effect editor's setting list (`FxEffectFields`, once `EffectParameterForm`) list a setting's options with the type's stock `colourPreview`,
 because they write a DMX slot and a slot is the type's, whichever gel a unit has in it — and on a
 fixture with extra placements one cell drives several units with different strings, so there is no
 one fitted colour for its swatch to show. Teaching them the patch's own is

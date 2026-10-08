@@ -7,6 +7,7 @@ import type { CellBatch, CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import { EditorSurface, useEditorForm, type CellClickBehaviour } from '../../editor/EditorSurface'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
@@ -52,6 +53,12 @@ interface SettingCellOwnProps {
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
+  /**
+   * The cell's `(head, property)` keys, for the source chip on the editor's label line
+   * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
+   * no chip — the plain lists, a focused Look layer, `CueValueGrid`.
+   */
+  sourceKeys?: readonly CellKey[]
 }
 
 type SettingCellProps = SettingCellOwnProps & CellClickBehaviour
@@ -93,6 +100,7 @@ export const SettingCell = memo(function SettingCell({
   editorAnchorRef,
   onCommit,
   onBeginEdit,
+  sourceKeys,
 }: SettingCellProps) {
   // The type-ahead's text, and which of the matches Enter would take. Reset on every open — by a
   // click, a marquee or the keyboard alike — so an editor never reopens holding the last search.
@@ -244,7 +252,12 @@ export const SettingCell = memo(function SettingCell({
       {/* The wrapper carries Enter and comma for every other editor; here the filter answers both
           keys itself and this only catches what it leaves. See `useEditorKeyboard`. */}
       <div ref={contentRef} onKeyDown={onKeyDown}>
-        <EditorLabelLine subject={headsLine(heads.count, scopeLabel)} column={label} className="px-2 pt-1 pb-1.5" />
+        <EditorLabelLine
+          subject={headsLine(heads.count, scopeLabel)}
+          column={label}
+          className="px-2 pt-1 pb-1.5"
+          chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
+        />
         {showFilter && (
           <Input
             type="text"

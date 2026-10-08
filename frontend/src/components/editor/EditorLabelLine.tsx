@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { useEditorForm } from './EditorSurface'
 
@@ -21,6 +22,7 @@ export function EditorLabelLine({
   className,
   docked = false,
   title,
+  chip,
 }: {
   subject: string
   column: string
@@ -36,9 +38,21 @@ export function EditorLabelLine({
   docked?: boolean
   /** The subject's hover — the refusal's full sentence where the subject is a scope's short word. */
   title?: string
+  /**
+   * The programmer grid's **source chip** (fixture-fx-sheets plan D19, `CellSourceChip`): on the
+   * line's right side, after the column, in the popover form — and, since both sheet forms draw no
+   * line, as a row of its own under the sheet's title there, so a phone reaches the stack too.
+   */
+  chip?: ReactNode
 }) {
   const form = useEditorForm()
-  if (!docked && form !== 'popover') return null
+  if (!docked && form !== 'popover') {
+    return chip == null ? null : (
+      <div data-editor-source-row className={cn('flex min-w-0 items-center gap-2', className)}>
+        {chip}
+      </div>
+    )
+  }
   return (
     <div
       data-editor-label-line
@@ -47,7 +61,10 @@ export function EditorLabelLine({
       <span className="min-w-0 truncate" title={title}>
         {subject}
       </span>
-      <span className="shrink-0">{column}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        {column}
+        {chip}
+      </span>
     </div>
   )
 }

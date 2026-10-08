@@ -109,8 +109,8 @@ export function getDistributionLabel(strategy: string): string {
  *
  * `beatDivision` carries both readings on one field, and they are a tempo apart: `2` is two beats
  * or two seconds, and only `timingSource` says which. Everything that renders a speed away from
- * `EffectParameterForm` (which has the library entry in hand and labels the input itself) goes
- * through this, so no surface has to re-derive the rule and none can get it half right.
+ * the live editor's fields (`FxEffectFields`, which have the library entry in hand and label the
+ * input themselves) goes through this, so no surface has to re-derive the rule and none can get it half right.
  *
  * **Null when the timing source is unknown**, and callers should then say nothing about the speed.
  * That happens for a template whose stored `effectType` no longer resolves in the registry — an

@@ -8,6 +8,8 @@ import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureF
 import {
   centreModeOf,
   degreesToSize,
+  differsFromTemplate,
+  withTemplateDraft,
   draftOf,
   levelModeOf,
   paramAxis,
@@ -126,5 +128,38 @@ describe('fxEditorModel', () => {
   it('files a composite under Intensity and an unknown category under Controls', () => {
     expect(pickerFamilyOf('composite')).toBe('INTENSITY')
     expect(pickerFamilyOf('scripted')).toBe('CONTROLS')
+  })
+})
+
+describe("a pad's instance against its template (§3.3, D20)", () => {
+  const template = {
+    effectType: 'Circle',
+    category: 'position',
+    beatDivision: 1,
+    blendMode: 'ADDITIVE',
+    distribution: 'CENTER_OUT',
+    phaseOffset: 0,
+    parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+    speedMasterUuid: null,
+    rateSpeedMasterUuid: null,
+  }
+  // A single fixture's instance: the desk leaves its distribution out, which `draftOf` reads LINEAR.
+  const instance = draftOf(
+    makeActiveEffect({ effectType: 'Circle', blendMode: 'ADDITIVE', distributionStrategy: null, parameters: { ...template.parameters, panRadius: '64.0' } }),
+  )
+
+  it('is not edited for a distribution the instance never said, nor for a number spelled differently', () => {
+    expect(instance.distributionStrategy).toBe('LINEAR')
+    expect(differsFromTemplate(instance, template, 'm1', {}, { distribution: false })).toBe(false)
+    // Asked to compare it, the guess reads as an edit — which is why the editor does not.
+    expect(differsFromTemplate(instance, template, 'm1', {}, { distribution: true })).toBe(true)
+    expect(differsFromTemplate({ ...instance, parameters: { ...instance.parameters, panRadius: '90' } }, template, 'm1', {}, { distribution: false })).toBe(true)
+    // A null master is master 1 on either side.
+    expect(differsFromTemplate({ ...instance, speedMasterUuid: 'm1' }, template, 'm1', {}, { distribution: false })).toBe(false)
+  })
+
+  it('keeps the template’s own distribution on Update where the instance said none', () => {
+    expect(withTemplateDraft(template, instance, { distribution: false }).distribution).toBe('CENTER_OUT')
+    expect(withTemplateDraft(template, { ...instance, distributionStrategy: 'RANDOM' }).distribution).toBe('RANDOM')
   })
 })

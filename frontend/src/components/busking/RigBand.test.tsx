@@ -54,6 +54,13 @@ vi.mock('@/store/fixtures', () => ({
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: patches }) }))
+// The sheet a tile's *Fixture sheet…* opens (D21) is the fixture sheet's body, whose own suites
+// pin it; here it only says what it was opened on.
+vi.mock('@/components/fixtureSheet/FixtureSheet', () => ({
+  FixtureSheet: ({ fixture, group }: { fixture?: { key: string }; group?: { name: string } }) => (
+    <div data-testid="fixture-sheet" data-target={fixture ? `fixture:${fixture.key}` : `group:${group?.name}`} />
+  ),
+}))
 vi.mock('@/store/busk', () => ({
   useBuskRigQuery: () => ({ data: rigData, isError: false }),
   useBuskRigCommit: () => commit,
@@ -478,9 +485,10 @@ describe('the rig band', () => {
       (el) => el.getAttribute('aria-label') ?? el.textContent,
     )
     expect(order.slice(0, 3)).toEqual(['Cells: All', 'Previous along the rig', 'Next along the rig'])
-    expect(order.slice(3, 7)).toEqual(['Spread…', 'Locate', 'Highlight', 'Clear'])
+    // *Release n* after the verbs, before Clear (fixture-fx-sheets plan D18).
+    expect(order.slice(3, 8)).toEqual(['Spread…', 'Locate', 'Highlight', 'Release 1', 'Clear'])
     // The selection's link badge is a button in Split — the toggle's linked face (desk-follow D11).
-    expect(order.slice(7)).toEqual(['Colour', 'Following the desk selection', 'Focus here'])
+    expect(order.slice(8)).toEqual(['Colour', 'Following the desk selection', 'Focus here'])
     const state = row.querySelector('[data-rig-row-state]') as HTMLElement
     expect(within(state).getByText('Colour')).toBeInTheDocument()
     expect(state.lastElementChild).toHaveTextContent('Focus here')
@@ -619,6 +627,10 @@ describe('the rig band', () => {
       const word = [...button.querySelectorAll('span')].find((el) => el.textContent === name)!
       expect(word.className).toBe(VERB_WORD_CLASS)
     }
+    // Release folds with them — its word and its count both (D18).
+    const release = screen.getByRole('button', { name: 'Release 1' })
+    expect(release.querySelector('svg')).not.toBeNull()
+    for (const span of release.querySelectorAll('span')) expect(span.className).toContain(VERB_WORD_CLASS)
     const rung = (cls: string) => Number(cls.match(/@\[(\d+)px\]/)![1])
     // Verbs' words go first, the Focus words (and the Cells prefix, the chip's subject) after,
     // the label last, and the floor under all of them. *Edit layout*'s word goes with the verbs'.
@@ -640,7 +652,7 @@ describe('the rig band', () => {
       expect(m, cls).not.toBeNull()
       return { from: Number(m![1]), to: Number(m![2]), utility: m![3] }
     }
-    for (const cls of [VERB_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, CHIP_SUBJECT_CLASS]) {
+    for (const cls of [EDIT_WORD_CLASS, FOCUS_WORD_CLASS, CHIP_SUBJECT_CLASS]) {
       const { from, to, utility } = range(cls)
       // A closed range under the floor: it overlaps nothing above it, and it ends at the floor.
       expect(to).toBe(RIG_ROW_FLOOR_PX)
@@ -650,14 +662,16 @@ describe('the rig band', () => {
       expect(cls).toMatch(/^hidden @\[\d+px\]:inline @min-/)
       expect(Number(cls.match(/@\[(\d+)px\]/)![1])).toBeGreaterThan(RIG_ROW_FLOOR_PX)
     }
-    // On the verbs line the words return before the prefix does; on the state line *Edit layout*'s
-    // word before the Focus words — the same order as above the floor, and each rung below it.
-    expect(range(VERB_WORD_CLASS).from).toBeGreaterThan(range(FOCUS_WORD_CLASS).from)
+    // The verbs' own words do not return under the floor since *Release n* joined them
+    // (fixture-fx-sheets plan D18): their worded line, prefix folded, is wider than the floor.
+    expect(VERB_WORD_CLASS).toMatch(/^hidden @\[\d+px\]:inline$/)
+    expect(Number(VERB_WORD_CLASS.match(/@\[(\d+)px\]/)![1])).toBeGreaterThan(RIG_ROW_FLOOR_PX)
+    // On the state line *Edit layout*'s word returns before the Focus words — the same order as
+    // above the floor, and each rung below it.
     expect(range(EDIT_WORD_CLASS).from).toBeGreaterThan(range(FOCUS_WORD_CLASS).from)
     // The Cells prefix and the mode's short form swap on one rung, above and below the floor alike
-    // — and under the floor the prefix's range ends exactly where the verbs' words return: the
-    // fully worded line is wider than the floor, so the two never share it and neither wins by
-    // rule order.
+    // — and under the floor the prefix's range runs up to the floor, the verbs' words no longer
+    // returning to take its place.
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }])
     const trigger = screen.getByRole('button', { name: 'Cells: All' })
     const prefix = [...trigger.querySelectorAll('span')].find((el) => el.textContent === 'Cells: ')!
@@ -665,7 +679,7 @@ describe('the rig band', () => {
     const prefixRange = range(prefix.className)
     expect(prefixRange.utility).toBe('inline')
     expect(prefixRange.from).toBeLessThan(prefixRange.to)
-    expect(prefixRange.to).toBe(range(VERB_WORD_CLASS).from)
+    expect(prefixRange.to).toBe(RIG_ROW_FLOOR_PX)
     expect(range(short.className)).toEqual({ ...prefixRange, utility: 'hidden' })
     // The label does not come back: under the floor the row is plainly the rig's.
     expect(RIG_LABEL_CLASS).not.toContain('@min-')
@@ -790,7 +804,7 @@ describe('the rig band', () => {
     expect(screen.queryByRole('button', { name: /^Cells:/ })).not.toBeInTheDocument()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'All', 'Odd', 'Even', '1st half', '2nd half', 'Invert', 'Masters only', 'Previous along the rig', 'Next along the rig', 'Spread…', 'Locate', 'Clear',
+      'All', 'Odd', 'Even', '1st half', '2nd half', 'Invert', 'Masters only', 'Previous along the rig', 'Next along the rig', 'Spread…', 'Locate', 'Release 1', 'Clear',
     ])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Invert' }))
     expect(onSubselect).toHaveBeenCalledWith('INVERT')
@@ -1266,5 +1280,34 @@ describe('the folded rig strip', () => {
     unlinkFromDesk({ targets: [], families: null })
     render(<RigStrip selectedTargets={map} families={['COLOUR']} />)
     expect(screen.getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
+  })
+})
+
+describe('Fixture sheet… on a rig tile (fixture-fx-sheets plan D21)', () => {
+  it('opens the fixture sheet from a tile’s menu over the busk view, and the group sheet from a group tile', () => {
+    draw()
+    expect(screen.queryByTestId('fixture-sheet')).toBeNull()
+    // In play mode the menu is the tile's right-click (a touch hold dispatches the same event).
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'PAR 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fixture sheet…' }))
+    expect(screen.getByTestId('fixture-sheet')).toHaveAttribute('data-target', 'fixture:par-1')
+    // The desk's form is the right-hand sheet.
+    expect(document.querySelector('[data-busk-fixture-sheet]')).toHaveAttribute('data-busk-fixture-sheet', 'side')
+    cleanup()
+
+    draw()
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Front wash' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Group sheet…' }))
+    expect(screen.getByTestId('fixture-sheet')).toHaveAttribute('data-target', 'group:Front wash')
+  })
+
+  it('joins the tile menu’s items in edit mode', () => {
+    rigData = builtRig()
+    draw([], { editing: true })
+    fireEvent.pointerDown(screen.getAllByRole('button', { name: 'Options for Front wash' })[0], { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(items).toEqual(['Group sheet…', 'Rename tile…', 'Remove from rig'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Group sheet…' }))
+    expect(screen.getByTestId('fixture-sheet')).toHaveAttribute('data-target', 'group:Front wash')
   })
 })

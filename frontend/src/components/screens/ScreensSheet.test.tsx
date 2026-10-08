@@ -280,7 +280,7 @@ describe('ScreensSheet', () => {
       expect(within(busk2).getByRole('radio', { name: 'pads' })).toHaveAttribute('aria-checked', 'true')
       // Sheet is one enum with `none`, offering only the tabs that have landed.
       const sheet = within(busk2).getByRole('radiogroup', { name: 'Sheet on Screen 2' })
-      expect(within(sheet).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['none', 'speed', 'colour', 'spread', 'show'])
+      expect(within(sheet).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['none', 'speed', 'colour', 'spread', 'effects', 'show'])
       expect(within(sheet).getByRole('radio', { name: 'none' })).toHaveAttribute('aria-checked', 'true')
       // The page it holds, named through the project's page list, and whose it is.
       expect(within(busk2).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('3')

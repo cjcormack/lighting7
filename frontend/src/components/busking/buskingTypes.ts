@@ -113,3 +113,18 @@ export function findEffectEntry<T extends { name: string }>(
   const normalized = normalizeEffectName(effectType)
   return library.find((entry) => normalizeEffectName(entry.name) === normalized)
 }
+
+/**
+ * The busk selection as *Release n*'s targets (fixture-fx-sheets plan D18): a group as its group, a
+ * whole fixture as itself and a cell by its own element key — the desk's `clearTarget` resolves a
+ * head's key as a fixture target, and takes only that head.
+ */
+export function buskReleaseTargets(selected: readonly BuskingTarget[]): { type: 'fixture' | 'group'; key: string; name: string }[] {
+  return selected.map((target) =>
+    target.type === 'group'
+      ? { type: 'group', key: target.name, name: target.name }
+      : target.element != null
+        ? { type: 'fixture', key: target.element.key, name: `${target.fixture.name} ${target.element.displayName}` }
+        : { type: 'fixture', key: target.key, name: target.fixture.name },
+  )
+}

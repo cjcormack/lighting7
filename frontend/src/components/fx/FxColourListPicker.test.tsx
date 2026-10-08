@@ -43,7 +43,7 @@ const WARM = 'tmpl:2f1c8a3e-0000-4000-8000-000000000001'
 const COLD = 'tmpl:2f1c8a3e-0000-4000-8000-000000000002'
 
 /**
- * Mirrors how EffectParameterForm drives the picker: whatever comes out of
+ * Mirrors how the effect editor (`FxEffectFields`) drives the picker: whatever comes out of
  * onChange is stored verbatim and handed straight back in as `value`. The
  * `external` button stands in for the parent swapping the form onto another
  * target, which changes `value` without the picker having asked for it.

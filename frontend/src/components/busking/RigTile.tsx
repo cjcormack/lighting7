@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { Layers, LayoutGrid, MoreHorizontal, X } from 'lucide-react'
+import { Layers, LayoutGrid, MoreHorizontal, PanelRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -12,6 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { dispatchSyntheticContextMenu, useLongPress } from '@/hooks/useLongPress'
 import type { FixturePatch } from '@/api/patchApi'
 import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRigApi'
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
@@ -23,6 +25,7 @@ import type { EffectPresence } from './buskingTypes'
 import { RIG_DROP_DEPTH, type RigDropData, type RigTileDragData } from './buskDnd'
 import { NameField } from './NameField'
 import { useRigEdit } from './RigEditProvider'
+import { sheetTargetOfTile, useOpenBuskFixtureSheet } from './BuskFixtureSheet'
 
 /**
  * One rig tile: a group, a fixture, one cell, or a run of cells.
@@ -85,6 +88,13 @@ import { useRigEdit } from './RigEditProvider'
  * border — the "weird bit of styling" reported on the desk. Inside the border it cannot repaint
  * the frame, and a head at zero draws no bar rather than a dim one; the pips keep their floor,
  * since a pip at zero would otherwise vanish and take its press target with it.
+ *
+ * ***Fixture sheet…*** (fixture-fx-sheets plan D21) opens D1's sheet over the busk view — a group
+ * tile's opens the group sheet — through the band's `BuskFixtureSheetContext`. In play mode it is
+ * the tile's **right-click or long-press** menu (`useLongPress` dispatching the context menu, as a
+ * pad's hold does, and the click a hold ends in swallowed so it presses nothing); in edit mode it
+ * joins the tile menu's items. A tile mounted outside the band, with nothing providing the door,
+ * draws no menu.
  */
 
 /** What a fixture tile's appearance leaf needs, looked up once by the band and threaded down. */
@@ -162,7 +172,16 @@ export function RigTile({
   onRename,
 }: RigTileProps) {
   const { source, foreign } = useRigEdit()
+  const nodeRef = useRef<HTMLElement | null>(null)
   const [renaming, setRenaming] = useState(false)
+  const openSheet = useOpenBuskFixtureSheet()
+  const sheetLabel = tile.kind === 'group' ? 'Group sheet…' : 'Fixture sheet…'
+  const playMenu = !editing && openSheet != null
+  // The hold opens the menu, as a pad's does; the click the release generates is swallowed below.
+  const { handlers: holdHandlers, consumeLongPress } = useLongPress({
+    onLongPress: (origin) => dispatchSyntheticContextMenu(nodeRef.current, origin),
+    disabled: !playMenu,
+  })
   const draggingRow = source?.type === 'rig-row'
   // Per **render** tile, never per stored tile: see `rigTileId`.
   const id = at == null ? `rtile-fallback:${tile.key}` : rigTileId(at, tile.key)
@@ -184,7 +203,6 @@ export function RigTile({
     } satisfies RigDropData,
     disabled: !editing || !inDocument || draggingRow || foreign,
   })
-  const nodeRef = useRef<HTMLElement | null>(null)
   const setRef = (node: HTMLElement | null) => {
     setDragRef(node)
     setDropRef(node)
@@ -230,7 +248,7 @@ export function RigTile({
     )
   }
 
-  return (
+  const body = (
     // `flex`, so the wrapper's box is the button's: the live overlay is positioned against it.
     <div ref={setRef} data-rig-tile-id={id} className={cn('relative flex shrink-0', isDragging && 'opacity-40')}>
       <button
@@ -240,7 +258,15 @@ export function RigTile({
         aria-pressed={presence !== 'none'}
         aria-label={tile.name}
         title={tile.name}
-        onClick={editing ? undefined : onPress}
+        {...(playMenu ? holdHandlers : {})}
+        onClick={
+          editing
+            ? undefined
+            : () => {
+                if (consumeLongPress()) return
+                onPress()
+              }
+        }
         className={cn(
           TILE_CLASS,
           // `flex-1`: in a stacked row (Rig focus below `md`) the wrapper is a grid cell and the
@@ -283,6 +309,8 @@ export function RigTile({
               onSetMode={onSetMode}
               onRename={() => setRenaming(true)}
               onRemove={onRemove}
+              sheetLabel={openSheet != null ? sheetLabel : null}
+              onOpenSheet={() => openSheet?.(sheetTargetOfTile(tile))}
             />
           )}
           <button
@@ -297,13 +325,26 @@ export function RigTile({
       )}
     </div>
   )
+
+  if (!playMenu) return body
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => openSheet?.(sheetTargetOfTile(tile))}>
+          <PanelRight className="mr-2 size-4" />
+          {sheetLabel}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
 /**
  * Every in-document tile's menu while editing: the four cell modes (D3) on a multi-head fixture —
  * the whole fixture with pips, the whole fixture only, one tile per cell, or `HALVES` with its
- * split, 2 up to the cell count, which is exactly the range the server accepts — then *Rename
- * tile…* on every kind, and *Remove from rig* last.
+ * split, 2 up to the cell count, which is exactly the range the server accepts — then *Fixture
+ * sheet…* (D21) and *Rename tile…* on every kind, and *Remove from rig* last.
  */
 function TileMenu({
   tile,
@@ -312,6 +353,8 @@ function TileMenu({
   onSetMode,
   onRename,
   onRemove,
+  sheetLabel,
+  onOpenSheet,
 }: {
   tile: BuskRigTile
   name: string
@@ -319,6 +362,9 @@ function TileMenu({
   onSetMode: (mode: BuskRigCellMode, split?: number) => void
   onRename: () => void
   onRemove: () => void
+  /** *Fixture sheet…* / *Group sheet…* (D21), or null where nothing provides the sheet. */
+  sheetLabel: string | null
+  onOpenSheet: () => void
 }) {
   const cellCount = tile.patch?.elements?.length ?? 0
   const splits: number[] = []
@@ -367,6 +413,7 @@ function TileMenu({
             <DropdownMenuSeparator />
           </>
         )}
+        {sheetLabel != null && <DropdownMenuItem onSelect={onOpenSheet}>{sheetLabel}</DropdownMenuItem>}
         <DropdownMenuItem onSelect={onRename}>Rename tile…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={onRemove}>

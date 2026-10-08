@@ -1,8 +1,9 @@
 # Fixture and FX sheets: one sheet that says who drives each value, clears it, takes typed values and edits effects live
 
-> **Document status: APPROVED, 2026-10-07 — sessions 1–4 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
+> **Document status: APPROVED, 2026-10-07 — sessions 1–5 shipped (`1d4a7660`, `50691dd`, `eff39ab`, `7ee8347`, `2664955`).** Chris approved the design on 2026-10-07 and called its six open calls the same day
 > (§10). Session 1 (the desk's half), session 2 (the sheet), session 3 (the tray and the live
-> editor) and session 4 (heads and groups) are done; sessions 5–6 are not started.
+> editor), session 4 (heads and groups) and session 5 (the Busk and Programmer views) are done;
+> session 6 is not started.
 >
 > - Design record: [`fixture-fx-sheets-design/INDEX.md`](fixture-fx-sheets-design/INDEX.md).
 > - Boards: <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. Private to Chris and a
@@ -539,7 +540,7 @@ Where session 4 departed from the bullets above, and why:
   `setPosition`). Rows over a pick read the same resolution, so a pick of such movers types degrees
   too, each head's degree resolved to its own byte.
 
-### Session 5 — the Busk and Programmer views (frontend, W5's client)
+### ~~Session 5 — the Busk and Programmer views (frontend, W5's client)~~ — done, `2664955`
 
 - **D16.**
   - The Centre segment in `TemplateEditor` and the template sheet's Value cell; new movement
@@ -569,6 +570,64 @@ Where session 4 departed from the bullets above, and why:
   - `frontend/CLAUDE.md` §"Focus and the side sheet" (the fifth tab), §"Looks, templates and layers"
     (Around in templates), §"The programmer's scoped grid" (the dot);
   - `docs/lighting-composition-model.md` (instance edits on a template layer).
+
+#### Session 5 amendment
+
+Where session 5 departed from the bullets above, and why:
+
+- **`EffectParameterForm` is retired, not rebuilt.** It was `TemplateEditor`'s draft form and nothing
+  else's, so the live editor's body was split out as `FxEffectFields` (`fx/FxEffectFields.tsx`) and
+  mounted over the template's draft (`templateDraftOf` / `withTemplateDraft`); D12's rules moved to a
+  store-free `fx/centreMode.ts`, re-exported by `fxEditorModel.ts`, so the pad face can say *around*
+  without a store. A template's sizes are **bytes** — there is no head to read degrees from — and its
+  rate master can be set back to *Unscaled*, which a draft can hold and a live frame cannot.
+- **The template sheet's Value cell asks Centre as an `OptionCell`** on a movement effect template
+  (any other effect template still reads out): one PUT of the effect with `withCentreMode` per
+  movement template in the batch, a value template in it skipped by name. The route fetches the
+  effect library, as it does the masters.
+- **Update template is the PUT then W5 on the edited instance.** The PUT alone would leave the
+  instance on a stale key and respawn it (phase restarted) at the stack's next recook — session 1's
+  amendment — so the reset re-keys it first. Every other running instance of the template reads
+  *edited* afterwards (`FU-TMPL-FX-EDIT-NO-RETIME`, amended). *Edited* compares the distribution only
+  where the instance says one (a single fixture's DTO leaves it out, which the draft reads `LINEAR`),
+  and Update keeps the template's own there rather than writing the guess over it.
+- **D17's leftover was the template arm, and the tray's read-only cue row.** The rail's *Edit…* and
+  `FxSheet`'s chips already opened `FxEditor` (session 3); they gain *edited*, Update template and
+  Reset to template with the editor. The tray now shows a **cue's** effect read-only (*on Q12*, no
+  editor, pause or stop), as the Fx board drew; the board's *opens it* is not built.
+- **The Effects tab lists programmer effects only** — a pad's and the operator's own, the board's
+  "pad effects and your own" — never a cue's, which the tray shows read-only. A pad's row has pause
+  and no stop, and its editor no ×: the pad releases it, and stopping the instance alone would leave
+  the layer to respawn it. The editor's footer wraps its two template verbs under the note, and each
+  onto a line of its own, at the sheet's 320px floor.
+- **The busk strip's words fold below 460px of sheet, not 400.** Five worded tabs measure 378px —
+  455 of sheet with the mode toggle, the chevron and the gutters — so at 400 the last tab was
+  clipped (`BUSK_TAB_WORDS_FROM`; the rail's three tabs keep 400).
+- **The rig row's rungs moved to 1100 / 780 / 660 / 615** (from 990 / 730 / 610 / 570) for
+  *Release n* (100px worded, 36 iconic, plus a gap each), re-measured in the app with a 60px
+  mask-pill stand-in at each rung and one below; and **the verbs' words no longer return under the
+  floor** — worded with the prefix folded the verbs line is 618, wider than the floor — so the Cells
+  prefix's range runs to the floor. Release over a cell sends `clearTarget` with the head's own key,
+  which the desk resolves as an element.
+- **Release on row C counts Locate's targets** — a group row is the group, an element row that
+  head by its own key — over a row selection or a marquee's rows, on the programmer only, folded on
+  the phone arm with Spread. It is live in Local and Output and refused, with the reason, while a
+  Look or template layer is focused (Chris's call in session 5's review): there the band says writes
+  go to the layer, and a Local wipe would surprise.
+- **The Effects tab's stop asks first for a group's effect reached through a member** — the tray's
+  rule (session 2) — and its row reads *via <group>*. The Screens sheet's enum segments wrap inside
+  their pill where the row is narrower than their values: the Sheet segment holds six, and at a
+  375px phone *Show* was clipped.
+- **The grid's source chip is drawn where ownership is** — Local; Output's cells take no edit and a
+  focused Look layer's draft has no stack (§8). `LayerStack` and `SourceChip` take the cue names and
+  the connection as props outside a fixture sheet.
+- ***Fixture sheet…* opens through `useEditorForm`'s forms, not `EditorSurface`**: a bottom sheet on
+  an upright phone, and on a desk the pop-up's own 512px right-hand sheet — the sheet is the pop-up's
+  body and draws its own header, which `EditorSurface`'s side form (352px, its own title row) would
+  have doubled. A group tile's item reads *Group sheet…*. In play mode it is the tile's right-click
+  or long-press menu.
+- **The pad face's *around* comes last** (*Circle · ½ · M1 · around*, the board's order), so a
+  narrow pad's line truncates it first; the template sheet's Value column says it in full.
 
 ### Session 6 — the remaining hosts (frontend)
 

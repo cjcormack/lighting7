@@ -4,6 +4,7 @@ import type { TemplateSummary } from '@/api/templatesApi'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { templateRowsSwatch } from '@/lib/templateIntent'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { isAroundSpelling } from '@/components/fx/centreMode'
 import { cn } from '@/lib/utils'
 import type { EffectPresence } from './buskingTypes'
 
@@ -68,7 +69,7 @@ export function describeTemplate(template: TemplateSummary): string {
     // No master label: that reads a live bank through a hook, and this string has to be renderable
     // by the overlay ghost. The pad draws `EffectPadDetail` over it and gains the `· M2`.
     const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource)
-    return [template.effect.effectType, speed].filter(Boolean).join(' · ')
+    return [template.effect.effectType, speed, isAroundSpelling(template.effect) ? 'around' : null].filter(Boolean).join(' · ')
   }
   if (!template.isGeneric) {
     const count = template.rows?.length ?? 0

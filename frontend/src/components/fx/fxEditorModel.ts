@@ -3,6 +3,18 @@ import type { ActiveEffect, EffectLibraryEntry, EffectParameterDef } from '@/sto
 import type { Fixture, SliderPropertyDescriptor } from '@/store/fixtures'
 import { findPanProperty, findTiltProperty } from '@/store/fixtures'
 import { annotatesDegrees } from '@/lib/axisDegrees'
+import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+
+export {
+  CENTRE_BYTE,
+  centreModeOf,
+  defaultParameters,
+  hasCentre,
+  isAroundSpelling,
+  storedCentreMode,
+  withCentreMode,
+  type CentreMode,
+} from './centreMode'
 
 /**
  * The live effect editor's rules, pure (fixture-fx-sheets plan D11, D12, D12a; §3.3).
@@ -12,47 +24,12 @@ import { annotatesDegrees } from '@/lib/axisDegrees'
  * sends are all answered here, where a test can reach them without a store.
  */
 
-/** The byte a centre parameter is pinned at while the effect orbits what is underneath. */
-export const CENTRE_BYTE = 128
-
-/** D12: a movement effect's centre is the position underneath, or a place of its own. */
-export type CentreMode = 'around' | 'absolute'
-
 /** D12a: a level effect replaces the level underneath, or moves within it. */
 export type LevelMode = 'replace' | 'within'
-
-const CENTRE_PARAMS = ['panCenter', 'tiltCenter'] as const
-
-function paramNamed(entry: Pick<EffectLibraryEntry, 'parameters'>, name: string): EffectParameterDef | undefined {
-  return entry.parameters.find((p) => p.name === name)
-}
-
-/**
- * The movement effects — a position effect with a centre pair (Circle, Figure 8, Random position).
- * Those are the ones D12's question is about: *Around* pins the centre at 128 and adds the shape to
- * whatever holds the position underneath, which is the only way a Circle orbits a set position. A
- * sweep has no centre to pin, so it asks nothing and keeps its blend under Advanced.
- */
-export function hasCentre(entry: Pick<EffectLibraryEntry, 'category' | 'parameters'>): boolean {
-  return entry.category === 'position' && CENTRE_PARAMS.every((name) => paramNamed(entry, name) != null)
-}
 
 /** The level effects — the dimmer category, D12a's *Replace it | Within it*. */
 export function isLevelEffect(entry: Pick<EffectLibraryEntry, 'category'>): boolean {
   return entry.category === 'dimmer'
-}
-
-/**
- * What a stored effect reads back as. **Around is Additive with both centres at 128** — the
- * spelling P2 gives it, so an effect stored by any surface reads the same; Absolute is Override.
- * Anything else (Max, Min, an Additive with a centre of its own) is neither, and the segment shows
- * nothing pressed while Advanced still shows the blend.
- */
-export function centreModeOf(blendMode: string, parameters: Record<string, string>): CentreMode | null {
-  const blend = blendMode.toUpperCase()
-  if (blend === 'OVERRIDE') return 'absolute'
-  if (blend !== 'ADDITIVE') return null
-  return CENTRE_PARAMS.every((name) => Number(parameters[name]) === CENTRE_BYTE) ? 'around' : null
 }
 
 /** Replace is Override, Within is Multiply (call 2); anything else is neither. */
@@ -63,24 +40,8 @@ export function levelModeOf(blendMode: string): LevelMode | null {
   return null
 }
 
-/** The blend and parameters D12 spells for [mode]: Around pins both centres; Absolute keeps them. */
-export function withCentreMode(
-  spec: { blendMode: string; parameters: Record<string, string> },
-  mode: CentreMode,
-): { blendMode: string; parameters: Record<string, string> } {
-  if (mode === 'absolute') return { blendMode: 'OVERRIDE', parameters: spec.parameters }
-  const parameters = { ...spec.parameters }
-  for (const name of CENTRE_PARAMS) parameters[name] = String(CENTRE_BYTE)
-  return { blendMode: 'ADDITIVE', parameters }
-}
-
 export function blendForLevelMode(mode: LevelMode): string {
   return mode === 'within' ? 'MULTIPLY' : 'OVERRIDE'
-}
-
-/** Every parameter at its declared default. */
-export function defaultParameters(entry: Pick<EffectLibraryEntry, 'parameters'>): Record<string, string> {
-  return Object.fromEntries(entry.parameters.map((p) => [p.name, p.defaultValue]))
 }
 
 /**
@@ -236,6 +197,11 @@ export interface FxScope {
   elementMode: boolean
   /** A fixture with heads, or a group with multi-element members. */
   elementFilter: boolean
+  /**
+   * Step timing, where it differs from [heads]: a template's effect offers its distribution (the
+   * layer supplies the heads) but not step timing, which is a question about one head's elements.
+   */
+  stepTiming?: boolean
 }
 
 /** The fields the DTO may leave out, and so the editor sends only once the operator has set them. */
@@ -343,4 +309,109 @@ export function pickerFamilyForSheet(family: string | null | undefined): PickerF
     default:
       return null
   }
+}
+
+// ─── A template's effect (D16) ─────────────────────────────────────────────────────────────────
+
+/** The fields of a template's effect the editor's draft speaks — `TemplateEffect`'s, structurally. */
+export interface TemplateEffectFields {
+  parameters: Record<string, string>
+  beatDivision: number
+  blendMode: string
+  distribution: string
+  phaseOffset?: number
+  speedMasterUuid?: string | null
+  rateSpeedMasterUuid?: string | null
+}
+
+/**
+ * A template's effect as the editor's draft (fixture-fx-sheets plan D16): the same `FxDraft` a live
+ * instance opens on, so `TemplateEditor` asks the *Centre* question through the same rules. The
+ * fields a template has no answer for — step timing, element mode, the head filter — read as their
+ * defaults and are never written back ([withTemplateDraft]).
+ */
+export function templateDraftOf(effect: TemplateEffectFields): FxDraft {
+  return {
+    parameters: { ...effect.parameters },
+    beatDivision: effect.beatDivision,
+    blendMode: effect.blendMode,
+    phaseOffset: effect.phaseOffset ?? 0,
+    stepTiming: false,
+    distributionStrategy: effect.distribution,
+    elementMode: 'PER_FIXTURE',
+    elementFilter: 'ALL',
+    speedMasterUuid: effect.speedMasterUuid ?? null,
+    rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
+  }
+}
+
+/**
+ * [effect] with the draft's fields written back — only the ones a template stores. A draft opened
+ * on a running instance whose DTO said nothing about its distribution (a single fixture: the desk
+ * leaves it out where it does not apply) holds `draftOf`'s `LINEAR` guess, so [distribution] false
+ * keeps the template's own rather than writing the guess over it.
+ */
+export function withTemplateDraft<E extends TemplateEffectFields>(
+  effect: E,
+  draft: FxDraft,
+  { distribution = true }: { distribution?: boolean } = {},
+): E {
+  return {
+    ...effect,
+    parameters: { ...draft.parameters },
+    beatDivision: draft.beatDivision,
+    blendMode: draft.blendMode,
+    phaseOffset: draft.phaseOffset,
+    distribution: distribution ? draft.distributionStrategy : effect.distribution,
+    speedMasterUuid: draft.speedMasterUuid,
+    rateSpeedMasterUuid: draft.rateSpeedMasterUuid,
+  }
+}
+
+/**
+ * Was this instance spawned by a **programmer** template layer — a pad's effect — and so has a
+ * template to compare with, update and reset to (fixture-fx-sheets plan §3.3, D20)? A cue's
+ * template-layer instance is not: W5 refuses it (`FX_NOT_FROM_TEMPLATE`), since the next GO
+ * respawns it. A *detached* copy (a plain click on an effect template's chip) carries no source.
+ */
+export function isTemplateLayerInstance(effect: Pick<ActiveEffect, 'templateId' | 'programmerLayerId' | 'cueId'>): boolean {
+  return effect.templateId != null && effect.programmerLayerId != null && effect.cueId == null
+}
+
+/** Two parameter strings say the same thing — `'128'` and `'128.0'` both. */
+function sameParam(a: string | undefined, b: string | undefined): boolean {
+  if (a === b) return true
+  if (a == null || b == null) return false
+  const x = Number(a)
+  const y = Number(b)
+  return a.trim() !== '' && b.trim() !== '' && Number.isFinite(x) && Number.isFinite(y) && x === y
+}
+
+/**
+ * *Edited* (§3.3, D20): does a running instance — as the editor's draft, or read off the wire
+ * through `draftOf` — differ from the template's effect it was spawned from? Every field a template
+ * stores, each compared as the desk would read it: a null speed master is master 1
+ * ([master1Uuid]), a parameter either side omits is the library's default ([defaults]), and a
+ * number is a number however it is spelled. The distribution is compared only where the instance
+ * has one to say ([distribution]) — a single fixture's DTO leaves it out, and `draftOf`'s `LINEAR`
+ * for the absence would read every template on another distribution as *edited*.
+ */
+export function differsFromTemplate(
+  draft: FxDraft,
+  effect: TemplateEffectFields,
+  master1Uuid: string | null,
+  defaults: Record<string, string> = {},
+  { distribution = true }: { distribution?: boolean } = {},
+): boolean {
+  if (Math.abs(draft.beatDivision - effect.beatDivision) > 1e-6) return true
+  if (draft.blendMode.toUpperCase() !== effect.blendMode.toUpperCase()) return true
+  if (Math.abs(draft.phaseOffset - (effect.phaseOffset ?? 0)) > 1e-6) return true
+  if (distribution && draft.distributionStrategy !== effect.distribution) return true
+  if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
+  if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
+  const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
+  for (const name of names) {
+    if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true
+  }
+  return false
 }

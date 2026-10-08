@@ -20,6 +20,9 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { useDuplicateBatch } from '@/components/sheet/useDuplicateBatch'
 import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { hasCentre, isAroundSpelling, storedCentreMode, withCentreMode, type CentreMode } from '@/components/fx/fxEditorModel'
+import { findEffectEntry } from '@/components/busking/buskingTypes'
+import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import { describeTemplateRows, templateRowsSwatch } from '@/lib/templateIntent'
 import { handPickUp } from '@/store/hand'
 import { useCopyTemplateMutation, useSaveTemplateMutation } from '@/store/templates'
@@ -63,6 +66,11 @@ export interface TemplateSheetProps {
   library: readonly TemplateSummary[]
   /** This project's speed masters, for the Master column. */
   masters: readonly SpeedMaster[]
+  /**
+   * The effect library, for the Value column's *Centre* on a movement effect template (D16) —
+   * fetched by the route, as the masters are, so no row subscribes to anything.
+   */
+  effectLibrary?: readonly EffectLibraryEntry[]
   isCurrentProject: boolean
   projectName: string
   onOpenTemplate: (template: TemplateSummary) => void
@@ -103,6 +111,7 @@ export function TemplateSheet({
   rows,
   library,
   masters,
+  effectLibrary,
   isCurrentProject,
   projectName,
   onOpenTemplate,
@@ -190,14 +199,32 @@ export function TemplateSheet({
         key: 'value',
         label: 'Value',
         width: 'minmax(150px, 200px)',
-        // Editable on a generic value template only (D6). A per-fixture template's values were
-        // recorded per head and an effect template holds no value, so both read out — `undefined`
-        // here — and open the editor from the pencil; a marquee over them skips them by name.
-        // **No `kind`**: the column takes commits from its own editor alone, and the family rule
-        // lives in `write`, since one column cannot carry a per-row `value:<family>` kind.
-        value: (row) => (row.template != null ? templateValueDraft(row.template) : undefined),
+        // Editable on a generic value template (D6) and, since fixture-fx-sheets session 5, on a
+        // **movement effect template**, whose one question here is D16's *Centre* — `Around
+        // current position | Absolute`, an `OptionCell` over the effect's blend and centre. A
+        // per-fixture template's values were recorded per head and any other effect template holds
+        // no value, so those read out — `undefined` here — and open the editor from the pencil; a
+        // marquee over them skips them by name. **No `kind`**: the column takes commits from its
+        // own editors alone, and the family rule lives in `write`, since one column cannot carry a
+        // per-row `value:<family>` kind.
+        value: (row) =>
+          row.template == null
+            ? undefined
+            : row.template.kind === 'effect'
+              ? centreValue(row.template, effectLibrary)
+              : templateValueDraft(row.template),
         display: (row) => (row.template ? <TemplateValue template={row.template} /> : null),
         cell: (row, props) => {
+          if (typeof props.value === 'string') {
+            return (
+              <OptionCell
+                {...(props as React.ComponentProps<typeof OptionCell>)}
+                label="Centre"
+                options={CENTRE_OPTIONS}
+                face={row.template ? <TemplateValue template={row.template} /> : null}
+              />
+            )
+          }
           const cellProps = props as React.ComponentProps<typeof TemplateValueCell>
           return (
             <TemplateValueCell
@@ -208,13 +235,36 @@ export function TemplateSheet({
           )
         },
         write: (batch, value) => {
+          if (value === 'around' || value === 'absolute') {
+            // D16's question, landed on every movement template in the batch: the blend and the
+            // centre pair, through the live editor's own rule (`withCentreMode`). A PUT of the
+            // effect recreates it — a running instance restarts, as the Master column says.
+            const values: string[] = []
+            for (const row of batch as MemberRow[]) {
+              const effect = row.template.effect
+              if (effect == null) {
+                values.push(row.template.name)
+                continue
+              }
+              const entry = findEffectEntry(effectLibrary, effect.effectType)
+              if (storedCentreMode(effect, entry) === value || centreValue(row.template, effectLibrary) == null) continue
+              put(row.template, 'value', { effect: { ...effect, ...withCentreMode(effect, value) } })
+            }
+            if (values.length > 0) {
+              toast.info(`${listNames(values, 'template')} ${values.length === 1 ? 'holds a value' : 'hold values'} — no centre to set · skipped`, {
+                id: 'sheet-write:templates:value-skip',
+              })
+            }
+            return true
+          }
           if (!isTemplateValueDraft(value) || value.changes == null) return false
           const { family, changes } = value
           const emptied: string[] = []
           for (const row of batch as MemberRow[]) {
             // The origin's family only: a colour draft on an intensity template would be refused
-            // as a change of family, and is named as skipped on the editor's read-out instead.
-            if (row.template.family !== family) continue
+            // as a change of family, and is named as skipped on the editor's read-out instead. A
+            // movement effect template in the batch holds no value to write (`valueLanding` names it).
+            if (row.template.kind !== 'value' || row.template.family !== family) continue
             // **What changed, over this template's own values** — never the origin's whole draft.
             // The PUT replaces a template's rows, so the draft would delete a sibling's strobe,
             // its white, another beam role, on an Enter that changed nothing.
@@ -463,7 +513,7 @@ export function TemplateSheet({
         display: (row) => (row.template ? <PressedAgo at={row.template.lastPressedAt} /> : null),
       },
     ],
-    [beatOptions, effectWithMaster, master1, masterByUuid, masterValue, put, rateOptions],
+    [beatOptions, effectLibrary, effectWithMaster, master1, masterByUuid, masterValue, put, rateOptions],
   )
 
   const openRow = useCallback(
@@ -682,14 +732,44 @@ function isTemplateValueDraft(value: unknown): value is TemplateValueDraft {
  * the read-out's half of `write`'s family rule: *Amber and Deep Blue are Colour · skipped*.
  */
 function valueLanding(family: AttributeFamily, batch: readonly TemplateSheetRow[]): TemplateValueLanding {
-  const other = batch.filter((row) => row.template != null && row.template.family !== family)
+  // A movement effect template answers this column too (its Centre), so a marquee over both kinds
+  // carries it into a value's batch: it holds no value, and is named as an effect.
+  const effects = batch.filter((row) => row.template?.kind === 'effect')
+  const other = batch.filter((row) => row.template != null && row.template.kind !== 'effect' && row.template.family !== family)
   const families = [...new Set(other.flatMap((row) => (row.template?.family != null ? [row.template.family] : [])))]
-  const named = listNames(other.map(templateRowName), 'template')
-  const verb = other.length === 1 ? 'is' : 'are'
+  const parts = [
+    other.length === 0
+      ? null
+      : `${listNames(other.map(templateRowName), 'template')} ${other.length === 1 ? 'is' : 'are'} ${formatFamilyList(families, ' and ')}`,
+    effects.length === 0
+      ? null
+      : `${listNames(effects.map(templateRowName), 'template')} ${effects.length === 1 ? 'runs an effect' : 'run effects'}`,
+  ].filter(Boolean)
   return {
-    count: batch.length - other.length,
-    skipped: other.length === 0 ? null : `${named} ${verb} ${formatFamilyList(families, ' and ')} · skipped`,
+    count: batch.length - other.length - effects.length,
+    skipped: parts.length === 0 ? null : `${parts.join('; ')} · skipped`,
   }
+}
+
+/** D16's two answers, in the Value column's `OptionCell` for a movement effect template. */
+const CENTRE_OPTIONS: readonly SheetOption[] = [
+  { value: 'around', label: 'Around current position' },
+  { value: 'absolute', label: 'Absolute' },
+]
+
+/**
+ * The Value column's value for an effect template: its *Centre* (D16) where the effect asks the
+ * question — `''` for a blend that is neither, which presses neither option — and `undefined` for
+ * an effect with no centre or a type the library no longer has, which reads out and is skipped.
+ */
+function centreValue(template: TemplateSummary, library: readonly EffectLibraryEntry[] | undefined): CentreMode | '' | undefined {
+  const effect = template.effect
+  if (effect == null) return undefined
+  const entry = findEffectEntry(library, effect.effectType)
+  if (entry == null) return undefined
+  const mode = storedCentreMode(effect, entry)
+  if (mode != null) return mode
+  return hasCentre(entry) ? '' : undefined
 }
 
 /**
@@ -701,7 +781,8 @@ function TemplateValue({ template }: { template: TemplateSummary }) {
   if (template.kind === 'effect') {
     const effect = template.effect
     const speed = effect == null ? null : effectSpeedLabel(effect.beatDivision, effect.timingSource)
-    const text = effect == null ? 'Effect' : [effect.effectType, speed].filter((p) => p != null && p !== '').join(' · ')
+    const around = effect != null && isAroundSpelling(effect) ? 'around' : null
+    const text = effect == null ? 'Effect' : [effect.effectType, speed, around].filter((p) => p != null && p !== '').join(' · ')
     return (
       <span className="mx-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={text}>
         <AudioWaveform className="size-3.5 shrink-0 text-violet-400" />

@@ -8,6 +8,7 @@ import type { CellBatch, CellCommit, WriteTarget } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import type { ColourRecentSource } from '../../editor/ColourEditor'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { useEditorCramped, type CellClickBehaviour } from '../../editor/EditorSurface'
 import { headsLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
@@ -71,6 +72,12 @@ interface ColourCellOwnProps {
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
   onBeginEdit: () => void
+  /**
+   * The cell's `(head, property)` keys, for the source chip on the editor's label line
+   * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
+   * no chip — the plain lists, a focused Look layer, `CueValueGrid`.
+   */
+  sourceKeys?: readonly CellKey[]
 }
 
 type ColourCellProps = ColourCellOwnProps & CellClickBehaviour
@@ -171,6 +178,7 @@ export const ColourCell = memo(function ColourCell({
   editorAnchorRef,
   onCommit,
   onBeginEdit,
+  sourceKeys,
 }: ColourCellProps) {
   // Driven from here so the container's request (Enter over a selection, or the bar's Set) can
   // open it: the picker keeps its own state when no `open` is passed, and the other two call
@@ -256,7 +264,13 @@ export const ColourCell = memo(function ColourCell({
         recent={recent}
         // The heads a colour commit reaches — `targets`, not `batch.count`, which also counts a
         // colour-wheel head the commit refuses; the read-out counts the same list.
-        labelLine={<EditorLabelLine subject={headsLine(batch == null ? 1 : targets.length, scopeLabel)} column={label} />}
+        labelLine={
+          <EditorLabelLine
+            subject={headsLine(batch == null ? 1 : targets.length, scopeLabel)}
+            column={label}
+            chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
+          />
+        }
         onSave={onSave}
         // *Spread…* opens the row C panel with this colour as From — the busk hand-over, RGB only —
         // and closes this editor, because the panel opens at the bar and not here.
