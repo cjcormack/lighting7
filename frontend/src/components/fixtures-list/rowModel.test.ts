@@ -31,6 +31,7 @@ import {
   groupSummary,
   makeFixture,
   makePixelBar,
+  positionProp,
   settingProp,
   sliderProp,
 } from '@/test/fixtureFactories'
@@ -489,6 +490,17 @@ describe('batch write planning', () => {
     // A byte beside a degree wins: the byte is what the editor said, the degree is not sent then.
     const both = planBatchWrites([mover540], 'position', { kind: 'position', pan: 10, panDeg: 270 })
     expect(both[0].commit).toEqual({ kind: 'position', pan: 10, tilt: undefined })
+  })
+
+  it('resolves a degree commit through the axes beside a position descriptor', () => {
+    // The Robe ColorSpot 575: 265° of a 530° pan is byte 128 (127.5 rounded up), 140° of 280° tilt 128.
+    const robe = makeFixture('robe', [
+      positionProp('position', chan(30), chan(32)),
+      sliderProp('pan', 'pan', chan(30), { axis: 'PAN', degMin: 0, degMax: 530 }),
+      sliderProp('tilt', 'tilt', chan(32), { axis: 'TILT', degMin: 0, degMax: 280 }),
+    ])
+    const planned = planBatchWrites([robe], 'position', { kind: 'position', panDeg: 265, tiltDeg: 140 })
+    expect(planned.map((p) => p.commit)).toEqual([{ kind: 'position', pan: 128, tilt: 128 }])
   })
 
   it('merges two position commits in one window per axis, the later one winning and one unit per axis', () => {
