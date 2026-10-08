@@ -186,7 +186,7 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
               hasAmberChannel={hasAmber}
               hasUvChannel={hasUv}
               onColourChange={handleColourChange}
-              // The picker-only form, as in `PropertyVisualizers`.
+              // The picker-only form: the channel bank beside the swatch is the read-out and the fields.
               footer={false}
               counts={false}
             >

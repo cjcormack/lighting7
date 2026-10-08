@@ -12,6 +12,7 @@ import { useActiveEffectsQuery, useRemoveFxMutation } from '../../store/fixtureF
 import { useSpeedMasterDisplay } from '../../store/speedMasters'
 import { useRemoveGroupFxMutation } from '../../store/groups'
 import { lightingApi } from '../../api/lightingApi'
+import { isHeldBack } from '../../lib/heldBack'
 import { useProgrammerRevision } from '../../store/programmer'
 import { COLUMN_DEFS, resolutionPropertyNames } from '../fixtures-list/columns'
 import { cellEffectKey, membersByGroupOf } from '../fixtures-list/cellEffects'
@@ -28,6 +29,9 @@ const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
 const GROUPED_KEY = 'programmer.fx.grouped'
 const ROW_HEIGHT_CLASS = 'min-h-9'
+
+const programmerHolds = (headKey: string, propertyName: string) =>
+  lightingApi.programmer.getKeyState(headKey, propertyName).entry != null
 
 /** Where one effect lands: which fixtures it covers, and under which column. */
 interface PlacedEffect {
@@ -163,18 +167,16 @@ export function FxSheet() {
   )
 
   /**
-   * Whether the programmer suppresses this effect on this row. Non-band effects lose to any
-   * programmer entry on the property; band effects are exempt and compose on top.
+   * Whether the programmer holds this effect back on any head of this row — `lib/heldBack.ts`'s
+   * rule, the desk's own (`EffectSuppression`): a non-band effect loses to a programmer entry on the
+   * key it paints, its own property on that head. The fixture sheet's amber dot reads the same rule.
    */
   const isSuppressed = useCallback((row: Row, col: ColumnKey, effect: ActiveEffect): boolean => {
-    if (effect.programmerOwned) return false
     if (row.kind === 'divider') return false
-    if (lightingApi.programmer.isBlind()) return false
+    const blind = lightingApi.programmer.isBlind()
     for (const target of rowWriteTargets(row)) {
-      for (const { target: resolved, resolution } of resolveTargetCells(target, col)) {
-        for (const name of resolutionPropertyNames(resolution)) {
-          if (lightingApi.programmer.getKeyState(resolved.key, name).entry) return true
-        }
+      for (const { target: resolved } of resolveTargetCells(target, col)) {
+        if (isHeldBack(effect, resolved.key, programmerHolds, blind)) return true
       }
     }
     return false

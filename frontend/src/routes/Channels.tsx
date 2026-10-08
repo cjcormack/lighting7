@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Pencil, Check } from "lucide-react"
+import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal } from "lucide-react"
 import { useUpdateChannelMutation } from "../store/channels"
 import { useChannelValue } from "@/hooks/usePropertyValues"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
@@ -33,7 +33,6 @@ import { useIsDeskConnected } from "../store/status"
 import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
 import { useGetUniverseQuery } from "../store/universes"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { EditModeProvider, useEditMode } from "@/components/fixtures/EditModeContext"
 import { FixtureDetailModal } from "@/components/groups/FixtureDetailModal"
 import { ChannelValueDialog } from "@/components/ChannelValueDialog"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -49,22 +48,19 @@ const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
  * What the park control on a channel row will do, or why it won't.
  *
  * One function for the hover tooltip *and* the context-menu item, because they were two
- * near-identical ternary chains that disagreed: with a channel parked, Edit mode off and the
- * socket down, one blamed the socket and dropped the parked value, the other named the value and
- * blamed the socket, and neither mentioned Edit mode. The blocking reasons are ordered as the
- * operator has to clear them — reconnect first, since Edit mode won't help while the desk is
- * unreachable.
+ * near-identical ternary chains that disagreed: with a channel parked and the socket down, one
+ * blamed the socket and dropped the parked value, the other named the value and blamed the socket.
+ * The page had an Edit mode gating unpark too, until fixture-fx-sheets session 2 took it away
+ * (D2): the rows are live while the desk is reachable, and unpark asks first.
  */
 function parkActionReason({
   connected,
   isParked,
-  isEditing,
   value,
   parkedValue,
 }: {
   connected: boolean
   isParked: boolean
-  isEditing: boolean
   value: number
   parkedValue?: number
 }): string {
@@ -74,7 +70,6 @@ function parkActionReason({
       : `Park at current value — ${DESK_OFFLINE_LABEL.toLowerCase()}`
   }
   if (!connected) return `Parked at ${parkedValue} — ${DESK_OFFLINE_LABEL.toLowerCase()}`
-  if (!isEditing) return `Parked at ${parkedValue} — enable Edit mode to unpark`
   return 'Unpark channel'
 }
 
@@ -128,19 +123,19 @@ export const ChannelSlider = React.memo(function ChannelSlider({
     runUpdateChannelMutation({ universe, channelNo: id, value: clamped })
   }, [runUpdateChannelMutation, universe, id])
 
-  // Unpark is only offered in Edit mode. Park locks output where it already is, so it is
-  // always safe; releasing it hands a hard-powered fixture back to the show, so it needs a
-  // deliberate mode switch rather than a hover-and-click.
+  // Park locks output where it already is, so it is always safe; releasing it hands a
+  // hard-powered fixture back to the show, so it asks first. There is no Edit mode to gate it on
+  // any more (fixture-fx-sheets plan D2) — the confirm is the guard, as on the fixture's Park.
   const canUnpark = isParked && isEditing && connected
   // Park is otherwise always offered — it locks output where it already is — but it is still a
   // wire write, so it needs the socket like everything else here.
   const canPark = !isParked && connected
 
-  const parkReason = parkActionReason({ connected, isParked, isEditing, value, parkedValue })
+  const parkReason = parkActionReason({ connected, isParked, value, parkedValue })
 
   const handleParkToggle = useCallback(() => {
     if (isParked) {
-      if (canUnpark) runUnparkChannel({ universe, channelNo: id })
+      if (canUnpark && confirm(`Unpark channel ${id}?`)) runUnparkChannel({ universe, channelNo: id })
     } else if (canPark) {
       runParkChannel({ universe, channelNo: id, value })
     }
@@ -212,9 +207,8 @@ export const ChannelSlider = React.memo(function ChannelSlider({
           </>
         )}
 
-        {/* Park/unpark button — visible on hover, in edit mode, or on touch devices.
-            While parked outside Edit mode it is a disabled status indicator, not a
-            one-click release. */}
+        {/* Park/unpark button — visible on hover, while live, or on touch devices. While parked
+            with the desk unreachable it is a disabled status indicator; unpark asks first. */}
         <Tooltip>
           <TooltipTrigger asChild>
             {isParked && !canUnpark ? (
@@ -409,9 +403,7 @@ export function ProjectChannels() {
   }
 
   return (
-    <EditModeProvider>
-      <ProjectChannelsContent projectId={projectIdNum} projectName={project.name} universe={universeNum} />
-    </EditModeProvider>
+    <ProjectChannelsContent projectId={projectIdNum} projectName={project.name} universe={universeNum} />
   )
 }
 
@@ -442,10 +434,12 @@ function useGridColumns(ref: React.RefObject<HTMLDivElement | null>) {
 
 function ProjectChannelsContent({ projectId, projectName, universe }: { projectId: number; projectName: string; universe: number }) {
   const navigate = useNavigate()
-  const { isEditing, toggleEditing } = useEditMode()
   // Every write on this page is a WebSocket frame — levels, park, unpark. Read once here and
   // handed down, rather than per row: a universe is 512 rows.
   const connected = useIsDeskConnected()
+  // The cards are live while the desk is connected: there is no Edit / Done here any more, as on
+  // the fixture sheet (fixture-fx-sheets plan D2). Unpark asks first instead.
+  const isEditing = connected
   const [selectedFixtureKey, setSelectedFixtureKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const parkedParam = searchParams.get("parked") === "true"
@@ -482,9 +476,8 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   // Channel mappings for this universe
   const universeMappings = mappingRecord?.[universe]
 
-  // Bulk release is Edit-mode-only *and* confirmed — it is the single most destructive
-  // park action on the page.
-  const canUnpark = isEditing && parkedCount > 0 && connected
+  // Bulk release is confirmed — it is the single most destructive park action on the page.
+  const canUnpark = parkedCount > 0 && connected
 
   const handleUnparkAll = () => {
     if (!canUnpark) return
@@ -556,29 +549,6 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
               <Lock className="size-3.5" />
               Park at Value
             </Button>
-            {/* Edit — always visible, icon-only on narrow */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={isEditing ? "default" : "outline"}
-                  size="icon"
-                  className="size-8 sm:hidden"
-                  onClick={toggleEditing}
-                >
-                  {isEditing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{isEditing ? "Done editing" : "Edit"}</TooltipContent>
-            </Tooltip>
-            <Button
-              variant={isEditing ? "default" : "outline"}
-              size="sm"
-              onClick={toggleEditing}
-              className="hidden sm:inline-flex"
-            >
-              {isEditing ? "Done" : "Edit"}
-            </Button>
-
             <ChannelsViewSwitcher current="cards" projectId={projectId} universe={universe} />
 
             {/* Overflow menu — visible on narrow viewports */}
@@ -614,11 +584,7 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled={!canUnpark} onClick={handleUnparkAll}>
                       <LockOpen className="size-4" />
-                      {canUnpark
-                        ? `Unpark All (${parkedCount})`
-                        : connected
-                          ? "Unpark All — Edit mode only"
-                          : "Unpark All — not connected to the desk"}
+                      {canUnpark ? `Unpark All (${parkedCount})` : "Unpark All — not connected to the desk"}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -651,11 +617,7 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
           parkValueMap={parkValueMap}
         />
       </Card>
-      <FixtureDetailModal
-        fixtureKey={selectedFixtureKey}
-        onClose={() => setSelectedFixtureKey(null)}
-        isEditing={isEditing}
-      />
+      <FixtureDetailModal fixtureKey={selectedFixtureKey} onClose={() => setSelectedFixtureKey(null)} />
       <ChannelValueDialog
         open={channelDialogMode !== null}
         onOpenChange={(open) => { if (!open) setChannelDialogMode(null) }}

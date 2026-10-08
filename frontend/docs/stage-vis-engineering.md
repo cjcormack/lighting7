@@ -159,8 +159,9 @@ allocation-free, which is what that frame loop requires.
 
 **The provider wraps only the canvases** — the `Stage3D` element in `routes/Stage.tsx`
 and the Positions panel's rows and Plan tab (`components/positions/`). Not `<main>`: the docked
-`StageFixtureControlPanel` renders `FixtureDetailView`, a live editing surface that must keep
-reading and writing the real wire whatever the stage is previewing. The same reasoning keeps
+`StageFixtureControlPanel` renders the fixture sheet (`components/fixtureSheet/FixtureSheet`), a
+live editing surface that must keep reading and writing the real wire whatever the stage is
+previewing. The same reasoning keeps
 `useVirtualDimmer` on the default source — all of its consumers are editing controls.
 
 R3F's `<Canvas>` is a separate reconciler root, but context still crosses it: `@react-three/fiber`
@@ -1958,6 +1959,17 @@ turned right axis. The hull is widened along the wide axis only. `FixtureModel.t
 three §9 checks in unit form: a Source Four 19°'s apex puts the cone at the lens's width at the lens
 (`archetype.test.ts`), a quarter-in top shutter draws a straight edge on the floor, and an oval
 PAR's long axis turns with `lampRotationDeg`.
+
+**The Stage panel is the fixture sheet's `stage` host** (fixture-fx-sheets plan session 2): the
+same body as the fixture list's pop-up — rows grouped by family, each with its source mark, the FX
+tray pinned at the foot — at 380px, with two Stage-only extras. **Focus** is a tab beside Values and
+Channels (it needs a scene to land a beam on). **Aim at point moved onto the Position row**: it was
+a block pinned under the panel, below every property, and is now an *Aim…* popover on the sheet's
+Position row (D14's half), holding the same `StageAimControls` body — so the panel's foot is the FX
+tray's alone. `StageFixtureControlPanel` passes that body as the sheet's `aim` prop only on the live
+project and for a head whose pan and tilt annotate degrees (`isAimable`), and the row draws the
+button only then; a multi-selection's docked aim panel in view mode is unchanged. The panel still
+reads the real wire whatever the vis source says. The phone's bottom sheet is session 6.
 
 **The Focus tab** (`StageFocusPanel`, a tab of `StageFixtureControlPanel`) and the patch editor's
 **Lantern** box both mount `components/lanterns/FocusCard.tsx`: the lantern and a live cross-section

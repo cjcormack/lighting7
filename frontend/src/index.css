@@ -186,7 +186,7 @@
 
    The three rules that stay are the picker's *look*, and every picker's, deliberately — the
    selectors are unscoped so that they stay that way: `ColourEditor` (the programmer's colour cell,
-   `fixtures/PropertyVisualizers` and its group twin through `ColourPickerPopover`, the busk Colour
+   the group property visualisers through `ColourPickerPopover`, the fixture sheet's colour row, the busk Colour
    tab and the Spread panel's endpoint picker in every host), plus `fx/ColourEditorBody` and
    `templates/TemplateEditor`, which mount `react-colorful` directly. One app should not hold two
    answers to how far a hue strip sits from its square. Anything added here lands on all of them:

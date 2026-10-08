@@ -12,7 +12,8 @@ import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
 export type VirtualDimmerResult = {
   value: number
   percentage: number
-  setValue: (newValue: number) => void
+  /** [fadeMs] is the programmer fade a typed value takes; a drag passes none. */
+  setValue: (newValue: number, fadeMs?: number) => void
 }
 
 /**
@@ -71,7 +72,7 @@ export function useVirtualDimmer(
   const { value, percentage } = live
 
   const setValue = useCallback(
-    (newValue: number) => {
+    (newValue: number, fadeMs?: number) => {
       const clamped = Math.max(0, Math.min(255, Math.round(newValue)))
 
       let r: number, g: number, b: number
@@ -121,7 +122,7 @@ export function useVirtualDimmer(
           w: colourProp.whiteChannel ? existingWhite : undefined,
           a: colourProp.amberChannel ? existingAmber : undefined,
           uv: colourProp.uvChannel ? existingUv : undefined,
-        })
+        }, fadeMs)
         return
       }
       // No fixture key (a synthetic descriptor) — fall back to raw channel writes, which the

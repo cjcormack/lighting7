@@ -15,8 +15,8 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
   onOpenChange?: (open: boolean) => void
   /**
    * Draw the typed R/G/B and per-emitter fields (`PD-COLOUR-EDITOR-INPUTS`). **Opt-in, and off by
-   * default**, because the finding is about the *cell* editor and this popover has three callers.
-   * The other two — `PropertyVisualizers` and `GroupPropertyVisualizers` — already render a full
+   * default**, because the finding is about the *cell* editor and this popover has two callers.
+   * The other — `GroupPropertyVisualizers` (`PropertyVisualizers` went with the fixture sheet) — renders a full
    * always-visible `ColourChannelSlider` bank for R/G/B and every emitter beside the same swatch,
    * so fields in here would be a second live editor for the same six values, opened over the first.
    * `ColourCell` has no such bank: the popover is the only editor a grid cell has, which is the
@@ -27,10 +27,10 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
    * Open in the shared cell-editor surface, which folds to a bottom sheet at phone widths
    * (`EditorSurface`) — instead of always being a floating popover.
    *
-   * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same two
-   * other callers. The fold exists because a grid cell's popover has nowhere good to sit on a
-   * 390px screen; `PropertyVisualizers` and `GroupPropertyVisualizers` open this from a page they
-   * already own the width of, beside their own always-visible channel bank, and a modal sheet over
+   * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same other
+   * caller. The fold exists because a grid cell's popover has nowhere good to sit on a
+   * 390px screen; `GroupPropertyVisualizers` opens this from a page it already owns the width of,
+   * beside its own always-visible channel bank, and a modal sheet over
    * that bank would cover the very thing it is editing.
    */
   sheetWhenNarrow?: boolean

@@ -103,11 +103,11 @@ export function effectsToStop(
 }
 
 /** What to tell the operator about the effects a clear could not take. */
-export function partialSweepMessage(partial: readonly ActiveEffect[]): string {
+export function partialSweepMessage(partial: readonly unknown[], outside?: string): string {
   const one = partial.length === 1
-  return `${partial.length} effect${one ? '' : 's'} left running — ${
-    one ? 'it drives' : 'they drive'
-  } heads outside the selection. Select every head ${
-    one ? 'it covers' : 'they cover'
-  }, or stop ${one ? 'it' : 'them'} in the FX list.`
+  const head = `${partial.length} effect${one ? '' : 's'} left running — ${one ? 'it drives' : 'they drive'} heads outside`
+  // The fixture sheet's Release names its own scope (`this fixture`); a group effect is stopped
+  // from the group, so the marquee's "select every head" advice does not fit there.
+  if (outside != null) return `${head} ${outside}. Stop ${one ? 'it' : 'them'} from the group, or in the FX list.`
+  return `${head} the selection. Select every head ${one ? 'it covers' : 'they cover'}, or stop ${one ? 'it' : 'them'} in the FX list.`
 }

@@ -9,9 +9,10 @@ import { useFixturePark } from "@/hooks/useFixturePark"
  * Park / unpark every channel of a fixture.
  *
  * Parking is always available — it only locks output where it already is. Unparking hands
- * live control back to the show, so it is gated on the surrounding Edit mode and confirmed:
- * park is what holds hard-powered fixtures on a dimmer at a safe level, and a stray click
- * on a read-only page must not release it.
+ * live control back to the show, so it is confirmed, and offered only while the surface is live
+ * (the desk reachable — there is no Edit mode on the fixture sheet or the cards since
+ * fixture-fx-sheets D2): park is what holds hard-powered fixtures on a dimmer at a safe level,
+ * and a stray click must not release it.
  */
 export function FixtureParkButton({
   fixture,
@@ -19,7 +20,7 @@ export function FixtureParkButton({
   iconOnly = false,
 }: {
   fixture: Fixture
-  /** Edit state of the surrounding view. Unpark is only offered when true. */
+  /** The surrounding view is live — the desk is reachable. Unpark is only offered when true. */
   isEditing: boolean
   iconOnly?: boolean
 }) {
@@ -43,7 +44,7 @@ export function FixtureParkButton({
     ? `Park all ${totalChannels} channels at current values`
     : canUnpark
       ? `Unpark all ${parkedCount} channel(s)`
-      : `${parkedCount} channel(s) parked — enable Edit mode to unpark`
+      : `${parkedCount} channel(s) parked — the desk is not connected`
 
   return (
     <Tooltip>
@@ -54,6 +55,8 @@ export function FixtureParkButton({
             variant={isAnyParked ? "default" : "outline"}
             size={iconOnly ? "icon" : "sm"}
             disabled={isAnyParked && !canUnpark}
+            // The tooltip is not an accessible name, so the icon-only form carries its own.
+            aria-label={iconOnly ? tooltip : undefined}
             className={[
               isAnyParked ? "bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-100" : "",
               iconOnly ? "size-8" : "",

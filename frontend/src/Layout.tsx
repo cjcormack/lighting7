@@ -308,12 +308,8 @@ export default function Layout() {
             </main>
           </DeskDndProvider>
 
-          {/* Fixture Detail Modal - opens in edit mode from overview */}
-          <FixtureDetailModal
-            fixtureKey={selectedFixture}
-            onClose={() => setSelectedFixture(null)}
-            isEditing
-          />
+          {/* The fixture sheet's pop-up, opened from the overview panel. */}
+          <FixtureDetailModal fixtureKey={selectedFixture} onClose={() => setSelectedFixture(null)} />
         </div>
 
         {/* The Screens sheet, mounted once: opened from the user menu and from ⌘K through

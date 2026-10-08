@@ -128,7 +128,7 @@ describe('ColourPickerPopover without channelFields', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   /**
-   * `PropertyVisualizers` and `GroupPropertyVisualizers` draw their own always-visible
+   * `GroupPropertyVisualizers` draws its own always-visible (as `PropertyVisualizers` did until the fixture sheet)
    * `ColourChannelSlider` bank for every channel beside the same swatch. A typed field in here
    * would be a second live editor for the same byte, opened over the first — so the default is the
    * shape those two have always had: the `R:… G:… B:…` readout and the emitter sliders.

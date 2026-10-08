@@ -8,7 +8,6 @@ import type {
   ChannelRef,
   SliderPropertyDescriptor,
   ColourPropertyDescriptor,
-  PositionPropertyDescriptor,
   SettingPropertyDescriptor,
 } from '../store/fixtures'
 
@@ -222,56 +221,6 @@ export function useColourValue(property: ColourPropertyDescriptor): ColourValueR
   return liveResult
 }
 
-type PositionValueResult = {
-  pan: number
-  tilt: number
-  panNormalized: number
-  tiltNormalized: number
-}
-
-/**
- * Hook to get a position property's pan/tilt values
- */
-export function usePositionValue(property: PositionPropertyDescriptor): PositionValueResult {
-  const source = useChannelSource()
-  const cachedRef = useRef<PositionValueResult | null>(null)
-
-  const channels = useMemo(
-    () => [property.panChannel, property.tiltChannel],
-    [property.panChannel, property.tiltChannel]
-  )
-
-  const subscribe = useCallback(
-    (callback: () => void) => subscribeToChannels(channels, callback, source),
-    [channels, source]
-  )
-
-  const getSnapshot = useCallback((): PositionValueResult => {
-    const pan = getChannelValue(property.panChannel, source)
-    const tilt = getChannelValue(property.tiltChannel, source)
-
-    // Check if values changed
-    const cached = cachedRef.current
-    if (cached && cached.pan === pan && cached.tilt === tilt) {
-      return cached
-    }
-
-    // Normalize to 0-1 range for display
-    const panRange = property.panMax - property.panMin
-    const tiltRange = property.tiltMax - property.tiltMin
-    const panNormalized = panRange > 0 ? (pan - property.panMin) / panRange : 0.5
-    const tiltNormalized = tiltRange > 0 ? (tilt - property.tiltMin) / tiltRange : 0.5
-
-    const result = { pan, tilt, panNormalized, tiltNormalized }
-    cachedRef.current = result
-    return result
-  }, [property, source])
-
-  const liveResult = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-
-  return liveResult
-}
-
 type SettingValueResult = {
   level: number
   option?: SettingPropertyDescriptor['options'][number]
@@ -368,32 +317,6 @@ export function useUpdateChannel() {
       lightingApi.channels.update(channel.universe, channel.channelNo, value)
     },
     []
-  )
-}
-
-/**
- * Update a fixture's position as one programmer entry rather than two channel writes.
- *
- * Only valid for a real `position` descriptor. A fixture whose movement is two independent
- * pan/tilt *sliders* must keep writing them separately (via [useUpdateChannel] with each
- * slider's own property name) — lifting one axis into a `position` entry would freeze the
- * other, which is exactly why the backend routes raw pan/tilt writes to its channel
- * sideband.
- */
-export function useUpdateFixturePosition(
-  property: PositionPropertyDescriptor,
-  fixtureKey: string | undefined,
-) {
-  return useCallback(
-    (pan: number, tilt: number) => {
-      if (!fixtureKey) {
-        lightingApi.channels.update(property.panChannel.universe, property.panChannel.channelNo, pan)
-        lightingApi.channels.update(property.tiltChannel.universe, property.tiltChannel.channelNo, tilt)
-        return
-      }
-      lightingApi.programmer.setPosition('fixture', fixtureKey, Math.round(pan), Math.round(tilt))
-    },
-    [fixtureKey, property]
   )
 }
 
