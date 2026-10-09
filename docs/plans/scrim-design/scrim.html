@@ -1,4 +1,4 @@
-<title>Scrim in the Stage View</title>
+<title>Scrims and Painted Cloths</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 <style>
@@ -152,7 +152,6 @@
   svg .dot-a { fill: var(--accent); }
   svg .dot-b { fill: var(--cool); }
   svg .lamp { fill: var(--fg); }
-  svg .haze-a { fill: var(--zone); }
   svg .haze-b { fill: var(--cool-zone); }
   svg .thread { fill: var(--fg); }
 
@@ -168,16 +167,18 @@
   .use h3 { font-size: 1.05rem; }
   .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
   @media (max-width: 760px) { .split { grid-template-columns: minmax(0, 1fr); } }
-  .sheet { border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); max-width: 420px; }
+  .sheet { border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); max-width: 440px; }
   .sheet .title { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
   .sheet .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .field { display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem; min-width: 0; }
   .field .lab { color: var(--muted); font-weight: 500; }
-  .field .box { border: 1px solid var(--rule); border-radius: 4px; padding: 4px 8px; display: flex; justify-content: space-between; gap: 6px; align-items: center; background: var(--bg); }
+  .field .box { border: 1px solid var(--rule); border-radius: 4px; padding: 4px 8px; display: flex; justify-content: space-between; gap: 6px; align-items: center; background: var(--bg); min-width: 0; }
+  .field .box span { min-width: 0; overflow-wrap: anywhere; }
   .field.new .box { border-color: var(--accent); box-shadow: 0 0 0 3px var(--zone); }
   .field .hint { color: var(--muted); font-size: 0.74rem; line-height: 1.4; }
-  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--rule); display: inline-block; background: #ccccc7; }
-  .formula { font-family: var(--font-mono); font-size: 0.9rem; background: var(--surface); border-radius: 6px; padding: 12px 16px; overflow-x: auto; white-space: nowrap; }
+  .thumb { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: center; }
+  .thumb canvas { width: 72px; height: 36px; border-radius: 3px; border: 1px solid var(--rule); background: var(--stage-bg); }
+  .formula { font-family: var(--font-mono); font-size: 0.9rem; background: var(--surface); border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
 </style>
 
 <div class="shell">
@@ -186,46 +187,48 @@
     <a href="#glance">At a glance</a>
     <a href="#live">The live stage</a>
     <a href="#reveal">The reveal, in stills</a>
-    <a href="#uses">Three ways to hang it</a>
+    <a href="#uses">Three ways to hang a scrim</a>
     <a href="#seats">Fabric, colour and seat</a>
+    <a href="#paint">Painted cloths</a>
     <span class="grp">The model</span>
     <a href="#weave">Why the angle matters</a>
     <a href="#section">Light through the cloth</a>
-    <a href="#pixel">One pixel through a scrim</a>
+    <a href="#pixel">One pixel through a cloth</a>
     <span class="grp">The desk</span>
     <a href="#document">In the scene document</a>
+    <a href="#images">Images on the desk</a>
     <a href="#decisions">Decisions proposed</a>
     <a href="#order">Proposed order</a>
     <a href="#code">Code map</a>
-    <a href="#questions">Questions</a>
+    <a href="#questions">Decided and open</a>
   </nav>
 
   <main>
     <header id="glance">
-      <span class="eyebrow">Stage view · design record · proposed 2026-10-09</span>
-      <h1>A scrim in the Stage view</h1>
-      <p class="lede">A scrim is cloth with holes in it. Lit steeply from the front, it reads as solid. Light what is behind it and take the front light out, and it disappears. Today the Stage view draws every drape as solid pleated cloth that stops every beam, so it cannot show that reveal. This record shows what the view would look like with a scrim modelled properly, whether it is flown, drawn on a track or dead-hung, and what the desk needs to get there.</p>
+      <span class="eyebrow">Stage view · design record · proposed 2026-10-09 · revised with Chris's answers</span>
+      <h1>Scrims and painted cloths in the Stage view</h1>
+      <p class="lede">A pantomime is built from cloths: painted backcloths and frontcloths, cut cloths and foliage borders, a gauze for the transformation, and a day cloth that turns to night when it is lit from behind. Today the Stage view draws every drape as plain pleated velour that stops every beam. This record shows what the view would look like with those cloths modelled properly, and what the desk needs to get there.</p>
       <div class="facts">
-        <div class="fact"><span class="v">1</span><span class="k">params key added: <code>fabric</code></span></div>
-        <div class="fact"><span class="v">0</span><span class="k">sync format bumps (the <code>travelS</code> precedent)</span></div>
-        <div class="fact"><span class="v">1</span><span class="k">function of angle decides what passes</span></div>
-        <div class="fact"><span class="v">4</span><span class="k">sessions, frontend-heavy</span></div>
+        <div class="fact"><span class="v">4</span><span class="k">fabrics: canvas, muslin, sharkstooth, bobbinet</span></div>
+        <div class="fact"><span class="v">2</span><span class="k">params keys: <code>fabric</code> and <code>paint</code></span></div>
+        <div class="fact"><span class="v">1</span><span class="k">format bump (v23, for the image folder)</span></div>
+        <div class="fact"><span class="v">6</span><span class="k">sessions, each building on the last</span></div>
       </div>
       <div class="callout cool">
-        <p class="small"><b>What the pictures are.</b> Every image on this page is drawn live by a small ray tracer in the page. It applies the proposed rules (§"Decisions proposed") to a model stage: a proscenium, a scrim just upstage of it, a room set and a painted sky cloth. It is a sketch of the model, not the desk's shader: no gobos, no lens optics and simpler falloff. The numbers that decide how much light passes are marked <span class="pill est">estimate</span>, as the stage-light plan marks its finishes.</p>
+        <p class="small"><b>What the pictures are.</b> Every image on this page is drawn live by a small ray tracer in the page. It applies the proposed rules (§"Decisions proposed") to a model stage: a proscenium, a gauze just upstage of it, a room set, a foliage cut cloth that can be flown in, and a translucent sky cloth painted for day on its front and night on its back. The paintings are procedural stand-ins for the uploaded images the desk would use. It is a sketch of the model, not the desk's shader: no gobos, no lens optics and simpler falloff. The numbers that decide how much light passes are marked <span class="pill est">estimate</span>, as the stage-light plan marks its finishes.</p>
       </div>
     </header>
 
     <section id="live" aria-labelledby="live-h">
       <span class="eyebrow">The look</span>
       <h2 id="live-h">The live stage</h2>
-      <p class="prose">This is a white sharkstooth gauze painted with a forest, dead-hung 50 cm upstage of the proscenium. Behind it is a room with a figure, a table and a chair. <b>Run the cue</b> plays the classic bleed-through: the steep wash on the gauze fades out while the room comes up. On a flown or tracked scrim, the cloth then flies out or draws open. Switch the model to <b>Today</b> to see the same cue in the current Stage view, where the gauze stays a wall.</p>
+      <p class="prose">This is a white sharkstooth gauze painted with a forest, dead-hung 50 cm upstage of the proscenium. Behind it is a room with a figure, a table and a chair. At the back is a translucent muslin sky cloth: front light shows the day painting, and light from behind shows the night painted on its back. <b>Run the cue</b> plays the gauze's bleed-through. On a flown or tracked gauze, the cloth then flies out or draws open. Fly in the foliage cut cloth to see its cut-outs pass light and haze. Switch the model to <b>Today</b> to see the same state in the current Stage view.</p>
 
       <div class="stage" id="stage-wrap">
-        <canvas id="stage" width="1280" height="720" aria-label="A ray-traced stage: a painted scrim in front of a lit room set"></canvas>
+        <canvas id="stage" width="1280" height="720" aria-label="A ray-traced stage: a painted gauze in front of a lit room set and a painted sky cloth"></canvas>
         <div class="readout" aria-live="polite">
           <span id="ro-cue"><b>Q12</b> · standing by</span>
-          <span id="ro-seen">eye sees <b>49 %</b> through</span>
+          <span id="ro-seen">eye sees <b>49 %</b> through the gauze</span>
           <span id="ro-model">model <b>proposed</b></span>
         </div>
       </div>
@@ -239,18 +242,23 @@
             <button type="button" data-preset="bleed">Bleed-through</button>
             <button type="button" data-preset="revealed">Revealed</button>
             <button type="button" data-preset="foh">Flat FOH</button>
+            <button type="button" data-preset="day">Day</button>
+            <button type="button" data-preset="night">Night</button>
           </div>
-          <p class="small muted">Flat FOH is the common mistake: a front light at a shallow angle carries on through the holes and lights the set.</p>
+          <p class="small muted">Flat FOH is the common mistake: a front light at a shallow angle carries on through the holes and lights the set. Day and Night light the sky cloth from the front or from behind.</p>
         </div>
         <div class="group">
           <span class="eyebrow">Levels</span>
           <div class="row"><label for="lv-scrim">Gauze wash</label><input type="range" id="lv-scrim" min="0" max="100" step="1"><output id="o-scrim" for="lv-scrim"></output></div>
           <div class="row"><label for="lv-foh">FOH front</label><input type="range" id="lv-foh" min="0" max="100" step="1"><output id="o-foh" for="lv-foh"></output></div>
-          <div class="row"><label for="lv-scene">Room behind</label><input type="range" id="lv-scene" min="0" max="100" step="1"><output id="o-scene" for="lv-scene"></output></div>
+          <div class="row"><label for="lv-scene">Room</label><input type="range" id="lv-scene" min="0" max="100" step="1"><output id="o-scene" for="lv-scene"></output></div>
+          <div class="row"><label for="lv-day">Sky front</label><input type="range" id="lv-day" min="0" max="100" step="1"><output id="o-day" for="lv-day"></output></div>
+          <div class="row"><label for="lv-night">Sky behind</label><input type="range" id="lv-night" min="0" max="100" step="1"><output id="o-night" for="lv-night"></output></div>
           <div class="row"><label for="lv-haze">Haze</label><input type="range" id="lv-haze" min="0" max="100" step="1"><output id="o-haze" for="lv-haze"></output></div>
         </div>
         <div class="group">
-          <span class="eyebrow">Cloth</span>
+          <span class="eyebrow">Gauze</span>
+          <label class="check" for="hung"><input type="checkbox" id="hung"> Gauze hung</label>
           <div class="row two"><label for="usage">Moves by</label>
             <select id="usage"><option value="DEAD">Dead-hung</option><option value="FLY">Fly (a flown gauze)</option><option value="DRAW">Draw (traveller tabs)</option></select></div>
           <div class="row" id="move-row"><label for="move" id="move-label">Trim</label><input type="range" id="move" min="0" max="100" step="1"><output id="o-move" for="move"></output></div>
@@ -260,7 +268,8 @@
             <select id="colour"><option value="painted">Painted forest</option><option value="white">White</option><option value="grey">Grey</option><option value="black">Black</option></select></div>
         </div>
         <div class="group">
-          <span class="eyebrow">View</span>
+          <span class="eyebrow">View and cloths</span>
+          <label class="check" for="cut"><input type="checkbox" id="cut"> Cut cloth flown in</label>
           <div class="row short"><label for="view">Seat</label>
             <select id="view"><option value="stalls">Stalls, centre</option><option value="side">Stalls, far side</option><option value="circle">Circle</option></select></div>
           <div class="row short"><span class="muted" id="model-label">Model</span>
@@ -275,22 +284,23 @@
     <section id="reveal" aria-labelledby="reveal-h">
       <span class="eyebrow">The look</span>
       <h2 id="reveal-h">The reveal, in stills</h2>
-      <p class="prose">Three moments of the same cue under the proposed model, then the last moment in today's view. Nothing on the cloth changes between the first three frames. Only the light does, which is the point of a scrim, and why the view needs no new scenery state to show it. Select a still to load it into the live stage.</p>
+      <p class="prose">Three moments of the gauze cue under the proposed model, then the last moment in today's view. Nothing on the cloth changes between the first three frames. Only the light does, which is the point of a scrim, and why the view needs no new scenery state to show it. Select a still to load it into the live stage.</p>
       <div class="strip" id="strip-reveal"></div>
     </section>
 
     <section id="uses" aria-labelledby="uses-h">
       <span class="eyebrow">The look</span>
-      <h2 id="uses-h">Three ways to hang it</h2>
+      <h2 id="uses-h">Three ways to hang a scrim</h2>
       <p class="prose">A scrim is still a drape, and it moves the way the drape's existing <b>Moves by</b> setting says. Flown, it travels on its <code>trimM</code>. On a track, it draws on its <code>open</code> state. Dead-hung, it stays put. The cloth's own rules stay the same in every case. One thing does change on a track: as a drawn scrim gathers, its folds stack layers of net, and the gathered part goes nearly solid.</p>
       <div class="strip" id="strip-uses"></div>
       <div class="uses">
         <div class="use">
           <h3>Flown</h3>
-          <p class="small">A gauze that flies out once the scene behind is lit. The usual memory or dream reveal. It carries <code>trimM</code> and a travel time, like any flown drape.</p>
+          <p class="small">A gauze that flies out once the scene behind is lit. The usual transformation reveal. It carries <code>trimM</code> and a travel time, like any flown drape.</p>
           <pre>{ "role": "BACKCLOTH",
   "operation": "FLY",
   "fabric": "SHARKSTOOTH",
+  "paint": { "front": "9f2c…e1" },
   "travelS": 8 }</pre>
         </div>
         <div class="use">
@@ -314,8 +324,25 @@
     <section id="seats" aria-labelledby="seats-h">
       <span class="eyebrow">The look</span>
       <h2 id="seats-h">Fabric, colour and seat</h2>
-      <p class="prose">The same bleed-through state under different cloths and from different seats. Bobbinet is a finer, more open net than sharkstooth, so it never quite reads as solid. A black scrim barely catches the wash, so the room shows through it at almost any level. From a side seat, the holes close up and the same gauze looks denser. That is real, and it is why a reveal that works in the centre stalls can fail at the ends of a row.</p>
+      <p class="prose">The same bleed-through state under different cloths and from different seats. Bobbinet is a finer, more open net than sharkstooth, so it never quite reads as solid. A black scrim barely catches the wash, so the room shows through it at almost any level. From a side seat, the holes close up and the same gauze looks denser. That is real, and it is why a reveal that works in the centre stalls can fail at the ends of a row. Seat views will say so (D13).</p>
       <div class="strip" id="strip-seats"></div>
+    </section>
+
+    <section id="paint" aria-labelledby="paint-h">
+      <span class="eyebrow">The look</span>
+      <h2 id="paint-h">Painted cloths</h2>
+      <p class="prose">Any drape or flat can carry a painted image. A transparent area in the image is a hole: a cut cloth's arch, the gaps between a foliage border's leaves, the window of a cut-out flat. Light, haze and the eye pass straight through it, and the cloth's shadow follows the cut edge. A translucent muslin cloth takes a second image for its back, which is how a day cloth turns to night.</p>
+      <div class="strip" id="strip-paint"></div>
+      <div class="split">
+        <div class="sub">
+          <h3>Day and night on one cloth</h3>
+          <p class="small">The front is painted in translucent dyes for day. The back is painted opaque wherever the night should be dark, leaving the moon, the stars and the windows open. Front light shows the front paint. Light from behind shines through both layers, so it shows through only where the back is open, coloured by the dye on the front. That is why the windows glow amber and the sky reads blue.</p>
+        </div>
+        <div class="sub">
+          <h3>Cut cloths and borders</h3>
+          <p class="small">The image's alpha channel cuts the cloth: below half opacity is a hole. The same mask drives the surface (a hole draws what is behind it), the shadows (the occlusion test samples the mask where a segment crosses the cloth), beam reach and the haze. So a back light through a foliage cut cloth throws shafts through the leaves, as the fourth still shows.</p>
+        </div>
+      </div>
     </section>
 
     <section id="weave" aria-labelledby="weave-h">
@@ -332,7 +359,7 @@
     <section id="section" aria-labelledby="section-h">
       <span class="eyebrow">The model</span>
       <h2 id="section-h">Light through the cloth</h2>
-      <p class="prose">A section along the centre line, to scale in metres, with the same rig as the live stage. Today every collider stops a beam outright (<code>beamReach.ts</code>) and shadows everything behind it (<code>occlusion.ts</code>). A scrim needs a third answer: it <b>passes a share</b>, so a beam continues to the next solid surface, at the strength <code>open(θ)</code> leaves it.</p>
+      <p class="prose">A section along the centre line, to scale in metres, with the same rig as the live stage. Today every collider stops a beam outright (<code>beamReach.ts</code>) and shadows everything behind it (<code>occlusion.ts</code>). Scrims and cut cloths need a third answer: the cloth <b>passes a share</b>, so a beam continues to the next solid surface at the strength left to it. For a scrim that share is <code>open(θ)</code>. For a cut cloth it is the image's mask at the point crossed.</p>
       <div class="drawing"><svg id="stage-section" viewBox="0 0 900 360" role="img" aria-label="Side section of the stage showing beams passing through the scrim"></svg></div>
       <ul class="plain small">
         <li><b>Steep wash</b> (amber, from above the gauze): it meets the threads at 86° and passes nothing, so the floor just upstage of the gauze stays dark.</li>
@@ -343,17 +370,18 @@
 
     <section id="pixel" aria-labelledby="pixel-h">
       <span class="eyebrow">The model</span>
-      <h2 id="pixel-h">One pixel through a scrim</h2>
-      <p class="prose">The surface shader draws the scrim as a blend over what is behind it, weighted by how much of the cloth the eye sees at that angle. The haze march splits at the scrim plane, so the haze in front of the gauze is not dimmed and the haze behind it is.</p>
-      <div class="formula">pixel = haze in front + (1 − open(θ<sub>eye</sub>)) · threads + open(θ<sub>eye</sub>) · (surface behind + haze behind)</div>
+      <h2 id="pixel-h">One pixel through a cloth</h2>
+      <p class="prose">A scrim draws as a blend over what is behind it, weighted by how much of the cloth the eye sees at that angle. The haze march splits at the cloth's plane, so haze in front of the gauze is not dimmed and haze behind it is. A cut cloth is the same blend with the mask in place of the angle, so it is either cloth or a hole. Muslin is opaque to the eye and to beams, but its front glows with light from behind.</p>
+      <div class="formula">scrim&nbsp;&nbsp;pixel = haze in front + (1 − open(θ<sub>eye</sub>)) · threads + open(θ<sub>eye</sub>) · (surface behind + haze behind)<br>muslin&nbsp;front = paint<sub>front</sub> · E<sub>front</sub> + τ · paint<sub>front</sub> ⊙ paint<sub>back</sub> · E<sub>behind</sub><span class="muted">&nbsp;&nbsp;&nbsp;τ = 0.45, estimate</span></div>
       <div class="tablewrap">
         <table>
           <thead><tr><th>Term</th><th>What it is</th><th>Where it lives</th></tr></thead>
           <tbody>
-            <tr><td class="n">threads</td><td>The cloth's own colour under every light on the viewer's side, with a wrap term: a round thread still catches light that grazes the cloth (0.45 at grazing <span class="pill est">estimate</span>). Lights on the far side add a small glow through the fibres (0.18 <span class="pill est">estimate</span>).</td><td><code>surfaceShader.ts</code>, a <code>SCRIM</code> define</td></tr>
+            <tr><td class="n">threads</td><td>The scrim's own colour or paint under every light on the viewer's side, with a wrap term: a round thread still catches light that grazes the cloth (0.45 at grazing <span class="pill est">estimate</span>). Lights on the far side add a small glow through the fibres (0.18 <span class="pill est">estimate</span>).</td><td><code>surfaceShader.ts</code>, a <code>SCRIM</code> define</td></tr>
             <tr><td class="n">open(θ<sub>eye</sub>)</td><td>The function above, taken at the angle between the view ray and the cloth's normal. A gathered drawn scrim raises it to the power of its layers: <code>open<sup>c</sup></code>, with <code>c</code> its width over the width it is gathered into.</td><td>One GLSL chunk with a TypeScript twin, as <code>beamMask.ts</code> has</td></tr>
-            <tr><td class="n">surface behind</td><td>Whatever the scene draws behind, shadowed by the scrim by transmittance rather than yes/no. A beam's light reaching it has crossed the cloth at the beam's own angle.</td><td><code>occlusion.ts</code>, per collider</td></tr>
-            <tr><td class="n">haze behind</td><td>The march's samples past the scrim from the eye, scaled by <code>open(θ<sub>eye</sub>)</code>. A beam's samples past the scrim along its own axis are scaled by <code>open(θ<sub>beam</sub>)</code>.</td><td><code>beamShaders.ts</code></td></tr>
+            <tr><td class="n">mask</td><td>A painted cloth's alpha at the point, from a 256-pixel copy of the image packed in an atlas beside the colliders. Below 0.5 is a hole.</td><td><code>occlusion.ts</code> and the CPU twin in <code>beamReach.ts</code></td></tr>
+            <tr><td class="n">τ · paint<sub>back</sub></td><td>Muslin's diffuse transmission. Light from behind lands on the back, passes the back paint and the front dye, and leaves the front, so the night painting appears only where the back is open.</td><td><code>surfaceShader.ts</code>, a <code>TRANSLUCENT</code> define</td></tr>
+            <tr><td class="n">haze behind</td><td>The march's samples past a scrim from the eye, scaled by <code>open(θ<sub>eye</sub>)</code>, or by the mask for a cut cloth. A beam's samples past the cloth along its own path are scaled by its own crossing.</td><td><code>beamShaders.ts</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -364,29 +392,50 @@
       <h2 id="document-h">In the scene document</h2>
       <div class="split">
         <div class="sub">
-          <p class="prose">A scrim is a <code>DRAPE</code> with a <b>fabric</b>. Fabric is a separate choice from role, which only sets a default colour and finish, and from operation, which sets how the cloth moves. If scrim were a role, "scrim tabs" could not be said.</p>
+          <p class="prose">A cloth's <b>fabric</b> and <b>paint</b> are separate choices from its role (a default colour and finish) and its operation (how it moves). If scrim were a role, "scrim tabs" could not be said, and a painted leg would need a role of its own.</p>
           <ul class="plain small">
-            <li><code>DrapeParams.fabric: SHARKSTOOTH | BOBBINET</code>, absent meaning solid cloth as today. Written canonically, so absent stays absent.</li>
-            <li>A scrim hangs flat: <code>depthM</code> does not pleat it. A drawn one folds only as it gathers.</li>
-            <li>Its default colour is an off-white, unless <code>finishColour</code> says otherwise, the way a cyc's is.</li>
-            <li>The MCP vocabulary in <code>SetupToolSchemas.kt</code> gains the key, so <code>set_scene</code> can build one: <code>DRAPE: {role, operation, fabric, travelS}</code>.</li>
-            <li>No <code>formatVersion</code> bump: an optional params key, as <code>travelS</code> was (<code>sync-engineering.md</code> §"A params key added later"). An older desk keeps the key but refuses an edit to that element, the same caveat <code>travelS</code> carries.</li>
+            <li><code>DrapeParams.fabric: CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET</code>, absent meaning velour as today. Canvas is a flat, opaque, matte painted cloth. Muslin is flat and translucent. The two nets are scrims.</li>
+            <li><code>paint: { front?, back? }</code> on <code>DrapeParams</code> and <code>FlatParams</code>, each the SHA-256 of a stored image. On a flat, the front is its downstage face and its openings still cut through. <code>back</code> is the upstage face, and on muslin it is the night side.</li>
+            <li>Every fabric but velour hangs flat, so <code>depthM</code> pleats only velour. A drawn cloth folds as it gathers.</li>
+            <li>The image stretches over the element's width and height. The sheet warns when the two aspects differ by more than 2 % and offers <i>Match height to image</i>.</li>
+            <li>A scrim's or muslin's default colour is off-white, unless <code>finishColour</code> says otherwise, the way a cyc's is. Under paint, the finish colour is the unpainted back.</li>
+            <li>The MCP vocabulary in <code>SetupToolSchemas.kt</code> gains both keys, so <code>set_scene</code> can build one: <code>DRAPE: {role, operation, fabric, paint, travelS}</code>.</li>
           </ul>
         </div>
-        <div class="sheet" aria-label="Mock of the element sheet with the new Fabric field">
-          <span class="title">Forest gauze</span>
+        <div class="sheet" aria-label="Mock of the element sheet with the new Fabric and Paint fields">
+          <span class="title">Village backcloth</span>
           <div class="grid2">
             <div class="field"><span class="lab">Kind</span><span class="box">Drape <span class="muted">▾</span></span></div>
             <div class="field"><span class="lab">Layer</span><span class="box">Set <span class="muted">▾</span></span></div>
             <div class="field"><span class="lab">Role</span><span class="box">BACKCLOTH <span class="muted">▾</span></span></div>
             <div class="field"><span class="lab">Moves by</span><span class="box">FLY <span class="muted">▾</span></span></div>
-            <div class="field new"><span class="lab">Fabric <span class="pill new">new</span></span><span class="box">Sharkstooth scrim <span class="muted">▾</span></span></div>
-            <div class="field"><span class="lab">Travel time (s, a full travel)</span><span class="box">8</span></div>
           </div>
-          <div class="field"><span class="lab">Finish colour</span><span class="box"><span><span class="swatch" aria-hidden="true"></span> #ccccc7</span><span class="muted">off-white by default</span></span></div>
-          <span class="field"><span class="hint">Fabric lists Solid (default), Sharkstooth scrim and Bobbinet. A scrim hangs flat, so the Depth field's hint reads "folds only as a drawn scrim gathers".</span></span>
+          <div class="field new"><span class="lab">Fabric <span class="pill new">new</span></span><span class="box">Muslin, translucent <span class="muted">▾</span></span></div>
+          <div class="field new"><span class="lab">Paint, front <span class="pill new">new</span></span><span class="box thumb"><canvas id="thumb-front" width="144" height="72" aria-hidden="true"></canvas><span>village-day.png · 8192 × 4096 · stored</span></span></div>
+          <div class="field new"><span class="lab">Paint, back <span class="pill new">new</span></span><span class="box thumb"><canvas id="thumb-back" width="144" height="72" aria-hidden="true"></canvas><span>village-night.png · 8192 × 4096 · stored</span></span></div>
+          <div class="field"><span class="hint">Image 2 : 1, cloth 12.0 × 6.0 m · aspects match. Transparent pixels cut holes in the cloth.</span></div>
         </div>
       </div>
+    </section>
+
+    <section id="images" aria-labelledby="images-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="images-h">Images on the desk</h2>
+      <p class="prose">Painted images are the second binary the desk syncs, after the prompt-book PDF. They follow the PDF's contract: content-addressed, outside the text machinery, and copied by raw bytes.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Where</th><th>What</th></tr></thead>
+          <tbody>
+            <tr><td class="n">Stored</td><td><code>&lt;appDataDir&gt;/scene-images/{projectUuid}/{sha256}.{png|jpg|webp}</code>, the original as uploaded (PNG, JPEG or WebP, at most 8192 px on its longest side and 25 MB). No table: params name the hash, as a prompt book names its PDF.</td></tr>
+            <tr><td class="n">Derived</td><td>A display copy at 2048 px with mipmaps for the Stage view, and a 256 px alpha mask for the occlusion atlas and beam reach. Both are made once, cached per machine and never synced.</td></tr>
+            <tr><td class="n">Synced</td><td><code>sceneImages/{sha256}.{ext}</code> in the show repo, only the hashes some element references. <code>formatVersion</code> 23, because an older reader's wipe-then-export push would delete the folder for every peer (v4's reason). <code>minReader</code> stays 5. <code>.gitattributes</code> marks the folder binary, and <code>walkTree</code> and the UUID remapper skip it.</td></tr>
+            <tr><td class="n">Uploaded</td><td><code>POST /api/rest/projects/{id}/scene-images</code> with the raw bytes answers <code>{hash, width, height, hasAlpha}</code>. <code>GET …/scene-images/{hash}?max=2048</code> serves the original or a copy. A paint hash that names no stored image is refused at the write boundary.</td></tr>
+            <tr><td class="n">MCP</td><td><code>upload_scene_image {mediaType, base64}</code> stores an image and answers its hash, for <code>set_scene</code> to name. Capped at the MCP message size. Stored data only, so it carries no remote-access gate, as <code>set_scene</code> carries none.</td></tr>
+            <tr><td class="n">Cloned</td><td>Export → import, as everything is. The importer hydrates <code>sceneImages/</code> into the new project's store, as it hydrates <code>promptScripts/</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="figure-note">The texture budget is why the display copy exists. Twenty painted cloths at 2048 px are about 220 MB of GPU memory with mipmaps. At 8192 px they would be about 3.5 GB.</p>
     </section>
 
     <section id="decisions" aria-labelledby="decisions-h">
@@ -396,15 +445,20 @@
         <table>
           <thead><tr><th>#</th><th>Decision</th></tr></thead>
           <tbody>
-            <tr><td class="n">D1</td><td><b>Fabric is a drape's, not a role.</b> <code>fabric: SHARKSTOOTH | BOBBINET</code> on <code>DrapeParams</code>, absent = solid. Role and operation are unchanged, and every use is a combination of the three.</td></tr>
-            <tr><td class="n">D2</td><td><b>A scrim hangs flat.</b> No pleat from <code>depthM</code>. A drawn scrim folds as it gathers, with an amplitude that grows with the gathering.</td></tr>
-            <tr><td class="n">D3</td><td><b>One function of angle.</b> <code>open(θ) = (1 − r)·max(0, 1 − r/cos θ)</code> decides both what a beam passes and what an eye sees through. Sharkstooth r = 0.30, bobbinet r = 0.15 <span class="pill est">estimate</span>. Gathered cloth stacks: <code>open<sup>c</sup></code>.</td></tr>
-            <tr><td class="n">D4</td><td><b>A beam does not stop at a scrim.</b> A part may be <i>transmitting</i> as well as colliding or not. Beam reach and the landing planes skip it, so the beam carries on to the next solid surface, and <i>Focus here</i> still takes the point it is given.</td></tr>
-            <tr><td class="n">D5</td><td><b>Shadows become transmittance.</b> The box occlusion test multiplies by <code>open(θ)</code> for each scrim it crosses and carries on, instead of returning blocked. The packed collider gains a flag (a sign on the skin, or a third texel). The landing-plane fallback does the same.</td></tr>
-            <tr><td class="n">D6</td><td><b>Seeing through is a blend.</b> The scrim draws without writing depth, premultiplied over what is behind it, weighted by <code>1 − open(θ<sub>eye</sub>)</code>. Its threads wrap grazing light and glow faintly from behind <span class="pill est">estimate</span>.</td></tr>
-            <tr><td class="n">D7</td><td><b>Haze splits at the plane.</b> Each beam carries the first scrim on its axis as one more plane. Samples past it scale by <code>open(θ<sub>beam</sub>)</code>, and samples behind a scrim from the eye by <code>open(θ<sub>eye</sub>)</code>, from a capped list of scrim rectangles, as regions are capped today.</td></tr>
-            <tr><td class="n">D8</td><td><b>No wire or sync change beyond the key.</b> No <code>formatVersion</code> bump, no new state. The reveal is lighting, and the cloth's moves are the drape's existing <code>trimM</code> and <code>open</code>.</td></tr>
-            <tr><td class="n">D9</td><td><b>Out of scope:</b> moiré, a visible weave, painted or projected images on the cloth (the scene document has no image finish), and bounce light (<code>FU-STAGE-BOUNCE-FILL</code>).</td></tr>
+            <tr><td class="n">D1</td><td><b>Fabric is a cloth's, not a role.</b> <code>fabric: CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET</code> on <code>DrapeParams</code>, absent = velour. Role and operation are unchanged, and every use is a combination of the three.</td></tr>
+            <tr><td class="n">D2</td><td><b>Only velour pleats.</b> Every other fabric hangs flat. A drawn cloth folds as it gathers, with an amplitude that grows with the gathering.</td></tr>
+            <tr><td class="n">D3</td><td><b>One function of angle for a scrim.</b> <code>open(θ) = (1 − r)·max(0, 1 − r/cos θ)</code> decides both what a beam passes and what an eye sees through. Sharkstooth r = 0.30, bobbinet r = 0.15 <span class="pill est">estimate</span>. Gathered net stacks: <code>open<sup>c</sup></code>.</td></tr>
+            <tr><td class="n">D4</td><td><b>Drapes and flats take paint.</b> <code>paint: {front?, back?}</code>, each a stored image's SHA-256, stretched over the element's face. The images are a content-addressed binary store synced at <code>sceneImages/</code> (v23).</td></tr>
+            <tr><td class="n">D5</td><td><b>Alpha cuts.</b> An image pixel below half opacity is a hole, in the surface, the shadows, beam reach and the haze alike, through a 256 px mask per image.</td></tr>
+            <tr><td class="n">D6</td><td><b>Muslin is translucent.</b> It is opaque to beams and to the eye. Light from behind lights its front through <code>τ · paint<sub>front</sub> ⊙ paint<sub>back</sub></code>, with τ = 0.45 <span class="pill est">estimate</span>, so a back painting shows only where it is left open.</td></tr>
+            <tr><td class="n">D7</td><td><b>A part may transmit.</b> Besides colliding or not, a part may pass a share of light: by angle (a scrim) or by mask (a cut cloth). Beam reach and the landing planes skip a transmitting part, so a beam carries on to the next solid surface, and <i>Focus here</i> still takes the point it is given.</td></tr>
+            <tr><td class="n">D8</td><td><b>Shadows become transmittance.</b> The box occlusion test multiplies by the crossing's share for each transmitting collider and carries on, instead of returning blocked. The packed collider gains a kind (a third texel), and masks sit in an atlas of at most 32. The landing-plane fallback does the same.</td></tr>
+            <tr><td class="n">D9</td><td><b>Seeing through is a blend.</b> A scrim draws without writing depth, premultiplied over what is behind it, weighted by <code>1 − open(θ<sub>eye</sub>)</code>. Its threads wrap grazing light and glow faintly from behind <span class="pill est">estimate</span>. A cut cloth discards its holes and writes depth elsewhere, so it stays opaque cloth with holes in it.</td></tr>
+            <tr><td class="n">D10</td><td><b>Haze splits at the plane.</b> Each beam carries the transmitting planes on its path. Samples past them scale by the beam's crossing, and samples behind one from the eye by the eye's, from a uniform list of four, as regions are capped today. A fifth still passes light on surfaces, but its haze does not split.</td></tr>
+            <tr><td class="n">D11</td><td><b>Uploads from the desk and from MCP.</b> A file picker on the element sheet, a REST upload, and <code>upload_scene_image</code> for Claude. No fetch by URL.</td></tr>
+            <tr><td class="n">D12</td><td><b>The GPU sees a 2048 px copy.</b> The original is stored and synced. The view loads a derived display copy with mipmaps, and occlusion reads the 256 px mask.</td></tr>
+            <tr><td class="n">D13</td><td><b>Seat views flag a solid-looking scrim.</b> When a seat sees a scrim at below half its head-on <code>open</code>, its popover and the viewpoint picker say so, e.g. "Forest gauze reads near-solid from F6 (open 12 %)".</td></tr>
+            <tr><td class="n">D14</td><td><b>Out of scope:</b> moiré, a visible weave, projection mapping, painted surfaces other than drapes and flats, and bounce light (<code>FU-STAGE-BOUNCE-FILL</code>).</td></tr>
           </tbody>
         </table>
       </div>
@@ -413,15 +467,17 @@
     <section id="order" aria-labelledby="order-h">
       <span class="eyebrow">The desk</span>
       <h2 id="order-h">Proposed order</h2>
-      <p class="prose">Four sessions, one PR each, in this order. After session 1 the light behaves correctly but the cloth still looks solid. Session 2 makes it look right from the house. Session 3 is the costly one and is measured against the frame budget.</p>
+      <p class="prose">Six sessions, one PR each. The order is chosen for clean development rather than for which feature lands first. Session 1 settles the document and the store once, so no later session touches sync. Session 3 builds one transmittance core that scrims and cut-outs both use, so the light model is written once. Sessions 4 and 5 then teach the surface shader and the haze about it. Both features are complete after session 5.</p>
       <div class="tablewrap">
         <table>
           <thead><tr><th>Session</th><th>What lands</th><th>Size</th></tr></thead>
           <tbody>
-            <tr><td class="n">1</td><td><b>The cloth and its shadows.</b> <code>fabric</code> end to end (Kotlin params and validation, <code>elementProblems.ts</code>, the element form, the MCP vocabulary, <code>RichProjectFixture</code>, the docs). Flat geometry. The transmitting part state. Transmittance in beam reach, box occlusion and the landing fallback (D1, D2, D4, D5).</td><td><span class="pill m">medium</span></td></tr>
-            <tr><td class="n">2</td><td><b>Seeing through.</b> The blend, <code>open(θ<sub>eye</sub>)</code> and the threads' wrap and glow (D3, D6), with the GLSL chunk and its TypeScript twin pinned by a test.</td><td><span class="pill s">small</span></td></tr>
-            <tr><td class="n">3</td><td><b>Haze.</b> Both attenuations in the march (D7). Measured in <code>?profileHarness</code> on the three machines, with the haze governor absorbing the cost.</td><td><span class="pill l">large</span></td></tr>
-            <tr><td class="n">4</td><td><b>Tuning.</b> A <code>?profileHarness=scrim</code> scene, like this page's stage, to judge r, the wrap and the glow by eye against the classic reveal.</td><td><span class="pill s">small</span></td></tr>
+            <tr><td class="n">1</td><td><b>The document and the image store</b> (backend-heavy). <code>fabric</code> and <code>paint</code> in Kotlin params and validation. The image store, its REST routes and the derived copies. Sync at v23, with the exporter, importer, <code>.gitattributes</code>, <code>walkTree</code> and remapper skips, and <code>RichProjectFixture</code> carrying a real image. <code>upload_scene_image</code> and the <code>set_scene</code> vocabulary. The element sheet's Fabric select and image pickers, and <code>elementProblems.ts</code>. Nothing new is drawn yet (D1, D4, D11, D12).</td><td><span class="pill l">large</span></td></tr>
+            <tr><td class="n">2</td><td><b>Painted surfaces.</b> Flat cloth for every fabric but velour. Front and back images on drapes and flats, with the image continuous across a drawn cloth's halves as they gather. Display copies loaded with mipmaps (D2, D4, D12).</td><td><span class="pill m">medium</span></td></tr>
+            <tr><td class="n">3</td><td><b>The transmittance core.</b> The transmitting part, by angle or by mask. The collider kind and the mask atlas in occlusion, the CPU mask in beam reach, and the landing fallback. After this, light passes scrims and cut-outs and shadows follow the cut edge (D3, D5, D7, D8).</td><td><span class="pill m">medium</span></td></tr>
+            <tr><td class="n">4</td><td><b>See-through surfaces.</b> The scrim blend with its wrap and glow, cut-out discard, and muslin's translucency with back paint. The GLSL for <code>open(θ)</code> gets a TypeScript twin pinned by a test (D6, D9).</td><td><span class="pill m">medium</span></td></tr>
+            <tr><td class="n">5</td><td><b>Haze.</b> Transmitting planes in the march, by angle and by mask, capped at four (D10). Measured in <code>?profileHarness</code> on the three machines, with the haze governor absorbing the cost.</td><td><span class="pill l">large</span></td></tr>
+            <tr><td class="n">6</td><td><b>Tuning and the seat hint.</b> <code>?profileHarness=scrim</code>, <code>=cutcloth</code> and <code>=daynight</code>, to judge r, the wrap, the glow and τ by eye. The seat-view hint (D13).</td><td><span class="pill s">small</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -434,19 +490,24 @@
         <table>
           <thead><tr><th>File</th><th>Change</th></tr></thead>
           <tbody>
-            <tr><td class="n">models/stageScene.kt</td><td><code>DrapeFabric</code>, <code>DrapeParams.fabric</code>, and the DRAPE arm of <code>parseElementParams</code></td></tr>
-            <tr><td class="n">ai/SetupToolSchemas.kt</td><td>The DRAPE params line gains <code>fabric</code></td></tr>
-            <tr><td class="n">stage/EditSceneElementForm.tsx</td><td>A Fabric select beside Role and Moves by. <code>elementProblems.ts</code> mirrors the check</td></tr>
-            <tr><td class="n">scene/builders/drape.ts</td><td>A flat cloth for a scrim. Gathered folds on DRAW. A <code>transmits</code> part</td></tr>
-            <tr><td class="n">scene/sceneParts.ts</td><td><code>ScenePart</code> gains the transmitting state. A scrim finish and its default colour</td></tr>
-            <tr><td class="n">scene/pleat.ts</td><td>A flat shape, and a fold that grows as a drawn scrim gathers</td></tr>
-            <tr><td class="n">scene/beamReach.ts</td><td>Skips a transmitting collider. Sight lines pass it</td></tr>
-            <tr><td class="n">scene/occlusion.ts</td><td>Transmittance per collider, packed as a flag. The GLSL keeps looping past a scrim</td></tr>
-            <tr><td class="n">scene/landing.ts</td><td>A scrim is never a landing plane. A beam carries its first scrim plane for the haze</td></tr>
-            <tr><td class="n">scene/surfaceShader.ts</td><td>A <code>SCRIM</code> define: the blend, the wrap, the back glow, no depth write</td></tr>
-            <tr><td class="n">beamShaders.ts</td><td>The march's two attenuations, and a capped scrim list</td></tr>
-            <tr><td class="n">profileHarness.ts</td><td>A <code>scrim</code> scene</td></tr>
-            <tr><td class="n">docs/fixtures-engineering.md</td><td>§"The scene document" gains the key, and <code>stage-vis-engineering.md</code> gains the model</td></tr>
+            <tr><td class="n">models/stageScene.kt</td><td><code>DrapeFabric</code>, <code>ScenePaint</code>, <code>DrapeParams.fabric</code> and <code>.paint</code>, <code>FlatParams.paint</code>, and their arms of <code>parseElementParams</code> (a paint hash must name a stored image)</td></tr>
+            <tr><td class="n">routes/projectSceneImages.kt</td><td>New: upload and serve, beside <code>projectStageScene.kt</code></td></tr>
+            <tr><td class="n">state/State.kt</td><td><code>sceneImagePath</code> beside <code>promptScriptPath</code>, and the derived-copy cache</td></tr>
+            <tr><td class="n">sync/ProjectExporter.kt, ProjectImporter.kt</td><td>Copy referenced images to <code>sceneImages/</code> and hydrate them back. v23</td></tr>
+            <tr><td class="n">sync/SceneImageRepoSync.kt</td><td>New: the store ↔ working-tree reconcile, after <code>PromptScriptRepoSync.kt</code></td></tr>
+            <tr><td class="n">sync/JGitClient.kt, ExportUuidRemapper.kt</td><td>Skip <code>sceneImages/</code> as they skip <code>promptScripts/</code></td></tr>
+            <tr><td class="n">ai/SetupTools.kt, SetupToolSchemas.kt</td><td><code>upload_scene_image</code>, and the DRAPE and FLAT params lines</td></tr>
+            <tr><td class="n">stage/EditSceneElementForm.tsx</td><td>Fabric select, front and back image pickers, the aspect hint. <code>elementProblems.ts</code> mirrors the checks</td></tr>
+            <tr><td class="n">scene/builders/drape.ts, flat.ts</td><td>Flat cloth, painted faces with their UVs, gathered folds on DRAW, transmitting parts</td></tr>
+            <tr><td class="n">scene/sceneParts.ts, pleat.ts</td><td>The transmitting state, scrim and muslin finishes, a flat shape and a gathering fold</td></tr>
+            <tr><td class="n">scene/beamReach.ts</td><td>Skips a transmitting collider, or samples its CPU mask. Sight lines pass it</td></tr>
+            <tr><td class="n">scene/occlusion.ts</td><td>The collider's kind, the mask atlas, and transmittance per crossing</td></tr>
+            <tr><td class="n">scene/landing.ts</td><td>A transmitting part is never a landing plane. A beam carries its transmitting planes for the haze</td></tr>
+            <tr><td class="n">scene/surfaceShader.ts</td><td>The paint textures, <code>SCRIM</code> and <code>TRANSLUCENT</code> defines, cut-out discard</td></tr>
+            <tr><td class="n">beamShaders.ts</td><td>The march's transmitting planes and their cap</td></tr>
+            <tr><td class="n">stage3d/StageViewpointPicker.tsx</td><td>The seat hint, with the seat popover</td></tr>
+            <tr><td class="n">profileHarness.ts</td><td><code>scrim</code>, <code>cutcloth</code> and <code>daynight</code> scenes</td></tr>
+            <tr><td class="n">docs</td><td><code>fixtures-engineering.md</code> §"The scene document", <code>sync-engineering.md</code> §"Version 23", and <code>stage-vis-engineering.md</code> for the model</td></tr>
           </tbody>
         </table>
       </div>
@@ -454,12 +515,28 @@
 
     <section id="questions" aria-labelledby="questions-h">
       <span class="eyebrow">The desk</span>
-      <h2 id="questions-h">Questions</h2>
+      <h2 id="questions-h">Decided and open</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Question</th><th>Chris, 2026-10-09</th></tr></thead>
+          <tbody>
+            <tr><td>Bobbinet in the first cut?</td><td>Yes, both nets.</td></tr>
+            <tr><td>How many scrims may the haze honour at once?</td><td>Four.</td></tr>
+            <tr><td>Painted gauzes?</td><td>Go further: paint every cloth, now, for the pantomime.</td></tr>
+            <tr><td>Which elements take paint?</td><td>Drapes and flats.</td></tr>
+            <tr><td>Does transparency cut the cloth?</td><td>Yes: alpha cuts the cloth.</td></tr>
+            <tr><td>Translucent day/night cloths?</td><td>Yes, with front and back paint.</td></tr>
+            <tr><td>Where do images come from?</td><td>Upload on the desk, and an MCP upload tool.</td></tr>
+            <tr><td>Warn when a scrim reads solid from a seat?</td><td>Yes, a hint on seat views.</td></tr>
+            <tr><td>Which lands first?</td><td>Whichever makes development cleanest. Both are needed before the pantomime, with time to land both properly.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="prose">Still open, for the plan to settle:</p>
       <ol class="plain">
-        <li><b>Bobbinet in the first cut?</b> Proposed: yes. It is one more number for r, and a theatre that owns one will hang it.</li>
-        <li><b>How many scrims may the haze honour at once?</b> Proposed: four, as a uniform list like the regions. A fifth would still pass light on surfaces, but its haze would not split.</li>
-        <li><b>Painted gauzes.</b> The forest on this page is not in scope: the scene document has no image finish for any element. Is a painted scrim wanted enough to plan an image finish of its own?</li>
-        <li><b>Seat check.</b> Should the seat views warn when a scrim the seat sees through at a steep angle reads as solid there? That is the far-side frame in §"Fabric, colour and seat".</li>
+        <li><b>Cut cloths in the haze's list.</b> Do the four transmitting planes cover scrims and cut cloths together, or does each get its own four? A panto can fly several foliage borders at once. The proposal is one shared list of eight, nearest the eye first.</li>
+        <li><b>Painted velour.</b> Velour pleats. Should a painted velour leg show its paint folded with it (as proposed), or should paint force a cloth flat?</li>
+        <li><b>The 2048 px display copy.</b> Is it sharp enough for a 12 m frontcloth seen from the front row? It is about 6 mm a pixel. An optional 4096 px copy for the hero cloth is the fallback.</li>
       </ol>
     </section>
   </main>
@@ -478,8 +555,8 @@
     side: { cam: [-7.5, -8, 0.4], target: [0.4, 3.5, 2.5], label: 'Stalls, far side' },
     circle: { cam: [0, -15, 6.5], target: [0, 3.5, 1.9], label: 'Circle' },
   };
-  // Eight units: a top and a ground wash each side of the gauze, an FOH front, and the room's key,
-  // back light and sky groundrow.
+  // Ten units: a top and a ground wash each side of the gauze, an FOH front, the room's key and back
+  // light, the sky cloth's front groundrow and its back light, and a wash for the cut cloth.
   const RIG = [
     { group: 'scrim', pos: [-2.6, 0.6, 7.6], at: [-2.4, 1.0, 1.2], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 34 },
     { group: 'scrim', pos: [2.6, 0.6, 7.6], at: [2.4, 1.0, 1.2], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 34 },
@@ -488,23 +565,28 @@
     { group: 'foh', pos: [0, -12, 7], at: [0, 1, 2.5], half: 15, col: [1.0, 0.93, 0.82], I: 230 },
     { group: 'scene', pos: [-5, 3, 6.5], at: [0.3, 4.5, 0.9], half: 22, col: [1.0, 0.74, 0.46], I: 120 },
     { group: 'scene', pos: [1.5, 7.2, 7.0], at: [-0.6, 4.0, 1.0], half: 17, col: [0.70, 0.76, 1.0], I: 105 },
-    { group: 'scene', pos: [0, 7.6, 0.25], at: [0, 8.6, 4.5], half: 60, col: [0.25, 0.42, 1.0], I: 24 },
+    { group: 'day', pos: [0, 7.9, 0.25], at: [0, 8.6, 4.5], half: 66, soft: 0.3, col: [1.0, 0.95, 0.86], I: 28 },
+    { group: 'night', pos: [0, 12.0, 4.0], at: [0, 8.6, 4.0], half: 76, soft: 0.3, col: [0.82, 0.9, 1.0], I: 64 },
+    { group: 'scene', pos: [0, 5.4, 7.8], at: [0, 6.6, 2.5], half: 60, soft: 0.3, col: [1.0, 0.9, 0.75], I: 22 },
   ];
+  const NL = RIG.length;
   const PRESETS = {
-    lit: { scrim: 1, foh: 0, scene: 0 },
-    bleed: { scrim: 0.55, foh: 0, scene: 0.5 },
-    revealed: { scrim: 0, foh: 0, scene: 1 },
-    foh: { scrim: 0, foh: 1, scene: 0 },
+    lit: { scrim: 1, foh: 0, scene: 0, day: 0, night: 0 },
+    bleed: { scrim: 0.55, foh: 0, scene: 0.5, day: 0.5, night: 0 },
+    revealed: { scrim: 0, foh: 0, scene: 1, day: 1, night: 0 },
+    foh: { scrim: 0, foh: 1, scene: 0, day: 0, night: 0 },
+    day: { scrim: 0, foh: 0, scene: 0.7, day: 1, night: 0 },
+    night: { scrim: 0, foh: 0, scene: 0.25, day: 0, night: 1 },
   };
   const TRIM_OUT = 7.2;
 
-  const state = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, scrim: 0.55, foh: 0, scene: 0.5, haze: 0.5 };
+  const state = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, hung: true, cut: false, scrim: 0.55, foh: 0, scene: 0.5, day: 0.5, night: 0, haze: 0.5 };
 
   function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
   function norm(a) { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; }
   function openAt(cosT, r, layers = 1) { return Math.pow((1 - r) * Math.max(0, 1 - r / Math.max(cosT, 1e-3)), layers); }
 
-  // ─── The shader: a ray tracer applying D3–D7 to the model stage. ───
+  // ─── The shader: a ray tracer applying the decisions to the model stage. ───
   const VS = `#version 300 es
 in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
@@ -513,6 +595,7 @@ void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 precision highp float;
 precision highp int;
 out vec4 outColour;
+#define NL ${NL}
 uniform vec2 uRes;
 uniform vec3 uCam;
 uniform vec3 uTarget;
@@ -521,13 +604,15 @@ uniform int uToday;
 uniform float uR;
 uniform vec3 uScrimCol;
 uniform int uPainted;
+uniform int uHung;
+uniform int uCut;
 uniform int uUsage;
 uniform float uTrim;
 uniform float uOpen;
-uniform vec3 uLPos[8];
-uniform vec3 uLDir[8];
-uniform vec2 uLCone[8];
-uniform vec3 uLCol[8];
+uniform vec3 uLPos[NL];
+uniform vec3 uLDir[NL];
+uniform vec2 uLCone[NL];
+uniform vec3 uLCol[NL];
 uniform float uHaze;
 uniform float uExposure;
 
@@ -537,9 +622,13 @@ const float SCRIM_H = 7.0;
 const float PROS_Y = 0.5;
 const float PROS_HW = 5.2;
 const float PROS_H = 6.2;
+const float CUT_Y = 6.6;
+const float CUT_HW = 7.5;
+const float CUT_H = 7.5;
 const float BACK_Y = 8.6;
 const float EXTENT = 9.5;
 const float GATHER = 0.84;
+const float TRANS_TAU = 0.45;
 
 const int NB = 13;
 const vec3 BMIN[NB] = vec3[NB](
@@ -556,10 +645,21 @@ const int BMAT[NB] = int[NB](0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3);
 const vec2 FIG_C = vec2(-0.9, 4.3);
 const float FIG_R = 0.19;
 const float FIG_H = 1.45;
+const float HOUSE_X[5] = float[5](-3.7, -2.4, 1.2, 2.5, 4.3);
 
 struct Hit { float t; vec3 n; int m; };
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float leafy(vec2 p) { return 0.6 * vnoise(p * 2.2) + 0.3 * vnoise(p * 5.1) + 0.1 * vnoise(p * 11.0); }
 
 vec3 safeInv(vec3 d) { return 1.0 / mix(vec3(1e-7), d, step(vec3(1e-7), abs(d))); }
 
@@ -614,9 +714,10 @@ bool prosAt(float x, float z) {
   return !(abs(x) < PROS_HW && z < PROS_H);
 }
 
-// Whether (x, z) on the scrim's plane is cloth, and how many layers deep a gathered drawn scrim is.
+// Whether (x, z) on the gauze's plane is cloth, and how many layers deep a gathered drawn gauze is.
 bool scrimAt(float x, float z, out float c) {
   c = 1.0;
+  if (uHung == 0) return false;
   float z0 = uUsage == 1 ? uTrim : 0.0;
   if (z < z0 || z > z0 + SCRIM_H || abs(x) > SCRIM_HW) return false;
   if (uUsage == 2) {
@@ -639,6 +740,73 @@ float openAt(float cosT, float c) {
   if (uToday == 1) return 0.0;
   float o = (1.0 - uR) * max(0.0, 1.0 - uR / max(cosT, 1e-3));
   return pow(o, c);
+}
+
+// D5: the cut cloth's alpha, 1 cloth and 0 a hole: an arch of foliage with leafy edges and gaps.
+// Today's view has no paint, so no holes: the cut cloth is its whole rectangle.
+float cutAlpha(float x, float z) {
+  if (uCut == 0 || abs(x) > CUT_HW || z < 0.0 || z > CUT_H) return 0.0;
+  if (uToday == 1) return 1.0;
+  float n = leafy(vec2(x, z) * 1.3) - 0.5;
+  float hw = 3.9 + 0.7 * n;
+  float top = 3.4 + 1.8 * sqrt(max(0.0, 1.0 - (x / hw) * (x / hw))) + 0.8 * n;
+  if (abs(x) < hw && z < top) return 0.0;
+  if (z > top && leafy(vec2(x, z) * 2.3 + 7.0) > 0.74) return 0.0;
+  return 1.0;
+}
+
+vec3 cutPaint(vec3 p) {
+  if (uToday == 1) return vec3(0.23, 0.07, 0.09);
+  float trunk = 1.0 - smoothstep(0.35, 0.5, abs(abs(p.x) - 5.0 + 0.15 * sin(p.z * 1.4)));
+  if (p.z < 4.2 && trunk > 0.5) return vec3(0.27, 0.18, 0.11);
+  float g = leafy(p.xz * 3.1 + 3.0);
+  return mix(vec3(0.07, 0.16, 0.07), vec3(0.26, 0.42, 0.15), g);
+}
+
+float hillNear(float x) { return 2.0 + 0.5 * sin(x * 0.45 + 0.6) + 0.25 * sin(x * 1.25 + 2.0); }
+float hillFar(float x) { return 2.7 + 0.4 * sin(x * 0.3 + 2.0) + 0.2 * sin(x * 0.9); }
+
+// A village on the near hill: 0 none, 1 wall, 2 roof, 3 window.
+int houseAt(float x, float z) {
+  for (int k = 0; k < 5; k++) {
+    float cx = HOUSE_X[k];
+    float dx = x - cx;
+    if (abs(dx) > 0.5) continue;
+    float zz = z - (hillNear(cx) - 0.12);
+    if (zz < 0.0) continue;
+    if (zz < 0.72 && abs(dx) < 0.42) {
+      bool win = abs(abs(dx) - 0.2) < 0.075 && zz > 0.3 && zz < 0.55;
+      return win ? 3 : 1;
+    }
+    if (zz >= 0.72 && zz < 0.72 + 0.42 * (1.0 - abs(dx) / 0.5)) return 2;
+  }
+  return 0;
+}
+
+// D6: the sky cloth's front, dyed for day.
+vec3 dayPaint(vec3 p) {
+  if (uToday == 1) return vec3(0.45, 0.46, 0.48);
+  int hs = houseAt(p.x, p.z);
+  if (hs == 3) return vec3(0.95, 0.80, 0.42);
+  if (hs == 1) return vec3(0.80, 0.74, 0.60);
+  if (hs == 2) return vec3(0.52, 0.24, 0.17);
+  if (p.z < hillNear(p.x)) return vec3(0.30, 0.42, 0.22);
+  if (p.z < hillFar(p.x)) return vec3(0.44, 0.54, 0.42);
+  float k = clamp((p.z - hillFar(p.x)) / 5.0, 0.0, 1.0);
+  return mix(vec3(0.92, 0.86, 0.72), vec3(0.58, 0.70, 0.88), k);
+}
+
+// D6: its back: opaque paint where the night is dark, open at the moon, the stars and the windows.
+float nightPaint(vec3 p) {
+  if (uToday == 1) return 0.0;
+  int hs = houseAt(p.x, p.z);
+  if (hs == 3) return 1.0;
+  if (hs != 0 || p.z < hillFar(p.x)) return 0.0;
+  if (distance(p.xz, vec2(3.4, 6.5)) < 0.42) return 1.0;
+  vec2 cell = floor(p.xz * 3.0);
+  vec2 f = fract(p.xz * 3.0) - 0.5;
+  if (p.z > 4.0 && hash(cell) > 0.9 && length(f) < 0.09) return 1.0;
+  return 0.42 * clamp((p.z - hillFar(p.x)) / 4.0 + 0.4, 0.0, 1.0);
 }
 
 void consider(float t, vec3 n, int m, inout Hit h) {
@@ -677,6 +845,9 @@ Hit trace(vec3 ro, vec3 rd) {
     float tr = -ro.y / rd.y;
     vec3 pr = ro + rd * tr;
     if (tr > 1e-4 && abs(pr.x) < EXTENT && pr.z < 0.0 && pr.z > -1.0) consider(tr, ny, 8, h);
+    float tu = (CUT_Y - ro.y) / rd.y;
+    vec3 pu = ro + rd * tu;
+    if (tu > 1e-4 && tu < h.t && cutAlpha(pu.x, pu.z) > 0.5) consider(tu, ny, 11, h);
     float tk = (BACK_Y - ro.y) / rd.y;
     vec3 pk = ro + rd * tk;
     if (tk > 1e-4 && abs(pk.x) < EXTENT && pk.z > 0.0 && pk.z < EXTENT) consider(tk, ny, 10, h);
@@ -684,7 +855,18 @@ Hit trace(vec3 ro, vec3 rd) {
   return h;
 }
 
+// Opaque things between p and q: the set, the pros, the cut cloth where it is cloth, the sky cloth.
 bool blocked(vec3 p, vec3 q) {
+  float ua = p.y - CUT_Y, ub = q.y - CUT_Y;
+  if (ua * ub < 0.0) {
+    vec3 x = mix(p, q, ua / (ua - ub));
+    if (cutAlpha(x.x, x.z) > 0.5) return true;
+  }
+  float ka = p.y - BACK_Y, kb = q.y - BACK_Y;
+  if (ka * kb < 0.0) {
+    vec3 x = mix(p, q, ka / (ka - kb));
+    if (abs(x.x) < EXTENT && x.z > 0.0 && x.z < EXTENT) return true;
+  }
   vec3 d = q - p;
   float len = length(d);
   vec3 rd = d / len;
@@ -708,7 +890,7 @@ bool blocked(vec3 p, vec3 q) {
   return false;
 }
 
-// D5: a segment crossing the scrim keeps open(θ) of its light, at its own angle to the cloth.
+// D8: a segment crossing the gauze keeps open(θ) of its light, at its own angle to the cloth.
 float scrimPass(vec3 p, vec3 q) {
   float a = p.y - SCRIM_Y;
   float b = q.y - SCRIM_Y;
@@ -725,13 +907,6 @@ float transmit(vec3 p, vec3 q) {
   return blocked(p, q) ? 0.0 : s;
 }
 
-vec3 sky(vec3 p) {
-  float h = 2.0 + 0.7 * sin(p.x * 0.45 + 0.6) + 0.35 * sin(p.x * 1.25 + 2.0);
-  if (p.z < h) return vec3(0.16, 0.20, 0.17);
-  float k = clamp((p.z - h) / 6.0, 0.0, 1.0);
-  return mix(vec3(0.72, 0.62, 0.50), vec3(0.42, 0.50, 0.68), k);
-}
-
 vec3 albedo(int m, vec3 p) {
   if (m == 0) return vec3(0.38, 0.24, 0.14);
   if (m == 1) return vec3(0.30, 0.18, 0.10);
@@ -743,7 +918,8 @@ vec3 albedo(int m, vec3 p) {
   if (m == 7) return vec3(0.09, 0.085, 0.08);
   if (m == 8) return vec3(0.02);
   if (m == 9) return vec3(0.05, 0.045, 0.05);
-  return sky(p);
+  if (m == 11) return cutPaint(p);
+  return dayPaint(p);
 }
 
 vec3 scrimAlbedo(vec3 p) {
@@ -765,49 +941,74 @@ vec3 scrimAlbedo(vec3 p) {
   return mix(paint, vec3(0.13, 0.15, 0.13), m);
 }
 
+// One light's reach to p, cone and falloff, or 0; l is written towards the lamp.
+float lightReach(int i, vec3 p, out vec3 l) {
+  vec3 L = uLPos[i] - p;
+  float d2 = dot(L, L);
+  l = L * inversesqrt(d2);
+  float ca = dot(-l, uLDir[i]);
+  if (ca <= uLCone[i].x) return 0.0;
+  return smoothstep(uLCone[i].x, uLCone[i].y, ca) / (d2 + 4.0);
+}
+
 vec3 litSurface(vec3 p, vec3 n, vec3 alb) {
   vec3 sum = alb * 0.006;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < NL; i++) {
     vec3 col = uLCol[i];
     if (col.r + col.g + col.b <= 0.0) continue;
-    vec3 L = uLPos[i] - p;
-    float d2 = dot(L, L);
-    vec3 l = L * inversesqrt(d2);
-    float ca = dot(-l, uLDir[i]);
-    if (ca <= uLCone[i].x) continue;
+    vec3 l;
+    float e = lightReach(i, p, l);
+    if (e <= 0.0) continue;
     float ndl = dot(n, l);
     if (ndl <= 0.0) continue;
     float vis = transmit(p + n * 0.004, uLPos[i]);
     if (vis <= 0.0) continue;
-    sum += alb * col * (smoothstep(uLCone[i].x, uLCone[i].y, ca) * ndl * vis / (d2 + 4.0));
+    sum += alb * col * (e * ndl * vis);
   }
   return sum;
 }
 
-// D6: a round thread still catches grazing light, and glows a little from behind.
-vec3 litThreads(vec3 p, vec3 nV, vec3 alb) {
-  vec3 sum = alb * 0.006;
-  for (int i = 0; i < 8; i++) {
+// D6: muslin lit from the front shows its front paint; lit from behind, the light passes both paints.
+vec3 litTranslucent(vec3 p, vec3 n, vec3 front, float back) {
+  vec3 sum = front * 0.006;
+  for (int i = 0; i < NL; i++) {
     vec3 col = uLCol[i];
     if (col.r + col.g + col.b <= 0.0) continue;
-    vec3 L = uLPos[i] - p;
-    float d2 = dot(L, L);
-    vec3 l = L * inversesqrt(d2);
-    float ca = dot(-l, uLDir[i]);
-    if (ca <= uLCone[i].x) continue;
+    vec3 l;
+    float e = lightReach(i, p, l);
+    if (e <= 0.0) continue;
+    float ndl = dot(n, l);
+    float k = ndl > 0.0 ? ndl : (uToday == 1 ? 0.0 : TRANS_TAU * back * -ndl);
+    if (k <= 0.0) continue;
+    float vis = transmit(p + l * 0.004, uLPos[i]);
+    if (vis <= 0.0) continue;
+    sum += front * col * (e * k * vis);
+  }
+  return sum;
+}
+
+// D9: a round thread still catches grazing light, and glows a little from behind.
+vec3 litThreads(vec3 p, vec3 nV, vec3 alb) {
+  vec3 sum = alb * 0.006;
+  for (int i = 0; i < NL; i++) {
+    vec3 col = uLCol[i];
+    if (col.r + col.g + col.b <= 0.0) continue;
+    vec3 l;
+    float e = lightReach(i, p, l);
+    if (e <= 0.0) continue;
     float f = dot(nV, l);
     float k = uToday == 1 ? max(f, 0.0)
       : (f > 0.0 ? (0.45 + 0.55 * f) * smoothstep(0.0, 0.05, f) : 0.18 * -f);
     if (k <= 0.0) continue;
     float vis = transmit(p + l * 0.004, uLPos[i]);
     if (vis <= 0.0) continue;
-    sum += alb * col * (smoothstep(uLCone[i].x, uLCone[i].y, ca) * k * vis / (d2 + 4.0));
+    sum += alb * col * (e * k * vis);
   }
   return sum;
 }
 
-// D7: haze in front of the scrim at full strength, behind it at what the eye sees through; each
-// beam's own light past the scrim already reduced by transmit().
+// D10: haze in front of the gauze at full strength, behind it at what the eye sees through; each
+// beam's own light past a cloth already reduced or cut by transmit().
 vec3 hazeAlong(vec3 ro, vec3 rd, float tEnd, float tS, float viewT) {
   if (uHaze <= 0.0) return vec3(0.0);
   const int N = 24;
@@ -821,18 +1022,16 @@ vec3 hazeAlong(vec3 ro, vec3 rd, float tEnd, float tS, float viewT) {
     float w = t > tS ? viewT : 1.0;
     if (w <= 0.0) continue;
     vec3 s = ro + rd * t;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NL; i++) {
       vec3 col = uLCol[i];
       if (col.r + col.g + col.b <= 0.0) continue;
-      vec3 L = uLPos[i] - s;
-      float d2 = dot(L, L);
-      vec3 l = L * inversesqrt(d2);
-      float ca = dot(-l, uLDir[i]);
-      if (ca <= uLCone[i].x) continue;
+      vec3 l;
+      float e = lightReach(i, s, l);
+      if (e <= 0.0) continue;
       float vis = transmit(s, uLPos[i]);
       if (vis <= 0.0) continue;
       float phase = 0.35 + 1.6 * pow(max(dot(l, rd), 0.0), 8.0);
-      acc += col * (w * vis * phase * smoothstep(uLCone[i].x, uLCone[i].y, ca) / (d2 + 4.0));
+      acc += col * (w * vis * phase * e);
     }
   }
   return acc * dt * uHaze;
@@ -850,7 +1049,7 @@ void main() {
   vec3 behind = vec3(0.0);
   if (h.m >= 0) {
     vec3 p = uCam + rd * h.t;
-    behind = litSurface(p, h.n, albedo(h.m, p));
+    behind = h.m == 10 ? litTranslucent(p, h.n, dayPaint(p), nightPaint(p)) : litSurface(p, h.n, albedo(h.m, p));
   }
   float tS = 1e9;
   float viewT = 1.0;
@@ -903,10 +1102,10 @@ void main() {
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
     const u = {};
-    for (const name of ['uRes', 'uCam', 'uTarget', 'uTanHalfFov', 'uToday', 'uR', 'uScrimCol', 'uPainted', 'uUsage', 'uTrim', 'uOpen', 'uLPos', 'uLDir', 'uLCone', 'uLCol', 'uHaze', 'uExposure']) {
+    for (const name of ['uRes', 'uCam', 'uTarget', 'uTanHalfFov', 'uToday', 'uR', 'uScrimCol', 'uPainted', 'uHung', 'uCut', 'uUsage', 'uTrim', 'uOpen', 'uLPos', 'uLDir', 'uLCone', 'uLCol', 'uHaze', 'uExposure']) {
       u[name] = gl.getUniformLocation(prog, name);
     }
-    const pos = new Float32Array(24), dir = new Float32Array(24), cone = new Float32Array(16), col = new Float32Array(24);
+    const pos = new Float32Array(NL * 3), dir = new Float32Array(NL * 3), cone = new Float32Array(NL * 2), col = new Float32Array(NL * 3);
     return function draw(s, w, h) {
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
       gl.viewport(0, 0, w, h);
@@ -918,13 +1117,15 @@ void main() {
       gl.uniform1i(u.uToday, s.today ? 1 : 0);
       gl.uniform1f(u.uR, R[s.fabric]);
       gl.uniform3fv(u.uScrimCol, COLOURS[s.colour]);
-      gl.uniform1i(u.uPainted, s.colour === 'painted' ? 1 : 0);
+      gl.uniform1i(u.uPainted, s.colour === 'painted' && !s.today ? 1 : 0);
+      gl.uniform1i(u.uHung, s.hung ? 1 : 0);
+      gl.uniform1i(u.uCut, s.cut ? 1 : 0);
       gl.uniform1i(u.uUsage, s.usage === 'FLY' ? 1 : s.usage === 'DRAW' ? 2 : 0);
       gl.uniform1f(u.uTrim, s.usage === 'FLY' ? s.move * TRIM_OUT : 0);
       gl.uniform1f(u.uOpen, s.usage === 'DRAW' ? s.move : 0);
       RIG.forEach((l, i) => {
         const d = norm(sub(l.at, l.pos));
-        const level = l.group === 'scrim' ? s.scrim : l.group === 'foh' ? s.foh : s.scene;
+        const level = s[l.group];
         pos.set(l.pos, i * 3);
         dir.set(d, i * 3);
         cone.set([Math.cos((l.half * Math.PI) / 180), Math.cos((l.half * (l.soft ?? 0.72) * Math.PI) / 180)], i * 2);
@@ -952,11 +1153,10 @@ void main() {
   }
 
   const $ = (id) => document.getElementById(id);
-  const sliders = { scrim: $('lv-scrim'), foh: $('lv-foh'), scene: $('lv-scene'), haze: $('lv-haze') };
+  const sliders = { scrim: $('lv-scrim'), foh: $('lv-foh'), scene: $('lv-scene'), day: $('lv-day'), night: $('lv-night'), haze: $('lv-haze') };
   const pct = (v) => `${Math.round(v * 100)}`;
 
   function eyeOpen() {
-    if (state.today) return 0;
     const v = VIEWS[state.view];
     const toward = norm(sub([0, SCRIM_Y, 3], v.cam));
     const layers = state.usage === 'DRAW' ? 1 / (1 - 0.84 * state.move) : 1;
@@ -968,6 +1168,8 @@ void main() {
       sliders[k].value = Math.round(state[k] * 100);
       $(`o-${k}`).textContent = pct(state[k]);
     }
+    $('hung').checked = state.hung;
+    $('cut').checked = state.cut;
     $('usage').value = state.usage;
     $('fabric').value = state.fabric;
     $('colour').value = state.colour;
@@ -979,9 +1181,11 @@ void main() {
     $('m-proposed').setAttribute('aria-pressed', String(!state.today));
     $('m-today').setAttribute('aria-pressed', String(state.today));
     $('ro-model').innerHTML = `model <b>${state.today ? 'today' : 'proposed'}</b>`;
-    $('ro-seen').innerHTML = state.today
-      ? 'eye sees <b>nothing</b> through'
-      : `eye sees <b>${Math.round(eyeOpen() * 100)} %</b> through the cloth`;
+    $('ro-seen').innerHTML = !state.hung
+      ? 'no gauze hung'
+      : state.today
+        ? 'eye sees <b>nothing</b> through the gauze'
+        : `eye sees <b>${Math.round(eyeOpen() * 100)} %</b> through the gauze`;
   }
 
   let pending = false;
@@ -1007,6 +1211,8 @@ void main() {
   $('fabric').addEventListener('change', () => { state.fabric = $('fabric').value; schedule(); });
   $('colour').addEventListener('change', () => { state.colour = $('colour').value; schedule(); });
   $('view').addEventListener('change', () => { state.view = $('view').value; schedule(); });
+  $('hung').addEventListener('change', () => { state.hung = $('hung').checked; schedule(); });
+  $('cut').addEventListener('change', () => { state.cut = $('cut').checked; schedule(); });
   $('m-proposed').addEventListener('click', () => { state.today = false; schedule(); });
   $('m-today').addEventListener('click', () => { state.today = true; schedule(); });
   document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
@@ -1016,9 +1222,10 @@ void main() {
     schedule();
   }));
 
-  // The cue: a 4 s crossfade from the gauze to the room, then, for a flown or drawn scrim, the cloth moves.
+  // The cue: a 4 s crossfade from the gauze to the room, then, for a flown or drawn gauze, the cloth moves.
   $('go').addEventListener('click', () => {
     stopCue();
+    state.hung = true;
     const moves = state.usage !== 'DEAD';
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const total = moves ? 9000 : 4800;
@@ -1027,6 +1234,8 @@ void main() {
       const fade = ease((ms - 400) / 4000);
       state.scrim = 1 - fade;
       state.scene = fade;
+      state.day = fade;
+      state.night = 0;
       state.foh = 0;
       state.move = moves ? ease((ms - 4800) / 4000) : 0;
       $('ro-cue').innerHTML = ms >= total
@@ -1048,7 +1257,7 @@ void main() {
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(schedule, 150); });
 
   // ─── Stills, drawn one at a time on a second context so the live stage never flickers. ───
-  const base = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, scrim: 0.55, foh: 0, scene: 0.5, haze: 0.5 };
+  const base = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, hung: true, cut: false, scrim: 0.55, foh: 0, scene: 0.5, day: 0.5, night: 0, haze: 0.5 };
   const STRIPS = {
     'strip-reveal': [
       { title: 'Gauze lit', note: 'Steep wash only. The forest reads as a solid cloth.', s: { ...PRESETS.lit } },
@@ -1067,6 +1276,12 @@ void main() {
       { title: 'Bobbinet, white', note: 'Stalls, centre: 72 % through.', s: { colour: 'white', fabric: 'BOBBINET' } },
       { title: 'Sharkstooth, black', note: 'Catches little wash; the room shows.', s: { colour: 'black' } },
       { title: 'From the far side', note: 'Stalls, far side: the holes close up.', s: { colour: 'white', view: 'side' } },
+    ],
+    'strip-paint': [
+      { title: 'Day', note: 'Muslin sky cloth lit from the front: its dyes.', s: { ...PRESETS.day, hung: false, haze: 0.3 } },
+      { title: 'Night', note: 'Lit from behind: only the back paint’s openings glow.', s: { ...PRESETS.night, hung: false, haze: 0.3 } },
+      { title: 'Cut cloth', note: 'A foliage arch flown in: its cut-outs are holes.', s: { ...PRESETS.day, hung: false, cut: true, haze: 0.3 } },
+      { title: 'Cut cloth in haze', note: 'The back light throws shafts through the leaves.', s: { scrim: 0, foh: 0, scene: 1, day: 0.35, night: 0, hung: false, cut: true, haze: 1 } },
     ],
   };
 
@@ -1114,6 +1329,63 @@ void main() {
       setTimeout(next, 0);
     };
     setTimeout(next, 60);
+  }
+
+  // ─── The sheet mock's thumbnails: the two sides of the village cloth, flat-lit. ───
+  {
+    const hillNear = (x) => 2.0 + 0.5 * Math.sin(x * 0.45 + 0.6) + 0.25 * Math.sin(x * 1.25 + 2.0);
+    const hillFar = (x) => 2.7 + 0.4 * Math.sin(x * 0.3 + 2.0) + 0.2 * Math.sin(x * 0.9);
+    const HOUSES = [-3.7, -2.4, 1.2, 2.5, 4.3];
+    const houseAt = (x, z) => {
+      for (const cx of HOUSES) {
+        const dx = x - cx;
+        if (Math.abs(dx) > 0.5) continue;
+        const zz = z - (hillNear(cx) - 0.12);
+        if (zz < 0) continue;
+        if (zz < 0.72 && Math.abs(dx) < 0.42) return Math.abs(Math.abs(dx) - 0.2) < 0.075 && zz > 0.3 && zz < 0.55 ? 3 : 1;
+        if (zz >= 0.72 && zz < 0.72 + 0.42 * (1 - Math.abs(dx) / 0.5)) return 2;
+      }
+      return 0;
+    };
+    const mix = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+    const day = (x, z) => {
+      const hs = houseAt(x, z);
+      if (hs === 3) return [0.95, 0.80, 0.42];
+      if (hs === 1) return [0.80, 0.74, 0.60];
+      if (hs === 2) return [0.52, 0.24, 0.17];
+      if (z < hillNear(x)) return [0.30, 0.42, 0.22];
+      if (z < hillFar(x)) return [0.44, 0.54, 0.42];
+      return mix([0.92, 0.86, 0.72], [0.58, 0.70, 0.88], Math.min(1, Math.max(0, (z - hillFar(x)) / 5)));
+    };
+    const back = (x, z) => {
+      const hs = houseAt(x, z);
+      if (hs === 3) return [1, 1, 1];
+      if (hs !== 0 || z < hillFar(x)) return [0.08, 0.08, 0.09];
+      if (Math.hypot(x - 3.4, z - 6.5) < 0.42) return [1, 1, 1];
+      const v = 0.42 * Math.min(1, Math.max(0, (z - hillFar(x)) / 4 + 0.4));
+      return [v, v, v];
+    };
+    const paintThumb = (id, fn) => {
+      const c = $(id);
+      if (c == null) return;
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(c.width, c.height);
+      for (let j = 0; j < c.height; j++) {
+        for (let i = 0; i < c.width; i++) {
+          const x = -9.5 + (i / c.width) * 19;
+          const z = 9.5 * (1 - j / c.height);
+          const rgb = fn(x, z);
+          const o = (j * c.width + i) * 4;
+          img.data[o] = Math.round(Math.pow(rgb[0], 1 / 2.2) * 255);
+          img.data[o + 1] = Math.round(Math.pow(rgb[1], 1 / 2.2) * 255);
+          img.data[o + 2] = Math.round(Math.pow(rgb[2], 1 / 2.2) * 255);
+          img.data[o + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    paintThumb('thumb-front', day);
+    paintThumb('thumb-back', back);
   }
 
   // ─── Drawings, from the same numbers. ───
@@ -1184,7 +1456,8 @@ void main() {
       let d = '';
       for (let a = 0; a <= 90; a += 0.5) d += `${a === 0 ? 'M' : 'L'}${xs(a).toFixed(1)},${ys(openAt(Math.cos((a * Math.PI) / 180), r)).toFixed(1)}`;
       el(svg, 'path', { d, class: cls });
-      el(svg, 'text', { x: xs(cls === 'curve-a' ? 52 : 4), y: ys(openAt(Math.cos((cls === 'curve-a' ? 52 : 4) * Math.PI / 180), r)) + (cls === 'curve-a' ? 22 : -8), class: cls === 'curve-a' ? 'acc' : 'cool' }, name);
+      const at = cls === 'curve-a' ? 52 : 4;
+      el(svg, 'text', { x: xs(at), y: ys(openAt(Math.cos((at * Math.PI) / 180), r)) + (cls === 'curve-a' ? 22 : -8), class: cls === 'curve-a' ? 'acc' : 'cool' }, name);
     }
     MARKS.forEach((m) => {
       const v = openAt(Math.cos((m.deg * Math.PI) / 180), 0.30);
