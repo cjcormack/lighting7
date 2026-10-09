@@ -1,0 +1,1276 @@
+<title>Scrim in the Stage View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: the house style of docs/plans/stage-light-design — a sticky contents rail beside one reading column; prose at ~72ch, the live stage and the drawings at full column width. */
+  :root {
+    --bg: oklch(0.985 0.004 75);
+    --surface: oklch(0.955 0.008 75);
+    --fg: oklch(0.22 0.012 60);
+    --muted: oklch(0.47 0.015 60);
+    --rule: oklch(0.87 0.012 70);
+    --accent: oklch(0.62 0.15 62);
+    --accent-ink: oklch(0.48 0.13 55);
+    --cool: oklch(0.55 0.11 245);
+    --bad: oklch(0.55 0.17 28);
+    --good: oklch(0.55 0.12 150);
+    --est: oklch(0.58 0.12 85);
+    --zone: oklch(0.62 0.15 62 / 0.14);
+    --cool-zone: oklch(0.55 0.11 245 / 0.16);
+    /* The stage itself: always dark, as the Stage view is. */
+    --stage-bg: oklch(0.141 0.005 285.8);
+    --stage-fg: oklch(0.86 0.006 286);
+    --stage-muted: oklch(0.62 0.008 286);
+    --stage-rule: oklch(0.32 0.006 286);
+    --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+      --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+      --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+      --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+      --cool-zone: oklch(0.72 0.11 245 / 0.18); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+    --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+    --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+    --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+    --cool-zone: oklch(0.72 0.11 245 / 0.18); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+  nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; max-height: calc(100vh - 48px); overflow-y: auto; }
+  nav.toc a { color: var(--muted); text-decoration: none; padding: 3px 0 3px 10px; border-left: 2px solid var(--rule); }
+  nav.toc a:hover { color: var(--fg); border-left-color: var(--accent); }
+  nav.toc .grp { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 4px; }
+  nav.toc .grp:first-child { margin-top: 0; }
+  main { display: flex; flex-direction: column; gap: 72px; min-width: 0; }
+  @media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); } nav.toc { display: none; } }
+
+  .prose { max-width: 72ch; }
+  h1, h2, h3, h4 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 1.75rem; font-weight: 600; }
+  h3 { font-size: 1.2rem; font-weight: 600; }
+  p { margin: 0; }
+  a { color: var(--accent-ink); }
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, figure.still:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 24px; }
+  .sub { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 66ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.85rem; }
+  ul.plain, ol.plain { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+  ul.plain li::marker, ol.plain li::marker { color: var(--accent); }
+  b { font-weight: 600; }
+
+  header { display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .fact { display: flex; flex-direction: column; gap: 2px; }
+  .fact .v { font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact .k { font-size: 0.8rem; color: var(--muted); }
+  .pill { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; letter-spacing: 0.04em; white-space: nowrap; }
+  .pill.est { color: var(--est); }
+  .pill.new { color: var(--accent-ink); }
+  .pill.s { color: var(--good); }
+  .pill.m { color: var(--est); }
+  .pill.l { color: var(--bad); }
+  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; max-width: 72ch; display: flex; flex-direction: column; gap: 8px; }
+  .callout.cool { border-left-color: var(--cool); }
+
+  /* The live stage. */
+  .stage { background: var(--stage-bg); color: var(--stage-fg); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+  .stage canvas { display: block; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage-bg); }
+  .stage .readout { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 8px 14px; font-family: var(--font-mono); font-size: 0.74rem; color: var(--stage-muted); border-top: 1px solid var(--stage-rule); font-variant-numeric: tabular-nums; }
+  .stage .readout b { color: var(--stage-fg); font-weight: 500; }
+  .nogl { padding: 40px 20px; text-align: center; color: var(--stage-muted); }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 24px; padding: 16px 0 4px; }
+  .group { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .group .eyebrow { border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+  .row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 42px; align-items: center; gap: 10px; font-size: 0.85rem; }
+  .row.two { grid-template-columns: 96px minmax(0, 1fr); }
+  .row.short { grid-template-columns: 56px minmax(0, 1fr); }
+  .row label { color: var(--muted); }
+  .row output { font-family: var(--font-mono); font-size: 0.78rem; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  select { font: inherit; font-size: 0.85rem; padding: 3px 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); min-width: 0; width: 100%; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); }
+  .check input { accent-color: var(--accent); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; font-size: 0.82rem; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.go { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; }
+  .seg button[aria-pressed="true"] { background: var(--zone); color: var(--accent-ink); font-weight: 600; }
+
+  /* Stills. */
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  figure.still { cursor: pointer; }
+  figure.still canvas { display: block; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 4px; background: var(--stage-bg); }
+  figure.still:hover canvas { outline: 2px solid var(--accent); outline-offset: 1px; }
+  figcaption { font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 1px; }
+  figcaption b { color: var(--fg); font-weight: 600; font-size: 0.86rem; }
+  .figure-note { font-size: 0.82rem; color: var(--muted); max-width: 80ch; }
+
+  /* Drawings. */
+  .drawing { background: var(--surface); border-radius: 6px; padding: 16px; overflow-x: auto; }
+  .drawing svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  .weave-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .weave-grid svg { min-width: 0; }
+  svg text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+  svg text.ink { fill: var(--fg); }
+  svg text.acc { fill: var(--accent-ink); }
+  svg text.cool { fill: var(--cool); }
+  svg .axis { stroke: var(--rule); stroke-width: 1; fill: none; }
+  svg .grid { stroke: var(--rule); stroke-width: 0.6; stroke-dasharray: 2 3; fill: none; }
+  svg .solid { fill: var(--fg); stroke: none; }
+  svg .faint { fill: var(--rule); stroke: none; }
+  svg .line { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+  svg .thin { stroke: var(--muted); stroke-width: 1; fill: none; }
+  svg .net { stroke: var(--fg); stroke-width: 1.6; stroke-dasharray: 1.5 2.5; fill: none; }
+  svg .ray { stroke: var(--accent); stroke-width: 1.4; fill: none; }
+  svg .ray-thin { stroke: var(--accent); stroke-width: 0.9; fill: none; }
+  svg .ray-dim { stroke: var(--accent); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; opacity: 0.55; }
+  svg .ray-blocked { stroke: var(--muted); stroke-width: 0.9; fill: none; opacity: 0.5; }
+  svg .eye { stroke: var(--cool); stroke-width: 1.4; fill: none; }
+  svg .eye-dim { stroke: var(--cool); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; opacity: 0.6; }
+  svg .curve-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+  svg .curve-b { stroke: var(--cool); stroke-width: 2; fill: none; }
+  svg .dot-a { fill: var(--accent); }
+  svg .dot-b { fill: var(--cool); }
+  svg .lamp { fill: var(--fg); }
+  svg .haze-a { fill: var(--zone); }
+  svg .haze-b { fill: var(--cool-zone); }
+  svg .thread { fill: var(--fg); }
+
+  /* Tables, code and the form mock. */
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  td.n { font-family: var(--font-mono); white-space: nowrap; color: var(--accent-ink); }
+  pre { margin: 0; background: var(--surface); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5; }
+  .uses { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .use { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .use h3 { font-size: 1.05rem; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 760px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .sheet { border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); max-width: 420px; }
+  .sheet .title { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+  .sheet .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field { display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem; min-width: 0; }
+  .field .lab { color: var(--muted); font-weight: 500; }
+  .field .box { border: 1px solid var(--rule); border-radius: 4px; padding: 4px 8px; display: flex; justify-content: space-between; gap: 6px; align-items: center; background: var(--bg); }
+  .field.new .box { border-color: var(--accent); box-shadow: 0 0 0 3px var(--zone); }
+  .field .hint { color: var(--muted); font-size: 0.74rem; line-height: 1.4; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--rule); display: inline-block; background: #ccccc7; }
+  .formula { font-family: var(--font-mono); font-size: 0.9rem; background: var(--surface); border-radius: 6px; padding: 12px 16px; overflow-x: auto; white-space: nowrap; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <span class="grp">The look</span>
+    <a href="#glance">At a glance</a>
+    <a href="#live">The live stage</a>
+    <a href="#reveal">The reveal, in stills</a>
+    <a href="#uses">Three ways to hang it</a>
+    <a href="#seats">Fabric, colour and seat</a>
+    <span class="grp">The model</span>
+    <a href="#weave">Why the angle matters</a>
+    <a href="#section">Light through the cloth</a>
+    <a href="#pixel">One pixel through a scrim</a>
+    <span class="grp">The desk</span>
+    <a href="#document">In the scene document</a>
+    <a href="#decisions">Decisions proposed</a>
+    <a href="#order">Proposed order</a>
+    <a href="#code">Code map</a>
+    <a href="#questions">Questions</a>
+  </nav>
+
+  <main>
+    <header id="glance">
+      <span class="eyebrow">Stage view · design record · proposed 2026-10-09</span>
+      <h1>A scrim in the Stage view</h1>
+      <p class="lede">A scrim is cloth with holes in it. Lit steeply from the front, it reads as solid. Light what is behind it and take the front light out, and it disappears. Today the Stage view draws every drape as solid pleated cloth that stops every beam, so it cannot show that reveal. This record shows what the view would look like with a scrim modelled properly, whether it is flown, drawn on a track or dead-hung, and what the desk needs to get there.</p>
+      <div class="facts">
+        <div class="fact"><span class="v">1</span><span class="k">params key added: <code>fabric</code></span></div>
+        <div class="fact"><span class="v">0</span><span class="k">sync format bumps (the <code>travelS</code> precedent)</span></div>
+        <div class="fact"><span class="v">1</span><span class="k">function of angle decides what passes</span></div>
+        <div class="fact"><span class="v">4</span><span class="k">sessions, frontend-heavy</span></div>
+      </div>
+      <div class="callout cool">
+        <p class="small"><b>What the pictures are.</b> Every image on this page is drawn live by a small ray tracer in the page. It applies the proposed rules (§"Decisions proposed") to a model stage: a proscenium, a scrim just upstage of it, a room set and a painted sky cloth. It is a sketch of the model, not the desk's shader: no gobos, no lens optics and simpler falloff. The numbers that decide how much light passes are marked <span class="pill est">estimate</span>, as the stage-light plan marks its finishes.</p>
+      </div>
+    </header>
+
+    <section id="live" aria-labelledby="live-h">
+      <span class="eyebrow">The look</span>
+      <h2 id="live-h">The live stage</h2>
+      <p class="prose">This is a white sharkstooth gauze painted with a forest, dead-hung 50 cm upstage of the proscenium. Behind it is a room with a figure, a table and a chair. <b>Run the cue</b> plays the classic bleed-through: the steep wash on the gauze fades out while the room comes up. On a flown or tracked scrim, the cloth then flies out or draws open. Switch the model to <b>Today</b> to see the same cue in the current Stage view, where the gauze stays a wall.</p>
+
+      <div class="stage" id="stage-wrap">
+        <canvas id="stage" width="1280" height="720" aria-label="A ray-traced stage: a painted scrim in front of a lit room set"></canvas>
+        <div class="readout" aria-live="polite">
+          <span id="ro-cue"><b>Q12</b> · standing by</span>
+          <span id="ro-seen">eye sees <b>49 %</b> through</span>
+          <span id="ro-model">model <b>proposed</b></span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="group">
+          <span class="eyebrow">Cue</span>
+          <div class="buttons">
+            <button class="go" id="go" type="button">Run the cue</button>
+            <button type="button" data-preset="lit">Gauze lit</button>
+            <button type="button" data-preset="bleed">Bleed-through</button>
+            <button type="button" data-preset="revealed">Revealed</button>
+            <button type="button" data-preset="foh">Flat FOH</button>
+          </div>
+          <p class="small muted">Flat FOH is the common mistake: a front light at a shallow angle carries on through the holes and lights the set.</p>
+        </div>
+        <div class="group">
+          <span class="eyebrow">Levels</span>
+          <div class="row"><label for="lv-scrim">Gauze wash</label><input type="range" id="lv-scrim" min="0" max="100" step="1"><output id="o-scrim" for="lv-scrim"></output></div>
+          <div class="row"><label for="lv-foh">FOH front</label><input type="range" id="lv-foh" min="0" max="100" step="1"><output id="o-foh" for="lv-foh"></output></div>
+          <div class="row"><label for="lv-scene">Room behind</label><input type="range" id="lv-scene" min="0" max="100" step="1"><output id="o-scene" for="lv-scene"></output></div>
+          <div class="row"><label for="lv-haze">Haze</label><input type="range" id="lv-haze" min="0" max="100" step="1"><output id="o-haze" for="lv-haze"></output></div>
+        </div>
+        <div class="group">
+          <span class="eyebrow">Cloth</span>
+          <div class="row two"><label for="usage">Moves by</label>
+            <select id="usage"><option value="DEAD">Dead-hung</option><option value="FLY">Fly (a flown gauze)</option><option value="DRAW">Draw (traveller tabs)</option></select></div>
+          <div class="row" id="move-row"><label for="move" id="move-label">Trim</label><input type="range" id="move" min="0" max="100" step="1"><output id="o-move" for="move"></output></div>
+          <div class="row two"><label for="fabric">Fabric</label>
+            <select id="fabric"><option value="SHARKSTOOTH">Sharkstooth</option><option value="BOBBINET">Bobbinet</option></select></div>
+          <div class="row two"><label for="colour">Colour</label>
+            <select id="colour"><option value="painted">Painted forest</option><option value="white">White</option><option value="grey">Grey</option><option value="black">Black</option></select></div>
+        </div>
+        <div class="group">
+          <span class="eyebrow">View</span>
+          <div class="row short"><label for="view">Seat</label>
+            <select id="view"><option value="stalls">Stalls, centre</option><option value="side">Stalls, far side</option><option value="circle">Circle</option></select></div>
+          <div class="row short"><span class="muted" id="model-label">Model</span>
+            <div class="seg" role="group" aria-labelledby="model-label">
+              <button type="button" id="m-proposed" aria-pressed="true">Proposed</button>
+              <button type="button" id="m-today" aria-pressed="false">Today</button>
+            </div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="reveal" aria-labelledby="reveal-h">
+      <span class="eyebrow">The look</span>
+      <h2 id="reveal-h">The reveal, in stills</h2>
+      <p class="prose">Three moments of the same cue under the proposed model, then the last moment in today's view. Nothing on the cloth changes between the first three frames. Only the light does, which is the point of a scrim, and why the view needs no new scenery state to show it. Select a still to load it into the live stage.</p>
+      <div class="strip" id="strip-reveal"></div>
+    </section>
+
+    <section id="uses" aria-labelledby="uses-h">
+      <span class="eyebrow">The look</span>
+      <h2 id="uses-h">Three ways to hang it</h2>
+      <p class="prose">A scrim is still a drape, and it moves the way the drape's existing <b>Moves by</b> setting says. Flown, it travels on its <code>trimM</code>. On a track, it draws on its <code>open</code> state. Dead-hung, it stays put. The cloth's own rules stay the same in every case. One thing does change on a track: as a drawn scrim gathers, its folds stack layers of net, and the gathered part goes nearly solid.</p>
+      <div class="strip" id="strip-uses"></div>
+      <div class="uses">
+        <div class="use">
+          <h3>Flown</h3>
+          <p class="small">A gauze that flies out once the scene behind is lit. The usual memory or dream reveal. It carries <code>trimM</code> and a travel time, like any flown drape.</p>
+          <pre>{ "role": "BACKCLOTH",
+  "operation": "FLY",
+  "fabric": "SHARKSTOOTH",
+  "travelS": 8 }</pre>
+        </div>
+        <div class="use">
+          <h3>Traveller tabs</h3>
+          <p class="small">A scrim on a track that draws open. It carries <code>open</code>. Gathered at the sides, it reads as solid cloth.</p>
+          <pre>{ "role": "TABS",
+  "operation": "DRAW",
+  "fabric": "SHARKSTOOTH",
+  "travelS": 6 }</pre>
+        </div>
+        <div class="use">
+          <h3>Dead-hung</h3>
+          <p class="small">A show gauze in a portal, or a black scrim in front of the cyc to deepen it and hide the cyc's seams.</p>
+          <pre>{ "role": "CYC",
+  "operation": "DEAD",
+  "fabric": "SHARKSTOOTH" }</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="seats" aria-labelledby="seats-h">
+      <span class="eyebrow">The look</span>
+      <h2 id="seats-h">Fabric, colour and seat</h2>
+      <p class="prose">The same bleed-through state under different cloths and from different seats. Bobbinet is a finer, more open net than sharkstooth, so it never quite reads as solid. A black scrim barely catches the wash, so the room shows through it at almost any level. From a side seat, the holes close up and the same gauze looks denser. That is real, and it is why a reveal that works in the centre stalls can fail at the ends of a row.</p>
+      <div class="strip" id="strip-seats"></div>
+    </section>
+
+    <section id="weave" aria-labelledby="weave-h">
+      <span class="eyebrow">The model</span>
+      <h2 id="weave-h">Why the angle matters</h2>
+      <p class="prose">A scrim's threads are round, and at an angle they hide the holes between them. Below, a section through one set of threads is drawn to scale, with the thread a third of the pitch (sharkstooth's <span class="pill est">estimate</span>). Parallel rays come in at three angles from the cloth's normal. The ones that pass are drawn in amber. The ones that hit a thread stop there.</p>
+      <div class="drawing"><div class="weave-grid" id="weave-panels"></div></div>
+      <p class="prose">One function covers both what a beam passes and what an eye sees through. The cross threads take their own share whatever the tilt:</p>
+      <div class="formula">open(θ) = (1 − r) · max(0, 1 − r ⁄ cos θ)<br><span class="muted">r = thread ⁄ pitch · sharkstooth r = 0.30 · bobbinet r = 0.15</span></div>
+      <div class="drawing"><svg id="open-chart" viewBox="0 0 640 280" role="img" aria-label="Chart of the share of light a scrim passes against the angle from its normal, for sharkstooth and bobbinet"></svg></div>
+      <p class="figure-note">The markers are this page's rig and seats, measured against the gauze's normal. The steep wash comes in at 86° and passes nothing: all of it lands on the threads. That is why designers light scrims from straight above or below. A flat FOH front light at 19° passes nearly half its light on to the set.</p>
+    </section>
+
+    <section id="section" aria-labelledby="section-h">
+      <span class="eyebrow">The model</span>
+      <h2 id="section-h">Light through the cloth</h2>
+      <p class="prose">A section along the centre line, to scale in metres, with the same rig as the live stage. Today every collider stops a beam outright (<code>beamReach.ts</code>) and shadows everything behind it (<code>occlusion.ts</code>). A scrim needs a third answer: it <b>passes a share</b>, so a beam continues to the next solid surface, at the strength <code>open(θ)</code> leaves it.</p>
+      <div class="drawing"><svg id="stage-section" viewBox="0 0 900 360" role="img" aria-label="Side section of the stage showing beams passing through the scrim"></svg></div>
+      <ul class="plain small">
+        <li><b>Steep wash</b> (amber, from above the gauze): it meets the threads at 86° and passes nothing, so the floor just upstage of the gauze stays dark.</li>
+        <li><b>Flat FOH</b> (amber, from the house): 48 % carries on, dashed, and lands on the set. That is the mistake the <i>Flat FOH</i> preset shows.</li>
+        <li><b>The eye</b> (blue): from the centre stalls it sees 49 % of what is behind. The back light's haze, shaded upstage of the gauze, reaches the house at that share too.</li>
+      </ul>
+    </section>
+
+    <section id="pixel" aria-labelledby="pixel-h">
+      <span class="eyebrow">The model</span>
+      <h2 id="pixel-h">One pixel through a scrim</h2>
+      <p class="prose">The surface shader draws the scrim as a blend over what is behind it, weighted by how much of the cloth the eye sees at that angle. The haze march splits at the scrim plane, so the haze in front of the gauze is not dimmed and the haze behind it is.</p>
+      <div class="formula">pixel = haze in front + (1 − open(θ<sub>eye</sub>)) · threads + open(θ<sub>eye</sub>) · (surface behind + haze behind)</div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Term</th><th>What it is</th><th>Where it lives</th></tr></thead>
+          <tbody>
+            <tr><td class="n">threads</td><td>The cloth's own colour under every light on the viewer's side, with a wrap term: a round thread still catches light that grazes the cloth (0.45 at grazing <span class="pill est">estimate</span>). Lights on the far side add a small glow through the fibres (0.18 <span class="pill est">estimate</span>).</td><td><code>surfaceShader.ts</code>, a <code>SCRIM</code> define</td></tr>
+            <tr><td class="n">open(θ<sub>eye</sub>)</td><td>The function above, taken at the angle between the view ray and the cloth's normal. A gathered drawn scrim raises it to the power of its layers: <code>open<sup>c</sup></code>, with <code>c</code> its width over the width it is gathered into.</td><td>One GLSL chunk with a TypeScript twin, as <code>beamMask.ts</code> has</td></tr>
+            <tr><td class="n">surface behind</td><td>Whatever the scene draws behind, shadowed by the scrim by transmittance rather than yes/no. A beam's light reaching it has crossed the cloth at the beam's own angle.</td><td><code>occlusion.ts</code>, per collider</td></tr>
+            <tr><td class="n">haze behind</td><td>The march's samples past the scrim from the eye, scaled by <code>open(θ<sub>eye</sub>)</code>. A beam's samples past the scrim along its own axis are scaled by <code>open(θ<sub>beam</sub>)</code>.</td><td><code>beamShaders.ts</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="document" aria-labelledby="document-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="document-h">In the scene document</h2>
+      <div class="split">
+        <div class="sub">
+          <p class="prose">A scrim is a <code>DRAPE</code> with a <b>fabric</b>. Fabric is a separate choice from role, which only sets a default colour and finish, and from operation, which sets how the cloth moves. If scrim were a role, "scrim tabs" could not be said.</p>
+          <ul class="plain small">
+            <li><code>DrapeParams.fabric: SHARKSTOOTH | BOBBINET</code>, absent meaning solid cloth as today. Written canonically, so absent stays absent.</li>
+            <li>A scrim hangs flat: <code>depthM</code> does not pleat it. A drawn one folds only as it gathers.</li>
+            <li>Its default colour is an off-white, unless <code>finishColour</code> says otherwise, the way a cyc's is.</li>
+            <li>The MCP vocabulary in <code>SetupToolSchemas.kt</code> gains the key, so <code>set_scene</code> can build one: <code>DRAPE: {role, operation, fabric, travelS}</code>.</li>
+            <li>No <code>formatVersion</code> bump: an optional params key, as <code>travelS</code> was (<code>sync-engineering.md</code> §"A params key added later"). An older desk keeps the key but refuses an edit to that element, the same caveat <code>travelS</code> carries.</li>
+          </ul>
+        </div>
+        <div class="sheet" aria-label="Mock of the element sheet with the new Fabric field">
+          <span class="title">Forest gauze</span>
+          <div class="grid2">
+            <div class="field"><span class="lab">Kind</span><span class="box">Drape <span class="muted">▾</span></span></div>
+            <div class="field"><span class="lab">Layer</span><span class="box">Set <span class="muted">▾</span></span></div>
+            <div class="field"><span class="lab">Role</span><span class="box">BACKCLOTH <span class="muted">▾</span></span></div>
+            <div class="field"><span class="lab">Moves by</span><span class="box">FLY <span class="muted">▾</span></span></div>
+            <div class="field new"><span class="lab">Fabric <span class="pill new">new</span></span><span class="box">Sharkstooth scrim <span class="muted">▾</span></span></div>
+            <div class="field"><span class="lab">Travel time (s, a full travel)</span><span class="box">8</span></div>
+          </div>
+          <div class="field"><span class="lab">Finish colour</span><span class="box"><span><span class="swatch" aria-hidden="true"></span> #ccccc7</span><span class="muted">off-white by default</span></span></div>
+          <span class="field"><span class="hint">Fabric lists Solid (default), Sharkstooth scrim and Bobbinet. A scrim hangs flat, so the Depth field's hint reads "folds only as a drawn scrim gathers".</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="decisions" aria-labelledby="decisions-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="decisions-h">Decisions proposed</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>#</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td class="n">D1</td><td><b>Fabric is a drape's, not a role.</b> <code>fabric: SHARKSTOOTH | BOBBINET</code> on <code>DrapeParams</code>, absent = solid. Role and operation are unchanged, and every use is a combination of the three.</td></tr>
+            <tr><td class="n">D2</td><td><b>A scrim hangs flat.</b> No pleat from <code>depthM</code>. A drawn scrim folds as it gathers, with an amplitude that grows with the gathering.</td></tr>
+            <tr><td class="n">D3</td><td><b>One function of angle.</b> <code>open(θ) = (1 − r)·max(0, 1 − r/cos θ)</code> decides both what a beam passes and what an eye sees through. Sharkstooth r = 0.30, bobbinet r = 0.15 <span class="pill est">estimate</span>. Gathered cloth stacks: <code>open<sup>c</sup></code>.</td></tr>
+            <tr><td class="n">D4</td><td><b>A beam does not stop at a scrim.</b> A part may be <i>transmitting</i> as well as colliding or not. Beam reach and the landing planes skip it, so the beam carries on to the next solid surface, and <i>Focus here</i> still takes the point it is given.</td></tr>
+            <tr><td class="n">D5</td><td><b>Shadows become transmittance.</b> The box occlusion test multiplies by <code>open(θ)</code> for each scrim it crosses and carries on, instead of returning blocked. The packed collider gains a flag (a sign on the skin, or a third texel). The landing-plane fallback does the same.</td></tr>
+            <tr><td class="n">D6</td><td><b>Seeing through is a blend.</b> The scrim draws without writing depth, premultiplied over what is behind it, weighted by <code>1 − open(θ<sub>eye</sub>)</code>. Its threads wrap grazing light and glow faintly from behind <span class="pill est">estimate</span>.</td></tr>
+            <tr><td class="n">D7</td><td><b>Haze splits at the plane.</b> Each beam carries the first scrim on its axis as one more plane. Samples past it scale by <code>open(θ<sub>beam</sub>)</code>, and samples behind a scrim from the eye by <code>open(θ<sub>eye</sub>)</code>, from a capped list of scrim rectangles, as regions are capped today.</td></tr>
+            <tr><td class="n">D8</td><td><b>No wire or sync change beyond the key.</b> No <code>formatVersion</code> bump, no new state. The reveal is lighting, and the cloth's moves are the drape's existing <code>trimM</code> and <code>open</code>.</td></tr>
+            <tr><td class="n">D9</td><td><b>Out of scope:</b> moiré, a visible weave, painted or projected images on the cloth (the scene document has no image finish), and bounce light (<code>FU-STAGE-BOUNCE-FILL</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="order" aria-labelledby="order-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="order-h">Proposed order</h2>
+      <p class="prose">Four sessions, one PR each, in this order. After session 1 the light behaves correctly but the cloth still looks solid. Session 2 makes it look right from the house. Session 3 is the costly one and is measured against the frame budget.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Session</th><th>What lands</th><th>Size</th></tr></thead>
+          <tbody>
+            <tr><td class="n">1</td><td><b>The cloth and its shadows.</b> <code>fabric</code> end to end (Kotlin params and validation, <code>elementProblems.ts</code>, the element form, the MCP vocabulary, <code>RichProjectFixture</code>, the docs). Flat geometry. The transmitting part state. Transmittance in beam reach, box occlusion and the landing fallback (D1, D2, D4, D5).</td><td><span class="pill m">medium</span></td></tr>
+            <tr><td class="n">2</td><td><b>Seeing through.</b> The blend, <code>open(θ<sub>eye</sub>)</code> and the threads' wrap and glow (D3, D6), with the GLSL chunk and its TypeScript twin pinned by a test.</td><td><span class="pill s">small</span></td></tr>
+            <tr><td class="n">3</td><td><b>Haze.</b> Both attenuations in the march (D7). Measured in <code>?profileHarness</code> on the three machines, with the haze governor absorbing the cost.</td><td><span class="pill l">large</span></td></tr>
+            <tr><td class="n">4</td><td><b>Tuning.</b> A <code>?profileHarness=scrim</code> scene, like this page's stage, to judge r, the wrap and the glow by eye against the classic reveal.</td><td><span class="pill s">small</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="code" aria-labelledby="code-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="code-h">Code map</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>File</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td class="n">models/stageScene.kt</td><td><code>DrapeFabric</code>, <code>DrapeParams.fabric</code>, and the DRAPE arm of <code>parseElementParams</code></td></tr>
+            <tr><td class="n">ai/SetupToolSchemas.kt</td><td>The DRAPE params line gains <code>fabric</code></td></tr>
+            <tr><td class="n">stage/EditSceneElementForm.tsx</td><td>A Fabric select beside Role and Moves by. <code>elementProblems.ts</code> mirrors the check</td></tr>
+            <tr><td class="n">scene/builders/drape.ts</td><td>A flat cloth for a scrim. Gathered folds on DRAW. A <code>transmits</code> part</td></tr>
+            <tr><td class="n">scene/sceneParts.ts</td><td><code>ScenePart</code> gains the transmitting state. A scrim finish and its default colour</td></tr>
+            <tr><td class="n">scene/pleat.ts</td><td>A flat shape, and a fold that grows as a drawn scrim gathers</td></tr>
+            <tr><td class="n">scene/beamReach.ts</td><td>Skips a transmitting collider. Sight lines pass it</td></tr>
+            <tr><td class="n">scene/occlusion.ts</td><td>Transmittance per collider, packed as a flag. The GLSL keeps looping past a scrim</td></tr>
+            <tr><td class="n">scene/landing.ts</td><td>A scrim is never a landing plane. A beam carries its first scrim plane for the haze</td></tr>
+            <tr><td class="n">scene/surfaceShader.ts</td><td>A <code>SCRIM</code> define: the blend, the wrap, the back glow, no depth write</td></tr>
+            <tr><td class="n">beamShaders.ts</td><td>The march's two attenuations, and a capped scrim list</td></tr>
+            <tr><td class="n">profileHarness.ts</td><td>A <code>scrim</code> scene</td></tr>
+            <tr><td class="n">docs/fixtures-engineering.md</td><td>§"The scene document" gains the key, and <code>stage-vis-engineering.md</code> gains the model</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="questions" aria-labelledby="questions-h">
+      <span class="eyebrow">The desk</span>
+      <h2 id="questions-h">Questions</h2>
+      <ol class="plain">
+        <li><b>Bobbinet in the first cut?</b> Proposed: yes. It is one more number for r, and a theatre that owns one will hang it.</li>
+        <li><b>How many scrims may the haze honour at once?</b> Proposed: four, as a uniform list like the regions. A fifth would still pass light on surfaces, but its haze would not split.</li>
+        <li><b>Painted gauzes.</b> The forest on this page is not in scope: the scene document has no image finish for any element. Is a painted scrim wanted enough to plan an image finish of its own?</li>
+        <li><b>Seat check.</b> Should the seat views warn when a scrim the seat sees through at a steep angle reads as solid there? That is the far-side frame in §"Fabric, colour and seat".</li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ─── The model stage, in lighting metres: x across (+ stage left), y upstage, z up. ───
+  const SCRIM_Y = 1.0;
+  const R = { SHARKSTOOTH: 0.30, BOBBINET: 0.15 };
+  const COLOURS = { painted: [0.80, 0.80, 0.78], white: [0.80, 0.80, 0.78], grey: [0.30, 0.30, 0.29], black: [0.022, 0.022, 0.024] };
+  const VIEWS = {
+    stalls: { cam: [0, -12, 0.4], target: [0, 3.5, 2.7], label: 'Stalls, centre' },
+    side: { cam: [-7.5, -8, 0.4], target: [0.4, 3.5, 2.5], label: 'Stalls, far side' },
+    circle: { cam: [0, -15, 6.5], target: [0, 3.5, 1.9], label: 'Circle' },
+  };
+  // Eight units: a top and a ground wash each side of the gauze, an FOH front, and the room's key,
+  // back light and sky groundrow.
+  const RIG = [
+    { group: 'scrim', pos: [-2.6, 0.6, 7.6], at: [-2.4, 1.0, 1.2], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 34 },
+    { group: 'scrim', pos: [2.6, 0.6, 7.6], at: [2.4, 1.0, 1.2], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 34 },
+    { group: 'scrim', pos: [-2.6, 0.65, 0.2], at: [-2.4, 1.0, 6.0], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 22 },
+    { group: 'scrim', pos: [2.6, 0.65, 0.2], at: [2.4, 1.0, 6.0], half: 58, soft: 0.3, col: [0.92, 0.96, 1.0], I: 22 },
+    { group: 'foh', pos: [0, -12, 7], at: [0, 1, 2.5], half: 15, col: [1.0, 0.93, 0.82], I: 230 },
+    { group: 'scene', pos: [-5, 3, 6.5], at: [0.3, 4.5, 0.9], half: 22, col: [1.0, 0.74, 0.46], I: 120 },
+    { group: 'scene', pos: [1.5, 7.2, 7.0], at: [-0.6, 4.0, 1.0], half: 17, col: [0.70, 0.76, 1.0], I: 105 },
+    { group: 'scene', pos: [0, 7.6, 0.25], at: [0, 8.6, 4.5], half: 60, col: [0.25, 0.42, 1.0], I: 24 },
+  ];
+  const PRESETS = {
+    lit: { scrim: 1, foh: 0, scene: 0 },
+    bleed: { scrim: 0.55, foh: 0, scene: 0.5 },
+    revealed: { scrim: 0, foh: 0, scene: 1 },
+    foh: { scrim: 0, foh: 1, scene: 0 },
+  };
+  const TRIM_OUT = 7.2;
+
+  const state = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, scrim: 0.55, foh: 0, scene: 0.5, haze: 0.5 };
+
+  function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+  function norm(a) { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; }
+  function openAt(cosT, r, layers = 1) { return Math.pow((1 - r) * Math.max(0, 1 - r / Math.max(cosT, 1e-3)), layers); }
+
+  // ─── The shader: a ray tracer applying D3–D7 to the model stage. ───
+  const VS = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+  const FS = `#version 300 es
+precision highp float;
+precision highp int;
+out vec4 outColour;
+uniform vec2 uRes;
+uniform vec3 uCam;
+uniform vec3 uTarget;
+uniform float uTanHalfFov;
+uniform int uToday;
+uniform float uR;
+uniform vec3 uScrimCol;
+uniform int uPainted;
+uniform int uUsage;
+uniform float uTrim;
+uniform float uOpen;
+uniform vec3 uLPos[8];
+uniform vec3 uLDir[8];
+uniform vec2 uLCone[8];
+uniform vec3 uLCol[8];
+uniform float uHaze;
+uniform float uExposure;
+
+const float SCRIM_Y = 1.0;
+const float SCRIM_HW = 5.5;
+const float SCRIM_H = 7.0;
+const float PROS_Y = 0.5;
+const float PROS_HW = 5.2;
+const float PROS_H = 6.2;
+const float BACK_Y = 8.6;
+const float EXTENT = 9.5;
+const float GATHER = 0.84;
+
+const int NB = 13;
+const vec3 BMIN[NB] = vec3[NB](
+  vec3(0.0, 4.05, 0.72), vec3(0.05, 4.10, 0.0), vec3(1.48, 4.10, 0.0), vec3(0.05, 4.83, 0.0), vec3(1.48, 4.83, 0.0),
+  vec3(1.90, 4.30, 0.42), vec3(2.30, 4.30, 0.47), vec3(1.97, 4.37, 0.0),
+  vec3(-5.0, 5.6, 0.0), vec3(-3.2, 5.6, 0.0), vec3(-4.1, 5.6, 2.3),
+  vec3(-6.8, 3.6, 0.0), vec3(5.1, 3.6, 0.0));
+const vec3 BMAX[NB] = vec3[NB](
+  vec3(1.6, 4.95, 0.78), vec3(0.12, 4.17, 0.72), vec3(1.55, 4.17, 0.72), vec3(0.12, 4.90, 0.72), vec3(1.55, 4.90, 0.72),
+  vec3(2.35, 4.75, 0.47), vec3(2.35, 4.75, 1.02), vec3(2.28, 4.68, 0.42),
+  vec3(-4.1, 5.7, 3.4), vec3(-1.6, 5.7, 3.4), vec3(-3.2, 5.7, 3.4),
+  vec3(-5.1, 3.65, 7.5), vec3(6.8, 3.65, 7.5));
+const int BMAT[NB] = int[NB](0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3);
+const vec2 FIG_C = vec2(-0.9, 4.3);
+const float FIG_R = 0.19;
+const float FIG_H = 1.45;
+
+struct Hit { float t; vec3 n; int m; };
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+vec3 safeInv(vec3 d) { return 1.0 / mix(vec3(1e-7), d, step(vec3(1e-7), abs(d))); }
+
+float boxT(vec3 ro, vec3 inv, vec3 bmin, vec3 bmax, out vec3 n) {
+  vec3 t0 = (bmin - ro) * inv;
+  vec3 t1 = (bmax - ro) * inv;
+  vec3 tmin = min(t0, t1);
+  vec3 tmax = max(t0, t1);
+  float tn = max(max(tmin.x, tmin.y), tmin.z);
+  float tf = min(min(tmax.x, tmax.y), tmax.z);
+  n = vec3(0.0);
+  if (tn > tf || tn < 1e-4) return -1.0;
+  if (tn == tmin.x) n = vec3(-sign(inv.x), 0.0, 0.0);
+  else if (tn == tmin.y) n = vec3(0.0, -sign(inv.y), 0.0);
+  else n = vec3(0.0, 0.0, -sign(inv.z));
+  return tn;
+}
+
+float cylT(vec3 ro, vec3 rd, out vec3 n) {
+  n = vec3(0.0);
+  vec2 o = ro.xy - FIG_C;
+  vec2 d = rd.xy;
+  float a = dot(d, d);
+  if (a < 1e-8) return -1.0;
+  float b = dot(o, d);
+  float c = dot(o, o) - FIG_R * FIG_R;
+  float disc = b * b - a * c;
+  if (disc < 0.0) return -1.0;
+  float t = (-b - sqrt(disc)) / a;
+  if (t < 1e-4) return -1.0;
+  float z = ro.z + rd.z * t;
+  if (z < 0.0 || z > FIG_H) return -1.0;
+  n = vec3(normalize(o + d * t), 0.0);
+  return t;
+}
+
+float sphT(vec3 ro, vec3 rd, vec3 c, float r, out vec3 n) {
+  n = vec3(0.0);
+  vec3 o = ro - c;
+  float b = dot(o, rd);
+  float cc = dot(o, o) - r * r;
+  float disc = b * b - cc;
+  if (disc < 0.0) return -1.0;
+  float t = -b - sqrt(disc);
+  if (t < 1e-4) return -1.0;
+  n = normalize(o + rd * t);
+  return t;
+}
+
+bool prosAt(float x, float z) {
+  if (abs(x) > EXTENT || z < 0.0 || z > EXTENT) return false;
+  return !(abs(x) < PROS_HW && z < PROS_H);
+}
+
+// Whether (x, z) on the scrim's plane is cloth, and how many layers deep a gathered drawn scrim is.
+bool scrimAt(float x, float z, out float c) {
+  c = 1.0;
+  float z0 = uUsage == 1 ? uTrim : 0.0;
+  if (z < z0 || z > z0 + SCRIM_H || abs(x) > SCRIM_HW) return false;
+  if (uUsage == 2) {
+    float hw = SCRIM_HW * (1.0 - GATHER * uOpen);
+    if (abs(x) < SCRIM_HW - hw) return false;
+    c = SCRIM_HW / hw;
+  }
+  return true;
+}
+
+// The cloth's normal (+y side). Today's cloth is pleated velour; a scrim hangs flat and folds only as it gathers.
+vec3 scrimNormal(float x, float c) {
+  float amp = uToday == 1 ? 0.45 : 0.9 * (1.0 - 1.0 / c);
+  float pitch = uToday == 1 ? 0.16 : 0.24;
+  return normalize(vec3(amp * sin(x * 6.2831853 / pitch), 1.0, 0.0));
+}
+
+// D3: the share a scrim passes at an angle whose cosine is cosT, through c stacked layers.
+float openAt(float cosT, float c) {
+  if (uToday == 1) return 0.0;
+  float o = (1.0 - uR) * max(0.0, 1.0 - uR / max(cosT, 1e-3));
+  return pow(o, c);
+}
+
+void consider(float t, vec3 n, int m, inout Hit h) {
+  if (t > 0.0 && t < h.t) { h.t = t; h.n = n; h.m = m; }
+}
+
+Hit trace(vec3 ro, vec3 rd) {
+  Hit h;
+  h.t = 1e9; h.n = vec3(0.0); h.m = -1;
+  vec3 inv = safeInv(rd);
+  vec3 n;
+  for (int i = 0; i < NB; i++) {
+    float tb = boxT(ro, inv, BMIN[i], BMAX[i], n);
+    consider(tb, n, BMAT[i], h);
+  }
+  float t = cylT(ro, rd, n);
+  consider(t, n, 4, h);
+  t = sphT(ro, rd, vec3(FIG_C, 1.6), 0.115, n);
+  consider(t, n, 5, h);
+  if (abs(rd.z) > 1e-6) {
+    float tc = (FIG_H - ro.z) / rd.z;
+    vec3 pc = ro + rd * tc;
+    if (tc > 1e-4 && distance(pc.xy, FIG_C) < FIG_R) consider(tc, vec3(0.0, 0.0, 1.0), 4, h);
+    float tf = -ro.z / rd.z;
+    vec3 pf = ro + rd * tf;
+    if (tf > 1e-4 && abs(pf.x) < EXTENT && pf.y > 0.0 && pf.y < BACK_Y) consider(tf, vec3(0.0, 0.0, -sign(rd.z)), 7, h);
+    float th = (-1.0 - ro.z) / rd.z;
+    vec3 ph = ro + rd * th;
+    if (th > 1e-4 && ph.y < 0.0 && abs(ph.x) < 14.0) consider(th, vec3(0.0, 0.0, -sign(rd.z)), 9, h);
+  }
+  if (abs(rd.y) > 1e-6) {
+    vec3 ny = vec3(0.0, -sign(rd.y), 0.0);
+    float tp = (PROS_Y - ro.y) / rd.y;
+    vec3 pp = ro + rd * tp;
+    if (tp > 1e-4 && prosAt(pp.x, pp.z)) consider(tp, ny, 6, h);
+    float tr = -ro.y / rd.y;
+    vec3 pr = ro + rd * tr;
+    if (tr > 1e-4 && abs(pr.x) < EXTENT && pr.z < 0.0 && pr.z > -1.0) consider(tr, ny, 8, h);
+    float tk = (BACK_Y - ro.y) / rd.y;
+    vec3 pk = ro + rd * tk;
+    if (tk > 1e-4 && abs(pk.x) < EXTENT && pk.z > 0.0 && pk.z < EXTENT) consider(tk, ny, 10, h);
+  }
+  return h;
+}
+
+bool blocked(vec3 p, vec3 q) {
+  vec3 d = q - p;
+  float len = length(d);
+  vec3 rd = d / len;
+  vec3 inv = safeInv(rd);
+  vec3 n;
+  for (int i = 0; i < NB; i++) {
+    float tb = boxT(p, inv, BMIN[i], BMAX[i], n);
+    if (tb > 0.0 && tb < len) return true;
+  }
+  float t = cylT(p, rd, n);
+  if (t > 0.0 && t < len) return true;
+  t = sphT(p, rd, vec3(FIG_C, 1.6), 0.115, n);
+  if (t > 0.0 && t < len) return true;
+  if (abs(rd.y) > 1e-6) {
+    float tp = (PROS_Y - p.y) / rd.y;
+    if (tp > 1e-4 && tp < len) {
+      vec3 x = p + rd * tp;
+      if (prosAt(x.x, x.z)) return true;
+    }
+  }
+  return false;
+}
+
+// D5: a segment crossing the scrim keeps open(θ) of its light, at its own angle to the cloth.
+float scrimPass(vec3 p, vec3 q) {
+  float a = p.y - SCRIM_Y;
+  float b = q.y - SCRIM_Y;
+  if (a * b >= 0.0) return 1.0;
+  vec3 x = mix(p, q, a / (a - b));
+  float c;
+  if (!scrimAt(x.x, x.z, c)) return 1.0;
+  return openAt(abs(dot(normalize(q - p), scrimNormal(x.x, c))), c);
+}
+
+float transmit(vec3 p, vec3 q) {
+  float s = scrimPass(p, q);
+  if (s <= 0.0) return 0.0;
+  return blocked(p, q) ? 0.0 : s;
+}
+
+vec3 sky(vec3 p) {
+  float h = 2.0 + 0.7 * sin(p.x * 0.45 + 0.6) + 0.35 * sin(p.x * 1.25 + 2.0);
+  if (p.z < h) return vec3(0.16, 0.20, 0.17);
+  float k = clamp((p.z - h) / 6.0, 0.0, 1.0);
+  return mix(vec3(0.72, 0.62, 0.50), vec3(0.42, 0.50, 0.68), k);
+}
+
+vec3 albedo(int m, vec3 p) {
+  if (m == 0) return vec3(0.38, 0.24, 0.14);
+  if (m == 1) return vec3(0.30, 0.18, 0.10);
+  if (m == 2) return vec3(0.62, 0.57, 0.46) * (0.88 + 0.12 * step(0.5, fract(p.x / 0.3)));
+  if (m == 3) return vec3(0.02);
+  if (m == 4) return vec3(0.55, 0.10, 0.12);
+  if (m == 5) return vec3(0.72, 0.54, 0.44);
+  if (m == 6) return vec3(0.10, 0.035, 0.04);
+  if (m == 7) return vec3(0.09, 0.085, 0.08);
+  if (m == 8) return vec3(0.02);
+  if (m == 9) return vec3(0.05, 0.045, 0.05);
+  return sky(p);
+}
+
+vec3 scrimAlbedo(vec3 p) {
+  vec3 base = uScrimCol;
+  if (uPainted == 0) return base;
+  float x = p.x;
+  float z = p.z - (uUsage == 1 ? uTrim : 0.0);
+  float m = 0.0;
+  for (int k = 0; k < 9; k++) {
+    float fk = float(k);
+    float fx = -5.0 + fk * 1.25 + 0.35 * sin(fk * 12.9);
+    float w = (0.10 + 0.07 * fract(sin(fk * 7.3) * 43.1)) * (1.0 + 0.25 * (1.0 - z / 7.0));
+    m = max(m, 1.0 - smoothstep(w * 0.8, w, abs(x - fx - 0.05 * sin(z * 1.3 + fk))));
+  }
+  float canopy = smoothstep(4.6, 5.4, z + 0.5 * sin(x * 1.7) + 0.35 * sin(x * 4.1 + 1.0));
+  float ground = 1.0 - smoothstep(0.4, 0.9, z + 0.15 * sin(x * 3.0));
+  vec3 paint = mix(base, vec3(0.30, 0.36, 0.30), 0.6 * canopy);
+  paint = mix(paint, vec3(0.32, 0.30, 0.24), 0.6 * ground);
+  return mix(paint, vec3(0.13, 0.15, 0.13), m);
+}
+
+vec3 litSurface(vec3 p, vec3 n, vec3 alb) {
+  vec3 sum = alb * 0.006;
+  for (int i = 0; i < 8; i++) {
+    vec3 col = uLCol[i];
+    if (col.r + col.g + col.b <= 0.0) continue;
+    vec3 L = uLPos[i] - p;
+    float d2 = dot(L, L);
+    vec3 l = L * inversesqrt(d2);
+    float ca = dot(-l, uLDir[i]);
+    if (ca <= uLCone[i].x) continue;
+    float ndl = dot(n, l);
+    if (ndl <= 0.0) continue;
+    float vis = transmit(p + n * 0.004, uLPos[i]);
+    if (vis <= 0.0) continue;
+    sum += alb * col * (smoothstep(uLCone[i].x, uLCone[i].y, ca) * ndl * vis / (d2 + 4.0));
+  }
+  return sum;
+}
+
+// D6: a round thread still catches grazing light, and glows a little from behind.
+vec3 litThreads(vec3 p, vec3 nV, vec3 alb) {
+  vec3 sum = alb * 0.006;
+  for (int i = 0; i < 8; i++) {
+    vec3 col = uLCol[i];
+    if (col.r + col.g + col.b <= 0.0) continue;
+    vec3 L = uLPos[i] - p;
+    float d2 = dot(L, L);
+    vec3 l = L * inversesqrt(d2);
+    float ca = dot(-l, uLDir[i]);
+    if (ca <= uLCone[i].x) continue;
+    float f = dot(nV, l);
+    float k = uToday == 1 ? max(f, 0.0)
+      : (f > 0.0 ? (0.45 + 0.55 * f) * smoothstep(0.0, 0.05, f) : 0.18 * -f);
+    if (k <= 0.0) continue;
+    float vis = transmit(p + l * 0.004, uLPos[i]);
+    if (vis <= 0.0) continue;
+    sum += alb * col * (smoothstep(uLCone[i].x, uLCone[i].y, ca) * k * vis / (d2 + 4.0));
+  }
+  return sum;
+}
+
+// D7: haze in front of the scrim at full strength, behind it at what the eye sees through; each
+// beam's own light past the scrim already reduced by transmit().
+vec3 hazeAlong(vec3 ro, vec3 rd, float tEnd, float tS, float viewT) {
+  if (uHaze <= 0.0) return vec3(0.0);
+  const int N = 24;
+  float t0 = 0.3;
+  float t1 = min(tEnd, 40.0);
+  float dt = (t1 - t0) / float(N);
+  float j = hash(gl_FragCoord.xy);
+  vec3 acc = vec3(0.0);
+  for (int k = 0; k < N; k++) {
+    float t = t0 + (float(k) + j) * dt;
+    float w = t > tS ? viewT : 1.0;
+    if (w <= 0.0) continue;
+    vec3 s = ro + rd * t;
+    for (int i = 0; i < 8; i++) {
+      vec3 col = uLCol[i];
+      if (col.r + col.g + col.b <= 0.0) continue;
+      vec3 L = uLPos[i] - s;
+      float d2 = dot(L, L);
+      vec3 l = L * inversesqrt(d2);
+      float ca = dot(-l, uLDir[i]);
+      if (ca <= uLCone[i].x) continue;
+      float vis = transmit(s, uLPos[i]);
+      if (vis <= 0.0) continue;
+      float phase = 0.35 + 1.6 * pow(max(dot(l, rd), 0.0), 8.0);
+      acc += col * (w * vis * phase * smoothstep(uLCone[i].x, uLCone[i].y, ca) / (d2 + 4.0));
+    }
+  }
+  return acc * dt * uHaze;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  vec3 fw = normalize(uTarget - uCam);
+  vec3 rt = normalize(cross(fw, vec3(0.0, 0.0, 1.0)));
+  vec3 up = cross(rt, fw);
+  vec3 rd = normalize(fw + (uv.x * rt + uv.y * up) * 2.0 * uTanHalfFov);
+
+  Hit h = trace(uCam, rd);
+  float tO = h.m >= 0 ? h.t : 60.0;
+  vec3 behind = vec3(0.0);
+  if (h.m >= 0) {
+    vec3 p = uCam + rd * h.t;
+    behind = litSurface(p, h.n, albedo(h.m, p));
+  }
+  float tS = 1e9;
+  float viewT = 1.0;
+  vec3 threads = vec3(0.0);
+  if (abs(rd.y) > 1e-6) {
+    float t = (SCRIM_Y - uCam.y) / rd.y;
+    float c;
+    if (t > 0.0 && t < tO) {
+      vec3 p = uCam + rd * t;
+      if (scrimAt(p.x, p.z, c)) {
+        tS = t;
+        vec3 nV = scrimNormal(p.x, c);
+        if (dot(nV, rd) > 0.0) nV = -nV;
+        viewT = openAt(abs(dot(rd, nV)), c);
+        threads = litThreads(p, nV, scrimAlbedo(p));
+      }
+    }
+  }
+  vec3 col = tS < 1e8 ? (1.0 - viewT) * threads + viewT * behind : behind;
+  col += hazeAlong(uCam, rd, tO, tS, viewT);
+
+  // Exposed and rolled off on the luminance, the chroma kept, as the desk's surfaces are.
+  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  if (lum > 1e-6) col *= (1.0 - exp(-lum * uExposure)) / lum;
+  col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+  col += (hash(gl_FragCoord.xy + 17.0) - 0.5) / 255.0;
+  outColour = vec4(col, 1.0);
+}`;
+
+  function makeRenderer(canvas) {
+    const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+    if (!gl) return null;
+    const compile = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader failed');
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link failed');
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    const u = {};
+    for (const name of ['uRes', 'uCam', 'uTarget', 'uTanHalfFov', 'uToday', 'uR', 'uScrimCol', 'uPainted', 'uUsage', 'uTrim', 'uOpen', 'uLPos', 'uLDir', 'uLCone', 'uLCol', 'uHaze', 'uExposure']) {
+      u[name] = gl.getUniformLocation(prog, name);
+    }
+    const pos = new Float32Array(24), dir = new Float32Array(24), cone = new Float32Array(16), col = new Float32Array(24);
+    return function draw(s, w, h) {
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      gl.viewport(0, 0, w, h);
+      const v = VIEWS[s.view];
+      gl.uniform2f(u.uRes, w, h);
+      gl.uniform3fv(u.uCam, v.cam);
+      gl.uniform3fv(u.uTarget, v.target);
+      gl.uniform1f(u.uTanHalfFov, Math.tan((38 * Math.PI) / 360));
+      gl.uniform1i(u.uToday, s.today ? 1 : 0);
+      gl.uniform1f(u.uR, R[s.fabric]);
+      gl.uniform3fv(u.uScrimCol, COLOURS[s.colour]);
+      gl.uniform1i(u.uPainted, s.colour === 'painted' ? 1 : 0);
+      gl.uniform1i(u.uUsage, s.usage === 'FLY' ? 1 : s.usage === 'DRAW' ? 2 : 0);
+      gl.uniform1f(u.uTrim, s.usage === 'FLY' ? s.move * TRIM_OUT : 0);
+      gl.uniform1f(u.uOpen, s.usage === 'DRAW' ? s.move : 0);
+      RIG.forEach((l, i) => {
+        const d = norm(sub(l.at, l.pos));
+        const level = l.group === 'scrim' ? s.scrim : l.group === 'foh' ? s.foh : s.scene;
+        pos.set(l.pos, i * 3);
+        dir.set(d, i * 3);
+        cone.set([Math.cos((l.half * Math.PI) / 180), Math.cos((l.half * (l.soft ?? 0.72) * Math.PI) / 180)], i * 2);
+        col.set(l.col.map((c) => c * l.I * level), i * 3);
+      });
+      gl.uniform3fv(u.uLPos, pos);
+      gl.uniform3fv(u.uLDir, dir);
+      gl.uniform2fv(u.uLCone, cone);
+      gl.uniform3fv(u.uLCol, col);
+      gl.uniform1f(u.uHaze, s.haze * 0.09);
+      gl.uniform1f(u.uExposure, 1.3);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+  }
+
+  // ─── The live stage and its controls. ───
+  const canvas = document.getElementById('stage');
+  let draw = null;
+  try { draw = makeRenderer(canvas); } catch (e) { console.error(e); draw = null; }
+  if (draw == null) {
+    const note = document.createElement('p');
+    note.className = 'nogl';
+    note.textContent = 'This browser cannot draw WebGL 2, so the live stage and its stills are not shown. The drawings below still are.';
+    canvas.replaceWith(note);
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const sliders = { scrim: $('lv-scrim'), foh: $('lv-foh'), scene: $('lv-scene'), haze: $('lv-haze') };
+  const pct = (v) => `${Math.round(v * 100)}`;
+
+  function eyeOpen() {
+    if (state.today) return 0;
+    const v = VIEWS[state.view];
+    const toward = norm(sub([0, SCRIM_Y, 3], v.cam));
+    const layers = state.usage === 'DRAW' ? 1 / (1 - 0.84 * state.move) : 1;
+    return openAt(Math.abs(toward[1]), R[state.fabric], layers);
+  }
+
+  function syncControls() {
+    for (const k of Object.keys(sliders)) {
+      sliders[k].value = Math.round(state[k] * 100);
+      $(`o-${k}`).textContent = pct(state[k]);
+    }
+    $('usage').value = state.usage;
+    $('fabric').value = state.fabric;
+    $('colour').value = state.colour;
+    $('view').value = state.view;
+    $('move-row').hidden = state.usage === 'DEAD';
+    $('move-label').textContent = state.usage === 'FLY' ? 'Trim' : 'Open';
+    $('move').value = Math.round(state.move * 100);
+    $('o-move').textContent = state.usage === 'FLY' ? `${(state.move * TRIM_OUT).toFixed(1)}m` : pct(state.move);
+    $('m-proposed').setAttribute('aria-pressed', String(!state.today));
+    $('m-today').setAttribute('aria-pressed', String(state.today));
+    $('ro-model').innerHTML = `model <b>${state.today ? 'today' : 'proposed'}</b>`;
+    $('ro-seen').innerHTML = state.today
+      ? 'eye sees <b>nothing</b> through'
+      : `eye sees <b>${Math.round(eyeOpen() * 100)} %</b> through the cloth`;
+  }
+
+  let pending = false;
+  function schedule() {
+    syncControls();
+    if (draw == null || pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      const w = Math.min(1280, Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio || 1, 1.25)));
+      draw(state, w, Math.round((w * 9) / 16));
+    });
+  }
+
+  let anim = null;
+  function stopCue() { if (anim != null) { cancelAnimationFrame(anim); anim = null; } }
+
+  for (const k of Object.keys(sliders)) {
+    sliders[k].addEventListener('input', () => { stopCue(); state[k] = Number(sliders[k].value) / 100; schedule(); });
+  }
+  $('move').addEventListener('input', () => { stopCue(); state.move = Number($('move').value) / 100; schedule(); });
+  $('usage').addEventListener('change', () => { stopCue(); state.usage = $('usage').value; state.move = 0; schedule(); });
+  $('fabric').addEventListener('change', () => { state.fabric = $('fabric').value; schedule(); });
+  $('colour').addEventListener('change', () => { state.colour = $('colour').value; schedule(); });
+  $('view').addEventListener('change', () => { state.view = $('view').value; schedule(); });
+  $('m-proposed').addEventListener('click', () => { state.today = false; schedule(); });
+  $('m-today').addEventListener('click', () => { state.today = true; schedule(); });
+  document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
+    stopCue();
+    Object.assign(state, PRESETS[b.dataset.preset]);
+    $('ro-cue').innerHTML = `<b>Q12</b> · ${b.textContent.toLowerCase()}`;
+    schedule();
+  }));
+
+  // The cue: a 4 s crossfade from the gauze to the room, then, for a flown or drawn scrim, the cloth moves.
+  $('go').addEventListener('click', () => {
+    stopCue();
+    const moves = state.usage !== 'DEAD';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const total = moves ? 9000 : 4800;
+    const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+    const frame = (ms) => {
+      const fade = ease((ms - 400) / 4000);
+      state.scrim = 1 - fade;
+      state.scene = fade;
+      state.foh = 0;
+      state.move = moves ? ease((ms - 4800) / 4000) : 0;
+      $('ro-cue').innerHTML = ms >= total
+        ? '<b>Q12</b> · complete'
+        : `<b>Q12</b> · running ${(ms / 1000).toFixed(1)} s of ${(total / 1000).toFixed(1)} s`;
+      schedule();
+    };
+    if (reduce) { frame(total); return; }
+    const start = performance.now();
+    const step = (now) => {
+      const ms = now - start;
+      frame(Math.min(ms, total));
+      anim = ms < total ? requestAnimationFrame(step) : null;
+    };
+    anim = requestAnimationFrame(step);
+  });
+
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(schedule, 150); });
+
+  // ─── Stills, drawn one at a time on a second context so the live stage never flickers. ───
+  const base = { view: 'stalls', usage: 'DEAD', move: 0, fabric: 'SHARKSTOOTH', colour: 'painted', today: false, scrim: 0.55, foh: 0, scene: 0.5, haze: 0.5 };
+  const STRIPS = {
+    'strip-reveal': [
+      { title: 'Gauze lit', note: 'Steep wash only. The forest reads as a solid cloth.', s: { ...PRESETS.lit } },
+      { title: 'Bleed-through', note: 'The room fades up behind the painting.', s: { ...PRESETS.bleed } },
+      { title: 'Revealed', note: 'Wash out. The gauze nearly vanishes.', s: { ...PRESETS.revealed } },
+      { title: 'Today, same state', note: 'The cloth stops every beam and hides the room.', s: { ...PRESETS.revealed, today: true } },
+    ],
+    'strip-uses': [
+      { title: 'Flown · in', note: 'Revealed state, gauze at its dead.', s: { ...PRESETS.revealed, scrim: 0.25, usage: 'FLY', move: 0 } },
+      { title: 'Flown · going out', note: 'Trim 3.6 m: clear below, gauze above.', s: { ...PRESETS.revealed, scrim: 0.25, usage: 'FLY', move: 0.5 } },
+      { title: 'Tabs · half open', note: 'The gathered halves turn solid.', s: { ...PRESETS.revealed, scrim: 0.25, usage: 'DRAW', move: 0.5 } },
+      { title: 'Tabs · drawn', note: 'Gathered six times over at each side.', s: { ...PRESETS.revealed, scrim: 0.25, usage: 'DRAW', move: 1 } },
+    ],
+    'strip-seats': [
+      { title: 'Sharkstooth, white', note: 'Stalls, centre: 49 % through.', s: { colour: 'white' } },
+      { title: 'Bobbinet, white', note: 'Stalls, centre: 72 % through.', s: { colour: 'white', fabric: 'BOBBINET' } },
+      { title: 'Sharkstooth, black', note: 'Catches little wash; the room shows.', s: { colour: 'black' } },
+      { title: 'From the far side', note: 'Stalls, far side: the holes close up.', s: { colour: 'white', view: 'side' } },
+    ],
+  };
+
+  const jobs = [];
+  for (const [id, items] of Object.entries(STRIPS)) {
+    const host = $(id);
+    for (const item of items) {
+      const fig = document.createElement('figure');
+      fig.className = 'still';
+      fig.tabIndex = 0;
+      fig.setAttribute('role', 'button');
+      fig.setAttribute('aria-label', `${item.title}: load into the live stage`);
+      const c = document.createElement('canvas');
+      c.width = 480;
+      c.height = 270;
+      const cap = document.createElement('figcaption');
+      cap.innerHTML = `<b>${item.title}</b><span>${item.note}</span>`;
+      fig.append(c, cap);
+      host.append(fig);
+      const s = { ...base, ...item.s };
+      const load = () => {
+        stopCue();
+        Object.assign(state, s);
+        $('ro-cue').innerHTML = `<b>Q12</b> · ${item.title.toLowerCase()}`;
+        schedule();
+        $('live').scrollIntoView({ block: 'start' });
+      };
+      fig.addEventListener('click', load);
+      fig.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); load(); } });
+      jobs.push({ c, s });
+    }
+  }
+
+  schedule();
+
+  if (draw != null) {
+    const off = document.createElement('canvas');
+    let drawStill = null;
+    try { drawStill = makeRenderer(off); } catch (e) { console.error(e); }
+    const next = () => {
+      const job = jobs.shift();
+      if (job == null || drawStill == null) return;
+      drawStill(job.s, 480, 270);
+      job.c.getContext('2d').drawImage(off, 0, 0);
+      setTimeout(next, 0);
+    };
+    setTimeout(next, 60);
+  }
+
+  // ─── Drawings, from the same numbers. ───
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (parent, tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+    if (text != null) n.textContent = text;
+    parent.append(n);
+    return n;
+  };
+
+  // The weave: one set of threads, to scale, rays at three angles.
+  const weave = $('weave-panels');
+  for (const deg of [0, 45, 70]) {
+    const svg = el(weave, 'svg', { viewBox: '0 0 240 190', role: 'img', 'aria-label': `Rays at ${deg} degrees through a row of threads` });
+    const pitch = 40, rad = (0.30 * pitch) / 2, cy = 112;
+    const th = (deg * Math.PI) / 180, sx = Math.sin(th), sy = Math.cos(th);
+    const centres = [];
+    for (let x = -pitch; x <= 240 + pitch; x += pitch) centres.push(x + 10);
+    for (let x0 = -140; x0 <= 260; x0 += 4) {
+      // Each ray starts on the line y = 18 and runs down at θ from the normal.
+      const ox = x0, oy = 18;
+      const atCloth = ox + sx * ((cy - oy) / sy);
+      if (atCloth < 30 || atCloth > 210) continue;
+      let hit = Infinity;
+      for (const cx of centres) {
+        const dx = ox - cx, dy = oy - cy;
+        const b = dx * sx + dy * sy, c = dx * dx + dy * dy - rad * rad, disc = b * b - c;
+        if (disc >= 0) hit = Math.min(hit, -b - Math.sqrt(disc));
+      }
+      const end = hit < Infinity ? hit : (175 - oy) / sy;
+      el(svg, 'line', { x1: ox, y1: oy, x2: ox + sx * end, y2: oy + sy * end, class: hit < Infinity ? 'ray-blocked' : 'ray-thin' });
+    }
+    for (const cx of centres) if (cx > 0 && cx < 240) el(svg, 'circle', { cx, cy, r: rad, class: 'thread' });
+    el(svg, 'line', { x1: 0, y1: 18, x2: 240, y2: 18, class: 'axis' });
+    el(svg, 'text', { x: 8, y: 12, class: 'ink' }, `θ = ${deg}°`);
+    el(svg, 'text', { x: 8, y: 186 }, `this row ${Math.round(Math.max(0, 1 - 0.30 / Math.cos(th)) * 100)} %`);
+    el(svg, 'text', { x: 232, y: 186, 'text-anchor': 'end', class: 'acc' }, `open ${Math.round(openAt(Math.cos(th), 0.30) * 100)} %`);
+  }
+
+  // The rig's angles to the gauze's normal (y), from the same numbers the shader uses.
+  const angleTo = (from, to) => (Math.acos(Math.abs(norm(sub(to, from))[1])) * 180) / Math.PI;
+  const MARKS = [
+    { label: 'stalls centre', deg: angleTo(VIEWS.stalls.cam, [0, SCRIM_Y, 3]), dx: -4, dy: -14, anchor: 'start' },
+    { label: 'far-side seat', deg: angleTo(VIEWS.side.cam, [0, SCRIM_Y, 3]), dx: 8, dy: 18, anchor: 'start' },
+    { label: 'flat FOH', deg: angleTo(RIG[4].pos, RIG[4].at), dx: 4, dy: 22, anchor: 'start' },
+    { label: 'steep wash', deg: angleTo(RIG[0].pos, RIG[0].at), dx: 0, dy: -14, anchor: 'end' },
+  ];
+
+  // open(θ) for both fabrics, to scale.
+  {
+    const svg = $('open-chart');
+    const X0 = 56, X1 = 600, Y0 = 236, Y1 = 24;
+    const xs = (d) => X0 + (d / 90) * (X1 - X0);
+    const ys = (v) => Y0 - (v / 0.8) * (Y0 - Y1);
+    for (const v of [0, 0.2, 0.4, 0.6, 0.8]) {
+      el(svg, 'line', { x1: X0, y1: ys(v), x2: X1, y2: ys(v), class: v === 0 ? 'axis' : 'grid' });
+      el(svg, 'text', { x: X0 - 8, y: ys(v) + 4, 'text-anchor': 'end' }, `${Math.round(v * 100)} %`);
+    }
+    for (const d of [0, 15, 30, 45, 60, 75, 90]) {
+      el(svg, 'line', { x1: xs(d), y1: Y0, x2: xs(d), y2: Y0 + 4, class: 'axis' });
+      el(svg, 'text', { x: xs(d), y: Y0 + 18, 'text-anchor': 'middle' }, `${d}°`);
+    }
+    el(svg, 'text', { x: X1, y: Y0 + 34, 'text-anchor': 'end' }, 'angle from the cloth’s normal');
+    el(svg, 'text', { x: X0, y: 14 }, 'share passed');
+    for (const [r, cls, name] of [[0.30, 'curve-a', 'sharkstooth'], [0.15, 'curve-b', 'bobbinet']]) {
+      let d = '';
+      for (let a = 0; a <= 90; a += 0.5) d += `${a === 0 ? 'M' : 'L'}${xs(a).toFixed(1)},${ys(openAt(Math.cos((a * Math.PI) / 180), r)).toFixed(1)}`;
+      el(svg, 'path', { d, class: cls });
+      el(svg, 'text', { x: xs(cls === 'curve-a' ? 52 : 4), y: ys(openAt(Math.cos((cls === 'curve-a' ? 52 : 4) * Math.PI / 180), r)) + (cls === 'curve-a' ? 22 : -8), class: cls === 'curve-a' ? 'acc' : 'cool' }, name);
+    }
+    MARKS.forEach((m) => {
+      const v = openAt(Math.cos((m.deg * Math.PI) / 180), 0.30);
+      el(svg, 'circle', { cx: xs(m.deg), cy: ys(v), r: 4, class: 'dot-a' });
+      el(svg, 'text', { x: xs(m.deg) + m.dx, y: ys(v) + m.dy, class: 'ink', 'text-anchor': m.anchor }, `${m.label} ${Math.round(m.deg)}° · ${Math.round(v * 100)} %`);
+    });
+  }
+
+  // The section along x = 0, to scale.
+  {
+    const svg = $('stage-section');
+    const Y0 = -13, Y1 = 9.4, Z0 = -1.3, Z1 = 8.4;
+    const W = 900, H = 360, pad = 20;
+    const k = Math.min((W - 2 * pad) / (Y1 - Y0), (H - 2 * pad) / (Z1 - Z0));
+    const px = (y) => pad + (y - Y0) * k;
+    const pz = (z) => H - pad - (z - Z0) * k;
+    const line = (a, b, cls) => el(svg, 'line', { x1: px(a[0]), y1: pz(a[1]), x2: px(b[0]), y2: pz(b[1]), class: cls });
+    const rect = (y0, z0, y1, z1, cls) => el(svg, 'rect', { x: px(y0), y: pz(z1), width: (y1 - y0) * k, height: (z1 - z0) * k, class: cls });
+
+    // The back light's haze: all of it upstage of the gauze, so the house sees it at the eye's share.
+    const back = RIG[6];
+    const bd = norm(sub(back.at, back.pos));
+    const spread = Math.tan((back.half * Math.PI) / 180);
+    const tLand = -back.pos[2] / bd[2];
+    {
+      const nrm = [-bd[2], bd[1]];
+      const at = (t, side) => {
+        const y = back.pos[1] + bd[1] * t + nrm[0] * side * t * spread;
+        const z = back.pos[2] + bd[2] * t + nrm[1] * side * t * spread;
+        return `${px(y).toFixed(1)},${pz(Math.max(0, z)).toFixed(1)}`;
+      };
+      el(svg, 'polygon', { points: [at(0.3, 1), at(tLand, 1), at(tLand, -1), at(0.3, -1)].join(' '), class: 'haze-b' });
+    }
+
+    line([Y0, -1], [0, -1], 'line');
+    line([0, -1], [0, 0], 'line');
+    line([0, 0], [8.6, 0], 'line');
+    rect(0.45, 6.2, 0.55, 8.3, 'solid');
+    line([0.5, 6.2], [0.5, 0], 'thin');
+    line([SCRIM_Y, 0], [SCRIM_Y, 7.0], 'net');
+    line([8.6, 0], [8.6, 8.3], 'line');
+    rect(4.05, 0.72, 4.95, 0.78, 'solid');
+    rect(4.1, 0, 4.17, 0.72, 'solid');
+    rect(4.83, 0, 4.9, 0.72, 'solid');
+    rect(4.11, 0, 4.49, 1.45, 'faint');
+    el(svg, 'circle', { cx: px(4.3), cy: pz(1.6), r: 0.115 * k, class: 'faint' });
+
+    // Steep wash: all of it on the threads.
+    const w0 = RIG[0];
+    line([w0.pos[1], w0.pos[2]], [SCRIM_Y, 2.4], 'ray');
+    // Flat FOH: a share carries on and lands on the set.
+    const f = RIG[4];
+    const fd = norm(sub(f.at, f.pos));
+    const tHit = (SCRIM_Y - f.pos[1]) / fd[1];
+    const hitZ = f.pos[2] + fd[2] * tHit;
+    const tFloor = -f.pos[2] / fd[2];
+    line([f.pos[1], f.pos[2]], [SCRIM_Y, hitZ], 'ray');
+    line([SCRIM_Y, hitZ], [f.pos[1] + fd[1] * tFloor, 0], 'ray-dim');
+    // The eye, through the gauze to the figure.
+    const eye = VIEWS.stalls.cam;
+    const ed = norm(sub([0, 4.3, 1.3], eye));
+    const tE = (SCRIM_Y - eye[1]) / ed[1];
+    const eZ = eye[2] + ed[2] * tE;
+    line([eye[1], eye[2]], [SCRIM_Y, eZ], 'eye');
+    line([SCRIM_Y, eZ], [4.11, 1.3], 'eye-dim');
+
+    for (const l of [RIG[0], RIG[2], RIG[4], RIG[5], RIG[6]]) el(svg, 'circle', { cx: px(l.pos[1]), cy: pz(l.pos[2]), r: 4.5, class: 'lamp' });
+    el(svg, 'circle', { cx: px(eye[1]), cy: pz(eye[2]), r: 4.5, class: 'dot-b' });
+
+    const label = (y, z, text, cls = '', anchor = 'start') => el(svg, 'text', { x: px(y), y: pz(z), class: cls, 'text-anchor': anchor }, text);
+    const said = (m) => `${Math.round(m.deg)}° · ${Math.round(openAt(Math.cos((m.deg * Math.PI) / 180), 0.30) * 100)} %`;
+    label(-12, 7.45, `flat FOH · ${said(MARKS[2])} carries on`, 'acc');
+    label(-12.6, 0.75, `centre stalls · ${said(MARKS[0])} seen through`, 'cool');
+    label(0.3, 8.0, `steep wash · ${said(MARKS[3])} through`, 'acc', 'end');
+    label(SCRIM_Y + 0.15, 7.25, 'scrim', 'ink');
+    label(0.35, 8.4, 'pros', '', 'end');
+    label(8.5, 8.4, 'sky cloth', '', 'end');
+    label(7.0, 7.25, 'back light', '', 'end');
+    label(3.3, 6.75, 'key', '');
+    label(4.0, 2.0, 'figure', '', 'end');
+    label(5.0, -0.7, 'stage 0 m', '');
+    label(-6, -0.7, 'house floor −1 m', '');
+    for (let y = -12; y <= 8; y += 2) {
+      el(svg, 'line', { x1: px(y), y1: pz(Z0) - 2, x2: px(y), y2: pz(Z0) + 2, class: 'axis' });
+    }
+    label(-12, Z0 + 0.05, '2 m ticks', '');
+  }
+})();
+</script>
