@@ -58,7 +58,9 @@ The plan adds its own:
 
 - **P1 — Six sessions, one PR each,** in §5's order, per CLAUDE.md §"Git workflow". Each ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and its
-  done-marker here: a one-line row with the merge SHA.
+  done-marker here: its heading struck through with the SHA(s) of the branch commit(s) that made
+  the change, as the stage-light plan's rows read. Those SHAs survive the merge commit (CLAUDE.md
+  §"Git workflow"), so the marker is the branch's last commit and needs no edit after the merge.
 - **P2 — One format bump, in session 1.** `fabric`, `paint` and the `sceneImages/` folder all land
   together at `formatVersion` 23, so no later session touches sync. The params keys alone would need
   no bump (`sync-engineering.md` §"A params key added later needs no bump"), but the folder does, for
@@ -191,7 +193,8 @@ gains §"Version 23". Cloning is derived: the importer's hydrate fills the new p
 ## 5. Implementation — six sessions
 
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
-engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
+engineering-doc paragraphs written, and its done-marker here: the heading struck through with the
+SHA(s) of the commit(s) that made the change (P1), added in the branch's last commit.
 
 ### Session 1 — the document and the image store (backend + frontend sheet)
 
