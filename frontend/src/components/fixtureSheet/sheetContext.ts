@@ -26,6 +26,13 @@ export const FINGER_BUTTON_CLASS = 'size-8'
 export const FINGER_CHIP_CLASS = 'h-8'
 
 /**
+ * A row's name line, as tall as its × in either size, so the × appearing when the programmer takes
+ * the row never moves the rows below.
+ */
+export const ROW_HEAD_CLASS = 'min-h-[22px]'
+export const FINGER_ROW_HEAD_CLASS = 'min-h-8'
+
+/**
  * What one sheet is about (D1): a fixture, or a group with the members it draws pips for — the
  * fixtures (or single heads) the group names that are patched and visible, in the group's order.
  */

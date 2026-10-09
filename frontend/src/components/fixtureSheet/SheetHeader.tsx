@@ -119,7 +119,8 @@ export function SheetHeader({
         >
           <Eraser className="size-3.5" />
           <span className="@max-[400px]/sheet:hidden">Release</span>
-          <span className="font-mono text-muted-foreground">{held}</span>
+          {/* Two digits reserved, so the count growing does not shift Locate and Park. */}
+          <span className="min-w-[2ch] text-right font-mono text-muted-foreground">{held}</span>
         </Button>
       </div>
     </div>

@@ -13,7 +13,7 @@ import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { AxisControl, LevelControl, OpenToggle, openKey, PositionPad } from './PropertyRow'
 import { MIXED_EDGE_CLASS, SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
-import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
+import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { usePickSource } from './useRowSource'
 import { useChannelValues } from './useChannelValues'
 import {
@@ -136,7 +136,7 @@ function PickFrame({
         openRowId === openKey(PICK_HEAD, row) && 'bg-primary/[0.07]',
       )}
     >
-      <div className="flex min-h-5 min-w-0 items-center gap-1.5">
+      <div className={cn('flex min-w-0 items-center gap-1.5', finger ? FINGER_ROW_HEAD_CLASS : ROW_HEAD_CLASS)}>
         <span title={name} className={cn('min-w-0 truncate text-[12.5px] font-medium', source.kind === 'base' && 'opacity-60')}>
           {name}
         </span>
