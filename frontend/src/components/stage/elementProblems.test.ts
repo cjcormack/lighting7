@@ -26,6 +26,12 @@ describe('elementProblems — the desk’s refusal, filed by field', () => {
       null,
     ])
     expect(problemPath('name must be 1–100 characters')).toBe('name')
+    // Scrim plan session 1: a painted face and a fabric file under their own paths.
+    expect(problemPath('params.paint.front names no stored image')).toBe('params.paint.front')
+    expect(problemPath("params.paint.back must be an image's SHA-256: 64 hex characters")).toBe('params.paint.back')
+    expect(problemPath('params.fabric must be one of CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET')).toBe('params.fabric')
+    expect(problemPath("params.paint is a drape's or a flat's (a DRAPE or a FLAT); this OBJECT takes none")).toBe('params.paint')
+    expect(problemPath("params: unknown field 'x' — fabric is a drape's")).toBe('params.fabric')
     expect(problemPath('positionX must be between -500.0 and 500.0 metres')).toBe('positionX')
   })
 

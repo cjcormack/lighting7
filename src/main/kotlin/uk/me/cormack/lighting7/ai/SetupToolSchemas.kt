@@ -21,9 +21,10 @@ import uk.me.cormack.lighting7.models.SurfacePattern
 // stage and its rigging, and the cue stacks and prompt-book markup of the show itself. Their
 // source material — another console's patch export, a plot, a photo of the rig, a script and a
 // designer's notes — is a PDF or an image in the conversation, which the model reads itself; every
-// tool here takes the structured result. Nothing here takes file bytes: the prompt-book PDF is the
-// one file the desk must hold, and it comes in through the desk's own Prompt Book import, which
-// already hashes it and counts its pages. See `docs/mcp-engineering.md` §"Show-setup tools".
+// tool here takes the structured result. One tool takes file bytes: `upload_scene_image`, an image
+// to paint on a cloth (scrim plan D11), which a model may have made itself. The prompt-book PDF
+// still comes in only through the desk's own Prompt Book import, which hashes it and counts its
+// pages. See `docs/mcp-engineering.md` §"Show-setup tools".
 
 private fun JsonObjectBuilder.prop(name: String, type: String, description: String? = null) {
     put(name, buildJsonObject {
@@ -345,7 +346,8 @@ private val sceneElementSchema = objectSchema(required = listOf("name")) {
             "Per kind, replaced whole when sent. ROOM: {omit: [DOWNSTAGE|UPSTAGE|STAGE_LEFT|STAGE_RIGHT|FLOOR|CEILING], floor: {colour, pattern}, ceiling: {colour, pattern}}. " +
                 "PROSCENIUM: {openingWidthM, openingHeightM, openingSillM, surroundM}. " +
                 "FLAT: {openings: [{kind: DOOR|WINDOW|FRENCH_WINDOW|ARCH, fromM (from the stage-right end), widthM, heightM, sillM}]}. " +
-                "DRAPE: {role: LEG|BORDER|TABS|CYC|BACKCLOTH, operation: DEAD|DRAW|FLY, travelS}. " +
+                "FLAT paint: {front, back} — each an image's hash from upload_scene_image, stretched over the flat's downstage (front) or upstage (back) face; the openings still cut through it. " +
+                "DRAPE: {role: LEG|BORDER|TABS|CYC|BACKCLOTH, operation: DEAD|DRAW|FLY, travelS, fabric: CANVAS|MUSLIN|SHARKSTOOTH|BOBBINET (omit for velour, the only fabric that pleats; canvas is the flat painted cloth, muslin translucent, the two nets scrims), paint: {front, back} (image hashes from upload_scene_image, front the downstage side)}. A flown gauze is BACKCLOTH + FLY + SHARKSTOOTH; a traveller scrim TABS + DRAW. " +
                 "PLATFORM: {railHeightM and railEdge together, region: a stage region's name when the platform is that region's deck}. " +
                 "SEATING: {rows (≤26), seatsPerRow, rowPitchM, seatPitchM, firstRow ('A'), rakeM (rise per row), aisles: [{afterSeat, widthM}] (a gap in every row, seats keep their numbers), chair: THEATRE|BANQUET, frameColour} — rows run away from the stage (−y), seat 1 at the stage-right end, the row centred on x. THEATRE (the default) is a fixed auditorium seat; BANQUET a stacking banquet chair (padded seat, round-topped back, metal frame — gold unless frameColour says otherwise; finish colour is the upholstery), about 0.45 m wide, so a seatPitchM of 0.5 sets them nearly touching. " +
                 "OBJECT: {shape: BOX|CYLINDER|SHADE|DISC, flies, travelS}. " +
@@ -401,6 +403,17 @@ internal val setSceneTool = ToolDef(
         put("removeElements", stringArray)
         put("removeViewpoints", stringArray)
         prop("dryRun", "boolean", "Validate and report without writing. Default false.")
+    },
+)
+
+internal val uploadSceneImageTool = ToolDef(
+    name = "upload_scene_image",
+    description = "Store an image to paint on a cloth — a backcloth, a frontcloth, a gauze, a cut cloth, a flat — and answer its hash, width, height and whether it has transparent pixels. " +
+        "Then name the hash in set_scene: a DRAPE's or a FLAT's params.paint {front, back}. The image stretches over the face, so size the element to the image's aspect; transparent pixels cut holes. " +
+        "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk). Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it.",
+    inputSchema = objectSchema(required = listOf("mediaType", "base64")) {
+        enumProp("mediaType", listOf("image/png", "image/jpeg"))
+        prop("base64", "string", "The image file's bytes, base64-encoded (a data: URL's prefix is ignored).")
     },
 )
 
@@ -563,6 +576,7 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     setStageTool,
     setSceneTool,
     getSceneTool,
+    uploadSceneImageTool,
     renderViewTool,
     placeFixturesTool,
     getPromptBookTool,

@@ -274,4 +274,116 @@ class StageSceneTest {
         // A stored travel the piece no longer has (switched to DEAD) is ignored, not obeyed.
         assertNull(elementTravelS(DrapeParams(DrapeRole.LEG, DrapeOperation.DEAD, travelS = 4.0)))
     }
+
+    // ─── Fabric and paint (scrim plan session 1, D1, D4) ────────────────────────────────────────
+
+    private val front = "a".repeat(64)
+    private val back = "b".repeat(64)
+    private val held = setOf(front, back)
+
+    private fun parsePainted(kind: StageElementKind, text: String): Pair<ElementParams?, List<String>> {
+        val problems = mutableListOf<String>()
+        return parseElementParams(kind, obj(text), 12.0, 6.0, "params", problems, imageStored = { it in held }) to problems
+    }
+
+    @Test
+    fun `a drape's fabric and paint round-trip, canonical and case-insensitive`() {
+        val (params, problems) = parsePainted(
+            StageElementKind.DRAPE,
+            """{"role":"backcloth","operation":"fly","fabric":"sharkstooth","paint":{"front":"${front.uppercase()}","back":"$back"}}""",
+        )
+        assertEquals(emptyList(), problems)
+        val drape = assertIs<DrapeParams>(params)
+        assertEquals(DrapeFabric.SHARKSTOOTH, drape.fabric)
+        assertEquals(ScenePaint(front = front, back = back), drape.paint)
+        val text = encodeElementParams(StageElementKind.DRAPE, drape)
+        assertEquals(
+            """{"fabric":"SHARKSTOOTH","operation":"FLY","paint":{"back":"$back","front":"$front"},"role":"BACKCLOTH"}""",
+            text,
+        )
+        assertEquals(drape, readElementParams(StageElementKind.DRAPE, text))
+        assertEquals(setOf(front, back), paintHashesOf(text))
+
+        // Velour is the absence of a fabric: nothing is written for it.
+        val (velour, _) = parsePainted(StageElementKind.DRAPE, """{"role":"LEG"}""")
+        assertEquals("""{"role":"LEG"}""", encodeElementParams(StageElementKind.DRAPE, velour!!))
+    }
+
+    @Test
+    fun `a flat takes paint, its openings still beside it`() {
+        val (params, problems) = parsePainted(
+            StageElementKind.FLAT,
+            """{"openings":[{"kind":"DOOR","fromM":1,"widthM":1,"heightM":2}],"paint":{"back":"$back"}}""",
+        )
+        assertEquals(emptyList(), problems)
+        val flat = assertIs<FlatParams>(params)
+        assertEquals(ScenePaint(back = back), flat.paint)
+        assertEquals(1, flat.openings.size)
+    }
+
+    @Test
+    fun `an empty paint is written as absent`() {
+        for (text in listOf("""{"role":"CYC","paint":{}}""", """{"role":"CYC","paint":{"front":null,"back":null}}""", """{"role":"CYC","paint":null}""")) {
+            val (params, problems) = parsePainted(StageElementKind.DRAPE, text)
+            assertEquals(emptyList(), problems, text)
+            assertNull((params as DrapeParams).paint, text)
+            assertEquals("""{"role":"CYC"}""", encodeElementParams(StageElementKind.DRAPE, params), text)
+        }
+    }
+
+    @Test
+    fun `fabric and paint refusals are named, every one at once`() {
+        val unknown = "c".repeat(64)
+        val (params, problems) = parsePainted(
+            StageElementKind.DRAPE,
+            """{"role":"BACKCLOTH","fabric":"lace","paint":{"front":"$unknown","back":"nope","side":"x"}}""",
+        )
+        assertNull(params)
+        assertTrue("params.fabric must be one of CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET" in problems, problems.toString())
+        assertTrue("params.paint.front names no stored image" in problems, problems.toString())
+        assertTrue("params.paint.back must be an image's SHA-256: 64 hex characters" in problems, problems.toString())
+        assertTrue(problems.any { "params.paint: unknown field 'side'" in it }, problems.toString())
+
+        val (_, notString) = parsePainted(StageElementKind.DRAPE, """{"role":"LEG","paint":{"front":7},"fabric":3}""")
+        assertTrue("params.paint.front must be a string" in notString, notString.toString())
+        assertTrue("params.fabric must be a string" in notString, notString.toString())
+        val (_, notObject) = parsePainted(StageElementKind.FLAT, """{"paint":"$front"}""")
+        assertEquals(listOf("params.paint must be an object"), notObject)
+
+        // A kind that takes neither refuses both by name, not as unknown fields.
+        val (obj, wrongKind) = parsePainted(StageElementKind.OBJECT, """{"fabric":"canvas","paint":{"front":"$front"}}""")
+        assertNull(obj)
+        assertTrue("params.fabric is a drape's (a DRAPE); this OBJECT has none" in wrongKind, wrongKind.toString())
+        assertTrue("params.paint is a drape's or a flat's (a DRAPE or a FLAT); this OBJECT takes none" in wrongKind, wrongKind.toString())
+        val (_, flatFabric) = parsePainted(StageElementKind.FLAT, """{"fabric":"canvas"}""")
+        assertEquals(listOf("params.fabric is a drape's (a DRAPE); this FLAT has none"), flatFabric)
+    }
+
+    @Test
+    fun `an element's stored paint is let stand when this machine lacks the image`() {
+        val fields = StageElementFields(
+            name = "Forest", kind = StageElementKind.DRAPE, layer = StageElementLayer.SET,
+            positionX = 0.0, positionY = 5.0, positionZ = 0.0, yawDeg = 0.0,
+            widthM = 12.0, depthM = 0.05, heightM = 6.0,
+            finishColour = null, finishPattern = null, emissive = false,
+            params = obj("""{"role":"BACKCLOTH","paint":{"front":"$front"}}"""), hidden = false,
+        )
+        val refused = mutableListOf<String>()
+        assertNull(validateStageElement(fields, emptySet(), "", refused, imageStored = { false }))
+        assertEquals(listOf("params.paint.front names no stored image"), refused)
+        val kept = mutableListOf<String>()
+        assertNotNull(validateStageElement(fields, emptySet(), "", kept, imageStored = { false }, storedPaint = setOf(front)))
+        assertEquals(emptyList(), kept)
+        // Through set_scene's spelling the message carries the row.
+        val row = mutableListOf<String>()
+        validateStageElement(fields, emptySet(), "elements[0] ('Forest')", row)
+        assertEquals(listOf("elements[0] ('Forest').params.paint.front names no stored image"), row)
+    }
+
+    @Test
+    fun `paint hashes are read leniently from a stored document`() {
+        assertEquals(setOf(front), paintHashesOf("""{"paint":{"front":"$front","back":"short"}}"""))
+        assertEquals(emptySet(), paintHashesOf("not json"))
+        assertEquals(emptySet(), paintHashesOf("""{"paint":"$front"}"""))
+    }
 }

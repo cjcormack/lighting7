@@ -144,6 +144,14 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v23 added the scene's painted cloths (scrim plan P2): `DrapeParams.fabric` and the drape's and the
+// flat's `paint`, inside the element's params, and a top-level `sceneImages/{sha256}.{png|jpg}`
+// folder of the images they name — raw bytes, content-addressed, moved by `SceneImageRepoSync`. The
+// params keys alone would need no bump; the folder does, for v4's reason: a v22 reader lacks the
+// wipe-preserve and its next wipe-then-export push would delete every peer's images (and its
+// re-export of a painted element would keep the keys while the images went). MIN stays at 5: a
+// missing folder is no images, and every key defaults.
+//
 // v22 added fitted media to `FixturePatchJson` and `PatchPlacementJson` — `media`, a nested
 // `{slots: {<property>: {<option>: {gel?, gobo?}}}}` (fixture optics plan session 3). SUPPORTED moved
 // for v14's reason — a v21 reader would import every unit with the stock string and write the fitted
@@ -176,7 +184,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 22
+internal const val SUPPORTED_FORMAT_VERSION = 23
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -260,6 +268,11 @@ class ProjectImporter(private val state: State) {
         // sync-pull path hydrates in the engine instead, from the real git checkout.
         runCatching { PromptScriptRepoSync.hydrateStore(state, targetUuid, sourceDir) }
             .onFailure { logger.warn("Prompt-book PDF hydrate failed for imported project {}: {}", targetUuid, it.message) }
+        // The scene images (v23) the same way, and for the same reasons: an image missing here
+        // reads as an unpainted cloth, never as a failed import. This is also what fills a clone's
+        // store — cloning is export → import — so `ProjectCloner` needs nothing of its own.
+        runCatching { SceneImageRepoSync.hydrateStore(state, targetUuid, sourceDir) }
+            .onFailure { logger.warn("Scene image hydrate failed for imported project {}: {}", targetUuid, it.message) }
 
         return result
     }

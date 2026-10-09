@@ -82,6 +82,16 @@ object RecordHasher {
      */
     const val PROMPT_SCRIPTS_DIR = "promptScripts"
 
+    /**
+     * Repo-relative subdirectory holding the images painted on scene cloths
+     * (`{sha256}.{png|jpg}`, format v23). Binary and content-addressed like [PROMPT_SCRIPTS_DIR],
+     * and skipped everywhere it is. See [SceneImageRepoSync].
+     */
+    const val SCENE_IMAGES_DIR = "sceneImages"
+
+    /** The binary subtrees no text machinery may read: the record scan, `walkTree`, the remapper. */
+    val BINARY_DIRS: Set<String> = setOf(PROMPT_SCRIPTS_DIR, SCENE_IMAGES_DIR)
+
     fun fromRef(repo: Repository, ref: String): Map<RecordKey, RecordSnapshot> =
         groupBlobs(JGitClient.walkTree(repo, ref))
 
@@ -162,7 +172,7 @@ object RecordHasher {
                 // Skip subtrees that can never contain live records: `.git/` (huge, full of
                 // pack files / loose objects) and `tombstones/` (deletions, not records).
                 val rel = workingTreePath.relativize(dir).toString().replace(File.separatorChar, '/')
-                return if (rel == ".git" || rel == TOMBSTONES_DIR || rel == PROMPT_SCRIPTS_DIR) {
+                return if (rel == ".git" || rel == TOMBSTONES_DIR || rel in BINARY_DIRS) {
                     FileVisitResult.SKIP_SUBTREE
                 } else {
                     FileVisitResult.CONTINUE

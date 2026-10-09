@@ -300,6 +300,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                     // Content-addressed PDF store for this project is now unreachable.
                     deletedProjectUuid?.let { uuid ->
                         runCatching { state.promptScriptStoreRoot.resolve(uuid).toFile().deleteRecursively() }
+                        // And its scene images, originals and derived copies alike.
+                        runCatching { state.sceneImages.deleteProject(uuid) }
                         // Cloud-sync working tree (`<root>/{uuid}/repo`) — remove the whole
                         // per-project dir so a delete doesn't leave an orphaned git repo behind.
                         runCatching { state.syncWorkingTreeRoot.resolve(uuid).toFile().deleteRecursively() }
@@ -359,6 +361,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)
         routeApiRestProjectStageScene(state)
+        routeApiRestProjectSceneImages(state)
         routeApiRestProjectScenery(state)
         routeApiRestProjectEffects(state)
         routeApiRestProjectFixtureCommands(state)

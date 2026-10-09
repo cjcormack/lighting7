@@ -17,7 +17,12 @@ import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoStageElement
 import uk.me.cormack.lighting7.models.encodeSceneryState
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
+import uk.me.cormack.lighting7.models.DrapeFabric
 import uk.me.cormack.lighting7.models.DrapeOperation
+import uk.me.cormack.lighting7.models.FlatOpening
+import uk.me.cormack.lighting7.models.FlatParams
+import uk.me.cormack.lighting7.models.OpeningKind
+import uk.me.cormack.lighting7.models.ScenePaint
 import uk.me.cormack.lighting7.models.DrapeParams
 import uk.me.cormack.lighting7.models.DrapeRole
 import uk.me.cormack.lighting7.models.ElementStates
@@ -83,6 +88,19 @@ import java.time.Duration
 
 /** Name of the project [seedRichProject] creates. */
 const val RICH_PROJECT_NAME = "round-trip-rich"
+
+/**
+ * The scene images the fixture paints with (scrim plan session 1), made in code: a PNG with alpha
+ * (a cut cloth's front), a JPEG (its back) and an opaque PNG (the flat's). Media type and bytes,
+ * in that order; [seedRichProject] stores each in the project's scene-image store.
+ */
+val RICH_PROJECT_SCENE_IMAGES: List<Pair<String, ByteArray>> by lazy {
+    listOf(
+        "image/png" to scenePng(96, 48, alpha = true, seed = 11),
+        "image/jpeg" to sceneJpeg(96, 48, seed = 12),
+        "image/png" to scenePng(40, 40, seed = 13),
+    )
+}
 
 /** SHA-256 the fixture's prompt book claims as its script hash. */
 const val RICH_PROJECT_SCRIPT_HASH = "a2c4e6081a2c4e6081a2c4e6081a2c4e6081a2c4e6081a2c4e6081a2c4e60810"
@@ -210,6 +228,44 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // travelS (scenery-programmer plan D6): an optional param, off its null default.
             DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0), travelS = 4.5),
         )
+    }
+    // v23: the painted cloths (scrim plan session 1). A muslin drape painted front (an image with
+    // holes) and back (a JPEG), and a flat painted on its front, every key off its default; the
+    // images go into the store as an upload would put them, so the exporter has bytes to copy.
+    val (cutFront, cutBack, flatFront) = RICH_PROJECT_SCENE_IMAGES.map { (type, bytes) ->
+        state.sceneImages.store(project.uuid.toString(), bytes, type).hash
+    }
+    DaoStageElement.new {
+        this.project = project
+        name = "Day/night cloth"
+        kind = StageElementKind.DRAPE.name
+        layer = StageElementLayer.SET.name
+        positionY = 6.5
+        widthM = 9.6; depthM = 0.05; heightM = 4.8
+        params = encodeElementParams(
+            StageElementKind.DRAPE,
+            DrapeParams(
+                DrapeRole.BACKCLOTH, DrapeOperation.FLY, travelS = 8.0,
+                fabric = DrapeFabric.MUSLIN, paint = ScenePaint(front = cutFront, back = cutBack),
+            ),
+        )
+        sortOrder = 3
+    }
+    DaoStageElement.new {
+        this.project = project
+        name = "Cottage flat"
+        kind = StageElementKind.FLAT.name
+        layer = StageElementLayer.SET.name
+        positionX = -3.0; positionY = 3.0
+        widthM = 2.4; depthM = 0.1; heightM = 2.4
+        params = encodeElementParams(
+            StageElementKind.FLAT,
+            FlatParams(
+                openings = listOf(FlatOpening(OpeningKind.DOOR, fromM = 0.7, widthM = 0.9, heightM = 2.1)),
+                paint = ScenePaint(front = flatFront),
+            ),
+        )
+        sortOrder = 4
     }
     DaoStageViewpoint.new {
         this.project = project

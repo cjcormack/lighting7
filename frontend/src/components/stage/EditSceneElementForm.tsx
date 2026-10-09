@@ -40,6 +40,9 @@ import {
   type Params,
 } from './elementDraft'
 import { OwnerEditor } from './OwnerEditor'
+import { PaintField } from './PaintField'
+import { useSceneImageListQuery, useSetElementDisplayDetailMutation } from '@/store/sceneImages'
+import { paintOf, withPaintSide, type PaintSide, type SceneImageInfo } from '@/api/sceneImageApi'
 
 /**
  * A scene element's form (stage-view plan session 5, `Edit.dc.html` §3): the body the docked
@@ -59,6 +62,13 @@ import { OwnerEditor } from './OwnerEditor'
  * its owner and never here. Beside the base states, a piece that travels — a DRAW or FLY drape, a
  * flown object — takes its **travel time** (`travelS`, D6): how long a full travel takes when no
  * cue's own clock moves it. `withKindParam` drops it with the travel.
+ *
+ * *Fabric and paint* (scrim plan §4, session 1): a drape's **Fabric** — velour unless it says
+ * otherwise (D1) — and on a drape or a flat the two painted faces (`PaintField`, D4), each an image
+ * in the desk's store named by its hash in `params.paint`. **Full detail** is this machine's switch
+ * for a hero cloth's 4096 px copy (D12): it is not part of the element, so it writes at once through
+ * `PUT …/display-detail` rather than waiting for Save. Nothing new is drawn yet — the Stage view
+ * draws every fabric, painted or not, as velour until the session that draws them.
  */
 
 interface EditSceneElementFormProps {
@@ -80,6 +90,15 @@ const DRAPE_OPERATIONS = ['DEAD', 'DRAW', 'FLY'] as const
 const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
 const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
 const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
+
+/** A drape's fabric (scrim plan D1): absent is velour, the only one that pleats. */
+const DRAPE_FABRICS = ['CANVAS', 'MUSLIN', 'SHARKSTOOTH', 'BOBBINET'] as const
+const FABRIC_LABELS: Record<string, string> = {
+  CANVAS: 'Canvas',
+  MUSLIN: 'Muslin (translucent)',
+  SHARKSTOOTH: 'Sharkstooth scrim',
+  BOBBINET: 'Bobbinet scrim',
+}
 
 /** `STAGE_LEFT` → `Stage left`. */
 function words(value: string): string {
@@ -113,6 +132,12 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
     const [updateElement, { isLoading: isUpdating }] = useUpdateStageElementMutation()
     const [deleteElement, { isLoading: isDeleting }] = useDeleteStageElementMutation()
     const { data: regions } = useStageRegionListQuery(projectId, { skip: element.kind !== 'PLATFORM' })
+    const paintable = element.kind === 'DRAPE' || element.kind === 'FLAT'
+    const { data: imageList, isSuccess: imagesLoaded } = useSceneImageListQuery(projectId, { skip: !paintable })
+    const images = useMemo(() => new Map<string, SceneImageInfo>((imageList ?? []).map((i) => [i.hash, i])), [imageList])
+    const [setDisplayDetail, { isLoading: isSettingDetail }] = useSetElementDisplayDetailMutation()
+    // The switch writes at once, so it keeps its own state rather than the draft's; a refusal puts it back.
+    const [fullDetail, setFullDetail] = useState(element.fullDetail === true)
 
     useImperativeHandle(ref, () => ({ setPosition: (next) => setDraft((prev) => ({ ...prev, ...next })) }), [])
 
@@ -150,10 +175,11 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
           openings.forEach((_, i) =>
             p([`openings[${i}]`, ...['kind', 'fromM', 'widthM', 'heightM', 'sillM'].map((k) => `openings[${i}].${k}`)]),
           )
+          p(['paint', 'paint.front', 'paint.back'])
           break
         }
         case 'DRAPE':
-          p(['role', 'operation'])
+          p(['role', 'operation', 'fabric', 'paint', 'paint.front', 'paint.back'])
           break
         case 'PLATFORM':
           p(['railHeightM', 'railEdge', 'regionUuid'])
@@ -238,6 +264,18 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
         />
       </Field>
     )
+
+    const paint = paintOf(params)
+    const setPaint = (side: PaintSide, hash: string | null) => setParam('paint', withPaintSide(paint, side, hash))
+    const toggleFullDetail = async (full: boolean) => {
+      setFullDetail(full)
+      try {
+        await setDisplayDetail({ projectId, elementId: element.id, full }).unwrap()
+      } catch {
+        // The middleware has said why; put the switch back where the desk has it.
+        setFullDetail(!full)
+      }
+    }
 
     const openings = (Array.isArray(params.openings) ? params.openings : []) as Params[]
     const aisles = (Array.isArray(params.aisles) ? params.aisles : []) as Params[]
@@ -427,6 +465,18 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
               <div className="grid grid-cols-2 gap-2">
                 {paramSelect('role', 'Role', DRAPE_ROLES)}
                 {paramSelect('operation', 'Moves by', DRAPE_OPERATIONS, 'Dead (default)')}
+                <div className="col-span-2">
+                  <Field id="element-fabric" label="Fabric" errors={filed.at('params.fabric')}>
+                    <NativeSelect
+                      id="element-fabric"
+                      value={str(params.fabric).toUpperCase()}
+                      onChange={(v) => setParam('fabric', v || null)}
+                      options={DRAPE_FABRICS}
+                      labels={FABRIC_LABELS}
+                      none="Velour (default)"
+                    />
+                  </Field>
+                </div>
               </div>
             )}
             {kind === 'PLATFORM' && (
@@ -528,6 +578,38 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
               </div>
             )}
           </Section>
+
+          {paintable && (
+            <Section title="Paint">
+              {(['front', 'back'] as const).map((side) => (
+                <div key={side} className="space-y-1">
+                  <PaintField
+                    projectId={projectId}
+                    side={side}
+                    hash={paint[side] ?? null}
+                    images={images}
+                    imagesLoaded={imagesLoaded}
+                    widthM={draft.widthM}
+                    heightM={draft.heightM}
+                    onChange={(hash) => setPaint(side, hash)}
+                    onMatchHeight={(h) => set('heightM', h)}
+                  />
+                  <FieldErrors errors={filed.at(`params.paint.${side}`)} />
+                </div>
+              ))}
+              <FieldErrors errors={filed.at('params.paint')} />
+              <Check
+                id="element-full-detail"
+                label="Full detail (4096 px, this machine)"
+                checked={fullDetail}
+                disabled={isSettingDetail}
+                onChange={(v) => void toggleFullDetail(v)}
+              />
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                A hero cloth&apos;s sharper copy, on this desk only. It changes at once, without Save.
+              </p>
+            </Section>
+          )}
 
           <Section title="Finish">
             <div className="grid grid-cols-2 gap-2">
@@ -683,17 +765,26 @@ function Check({
   checked,
   onChange,
   errors,
+  disabled,
 }: {
   id: string
   label: string
   checked: boolean
   onChange: (v: boolean) => void
   errors?: string[]
+  disabled?: boolean
 }) {
   return (
     <div className="space-y-1">
       <label htmlFor={id} className="flex items-center gap-2 text-sm">
-        <input id={id} type="checkbox" className="size-4 accent-primary" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <input
+          id={id}
+          type="checkbox"
+          className="size-4 accent-primary"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
         {label}
       </label>
       <FieldErrors errors={errors} />
@@ -711,6 +802,7 @@ function NativeSelect({
   onChange,
   options,
   none,
+  labels,
   ...rest
 }: {
   id: string
@@ -718,6 +810,8 @@ function NativeSelect({
   onChange: (v: string) => void
   options: readonly string[]
   none?: string
+  /** Each option's words, where they are not the name's own. */
+  labels?: Record<string, string>
   'aria-label'?: string
 }) {
   return (
@@ -726,7 +820,7 @@ function NativeSelect({
       {none == null && !options.includes(value) && <option value="">—</option>}
       {options.map((o) => (
         <option key={o} value={o}>
-          {words(o)}
+          {labels?.[o] ?? words(o)}
         </option>
       ))}
     </select>

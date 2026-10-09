@@ -35,6 +35,12 @@ export interface StageElementDto {
   params: Record<string, unknown>
   hidden: boolean
   sortOrder: number
+  /**
+   * This machine loads the 4096 px copy of the element's paint rather than the 2048 (scrim plan
+   * D12) — a per-machine switch, never synced; `PUT …/display-detail` sets it. Absent from a desk
+   * that predates it.
+   */
+  fullDetail?: boolean
 }
 
 /** A create; every field but the name and kind defaults. */
