@@ -67,8 +67,8 @@ import { paintOf, withPaintSide, type PaintSide, type SceneImageInfo } from '@/a
  * otherwise (D1) — and on a drape or a flat the two painted faces (`PaintField`, D4), each an image
  * in the desk's store named by its hash in `params.paint`. **Full detail** is this machine's switch
  * for a hero cloth's 4096 px copy (D12): it is not part of the element, so it writes at once through
- * `PUT …/display-detail` rather than waiting for Save. Nothing new is drawn yet — the Stage view
- * draws every fabric, painted or not, as velour until the session that draws them.
+ * `PUT …/display-detail` rather than waiting for Save. The Stage view draws both (session 2): only
+ * velour pleats, so a drape's **Depth** says it folds velour only ([DRAPE_DEPTH_HINT]).
  */
 
 interface EditSceneElementFormProps {
@@ -90,6 +90,9 @@ const DRAPE_OPERATIONS = ['DEAD', 'DRAW', 'FLY'] as const
 const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
 const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
 const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
+
+/** What a drape's Depth means (scrim plan §4): the pleats', and only velour has them (D2). */
+export const DRAPE_DEPTH_HINT = 'The depth of the pleats. Only velour folds; every other fabric hangs flat.'
 
 /** A drape's fabric (scrim plan D1): absent is velour, the only one that pleats. */
 const DRAPE_FABRICS = ['CANVAS', 'MUSLIN', 'SHARKSTOOTH', 'BOBBINET'] as const
@@ -348,6 +351,7 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
                 {numberField('element-h', 'Height', draft.heightM, (v) => set('heightM', v), 'heightM')}
               </div>
             )}
+            {kind === 'DRAPE' && <p className="text-[11px] leading-snug text-muted-foreground">{DRAPE_DEPTH_HINT}</p>}
           </Section>
 
           <Section title={kindLabelFor(kind)}>

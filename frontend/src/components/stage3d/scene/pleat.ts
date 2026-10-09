@@ -68,7 +68,7 @@ function sineFullness(k: number): number {
 /** The slope scale `2πA / pitch` a sine has at [fullness]. */
 function slopeForFullness(fullness: number): number {
   let lo = 0
-  let hi = 8
+  let hi = 32
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2
     if (sineFullness(mid) < fullness) lo = mid
@@ -109,10 +109,15 @@ export function pleatShape(
   const fullness = cyc ? CYC_FULLNESS : FULLNESS_MIN + (FULLNESS_MAX - FULLNESS_MIN) * t
   const amplitudeM = depth / 2
   const pitchM = (2 * Math.PI * amplitudeM) / slopeForFullness(fullness)
-  const random = seededRandom(`${element.uuid}:${part}`)
+  return { pitchM, amplitudeM, fullness, warp: pleatWarp(`${element.uuid}:${part}`, pitchM) }
+}
+
+/** The phase's wander for a fold of [pitchM], from a noise seeded by [seed]. */
+function pleatWarp(seed: string, pitchM: number): PleatWarp[] {
+  const random = seededRandom(seed)
   const weights = Array.from({ length: PLEAT_WARP_TERMS }, () => 0.2 + random())
   const total = weights.reduce((s, w) => s + w, 0)
-  const warp = weights.map((w) => {
+  return weights.map((w) => {
     const wavelength = pitchM * (WARP_MIN_PITCHES + WARP_SPAN_PITCHES * random())
     // a·k at most its share of the wander, so the phase's rate stays within ±PITCH_WANDER of ω.
     return {
@@ -121,7 +126,36 @@ export function pleatShape(
       theta: 2 * Math.PI * random(),
     }
   })
-  return { pitchM, amplitudeM, fullness, warp }
+}
+
+/**
+ * The pitch a gathered cloth folds at (scrim plan D2): fixed, so only the fold's depth moves as the
+ * cloth gathers, and its folds stay where they are along it. An estimate, judged by eye.
+ */
+export const GATHER_PITCH_M = 0.15
+
+/**
+ * **A cloth that hangs flat, folded by gathering** (scrim plan D2): a drawn half of any fabric but
+ * velour, [fullness] times as wide as the width it is gathered into — 1 where it hangs open, flat,
+ * rising as it is drawn. The fold is a sine at [GATHER_PITCH_M] whose depth gives the cloth that
+ * fullness, so it is 0 at 1 and grows with the gathering, no deeper than [PLEAT_DEPTH_MAX_M]. The
+ * wander is the element's own, as a velour's is ([pleatShape]), and does not move with [fullness]:
+ * a draw changes the fold's depth alone, which the surface shader takes as a uniform.
+ */
+export function gatherShape(
+  element: Pick<StageElementDto, 'uuid'>,
+  part: string,
+  fullness: number,
+): PleatShape {
+  const f = Number.isFinite(fullness) ? Math.max(1, fullness) : 1
+  const pitchM = GATHER_PITCH_M
+  const amplitudeM = f <= 1 ? 0 : Math.min(PLEAT_DEPTH_MAX_M / 2, (slopeForFullness(f) * pitchM) / (2 * Math.PI))
+  return {
+    pitchM,
+    amplitudeM,
+    fullness: amplitudeM > 0 ? sineFullness((2 * Math.PI * amplitudeM) / pitchM) : 1,
+    warp: pleatWarp(`${element.uuid}:${part}`, pitchM),
+  }
 }
 
 /** The fold's phase [x] metres across the cloth from its centre. */

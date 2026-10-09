@@ -246,6 +246,13 @@ describe('the finish defaults, by kind, role and part', () => {
     expect(finishLobes('DRAPE', 'LEG')).toBe(FINISH_LOBES.VELOUR)
     expect(finishLobes('DRAPE', 'BACKCLOTH')).toBe(FINISH_LOBES.VELOUR)
     expect(finishLobes('DRAPE', 'CYC')).toBe(FINISH_LOBES.MATTE)
+    // A drape's fabric outranks its role (scrim plan session 2): canvas and muslin matte, the nets net.
+    expect(finishLobes('DRAPE', 'LEG', 'body', 'CANVAS')).toBe(FINISH_LOBES.MATTE)
+    expect(finishLobes('DRAPE', 'BACKCLOTH', 'body', 'MUSLIN')).toBe(FINISH_LOBES.MATTE)
+    expect(finishLobes('DRAPE', 'BACKCLOTH', 'body', 'SHARKSTOOTH')).toBe(FINISH_LOBES.NET)
+    expect(finishLobes('DRAPE', 'CYC', 'body', 'BOBBINET')).toBe(FINISH_LOBES.NET)
+    expect(finishLobes('DRAPE', 'LEG', 'body', null)).toBe(FINISH_LOBES.VELOUR)
+    expect(lobeDefines(FINISH_LOBES.NET)).toEqual({ orenNayar: true, sheen: false, ggx: false })
     expect(finishLobes('FLAT', null)).toBe(FINISH_LOBES.PAINT)
     expect(finishLobes('OBJECT', null)).toBe(FINISH_LOBES.PAINT)
     expect(finishLobes('PLATFORM', null)).toBe(FINISH_LOBES.DECK)

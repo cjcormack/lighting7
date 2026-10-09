@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux'
 import { Stage3D } from '../Stage3D'
 import type { StageCapture, StageCaptureHandle } from '../CaptureCanvas'
 import { resolveViewpoint } from '../savedViewpoints'
+import { paintTextures } from '../scene/paintTextures'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from '../useStageView'
 import { DEFAULT_SCENE_LAYERS, useLightBudget } from '../scene/sceneView'
 import { StageChannelSourceProvider } from '../../../hooks/useChannelSource'
@@ -61,8 +62,9 @@ const noop = () => {}
  * read. The container sits offscreen and the canvas is never attached, so nothing on screen moves.
  *
  * **It draws once everything is in**: every row read afresh, the viewpoint resolved, the scene
- * mounted (its lazy font included), and a derived source holding what it will hold — then a few
- * frames, then the read. Unmounting it (the host does, on the outcome) disposes the renderer and
+ * mounted (its lazy font included), a derived source holding what it will hold, and every painted
+ * cloth's image in (`scene/paintTextures.ts` — missing ones settle too, and draw unpainted) — then a
+ * few frames, then the read. Unmounting it (the host does, on the outcome) disposes the renderer and
  * loses its context on purpose.
  */
 export default function StageRenderJob({
@@ -137,6 +139,7 @@ export default function StageRenderJob({
 
   const [sourceSettled, setSourceSettled] = useState(false)
   const [handle, setHandle] = useState<StageCaptureHandle | null>(null)
+  const [paintLoading, setPaintLoading] = useState(false)
   const capture = useMemo<StageCapture>(
     () => ({ width, height, onReady: setHandle, onError: (reason) => finish({ reason }) }),
     [width, height, finish],
@@ -155,6 +158,12 @@ export default function StageRenderJob({
     let cancelled = false
     void (async () => {
       try {
+        // The scene asked for its images as it mounted, in layout effects, so they are all asked
+        // for by now; each part binds its own as it arrives, a task or so before the frames below.
+        setPaintLoading(true)
+        await paintTextures.settled()
+        if (cancelled) return
+        setPaintLoading(false)
         await handle.draw(SETTLE_FRAMES)
         const png = await handle.toPng()
         if (!cancelled) finish({ png })
@@ -175,7 +184,9 @@ export default function StageRenderJob({
         ? 'waiting for the scene to mount'
         : !sourceSettled
           ? `waiting for the ${request.source} source`
-          : 'while drawing'
+          : paintLoading
+            ? 'waiting for the painted cloths\' images'
+            : 'while drawing'
   const waitingRef = useRef(waiting)
   waitingRef.current = waiting
   useEffect(() => {

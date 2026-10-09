@@ -481,6 +481,25 @@ is no socket frame. Refusals (`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`,
 `REMOTE_COMMANDS_DISABLED`) toast by the desk's words; a cut-short hold warns. The remote-access tab
 carries *Allow fixture commands over remote access* (`allowCommands`), which MCP is held to as well.
 
+**Painted cloths hang flat, and carry their pictures** (scrim plan session 2;
+`docs/stage-vis-engineering.md` §"Painted cloths"). Only velour pleats: every other `fabric` builds a
+flat `sheet` part, and a drawn half of one folds only as it gathers (`pleat.ts`'s `gatherShape`, flat
+at `open` 0, its depth a uniform so a draw rebuilds no material). Canvas and muslin are `MATTE`, the
+nets a new `NET` preset, nets and muslin off-white unless `finishColour` says otherwise. A drape's or a
+flat's `paint` is the finish's (`PartFinish.paint`) and each painted part carries a `uv` rect — a flat's
+pieces their share of its face, a drawn cloth's halves ½ each, compressed as they gather so the image
+stays whole — which `partGeometry` writes with an `aPaintFace` attribute (downstage 1, upstage −1,
+edges 0). The surface shader's `PAINT` define samples the images as the albedo by face, so every
+light and the work lights' lift see them as any finish, and discards where **either** image's alpha
+is below ½ (holes in the surface only; light passes them from session 3). The textures come from one
+**module-level** cache, `scene/paintTextures.ts` — keyed by hash and variant, `?variant=display` or
+`detail` for an element with `fullDetail`, mipmapped and anisotropic, loaded once, disposed 5 s after
+nothing holds it — never a React context, which a `render_view` capture would not bridge. A part binds
+its images as uniforms when they land (`setPaintTextures`, no recompile) and **asks for the frame**;
+a missing image settles unpainted, never an error; a Full detail switch keeps the 2048 copy until the
+4096 one is in; and `StageRenderJob` awaits `paintTextures.settled()` before it draws. The element
+sheet's Depth hint says it folds only velour (`DRAPE_DEPTH_HINT`).
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group

@@ -118,6 +118,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a mesh's shadow land — a body, a seat, an imported model — or a round one; boxes cast theirs already |
 | [`FU-STAGE-BOUNCE-FILL`](#fu-stage-bounce-fill) | Trigger | Stage | a plot reads wrong because a bright cyc or floor pool lights nothing round it |
 | [`FU-SCENE-IMAGE-WEBP`](#fu-scene-image-webp) | Trigger | Stage | a designer's cloth images arrive as WebP |
+| [`FU-STAGE-PAINT-ALL-SURFACES`](#fu-stage-paint-all-surfaces) | Trigger | Stage | a set the painted drapes and flats cannot dress |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
@@ -2367,6 +2368,23 @@ them first is a real cost. **Then**: a pure-JVM WebP reader (no native code — 
 gaining `WEBP` (`.webp`, `image/webp`, its signature `RIFF….WEBP`), and the header-first size check
 proved for it as `SceneImageStoreTest` proves it for PNG. The derived copies are PNG either way, so
 nothing downstream changes; the repo folder takes the new extension, a `formatVersion` question.
+
+### `FU-STAGE-PAINT-ALL-SURFACES`
+
+**Paint beyond drapes and flats** · Trigger · scrim plan D14 / §8, 2026-10-09
+
+Only a drape and a flat take `params.paint` (scrim plan D4): the backend refuses it on any other kind,
+and the Stage view's builders paint only those two (`builders/drape.ts`, `builders/flat.ts`, the
+`PAINT` define in `surfaceShader.ts`). A room, a proscenium, a platform and an object draw their
+finish's colour and pattern. **Trigger**: a set the two cannot dress — a painted floor cloth that must
+lie on a rostrum, a painted portal, a prop with a picture on it — and a flat or a drape standing in
+for it reads wrong. **Then**: `paint` on the kind's params (its `parseElementParams` arm, the store's
+reference scan and the exporter's image list, which collect by hash so need nothing new beyond the
+kind), and a `uv` on the builder's parts. A pros's downstage face is a box's downstage face, which
+`partGeometry` already paints from its `uv` rect as a flat's pieces are (`aPaintFace` 1 there);
+anything else is new work in `partGeometry`'s `paintUvs`, which paints only a box's downstage and
+upstage faces and reads `u, v` from the part's x and z — a platform's top needs its own face code and
+its x and y, and a cylinder or a disc its own unwrap.
 
 ### `FU-STAGE-FOCUS-FRINGE`
 

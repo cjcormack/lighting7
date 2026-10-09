@@ -846,7 +846,7 @@ export function Stage3D({
           onDragEnd={enableOrbit}
         />
       )}
-      {builds.length > 0 && <StageSceneElements builds={builds} seatPicking={picking} />}
+      {builds.length > 0 && <StageSceneElements projectId={projectId} builds={builds} seatPicking={picking} />}
       {/* Confetti on every fire, real or rehearsed (stage-view plan session 9). Not in a one-frame
           render: a capture draws the stage, not a burst in flight. */}
       {capture == null && (

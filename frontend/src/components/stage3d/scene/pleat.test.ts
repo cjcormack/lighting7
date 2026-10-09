@@ -7,6 +7,8 @@ import {
   foldLight,
   FULLNESS_MAX,
   FULLNESS_MIN,
+  GATHER_PITCH_M,
+  gatherShape,
   PITCH_WANDER,
   PLEAT_GLSL,
   PLEAT_WARP_TERMS,
@@ -18,6 +20,7 @@ import {
   pleatShift,
   pleatSlope,
   pleatUniformValues,
+  PLEAT_DEPTH_MAX_M,
   TROUGH_DARKEN,
   troughAmbient,
   type PleatShape,
@@ -344,5 +347,40 @@ describe('a face sees only its own side of the cloth', () => {
     expect(pleatFaceSeesLamp(0.1, false, sine)).toBe(false)
     expect(pleatFaceSeesLamp(-0.1, true, deep)).toBe(true)
     expect(pleatFaceSeesLamp(-0.1, true, sine)).toBe(false)
+  })
+})
+
+describe('cloth gathered as it is drawn (scrim plan D2)', () => {
+  it('folds not at all while it hangs open, and deeper the more it is gathered, never past a drape\'s deepest', () => {
+    expect(gatherShape({ uuid: 'g' }, 'sr', 1).amplitudeM).toBe(0)
+    expect(gatherShape({ uuid: 'g' }, 'sr', 0.5).amplitudeM).toBe(0)
+    let last = 0
+    for (const f of [1.05, 1.2, 1.5, 2, 3, 4, 6.25]) {
+      const a = gatherShape({ uuid: 'g' }, 'sr', f).amplitudeM
+      expect(a).toBeGreaterThanOrEqual(last)
+      expect(a).toBeLessThanOrEqual(PLEAT_DEPTH_MAX_M / 2)
+      last = a
+    }
+    expect(last).toBe(PLEAT_DEPTH_MAX_M / 2)
+  })
+
+  it('hangs the cloth it is given in the width it is gathered into, until the fold is as deep as a drape folds', () => {
+    for (const f of [1.2, 1.5, 2]) {
+      const fold = gatherShape({ uuid: `gather-${f}` }, 'sl', f)
+      expect(fold.pitchM).toBe(GATHER_PITCH_M)
+      expect(fold.fullness).toBeCloseTo(f, 3)
+      // The drawn sine's own length agrees, wander and all, within the wander's effect.
+      expect(drawnFullness(fold, 3)).toBeCloseTo(f, 1)
+    }
+  })
+
+  it('keeps its pitch and wander as it gathers, so a draw moves only the depth of its folds', () => {
+    const a = gatherShape({ uuid: 'g' }, 'sr', 1.3)
+    const b = gatherShape({ uuid: 'g' }, 'sr', 2.8)
+    expect(b.pitchM).toBe(a.pitchM)
+    expect(b.warp).toEqual(a.warp)
+    expect(b.amplitudeM).toBeGreaterThan(a.amplitudeM)
+    // Each half wanders its own way.
+    expect(gatherShape({ uuid: 'g' }, 'sl', 1.3).warp).not.toEqual(a.warp)
   })
 })

@@ -1702,9 +1702,11 @@ paint. Both are refused **by name** on any other kind (`params.fabric is a drape
 and a hash the store does not hold is `params.paint.front names no stored image` — except one the
 element already carries, which is let stand as a dangling region is: a partial import leaves an
 element whose image is missing on this machine, and a rename must not be refused for it. Hashes are
-stored lower-case, and an empty `paint` (`{}`, or both sides null) is written as absent. **Nothing
-is drawn from them yet**: until scrim session 2 every fabric, painted or not, renders as today's
-velour. The keys travel inside `params`; the images travel beside them at `formatVersion` 23
+stored lower-case, and an empty `paint` (`{}`, or both sides null) is written as absent. The Stage
+view draws both since scrim session 2: every fabric but velour hangs flat, a drawn one folding only
+as it gathers, and the images lie on the cloth's two sides or the flat's two faces, alpha below half
+cutting a hole (`frontend/docs/stage-vis-engineering.md` §"Painted cloths"). Light does not pass a
+net or a hole yet (sessions 3–5). The keys travel inside `params`; the images travel beside them at `formatVersion` 23
 (`docs/sync-engineering.md` §"Version 23 — painted cloths").
 
 **The scene-image store** (`state/SceneImageStore.kt`, `State.sceneImages`) holds the originals
