@@ -7,10 +7,10 @@ Answering its questions, he widened the scope to painted cloths of every kind, f
 about to work on: "Can we go further and add support for painting all cloths? … let's include them
 now."
 
-This record holds the proposal, the pictures and the answers. There is no plan yet; one would follow
-the stage-light plan's shape, at `../scrim-plan.md`.
+This record holds the proposal, the pictures and the answers. The engineering plan is
+[`../scrim-plan.md`](../scrim-plan.md); where the two disagree, the plan wins.
 
-**Status: proposed — scope agreed (below), not yet planned, nothing built.**
+**Status: scope agreed (below), planned, awaiting approval, nothing built.**
 
 | File | What it is |
 | --- | --- |
@@ -29,6 +29,9 @@ the stage-light plan's shape, at `../scrim-plan.md`.
 | Translucent day/night cloths? | Yes, with front and back paint. |
 | Where do images come from? | Upload on the desk, and an MCP upload tool. No fetch by URL. |
 | Warn when a scrim reads solid from a seat? | Yes, a hint on seat views. |
+| Do scrims and cut cloths share the haze's list? | Yes: one shared list of eight, nearest the eye first. |
+| Does a painted velour fold its paint? | Yes: paint follows the pleats; canvas is the flat painted cloth. |
+| Is 2048 px sharp enough? | 2048 px for every cloth, with 4096 px per cloth on request (machine-local). |
 | Which lands first? | Whichever makes development cleanest; both are needed before the pantomime, with time to land both properly. |
 
 ## Sources
@@ -63,7 +66,7 @@ Every drape is plain velour, opaque, in five places:
 
 - **D1** `DrapeParams.fabric: CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET`, absent = velour. Fabric is a
   separate choice from role and operation, so every use is a combination.
-- **D2** Only velour pleats; a drawn cloth folds as it gathers.
+- **D2** Only velour pleats, and paint follows its pleats; a drawn cloth folds as it gathers.
 - **D3** A scrim passes `open(θ) = (1 − r)·max(0, 1 − r/cos θ)` for beams and eyes alike (sharkstooth
   r 0.30, bobbinet 0.15, estimates); gathered net stacks as `open^c`.
 - **D4** `paint: {front?, back?}` on drapes and flats, each a stored image's SHA-256, stretched over
@@ -77,11 +80,11 @@ Every drape is plain velour, opaque, in five places:
   multiplies by each crossing's share (a collider kind, a mask atlas of at most 32).
 - **D9** A scrim draws as a premultiplied blend with no depth write, threads wrapping grazing light
   and glowing faintly from behind; a cut cloth discards its holes.
-- **D10** The haze splits at each transmitting plane, by the beam's crossing and by the eye's, from a
-  list of four.
+- **D10** The haze splits at each transmitting plane, by the beam's crossing and by the eye's, from one
+  list of eight shared with cut cloths, nearest the eye first.
 - **D11** Uploads from the element sheet, REST, and MCP `upload_scene_image`.
-- **D12** The Stage view loads a derived 2048 px display copy with mipmaps; the original is stored
-  and synced.
+- **D12** The Stage view loads a derived 2048 px display copy with mipmaps, or 4096 px for a cloth
+  switched to Full detail on this machine; the original is stored and synced.
 - **D13** Seat views flag a scrim the seat sees at below half its head-on `open`.
 - **D14** Out of scope: moiré, a visible weave, projection mapping, painted surfaces other than drapes
   and flats, and bounce light.
@@ -110,11 +113,8 @@ but not its optics: no gobos, no lens focus, and `I / (d² + 4)` falloff. It app
 and D8–D10 as written, so the pictures show what the rules do, not what was painted to look right.
 Its tuning numbers would be re-judged in the harness scenes (session 6).
 
-## Open, for the plan to settle
+## Since the record
 
-1. Whether scrims and cut cloths share the haze's list of transmitting planes, and its size (a panto
-   flies several borders at once; proposed: one shared list of eight, nearest the eye first).
-2. Whether a painted velour leg folds its paint with its pleats (proposed) or paint forces a cloth
-   flat.
-3. Whether the 2048 px display copy is sharp enough for a hero frontcloth from the front row (about
-   6 mm a pixel on 12 m), with an optional 4096 px copy as the fallback.
+The plan settles two things the record left loose: uploads are PNG and JPEG only (the JVM decodes
+both with no new dependency; WebP is `FU-SCENE-IMAGE-WEBP`), and an image no element has referenced
+for 7 days is pruned from a machine's store at project load.

@@ -205,7 +205,7 @@
 
   <main>
     <header id="glance">
-      <span class="eyebrow">Stage view · design record · proposed 2026-10-09 · revised with Chris's answers</span>
+      <span class="eyebrow">Stage view · design record · 2026-10-09 · scope agreed, plan in scrim-plan.md</span>
       <h1>Scrims and painted cloths in the Stage view</h1>
       <p class="lede">A pantomime is built from cloths: painted backcloths and frontcloths, cut cloths and foliage borders, a gauze for the transformation, and a day cloth that turns to night when it is lit from behind. Today the Stage view draws every drape as plain pleated velour that stops every beam. This record shows what the view would look like with those cloths modelled properly, and what the desk needs to get there.</p>
       <div class="facts">
@@ -396,7 +396,7 @@
           <ul class="plain small">
             <li><code>DrapeParams.fabric: CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET</code>, absent meaning velour as today. Canvas is a flat, opaque, matte painted cloth. Muslin is flat and translucent. The two nets are scrims.</li>
             <li><code>paint: { front?, back? }</code> on <code>DrapeParams</code> and <code>FlatParams</code>, each the SHA-256 of a stored image. On a flat, the front is its downstage face and its openings still cut through. <code>back</code> is the upstage face, and on muslin it is the night side.</li>
-            <li>Every fabric but velour hangs flat, so <code>depthM</code> pleats only velour. A drawn cloth folds as it gathers.</li>
+            <li>Every fabric but velour hangs flat, so <code>depthM</code> pleats only velour, and a painted velour folds its paint with its pleats. A drawn cloth folds as it gathers.</li>
             <li>The image stretches over the element's width and height. The sheet warns when the two aspects differ by more than 2 % and offers <i>Match height to image</i>.</li>
             <li>A scrim's or muslin's default colour is off-white, unless <code>finishColour</code> says otherwise, the way a cyc's is. Under paint, the finish colour is the unpainted back.</li>
             <li>The MCP vocabulary in <code>SetupToolSchemas.kt</code> gains both keys, so <code>set_scene</code> can build one: <code>DRAPE: {role, operation, fabric, paint, travelS}</code>.</li>
@@ -426,16 +426,16 @@
         <table>
           <thead><tr><th>Where</th><th>What</th></tr></thead>
           <tbody>
-            <tr><td class="n">Stored</td><td><code>&lt;appDataDir&gt;/scene-images/{projectUuid}/{sha256}.{png|jpg|webp}</code>, the original as uploaded (PNG, JPEG or WebP, at most 8192 px on its longest side and 25 MB). No table: params name the hash, as a prompt book names its PDF.</td></tr>
+            <tr><td class="n">Stored</td><td><code>&lt;appDataDir&gt;/scene-images/{projectUuid}/{sha256}.{png|jpg}</code>, the original as uploaded (PNG or JPEG, which the JVM decodes with no new dependency; WebP is a follow-up; at most 8192 px on its longest side and 25 MB). No table: params name the hash, as a prompt book names its PDF.</td></tr>
             <tr><td class="n">Derived</td><td>A display copy at 2048 px with mipmaps for the Stage view, and a 256 px alpha mask for the occlusion atlas and beam reach. Both are made once, cached per machine and never synced.</td></tr>
             <tr><td class="n">Synced</td><td><code>sceneImages/{sha256}.{ext}</code> in the show repo, only the hashes some element references. <code>formatVersion</code> 23, because an older reader's wipe-then-export push would delete the folder for every peer (v4's reason). <code>minReader</code> stays 5. <code>.gitattributes</code> marks the folder binary, and <code>walkTree</code> and the UUID remapper skip it.</td></tr>
-            <tr><td class="n">Uploaded</td><td><code>POST /api/rest/projects/{id}/scene-images</code> with the raw bytes answers <code>{hash, width, height, hasAlpha}</code>. <code>GET …/scene-images/{hash}?max=2048</code> serves the original or a copy. A paint hash that names no stored image is refused at the write boundary.</td></tr>
+            <tr><td class="n">Uploaded</td><td><code>POST /api/rest/projects/{id}/scene-images</code> with the raw bytes answers <code>{hash, width, height, hasAlpha}</code>. <code>GET …/scene-images/{hash}</code> serves the original, and <code>?variant=display | detail | mask</code> a derived copy. A paint hash that names no stored image is refused at the write boundary.</td></tr>
             <tr><td class="n">MCP</td><td><code>upload_scene_image {mediaType, base64}</code> stores an image and answers its hash, for <code>set_scene</code> to name. Capped at the MCP message size. Stored data only, so it carries no remote-access gate, as <code>set_scene</code> carries none.</td></tr>
             <tr><td class="n">Cloned</td><td>Export → import, as everything is. The importer hydrates <code>sceneImages/</code> into the new project's store, as it hydrates <code>promptScripts/</code>.</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="figure-note">The texture budget is why the display copy exists. Twenty painted cloths at 2048 px are about 220 MB of GPU memory with mipmaps. At 8192 px they would be about 3.5 GB.</p>
+      <p class="figure-note">The texture budget is why the display copy exists. Twenty painted cloths at 2048 px are about 220 MB of GPU memory with mipmaps. A hero frontcloth can load at 4096 px instead: a per-element <i>Full detail</i> switch, kept per machine. At 8192 px they would be about 3.5 GB.</p>
     </section>
 
     <section id="decisions" aria-labelledby="decisions-h">
@@ -446,7 +446,7 @@
           <thead><tr><th>#</th><th>Decision</th></tr></thead>
           <tbody>
             <tr><td class="n">D1</td><td><b>Fabric is a cloth's, not a role.</b> <code>fabric: CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET</code> on <code>DrapeParams</code>, absent = velour. Role and operation are unchanged, and every use is a combination of the three.</td></tr>
-            <tr><td class="n">D2</td><td><b>Only velour pleats.</b> Every other fabric hangs flat. A drawn cloth folds as it gathers, with an amplitude that grows with the gathering.</td></tr>
+            <tr><td class="n">D2</td><td><b>Only velour pleats.</b> Every other fabric hangs flat. Paint follows velour’s pleats. A drawn cloth folds as it gathers, with an amplitude that grows with the gathering.</td></tr>
             <tr><td class="n">D3</td><td><b>One function of angle for a scrim.</b> <code>open(θ) = (1 − r)·max(0, 1 − r/cos θ)</code> decides both what a beam passes and what an eye sees through. Sharkstooth r = 0.30, bobbinet r = 0.15 <span class="pill est">estimate</span>. Gathered net stacks: <code>open<sup>c</sup></code>.</td></tr>
             <tr><td class="n">D4</td><td><b>Drapes and flats take paint.</b> <code>paint: {front?, back?}</code>, each a stored image's SHA-256, stretched over the element's face. The images are a content-addressed binary store synced at <code>sceneImages/</code> (v23).</td></tr>
             <tr><td class="n">D5</td><td><b>Alpha cuts.</b> An image pixel below half opacity is a hole, in the surface, the shadows, beam reach and the haze alike, through a 256 px mask per image.</td></tr>
@@ -454,9 +454,9 @@
             <tr><td class="n">D7</td><td><b>A part may transmit.</b> Besides colliding or not, a part may pass a share of light: by angle (a scrim) or by mask (a cut cloth). Beam reach and the landing planes skip a transmitting part, so a beam carries on to the next solid surface, and <i>Focus here</i> still takes the point it is given.</td></tr>
             <tr><td class="n">D8</td><td><b>Shadows become transmittance.</b> The box occlusion test multiplies by the crossing's share for each transmitting collider and carries on, instead of returning blocked. The packed collider gains a kind (a third texel), and masks sit in an atlas of at most 32. The landing-plane fallback does the same.</td></tr>
             <tr><td class="n">D9</td><td><b>Seeing through is a blend.</b> A scrim draws without writing depth, premultiplied over what is behind it, weighted by <code>1 − open(θ<sub>eye</sub>)</code>. Its threads wrap grazing light and glow faintly from behind <span class="pill est">estimate</span>. A cut cloth discards its holes and writes depth elsewhere, so it stays opaque cloth with holes in it.</td></tr>
-            <tr><td class="n">D10</td><td><b>Haze splits at the plane.</b> Each beam carries the transmitting planes on its path. Samples past them scale by the beam's crossing, and samples behind one from the eye by the eye's, from a uniform list of four, as regions are capped today. A fifth still passes light on surfaces, but its haze does not split.</td></tr>
+            <tr><td class="n">D10</td><td><b>Haze splits at the plane.</b> Each beam carries the transmitting planes on its path. Samples past them scale by the beam's crossing, and samples behind one from the eye by the eye's, from one list of eight shared by scrims and cut cloths, nearest the eye first. A ninth still passes light on surfaces, but its haze does not split.</td></tr>
             <tr><td class="n">D11</td><td><b>Uploads from the desk and from MCP.</b> A file picker on the element sheet, a REST upload, and <code>upload_scene_image</code> for Claude. No fetch by URL.</td></tr>
-            <tr><td class="n">D12</td><td><b>The GPU sees a 2048 px copy.</b> The original is stored and synced. The view loads a derived display copy with mipmaps, and occlusion reads the 256 px mask.</td></tr>
+            <tr><td class="n">D12</td><td><b>The GPU sees a 2048 px copy.</b> The original is stored and synced. The view loads a derived display copy with mipmaps, and occlusion reads the 256 px mask. A per-element <i>Full detail</i> switch loads 4096 px for a hero cloth, kept per machine in <code>machine_overrides</code>, never synced.</td></tr>
             <tr><td class="n">D13</td><td><b>Seat views flag a solid-looking scrim.</b> When a seat sees a scrim at below half its head-on <code>open</code>, its popover and the viewpoint picker say so, e.g. "Forest gauze reads near-solid from F6 (open 12 %)".</td></tr>
             <tr><td class="n">D14</td><td><b>Out of scope:</b> moiré, a visible weave, projection mapping, painted surfaces other than drapes and flats, and bounce light (<code>FU-STAGE-BOUNCE-FILL</code>).</td></tr>
           </tbody>
@@ -476,7 +476,7 @@
             <tr><td class="n">2</td><td><b>Painted surfaces.</b> Flat cloth for every fabric but velour. Front and back images on drapes and flats, with the image continuous across a drawn cloth's halves as they gather. Display copies loaded with mipmaps (D2, D4, D12).</td><td><span class="pill m">medium</span></td></tr>
             <tr><td class="n">3</td><td><b>The transmittance core.</b> The transmitting part, by angle or by mask. The collider kind and the mask atlas in occlusion, the CPU mask in beam reach, and the landing fallback. After this, light passes scrims and cut-outs and shadows follow the cut edge (D3, D5, D7, D8).</td><td><span class="pill m">medium</span></td></tr>
             <tr><td class="n">4</td><td><b>See-through surfaces.</b> The scrim blend with its wrap and glow, cut-out discard, and muslin's translucency with back paint. The GLSL for <code>open(θ)</code> gets a TypeScript twin pinned by a test (D6, D9).</td><td><span class="pill m">medium</span></td></tr>
-            <tr><td class="n">5</td><td><b>Haze.</b> Transmitting planes in the march, by angle and by mask, capped at four (D10). Measured in <code>?profileHarness</code> on the three machines, with the haze governor absorbing the cost.</td><td><span class="pill l">large</span></td></tr>
+            <tr><td class="n">5</td><td><b>Haze.</b> Transmitting planes in the march, by angle and by mask, one shared list of eight (D10). Measured in <code>?profileHarness</code> on the three machines, with the haze governor absorbing the cost.</td><td><span class="pill l">large</span></td></tr>
             <tr><td class="n">6</td><td><b>Tuning and the seat hint.</b> <code>?profileHarness=scrim</code>, <code>=cutcloth</code> and <code>=daynight</code>, to judge r, the wrap, the glow and τ by eye. The seat-view hint (D13).</td><td><span class="pill s">small</span></td></tr>
           </tbody>
         </table>
@@ -528,16 +528,14 @@
             <tr><td>Translucent day/night cloths?</td><td>Yes, with front and back paint.</td></tr>
             <tr><td>Where do images come from?</td><td>Upload on the desk, and an MCP upload tool.</td></tr>
             <tr><td>Warn when a scrim reads solid from a seat?</td><td>Yes, a hint on seat views.</td></tr>
+            <tr><td>Do scrims and cut cloths share the haze's list?</td><td>Yes: one shared list of eight.</td></tr>
+            <tr><td>Does a painted velour fold its paint?</td><td>Yes: paint follows the pleats; canvas is the flat painted cloth.</td></tr>
+            <tr><td>Is 2048 px sharp enough?</td><td>2048 px for every cloth, with 4096 px per cloth on request.</td></tr>
             <tr><td>Which lands first?</td><td>Whichever makes development cleanest. Both are needed before the pantomime, with time to land both properly.</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="prose">Still open, for the plan to settle:</p>
-      <ol class="plain">
-        <li><b>Cut cloths in the haze's list.</b> Do the four transmitting planes cover scrims and cut cloths together, or does each get its own four? A panto can fly several foliage borders at once. The proposal is one shared list of eight, nearest the eye first.</li>
-        <li><b>Painted velour.</b> Velour pleats. Should a painted velour leg show its paint folded with it (as proposed), or should paint force a cloth flat?</li>
-        <li><b>The 2048 px display copy.</b> Is it sharp enough for a 12 m frontcloth seen from the front row? It is about 6 mm a pixel. An optional 4096 px copy for the hero cloth is the fallback.</li>
-      </ol>
+      <p class="prose">All questions are answered. The engineering plan is <code>docs/plans/scrim-plan.md</code>.</p>
     </section>
   </main>
 </div>
