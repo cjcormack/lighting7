@@ -10,7 +10,7 @@ now."
 This record holds the proposal, the pictures and the answers. The engineering plan is
 [`../scrim-plan.md`](../scrim-plan.md); where the two disagree, the plan wins.
 
-**Status: scope agreed (below), planned, awaiting approval, nothing built.**
+**Status: scope agreed (below); plan approved 2026-10-09; nothing built yet.**
 
 | File | What it is |
 | --- | --- |

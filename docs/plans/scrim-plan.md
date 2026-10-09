@@ -1,6 +1,7 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: PROPOSED — awaiting Chris's approval.** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED by Chris, 2026-10-09 — no session started.** Scope agreed with Chris,
+> 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
