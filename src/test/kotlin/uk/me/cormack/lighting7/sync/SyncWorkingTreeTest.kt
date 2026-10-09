@@ -92,6 +92,30 @@ class SyncWorkingTreeTest {
         assertTrue(Files.isDirectory(path.resolve(".git")))
     }
 
+    /**
+     * v23 (scrim plan P2): scene images are binary blobs like the prompt-book PDFs — kept through the
+     * wipe, and marked binary in `.gitattributes`, back-filled onto a repo made before either rule.
+     */
+    @Test
+    fun `scene images survive the wipe, and both binary rules are back-filled`() {
+        val uuid = UUID.randomUUID()
+        val path = workingTree.pathFor(uuid)
+        Files.createDirectories(path)
+        Files.writeString(path.resolve(".gitattributes"), "* text=auto eol=lf")
+        workingTree.ensureInitialised(path).close()
+        val attributes = Files.readString(path.resolve(".gitattributes"))
+        assertTrue(attributes.lines().contains("promptScripts/** binary"), attributes)
+        assertTrue(attributes.lines().contains("sceneImages/** binary"), attributes)
+        workingTree.ensureInitialised(path).close()
+        assertEquals(attributes, Files.readString(path.resolve(".gitattributes")), "the back-fill is idempotent")
+
+        val image = path.resolve("sceneImages/${"a".repeat(64)}.png")
+        Files.createDirectories(image.parent)
+        Files.write(image, byteArrayOf(1, 2, 3))
+        workingTree.cleanTrackedFiles(path)
+        assertTrue(Files.exists(image), "the wipe keeps scene images; the exporter reconciles them")
+    }
+
     @Test
     fun `clean then re-add surfaces deletion in git status`() {
         val uuid = UUID.randomUUID()

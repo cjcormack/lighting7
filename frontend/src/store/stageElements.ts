@@ -9,8 +9,10 @@ import {
   type UpdateStageElementRequest,
 } from "../api/stageElementApi"
 
+// An element write is also how a new scene image comes to matter — `upload_scene_image` then
+// `set_scene`, or a sync pull that hydrated the store — so the image list goes stale with it.
 lightingApi.stageElements.subscribe(() => {
-  store.dispatch(restApi.util.invalidateTags(['StageElement']))
+  store.dispatch(restApi.util.invalidateTags(['StageElement', 'SceneImage']))
 })
 
 /**

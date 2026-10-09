@@ -1031,8 +1031,9 @@ class RemoteSyncEngine(
     }
 
     /**
-     * After a pull materialises a new tree, keep prompt-book PDFs in sync with the local
-     * store. When [reconcile] is true (the merge path) the tree is first reconciled to the
+     * After a pull materialises a new tree, keep prompt-book PDFs — and scene images, which
+     * follow the same two moves keyed by the elements' paint — in sync with the local store.
+     * When [reconcile] is true (the merge path) the tree is first reconciled to the
      * merged `scriptHash` — copying the winning PDF in from the store and dropping orphans
      * — so the merge commit is self-consistent (the record-overlay only writes JSON, never
      * the binary). Then every PDF in the tree's `promptScripts` directory is copied into
@@ -1041,11 +1042,15 @@ class RemoteSyncEngine(
      */
     private fun reconcileAndHydratePromptScripts(projectId: Int, treeDir: Path, reconcile: Boolean) {
         val ref = transaction(state.database) {
-            DaoProject.findById(projectId)
-                ?.let { it.uuid to listOfNotNull(it.promptBook?.scriptHash).toSet() }
+            DaoProject.findById(projectId)?.let {
+                Triple(it.uuid, listOfNotNull(it.promptBook?.scriptHash).toSet(), SceneImageRepoSync.referencedHashes(projectId))
+            }
         } ?: return
         if (reconcile) PromptScriptRepoSync.reconcileTree(state, ref.first, ref.second, treeDir)
         PromptScriptRepoSync.hydrateStore(state, ref.first, treeDir)
+        // The scene images (v23) ride the same two moves, keyed by the elements' paint.
+        if (reconcile) SceneImageRepoSync.reconcileTree(state, ref.first, ref.third, treeDir)
+        SceneImageRepoSync.hydrateStore(state, ref.first, treeDir)
     }
 
     private fun remoteBranchRef(branch: String): String = "refs/remotes/$REMOTE_NAME/$branch"

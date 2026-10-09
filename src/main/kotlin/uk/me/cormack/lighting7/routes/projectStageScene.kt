@@ -24,6 +24,9 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.sync.canonicalDecode
+import kotlinx.serialization.builtins.serializer
 import java.util.UUID
 
 /**
@@ -52,7 +55,8 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
     get<ProjectStageElementsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val elements = transaction(state.database) {
-                stageElementsOf(project).map { it.toDto() }
+                val full = fullDetailUuidsOf(project)
+                stageElementsOf(project).map { it.toDto(fullDetail = it.uuid in full) }
             }
             call.respond(elements)
         }
@@ -61,7 +65,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
     get<ProjectStageElementResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }?.toDto()
+                DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }?.toDetailDto(project)
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(STAGE_ELEMENT_NOT_FOUND))
@@ -75,7 +79,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
         withProject(state, resource.projectId) { project ->
             val body = call.receive<JsonObject>()
             val outcome = transaction(state.database) {
-                writeStageElement(project, null, body, force = false)
+                writeStageElement(state, project, null, body, force = false)
             }
             respondElementWrite(outcome, HttpStatusCode.Created)
             if (outcome is ElementWrite.Written) state.show.fixtures.stageElementListChanged()
@@ -88,7 +92,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
             val outcome = transaction(state.database) {
                 val element = DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }
                     ?: return@transaction ElementWrite.NotFound
-                writeStageElement(project, element, body, resource.force)
+                writeStageElement(state, project, element, body, resource.force)
             }
             respondElementWrite(outcome, HttpStatusCode.OK)
             if (outcome is ElementWrite.Written) state.show.fixtures.stageElementListChanged()
@@ -105,6 +109,8 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
                 if (views.isNotEmpty() && !resource.force) return@transaction ElementWrite.InUse(views)
                 // Its scenery changes go with it, as a group's busk-rig tiles go with the group.
                 swept = deleteSceneryForElements(listOf(element.id))
+                // As do its machine-local overrides, and its images' week before the prune.
+                forgetElement(state, project, element)
                 element.delete()
                 ElementWrite.Deleted
             }
@@ -373,7 +379,17 @@ internal fun unlinkRegionFromPlatforms(project: DaoProject, regionUuid: UUID): I
     return unlinked
 }
 
+/**
+ * What deleting [element] leaves behind on this machine: its *Full detail* override goes, and the
+ * images it painted are touched so the prune keeps them a week (an undo re-uploads nothing).
+ */
+internal fun forgetElement(state: State, project: DaoProject, element: DaoStageElement) {
+    Overrides.setString(project.id.value, STAGE_ELEMENTS_OVERRIDE_TABLE, element.uuid, FIELD_DISPLAY_DETAIL, null)
+    state.sceneImages.touch(project.uuid.toString(), paintHashesOf(element.params))
+}
+
 private fun writeStageElement(
+    state: State,
     project: DaoProject,
     element: DaoStageElement?,
     body: JsonObject,
@@ -418,10 +434,14 @@ private fun writeStageElement(
         hidden = hidden ?: if (r.has("hidden")) false else start.hidden,
     )
     val stored = element?.let { readElementParams(start.kind, it.params) }
+    val projectUuid = project.uuid.toString()
+    val storedPaint = element?.let { paintHashesOf(it.params) }.orEmpty()
     val parsed = validateStageElement(
         fields, regionUuidsOf(project), "", problems,
         storedRegionUuid = (stored as? PlatformParams)?.regionUuid,
         positionNames = listOf("positionX", "positionY", "positionZ"),
+        imageStored = { state.sceneImages.exists(projectUuid, it) },
+        storedPaint = storedPaint,
     )
     if (parsed == null) return ElementWrite.Invalid(problems)
 
@@ -444,7 +464,9 @@ private fun writeStageElement(
     }
     target.store(fields, parsed)
     sortOrder?.let { target.sortOrder = it }
-    return ElementWrite.Written(target.toDto())
+    // Both the images it names now and the ones it let go start the prune's week again.
+    state.sceneImages.touch(projectUuid, storedPaint + paintHashesOf(target.params))
+    return ElementWrite.Written(target.toDetailDto(project))
 }
 
 private sealed interface ViewpointWrite {
@@ -611,6 +633,11 @@ data class StageElementDto(
     val params: JsonObject,
     val hidden: Boolean,
     val sortOrder: Int,
+    /**
+     * This machine loads the 4096 px copy of the element's paint rather than the 2048 (scrim plan
+     * D12): a `machine_overrides` row, never in a sync DTO. `PUT .../display-detail` sets it.
+     */
+    val fullDetail: Boolean = false,
 )
 
 @Serializable
@@ -631,7 +658,30 @@ data class StageViewpointDto(
     val sortOrder: Int,
 )
 
-internal fun DaoStageElement.toDto() = StageElementDto(
+/** The `machine_overrides` table name the element overrides are filed under. */
+internal const val STAGE_ELEMENTS_OVERRIDE_TABLE = "stage_elements"
+
+/** The *Full detail* override's field; its one value is [DISPLAY_DETAIL_FULL]. */
+internal const val FIELD_DISPLAY_DETAIL = "displayDetail"
+internal const val DISPLAY_DETAIL_FULL = "4096"
+
+/** The uuids of [project]'s elements this machine shows at full detail, in one read. */
+internal fun fullDetailUuidsOf(project: DaoProject): Set<UUID> =
+    DaoMachineOverride.find {
+        (DaoMachineOverrides.project eq project.id) and
+            (DaoMachineOverrides.targetTable eq STAGE_ELEMENTS_OVERRIDE_TABLE) and
+            (DaoMachineOverrides.fieldName eq FIELD_DISPLAY_DETAIL)
+    }.filter { row ->
+        runCatching { canonicalDecode(String.serializer(), row.valueJson) }.getOrNull() == DISPLAY_DETAIL_FULL
+    }.map { it.recordUuid }
+        .toSet()
+
+/** One element's DTO with its machine-local switch read for it. */
+internal fun DaoStageElement.toDetailDto(project: DaoProject) = toDto(
+    fullDetail = Overrides.getString(project.id.value, STAGE_ELEMENTS_OVERRIDE_TABLE, uuid, FIELD_DISPLAY_DETAIL) == DISPLAY_DETAIL_FULL,
+)
+
+internal fun DaoStageElement.toDto(fullDetail: Boolean = false) = StageElementDto(
     id = id.value,
     uuid = uuid.toString(),
     name = name,
@@ -650,6 +700,7 @@ internal fun DaoStageElement.toDto() = StageElementDto(
     params = storedParamsObject(params),
     hidden = hidden,
     sortOrder = sortOrder,
+    fullDetail = fullDetail,
 )
 
 internal fun DaoStageViewpoint.toDto() = StageViewpointDto(

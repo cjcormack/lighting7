@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: PROPOSED — awaiting Chris's approval.** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — session 1 shipped 2026-10-09 as `2729120d`.** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -192,7 +192,7 @@ gains §"Version 23". Cloning is derived: the importer's hydrate fills the new p
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
 engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
 
-### Session 1 — the document and the image store (backend + frontend sheet)
+### Session 1 — the document and the image store (backend + frontend sheet) — done, `2729120d`
 
 - **Params (D1, D4):** `DrapeFabric`, `ScenePaint`, `DrapeParams.fabric` and `.paint`, and
   `FlatParams.paint`, with their `parseElementParams` arms and the "names no stored image" check.

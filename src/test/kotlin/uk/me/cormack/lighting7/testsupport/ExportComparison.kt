@@ -15,17 +15,17 @@ import kotlin.test.assertTrue
 /**
  * Every regular file under [root], keyed by its path relative to [root].
  *
- * Files under `promptScripts` are prompt-book PDFs — binary. They are represented by a
- * `sha256:` digest rather than decoded text: `Files.readString` on a PDF either throws
- * `MalformedInputException` or, on a lenient decoder, maps invalid bytes to U+FFFD and makes
- * two different PDFs compare equal. The digest keeps the comparison exact either way.
+ * Files under `promptScripts` and `sceneImages` are prompt-book PDFs and scene images — binary.
+ * They are represented by a `sha256:` digest rather than decoded text: `Files.readString` on one
+ * either throws `MalformedInputException` or, on a lenient decoder, maps invalid bytes to U+FFFD
+ * and makes two different files compare equal. The digest keeps the comparison exact either way.
  */
 fun readExportFiles(root: Path): Map<String, String> {
     val out = mutableMapOf<String, String>()
     Files.walk(root).use { stream ->
         stream.filter(Files::isRegularFile).forEach { p ->
             val rel = root.relativize(p).toString().replace(File.separatorChar, '/')
-            out[rel] = if (rel.startsWith("${RecordHasher.PROMPT_SCRIPTS_DIR}/")) {
+            out[rel] = if (RecordHasher.BINARY_DIRS.any { rel.startsWith("$it/") }) {
                 "sha256:" + RecordHasher.sha256Hex(Files.readAllBytes(p))
             } else {
                 Files.readString(p)

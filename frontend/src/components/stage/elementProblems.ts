@@ -44,6 +44,8 @@ const PARAM_FIELDS = [
   'rakeM',
   'role',
   'operation',
+  'fabric',
+  'paint',
   'shape',
   'flies',
   'omit',

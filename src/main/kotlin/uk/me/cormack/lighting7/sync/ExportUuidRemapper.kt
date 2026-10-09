@@ -44,8 +44,9 @@ import java.util.UUID
  *  * `scripts/{uuid}.kts` bodies, and any other non-JSON sidecar — only `.json` documents are
  *    parsed and rewritten. Script bodies address fixtures by key, never by record UUID. Their
  *    *filenames* are still renamed.
- *  * the PDFs under `promptScripts` — binary, content-addressed by SHA-256, so they hold no
- *    UUIDs and need no rename (see [PromptScriptRepoSync]).
+ *  * the PDFs under `promptScripts` and the images under `sceneImages` — binary,
+ *    content-addressed by SHA-256, so they hold no UUIDs and need no rename (see
+ *    [PromptScriptRepoSync], [SceneImageRepoSync]).
  */
 object ExportUuidRemapper {
 
@@ -153,8 +154,8 @@ object ExportUuidRemapper {
         }
 
     /**
-     * Every regular file under [exportDir] except `.git/` and `promptScripts/` (binary
-     * blobs — reading them as UTF-8 would corrupt them, and their names are content
+     * Every regular file under [exportDir] except `.git/`, `promptScripts/` and `sceneImages/`
+     * (binary blobs — reading them as UTF-8 would corrupt them, and their names are content
      * hashes rather than UUIDs).
      */
     private fun walkFiles(exportDir: Path): List<Path> =
@@ -162,7 +163,7 @@ object ExportUuidRemapper {
             stream.filter(Files::isRegularFile)
                 .filter { p ->
                     val rel = relativePath(exportDir, p)
-                    !rel.startsWith(".git/") && !rel.startsWith("${RecordHasher.PROMPT_SCRIPTS_DIR}/")
+                    !rel.startsWith(".git/") && RecordHasher.BINARY_DIRS.none { rel.startsWith("$it/") }
                 }
                 .toList()
         }

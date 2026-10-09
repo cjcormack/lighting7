@@ -17,9 +17,10 @@ import java.util.UUID
  *
  *  * `.gitignore` — excludes OS junk (`.DS_Store`, `Thumbs.db`).
  *  * `.gitattributes` — `* text=auto eol=lf` so commits are byte-stable across
- *    macOS / Linux / Windows installs of the same project, plus a rule marking
- *    the `promptScripts` tree binary so prompt-book PDF blobs aren't
- *    EOL-normalised. (That binary rule is back-filled onto pre-existing repos.)
+ *    macOS / Linux / Windows installs of the same project, plus rules marking
+ *    the `promptScripts` and `sceneImages` trees binary so prompt-book PDFs and
+ *    scene images aren't EOL-normalised. (Both rules are back-filled onto
+ *    pre-existing repos.)
  *
  * The snapshot pipeline calls [cleanTrackedFiles] before re-running
  * [ProjectExporter], which lets `git status` correctly surface deletions for
@@ -65,13 +66,11 @@ class SyncWorkingTree(private val state: State) {
         if (rel.isEmpty()) return true
         if (rel == ".git" || rel.startsWith(".git${File.separator}")) return true
         if (rel == ".gitignore" || rel == ".gitattributes") return true
-        // Prompt-book PDFs are content-addressed binary blobs, not DB-derived records, so
-        // the wipe must not delete them — an install lacking the bytes locally would
-        // otherwise drop the repo copy and revert the deletion onto its peers. The
-        // exporter reconciles this dir against the referenced hash (add/orphan-remove).
-        val prefix = RecordHasher.PROMPT_SCRIPTS_DIR
-        if (rel == prefix || rel.startsWith("$prefix${File.separator}")) return true
-        return false
+        // Prompt-book PDFs and scene images are content-addressed binary blobs, not DB-derived
+        // records, so the wipe must not delete them — an install lacking the bytes locally
+        // would otherwise drop the repo copy and revert the deletion onto its peers. The
+        // exporter reconciles each dir against the referenced hashes (add/orphan-remove).
+        return RecordHasher.BINARY_DIRS.any { prefix -> rel == prefix || rel.startsWith("$prefix${File.separator}") }
     }
 
     private fun writeMetadataFiles(path: Path) {
@@ -81,18 +80,15 @@ class SyncWorkingTree(private val state: State) {
         if (!Files.exists(gitattributes)) {
             Files.writeString(gitattributes, GITATTRIBUTES_CONTENT)
         } else {
-            // Existing repos (created before binary-PDF support) carry only
-            // `* text=auto eol=lf`. Ensure the binary rule is present so committed PDFs
-            // are never EOL-normalised or textually diffed. Idempotent — appended once,
-            // on the first snapshot after upgrade.
-            val current = Files.readString(gitattributes)
-            if (!current.contains(PROMPT_SCRIPTS_ATTRIBUTE)) {
+            // Existing repos (created before binary-PDF support, or before scene images)
+            // lack one or both binary rules. Ensure each is present so committed PDFs and
+            // images are never EOL-normalised or textually diffed. Idempotent — each is
+            // appended once, on the first snapshot after upgrade.
+            for (rule in BINARY_ATTRIBUTES) {
+                val current = Files.readString(gitattributes)
+                if (current.contains(rule)) continue
                 val sep = if (current.isEmpty() || current.endsWith("\n")) "" else "\n"
-                Files.writeString(
-                    gitattributes,
-                    "$sep$PROMPT_SCRIPTS_ATTRIBUTE\n",
-                    StandardOpenOption.APPEND,
-                )
+                Files.writeString(gitattributes, "$sep$rule\n", StandardOpenOption.APPEND)
             }
         }
     }
@@ -112,13 +108,19 @@ class SyncWorkingTree(private val state: State) {
          */
         const val PROMPT_SCRIPTS_ATTRIBUTE = "promptScripts/** binary"
 
+        /** The scene images' rule (format v23), back-filled the same way. */
+        const val SCENE_IMAGES_ATTRIBUTE = "sceneImages/** binary"
+
+        private val BINARY_ATTRIBUTES = listOf(PROMPT_SCRIPTS_ATTRIBUTE, SCENE_IMAGES_ATTRIBUTE)
+
         // `text=auto eol=lf` normalises line endings on commit, so a Windows
         // install committing into the same repo as a macOS install doesn't
-        // produce a diff for every file on first push. `promptScripts/** binary`
-        // exempts the content-addressed PDF blobs from that normalisation.
+        // produce a diff for every file on first push. `promptScripts/** binary` and
+        // `sceneImages/** binary` exempt the content-addressed blobs from that normalisation.
         private val GITATTRIBUTES_CONTENT = """
             * text=auto eol=lf
             $PROMPT_SCRIPTS_ATTRIBUTE
+            $SCENE_IMAGES_ATTRIBUTE
         """.trimIndent() + "\n"
     }
 }

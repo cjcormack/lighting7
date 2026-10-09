@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.blankElementFields
+import uk.me.cormack.lighting7.routes.forgetElement
 import uk.me.cormack.lighting7.routes.seatResolves
 import uk.me.cormack.lighting7.routes.seatingOf
 import uk.me.cormack.lighting7.routes.sceneryOwnersChanged
@@ -25,8 +26,12 @@ import uk.me.cormack.lighting7.routes.stageElementsOf
 import uk.me.cormack.lighting7.routes.stageViewpointsOf
 import uk.me.cormack.lighting7.routes.store
 import uk.me.cormack.lighting7.routes.toFields
+import uk.me.cormack.lighting7.state.SceneImageException
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+
+/** `upload_scene_image`'s cap, decoded: smaller than the REST upload's 25 MB, since it arrives as text. */
+internal const val MAX_SCENE_IMAGE_TOOL_BYTES = 16 * 1024 * 1024
 
 /**
  * `set_scene` and `get_scene` (stage-view plan session 2, D2): the scene document as a model writes
@@ -115,6 +120,7 @@ internal class SceneSetupTools(private val state: State) {
             val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }.toList()
             val regionUuidByName = regions.associate { it.name to it.uuid.toString() }
             val regionUuids = regionUuidByName.values.toSet()
+            val projectUuid = project.uuid.toString()
 
             removeElements.filter { it !in stored }.forEach { problems += "removeElements: no element named '$it'" }
             removeViewpoints.filter { it !in storedViews }.forEach { problems += "removeViewpoints: no viewpoint named '$it'" }
@@ -134,7 +140,12 @@ internal class SceneSetupTools(private val state: State) {
                 val existing = stored[name]
                 val fields = elementFields(row, existing?.toFields(), name, regionUuidByName, where, problems) ?: continue
                 val storedRegion = (planned[name]?.params as? PlatformParams)?.regionUuid.takeIf { existing != null }
-                val params = validateStageElement(fields, regionUuids, where, problems, storedRegionUuid = storedRegion)
+                val params = validateStageElement(
+                    fields, regionUuids, where, problems,
+                    storedRegionUuid = storedRegion,
+                    imageStored = { state.sceneImages.exists(projectUuid, it) },
+                    storedPaint = existing?.let { paintHashesOf(it.params) }.orEmpty(),
+                )
                 val p = Planned(existing?.uuid ?: UUID.randomUUID(), fields, params)
                 planned[name] = p
                 written += p
@@ -171,6 +182,8 @@ internal class SceneSetupTools(private val state: State) {
 
             var order = (stored.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (p in written) {
+                // What it painted before this write; a new element painted nothing.
+                val released = stored[p.fields.name]?.let { paintHashesOf(it.params) }.orEmpty()
                 val element = stored[p.fields.name] ?: DaoStageElement.new {
                     this.project = project
                     name = p.fields.name
@@ -180,6 +193,8 @@ internal class SceneSetupTools(private val state: State) {
                     sortOrder = order++
                 }
                 element.store(p.fields, p.params!!)
+                // Every image it names now, and every one it let go, starts the prune's week again.
+                state.sceneImages.touch(projectUuid, released + paintHashesOf(element.params))
             }
             var viewOrder = (storedViews.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (fields in viewWrites) {
@@ -195,6 +210,7 @@ internal class SceneSetupTools(private val state: State) {
             for (name in removeElements) {
                 val element = stored[name] ?: continue
                 swept += deleteSceneryForElements(listOf(element.id))
+                forgetElement(state, project, element)
                 element.delete()
             }
             Triple(written.size, viewWrites.size, true)
@@ -223,8 +239,63 @@ internal class SceneSetupTools(private val state: State) {
         )
     }
 
+    /**
+     * `upload_scene_image` (scrim plan D11): an image for a cloth's paint, as base64, into the
+     * current project's scene-image store — the REST upload's check and answer, through the same
+     * [SceneImageStore.store], capped at [MAX_SCENE_IMAGE_TOOL_BYTES] decoded (a bigger image goes in
+     * through the desk's own sheet). Stored data only, like `set_scene`, so no remote-access gate:
+     * an image does nothing until an element names it.
+     */
+    fun uploadSceneImage(input: JsonObject): ToolExecutionResult {
+        val problems = unknownFields(input, listOf("mediaType", "base64"), "upload_scene_image").toMutableList()
+        val mediaType = input.string("mediaType")?.trim()
+        if (mediaType == null) problems += "mediaType is required: image/png or image/jpeg"
+        // A pasted data URL is the same bytes behind a prefix.
+        val encoded = input.string("base64")?.trim()?.substringAfter(";base64,")?.filterNot { it.isWhitespace() }
+        if (encoded.isNullOrEmpty()) problems += "base64 is required: the image's bytes, base64-encoded"
+        // Refused by length before anything is decoded: four characters carry three bytes.
+        if (encoded != null && encoded.length.toLong() * 3 / 4 > MAX_SCENE_IMAGE_TOOL_BYTES + 2) {
+            problems += "the image is over ${MAX_SCENE_IMAGE_TOOL_BYTES / (1024 * 1024)} MB decoded; upload a larger one from the element's sheet on the desk"
+        }
+        if (problems.isNotEmpty()) return rejected(problems)
+        val bytes = runCatching { java.util.Base64.getDecoder().decode(encoded) }.getOrElse {
+            return rejected(listOf("base64 does not decode: ${it.message}"))
+        }
+        if (bytes.size > MAX_SCENE_IMAGE_TOOL_BYTES) {
+            return rejected(listOf("the image is over ${MAX_SCENE_IMAGE_TOOL_BYTES / (1024 * 1024)} MB decoded; upload a larger one from the element's sheet on the desk"))
+        }
+        val project = state.projectManager.currentProject
+        val info = try {
+            state.sceneImages.store(project.uuid.toString(), bytes, mediaType)
+        } catch (e: SceneImageException) {
+            return rejected(listOf(e.message ?: "not a scene image"))
+        }
+        return success(
+            "Stored a ${info.width} × ${info.height} ${info.mediaType} as ${info.hash}",
+            buildJsonObject {
+                put("hash", info.hash)
+                put("width", info.width)
+                put("height", info.height)
+                put("hasAlpha", info.hasAlpha)
+                put("mediaType", info.mediaType)
+                put(
+                    "note",
+                    "Paint a DRAPE or a FLAT with it through set_scene: params.paint {front, back} names this hash. " +
+                        "Size the cloth to the image's aspect (${info.width}:${info.height})" +
+                        (if (info.hasAlpha) "; its transparent pixels cut holes in the cloth." else "."),
+                )
+            },
+        )
+    }
+
     fun getScene(): ToolExecutionResult {
         val project = state.projectManager.currentProject
+        // What each painted face's image is, read before the transaction: an image with no info
+        // sidecar is decoded to answer, and that must never hold the one pooled connection.
+        val paintHashes = transaction(state.database) {
+            stageElementsOf(project).flatMap { paintHashesOf(it.params) }.toSet()
+        }
+        val imageInfo = paintHashes.associateWith { state.sceneImages.info(project.uuid.toString(), it) }
         val body = transaction(state.database) {
             val elements = stageElementsOf(project)
             val regionNames = DaoStageRegion.find { DaoStageRegions.project eq project.id }.associate { it.uuid.toString() to it.name }
@@ -266,6 +337,25 @@ internal class SceneSetupTools(private val state: State) {
                             params
                         }
                         if (shown.isNotEmpty()) put("params", shown)
+                        // What each painted face's image is, so a cloth can be sized to its picture.
+                        val paint = params["paint"] as? JsonObject
+                        if (paint != null) {
+                            putJsonObject("paintImages") {
+                                for (side in listOf("front", "back")) {
+                                    val hash = (paint[side] as? JsonPrimitive)?.contentOrNull ?: continue
+                                    val info = imageInfo[hash]
+                                    if (info == null) {
+                                        put(side, "missing on this machine")
+                                    } else {
+                                        putJsonObject(side) {
+                                            put("width", info.width)
+                                            put("height", info.height)
+                                            put("hasAlpha", info.hasAlpha)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         seating[e.uuid]?.let { s ->
                             val last = s.params.firstRow.first() + (s.params.rows - 1)
                             val aisles = s.params.aisles.takeIf { it.isNotEmpty() }
@@ -679,9 +769,9 @@ internal class SceneSetupTools(private val state: State) {
         /**
          * What `get_scene` answers beside a row's fields and `set_scene` ignores, so a row read back
          * can be corrected and resent as it stands: a seating's seat count, a seat view's resolved
-         * eye, a note that its seating has gone.
+         * eye, a note that its seating has gone, a painted face's image size.
          */
-        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note")
+        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages")
         val TEMPLATE_NUMBERS = listOf(
             "hallWidthM", "hallDepthM", "hallHeightM", "stageWidthM", "stageDepthM", "prosWidthM", "prosHeightM",
             "deckHeightM", "apronM", "stageHouseHeightM", "rows", "seatsPerRow", "rowPitchM", "seatPitchM",

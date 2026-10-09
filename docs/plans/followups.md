@@ -117,6 +117,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
 | [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a mesh's shadow land — a body, a seat, an imported model — or a round one; boxes cast theirs already |
 | [`FU-STAGE-BOUNCE-FILL`](#fu-stage-bounce-fill) | Trigger | Stage | a plot reads wrong because a bright cyc or floor pool lights nothing round it |
+| [`FU-SCENE-IMAGE-WEBP`](#fu-scene-image-webp) | Trigger | Stage | a designer's cloth images arrive as WebP |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
@@ -2352,6 +2353,20 @@ written by the director beside the beam's own row — at the landed point, facin
 a wide cosine lobe coloured by the light × the hit finish's albedo — packed after the real lights so
 the budget drops bounces first, and drawn by no beam. `landedPoints.ts` and the director's `SurfaceHit`
 already know where a beam lands and on what; the finish would have to ride the collider.
+
+### `FU-SCENE-IMAGE-WEBP`
+
+**WebP uploads for painted cloths** · Trigger · scrim plan P3, 2026-10-09
+
+The scene-image store takes PNG and JPEG only (`state/SceneImageStore.kt`), because the JVM's
+`ImageIO` decodes both with no new dependency and no native payload, so the `nativePayloadOs`
+verifier stays untouched. WebP is refused as `SCENE_IMAGE_INVALID` on the REST upload, the element
+sheet and `upload_scene_image` alike. **Trigger**: a designer's files arrive as WebP and converting
+them first is a real cost. **Then**: a pure-JVM WebP reader (no native code — check the jar's
+`nativePayloadOs` verifier still passes on every OS) registered with `ImageIO`, `SceneImageFormat`
+gaining `WEBP` (`.webp`, `image/webp`, its signature `RIFF….WEBP`), and the header-first size check
+proved for it as `SceneImageStoreTest` proves it for PNG. The derived copies are PNG either way, so
+nothing downstream changes; the repo folder takes the new extension, a `formatVersion` question.
 
 ### `FU-STAGE-FOCUS-FRINGE`
 

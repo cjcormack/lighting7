@@ -24,6 +24,15 @@ vi.mock('@/store/stageRegions', () => ({
   useStageRegionListQuery: () => ({ data: [{ uuid: 'r-1', name: 'Main stage' }] }),
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+const upload = vi.fn()
+const setDisplayDetail = vi.fn()
+/** What `GET scene-images` answers: the images this machine holds. */
+const imageList: { current: unknown[] | undefined } = { current: [] }
+vi.mock('@/store/sceneImages', () => ({
+  useSceneImageListQuery: () => ({ data: imageList.current, isSuccess: imageList.current != null }),
+  useUploadSceneImageMutation: () => [upload, { isLoading: false }],
+  useSetElementDisplayDetailMutation: () => [setDisplayDetail, { isLoading: false }],
+}))
 
 import { EditSceneElementForm } from './EditSceneElementForm'
 
@@ -63,6 +72,9 @@ function type(label: string | RegExp, value: string) {
 beforeEach(() => {
   update.mockReset()
   remove.mockReset()
+  upload.mockReset()
+  setDisplayDetail.mockReset()
+  imageList.current = []
   sceneryRead.current = { cues: [], sets: [], looks: [] }
 })
 afterEach(cleanup)
@@ -275,5 +287,172 @@ describe('EditSceneElementForm (stage-view plan session 5)', () => {
     render(<EditSceneElementForm ref={ref} element={element()} projectId={3} onClose={() => {}} />)
     ref.current!.setPosition({ positionX: 2.5, positionY: 6, positionZ: 0 })
     return waitFor(() => expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('2.5'))
+  })
+})
+
+describe('EditSceneElementForm — fabric and paint (scrim plan session 1)', () => {
+  const FRONT = 'a'.repeat(64)
+  const BACK = 'b'.repeat(64)
+  const png = (hash: string, width: number, height: number, hasAlpha = false) => ({
+    hash,
+    width,
+    height,
+    hasAlpha,
+    mediaType: 'image/png',
+  })
+  const cloth = (over: Partial<StageElementDto> = {}) =>
+    element({
+      uuid: 'cloth',
+      name: 'Forest cloth',
+      kind: 'DRAPE',
+      widthM: 12,
+      depthM: 0.05,
+      heightM: 6,
+      params: { role: 'BACKCLOTH', operation: 'FLY' },
+      ...over,
+    })
+
+  it('a drape picks its fabric, velour by default, and sends it in params', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve(cloth()) })
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    const fabric = screen.getByLabelText('Fabric') as HTMLSelectElement
+    expect(fabric.value).toBe('')
+    expect([...fabric.options].map((o) => o.textContent)).toEqual([
+      'Velour (default)',
+      'Canvas',
+      'Muslin (translucent)',
+      'Sharkstooth scrim',
+      'Bobbinet scrim',
+    ])
+    fireEvent.change(fabric, { target: { value: 'SHARKSTOOTH' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'BACKCLOTH', operation: 'FLY', fabric: 'SHARKSTOOTH' })
+  })
+
+  it('a flat takes paint but no fabric; other kinds take neither', () => {
+    render(<EditSceneElementForm element={element()} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByLabelText('Fabric')).toBeNull()
+    expect(document.querySelector('[data-paint="front"]')).not.toBeNull()
+    expect(document.querySelector('[data-paint="back"]')).not.toBeNull()
+    cleanup()
+    render(<EditSceneElementForm element={element({ kind: 'OBJECT', params: { shape: 'BOX' } })} projectId={3} onClose={() => {}} />)
+    expect(document.querySelector('[data-paint]')).toBeNull()
+    expect(screen.queryByLabelText(/Full detail/)).toBeNull()
+  })
+
+  it('uploads a picked image and puts the hash it answers into params on Save', async () => {
+    upload.mockReturnValue({ unwrap: () => Promise.resolve(png(FRONT, 2048, 1024, true)) })
+    update.mockReturnValue({ unwrap: () => Promise.resolve(cloth()) })
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'forest.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Paint, front: choose an image'), { target: { files: [file] } })
+    await waitFor(() => expect(upload).toHaveBeenCalled())
+    expect(upload.mock.calls[0]![0]).toMatchObject({ projectId: 3, mediaType: 'image/png' })
+    expect(upload.mock.calls[0]![0].bytes.byteLength).toBe(4)
+    // The thumbnail is the desk's display copy.
+    const thumb = await waitFor(() => {
+      const img = document.querySelector('[data-paint-thumbnail="front"]')
+      expect(img).not.toBeNull()
+      return img as HTMLImageElement
+    })
+    // The upload's own answer stands in for the list until it refetches.
+    expect(within(document.querySelector('[data-paint="front"]') as HTMLElement).getByText('Transparent pixels cut holes')).toBeTruthy()
+    expect(screen.queryByText('Image missing on this machine')).toBeNull()
+    expect(thumb.getAttribute('src')).toBe(`/api/rest/projects/3/scene-images/${FRONT}?variant=display`)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'BACKCLOTH', operation: 'FLY', paint: { front: FRONT } })
+  })
+
+  it('refuses a file that is not a PNG or a JPEG without sending it, and says a refused upload beside the paint', async () => {
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    const gif = new File(['GIF89a'], 'moon.gif', { type: 'image/gif' })
+    fireEvent.change(screen.getByLabelText('Paint, back: choose an image'), { target: { files: [gif] } })
+    expect(await screen.findByText('moon.gif is not a PNG or a JPEG')).toBeTruthy()
+    expect(upload).not.toHaveBeenCalled()
+
+    upload.mockReturnValue({
+      unwrap: () => Promise.reject({ status: 400, data: { error: 'The image is 9000 × 10 px; a scene image is at most 8192 px on a side', code: 'SCENE_IMAGE_INVALID' } }),
+    })
+    const wide = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'wide.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByLabelText('Paint, back: choose an image'), { target: { files: [wide] } })
+    expect(await screen.findByText(/at most 8192 px on a side/)).toBeTruthy()
+    expect(upload.mock.calls[0]![0].mediaType).toBe('image/jpeg')
+  })
+
+  it('reads the aspect against the cloth, and matches the height to the image', async () => {
+    imageList.current = [png(FRONT, 2000, 1000), png(BACK, 1600, 900, true)]
+    update.mockReturnValue({ unwrap: () => Promise.resolve(cloth()) })
+    render(
+      <EditSceneElementForm element={cloth({ params: { role: 'BACKCLOTH', paint: { front: FRONT, back: BACK } } })} projectId={3} onClose={() => {}} />,
+    )
+    const front = document.querySelector('[data-paint="front"]') as HTMLElement
+    expect(within(front).getByText('Image 2 : 1, cloth 12.0 × 6.0 m · aspects match')).toBeTruthy()
+    expect(within(front).queryByText('Transparent pixels cut holes')).toBeNull()
+    expect(within(front).queryByRole('button', { name: 'Match height to image' })).toBeNull()
+
+    const back = document.querySelector('[data-paint="back"]') as HTMLElement
+    expect(within(back).getByText('Image 16 : 9, cloth 12.0 × 6.0 m')).toBeTruthy()
+    expect(within(back).getByText('Transparent pixels cut holes')).toBeTruthy()
+    fireEvent.click(within(back).getByRole('button', { name: 'Match height to image' }))
+    expect((screen.getByLabelText('Height') as HTMLInputElement).value).toBe('6.75')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0]).toMatchObject({ heightM: 6.75 })
+  })
+
+  it('says an image is missing on this machine, and removes a paint', async () => {
+    imageList.current = [png(FRONT, 2000, 1000)]
+    update.mockReturnValue({ unwrap: () => Promise.resolve(cloth()) })
+    render(
+      <EditSceneElementForm element={cloth({ params: { role: 'BACKCLOTH', paint: { front: FRONT, back: BACK } } })} projectId={3} onClose={() => {}} />,
+    )
+    const back = document.querySelector('[data-paint="back"]') as HTMLElement
+    expect(within(back).getByText('Image missing on this machine')).toBeTruthy()
+    expect(within(back).queryByRole('img')).toBeNull()
+    const front = document.querySelector('[data-paint="front"]') as HTMLElement
+    expect(within(front).queryByText('Image missing on this machine')).toBeNull()
+
+    fireEvent.click(within(back).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(front).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    // An empty paint goes as absent, not as `{}`.
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'BACKCLOTH' })
+  })
+
+  it('does not call an image missing before the list has answered', () => {
+    imageList.current = undefined
+    render(<EditSceneElementForm element={cloth({ params: { role: 'BACKCLOTH', paint: { front: FRONT } } })} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByText('Image missing on this machine')).toBeNull()
+  })
+
+  it('flips Full detail at once through its own route, and puts it back when refused', async () => {
+    setDisplayDetail.mockReturnValue({ unwrap: () => Promise.resolve(cloth({ fullDetail: true })) })
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    const box = screen.getByLabelText('Full detail (4096 px, this machine)') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    fireEvent.click(box)
+    await waitFor(() => expect(setDisplayDetail).toHaveBeenCalledWith({ projectId: 3, elementId: 7, full: true }))
+    expect(box.checked).toBe(true)
+    expect(update).not.toHaveBeenCalled()
+
+    setDisplayDetail.mockReturnValue({ unwrap: () => Promise.reject({ status: 500 }) })
+    fireEvent.click(box)
+    await waitFor(() => expect(setDisplayDetail).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(box.checked).toBe(true))
+  })
+
+  it('draws the desk’s paint and fabric refusals beside their fields', async () => {
+    update.mockReturnValue(
+      refuse(400, ['params.paint.front names no stored image', 'params.fabric must be one of CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET'].join('; ')),
+    )
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Forest' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Names no stored image')).toBeTruthy()
+    expect(screen.getByText('Must be one of CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET')).toBeTruthy()
+    expect(screen.queryByRole('alert', { name: /params\.paint/ })).toBeNull()
   })
 })

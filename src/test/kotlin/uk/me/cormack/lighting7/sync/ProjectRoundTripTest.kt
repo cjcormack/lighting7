@@ -30,7 +30,13 @@ import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlin.test.assertContentEquals
+import kotlin.test.assertNull
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
+import uk.me.cormack.lighting7.testsupport.readExportFiles
 import uk.me.cormack.lighting7.testsupport.seedRichProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -295,11 +301,6 @@ class ProjectRoundTripTest {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
 
-        assertTrue(
-            Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 22"),
-            "the writer stamps v22",
-        )
-        assertEquals(22, SUPPORTED_FORMAT_VERSION)
         val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
             stream.toList().map { Files.readString(it) }
         }
@@ -403,7 +404,7 @@ class ProjectRoundTripTest {
         val elements = Files.list(exportDirA.resolve("stageElements")).use { stream ->
             stream.toList().map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
         }.associateBy { it.name }
-        assertEquals(setOf("Stalls", "Thrust deck", "House tabs"), elements.keys)
+        assertEquals(setOf("Stalls", "Thrust deck", "House tabs", "Day/night cloth", "Cottage flat"), elements.keys)
         val stalls = elements.getValue("Stalls")
         assertEquals("SEATING" to "VENUE", stalls.kind to stalls.layer)
         assertEquals("B", stalls.params!!["firstRow"]!!.jsonPrimitive.content)
@@ -547,8 +548,8 @@ class ProjectRoundTripTest {
         assertEquals(listOf("output1" to 600L, "output2" to 750L), cue.events.map { it.trigger to it.offsetMs })
         assertTrue(cue.events.all { it.patchUuid == cannonUuid })
         assertEquals(listOf(0, 1), cue.events.map { it.sortOrder })
-        val everything = Files.walk(exportDirA).use { s -> s.filter { Files.isRegularFile(it) }.toList() }
-            .joinToString("\n") { Files.readString(it) }
+        // Binary-aware: the scene images (v23) are bytes, read as a digest.
+        val everything = readExportFiles(exportDirA).values.joinToString("\n")
         assertTrue("spentAt" !in everything && "spent_at" !in everything, "tube state never travels")
 
         wipeDatabase()
@@ -874,6 +875,85 @@ class ProjectRoundTripTest {
             assertEquals(0, DaoProject.all().count(),
                 "import that errored mid-flight should leave DB empty")
         }
+    }
+
+    /**
+     * v23 (scrim plan P2): a drape's fabric and paint ride its params, and the images they name ride
+     * `sceneImages/{sha256}.{png|jpg}` as raw bytes. Only the referenced images travel; an import
+     * hydrates them into the new project's store, byte for byte, with the store wiped in between so
+     * nothing can pass by being left behind.
+     */
+    @Test
+    fun `painted cloths export their images byte for byte, and an import hydrates them`() {
+        val projectId = seedRichProject(state)
+        val projectUuid = transaction(state.database) { DaoProject.findById(projectId)!!.uuid.toString() }
+        // An upload no element names stays on this machine.
+        val orphan = state.sceneImages.store(projectUuid, uk.me.cormack.lighting7.testsupport.scenePng(12, 12, seed = 99), "image/png")
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 23"), "the writer stamps v23")
+        assertEquals(23, SUPPORTED_FORMAT_VERSION)
+        val expected = RICH_PROJECT_SCENE_IMAGES.associate { (type, bytes) ->
+            "${RecordHasher.sha256Hex(bytes)}.${if (type == "image/png") "png" else "jpg"}" to bytes
+        }
+        val dir = exportDirA.resolve(RecordHasher.SCENE_IMAGES_DIR)
+        val exported = Files.list(dir).use { s -> s.toList() }.associate { it.fileName.toString() to Files.readAllBytes(it) }
+        assertEquals(expected.keys, exported.keys, "exactly the referenced images, and not ${orphan.hash}")
+        expected.forEach { (name, bytes) -> assertContentEquals(bytes, exported.getValue(name), name) }
+
+        val cloth = Files.list(exportDirA.resolve("stageElements")).use { s -> s.toList() }
+            .map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
+            .single { it.name == "Day/night cloth" }
+        assertEquals("MUSLIN", cloth.params!!["fabric"]!!.jsonPrimitive.content)
+        assertEquals(
+            setOf("front", "back"),
+            cloth.params["paint"]!!.jsonObject.keys,
+        )
+
+        wipeDatabase()
+        state.sceneImages.deleteProject(projectUuid)
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        assertEquals(projectUuid, imported.projectUuid)
+        for ((name, bytes) in expected) {
+            val hash = name.substringBefore('.')
+            val stored = state.sceneImages.original(projectUuid, hash)
+            assertNotNull(stored, "the import hydrated $name")
+            assertContentEquals(bytes, Files.readAllBytes(stored.first))
+        }
+        assertNull(state.sceneImages.original(projectUuid, orphan.hash))
+
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+    }
+
+    /**
+     * A v22 archive — no `sceneImages/`, no fabric, no paint — still imports (`minReader` stays 5),
+     * and its cloths read as velour, unpainted.
+     */
+    @Test
+    fun `a v22 archive still imports`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        exportDirA.resolve(RecordHasher.SCENE_IMAGES_DIR).toFile().deleteRecursively()
+        Files.list(exportDirA.resolve("stageElements")).use { s -> s.toList() }.forEach { file ->
+            val doc = Json.parseToJsonElement(Files.readString(file)).jsonObject
+            val params = doc["params"] as? JsonObject ?: return@forEach
+            val stripped = JsonObject(doc + ("params" to JsonObject(params - "fabric" - "paint")))
+            Files.writeString(file, stripped.toString())
+        }
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": $SUPPORTED_FORMAT_VERSION", "\"formatVersion\": 22"),
+        )
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        assertFalse(Files.exists(exportDirB.resolve(RecordHasher.SCENE_IMAGES_DIR)), "no paint, no images")
+        val cloth = Files.list(exportDirB.resolve("stageElements")).use { s -> s.toList() }
+            .map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
+            .single { it.name == "Day/night cloth" }
+        assertEquals(setOf("operation", "role", "travelS"), cloth.params!!.keys)
     }
 
     private fun wipeDatabase() {

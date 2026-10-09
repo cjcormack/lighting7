@@ -131,6 +131,7 @@ class ProjectExporter(private val state: State) {
         val liveKeys = mutableSetOf<RecordKey>()
         var reconcileProjectUuid: UUID? = null
         var referencedScriptHashes: Set<String> = emptySet()
+        var referencedImageHashes: Set<String> = emptySet()
         val fileCount = transaction(state.database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project not found: $projectId")
@@ -234,6 +235,8 @@ class ProjectExporter(private val state: State) {
             // Capture the referenced script-PDF hashes; the actual (up-to-100MB) copy
             // happens AFTER the transaction commits so it never holds the DB write lock.
             referencedScriptHashes = promptBooks.map { it.scriptHash }.toSet()
+            // Likewise the images the scene's cloths are painted with (v23).
+            referencedImageHashes = SceneImageRepoSync.referencedHashes(projectId)
 
             count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }, liveKeys) { u ->
                 // `address` deliberately omitted — machine-local per cloud-sync design.
@@ -635,6 +638,8 @@ class ProjectExporter(private val state: State) {
         // DB writer. PDFs are not records; they ride the repo as content-addressed blobs.
         reconcileProjectUuid?.let {
             PromptScriptRepoSync.reconcileTree(state, it, referencedScriptHashes, targetDir)
+            // And the referenced scene images into `sceneImages/{hash}.{png|jpg}`, the same way.
+            SceneImageRepoSync.reconcileTree(state, it, referencedImageHashes, targetDir)
         }
         return Result(targetDir, fileCount, liveKeys)
     }

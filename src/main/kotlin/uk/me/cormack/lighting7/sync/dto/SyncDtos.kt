@@ -29,6 +29,14 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v23: painted cloths (scrim plan session 1, P2). No DTO changes: a drape's `fabric` and a drape's
+    // or a flat's `paint` (`{front?, back?}`, each an image's SHA-256) ride inside `StageElementJson`'s
+    // params, which already travel whole. What moves the number is the new top-level
+    // `sceneImages/{sha256}.{png|jpg}` folder — the images, raw bytes with no JSON record, the file
+    // its own identity — for v4's reason: a v22 reader would not preserve the folder through its
+    // wipe-then-export push and would delete every peer's images. `minReader` stays at **5**: a
+    // missing folder is no images, and a v22 archive imports unchanged.
+    //
     // v22: fitted media (fixture optics plan session 3). `FixturePatchJson` and `PatchPlacementJson`
     // each gain `media` ([FittedMedia]): what a unit has loaded in its loadable settings, as a nested
     // `{slots: {<property>: {<option>: {gel?, gobo?}}}}` naming only the options that differ from the
@@ -188,7 +196,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 22,
+    val formatVersion: Int = 23,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )

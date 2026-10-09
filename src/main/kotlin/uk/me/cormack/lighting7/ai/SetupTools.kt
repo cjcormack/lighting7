@@ -98,6 +98,7 @@ class SetupTools(
             setStageTool.name -> setStage(input)
             setSceneTool.name -> scene.setScene(input)
             getSceneTool.name -> scene.getScene()
+            uploadSceneImageTool.name -> scene.uploadSceneImage(input)
             renderViewTool.name -> render.renderView(input)
             placeFixturesTool.name -> placeFixtures(input)
             getPromptBookTool.name -> getPromptBook()

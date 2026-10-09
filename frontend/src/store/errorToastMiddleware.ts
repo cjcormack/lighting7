@@ -86,6 +86,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'saveSpeedMaster', // src/components/speedMasters/SpeedMasterDetailSheet.tsx, SpeedMasterSheet.tsx
   // These three take a password or a name the user typed and render failures inline in
   // their own sheet/page, not as a toast.
+  // A refused scene image (SCENE_IMAGE_INVALID, 413 over 25 MB) is said beside the paint it was
+  // for, in the element sheet; a generic toast on top would say less, twice.
+  'uploadSceneImage', // src/components/stage/PaintField.tsx
   'createUser', // src/components/users/CreateUserSheet.tsx
   'setUserPassword', // src/components/users/UserDetailSheet.tsx
   'redeemResetToken', // src/routes/ResetPasswordPage.tsx

@@ -181,6 +181,20 @@ class State(val config: ApplicationConfig) {
         promptScriptStoreRoot.resolve(projectUuid).resolve("$hash.pdf")
 
     /**
+     * The images painted on scene cloths (scrim plan §3.3), content-addressed as
+     * `{projectUuid}/{sha256}.{png|jpg}` with per-machine derived copies beside them. Defaults to
+     * `<appDataDir>/scene-images`, overridable as `stage.sceneImageStoreRoot` (for tests). Outside the
+     * DB, and moved through sync as raw bytes by `SceneImageRepoSync`, like the prompt-book PDFs.
+     */
+    val sceneImages: SceneImageStore = SceneImageStore(
+        config.optionalString("stage.sceneImageStoreRoot")?.let { Paths.get(it) } ?: appDataDir().resolve("scene-images"),
+    )
+
+    /** Where a scene image's original lives: `{store}/{projectUuid}/{hash}.{png|jpg}`. */
+    fun sceneImagePath(projectUuid: String, hash: String, format: SceneImageFormat): Path =
+        sceneImages.path(projectUuid, hash, format)
+
+    /**
      * Cloud-sync lifecycle broadcasts. The REST sync-run handler emits into this flow;
      * each WS handler in `plugins/Sockets.kt` collects per-connection.
      */

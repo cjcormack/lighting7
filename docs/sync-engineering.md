@@ -111,6 +111,7 @@ promptBooks/{uuid}.json        # script reference by content hash (scriptHash)
 promptBookAnchors/{uuid}.json  # carries promptBookUuid + cueUuid; normalized region rects
 promptBookAnnotations/{uuid}.json  # carries promptBookUuid; note/strikethrough/freetext
 promptScripts/{sha256}.pdf     # the script PDF itself — binary blob, content-addressed (v4+)
+sceneImages/{sha256}.{png|jpg} # an image a cloth is painted with — binary blob, content-addressed (v23+)
 ```
 
 ### Prompt books
@@ -205,7 +206,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 22`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 23`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -258,6 +259,59 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 23 — painted cloths
+
+Bumped when the images painted on scene cloths began travelling in the repo (scrim plan session 1,
+P2 — `docs/plans/scrim-plan.md`). `SUPPORTED_FORMAT_VERSION = 23`; `MIN_SUPPORTED_FORMAT_VERSION`
+**stays 5**, so a v23 install still reads every earlier repo: a missing folder is no images, and
+every key defaults. The writer emits `formatVersion = 23`.
+
+Three things land together under the one number, so no later scrim session touches sync:
+
+* a drape's `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`, absent velour) and a drape's or a
+  flat's `paint` (`{front?, back?}`, each an image's SHA-256), as keys of the element's `params`,
+  which `StageElementJson` already carries whole — no DTO changes;
+* a new top-level `sceneImages/{sha256}.{png|jpg}` directory holding the raw image bytes. There is
+  **no JSON DTO** — the file is the content, keyed by its own SHA-256, which is what a `paint` side
+  names;
+* the `.gitattributes` rule `sceneImages/** binary`.
+
+The params keys alone would need no bump (§"A params key added later needs no bump" below). The
+folder does, for v4's reason exactly: a v22 install lacks the wipe-preserve and reconcile logic, so
+on its next snapshot it would delete `sceneImages/` and **revert every image onto its peers** — while
+re-exporting the elements, keys intact, that name them. Emitting v23 makes such an install refuse the
+repo as too-new instead.
+
+The images follow the prompt-book PDFs' contract (§"Version 4") point for point, through
+[`SceneImageRepoSync`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SceneImageRepoSync.kt):
+
+* **Only referenced images travel.** The referenced set is every hash a stage element's
+  `params.paint` names (`SceneImageRepoSync.referencedHashes`, read leniently with
+  `paintHashesOf`), so an upload whose element was never saved stays on the machine that made it
+  until the store's prune takes it.
+* **store → tree** (`reconcileTree`) on every export and snapshot, and on the auto-merge path after
+  the DB is merged: copies each referenced image the tree lacks, deletes every file whose hash is no
+  longer referenced (or whose name is not an image's), and **never deletes a referenced hash's file
+  even when the store lacks the bytes**, so a store-less install cannot drop the repo's copy.
+* **tree → store** (`hydrateStore`) on every pull, after a fast-forward or a merge, and on manual
+  import — which is also what fills a **clone's** store, since cloning is export → import
+  (`ProjectCloner` needs nothing of its own). The store takes a file only when its bytes are what its
+  name says: a PNG or a JPEG whose SHA-256 is the name, at most 25 MB. A file that is not is logged
+  and skipped; the element then reads "Image missing on this machine" and draws unpainted.
+* **Binaries never touch the text machinery.** `RecordHasher.BINARY_DIRS` is the one list of the
+  two binary folders: the record scan, `JGitClient.walkTree` and `ExportUuidRemapper` skip both, and
+  `SyncWorkingTree.cleanTrackedFiles` preserves both through the snapshot wipe. The binary
+  `.gitattributes` rule is **back-filled** onto existing repos like the PDFs' was.
+* **Content-addressed, so git merges them trivially** — a path always holds the same bytes, so an
+  image is only ever added or removed, never conflicted, and needs no UUID remap on clone.
+
+What does **not** travel: the derived copies (the 2048 and 4096 px display copies and the 256 px
+mask, made per machine on first request) and an element's *Full detail* switch, a
+`machine_overrides` row (§"Machine-local data"). `RichProjectFixture` paints a muslin drape front
+(a PNG with holes) and back (a JPEG) and a flat front, the images made in code; `ProjectRoundTripTest`
+asserts the images' bytes survive an export, a wiped store and an import, and that a v22 archive
+still imports. No table is added, so `SyncCoverageTest`'s dispositions are unchanged.
 
 ### Version 22 — fitted media
 
@@ -816,6 +870,13 @@ This is the precedent for any future per-install field. The decision tree
 in `CLAUDE.md` §"Database changes and cloud sync" guides which side of the
 portable/machine-local line a new field falls on.
 
+**A scene element's *Full detail* is an override** (scrim plan D12): `stage_elements` /
+`displayDetail` = `"4096"` on the element's uuid, set by `PUT stage-elements/{id}/display-detail` and
+answered as `StageElementDto.fullDetail`, so a hero cloth loads its 4096 px copy on this desk only.
+Deleting the element deletes the row; a clone carries it with every other override. The images'
+derived copies are machine-local too, as files beside the store's originals (`derived/`), and never
+reach a repo.
+
 **`effect_tube_state` is machine-local in its own table** (stage-view plan session 9, §3.2) — the
 "wholly machine-local" branch of that tree, like `sync_configs`, rather than an override: a row is a
 spent one-shot tube (`patch_uuid`, `trigger`, `spent_at` as a `utcInstant`), and loaded is the absence
@@ -911,8 +972,8 @@ exists to avoid.
 Left untouched: `installs.json` (install identities, not records — exempt from
 both collection and substitution), the `scripts/{uuid}.kts` bodies and any
 other non-JSON sidecar (only `.json` documents are parsed and rewritten;
-filenames are still renamed), and the `promptScripts` PDFs (binary,
-content-addressed).
+filenames are still renamed), and the `promptScripts` PDFs and `sceneImages`
+images (binary, content-addressed — `RecordHasher.BINARY_DIRS`).
 
 A clone is a **distinct sync identity**: new project UUID, new record UUIDs, no
 `sync_configs` / `sync_state` / linked repo / session history. It is not

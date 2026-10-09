@@ -1665,8 +1665,8 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 |---|---|
 | `ROOM` | `omit` (sides not drawn: `DOWNSTAGE · UPSTAGE · STAGE_LEFT · STAGE_RIGHT · FLOOR · CEILING`), `floor` and `ceiling` finishes. |
 | `PROSCENIUM` | `openingWidthM`, `openingHeightM` (required), `openingSillM`, `surroundM` — the opening must fit the wall. |
-| `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. |
-| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's). |
+| `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. `paint` (below). |
+| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's), `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`; absent is velour), `paint` (below). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
 | `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`. |
 | `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`, `travelS` (a flown piece's). |
@@ -1690,6 +1690,45 @@ unflown) from the form.
 `elementTravelS` reads it, and ignores a stored value the
 piece no longer has (a drape switched to `DEAD`). Like every key here it needs no `formatVersion`:
 `params` travel verbatim, and an older desk keeps a field it does not read.
+
+**Fabric and paint** (scrim plan session 1, D1 and D4; `docs/plans/scrim-plan.md`). A drape's
+`fabric` is the cloth's, not its role's: a flown gauze is `BACKCLOTH` + `FLY` + `SHARKSTOOTH`, a
+traveller scrim `TABS` + `DRAW`. Absent is velour, the only fabric that pleats; canvas is the flat
+painted cloth, muslin is translucent, and the two nets are scrims. A drape's or a flat's `paint` is
+`{front?, back?}`, each the SHA-256 of an image in this project's **scene-image store** (below),
+stretched over the face — `front` is the downstage one, and a flat's openings still cut through its
+paint. Both are refused **by name** on any other kind (`params.fabric is a drape's …`,
+`params.paint is a drape's or a flat's …`), a hash that is not 64 hex characters is refused as one,
+and a hash the store does not hold is `params.paint.front names no stored image` — except one the
+element already carries, which is let stand as a dangling region is: a partial import leaves an
+element whose image is missing on this machine, and a rename must not be refused for it. Hashes are
+stored lower-case, and an empty `paint` (`{}`, or both sides null) is written as absent. **Nothing
+is drawn from them yet**: until scrim session 2 every fabric, painted or not, renders as today's
+velour. The keys travel inside `params`; the images travel beside them at `formatVersion` 23
+(`docs/sync-engineering.md` §"Version 23 — painted cloths").
+
+**The scene-image store** (`state/SceneImageStore.kt`, `State.sceneImages`) holds the originals
+content-addressed at `<appDataDir>/scene-images/{projectUuid}/{sha256}.{png|jpg}` (overridable as
+`stage.sceneImageStoreRoot`), written crash-atomically (a temp file, then an atomic move), PNG and
+JPEG only, at most 25 MB and 8192 px a side. The size is read from the image's **header before it is
+decoded**, so an image claiming more is refused without the gigabytes a decode would take; then it
+must decode, and `hasAlpha` is whether any pixel is not fully opaque. Beside the originals, under
+`derived/`, are per-machine copies made on first request and never synced: `{sha}-2048.png` (every
+cloth's), `{sha}-4096.png` (a cloth with *Full detail*) — both by successive halving with bicubic
+filtering, premultiplied so a hole's edge does not darken, alpha kept — and `{sha}-mask.png`, the
+alpha at exactly 256 px on the longest side, one byte a pixel, opaque white for a JPEG. A
+`{sha}-info.json` records what the image is, so the list never decodes an original twice. All of it
+is plain Kotlin over `ImageIO` and the pixel arrays: no `Graphics2D`, which on macOS starts the AWT
+toolkit and puts a Java icon in the Dock, and one full decode at a time (an 8192 px frame is 256 MB).
+**At project load** the store prunes any image no element has referenced for a week — an image's
+mtime is moved by every element write that names *or drops* it and by every load that finds it
+referenced — so an upload whose element was never saved does not pile up, and one taken off a cloth
+survives a week for an undo. A deleted project's store goes with it.
+
+**Full detail** (D12) is per element and per machine: a `machine_overrides` row,
+`Overrides.setString(projectId, "stage_elements", elementUuid, "displayDetail", "4096")`, set by
+`PUT stage-elements/{id}/display-detail {full}` and answered as `StageElementDto.fullDetail`, never in
+a sync DTO. Deleting the element deletes it; a clone carries it, as it carries every override.
 
 **Seats** are derived, never stored: row `firstRow` is nearest the stage at the origin, each later row
 a `rowPitchM` further from the stage (local −Y) and `rakeM` higher, seat 1 at the stage-right end,

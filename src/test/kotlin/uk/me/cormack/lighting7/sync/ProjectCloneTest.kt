@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCRIPT_HASH
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
 import uk.me.cormack.lighting7.testsupport.allUuidsIn
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
 import uk.me.cormack.lighting7.testsupport.seedRichProject
@@ -439,6 +440,20 @@ class ProjectCloneTest {
         val clonedPdf = state.promptScriptPath(result.projectUuid, RICH_PROJECT_SCRIPT_HASH)
         assertTrue(Files.exists(clonedPdf), "prompt-book PDF was not copied to $clonedPdf")
         assertContentEquals(pdfBytes, Files.readAllBytes(clonedPdf))
+    }
+
+    /** Cloning is derived (export → import), so the import's hydrate is what fills the clone's store. */
+    @Test
+    fun `clone copies the scene images into the new project's store`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-cloths", description = null)
+
+        for ((type, bytes) in RICH_PROJECT_SCENE_IMAGES) {
+            val hash = RecordHasher.sha256Hex(bytes)
+            val cloned = state.sceneImages.original(result.projectUuid, hash)
+            assertTrue(cloned != null, "scene image $hash ($type) was not copied into the clone's store")
+            assertContentEquals(bytes, Files.readAllBytes(cloned.first))
+        }
     }
 
     @Test

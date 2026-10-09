@@ -41,6 +41,14 @@ enum class DrapeRole { LEG, BORDER, TABS, CYC, BACKCLOTH }
 /** How a drape moves, which decides the state it may carry: `open` for a draw, `trimM` for a fly. */
 enum class DrapeOperation { DEAD, DRAW, FLY }
 
+/**
+ * What a drape is woven from (scrim plan D1): a cloth's, not a role's, so a flown gauze is
+ * `BACKCLOTH` + `FLY` + `SHARKSTOOTH`. Absent is velour, the only fabric that pleats (D2). Canvas is
+ * the flat painted cloth; muslin is translucent (D6); the two nets are scrims (D3). Nothing reads it
+ * on the desk: the Stage view draws it, and until scrim session 2 draws every fabric as velour.
+ */
+enum class DrapeFabric { CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET }
+
 enum class OpeningKind { DOOR, WINDOW, FRENCH_WINDOW, ARCH }
 
 enum class ObjectShape { BOX, CYLINDER, SHADE, DISC }
@@ -53,6 +61,17 @@ enum class StageViewpointKind { ORBIT, EYE, SEAT }
  * back on a metal frame.
  */
 enum class ChairStyle { THEATRE, BANQUET }
+
+/**
+ * The images painted on a drape's two sides or a flat's two faces (scrim plan D4): each the
+ * SHA-256 of an image in this project's scene-image store (`SceneImageStore`), 64 lower-case hex
+ * characters, stretched over the face. `front` is the downstage face. An empty paint is written as
+ * absent ([parseElementParams]), so `{}` never reaches the column.
+ */
+@Serializable
+data class ScenePaint(val front: String? = null, val back: String? = null) {
+    val hashes: List<String> get() = listOfNotNull(front, back)
+}
 
 /** A surface's finish where an element has more than one surface (a room's floor and ceiling). */
 @Serializable
@@ -114,6 +133,8 @@ data class FlatOpening(
 data class FlatParams(
     val openings: List<FlatOpening> = emptyList(),
     override val states: ElementStates? = null,
+    /** Images on its faces (scrim plan D4); the openings still cut through them. */
+    val paint: ScenePaint? = null,
 ) : ElementParams
 
 @Serializable
@@ -123,6 +144,10 @@ data class DrapeParams(
     override val states: ElementStates? = null,
     /** A drawn or flown drape's full travel, in seconds ([elementTravelS]); null snaps. */
     val travelS: Double? = null,
+    /** What it is woven from (scrim plan D1); null is velour. */
+    val fabric: DrapeFabric? = null,
+    /** Images on its two sides (scrim plan D4). */
+    val paint: ScenePaint? = null,
 ) : ElementParams
 
 @Serializable
@@ -366,6 +391,51 @@ private fun readFinish(r: ParamReader, name: String, where: String): SurfaceFini
     return SurfaceFinish(colour, pattern)
 }
 
+/** A scene image's identity: the SHA-256 of its bytes, lower-case hex (scrim plan §3.1). */
+val SCENE_IMAGE_HASH = Regex("^[0-9a-f]{64}$")
+
+/**
+ * A `paint` object read side by side, every problem at once. A hash is normalised to lower case and
+ * must name an image [imageStored] holds — this project's store, or the element's own stored paint
+ * (a hash a partial import left without its file still lets an unrelated edit through).
+ */
+private fun readPaint(r: ParamReader, where: String, imageStored: (String) -> Boolean): ScenePaint? {
+    val obj = r.obj("paint") ?: return null
+    val inner = ParamReader(obj, "$where.paint", r.problems)
+    fun side(name: String): String? {
+        val raw = inner.string(name)?.trim()?.lowercase() ?: return null
+        if (!SCENE_IMAGE_HASH.matches(raw)) {
+            r.problems += "$where.paint.$name must be an image's SHA-256: 64 hex characters"
+            return null
+        }
+        if (!imageStored(raw)) {
+            r.problems += "$where.paint.$name names no stored image"
+            return null
+        }
+        return raw
+    }
+    val front = side("front")
+    val back = side("back")
+    inner.rejectUnknown()
+    return ScenePaint(front, back).takeIf { it.front != null || it.back != null }
+}
+
+/**
+ * Every scene-image hash a stored params document names, read leniently — a document a later
+ * writer shaped differently still gives up the hashes it holds, so the prune and the exporter never
+ * drop an image an element still shows.
+ */
+fun paintHashesOf(params: JsonObject): Set<String> {
+    val paint = params["paint"] as? JsonObject ?: return emptySet()
+    return listOf("front", "back").mapNotNull { side ->
+        (paint[side] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.lowercase()
+            ?.takeIf { SCENE_IMAGE_HASH.matches(it) }
+    }.toSet()
+}
+
+/** [paintHashesOf] over a stored column's text. */
+fun paintHashesOf(paramsText: String): Set<String> = paintHashesOf(storedParamsObject(paramsText))
+
 /**
  * How far past its wall a fit may run and still fit: a tenth of a millimetre, well under anything
  * built, and well over a double's rounding — 1.1 + 2.2 is 3.3000000000000003, and an opening that
@@ -387,12 +457,16 @@ fun parseElementParams(
     heightM: Double,
     where: String,
     problems: MutableList<String>,
+    imageStored: (String) -> Boolean = { false },
 ): ElementParams? {
     val before = problems.size
     val r = ParamReader(obj, where, problems)
     val statesObj = r.obj("states")
     // Read for every kind so a misplaced one is refused by name below, not as an unknown field.
     val travelS = r.number("travelS", MIN_TRAVEL_S, MAX_TRAVEL_S, unit = "seconds")
+    val fabric = r.enum<DrapeFabric>("fabric")
+    val paintSent = obj["paint"].let { it != null && it !is JsonNull }
+    val paint = readPaint(r, where, imageStored)
     val params: ElementParams? = when (kind) {
         StageElementKind.ROOM -> {
             val omit = r.array("omit")?.mapIndexedNotNull { i, e ->
@@ -426,12 +500,12 @@ fun parseElementParams(
                 if (h != null && sill + h > heightM + FIT_TOLERANCE_M) problems += "$where.openings[$i] is taller than the flat (sillM + heightM = ${sill + h}, heightM $heightM)"
                 if (k != null && from != null && w != null && h != null) FlatOpening(k, from, w, h, sill) else null
             }.orEmpty()
-            FlatParams(openings)
+            FlatParams(openings, paint = paint)
         }
         StageElementKind.DRAPE -> {
             val role = r.enum<DrapeRole>("role", required = true)
             val operation = r.enum<DrapeOperation>("operation")
-            role?.let { DrapeParams(it, operation) }
+            role?.let { DrapeParams(it, operation, fabric = fabric, paint = paint) }
         }
         StageElementKind.PLATFORM -> {
             val rail = r.number("railHeightM", 0.1, 3.0)
@@ -503,6 +577,12 @@ fun parseElementParams(
             (params as? DrapeParams)?.let { " with operation ${it.operation ?: DrapeOperation.DEAD}" }.orEmpty()
         } does not travel"
     }
+    if (fabric != null && kind != StageElementKind.DRAPE) {
+        problems += "$where.fabric is a drape's (a DRAPE); this $kind has none"
+    }
+    if (paintSent && kind != StageElementKind.DRAPE && kind != StageElementKind.FLAT) {
+        problems += "$where.paint is a drape's or a flat's (a DRAPE or a FLAT); this $kind takes none"
+    }
     if (problems.size > before || params == null) return null
     val kept = states?.takeIf { it.visible != null || it.open != null || it.trimM != null }
     return when (params) {
@@ -544,6 +624,9 @@ data class StageElementFields(
  * the project's regions, for a platform's link; [storedRegionUuid] is the link the element already
  * holds, which may dangle — its region deleted, or a peer's sync that deleted it — and is let stand,
  * since a dangling link reads as none and an edit that does not touch it must not be refused for it.
+ * [imageStored] answers whether this project's scene-image store holds a hash, and [storedPaint] is
+ * the paint the element already carries, let stand on the same terms: an image a partial import left
+ * missing on this machine reads as unpainted, and must not refuse a rename.
  * Every message is prefixed with [where], and names the pose by [positionNames] — the surface's own
  * spelling (`positionX` over REST, `x` in a `set_scene` row).
  */
@@ -554,6 +637,8 @@ fun validateStageElement(
     problems: MutableList<String>,
     storedRegionUuid: String? = null,
     positionNames: List<String> = listOf("x", "y", "z"),
+    imageStored: (String) -> Boolean = { false },
+    storedPaint: Set<String> = emptySet(),
 ): ElementParams? {
     val before = problems.size
     val p = if (where.isEmpty()) "" else "$where: "
@@ -576,6 +661,7 @@ fun validateStageElement(
     val params = parseElementParams(
         fields.kind, fields.params, fields.widthM, fields.heightM,
         if (where.isEmpty()) "params" else "$where.params", problems,
+        imageStored = { it in storedPaint || imageStored(it) },
     )
     val region = (params as? PlatformParams)?.regionUuid
     if (region != null && region != storedRegionUuid && region !in regionUuids) {
