@@ -17,6 +17,7 @@ import type { RiggingDto } from '../../api/riggingApi'
 import {
   findColourSource,
   findDimmerProperty,
+  findGroupColourSource,
   findStrobeProperties,
   type ChannelRef,
   type ColourPropertyDescriptor,
@@ -52,6 +53,8 @@ import {
 } from '../../hooks/usePropertyValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
+import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import {
   computeNormalizedHue,
@@ -702,6 +705,7 @@ export function FixtureModel({
     () => (unitProps ? findColourSource(unitProps) : undefined),
     [unitProps],
   )
+  const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
   const dimmerProp = useMemo(
     () => findDimmerProperty(unitProps),
     [unitProps],
@@ -979,6 +983,7 @@ export function FixtureModel({
       ) : (
         <ColourSync
           hasFixture={!!fixture}
+          groupColour={groupColour}
           colourSource={colourSource}
           gel={gel}
           filters={filterProps}
@@ -2147,12 +2152,15 @@ function beginColourApply(
  *  `FixtureModel` cannot be rendered outside an R3F canvas. */
 export function ColourSync({
   hasFixture,
+  groupColour,
   colourSource,
   gel,
   ...refs
 }: ColourSyncBaseProps & {
   /** False for a patch whose fixture record hasn't resolved (or never will). */
   hasFixture: boolean
+  /** Its heads' colour (`findGroupColourSource`): a fixture whose colour lives on its elements. */
+  groupColour?: GroupColourPropertyDescriptor
   colourSource:
     | { type: 'colour'; property: ColourPropertyDescriptor }
     | { type: 'setting'; property: SettingPropertyDescriptor }
@@ -2167,7 +2175,12 @@ export function ColourSync({
     return <PlaceholderBeamSync {...refs} />
   }
   // A body of several cells never reaches here: `FixtureModel` draws it through `CellColourSync`,
-  // one colour and level per cell. This dispatch is the fixture's one colour, as the 2D one is.
+  // one colour and level per cell. This dispatch is the fixture's one colour, as the 2D one is —
+  // so a one-lens body over several coloured heads (a wash whose zones are its elements) draws
+  // their mix, ahead of the fixture's own arms, as `FixtureAppearanceSource` orders it.
+  if (groupColour && groupColour.memberColourChannels.length > 1) {
+    return <GroupColourBeamSync groupColourProp={groupColour} {...refs} />
+  }
   if (colourSource?.type === 'colour') {
     return <ColourBeamSync colourProp={colourSource.property} {...refs} />
   }
@@ -2471,6 +2484,48 @@ function FixedColourBeamSync({
         refs,
       )
       return filtersAnimate(filters, levels) || strobesAnimate(strobes, source) || travelState.moving
+    },
+    source,
+    ticker,
+  )
+  return null
+}
+
+// Several heads behind one lens: their beam mix and level (`computeGroupColourValues`, the 2D
+// `MultiPixelAppearance`'s numbers) × the fixture's dimmer. No filters and no travel, as there.
+function GroupColourBeamSync({
+  groupColourProp,
+  dimmerProp,
+  strobes = NO_STROBES,
+  ticker = STILL_COLOUR_TICKER,
+  lensRef,
+  colorStateRef,
+}: ColourSyncBaseProps & { groupColourProp: GroupColourPropertyDescriptor }) {
+  const refs = { lensRef, colorStateRef }
+  const source = useChannelSource()
+  const channels = useMemo(() => {
+    const cs: ChannelRef[] = []
+    for (const m of groupColourProp.memberColourChannels) {
+      cs.push(m.redChannel, m.greenChannel, m.blueChannel)
+      if (m.whiteChannel) cs.push(m.whiteChannel)
+      if (m.amberChannel) cs.push(m.amberChannel)
+      if (m.uvChannel) cs.push(m.uvChannel)
+    }
+    if (dimmerProp) cs.push(dimmerProp.channel)
+    for (const p of strobes) cs.push(p.channel)
+    return cs
+  }, [groupColourProp, dimmerProp, strobes])
+  useLiveColour(
+    channels,
+    () => {
+      const group = computeGroupColourValues(groupColourProp, source)
+      const timeS = ticker.now()
+      applyColour(
+        computeNormalizedHueCss(group.beamR, group.beamG, group.beamB),
+        group.beamIntensity * liveDimmerFactor(dimmerProp, source) * liveStrobeFactor(strobes, source, timeS),
+        refs,
+      )
+      return strobesAnimate(strobes, source)
     },
     source,
     ticker,

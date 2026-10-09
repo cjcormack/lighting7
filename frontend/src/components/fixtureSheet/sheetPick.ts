@@ -1,4 +1,5 @@
 import type { ElementDescriptor, Fixture, PropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
+import { SUBSELECT_MODE_LABELS } from '@/lib/cellsSubSelection'
 import { buildSheetRows, type SheetFamily, type SheetRow, type SheetRowGroup } from './sheetRows'
 
 /**
@@ -26,15 +27,76 @@ export function normalisePick(keys: Iterable<string>, all: readonly string[]): H
   return next
 }
 
+/** A pip's tap: that head alone, whatever was picked before. */
+export function selectOnlyPick(key: string, all: readonly string[]): HeadPick {
+  return normalisePick([key], all)
+}
+
+/** A run's next pip, or a tap with ⌘ or ⇧: added to the pick. *All* already has it. */
+export function addToPick(pick: HeadPick, key: string, all: readonly string[]): HeadPick {
+  if (pick == null) return null
+  return normalisePick([...pick, key], all)
+}
+
 /**
- * A pip's tap — or one pip of a run — toggles it (the busk pip's rule). From *All* nothing is
- * picked yet, so the first tap picks that one head; toggling the last one off is *All* again.
+ * A tap with ⌘ or ⇧ — and every pip of a run that began with one — toggles it. *All* holds every
+ * head, so toggling one there leaves the rest; toggling the last one off is *All* again.
  */
 export function togglePick(pick: HeadPick, key: string, all: readonly string[]): HeadPick {
-  const next = new Set(pick ?? [])
+  const next = new Set(pick ?? all)
   if (next.has(key)) next.delete(key)
   else next.add(key)
   return normalisePick(next, all)
+}
+
+/** The head strip's Cells menu: the filters, each over **every** head, and *Invert* of the pick. */
+export type PickFilter = 'ALL' | 'ODD' | 'EVEN' | 'FIRST_HALF' | 'SECOND_HALF' | 'INVERT'
+
+export const PICK_FILTERS: readonly PickFilter[] = ['ALL', 'ODD', 'EVEN', 'FIRST_HALF', 'SECOND_HALF', 'INVERT']
+
+/** The busk band's words for the same filters, so the two menus name them alike. */
+export const PICK_FILTER_LABELS: Record<PickFilter, string> = Object.fromEntries(
+  PICK_FILTERS.map((filter) => [filter, SUBSELECT_MODE_LABELS[filter]]),
+) as Record<PickFilter, string>
+
+/** Whether head [index] of [total] is in a filter — the desk's `ElementFilter.includes`, clause for clause. */
+function filterIncludes(filter: Exclude<PickFilter, 'ALL' | 'INVERT'>, index: number, total: number): boolean {
+  const half = Math.floor((total + 1) / 2)
+  switch (filter) {
+    case 'ODD':
+      return index % 2 === 0
+    case 'EVEN':
+      return index % 2 === 1
+    case 'FIRST_HALF':
+      return index < half
+    case 'SECOND_HALF':
+      return index >= half
+  }
+}
+
+/**
+ * A Cells-menu filter applied: Odd, Even and the halves are over every head — so they are exactly the
+ * element filters an effect can start with (`elementFilterFor`) — and *Invert* is every head the pick
+ * does not hold. *Invert* of *All* would be nothing, which reads as *All*, so it leaves *All* alone.
+ */
+export function filterPick(pick: HeadPick, filter: PickFilter, all: readonly string[]): HeadPick {
+  if (filter === 'ALL') return null
+  if (filter === 'INVERT') return pick == null ? null : normalisePick(all.filter((k) => !pick.has(k)), all)
+  return normalisePick(all.filter((_, i) => filterIncludes(filter, i, all.length)), all)
+}
+
+/**
+ * *Prev* / *Next*: the pick moved one head along, wrapping at the ends. From *All* there is nothing
+ * to move, so *Next* starts at the first head and *Prev* at the last.
+ */
+export function stepPick(pick: HeadPick, step: 1 | -1, all: readonly string[]): HeadPick {
+  const n = all.length
+  if (n === 0) return null
+  if (pick == null) return normalisePick([all[step === 1 ? 0 : n - 1]], all)
+  return normalisePick(
+    all.filter((k) => pick.has(k)).map((k) => all[(all.indexOf(k) + step + n) % n]),
+    all,
+  )
 }
 
 /** The heads a pick covers, in strip order. */
@@ -70,7 +132,7 @@ export interface PickRowGroup {
  * refuses a group setting otherwise): the row writes one option's level to every head, and on a
  * model whose list differs that level is another option.
  *
- * [optionsFor] is `buildSheetRows`' options per head — a head's fixture-level dimmer for its swatch.
+ * [optionsFor] is `buildSheetRows`' options per head — `headRowOptions` for a fixture's heads.
  */
 export function rowsOverHeads(
   heads: readonly PickHead[],
@@ -126,9 +188,13 @@ export function pickCountLabel(heads: readonly PickHead[], pick: HeadPick): stri
   return pick == null ? `All ${heads.length}` : `${pick.size} of ${heads.length}`
 }
 
-/** A head's fixture-level dimmer, for its swatch when it has none of its own — `buildSheetRows`' option. */
+/**
+ * `buildSheetRows`' options for a fixture's heads: the fixture's dimmer for a head's swatch when it
+ * has none of its own, and **no** Intensity row of a head's own — a head has no dimmer channel, and
+ * the row would only scale its colour, which the colour row already sets.
+ */
 export function headRowOptions(fixtureDimmer: SliderPropertyDescriptor | undefined) {
-  return () => ({ fallbackDimmer: fixtureDimmer })
+  return () => ({ fallbackDimmer: fixtureDimmer, dimmerElsewhere: true })
 }
 
 /**
@@ -139,15 +205,8 @@ export function headRowOptions(fixtureDimmer: SliderPropertyDescriptor | undefin
 export function elementFilterFor(heads: readonly PickHead[], pick: HeadPick): 'ODD' | 'EVEN' | 'FIRST_HALF' | 'SECOND_HALF' | null {
   if (pick == null) return null
   const total = heads.length
-  const half = Math.floor((total + 1) / 2)
-  const filters = {
-    ODD: (i: number) => i % 2 === 0,
-    EVEN: (i: number) => i % 2 === 1,
-    FIRST_HALF: (i: number) => i < half,
-    SECOND_HALF: (i: number) => i >= half,
-  } as const
-  for (const [name, includes] of Object.entries(filters) as [keyof typeof filters, (i: number) => boolean][]) {
-    if (heads.every((h, i) => includes(i) === pick.has(h.key))) return name
+  for (const name of ['ODD', 'EVEN', 'FIRST_HALF', 'SECOND_HALF'] as const) {
+    if (heads.every((h, i) => filterIncludes(name, i, total) === pick.has(h.key))) return name
   }
   return null
 }

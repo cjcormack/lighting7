@@ -8,9 +8,13 @@ import {
   elementFilterFor,
   groupSheetMembers,
   headsOfFixture,
+  addToPick,
+  filterPick,
   normalisePick,
   pickWrite,
   rowsOverHeads,
+  selectOnlyPick,
+  stepPick,
   togglePick,
   type PickHead,
 } from './sheetPick'
@@ -26,11 +30,32 @@ describe('the pick', () => {
     expect([...normalisePick(['a', 'z'], keys)!]).toEqual(['a'])
   })
 
-  it('toggles from All to one head, and back to All with the last', () => {
-    const one = togglePick(null, 'b', keys)
+  it('picks one head on a tap, adds a run’s next pip, and toggles a modified tap', () => {
+    const one = selectOnlyPick('b', keys)
     expect([...one!]).toEqual(['b'])
+    expect([...addToPick(one, 'c', keys)!]).toEqual(['b', 'c'])
+    expect(addToPick(null, 'c', keys)).toBeNull()
+    // All holds every head: toggling one there leaves the rest; toggling the last one off is All.
+    expect([...togglePick(null, 'b', keys)!]).toEqual(['a', 'c', 'd'])
     expect(togglePick(one, 'b', keys)).toBeNull()
     expect(togglePick(togglePick(togglePick(one, 'a', keys), 'c', keys), 'd', keys)).toBeNull()
+  })
+
+  it('filters every head by the desk’s element filters, inverts the pick, and steps it along', () => {
+    const five = ['a', 'b', 'c', 'd', 'e']
+    const list = (p: ReturnType<typeof filterPick>) => (p == null ? null : [...p].sort())
+    expect(list(filterPick(new Set(['b']), 'ODD', five))).toEqual(['a', 'c', 'e'])
+    expect(list(filterPick(null, 'EVEN', five))).toEqual(['b', 'd'])
+    expect(list(filterPick(null, 'FIRST_HALF', five))).toEqual(['a', 'b', 'c'])
+    expect(list(filterPick(null, 'SECOND_HALF', five))).toEqual(['d', 'e'])
+    expect(filterPick(new Set(['b']), 'ALL', five)).toBeNull()
+    expect(list(filterPick(new Set(['a', 'c', 'e']), 'INVERT', five))).toEqual(['b', 'd'])
+    // Invert of All would be nothing, which is All again.
+    expect(filterPick(null, 'INVERT', five)).toBeNull()
+    expect(list(stepPick(null, 1, five))).toEqual(['a'])
+    expect(list(stepPick(null, -1, five))).toEqual(['e'])
+    expect(list(stepPick(new Set(['d', 'e']), 1, five))).toEqual(['a', 'e'])
+    expect(list(stepPick(new Set(['a']), -1, five))).toEqual(['e'])
   })
 
   it('writes a group entry on a group’s All, and members carrying the group on a subset', () => {

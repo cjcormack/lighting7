@@ -1658,8 +1658,12 @@ fixture's colour. At most `MAX_CELLS` (16).
   writes its beam's colour and opacity; a body of one cell keeps `ColourSync`, the fixture's own
   dispatch. Cells are 3D only: the 2D dispatch answers one colour a fixture, folding a pixel bar's
   elements into one in its multi-element arm. `ColourSync` lost that arm (and `MultiPixelColourSync`)
-  with session 6, since a bar is drawn as cells; its single-colour arms still mirror the 2D ones,
-  which `colourDispatchParity.test.tsx` pins.
+  with session 6, since a bar is drawn as cells, and has it again as `GroupColourBeamSync` for a
+  **one-cell body over several coloured heads** — a wash whose zones are its elements (the Shehds
+  19×15 in 24 channels), which otherwise fell to the default white because the fixture carries no
+  colour of its own. It draws the heads' mix, the 2D arm's numbers (`computeGroupColourValues`), ahead
+  of the fixture's own arms as the 2D dispatch orders it; every arm still mirrors the 2D one, which
+  `colourDispatchParity.test.tsx` pins.
 - **Lights on the surfaces are capped at four a fixture** (`MAX_LIGHTS_PER_FIXTURE`), each averaging
   a contiguous run of cells (`lightRuns`) — its aperture the run's span, its colour × level their
   mean — so a 12-pixel bar takes four of the surface shader's lights, not twelve. The air keeps a

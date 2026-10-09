@@ -567,7 +567,8 @@ Release folds to its glyph and the scope line drops the fade.
   `lib/attributeFamily.ts` files under Beam as its catch-all). Triggers, commands and fine halves are
   not rows. **Pan and tilt are one Position row** keyed `position` first (then the axis names), from
   the grid's own `resolveCell(…, 'position')`. A colour head with no dimmer gets an Intensity *Dimmer*
-  row over its colour — no "Virtual" badge.
+  row over its colour — no "Virtual" badge — but **a fixture's heads never do** (`headRowOptions`):
+  a head has no dimmer channel, and the row only repeated what its colour row sets.
 - **Controls are the editor kit's** (D7): a slider beside an `EditorField` in the row's unit — a
   **percent** for a level, as the grid reads; **degrees** for a Position whose axes annotate travel,
   bytes otherwise. A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
@@ -683,8 +684,15 @@ Release folds to its glyph and the scope line drops the fade.
   (`FixtureAppearanceSource` — one leaf for a fixture, whose heads are its `segments`; one per member,
   a member key naming one head of a bar — defensive, a patch-loaded group never holds one — coloured
   by that segment), a floor so a dark head is still a target. The gesture is the busk pip's, shared
-  through `hooks/usePipRun.ts` with `RigTile`: **a tap toggles, a mouse drag runs, a held finger
-  runs**, the release's click swallowed. **The pick is the
+  through `hooks/usePipRun.ts` with `RigTile`, read as a pick rather than a toggle: **a tap picks that
+  head alone**, a mouse drag or a held finger **runs** — the first pip picked alone, every pip crossed
+  added — and **⌘ or ⇧ toggles** one in or out; the release's click is swallowed. *All* lights every
+  pip, since it holds every head, so a pick that covers every head (and folds to *All*) never reads as
+  lost. Beside the pips, the busk band's vocabulary: a **Cells** menu — *All · Odd · Even · 1st half ·
+  2nd half* over every head (exactly the element filters an effect starts with) and *Invert* of the
+  pick — and *Prev* / *Next*, stepping the pick one head along and wrapping (from *All*, the first or
+  last head). The menu's face names the filter last chosen, kept beside the pick, and any other
+  gesture clears it. **The pick is the
   sheet's own** — never the desk selection (call 4) — remembered against the target it was made on, so
   it reads as *All* the moment the sheet shows another target (the Stage panel keeps one sheet mounted
   across fixtures). `sheetPick.ts` is the pure model: a `HeadPick` is `null` for *All* or a set that is
@@ -711,8 +719,8 @@ Release folds to its glyph and the scope line drops the fade.
   is resolved per head; a group's *All* stays one entry only where every member lands on the same
   bytes (one model), else each member's own. A colour fills an emitter it does not say from each
   head's own channel (the desk reads a missing one as 0), and is one group entry only over members
-  with the same emitters. A dimmerless colour's *Dimmer* scales each head's colour,
-  so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
+  with the same emitters. A dimmerless colour's *Dimmer* (a group member's, never a fixture's head)
+  scales each head's colour, so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
 - **Effects follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
   (`effectsReaching`, still the one filter), an effect on one head reading *on Head 3*. **+ Effect**
   starts on the fixture or the group for *All* (a group's with its distribution, Element mode in the
