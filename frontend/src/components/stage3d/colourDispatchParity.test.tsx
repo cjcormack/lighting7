@@ -12,6 +12,7 @@ import type { ChannelSource } from '../../api/channelSource'
 import {
   findColourSource,
   findDimmerProperty,
+  findGroupColourSource,
   findStrobeProperties,
   type Fixture,
   type FixtureTypeInfo,
@@ -122,6 +123,7 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
     <ChannelSourceProvider source={sourceOf(scenario.values)}>
       <ColourSync
         hasFixture={!!fixture}
+        groupColour={findGroupColourSource(fixture)}
         colourSource={colourSource}
         gel={gel}
         filters={colourFilters(properties, colourSource)}
@@ -196,6 +198,28 @@ const ROBE_WHEEL_2 = settingProp('colour2', 'colour', chan(10), [
   { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW', noColour: true },
 ])
 const ROBE = makeFixture('robe-1', [DIMMER, ROBE_WHEEL_1, ROBE_WHEEL_2])
+
+// The Shehds 19×15 in its 24-channel mode: a wash whose colour is three RGBW zones — elements, each
+// with its own colour — behind one lens, and a master dimmer on the fixture.
+const ZONES = [11, 15, 19].map((first) => colourProp('rgbColour', chan(first), chan(first + 1), chan(first + 2), { whiteChannel: chan(first + 3) }))
+const ZONED_WASH = makeFixture('wash-1', [DIMMER], {
+  elements: ZONES.map((zone, i) => ({ index: i, key: `wash-1.zone-${i + 1}`, displayName: `Zone ${i + 1}`, properties: [zone] })),
+  elementGroupProperties: [
+    {
+      type: 'colour',
+      name: 'rgbColour',
+      displayName: 'Colour',
+      category: 'colour',
+      memberColourChannels: ZONES.map((zone, i) => ({
+        fixtureKey: `wash-1.zone-${i + 1}`,
+        redChannel: zone.redChannel,
+        greenChannel: zone.greenChannel,
+        blueChannel: zone.blueChannel,
+        whiteChannel: zone.whiteChannel,
+      })),
+    },
+  ],
+})
 
 function scenario(over: Partial<Scenario>): Scenario {
   return { patch: PATCH, fixture: undefined, fixtureType: undefined, values: {}, ...over }
@@ -307,6 +331,20 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
     }),
   },
   {
+    name: 'a wash whose zones are all red, under a half dimmer',
+    scenario: scenario({
+      fixture: ZONED_WASH,
+      values: { '0:1': 128, '0:11': 255, '0:15': 255, '0:19': 255 },
+    }),
+  },
+  {
+    name: 'a wash whose zones are red, blue and white',
+    scenario: scenario({
+      fixture: ZONED_WASH,
+      values: { '0:1': 255, '0:11': 255, '0:17': 255, '0:22': 200 },
+    }),
+  },
+  {
     name: 'a colour-wheel fixture parked at open',
     scenario: scenario({
       fixture: makeFixture('fx-1', [DIMMER, WHEEL]),
@@ -316,6 +354,12 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
 ]
 
 describe('2D and 3D colour dispatch parity', () => {
+  it('draws a zoned wash in its zones\' colour, not the default white', () => {
+    const red = resolve3D(scenario({ fixture: ZONED_WASH, values: { '0:1': 255, '0:11': 255, '0:15': 255, '0:19': 255 } }))
+    expect(red.colour).toBe('#ff0000')
+    expect(red.intensity).toBeGreaterThan(0)
+  })
+
   it.each(SCENARIOS)('resolves $name identically on both surfaces', ({ scenario: s }) => {
     const twoD = resolve2D(s)
     const threeD = resolve3D(s)

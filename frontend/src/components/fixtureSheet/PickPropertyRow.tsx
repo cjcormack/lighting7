@@ -137,7 +137,9 @@ function PickFrame({
       )}
     >
       <div className="flex min-h-5 min-w-0 items-center gap-1.5">
-        <span className={cn('shrink-0 text-[12.5px] font-medium', source.kind === 'base' && 'opacity-60')}>{name}</span>
+        <span title={name} className={cn('min-w-0 truncate text-[12.5px] font-medium', source.kind === 'base' && 'opacity-60')}>
+          {name}
+        </span>
         <SourceChip
           source={source}
           heads={heads}

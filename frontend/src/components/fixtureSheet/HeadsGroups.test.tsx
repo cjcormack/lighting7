@@ -125,6 +125,7 @@ import { FixtureSheet } from './FixtureSheet'
 
 const BAR_A: Fixture = makePixelBar('bar-a', 12, [], { name: 'Bar A' })
 const BAR_B: Fixture = makePixelBar('bar-b', 12, [], { name: 'Bar B' })
+const BAR_C: Fixture = makePixelBar('bar-c', 3, [], { name: 'Bar C' })
 
 const wash = (key: string, first: number) =>
   makeFixture(
@@ -140,10 +141,14 @@ const WASH_2 = wash('wash-2', 111)
 const WASH_3 = wash('wash-3', 121)
 const FRONT = { ...groupSummary('front', 3), capabilities: ['dimmer', 'colour'] }
 
-const pip = (name: string) => screen.getByRole('checkbox', { name })
+const pip = (name: string) => screen.getByRole('button', { name })
+const pips = (root: ParentNode = document) => [...root.querySelectorAll<HTMLElement>('[data-head-pip]')]
 const all = () => screen.getByRole('button', { name: /^All/ })
 const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement
 const mouse = { button: 0, pointerId: 1, pointerType: 'mouse' }
+/** A pip added to the pick — a click with ⌘ held; a plain click picks that head alone. */
+const addPip = (name: string) => fireEvent.click(pip(name), { metaKey: true })
+const checked = () => pips().filter((p) => p.getAttribute('aria-pressed') === 'true').map((p) => p.getAttribute('aria-label'))
 
 /** Rows over a pick of heads or members are a `PickPropertyRow`; one picked head is its own `PropertyRow`. */
 function typeInto(field: HTMLElement, value: string) {
@@ -172,7 +177,7 @@ beforeEach(() => {
   wire.values = new Map()
   wire.connected = true
   wire.effects = []
-  wire.fixtures = [BAR_A, BAR_B, WASH_1, WASH_2, WASH_3]
+  wire.fixtures = [BAR_A, BAR_B, BAR_C, WASH_1, WASH_2, WASH_3]
   wire.members = [WASH_1, WASH_2, WASH_3].map((f) => ({ fixtureKey: f.key, fixtureName: f.name }))
   picker.props = null
   programmerWs.reset()
@@ -192,20 +197,21 @@ describe('the head strip', () => {
   it('draws All and a pip per head, starting on All', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     const strip = screen.getByRole('group', { name: 'Heads' })
-    expect(within(strip).getAllByRole('checkbox')).toHaveLength(12)
+    expect(pips(strip)).toHaveLength(12)
     expect(all().getAttribute('aria-pressed')).toBe('true')
-    expect(within(strip).getAllByRole('checkbox').every((p) => p.getAttribute('aria-checked') === 'false')).toBe(true)
+    // All holds every head, so every pip is lit.
+    expect(pips(strip).every((p) => p.getAttribute('aria-pressed') === 'true')).toBe(true)
   })
 
   it('resets the pick when the sheet moves to another target', () => {
     const { rerender } = render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 3'))
-    expect(pip('Head 3').getAttribute('aria-checked')).toBe('true')
+    expect(pip('Head 3').getAttribute('aria-pressed')).toBe('true')
     expect(all().getAttribute('aria-pressed')).toBe('false')
     // The Stage panel keeps one sheet mounted and hands it the next fixture.
     rerender(<FixtureSheet fixture={BAR_B} host="stage" />)
     expect(all().getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getAllByRole('checkbox').some((p) => p.getAttribute('aria-checked') === 'true')).toBe(false)
+    expect(checked()).toHaveLength(12)
   })
 
   it('picks a run with a mouse drag — every pip crossed, once', () => {
@@ -216,19 +222,66 @@ describe('the head strip', () => {
     fireEvent.pointerMove(pip('Head 4'), mouse)
     fireEvent.pointerMove(pip('Head 4'), mouse)
     fireEvent.pointerUp(pip('Head 4'), mouse)
-    const picked = screen.getAllByRole('checkbox').filter((p) => p.getAttribute('aria-checked') === 'true')
+    const picked = pips().filter((p) => p.getAttribute('aria-pressed') === 'true')
     expect(picked.map((p) => p.getAttribute('aria-label'))).toEqual(['Head 1', 'Head 2', 'Head 3', 'Head 4'])
     expect(screen.getByText('4 of 12')).toBeTruthy()
   })
 
-  it('goes back to All on a press of All, and when the last pip is toggled off', () => {
+  it('picks one head on a tap, from All or from any other pick', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 2'))
+    expect(checked()).toEqual(['Head 2'])
+    addPip('Head 3')
+    fireEvent.click(pip('Head 5'))
+    expect(checked()).toEqual(['Head 5'])
     fireEvent.click(all())
     expect(all().getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(pip('Head 5'))
-    fireEvent.click(pip('Head 5'))
+  })
+
+  it('adds and removes a head with ⌘, and a pick of every head reads as All with every pip still lit', () => {
+    render(<FixtureSheet fixture={BAR_C} host="stage" />)
+    fireEvent.click(pip('Head 1'))
+    addPip('Head 2')
+    expect(checked()).toEqual(['Head 1', 'Head 2'])
+    addPip('Head 3')
     expect(all().getAttribute('aria-pressed')).toBe('true')
+    expect(checked()).toEqual(['Head 1', 'Head 2', 'Head 3'])
+    addPip('Head 2')
+    expect(checked()).toEqual(['Head 1', 'Head 3'])
+  })
+
+  it('picks by pattern from the Cells menu, steps with Prev and Next, and a tap clears the pattern', () => {
+    render(<FixtureSheet fixture={BAR_A} host="stage" />)
+    const cells = () => screen.getByRole('button', { name: /^Cells:/ })
+    // Radix opens on Enter at the trigger, with no pointer needed.
+    const choose = (name: string) => {
+      fireEvent.keyDown(cells(), { key: 'Enter' })
+      fireEvent.click(screen.getByRole('menuitem', { name }))
+    }
+    expect(cells().getAttribute('aria-label')).toBe('Cells: All')
+    choose('Odd')
+    expect(checked()).toEqual(['Head 1', 'Head 3', 'Head 5', 'Head 7', 'Head 9', 'Head 11'])
+    expect(cells().getAttribute('aria-label')).toBe('Cells: Odd')
+    choose('Invert')
+    expect(checked()).toEqual(['Head 2', 'Head 4', 'Head 6', 'Head 8', 'Head 10', 'Head 12'])
+    choose('2nd half')
+    expect(checked()).toEqual(['Head 7', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
+    fireEvent.click(screen.getByRole('button', { name: 'Next head' }))
+    expect(checked()).toEqual(['Head 1', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
+    expect(cells().getAttribute('aria-label')).toBe('Cells: a pick of your own')
+    fireEvent.click(pip('Head 4'))
+    expect(checked()).toEqual(['Head 4'])
+    fireEvent.click(screen.getByRole('button', { name: 'Previous head' }))
+    expect(checked()).toEqual(['Head 3'])
+  })
+
+  it('steps from All to the first head with Next and the last with Prev', () => {
+    render(<FixtureSheet fixture={BAR_A} host="stage" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Next head' }))
+    expect(checked()).toEqual(['Head 1'])
+    fireEvent.click(all())
+    fireEvent.click(screen.getByRole('button', { name: 'Previous head' }))
+    expect(checked()).toEqual(['Head 12'])
   })
 
   it('never touches the desk selection — the pick is the sheet’s own (call 4)', () => {
@@ -238,7 +291,7 @@ describe('the head strip', () => {
     selection.toggle = set
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))
-    fireEvent.click(pip('Head 2'))
+    addPip('Head 2')
     expect(set).not.toHaveBeenCalled()
   })
 })
@@ -251,11 +304,18 @@ describe('rows over a pick of heads', () => {
     fireEvent.pointerDown(pip('Head 1'), mouse)
     for (const n of [2, 3, 4]) fireEvent.pointerMove(pip(`Head ${n}`), mouse)
     fireEvent.pointerUp(pip('Head 4'), mouse)
-    // A pixel's colour has no dimmer: its Dimmer row scales the colour of each picked head.
-    const dimmer = within(row('virtual-dimmer:rgbColour')).getByLabelText('Dimmer percent')
-    typeInto(dimmer, '100')
+    fireEvent.click(within(row('rgbColour')).getByRole('button', { name: /^Open the .* editor$/ }))
+    fireEvent.change(within(row('rgbColour')).getByLabelText('R'), { target: { value: '255' } })
     expect(setColour.mock.calls.map((c) => c[1])).toEqual(['bar-a.pixel-0', 'bar-a.pixel-1', 'bar-a.pixel-2', 'bar-a.pixel-3'])
-    expect(setColour.mock.calls.every((c) => c[0] === 'fixture' && c[4] === 1000 && c[5] === undefined)).toBe(true)
+    expect(setColour.mock.calls.every((c) => c[0] === 'fixture' && c[5] === undefined)).toBe(true)
+  })
+
+  it('draws no Dimmer row for a head — a head has no dimmer channel, and its colour row sets its level', () => {
+    render(<FixtureSheet fixture={BAR_A} host="stage" />)
+    expect(row('virtual-dimmer:rgbColour')).toBeNull()
+    fireEvent.click(pip('Head 1'))
+    expect(row('virtual-dimmer:rgbColour')).toBeNull()
+    expect(row('rgbColour')).toBeTruthy()
   })
 
   it('draws mixed levels as a range and a swatch strip, and one head as its own row', () => {
@@ -269,10 +329,7 @@ describe('rows over a pick of heads', () => {
     red(h2, 128)
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))
-    fireEvent.click(pip('Head 2'))
-    const field = within(row('virtual-dimmer:rgbColour')).getByLabelText('Dimmer percent') as HTMLInputElement
-    expect(field.value).toBe('')
-    expect(field.placeholder).toBe('50–100')
+    addPip('Head 2')
     expect(within(row('rgbColour')).getByTestId('colour-strip').children).toHaveLength(2)
     expect(row('rgbColour').textContent).toContain('2 colours')
     // One head picked: that head's own row, with its own value.
@@ -291,7 +348,7 @@ describe('rows over a pick of heads', () => {
     )
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))
-    fireEvent.click(pip('Head 2'))
+    addPip('Head 2')
     expect(row('rgbColour').getAttribute('data-mixed-source')).toBe('true')
     const chip = row('rgbColour').querySelector('button[data-source]') as HTMLElement
     expect(chip.textContent).toBe('Programmer · 1 of 2')
@@ -314,13 +371,14 @@ describe('rows over a pick of heads', () => {
 
   it('starts on the fixture with a filter for a half of the heads, and refuses a pick no filter names', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
-    for (const n of [1, 2, 3, 4, 5, 6]) fireEvent.click(pip(`Head ${n}`))
+    fireEvent.click(pip('Head 1'))
+    for (const n of [2, 3, 4, 5, 6]) addPip(`Head ${n}`)
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
     fireEvent.click(within(tray).getByRole('button', { name: 'Effect' }))
     expect((picker.props?.target as { fixture: Fixture }).fixture.key).toBe('bar-a')
     expect(picker.props?.elementFilter).toBe('FIRST_HALF')
     // Five heads: no filter names them, so the picker says why rather than starting on the wrong ones.
-    fireEvent.click(pip('Head 6'))
+    addPip('Head 6')
     expect(within(tray).queryByTestId('fx-picker')).toBeNull()
     expect(within(tray).getByText(/pick one of those/)).toBeTruthy()
     fireEvent.click(within(tray).getByRole('button', { name: 'Back to the effects' }))
@@ -336,7 +394,7 @@ describe('the tray’s Look picker follows the pick', () => {
     expect(look()).toBe('fixture:bar-a')
     fireEvent.click(pip('Head 1'))
     expect(look()).toBe('fixture:bar-a.pixel-0')
-    fireEvent.click(pip('Head 2'))
+    addPip('Head 2')
     expect(look()).toBeNull()
   })
 
@@ -365,11 +423,35 @@ describe('the group sheet', () => {
     const set = vi.spyOn(lightingApi.programmer, 'set')
     render(<FixtureSheet group={FRONT} host="popup" />)
     fireEvent.click(pip('Wash 1'))
-    fireEvent.click(pip('Wash 3'))
+    addPip('Wash 3')
     typeInto(within(row('dimmer')).getByLabelText('dimmer percent'), '50')
     expect(set.mock.calls).toEqual([
       ['fixture', 'wash-1', 'dimmer', '128', 0, 'front'],
       ['fixture', 'wash-3', 'dimmer', '128', 0, 'front'],
+    ])
+  })
+
+  it('scales each member’s colour from a dimmerless group’s Dimmer row, carrying the group', () => {
+    const par = (key: string, first: number) =>
+      makeFixture(key, [colourProp('rgbColour', chan(first), chan(first + 1), chan(first + 2))], {
+        name: key,
+        groups: ['pars'],
+        channelCount: 3,
+        firstChannel: first,
+      })
+    const parA = par('par-a', 201)
+    const parB = par('par-b', 211)
+    wire.fixtures = [parA, parB]
+    wire.members = [parA, parB].map((f) => ({ fixtureKey: f.key, fixtureName: f.name }))
+    const red = (f: Fixture) => (f.properties[0] as { redChannel: { universe: number; channelNo: number } }).redChannel
+    for (const f of [parA, parB]) wire.values.set(`${red(f).universe}:${red(f).channelNo}`, 200)
+    setProgrammerFade('0')
+    const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
+    render(<FixtureSheet group={{ ...groupSummary('pars', 2), capabilities: ['colour'] }} host="popup" />)
+    typeInto(within(row('virtual-dimmer:rgbColour')).getByLabelText('Dimmer percent'), '50')
+    expect(setColour.mock.calls.map((c) => [c[0], c[1], c[3].r, c[5]])).toEqual([
+      ['fixture', 'par-a', 128, 'pars'],
+      ['fixture', 'par-b', 128, 'pars'],
     ])
   })
 

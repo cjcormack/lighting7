@@ -4,6 +4,14 @@ import { useLongPress } from './useLongPress'
 /** How long a finger must hold still on a pip before a drag across the row is a run — the marquee's number. */
 export const PIP_HOLD_MS = 500
 
+/** Where a pip falls in its gesture — `usePipRun`'s `onToggle`. */
+export interface PipRunStep {
+  /** The pip the gesture began on. */
+  first: boolean
+  /** The gesture began with ⌘ or ⇧ held (a mouse's; a finger has none). Not Ctrl: on a Mac that is a right-click. */
+  additive: boolean
+}
+
 /**
  * The busk pip's gesture (busk-further plan D11), for a row of pips that each toggle one thing: **a
  * tap toggles**, **a mouse drag runs** — the pip under the press toggles on `pointerdown`, the row
@@ -14,7 +22,9 @@ export const PIP_HOLD_MS = 500
  * it is not a second toggle; a pip's own `onClick` is the keyboard's toggle.
  *
  * Two rows share it: the busk rig tile's cells (`RigTile`) and the fixture sheet's head strip
- * (`HeadStrip`). A pip is found by its [attribute], whose value is the key [onToggle] is handed.
+ * (`HeadStrip`), which reads a press as *pick this head* rather than a toggle — the gesture is the
+ * same, and `onToggle`'s [PipRunStep] is what lets a row tell a run's first pip from the rest. A pip
+ * is found by its [attribute], whose value is the key [onToggle] is handed.
  *
  * [hot] is the pip under a live touch run, which a row draws large so the finger can see it.
  */
@@ -27,11 +37,16 @@ export function usePipRun<E extends HTMLElement = HTMLElement>({
   attribute: string
   /** The row takes no press (a rig being edited). */
   inert: boolean
-  onToggle: (key: string) => void
+  /**
+   * A pip pressed or crossed. [run] says where in the gesture: `first` for the pip it began on, and
+   * `additive` when it began with ⌘ or ⇧ held — the head strip's tap picks one head and a modified
+   * tap adds to the pick, where the rig tile toggles either way and reads neither.
+   */
+  onToggle: (key: string, run: PipRunStep) => void
 }) {
   const rowRef = useRef<E | null>(null)
-  /** The live run: the pointer that owns it and the pips it has already toggled. */
-  const run = useRef<{ pointerId: number; toggled: Set<string> } | null>(null)
+  /** The live run: the pointer that owns it, the pips it has already toggled, and its modifier. */
+  const run = useRef<{ pointerId: number; toggled: Set<string>; additive: boolean } | null>(null)
   /** A touch press waiting for its hold, and the pip it landed on. */
   const pending = useRef<{ pointerId: number; key: string | null } | null>(null)
   /** Set by a run's release: the click the browser is about to deliver is not a second toggle. */
@@ -53,13 +68,14 @@ export function usePipRun<E extends HTMLElement = HTMLElement>({
   const toggle = useCallback((key: string | null) => {
     const live = run.current
     if (key == null || live == null || live.toggled.has(key)) return
+    const first = live.toggled.size === 0
     live.toggled.add(key)
-    toggleRef.current(key)
+    toggleRef.current(key, { first, additive: live.additive })
   }, [])
 
   const start = useCallback(
-    (pointerId: number, key: string | null, held: boolean) => {
-      run.current = { pointerId, toggled: new Set() }
+    (pointerId: number, key: string | null, held: boolean, additive: boolean) => {
+      run.current = { pointerId, toggled: new Set(), additive }
       // A finger's run is followed off the row and the browser's pan is refused for as long as
       // it lasts (`useCellMarquee`'s `touchmove` guard, for its reason).
       if (held) {
@@ -100,7 +116,7 @@ export function usePipRun<E extends HTMLElement = HTMLElement>({
     onLongPress: () => {
       const press = pending.current
       if (press == null || run.current != null) return
-      start(press.pointerId, press.key, true)
+      start(press.pointerId, press.key, true, false)
     },
   })
 
@@ -121,7 +137,7 @@ export function usePipRun<E extends HTMLElement = HTMLElement>({
       hold.onPointerDown(e)
       return
     }
-    start(e.pointerId, key, false)
+    start(e.pointerId, key, false, e.metaKey || e.shiftKey)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {

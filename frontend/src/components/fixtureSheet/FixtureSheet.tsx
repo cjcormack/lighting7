@@ -35,6 +35,7 @@ import {
   elementFilterFor,
   groupSheetMembers,
   headAsFixture,
+  headRowOptions,
   headsOfFixture,
   pickCountLabel,
   pickedHeads,
@@ -42,6 +43,7 @@ import {
   rowsOverHeads,
   type GroupSheetMember,
   type HeadPick,
+  type PickFilter,
   type PickHead,
   type PickRowGroup,
 } from './sheetPick'
@@ -89,15 +91,19 @@ export function FixtureSheet(props: ({ fixture: Fixture; group?: undefined } | {
 }
 
 /**
- * The strip's pick, **reset when the sheet moves to another target** (call 4): it is remembered
- * against the target it was made on, and a different target reads it as *All* — so a host that keeps
- * one sheet mounted across fixtures (the Stage panel) starts each on *All* without an effect.
+ * The strip's pick and the Cells filter that made it, **reset when the sheet moves to another
+ * target** (call 4): it is remembered against the target it was made on, and a different target
+ * reads it as *All* — so a host that keeps one sheet mounted across fixtures (the Stage panel)
+ * starts each on *All* without an effect.
  */
-function useSheetPick(targetKey: string): [HeadPick, (pick: HeadPick) => void] {
-  const [state, setState] = useState<{ on: string; pick: HeadPick }>({ on: targetKey, pick: null })
-  const pick = state.on === targetKey ? state.pick : null
-  const setPick = useCallback((next: HeadPick) => setState({ on: targetKey, pick: next }), [targetKey])
-  return [pick, setPick]
+function useSheetPick(targetKey: string): [HeadPick, PickFilter | null, (pick: HeadPick, mode?: PickFilter | null) => void] {
+  const [state, setState] = useState<{ on: string; pick: HeadPick; mode: PickFilter | null }>({ on: targetKey, pick: null, mode: null })
+  const own = state.on === targetKey
+  const setPick = useCallback(
+    (next: HeadPick, mode: PickFilter | null = null) => setState({ on: targetKey, pick: next, mode }),
+    [targetKey],
+  )
+  return [own ? state.pick : null, own ? state.mode : null, setPick]
 }
 
 /** What every sheet shares: the context the rows read, the open row, the picker's starting family. */
@@ -180,7 +186,7 @@ function SheetColumn({
 function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: SheetProps & { fixture: Fixture }) {
   const [view, setView] = useState<SheetView>('values')
   const heads = useMemo(() => headsOfFixture(fixture), [fixture])
-  const [pick, setPick] = useSheetPick(fixture.key)
+  const [pick, pickMode, setPick] = useSheetPick(fixture.key)
   const groups = useMemo(
     () =>
       buildSheetRows(fixture.properties, {
@@ -190,7 +196,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
   )
   const fixtureDimmer = useMemo(() => findDimmerProperty(fixture.properties), [fixture.properties])
   const picked = useMemo(() => pickedHeads(heads, pick), [heads, pick])
-  const headGroups = useMemo(() => rowsOverHeads(picked, () => ({ fallbackDimmer: fixtureDimmer })), [picked, fixtureDimmer])
+  const headGroups = useMemo(() => rowsOverHeads(picked, headRowOptions(fixtureDimmer)), [picked, fixtureDimmer])
   const write = useMemo(() => pickWrite(heads, pick), [heads, pick])
   const target = useMemo<SheetTarget>(() => ({ type: 'fixture', fixture }), [fixture])
   const reachOf = useCallback(
@@ -255,6 +261,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
                 groups={groups}
                 heads={heads}
                 pick={pick}
+                pickMode={pickMode}
                 onPick={setPick}
                 headGroups={headGroups}
                 write={write}
@@ -280,6 +287,7 @@ function FixtureValues({
   groups,
   heads,
   pick,
+  pickMode,
   onPick,
   headGroups,
   write,
@@ -289,7 +297,8 @@ function FixtureValues({
   groups: readonly SheetRowGroup[]
   heads: readonly PickHead[]
   pick: HeadPick
-  onPick: (pick: HeadPick) => void
+  pickMode: PickFilter | null
+  onPick: (pick: HeadPick, mode?: PickFilter | null) => void
   headGroups: readonly PickRowGroup[]
   write: ReturnType<typeof pickWrite>
   connected: boolean
@@ -325,12 +334,12 @@ function FixtureValues({
             <EditorLabel>Heads</EditorLabel>
             <span className="text-[11px] text-muted-foreground">
               <b className="font-medium text-foreground">{pickCountLabel(heads, pick)}</b>
-              <span className="@max-[400px]/sheet:hidden"> · drag across to pick a run</span>
+              <span className="@max-[400px]/sheet:hidden"> · drag across to pick a run, ⌘ to add one</span>
             </span>
             <span className="h-px flex-1 bg-border" />
           </div>
           <div className="border-y bg-muted/30 px-3 py-2">
-            <HeadStrip heads={heads} pick={pick} onPick={onPick} kind="heads" fixture={fixture} allLabel="All" />
+            <HeadStrip heads={heads} pick={pick} mode={pickMode} onPick={onPick} kind="heads" fixture={fixture} allLabel="All" />
           </div>
           <PickFamilyGroups groups={headGroups} write={write} />
         </section>
@@ -348,7 +357,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
   const visible = useVisibleGroupMembers(detail?.members)
   const { fixtures } = useFixtureLookup()
   const members = useMemo(() => groupSheetMembers(visible ?? [], fixtures ?? []), [visible, fixtures])
-  const [pick, setPick] = useSheetPick(group.name)
+  const [pick, pickMode, setPick] = useSheetPick(group.name)
   const picked = useMemo(() => pickedHeads(members, pick), [members, pick])
   const rowGroups = useMemo(() => rowsOverHeads(picked), [picked])
   const write = useMemo(() => pickWrite(members, pick, group.name), [members, pick, group.name])
@@ -394,7 +403,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
   const strip =
     members.length > 0 ? (
       <div className={cn('flex-none bg-muted/30 px-3 pt-2 pb-2', !card && 'border-b')}>
-        <HeadStrip heads={members} pick={pick} onPick={setPick} kind="members" members={members} allLabel={`All ${members.length}`} />
+        <HeadStrip heads={members} pick={pick} mode={pickMode} onPick={setPick} kind="members" members={members} allLabel={`All ${members.length}`} />
       </div>
     ) : null
 
