@@ -3,6 +3,7 @@ import type { StageElementDto } from '../../../../api/stageElementApi'
 import { seatBase, seatingParams } from '../../../../lib/stageSeats'
 import { buildElement } from '.'
 import { DRAWN_GATHER, drawnHalfWidth } from './drape'
+import { SCRIM_THREAD_SHARE } from '../scrimOpen'
 import { ROOM_FACE_INSET_M } from './room'
 import { elementBaseZ, FINISH_LOBES, FULL_UV, type PartUv, type ScenePart } from '../sceneParts'
 import { pleatShape } from '../pleat'
@@ -54,7 +55,7 @@ describe('the element builders (stage-view plan session 3)', () => {
       params: { openingWidthM: 5.1, openingHeightM: 2.9, openingSillM: 0.95, surroundM: 0.18 },
     })
     const { parts } = buildElement(pros)
-    const solid = parts.filter((p) => p.collides)
+    const solid = parts.filter((p) => p.light === 'solid')
     // Two piers, the sill under the opening and the head over it.
     expect(solid).toHaveLength(4)
     const piers = solid.filter((p) => p.key.startsWith('pier'))
@@ -66,7 +67,7 @@ describe('the element builders (stage-view plan session 3)', () => {
     expect(sill.geometry).toMatchObject({ w: 5.1, h: 0.95 })
     const head = solid.find((p) => p.key.startsWith('head'))!
     expect(head.at.z).toBeCloseTo(0.95 + 2.9 + (5.55 - 3.85) / 2, 9)
-    expect(parts.filter((p) => !p.collides).map((p) => p.key).sort()).toEqual(['surround-head', 'surround-sl', 'surround-sr'])
+    expect(parts.filter((p) => p.light === 'none').map((p) => p.key).sort()).toEqual(['surround-head', 'surround-sl', 'surround-sr'])
   })
 
   it("cuts a flat's openings from its stage-right end, sill and head around each", () => {
@@ -340,6 +341,81 @@ describe('paint on a drape and a flat (scrim plan D4)', () => {
       const { parts } = buildElement(element({ kind, widthM: 4, depthM: 2, heightM: 3, params: { paint } }))
       expect(parts.length).toBeGreaterThan(0)
       expect(parts.every((p) => p.finish.paint == null && p.uv == null)).toBe(true)
+    }
+  })
+})
+
+describe('how each part meets light (scrim plan D7)', () => {
+  const drape = (params: Record<string, unknown>, fields: Partial<StageElementDto> = {}) =>
+    element({ kind: 'DRAPE', uuid: 'cloth', widthM: 6, heightM: 4, depthM: 0.1, params: { role: 'BACKCLOTH', ...params }, ...fields })
+
+  it('keeps velour, canvas, muslin and an unpainted cloth solid, dead, flown or drawn', () => {
+    for (const fabric of [undefined, 'CANVAS', 'MUSLIN']) {
+      for (const operation of [undefined, 'FLY', 'DRAW']) {
+        const { parts } = buildElement(drape({ fabric, operation, states: { open: 0.5 } }))
+        expect(parts.length).toBeGreaterThan(0)
+        expect(parts.every((p) => p.light === 'solid')).toBe(true)
+      }
+    }
+  })
+
+  it('passes a net by angle — sharkstooth 0.30, bobbinet 0.15 — hung open as one layer', () => {
+    for (const fabric of ['SHARKSTOOTH', 'BOBBINET'] as const) {
+      for (const operation of [undefined, 'FLY', 'DEAD']) {
+        const cloth = part(buildElement(drape({ fabric, operation })).parts, 'cloth')
+        expect(cloth.light).toEqual({ kind: 'angle', r: SCRIM_THREAD_SHARE[fabric], gather: 1 })
+      }
+    }
+    expect(SCRIM_THREAD_SHARE).toEqual({ SHARKSTOOTH: 0.3, BOBBINET: 0.15 })
+    // A net keeps its angle painted: its holes are its weave.
+    const painted = part(buildElement(drape({ fabric: 'SHARKSTOOTH', paint: { front: FRONT } })).parts, 'cloth')
+    expect(painted.light).toMatchObject({ kind: 'angle' })
+  })
+
+  it("stacks a drawn net half's layers as it gathers: its fullness, 1 closed", () => {
+    for (const open of [0, 0.25, 0.5, 1]) {
+      const { parts } = buildElement(drape({ fabric: 'BOBBINET', operation: 'DRAW', states: { open } }))
+      const half = drawnHalfWidth(6, open)
+      for (const key of ['cloth-sr', 'cloth-sl']) {
+        const light = part(parts, key).light
+        expect(light).toMatchObject({ kind: 'angle', r: 0.15 })
+        expect((light as { gather: number }).gather).toBeCloseTo(3 / half, 9)
+      }
+    }
+    expect((part(buildElement(drape({ fabric: 'SHARKSTOOTH', operation: 'DRAW' })).parts, 'cloth-sr').light as { gather: number }).gather).toBe(1)
+  })
+
+  it("cuts a painted cloth by its front image's mask over its own uv, each drawn half its own half", () => {
+    for (const fabric of [undefined, 'CANVAS', 'MUSLIN']) {
+      const dead = part(buildElement(drape({ fabric, paint: { front: FRONT, back: BACK } })).parts, 'cloth')
+      expect(dead.light).toEqual({ kind: 'mask', image: FRONT, uv: FULL_UV })
+      const { parts } = buildElement(drape({ fabric, operation: 'DRAW', states: { open: 0.6 }, paint: { front: FRONT } }))
+      for (const key of ['cloth-sr', 'cloth-sl']) {
+        const p = part(parts, key)
+        expect(p.light).toEqual({ kind: 'mask', image: FRONT, uv: p.uv })
+      }
+    }
+  })
+
+  it('cuts a cloth painted on its back only by the back, seen from downstage the other way round', () => {
+    const { parts } = buildElement(drape({ operation: 'DRAW', paint: { back: BACK } }))
+    expect(part(parts, 'cloth-sr').light).toEqual({ kind: 'mask', image: BACK, uv: { u0: 1, u1: 0.5, v0: 0, v1: 1 } })
+    expect(part(parts, 'cloth-sl').light).toEqual({ kind: 'mask', image: BACK, uv: { u0: 0.5, u1: 0, v0: 0, v1: 1 } })
+  })
+
+  it("cuts each painted flat piece by its share of the face, and leaves an unpainted flat solid", () => {
+    const flat = (params: Record<string, unknown>) =>
+      element({ kind: 'FLAT', widthM: 4, depthM: 0.1, heightM: 2, params: { openings: [{ fromM: 1, widthM: 1, heightM: 1.5, sillM: 0 }], ...params } })
+    for (const p of buildElement(flat({ paint: { front: FRONT } })).parts) {
+      expect(p.light).toEqual({ kind: 'mask', image: FRONT, uv: p.uv })
+    }
+    expect(buildElement(flat({})).parts.every((p) => p.light === 'solid')).toBe(true)
+  })
+
+  it('keeps every other kind solid, the surround drawn only', () => {
+    for (const kind of ['ROOM', 'PLATFORM', 'OBJECT', 'PROSCENIUM'] as const) {
+      const { parts } = buildElement(element({ kind, widthM: 4, depthM: 2, heightM: 3, params: { openingWidthM: 2, openingHeightM: 2, surroundM: 0.1 } }))
+      expect(parts.every((p) => p.light === 'solid' || (kind === 'PROSCENIUM' && p.key.startsWith('surround') && p.light === 'none'))).toBe(true)
     }
   })
 })

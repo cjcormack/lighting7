@@ -1,6 +1,7 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { REACH_EPS_M } from './landing'
-import { elementBaseZ, type ElementBuild, type Facing, type PartGeometry } from './sceneParts'
+import { sceneMasks, type MaskSampler } from './sceneMasks'
+import { elementBaseZ, partCollides, partTransmit, type ElementBuild, type Facing, type PartGeometry, type Transmit } from './sceneParts'
 
 /**
  * **Axial beam reach** (stage-view plan session 3): the first surface on a beam's axis — where the
@@ -15,6 +16,12 @@ import { elementBaseZ, type ElementBuild, type Facing, type PartGeometry } from 
  * (behind it and a second face, for a beam split across an edge). The surfaces are shadowed by the
  * same colliders, tested from each fragment towards the lamp (`occlusion.ts`, stage-light plan
  * session 3), so the floor under a deck stays dark and a flat shadows the wall behind it.
+ *
+ * **A collider may transmit** (scrim plan D7, [Collider.transmit]): a net passes a share of every
+ * beam, so beam reach skips it and the beam carries on to the next solid surface — whose plane is
+ * where it lands, so a net is never a landing plane; a painted cloth with holes is skipped where the
+ * beam crosses a hole and stops the beam where it crosses cloth, read from its mask at the crossing
+ * (`sceneMasks.ts`, looked up as the beam is cast). *Focus here* still takes the point it is given.
  *
  * Pure and three.js-free: numbers in, numbers out, allocation-free on the per-frame path.
  */
@@ -51,6 +58,12 @@ export interface Collider {
   face?: Face
   /** False for a collider that draws nothing a sight line could stop at: the catch floor, light alone. */
   sight?: false
+  /**
+   * The share of light it passes (scrim plan D7), its part's [Transmit]: a net's angle, or a painted
+   * cloth's mask over the [Transmit]'s `uv` — local x across the box (−[hx] at u0), local y up it
+   * (−[hy] at v0). Absent for a solid.
+   */
+  transmit?: Transmit
 }
 
 /** A unit normal, three.js space. */
@@ -82,7 +95,8 @@ export const MIN_REACH_M = 0.05
 /**
  * The nearest collider the ray from [ox, oy, oz] along the unit [dx, dy, dz] meets within [maxT],
  * written into [out]; false when it meets none. A box the ray starts inside is skipped — a head
- * inside a deck's box is mounted on it, not blocked by it.
+ * inside a deck's box is mounted on it, not blocked by it. So is a net, and a painted cloth where
+ * the ray crosses a hole in it ([maskPasses], read from [masks]).
  */
 export function beamReach(
   ox: number,
@@ -94,11 +108,14 @@ export function beamReach(
   colliders: readonly Collider[],
   maxT: number,
   out: BeamHit,
+  masks: MaskSampler = sceneMasks,
 ): boolean {
   let best = maxT
   let found = false
   for (let i = 0; i < colliders.length; i++) {
     const b = colliders[i]
+    // A net passes every beam on to what is behind it (D7): never where one lands.
+    if (b.transmit?.kind === 'angle') continue
     const rx = ox - b.cx
     const ry = oy - b.cy
     const rz = oz - b.cz
@@ -159,6 +176,8 @@ export function beamReach(
       if (hi < tFar) tFar = hi
     }
     if (tNear > tFar || tFar < 0 || tNear < MIN_REACH_M || tNear >= best || axis < 0) continue
+    // A painted cloth stops the beam where it crosses cloth, and passes it through a hole.
+    if (b.transmit?.kind === 'mask' && maskPasses(b, b.transmit, lox, ry, ldx, dy, tNear, tFar, masks)) continue
     best = tNear
     found = true
     out.skin = axis === 1 ? b.capSkin : b.skin
@@ -203,7 +222,9 @@ export function boxCollider(
  * [dx, dy, dz] — the eye's sight line to it. A box the ray starts inside is skipped (an eye on a
  * deck), as is one the point lies within [clearM] of: a label sits on what it names, a region's on
  * its own deck, and is not hidden by it. A single-sided collider ([Collider.face]) hides only when
- * the ray meets its face from the front: a room seen from outside its near wall is seen into.
+ * the ray meets its face from the front: a room seen from outside its near wall is seen into. A net
+ * hides nothing (scrim plan D7 — the eye's share of it is session 4's blend), and a painted cloth
+ * hides only where the line crosses cloth rather than a hole in it ([maskPasses]).
  *
  * Allocation-free: a label layer asks it for every label on every frame.
  */
@@ -217,10 +238,13 @@ export function sightBlocked(
   len: number,
   colliders: readonly Collider[],
   clearM: number,
+  masks: MaskSampler = sceneMasks,
 ): boolean {
   for (let i = 0; i < colliders.length; i++) {
     const b = colliders[i]
     if (b.sight === false) continue
+    // A net is seen through (D7) — a label behind a gauze still shows.
+    if (b.transmit?.kind === 'angle') continue
     const f = b.face
     if (f != null && f.x * dx + f.y * dy + f.z * dz >= 0) continue
     const rx = ox - b.cx
@@ -264,9 +288,36 @@ export function sightBlocked(
     const py = Math.max(Math.abs(ry + dy * len) - b.hy, 0)
     const pz = Math.max(Math.abs(loz + ldz * len) - b.hz, 0)
     if (px * px + py * py + pz * pz <= clearM * clearM) continue
+    // A cut cloth hides what is behind it only where the line crosses cloth.
+    if (b.transmit?.kind === 'mask' && maskPasses(b, b.transmit, lox, ry, ldx, dy, tNear, Math.min(tFar, len), masks)) continue
     return true
   }
   return false
+}
+
+/**
+ * Whether a line through collider [b] — in the box's own frame, from [lox], [ly] along [ldx], [ldy]
+ * (its across and up; the depth through the cloth plays no part), crossing it between [t0] and [t1] — passes the [mask]'s cloth through a hole: the
+ * mask read at the middle of the crossing, its local x across the box mapped onto the mask's u0..u1
+ * and its local y up it onto v0..v1. A mask not loaded, missing or over the atlas's cap is solid.
+ */
+export function maskPasses(
+  b: Pick<Collider, 'hx' | 'hy'>,
+  mask: Extract<Transmit, { kind: 'mask' }>,
+  lox: number,
+  ly: number,
+  ldx: number,
+  ldy: number,
+  t0: number,
+  t1: number,
+  masks: MaskSampler,
+): boolean {
+  const t = (Math.max(t0, 0) + t1) / 2
+  const fx = (lox + ldx * t) / Math.max(b.hx, 1e-9)
+  const fy = (ly + ldy * t) / Math.max(b.hy, 1e-9)
+  const u = mask.uv.u0 + ((fx + 1) / 2) * (mask.uv.u1 - mask.uv.u0)
+  const v = mask.uv.v0 + ((fy + 1) / 2) * (mask.uv.v1 - mask.uv.v0)
+  return masks.holeAt(mask.image, u, v)
 }
 
 /** A part's collider in its element's lighting frame: centre offset, half-extents and skins. */
@@ -355,9 +406,9 @@ export function quadNormal(facing: Facing): [number, number, number] {
 }
 
 /**
- * The colliders of one built element, placed by its pose: each colliding part's box, turned by the
- * element's yaw about its origin and moved to its origin — its base, a platform's top, or a flown
- * piece's trim.
+ * The colliders of one built element, placed by its pose: each colliding part's box — every part
+ * but a `none` one, a transmitting part carrying its [Transmit] — turned by the element's yaw about
+ * its origin and moved to its origin — its base, a platform's top, or a flown piece's trim.
  */
 export function elementColliders(
   element: Pick<StageElementDto, 'kind' | 'params' | 'positionX' | 'positionY' | 'positionZ' | 'yawDeg'>,
@@ -369,7 +420,7 @@ export function elementColliders(
   const s = Math.sin(yaw)
   const baseZ = elementBaseZ(element)
   for (const part of build.parts) {
-    if (!part.collides) continue
+    if (!partCollides(part)) continue
     const b = partBox(part.geometry)
     // The part's centre in the element's lighting frame, turned by +yaw (anticlockwise from above).
     const lx = part.at.x + b.ox
@@ -383,7 +434,10 @@ export function elementColliders(
       const [nx, ny, nz] = quadNormal(part.geometry.facing)
       face = { x: c * nx - s * ny, y: nz, z: -(s * nx + c * ny) }
     }
-    out.push(boxCollider(wx, wz, -wy, b.hx, b.hz, b.hy, yaw, b.skin, b.capSkin, face))
+    const box = boxCollider(wx, wz, -wy, b.hx, b.hz, b.hy, yaw, b.skin, b.capSkin, face)
+    const transmit = partTransmit(part)
+    if (transmit != null) box.transmit = transmit
+    out.push(box)
   }
   return out
 }

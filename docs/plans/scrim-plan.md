@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — sessions 1–2 shipped 2026-10-09, as `2729120d` and `6c6f4f85`.** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — sessions 1–3 shipped 2026-10-09, as `2729120d`, `6c6f4f85` and `14dcb7bd`.** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -149,7 +149,9 @@ gains §"Version 23". Cloning is derived: the importer's hydrate fills the new p
   transmitting collider, or for a mask samples the CPU mask at the crossing and skips it there only
   where it is a hole. `sightBlocked` passes a scrim, and passes a mask where it is a hole.
 - **Occlusion** (`occlusion.ts`): `COLLIDER_TEXELS` goes from 2 to 3. Texel 2 is `(kind, r or atlas
-  layer, gather, 0)`. The atlas is a 256 × 256 × 32 `R8` `DataArrayTexture` keyed by hash, so a
+  layer, gather or the mask's u0..u1, 0 or its v0..v1)` — a net's `(1, r, gather, 0)`, a mask's
+  `(2, layer, u0..u1, v0..v1)`, each uv pair packed in one float, since a mask needs its uv rect (a
+  drawn half's is half the image) and has no gather (as built in session 3). The atlas is a 256 × 256 × 32 `R8` `DataArrayTexture` keyed by hash, so a
   33rd distinct mask falls back to solid, named in `stageStats`. `segmentBlocked` and `OCCLUSION_GLSL`
   become `segmentTransmit`, which returns a share: 0 at the first solid box, otherwise the product of
   the crossings' shares. A box the fragment sits inside within its skin is still skipped, so a
@@ -231,7 +233,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   disposes on drop.
 - **Docs:** `stage-vis-engineering.md` §"Painted cloths".
 
-### Session 3 — the transmittance core (frontend)
+### Session 3 — the transmittance core (frontend) — done, `14dcb7bd`
 
 - **Parts and colliders (D7):** `light: 'solid' | 'none' | Transmit` through builders, `partBox` and
   `elementColliders`. `beamReach` skips or samples, and sight lines pass.

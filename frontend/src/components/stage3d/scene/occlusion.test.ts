@@ -5,12 +5,17 @@ import { buildElement } from './builders'
 import { REACH_EPS_M } from './landing'
 import { LIGHT_TEXELS, LightTable, makeLightRow, MAX_LIGHT_BUDGET } from './lightTable'
 import {
+  COLLIDER_ANGLE,
+  COLLIDER_MASK,
+  COLLIDER_SOLID,
   COLLIDER_TEXELS,
   colliderSkin,
   cullLightColliders,
   ENTRY_ALL_DIRECTIONS,
   ENTRY_INDEX_BASE,
+  emptyPackedCollider,
   entryMayShadow,
+  listEntryCount,
   listRowFloats,
   LIST_OVERFLOW,
   LIST_TEXELS,
@@ -21,11 +26,15 @@ import {
   occlusionReach,
   packColliders,
   packEntry,
-  segmentBlocked,
+  packUnitPair,
+  segmentTransmit,
   unpackCollider,
   unpackEntry,
+  unpackUnitPair,
   type PackedCollider,
 } from './occlusion'
+import { twinAtlas, twinCases, TWIN_MASK_IMAGE, TWIN_MASK_LAYER, TWIN_MASK_LAYERS } from './occlusionTwin'
+import { scrimOpen } from './scrimOpen'
 
 /** A seeded generator, so a failure names a case that can be run again. */
 function rng(seed: number): () => number {
@@ -36,14 +45,17 @@ function rng(seed: number): () => number {
   }
 }
 
-const unpacked = (): PackedCollider => ({ cx: 0, cy: 0, cz: 0, hx: 0, hy: 0, hz: 0, cos: 1, sin: 0, skin: 0 })
+const unpacked = (): PackedCollider => emptyPackedCollider()
 
 /** One collider, packed and read back as the shader reads it. */
-function asShaderReads(c: Collider): PackedCollider {
+function asShaderReads(c: Collider, masks = TWIN_MASK_LAYERS): PackedCollider {
   const set = makeColliderSet(1)
-  packColliders([c], set)
+  packColliders([c], set, masks)
   return unpackCollider(set.data, 0, unpacked())
 }
+
+/** Whether a solid box blocks the segment: its share kept is nothing. */
+const blocks = (...args: Parameters<typeof segmentTransmit>) => segmentTransmit(...args) === 0
 
 /** A light row as the director writes it, packed through the light table into the shader's layout. */
 function packLights(
@@ -72,13 +84,20 @@ const entryAt = (k: number, j: number) => k * LIST_TEXELS * 4 + 4 + j * 4
 
 function listOf(lists: Float32Array, k: number): number[] | 'overflow' {
   const n = lists[k * LIST_TEXELS * 4]
-  if (n === LIST_OVERFLOW) return 'overflow'
+  if (n <= LIST_OVERFLOW) return 'overflow'
   return Array.from({ length: n }, (_, j) => unpackEntry(lists, entryAt(k, j)).index)
 }
 
+/** An overflowed row's transmitting entries, by index. */
+function overflowTransmitting(lists: Float32Array, k: number): number[] {
+  const n = lists[k * LIST_TEXELS * 4]
+  expect(n).toBeLessThanOrEqual(LIST_OVERFLOW)
+  return Array.from({ length: listEntryCount(n) }, (_, j) => unpackEntry(lists, entryAt(k, j)).index)
+}
+
 describe('the collider texture', () => {
-  it('packs a collider in two texels and reads it back as the shader does', () => {
-    expect(COLLIDER_TEXELS).toBe(2)
+  it('packs a collider in three texels and reads it back as the shader does', () => {
+    expect(COLLIDER_TEXELS).toBe(3)
     const random = rng(7)
     const colliders: Collider[] = []
     for (let i = 0; i < 200; i++) {
@@ -274,7 +293,7 @@ describe("each light's colliders", () => {
         const fromApex = v.map((x) => x / dist)
         list.forEach((index, j) => {
           const box = unpackCollider(set.data, index, unpacked())
-          if (!segmentBlocked(p[0], p[1], p[2], -fromApex[0], -fromApex[1], -fromApex[2], dist - 0.25, box)) return
+          if (!blocks(p[0], p[1], p[2], -fromApex[0], -fromApex[1], -fromApex[2], dist - 0.25, box)) return
           blocked++
           expect(entryMayShadow(lists, entryAt(0, j), fromApex[0], fromApex[1], fromApex[2], dist), `trial ${trial}`).toBe(true)
         })
@@ -367,7 +386,7 @@ describe('the segment test', () => {
       }
       if (surely !== maybe) continue
       decided++
-      expect(segmentBlocked(p[0], p[1], p[2], d[0], d[1], d[2], tMax, b), `trial ${trial}`).toBe(surely)
+      expect(blocks(p[0], p[1], p[2], d[0], d[1], d[2], tMax, b), `trial ${trial}`).toBe(surely)
     }
     expect(decided).toBeGreaterThan(400)
   })
@@ -400,10 +419,10 @@ describe('the segment test', () => {
       decided++
       const want = depth > b.skin
       if (want) blocked++
-      expect(segmentBlocked(p[0], p[1], p[2], d[0], d[1], d[2], 50, b), `trial ${trial}`).toBe(want)
+      expect(blocks(p[0], p[1], p[2], d[0], d[1], d[2], 50, b), `trial ${trial}`).toBe(want)
       // A segment that ends before it leaves the box is never blocked by it, whatever the depth: the
       // lamp is inside it too.
-      expect(segmentBlocked(p[0], p[1], p[2], d[0], d[1], d[2], t * 0.9, b)).toBe(false)
+      expect(blocks(p[0], p[1], p[2], d[0], d[1], d[2], t * 0.9, b)).toBe(false)
     }
     expect(decided).toBeGreaterThan(400)
     expect(blocked).toBeGreaterThan(50)
@@ -413,16 +432,16 @@ describe('the segment test', () => {
   it('lights a pleat in its trough and a wall on its face, and keeps the floor under a deck dark', () => {
     // A drape's box 10 cm deep, skin the pleat's depth: a trough 9 cm behind the front face is lit.
     const drape = asShaderReads(boxCollider(0, 2, -5, 3, 2, 0.05, 0, 0.13, 0.13))
-    expect(segmentBlocked(0.3, 2, -5.04, 0.2, 0.3, 0.93, 20, drape)).toBe(false)
+    expect(blocks(0.3, 2, -5.04, 0.2, 0.3, 0.93, 20, drape)).toBe(false)
     // A wall's 2 cm slab, the fragment on its face.
     const wall = asShaderReads(boxCollider(0, 2, -6.01, 5, 2, 0.01))
-    expect(segmentBlocked(1, 1, -6, 0, 0.6, 0.8, 20, wall)).toBe(false)
+    expect(blocks(1, 1, -6, 0, 0.6, 0.8, 20, wall)).toBe(false)
     // A deck 0.6 m high: the floor under it is 0.6 m behind the face the segment leaves by.
     const deck = asShaderReads(boxCollider(0, 0.3, -3, 1, 0.3, 1))
-    expect(segmentBlocked(0.2, 0, -3, 0, 1, 0, 20, deck)).toBe(true)
+    expect(blocks(0.2, 0, -3, 0, 1, 0, 20, deck)).toBe(true)
     // A box ahead within a millimetre of the start is one the fragment is on, and decided by depth.
     const ahead = asShaderReads(boxCollider(0, 1 + OCCLUSION_START_EPS_M / 2 + 0.5, 0, 1, 0.5, 1))
-    expect(segmentBlocked(0, 1, 0, 0, 1, 0, 20, ahead)).toBe(true)
+    expect(blocks(0, 1, 0, 0, 1, 0, 20, ahead)).toBe(true)
   })
 
   it('reaches from the fragment to just short of the aperture', () => {
@@ -435,15 +454,125 @@ describe('the segment test', () => {
     expect(OCCLUSION_GLSL).toContain(`#define OCCLUSION_START_EPS ${OCCLUSION_START_EPS_M.toFixed(4)}`)
     expect(OCCLUSION_GLSL).toContain(`#define OCCLUSION_MIN_REACH ${MIN_REACH_M.toFixed(4)}`)
     expect(OCCLUSION_GLSL).toContain('float s = sqrt(max(0.0, 1.0 - a.w * a.w));')
-    expect(OCCLUSION_GLSL).toContain('if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return false;')
-    expect(OCCLUSION_GLSL).toContain('if (tNear > OCCLUSION_START_EPS) return true;')
-    expect(OCCLUSION_GLSL).toContain('if (tFar >= tMax) return false;')
-    expect(OCCLUSION_GLSL).toContain('return depth > b.w;')
-    expect(OCCLUSION_GLSL).toContain('if (n < 0.0) return behindLanding(landing, p, REACH_EPS);')
+    expect(OCCLUSION_GLSL).toContain('if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return 1.0;')
+    expect(OCCLUSION_GLSL).toContain('if (tNear <= OCCLUSION_START_EPS) {')
+    expect(OCCLUSION_GLSL).toContain('if (tFar >= tMax) return 1.0;')
+    expect(OCCLUSION_GLSL).toContain('if (depth <= b.w) return 1.0;')
+    // Texel 2 only once the segment crosses: solid, then a net's share, then the mask's texel.
+    expect(OCCLUSION_GLSL).toContain('vec4 m = texelFetch(uColliders, ivec2(2, k), 0);')
+    expect(OCCLUSION_GLSL).toContain('if (m.x < 0.5) return 0.0;')
+    expect(OCCLUSION_GLSL).toContain('if (m.x < 1.5) return scrimShare(abs(ld.z), m.y, m.z);')
+    expect(OCCLUSION_GLSL).toContain('float t = (max(tNear, 0.0) + min(tFar, tMax)) * 0.5;')
+    expect(OCCLUSION_GLSL).toContain('float u = us.x + ((lo.x + ld.x * t) / b.x + 1.0) * 0.5 * (us.y - us.x);')
+    expect(OCCLUSION_GLSL).toContain('float v = vs.x + ((lo.y + ld.y * t) / b.y + 1.0) * 0.5 * (vs.y - vs.x);')
+    expect(OCCLUSION_GLSL).toContain('ivec2 texel = clamp(ivec2(floor(vec2(u, v) * 256.0)), ivec2(0), ivec2(255));')
+    expect(OCCLUSION_GLSL).toContain('return alpha < 0.500000 ? 1.0 : 0.0;')
+    expect(OCCLUSION_GLSL).toContain('vec2 unpackUnitPair(float p) {')
+    expect(OCCLUSION_GLSL).toContain('float hi = floor(p / 4096.0);')
+    expect(OCCLUSION_GLSL).toContain('return vec2(hi, p - hi * 4096.0) / 4095.0;')
+    expect(OCCLUSION_GLSL).toContain('if (n < 0.0 && behindLanding(landing, p, REACH_EPS)) return 0.0;')
+    expect(OCCLUSION_GLSL).toContain('int count = n < 0.0 ? int(-n - 0.5) : int(n + 0.5);')
+    expect(OCCLUSION_GLSL).toContain(`share *= boxTransmit(p, toLamp, tMax, int(entry.w - q * ${ENTRY_INDEX_BASE}.0 + 0.5));`)
+    expect(OCCLUSION_GLSL).toContain('if (share <= 0.0) return 0.0;')
     expect(OCCLUSION_GLSL).toContain('float tMax = dist - near / max(cosAxis, 1e-6) - OCCLUSION_MIN_REACH;')
     expect(OCCLUSION_GLSL).toContain('if (dot(-toLamp, normalize(u)) < entry.z) continue;')
     expect(OCCLUSION_GLSL).toContain(`float q = floor(entry.w / ${ENTRY_INDEX_BASE}.0);`)
     expect(OCCLUSION_GLSL).toContain('if (dist < q / 100.0) continue;')
+  })
+})
+
+describe('transmittance (scrim plan session 3)', () => {
+  it("packs a net's share and a cut cloth's mask in texel 2, and a mask with no layer as solid", () => {
+    const net = boxCollider(0, 2, -4, 3, 2, 0.005)
+    net.transmit = { kind: 'angle', r: 0.3, gather: 2.5 }
+    const cut = boxCollider(0, 2, -4, 3, 2, 0.005)
+    cut.transmit = { kind: 'mask', image: TWIN_MASK_IMAGE, uv: { u0: 0.5, u1: 1, v0: 0.25, v1: 0.75 } }
+    const unloaded = boxCollider(0, 2, -4, 3, 2, 0.005)
+    unloaded.transmit = { kind: 'mask', image: 'f'.repeat(64), uv: { u0: 0, u1: 1, v0: 0, v1: 1 } }
+    const a = asShaderReads(net)
+    expect([a.kind, a.k1, a.k2, a.k3]).toEqual([COLLIDER_ANGLE, Math.fround(0.3), 2.5, 0])
+    const m = asShaderReads(cut)
+    expect([m.kind, m.k1]).toEqual([COLLIDER_MASK, TWIN_MASK_LAYER])
+    expect(unpackUnitPair(m.k2)).toEqual([0.5, 1].map((x) => Math.round(x * 4095) / 4095))
+    expect(unpackUnitPair(m.k3).map((x) => x.toFixed(3))).toEqual(['0.250', '0.750'])
+    // Loading, missing, holeless or past the atlas's cap: solid.
+    expect(asShaderReads(unloaded).kind).toBe(COLLIDER_SOLID)
+    expect(asShaderReads(boxCollider(0, 0, 0, 1, 1, 1)).kind).toBe(COLLIDER_SOLID)
+  })
+
+  it('packs a pair of unit numbers exactly in one float32', () => {
+    for (const [a, b] of [[0, 1], [1, 0], [0.5, 0.25], [0.123, 0.987]]) {
+      const p = packUnitPair(a, b)
+      expect(Math.fround(p)).toBe(p)
+      const [ua, ub] = unpackUnitPair(p)
+      expect(Math.abs(ua - a)).toBeLessThan(1 / 4095)
+      expect(Math.abs(ub - b)).toBeLessThan(1 / 4095)
+    }
+  })
+
+  it('turns a mask the other way round along a box whose turn is folded', () => {
+    // A cut cloth turned by π is the same box, its local x reversed: u runs the other way.
+    const atlas = twinAtlas()
+    const turned = boxCollider(0, 0, -2, 1, 1, 0.005, Math.PI)
+    turned.transmit = { kind: 'mask', image: TWIN_MASK_IMAGE, uv: { u0: 0, u1: 1, v0: 0, v1: 1 } }
+    const b = asShaderReads(turned)
+    // The cloth's own left half (u < ½) is the hole; turned by π, that half lies at three-space +x.
+    expect(segmentTransmit(0.5, 0, -1, 0, 0, -1, 2, b, atlas)).toBe(1)
+    expect(segmentTransmit(-0.5, 0, -1, 0, 0, -1, 2, b, atlas)).toBe(0)
+  })
+
+  it('keeps the fixed twin scene: solid, a scrim at 0°, 45° and 80°, gathered net, a mask hole and a mask cloth', () => {
+    const atlas = twinAtlas()
+    const got = twinCases().map((c) => {
+      const b = asShaderReads(c.collider)
+      return [c.name, Number(segmentTransmit(...c.p, ...c.d, c.tMax, b, atlas).toFixed(4))]
+    })
+    expect(got).toEqual([
+      ['solid', 0],
+      ['scrim 0°', 0.49],
+      ['scrim 45°', 0.403],
+      ['scrim 80°', 0],
+      ['scrim 0° gathered 2', 0.2401],
+      ['mask hole', 1],
+      ['mask cloth', 0],
+      ['scrim, the fragment on it', 1],
+    ])
+    twinCases().forEach((c) => expect(segmentTransmit(...c.p, ...c.d, c.tMax, asShaderReads(c.collider), atlas), c.name).toBeCloseTo(c.want, 4))
+  })
+
+  it("takes a net's share from the angle the segment crosses it at, whichever side the lamp is", () => {
+    const net = boxCollider(0, 0, -2, 4, 4, 0.005, 0.7)
+    net.transmit = { kind: 'angle', r: 0.15, gather: 1 }
+    const b = asShaderReads(net)
+    for (const deg of [0, 20, 50, 75]) {
+      const a = (deg * Math.PI) / 180
+      // In the box's frame, at deg from its normal; out to three space by +yaw.
+      const lx = Math.sin(a)
+      const lz = -Math.cos(a)
+      const d = [b.cos * lx + b.sin * lz, 0, -b.sin * lx + b.cos * lz]
+      const p = [-d[0], -d[1], -2 - d[2]]
+      expect(segmentTransmit(p[0], p[1], p[2], d[0], d[1], d[2], 2, b)).toBeCloseTo(scrimOpen(Math.cos(a), 0.15), 5)
+      expect(segmentTransmit(-p[0], -p[1], -4 - p[2], -d[0], -d[1], -d[2], 2, b)).toBeCloseTo(scrimOpen(Math.cos(a), 0.15), 5)
+    }
+  })
+
+  it('lists the transmitting colliders in an overflowed light row, so its planes are multiplied by them', () => {
+    const lights = packLights([{ apex: [0, 5, 0], dir: [0, 0, -1], cosBound: Math.cos(0.5), near: 0.2 }])
+    const ahead = Array.from({ length: 5 }, (_, i) => boxCollider(0, 5, -2 - i, 0.5, 0.5, 0.1))
+    const gauze = boxCollider(0, 5, -1.5, 2, 2, 0.005)
+    gauze.transmit = { kind: 'angle', r: 0.3, gather: 1 }
+    const set = makeColliderSet()
+    packColliders([...ahead, gauze], set)
+    const lists = newLists()
+    cullLightColliders(lights, 1, set, 40, lists, 4)
+    expect(listOf(lists, 0)).toBe('overflow')
+    expect(lists[0]).toBe(LIST_OVERFLOW - 1)
+    expect(overflowTransmitting(lists, 0)).toEqual([5])
+    expect(listRowFloats(lists, 0)).toBe(8)
+    // With box shadows off, nothing is listed at all.
+    cullLightColliders(lights, 1, set, 40, lists, 0)
+    expect(lists[0]).toBe(LIST_OVERFLOW)
+    expect(listRowFloats(lists, 0)).toBe(4)
   })
 })
 
@@ -470,7 +599,7 @@ describe('the shadow scene', () => {
       const toLamp = v.map((x) => x / dist)
       const cosAxis = -(toLamp[0] * dir[0] + toLamp[1] * dir[1] + toLamp[2] * dir[2]) / Math.hypot(...dir)
       const tMax = occlusionReach(dist, cosAxis, 0.1)
-      return list.some((k) => segmentBlocked(p[0], p[1], p[2], toLamp[0], toLamp[1], toLamp[2], tMax, unpackCollider(set.data, k, unpacked())))
+      return list.some((k) => blocks(p[0], p[1], p[2], toLamp[0], toLamp[1], toLamp[2], tMax, unpackCollider(set.data, k, unpacked())))
     }
     // The wall's face is 5.95 m upstage. Behind the flat, as the lamp sees it: dark.
     expect(occluded(three({ x: -1.4, y: 5.95, z: 1 }))).toBe(true)

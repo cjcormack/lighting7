@@ -1,15 +1,20 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
 import { gatherShape, pleatShape } from '../pleat'
+import { SCRIM_THREAD_SHARE } from '../scrimOpen'
 import {
   elementFinish,
   elementStates,
   FULL_UV,
+  paintTransmit,
   paramEnum,
   paramFabric,
   paramPaint,
+  type DrapeFabric,
   type ElementBuild,
   type PartFinish,
   type PartGeometry,
+  type PartLight,
+  type PartUv,
   type ScenePart,
 } from '../sceneParts'
 
@@ -54,6 +59,18 @@ function drapeFinish(element: StageElementDto): PartFinish {
 }
 
 /**
+ * How one piece of a drape meets light (scrim plan D7): a net (sharkstooth, bobbinet) passes
+ * `open(θ)` of its thread share through [gather] layers — the piece's fullness, 1 hanging open — and
+ * every other fabric is solid unless it is painted, when its paint's alpha cuts it over [uv]
+ * ([paintTransmit]). A net keeps its angle even painted: its holes are its weave, and the one part
+ * carries one share. Velour, canvas, muslin and an unpainted cloth stay solid.
+ */
+function drapeLight(fabric: DrapeFabric, finish: PartFinish, uv: PartUv, gather: number): PartLight {
+  if (fabric === 'SHARKSTOOTH' || fabric === 'BOBBINET') return { kind: 'angle', r: SCRIM_THREAD_SHARE[fabric], gather }
+  return paintTransmit(finish.paint, uv) ?? 'solid'
+}
+
+/**
  * A `DRAPE` — a leg, border, pair of tabs, cyc or backcloth — as cloth [widthM] across and
  * [heightM] tall, standing on its base (a flown one at its `trimM`, [elementBaseZ]) in the plane
  * y = 0 of its frame. Its `role` sets nothing but a default colour; its `operation` sets how it
@@ -79,12 +96,14 @@ export function buildDrape(element: StageElementDto): ElementBuild {
   const h = element.heightM
   if (!(w > 0 && h > 0)) return { parts: [], seats: [] }
   const finish = drapeFinish(element)
-  const velour = paramFabric(element) === 'VELOUR'
+  const fabric = paramFabric(element)
+  const velour = fabric === 'VELOUR'
   const painted = finish.paint != null
   if (paramEnum(element, 'operation') !== 'DRAW') {
     const geometry: PartGeometry = velour ? { shape: 'pleat', w, h, pleat: pleatShape(element) } : { shape: 'sheet', w, h }
+    const light = drapeLight(fabric, finish, FULL_UV, 1)
     return {
-      parts: [{ key: 'cloth', geometry, at: { x: 0, y: 0, z: h / 2 }, finish, collides: true, ...(painted && { uv: FULL_UV }) }],
+      parts: [{ key: 'cloth', geometry, at: { x: 0, y: 0, z: h / 2 }, finish, light, ...(painted && { uv: FULL_UV }) }],
       seats: [],
     }
   }
@@ -92,23 +111,26 @@ export function buildDrape(element: StageElementDto): ElementBuild {
   // How much cloth a half has against the width it is gathered into: 1 while closed.
   const fullness = w / 2 / half
   const fold = (side: 'sr' | 'sl') => (velour ? pleatShape(element, side) : gatherShape(element, side, fullness))
-  // Each half's folds are measured from its outer edge, which stays put as it gathers.
+  const uvSr: PartUv = { u0: 0, u1: 0.5, v0: 0, v1: 1 }
+  const uvSl: PartUv = { u0: 0.5, u1: 1, v0: 0, v1: 1 }
+  // Each half's folds are measured from its outer edge, which stays put as it gathers. A net half
+  // gathered into less width than it has stacks that many layers of itself (D3).
   const parts: ScenePart[] = [
     {
       key: 'cloth-sr',
       geometry: { shape: 'pleat', w: half, h, pleat: fold('sr'), anchor: 'left' },
       at: { x: -w / 2 + half / 2, y: 0, z: h / 2 },
       finish,
-      collides: true,
-      ...(painted && { uv: { u0: 0, u1: 0.5, v0: 0, v1: 1 } }),
+      light: drapeLight(fabric, finish, uvSr, fullness),
+      ...(painted && { uv: uvSr }),
     },
     {
       key: 'cloth-sl',
       geometry: { shape: 'pleat', w: half, h, pleat: fold('sl'), anchor: 'right' },
       at: { x: w / 2 - half / 2, y: 0, z: h / 2 },
       finish,
-      collides: true,
-      ...(painted && { uv: { u0: 0.5, u1: 1, v0: 0, v1: 1 } }),
+      light: drapeLight(fabric, finish, uvSl, fullness),
+      ...(painted && { uv: uvSl }),
     },
   ]
   return { parts, seats: [] }

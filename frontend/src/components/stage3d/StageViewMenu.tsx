@@ -38,6 +38,7 @@ import { isWorkLights, type WorkLights } from './scene/workLights'
 import { HAZE_TIERS } from './scene/hazeGovernor'
 import { isSlowReading } from './scene/frameRate'
 import { useStageStats, type StageStatsStore } from './scene/stageStats'
+import { MASK_ATLAS_LAYERS } from './scene/sceneMasks'
 
 /**
  * The Stage view's **View** popover (`stage-view-menu-design/Menu.dc.html`): **View** is what this
@@ -393,7 +394,7 @@ function PerformanceTab({
 
 /** fps and ms a frame, the lights packed of lit, the haze tier: what this canvas is doing now. */
 function LiveBlock({ stats, hazeOff }: { stats: StageStatsStore; hazeOff: boolean }) {
-  const { frameRate, lights, hazeTier } = useStageStats(stats)
+  const { frameRate, lights, hazeTier, masksOverCap } = useStageStats(stats)
   const slow = isSlowReading(frameRate)
   return (
     <>
@@ -431,6 +432,16 @@ function LiveBlock({ stats, hazeOff }: { stats: StageStatsStore; hazeOff: boolea
           Haze <b className="font-semibold text-foreground">{hazeOff ? 'off' : hazeTierLabel(hazeTier)}</b>
         </span>
       </div>
+      {masksOverCap > 0 && (
+        <div
+          data-testid="stage-live-masks"
+          className="text-[11px] text-amber-600 dark:text-amber-400"
+          title={`The mask atlas holds ${MASK_ATLAS_LAYERS} cut cloths' holes; past that a cloth is lit as solid until one leaves the scene`}
+        >
+          <b className="font-semibold tabular-nums">{masksOverCap}</b> cut {masksOverCap === 1 ? 'cloth' : 'cloths'} past the{' '}
+          {MASK_ATLAS_LAYERS} masks — lit solid
+        </div>
+      )}
     </>
   )
 }

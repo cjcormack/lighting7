@@ -119,6 +119,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-BOUNCE-FILL`](#fu-stage-bounce-fill) | Trigger | Stage | a plot reads wrong because a bright cyc or floor pool lights nothing round it |
 | [`FU-SCENE-IMAGE-WEBP`](#fu-scene-image-webp) | Trigger | Stage | a designer's cloth images arrive as WebP |
 | [`FU-STAGE-PAINT-ALL-SURFACES`](#fu-stage-paint-all-surfaces) | Trigger | Stage | a set the painted drapes and flats cannot dress |
+| [`FU-STAGE-CUT-NET`](#fu-stage-cut-net) | Trigger | Stage | a show hangs a gauze painted with cut-outs whose holes must let light through more than the net does |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
@@ -2327,7 +2328,10 @@ compare before dirtying — before cutting steps from the march.
 The surface shader lands every light as a pool through one loop over the light table, and since the
 stage-light plan's session 3 every scene **box** casts a shadow: each fragment tests the segment to
 the lamp against the colliders in that light's cone (`frontend/docs/stage-vis-engineering.md`
-§"Light lands through one surface shader"). What casts none is anything that is not a collider — a
+§"Light lands through one surface shader"). Since the scrim plan's session 3 a box may also
+**transmit**: the test multiplies by a net's `open(θ)` and passes a cut cloth's holes through its
+mask, so a cloth's shadow is a share and follows its cut edge (§"Painted cloths") — a shadow map here
+would have to carry that share too. What casts none is anything that is not a collider — a
 fixture's body, a seat, a GLB mesh (`FU-STAGE-GLB-IMPORT`) — and a box's shadow is square however
 round the thing it stands for. The haze still stops at the landing planes. The design record's
 §"Lighting the room" sketched a quality tier: shadow maps for up to four selected heads, and gobos
@@ -2385,6 +2389,22 @@ kind), and a `uv` on the builder's parts. A pros's downstage face is a box's dow
 anything else is new work in `partGeometry`'s `paintUvs`, which paints only a box's downstage and
 upstage faces and reads `u, v` from the part's x and z — a platform's top needs its own face code and
 its x and y, and a cylinder or a disc its own unwrap.
+
+### `FU-STAGE-CUT-NET`
+
+**A painted net's cut-outs passing light** · Trigger · scrim plan session 3, 2026-10-09
+
+A sharkstooth or bobbinet drape is a `Transmit` of kind `angle` whether or not it is painted
+(`builders/drape.ts`'s `drapeLight`): the plan's D7 makes a part's share by angle *or* by mask, never
+both, and a net's holes are its weave. So a gauze painted with a PNG whose alpha cuts holes draws the
+holes (the surface discards them, session 2) but lets light through the whole cloth at `open(θ)`,
+holes included — not the full share a hole should pass (`frontend/docs/stage-vis-engineering.md`
+§"Painted cloths"). Chris kept it so on 2026-10-09. **Trigger**: a show hangs a gauze painted with
+cut-outs whose holes must read brighter than the net round them. **Then**: a combined kind — the
+net's `open(θ)^gather` where the mask is cloth, 1 where it is a hole — which needs texel 2 to carry
+`r`, `gather`, the atlas layer and the uv rect at once (one more texel, or `r` and `gather` packed in
+one float), `segmentTransmit` and `boxTransmit` changed together, and beam reach skipping the net
+everywhere as it does now.
 
 ### `FU-STAGE-FOCUS-FRINGE`
 

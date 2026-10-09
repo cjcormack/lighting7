@@ -78,6 +78,31 @@ export interface PartUv {
 /** The whole image over the whole part. */
 export const FULL_UV: PartUv = { u0: 0, u1: 1, v0: 0, v1: 1 }
 
+/**
+ * A part that passes a share of the light that reaches it (scrim plan D7):
+ *
+ * - `angle` — a net (sharkstooth, bobbinet): `open(θ)` of thread share [r], θ from the cloth's
+ *   normal, raised to [gather], the layers a drawn half is gathered into (its fullness, 1 for a
+ *   cloth hanging open) — `scrimOpen.ts`.
+ * - `mask` — a painted cloth or flat: the [image]'s alpha at the point crossed, through its 256 px
+ *   mask (D5) — a hole below half opacity passes everything, the cloth passes nothing. [uv] is where
+ *   the part's own x and z land on that image, as [ScenePart.uv] says for the paint, so a drawn
+ *   half's mask is its own half of the image, compressed as it gathers.
+ *
+ * The mask's pixels are never in the part: they are looked up when a beam is cast or the colliders
+ * are packed (`sceneMasks.ts`), so the builders stay pure. One not yet loaded, missing, over the
+ * atlas's 32, or with no hole in it counts as solid.
+ */
+export type Transmit =
+  | { kind: 'angle'; r: number; gather: number }
+  | { kind: 'mask'; image: string; uv: PartUv }
+
+/**
+ * How a part meets light: `solid` stops a beam and casts a shadow, `none` is drawn and nothing
+ * more (a proscenium's surround strip, proud of its wall), or a [Transmit] share.
+ */
+export type PartLight = 'solid' | 'none' | Transmit
+
 export interface ScenePart {
   /** Stable within its element, for React keys and tests. */
   key: string
@@ -85,10 +110,35 @@ export interface ScenePart {
   /** The part's centre in the element's frame. */
   at: { x: number; y: number; z: number }
   finish: PartFinish
-  /** Whether a beam stops at it ([`beamReach.ts`](./beamReach.ts)). A surround strip does not. */
-  collides: boolean
+  /** How light meets it ([`beamReach.ts`](./beamReach.ts), [`occlusion.ts`](./occlusion.ts)). */
+  light: PartLight
   /** Where its faces land on the element's paint, for a part whose finish carries [PartFinish.paint]. */
   uv?: PartUv
+}
+
+/** Whether a part is a collider at all — solid or transmitting; a `none` part is drawn only. */
+export function partCollides(part: Pick<ScenePart, 'light'>): boolean {
+  return part.light !== 'none'
+}
+
+/** The part's [Transmit], or null for a solid or a `none` one. */
+export function partTransmit(part: Pick<ScenePart, 'light'>): Transmit | null {
+  return typeof part.light === 'object' ? part.light : null
+}
+
+/**
+ * The [Transmit] a painted part's alpha gives it (D5, D7): the front image's mask over [uv], or —
+ * painted on its back only — the back's, seen from downstage the other way round (`1 − u`, as the
+ * surface shader samples it). Null for an unpainted part.
+ *
+ * A cloth painted on **both** faces cuts light by its front's alpha alone: the surface discards
+ * where either image is a hole (session 2), but one part has one mask, and a hole only the back
+ * has is drawn and not lit through. A cut cloth painted on both sides cuts the same holes in both.
+ */
+export function paintTransmit(paint: ScenePaint | null | undefined, uv: PartUv): Transmit | null {
+  if (paint?.front != null) return { kind: 'mask', image: paint.front, uv }
+  if (paint?.back != null) return { kind: 'mask', image: paint.back, uv: { u0: 1 - uv.u0, u1: 1 - uv.u1, v0: uv.v0, v1: uv.v1 } }
+  return null
 }
 
 export interface ElementBuild {
@@ -309,8 +359,8 @@ export function boxPart(
   d: number,
   h: number,
   finish: PartFinish,
-  collides = true,
+  light: PartLight = 'solid',
 ): ScenePart | null {
   if (!(w > 1e-4 && d > 1e-4 && h > 1e-4)) return null
-  return { key, geometry: { shape: 'box', w, d, h }, at: { x, y, z: z0 + h / 2 }, finish, collides }
+  return { key, geometry: { shape: 'box', w, d, h }, at: { x, y, z: z0 + h / 2 }, finish, light }
 }

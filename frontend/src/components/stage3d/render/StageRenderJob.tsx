@@ -4,6 +4,7 @@ import { Stage3D } from '../Stage3D'
 import type { StageCapture, StageCaptureHandle } from '../CaptureCanvas'
 import { resolveViewpoint } from '../savedViewpoints'
 import { paintTextures } from '../scene/paintTextures'
+import { sceneMasks } from '../scene/sceneMasks'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from '../useStageView'
 import { DEFAULT_SCENE_LAYERS, useLightBudget } from '../scene/sceneView'
 import { StageChannelSourceProvider } from '../../../hooks/useChannelSource'
@@ -63,8 +64,9 @@ const noop = () => {}
  *
  * **It draws once everything is in**: every row read afresh, the viewpoint resolved, the scene
  * mounted (its lazy font included), a derived source holding what it will hold, and every painted
- * cloth's image in (`scene/paintTextures.ts` — missing ones settle too, and draw unpainted) — then a
- * few frames, then the read. Unmounting it (the host does, on the outcome) disposes the renderer and
+ * cloth's image in (`scene/paintTextures.ts` — missing ones settle too, and draw unpainted) and every
+ * cut cloth's mask (`scene/sceneMasks.ts` — a missing one settles too, and is solid) — then a few
+ * frames, then the read. Unmounting it (the host does, on the outcome) disposes the renderer and
  * loses its context on purpose.
  */
 export default function StageRenderJob({
@@ -160,8 +162,9 @@ export default function StageRenderJob({
       try {
         // The scene asked for its images as it mounted, in layout effects, so they are all asked
         // for by now; each part binds its own as it arrives, a task or so before the frames below.
+        // The masks the cut cloths' holes are lit through are asked for the same way (`useSceneMaskHolds`).
         setPaintLoading(true)
-        await paintTextures.settled()
+        await Promise.all([paintTextures.settled(), sceneMasks.settled()])
         if (cancelled) return
         setPaintLoading(false)
         await handle.draw(SETTLE_FRAMES)
@@ -185,7 +188,7 @@ export default function StageRenderJob({
         : !sourceSettled
           ? `waiting for the ${request.source} source`
           : paintLoading
-            ? 'waiting for the painted cloths\' images'
+            ? 'waiting for the painted cloths\' images and masks'
             : 'while drawing'
   const waitingRef = useRef(waiting)
   waitingRef.current = waiting

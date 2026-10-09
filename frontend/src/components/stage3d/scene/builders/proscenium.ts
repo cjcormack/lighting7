@@ -28,9 +28,9 @@ export function buildProscenium(element: StageElementDto): ElementBuild {
   if (s > 0) {
     const y = -t / 2 - SURROUND_PROUD_M / 2
     const strips: Array<ScenePart | null> = [
-      boxPart('surround-sr', -(ow + s) / 2, y, sill, s, SURROUND_PROUD_M, oh + s, SURROUND, false),
-      boxPart('surround-sl', (ow + s) / 2, y, sill, s, SURROUND_PROUD_M, oh + s, SURROUND, false),
-      boxPart('surround-head', 0, y, sill + oh, ow + 2 * s, SURROUND_PROUD_M, s, SURROUND, false),
+      boxPart('surround-sr', -(ow + s) / 2, y, sill, s, SURROUND_PROUD_M, oh + s, SURROUND, 'none'),
+      boxPart('surround-sl', (ow + s) / 2, y, sill, s, SURROUND_PROUD_M, oh + s, SURROUND, 'none'),
+      boxPart('surround-head', 0, y, sill + oh, ow + 2 * s, SURROUND_PROUD_M, s, SURROUND, 'none'),
     ]
     for (const strip of strips) if (strip != null) parts.push(strip)
   }

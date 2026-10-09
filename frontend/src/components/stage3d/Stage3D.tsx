@@ -49,6 +49,7 @@ import {
   sceneElementBounds,
   type SceneBuildCache,
 } from './scene/stageSurfaces'
+import { useMasksOverCapStat, useSceneMaskHolds } from './scene/useSceneMasks'
 import { buildEmitterLayout } from './emitterLayout'
 import { bodySpecOf, emitterNeedsForSpec } from './emitterNeeds'
 import { StageBodies, buildBodyLayout } from './bodies/StageBodies'
@@ -408,6 +409,9 @@ export function Stage3D({
       }),
     [stageDims, view.regions, regionGeometry, builds, gridSize],
   )
+  // The masks the painted cloths' holes are cut by (scrim plan D5): held while the scene names them,
+  // read where a beam is cast and a shadow tested; the emitters ask for the frame as each lands.
+  useSceneMaskHolds(projectId, builds)
   const beamClip = useMemo(() => beamClipFor(stageDims, builds), [stageDims, builds])
   // Only the whole scene has a house to keep clear: a canvas drawing a subset of it — the Positions
   // plan's drapes and Set pieces, never the room or the proscenium — draws its beams whole, as it did
@@ -424,6 +428,7 @@ export function Stage3D({
   useEffect(() => {
     liveStats?.setHazeTier(hazeQuality.tier)
   }, [liveStats, hazeQuality.tier])
+  useMasksOverCapStat(liveStats)
 
   // The canvas's container, which the emitters stamp with the light table's counts (`data-lights`).
   const containerRef = useRef<HTMLDivElement | null>(null)

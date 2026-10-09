@@ -79,7 +79,7 @@ export function elementAnchorBox(
   element: Pick<StageElementDto, 'kind' | 'params' | 'positionX' | 'positionY' | 'positionZ' | 'yawDeg' | 'widthM' | 'depthM' | 'heightM'>,
   build: ElementBuild | null,
 ): AnchorBox {
-  const colliders = build == null ? [] : elementColliders(element, { parts: build.parts.map((p) => ({ ...p, collides: true })), seats: [] })
+  const colliders = build == null ? [] : elementColliders(element, { parts: build.parts.map((p) => ({ ...p, light: 'solid' as const })), seats: [] })
   if (colliders.length === 0) {
     // Lighting (x, y, z) → three (x, z, −y); the box unturned, which is enough for an anchor.
     const reach = Math.hypot(element.widthM, element.depthM) / 2

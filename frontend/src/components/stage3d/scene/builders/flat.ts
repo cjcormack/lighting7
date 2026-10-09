@@ -1,5 +1,5 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
-import { boxPart, elementFinish, paramPaint, type ElementBuild, type PartFinish, type ScenePart } from '../sceneParts'
+import { boxPart, elementFinish, paintTransmit, paramPaint, type ElementBuild, type PartFinish, type PartUv, type ScenePart } from '../sceneParts'
 
 /** One opening in a wall, along its width from its stage-right end (local −x), as the backend's `FlatOpening`. */
 export interface WallOpening {
@@ -36,6 +36,7 @@ export function flatOpenings(element: Pick<StageElementDto, 'params'>): WallOpen
  * A finish carrying paint (a flat's, scrim plan D4) gives each piece its share of the face as its
  * [ScenePart.uv] — the wall's width and height mapped onto the image once — so an opening cuts a
  * hole in the picture and the piers, sills and heads round it each show the part of it they cover.
+ * The same rect is the piece's mask (D5, D7): where the image's alpha is a hole, light passes it.
  */
 export function wallWithOpenings(
   keyPrefix: string,
@@ -51,8 +52,10 @@ export function wallWithOpenings(
   }
   const painted = finish.paint != null
   const segment = (key: string, a: number, b: number, z0: number, z1: number) => {
-    const part = boxPart(`${keyPrefix}${key}`, -w / 2 + (a + b) / 2, 0, z0, b - a, t, z1 - z0, finish)
-    push(part != null && painted ? { ...part, uv: { u0: a / w, u1: b / w, v0: z0 / h, v1: z1 / h } } : part)
+    const uv: PartUv = { u0: a / w, u1: b / w, v0: z0 / h, v1: z1 / h }
+    // A painted piece's alpha cuts it for light too (scrim plan D5, D7), over its own share of the face.
+    const part = boxPart(`${keyPrefix}${key}`, -w / 2 + (a + b) / 2, 0, z0, b - a, t, z1 - z0, finish, paintTransmit(finish.paint, uv) ?? 'solid')
+    push(part != null && painted ? { ...part, uv } : part)
   }
   let cursor = 0
   const sorted = [...openings]

@@ -230,7 +230,12 @@ surface), dark-glass lenses, and the one DOM label layer. **Light lands through 
 (session 3): every venue, set and region surface loops over a float data texture of the live lights
 (`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-machine light budget, and each
 fragment is shadowed by the scene's colliders — the boxes beam reach casts at — tested against the
-light's own culled list (`scene/occlusion.ts`), capped per machine by *Box shadows*;
+light's own culled list (`scene/occlusion.ts`), capped per machine by *Box shadows*. Since the scrim
+plan's session 3 a collider may **transmit**: `segmentTransmit` answers a share — 0 past a solid box,
+`open(θ)^gather` through a net (`scene/scrimOpen.ts`), 1 or 0 through a cut cloth's hole or cloth
+(its mask in a 32-layer `R8` atlas, `scene/maskAtlas.ts`) — the collider's third texel saying which,
+and beam reach skips what transmits, so a beam lands past a gauze; the GLSL and its twin change
+together;
 the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
@@ -491,13 +496,18 @@ pieces their share of its face, a drawn cloth's halves ½ each, compressed as th
 stays whole — which `partGeometry` writes with an `aPaintFace` attribute (downstage 1, upstage −1,
 edges 0). The surface shader's `PAINT` define samples the images as the albedo by face, so every
 light and the work lights' lift see them as any finish, and discards where **either** image's alpha
-is below ½ (holes in the surface only; light passes them from session 3). The textures come from one
+is below ½. **Holes and nets pass light** (session 3): `ScenePart.light` is `'solid' | 'none' |
+Transmit` — a net `{kind: 'angle', r, gather}`, a painted cloth or flat `{kind: 'mask', image, uv}`
+over its paint rect — so the shadows, beam reach and sight lines pass a gauze and a cut cloth's holes,
+through masks from a second module-level cache, `scene/sceneMasks.ts` (`?variant=mask`, keyed by
+hash, held by `useSceneMaskHolds`, a mask not loaded or missing counting as solid, its landing a
+re-pack and an `invalidate`); the cloth still draws opaque until session 4. The textures come from one
 **module-level** cache, `scene/paintTextures.ts` — keyed by hash and variant, `?variant=display` or
 `detail` for an element with `fullDetail`, mipmapped and anisotropic, loaded once, disposed 5 s after
 nothing holds it — never a React context, which a `render_view` capture would not bridge. A part binds
 its images as uniforms when they land (`setPaintTextures`, no recompile) and **asks for the frame**;
 a missing image settles unpainted, never an error; a Full detail switch keeps the 2048 copy until the
-4096 one is in; and `StageRenderJob` awaits `paintTextures.settled()` before it draws. The element
+4096 one is in; and `StageRenderJob` awaits `paintTextures.settled()` and `sceneMasks.settled()` before it draws. The element
 sheet's Depth hint says it folds only velour (`DRAPE_DEPTH_HINT`).
 
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per

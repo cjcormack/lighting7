@@ -20,6 +20,7 @@ import { getGoboTexture } from '../goboAtlas'
 import { GOBO_LAYERS_GLSL } from '../goboLayers'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from '../washConfig'
 import { LANDING_GLSL, REACH_EPS_M } from './landing'
+import { getMaskAtlasTexture } from './maskAtlas'
 import { lobeDefines, LOBES_GLSL, lobeUniformValues } from './lobes'
 import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
 import { COLLIDER_TEXELS, LIST_TEXELS, makeColliderSet, OCCLUSION_GLSL, type ColliderSet } from './occlusion'
@@ -39,11 +40,13 @@ import type { WorkLightLevels } from './workLights'
  * plan session 6) and facing the light — then the beam's cross-section, `beamMask`
  * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
  * iris, and an edge softened by the family and spread by how far the surface sits from the focal
- * plane, which is measured along the axis from the aperture — and then **not shadowed**: the segment
- * from the fragment to the lamp meets none of the colliders in that light's cone (`occlusion.ts`,
- * stage-light plan session 3), so a flat shadows the wall behind it. A light whose cone reaches more
- * colliders than its list holds falls back to where its beam lands (`landing.ts`'s two planes, which
- * the haze still reads). A pool **falls off with distance from the aperture** — as
+ * plane, which is measured along the axis from the aperture — and then **shadowed**, by what the
+ * segment from the fragment to the lamp keeps through the colliders in that light's cone
+ * (`occlusion.ts`, stage-light plan session 3): nothing past a solid one, so a flat shadows the wall
+ * behind it, and a share through a net or a cut cloth's hole (scrim plan D8), so a flat front light
+ * lights the set through a gauze. A light whose cone reaches more colliders than its list holds falls
+ * back to where its beam lands (`landing.ts`'s two planes, which the haze still reads), times the
+ * transmitting colliders its list still names. A pool **falls off with distance from the aperture** — as
  * the square of it out to [FALLOFF_KNEE_M], the prototype's throws, and linearly past it, as an eye
  * adapted to the stage sees a long throw rather than as a meter reads it — and is as bright as its
  * beam is narrow: the light is spread over the footprint, radius `da · tan(half
@@ -197,6 +200,8 @@ export interface SurfaceUniforms {
   uColliders: { value: DataTexture }
   /** Each packed light row's colliders, `occlusion.ts`'s `cullLightColliders`. */
   uLightColliders: { value: DataTexture }
+  /** The painted cloths' masks (`maskAtlas.ts`), one shared atlas: a mask landing writes a layer, never a define. */
+  uMaskAtlas: { value: DataArrayTexture }
 }
 
 /** A canvas's light texture: [MAX_LIGHT_BUDGET] rows of [LIGHT_TEXELS] RGBA float texels. */
@@ -250,6 +255,7 @@ export function makeSurfaceUniforms(texture: DataTexture, occlusion: OcclusionTe
     uLodMax: { value: FOCUS_LOD_MAX },
     uColliders: { value: occlusion.colliders },
     uLightColliders: { value: occlusion.lists },
+    uMaskAtlas: { value: getMaskAtlasTexture() },
   }
 }
 
@@ -475,8 +481,10 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
         if (m <= 0.0) continue;
       }
       // Shadowed: a collider between here and the lamp, or behind where the beam lands for a light
-      // with too many colliders in its cone to test.
-      if (lightOccluded(i, vWorldPos, -L, dist, c, aperture.x, texelFetch(uLights, ivec2(3, i), 0))) continue;
+      // with too many colliders in its cone to test — or a share of it, through a net or a hole.
+      float through = lightTransmit(i, vWorldPos, -L, dist, c, aperture.x, texelFetch(uLights, ivec2(3, i), 0));
+      if (through <= 0.0) continue;
+      m *= through;
       // Falls off from the lens, not the apex behind it (nearer than 0.3 m it holds), over the
       // beam's own footprint: a narrow beam puts the same light on less of the surface.
       float da = max(dist - aperture.x, 0.3);
