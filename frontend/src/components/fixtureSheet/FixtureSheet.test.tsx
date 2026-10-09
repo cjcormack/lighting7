@@ -220,6 +220,16 @@ describe('FixtureSheet — clearing', () => {
     expect(clearEntry).toHaveBeenCalledWith('fixture', 'spot-3', 'dimmer', 2000)
   })
 
+  it("reserves the ×'s height on every name line, so taking a row moves nothing below it", () => {
+    hold([entry('dimmer')], [prov('dimmer', {})])
+    const { unmount } = render(<FixtureSheet fixture={SPOT} host="popup" />)
+    for (const name of ['dimmer', 'zoom']) expect(row(name).firstElementChild!.className).toContain('min-h-[22px]')
+    unmount()
+
+    render(<FixtureSheet fixture={SPOT} host="phone" />)
+    for (const name of ['dimmer', 'zoom']) expect(row(name).firstElementChild!.className).toContain('min-h-8')
+  })
+
   it('clears the position entry from the Position row', () => {
     const clearEntry = vi.spyOn(lightingApi.programmer, 'clearEntry')
     hold([entry('position', { value: '128,64' })], [prov('position', {})])

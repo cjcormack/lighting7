@@ -19,7 +19,7 @@ import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { SheetField } from './SheetField'
 import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
-import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
+import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
 import { clearSheetRow, writePickColour, writePickVirtualDimmer, writeSheetLevel, writeSheetPosition } from './sheetWrites'
 import type { RowSource } from './rowSource'
@@ -102,7 +102,7 @@ function RowFrame({
         openRowId === openKey(headKey, row) && 'bg-primary/[0.07]',
       )}
     >
-      <div className="flex min-h-5 min-w-0 items-center gap-1.5">
+      <div className={cn('flex min-w-0 items-center gap-1.5', finger ? FINGER_ROW_HEAD_CLASS : ROW_HEAD_CLASS)}>
         <span title={name} className={cn('min-w-0 truncate text-[12.5px] font-medium', source.kind === 'base' && 'opacity-60')}>
           {name}
         </span>
