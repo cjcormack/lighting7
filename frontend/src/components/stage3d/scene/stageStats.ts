@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { sameReading, type FrameRateReading } from './frameRate'
 
 /**
- * What one canvas is doing — frame rate, lights packed of lit, haze tier — for the View popover's
+ * What one canvas is doing — frame rate, lights packed of lit, haze tier, masks over the atlas's cap — for the View popover's
  * Performance tab and the frame-rate readout. One store per canvas, created by the Stage route. Read
  * it from a leaf only: a route that re-rendered on it would hand the canvas props and ask for frames.
  */
@@ -12,6 +12,11 @@ export interface StageStats {
   /** How many lights the surfaces took of how many were lit; null while nothing packs them. */
   lights: { packed: number; lit: number } | null
   hazeTier: number
+  /**
+   * Painted cloths' masks with holes the atlas has no layer for (scrim plan D8: 32 at most): drawn
+   * and lit solid until one frees. 0 for none.
+   */
+  masksOverCap: number
 }
 
 export interface StageStatsStore {
@@ -20,9 +25,10 @@ export interface StageStatsStore {
   setFrameRate: (reading: FrameRateReading | null) => void
   setLights: (lights: { packed: number; lit: number } | null) => void
   setHazeTier: (tier: number) => void
+  setMasksOverCap: (n: number) => void
 }
 
-export const IDLE_STATS: StageStats = { frameRate: null, lights: null, hazeTier: 0 }
+export const IDLE_STATS: StageStats = { frameRate: null, lights: null, hazeTier: 0, masksOverCap: 0 }
 
 export function createStageStats(): StageStatsStore {
   let current = IDLE_STATS
@@ -47,6 +53,9 @@ export function createStageStats(): StageStatsStore {
     },
     setHazeTier(tier) {
       if (current.hazeTier !== tier) publish({ ...current, hazeTier: tier })
+    },
+    setMasksOverCap(n) {
+      if (current.masksOverCap !== n) publish({ ...current, masksOverCap: n })
     },
   }
 }

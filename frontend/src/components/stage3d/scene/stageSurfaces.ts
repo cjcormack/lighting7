@@ -173,7 +173,7 @@ export function sceneElementBounds(builds: readonly SceneBuild[]): LightingBound
     max.z = Math.max(max.z, z)
   }
   for (const { element, build } of builds) {
-    for (const c of elementColliders(element, { parts: build.parts.map((p) => ({ ...p, collides: true })), seats: [] })) {
+    for (const c of elementColliders(element, { parts: build.parts.map((p) => ({ ...p, light: 'solid' as const })), seats: [] })) {
       // The collider is a turned box in three.js space; its bounding circle about y is enough here.
       const r = Math.hypot(c.hx, c.hz)
       grow(c.cx - r, -c.cz - r, c.cy - c.hy)

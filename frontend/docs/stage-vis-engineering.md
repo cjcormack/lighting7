@@ -577,6 +577,9 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   the long gap after an idle spell.
 - **A painted cloth's image landing** (§"Painted cloths"): bound as a uniform when it loads, after
   the part has drawn, so the part asks for the frame that shows it.
+- **A cut cloth's mask landing** (§"Painted cloths"): `StageEmitters`' pack effect, keyed on
+  `sceneMasks.version`, re-packs the colliders and invalidates, so the frame it asks for re-casts every
+  beam and draws the shadows through the new holes; the atlas takes it as a texture write.
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
   unmounts, a body's `hide` and `setActive` — and the region uniforms (below). A body's parts are
   written from its own frame loop (§"Fixture bodies"), so they need no request of their own. The light table is packed in the emitters'
@@ -665,7 +668,12 @@ without a room — the back wall and the catch floor:
   keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
   window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
   Everywhere and the Positions plan (which draws only the drapes and the Set layer, no house) draw it
-  whole.
+  whole. **A transmitting collider is skipped** (scrim plan D7, session 3; §"Painted cloths"): beam
+  reach passes a net (`Collider.transmit` of kind `angle`) and a painted cloth where its axis crosses
+  a hole (kind `mask`, its mask read at the middle of the crossing — `maskPasses`), so a beam
+  through a gauze lands on the set behind it, its air runs on to there, and a transmitting collider
+  is never a landing plane (`landing.ts`). `sightBlocked` passes the same two, so a label behind a
+  gauze still shows. *Focus here* still takes the point it is given.
 - **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
   face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
   one fold, which the mesh, the box and the fold shadow all read: the element's `depthM` crest to
@@ -717,10 +725,16 @@ without a room — the back wall and the catch floor:
   against the colliders in that light's cone. So a flat shadows the wall behind it, a column the
   backcloth, a leg the leg upstage of it, and a beam wider than a box passes it on both sides with
   the box's shadow between. No shadow map and no extra pass: two float textures beside the light
-  table, which stays at six texels. **The colliders**, two RGBA texels each — the centre and the
-  yaw's cosine (a box turned by π is the same box, so the turn is folded to a sine of at least 0
-  and the shader takes `√(1 − cos²)` rather than a `cos` and a `sin`), then the half-extents and
-  the skin — packed from the same `sceneColliders` the director casts at, whenever they change.
+  table, which stays at six texels, and the mask atlas. **The colliders**, three RGBA texels each
+  (`COLLIDER_TEXELS`, two until scrim plan session 3) — the centre and the yaw's cosine (a box
+  turned by π is the same box, so the turn is folded to a sine of at least 0 and the shader takes
+  `√(1 − cos²)` rather than a `cos` and a `sin`), then the half-extents and the skin, then **what
+  the box does to light**: `(kind, r or atlas layer, gather or u0..u1, 0 or v0..v1)` — solid, a net
+  (its thread share and how many layers it is gathered into) or a cut cloth (its mask's atlas layer
+  and its uv rect, each pair packed in one float, `packUnitPair`; the plan's texel was `(kind, r or
+  layer, gather, 0)`, and a mask needs its rect — a drawn half's is half the image — where it has
+  no gather) — packed from the same `sceneColliders` the director casts at, whenever they change or
+  a mask lands. A mask that holds no atlas layer packs solid.
   **Each packed light row's list**: the count, then one texel an entry — the direction from the
   apex to the collider's bounding sphere, octahedrally encoded; the cosine of the angle the sphere
   spans; and the collider's index and the distance to the sphere's near side, packed exactly in one
@@ -729,6 +743,29 @@ without a room — the back wall and the catch floor:
   is halved along its longest axis and tried in pieces, or every wall would be in every list. A box
   the aperture sits inside is left out, as beam reach leaves it. Only the rows packed are uploaded,
   each as far as its list runs.
+  - **The test answers a share, not blocked or not** (`segmentTransmit`, scrim plan D8): 1 where
+    the segment misses a box, and otherwise the box's share of the crossing — 0 for a solid box,
+    `open(θ)^gather` for a net (`scrimOpen.ts`, θ between the segment and the box's local z, its
+    normal), and for a cut cloth 1 or 0 as its mask is a hole or cloth at the middle of the
+    crossing (`texelFetch` of the atlas, a byte below 128 a hole). The light loop multiplies them
+    (`lightTransmit`, in place of `lightOccluded`) and stops at the first 0; the surface's
+    irradiance is multiplied by what is left. Texel 2 is fetched only once the slab test says the
+    segment crosses the box, so on a GPU a miss should cost what it did — unmeasured: on
+    SwiftShader every branch's code is paid, taken or not (the third-texel bullet below). The GLSL and `segmentTransmit` change
+    together: `occlusion.test.ts` runs the twin over a fixed scene (`scene/occlusionTwin.ts` —
+    solid, a sharkstooth at 0°, 45° and 80°, gathered two deep, a mask's hole and its cloth, and a
+    fragment on the scrim itself), and the bench's `?only=twin` runs the GLSL over the same cases on
+    a real renderer and prints both (they agreed to five places on SwiftShader).
+  - **The mask atlas** (`scene/maskAtlas.ts` over `scene/sceneMasks.ts`) is an `R8`
+    `DataArrayTexture`, 256 × 256 × **32**, keyed by hash: each mask with a hole resampled onto a
+    layer, bottom row first. A mask with no hole (a JPEG's opaque white) takes no layer and packs
+    solid, and so does a 33rd distinct mask with holes until a layer frees — counted by
+    `sceneMasks.overCap()`, named on the canvas's stats store (`masksOverCap`) and in the
+    Performance tab's live block (*2 cut cloths past the 32 masks — lit solid*). The texture wraps
+    the cache's own bytes, the same ones beam reach reads, so a shadow and a beam's end are decided
+    by one copy; it is uploaded whole when a mask lands (2 MB, a handful of times a session) rather
+    than by three's per-layer updates, which a second canvas's first upload would take as the only
+    layers there are.
   - **A box the fragment is inside passes it** as long as the fragment lies within the box's skin of
     the face the segment leaves by: the larger of the collider's two skins, one number for all six
     faces. So a pleated cloth inside its own box keeps lighting its troughs (whether a crest stands
@@ -748,13 +785,29 @@ without a room — the back wall and the catch floor:
     box test, before the skip, was +0.177 ms an entry, so the skip pays wherever fewer than about
     43 % of a light's entries stand behind a given fragment. The Commemoration Hall packs 61
     colliders; its two advance-bar spots carry 11 and 8, its 9.7° balcony spot 49.
+  - **The third texel's cost** (scrim plan session 3), measured only on SwiftShader — Chromium's
+    software renderer, the one this session's container had — with the bench at 512 × 320, twelve
+    lights, `main` and the branch interleaved over three rounds (medians, ms a frame): an entry
+    skipped on its sphere went from +14.5 to +24.5, one tested from +21.8 to +32.1, one tested and
+    crossed as a net (`?pass=1&scrims=1`, the share multiplied every time) +34.3, and the planes
+    path from ~125 to ~136. Taking the texel-2 block out of the GLSL put the skipped entry back at
+    `main`'s cost (1146 ms at 64 entries against `main`'s 1056), with the net's arm alone at 1514
+    and the mask's adding the rest: SwiftShader runs a branch's code masked whether or not a lane
+    takes it, so on it the cost of a box test is the code it holds, taken or not. A GPU skips a
+    branch no lane in its group takes, so the desk Mac's and the iPad's numbers are owed
+    (`FU-MANUAL-STAGE-LIGHT-BUDGET` step 8); none of these is a GPU's.
   - **How many boxes a light may be shadowed by is the viewer's** — *Box shadows* on the View
     popover's **Performance** tab, per machine in `localStorage` (`stage.boxShadows`,
     `scene/sceneView.ts`) beside the light budget and *Gobos on surfaces*: *64 a light* (the default,
     the list texture's width, `MAX_LIGHT_COLLIDERS`), *16 a light* or *Off*. A light whose cone reaches more than the cap falls
     back to its landing planes (texel 3, `landing.ts`'s `behindLanding`), so a lower cap takes the
     widest cones' shadows first; *Off* puts every light there, the cost the surfaces had before
-    session 3. So does a scene with more colliders than the texture's 1024 rows. It is the
+    session 3. So does a scene with more colliders than the texture's 1024 rows. **The fallback
+    multiplies likewise** (scrim plan D8): an overflowed row still lists the transmitting colliders
+    in its cone, as many as the cap allows, and its count reads `LIST_OVERFLOW − n` — the planes
+    stand for the solid boxes (they lie at the next solid surface past a net, since beam reach
+    skipped it), and the listed nets and cut cloths multiply what the planes let through. *Off*
+    lists none: every light on its planes alone. It is the
     machine's because the machines differ by more than any one cap suits: the same bench in Safari
     on the desk Mac matched Chromium (+0.10 ms an entry skipped, +0.27 tested; 7.5 and 18.2 ms at
     64), and on an iPad cost +0.65 and +1.86 (46.7 and 123.8 ms at 64, from 5 ms on the planes). A
@@ -949,10 +1002,13 @@ z-fight it.
 
 ### Painted cloths
 
-Scrim plan session 2 (`../../docs/plans/scrim-plan.md` D2, D4, D5, D12). A drape's `fabric` and a
-drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene document") are
-drawn; nothing yet lets light **through** a net or a hole — beam reach, the box shadows and the haze
-still treat every cloth as solid (sessions 3–5).
+Scrim plan sessions 2 and 3 (`../../docs/plans/scrim-plan.md` D2–D5, D7, D8, D12). A drape's
+`fabric` and a drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene
+document") are drawn, and since session 3 **light passes a net and a hole**: a flat front light
+lights the set through a gauze, a steep wash barely does, a beam's air runs on to the next solid
+surface behind the cloth, and a cut cloth's shadow follows its holes. The cloth itself still draws
+**opaque** — the scrim's see-through blend and muslin's back light are session 4 — and the haze still
+stops at the landing planes, which now lie past a net (session 5 splits it at the cloth).
 
 - **Only velour pleats** (D2). `buildDrape` draws a velour drape — no `fabric` — as it always has,
   pleated by its `depthM`. Every other fabric hangs flat whatever its depth: a `sheet` part, one
@@ -984,10 +1040,39 @@ still treat every cloth as solid (sessions 3–5).
   painted velour's sheen (0.1, grazing only) keeps the finish's tint rather than the picture's — a
   known approximation left for the tuning session; canvas, muslin and the nets have no sheen. Both images are sampled before any branch, so their mipmap
   derivatives are defined.
-- **Alpha below half is a hole** (D5), in the surface only this session: the fragment is discarded
-  where **either** image is below 0.5, on both faces, so a cut cloth reads from the house and from
-  behind, and a flat's front cut-out shows through its back. The shadows, beam reach and haze still
-  stop at it.
+- **Alpha below half is a hole** (D5): the fragment is discarded where **either** image is below
+  0.5, on both faces, so a cut cloth reads from the house and from behind, and a flat's front cut-out
+  shows through its back. Since session 3 the shadows and beam reach pass it too (below); the haze
+  still stops at it (session 5).
+- **A part says how it meets light** (D7, session 3): `ScenePart.light` is `'solid'`, `'none'` (a
+  proscenium's surround strip, drawn and nothing more — it was `collides: false`) or a `Transmit`:
+  `{kind: 'angle', r, gather}` for a sharkstooth (r 0.30) or a bobbinet (0.15) — estimates, judged in
+  session 6 — with `gather` the half's fullness (`gatherShape`'s, 1 hanging open), and
+  `{kind: 'mask', image, uv}` for a painted cloth or flat, its `uv` the part's paint rect, so a drawn
+  half's mask is its own half of the image, compressed as it gathers. Velour, canvas, muslin and an
+  unpainted cloth stay solid; a net keeps its angle even painted (its holes are its weave), so a
+  cut-out painted on a gauze is drawn but passes light at the net's share (`FU-STAGE-CUT-NET`). A cloth
+  painted on its back only takes the back's mask, its `u` the other way round as the shader samples
+  it; one painted on both faces takes its front's, so a hole only its back has is drawn and not lit
+  through. `elementColliders` carries the `Transmit` onto the collider (`Collider.transmit`);
+  `partBox` is unchanged, since a net's box is the 1 cm sheet it always was.
+- **A net passes `open(θ)`** (D3, `scene/scrimOpen.ts`): `(1 − r)·max(0, 1 − r/cos θ)`, θ from the
+  cloth's normal — 49 %, 40 % and 9 % of a sharkstooth at 0°, 45° and 70°, nothing past ~72.5° — and
+  gathered net stacks as `open^c`. One GLSL chunk (`SCRIM_OPEN_GLSL`) with its TypeScript twin, as
+  `beamMask.ts` has, pinned by `scrimOpen.test.ts`. So a flat FOH (θ small) lights the set through a
+  gauze and a steep overhead wash (θ large) leaves it dark — the reveal's physics. Beam reach skips a
+  net outright (§"Light lands through one surface shader"): its share is the shadows'.
+- **A cut cloth is cut by its mask** (D5, `scene/sceneMasks.ts`): the desk's `?variant=mask`, the
+  alpha at 256 px, loaded **once per hash** from a module-level cache with `paintTextures.ts`'s
+  pattern — held while the drawn scene names it (`useSceneMaskHolds`, a layout effect in `Stage3D`),
+  disposed `MASK_GRACE_MS` (5 s) after nothing does, never a React context — decoded off the main
+  thread to one byte a pixel. **The builders stay pure**: a part names its image, and the mask is
+  looked up as a beam is cast and as the colliders are packed. A mask not yet loaded, missing, with
+  no hole (a JPEG's is opaque white) or past the atlas's 32 counts as **solid**, so a painted cloth
+  is never let through by mistake. Its landing re-packs the colliders and **asks for a frame**
+  (`StageEmitters`' pack effect, keyed on the cache's version), which re-casts every beam; the atlas
+  takes the new layer as a texture write, never a recompile. A `render_view` capture waits for the
+  masks as it waits for the paint (`StageRenderJob`).
 - **The texture cache** (`scene/paintTextures.ts`, D12) is module-level, keyed by hash and variant,
   and shared by every canvas — a `Texture` belongs to no renderer, each context uploads its own. Each
   is fetched once from `GET …/scene-images/{hash}?variant=display` (2048 px), or `detail` (4096 px)
@@ -1008,8 +1093,10 @@ still treat every cloth as solid (sessions 3–5).
 - **A `render_view` capture waits for the paint.** The cache is not a React context, so nothing needs
   bridging into the capture's root (`CaptureCanvas.tsx`); a part asks for its images in **layout**
   effects, so by the time the scene reports ready every image is asked for, and `StageRenderJob`
-  awaits `paintTextures.settled()` before its frames. One that never comes is named in the give-up
-  reason (*waiting for the painted cloths' images*); a missing one settles and draws unpainted.
+  awaits `paintTextures.settled()` — and, since session 3, `sceneMasks.settled()`, the masks being
+  held in a layout effect too — before its frames. One that never comes is named in the give-up
+  reason (*waiting for the painted cloths' images and masks*); a missing image settles and draws
+  unpainted, a missing mask settles and is solid.
 
 ### Haze degrades before frame rate
 
@@ -1461,8 +1548,8 @@ views, scene elements, patches, regions, riggings, fixtures and types — with `
 render before its own fetch has run. Then it resolves the viewpoint once (a refetch mid-render moves
 the cache `Stage3D` draws from, never the camera, and never unmounts the canvas), mounts `Stage3D`,
 and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it — for
-the source to settle, and for every painted cloth's image to have loaded or settled missing
-(`paintTextures.settled()`, §"Painted cloths"). Then four frames a task apart (the
+the source to settle, and for every painted cloth's image and mask to have loaded or settled missing
+(`paintTextures.settled()`, `sceneMasks.settled()`, §"Painted cloths"). Then four frames a task apart (the
 emitters lay out and pack the light table; the next draws through the camera the viewpoint swapped
 in), and `toBlob`. It gives up three seconds before the desk would, naming what never
 arrived, so Claude hears *waiting for the scene to mount* rather than a bare timeout.

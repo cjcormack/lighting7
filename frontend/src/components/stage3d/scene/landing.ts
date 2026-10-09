@@ -7,6 +7,11 @@
  * the axis hits the riser, the half above it carries on to the deck, and the deck's plane is the
  * second. Behind both planes is the inside of the stage, the only part of the beam the edge stops.
  *
+ * **A transmitting collider is never a landing plane** (scrim plan D7): beam reach skips a net, and a
+ * painted cloth where the beam crosses a hole in it, so a beam through a gauze lands on the set
+ * behind and its air runs on to there. The surfaces that fall back to these planes multiply by the
+ * transmitting colliders their light's list still names (`occlusion.ts`'s `lightTransmit`).
+ *
  * Both planes ride one vec4: the beam's `aBeamLand` attribute and the light table's texel 3, which
  * have no room for a second (sixteen attributes; six texels). A collider turns about y only, so a
  * face's normal is straight up, straight down or level, and one float holds it ([landNormalCode]).

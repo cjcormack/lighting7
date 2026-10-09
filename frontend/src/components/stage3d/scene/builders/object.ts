@@ -24,13 +24,13 @@ export function buildObject(element: StageElementDto): ElementBuild {
   let part: ScenePart | null
   switch (shape) {
     case 'CYLINDER':
-      part = { key: 'body', geometry: { shape: 'cylinder', rTop: w / 2, rBottom: w / 2, h }, at: { x: 0, y: 0, z: h / 2 }, finish, collides: true }
+      part = { key: 'body', geometry: { shape: 'cylinder', rTop: w / 2, rBottom: w / 2, h }, at: { x: 0, y: 0, z: h / 2 }, finish, light: 'solid' }
       break
     case 'SHADE':
-      part = { key: 'body', geometry: { shape: 'cylinder', rTop: w * 0.28, rBottom: w / 2, h }, at: { x: 0, y: 0, z: h / 2 }, finish, collides: true }
+      part = { key: 'body', geometry: { shape: 'cylinder', rTop: w * 0.28, rBottom: w / 2, h }, at: { x: 0, y: 0, z: h / 2 }, finish, light: 'solid' }
       break
     case 'DISC':
-      part = { key: 'body', geometry: { shape: 'disc', r: w / 2, d }, at: { x: 0, y: 0, z: w / 2 }, finish, collides: true }
+      part = { key: 'body', geometry: { shape: 'disc', r: w / 2, d }, at: { x: 0, y: 0, z: w / 2 }, finish, light: 'solid' }
       break
     default:
       part = boxPart('body', 0, 0, 0, w, d, h, finish)

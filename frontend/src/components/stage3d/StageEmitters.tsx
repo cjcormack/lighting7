@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
   type Color,
@@ -33,6 +33,7 @@ import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
 import { packLanding } from './scene/landing'
 import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
+import { sceneMasks } from './scene/sceneMasks'
 import type { HazeQuality } from './scene/hazeGovernor'
 import type { StageStatsStore } from './scene/stageStats'
 
@@ -418,13 +419,17 @@ export function StageEmitters({
   // The surfaces' light texture: packed from the table whenever a light moved or the budget did.
   const lighting = useSurfaceLighting()
   // The colliders the surfaces' shadows are tested against: the ones beam reach casts at. A new set
-  // asks for a pack, so each light's list is culled against it.
+  // asks for a pack, so each light's list is culled against it. So does a painted cloth's mask
+  // landing (`scene/sceneMasks.ts`): it packs as the cloth it cuts rather than solid, and the frame
+  // it asks for re-casts every beam, which reads the mask as it is cast — not an R3F prop, so the
+  // invalidate is what shows it.
+  const maskVersion = useSyncExternalStore(sceneMasks.subscribe, sceneMasks.version)
   useEffect(() => {
     packColliders(colliders, lighting.occlusion.set)
     lighting.occlusion.colliders.needsUpdate = true
     built.lights.dirty = true
     invalidate()
-  }, [colliders, lighting, built, invalidate])
+  }, [colliders, lighting, built, invalidate, maskVersion])
   const budgetRef = useRef(lightBudget)
   useEffect(() => {
     if (budgetRef.current === lightBudget) return

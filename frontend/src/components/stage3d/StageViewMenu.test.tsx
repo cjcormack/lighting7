@@ -189,6 +189,19 @@ describe('the Performance tab', () => {
     expect(props.setFrameRateReadout).toHaveBeenCalledWith(true)
   })
 
+  it('names the cut cloths past the mask atlas, and says nothing while none are', () => {
+    const props = setup()
+    open()
+    goTo('Performance')
+    expect(screen.queryByTestId('stage-live-masks')).toBeNull()
+    act(() => props.stats!.setMasksOverCap(2))
+    expect(screen.getByTestId('stage-live-masks')).toHaveTextContent('2 cut cloths past the 32 masks — lit solid')
+    act(() => props.stats!.setMasksOverCap(1))
+    expect(screen.getByTestId('stage-live-masks')).toHaveTextContent('1 cut cloth past the 32 masks — lit solid')
+    act(() => props.stats!.setMasksOverCap(0))
+    expect(screen.queryByTestId('stage-live-masks')).toBeNull()
+  })
+
   it('says haze is off when the window draws none', () => {
     setup({ layers: { ...DEFAULT_SCENE_LAYERS, haze: 'off' } })
     open()

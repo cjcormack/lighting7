@@ -31,8 +31,8 @@ export function buildRoom(element: StageElementDto): ElementBuild {
   const floor = paramsFinish(element.params.floor, elementFinish(element, 'floor'))
   const ceiling = paramsFinish(element.params.ceiling, elementFinish(element, 'ceiling'))
   const parts: ScenePart[] = []
-  const face = (side: string, part: Omit<ScenePart, 'key' | 'collides'>) => {
-    if (!omit.has(side)) parts.push({ key: side.toLowerCase(), collides: true, ...part })
+  const face = (side: string, part: Omit<ScenePart, 'key' | 'light'>) => {
+    if (!omit.has(side)) parts.push({ key: side.toLowerCase(), light: 'solid', ...part })
   }
   const e = ROOM_FACE_INSET_M
   face('FLOOR', { geometry: { shape: 'quad', w, h: d, facing: 'up' }, at: { x: 0, y: 0, z: -e }, finish: floor })

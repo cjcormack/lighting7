@@ -275,7 +275,19 @@ is its dearest lobe. If a fallback is ever wanted, the precedent is *Box shadows
 7. In Safari on the desk Mac, open `/occlusion-bench.html?only=lobes&frames=60` and add its
    `msPerFrame.lambert` and five `lobeCost` values to the table above.
 
-45 minutes; all of it is the desk's.
+**Since scrim plan session 3 the box test answers a share** — a net passes `open(θ)`, a cut cloth its
+holes — through a third collider texel and a mask atlas (`frontend/docs/stage-vis-engineering.md`
+§"Light lands through one surface shader"). On SwiftShader, `main` against the branch at 512 × 320
+with twelve lights, an entry skipped on its sphere went from +14.5 to +24.5 ms a frame and one tested
+from +21.8 to +32.1, because SwiftShader runs every branch's code masked; a GPU should pay the old
+price for a box the segment misses. So:
+
+8. On the desk Mac (Chromium and Safari) and the iPad, run `/occlusion-bench.html` and
+   `?pass=1` again and add the rows to the table above beside the old ones, and once more with
+   `?pass=1&scrims=1` (every entry a net the segment crosses). If the iPad's skipped entry has
+   moved materially from +0.65, say so here, and whether *Box shadows*' default should follow.
+
+55 minutes; all of it is the desk's.
 
 ---
 

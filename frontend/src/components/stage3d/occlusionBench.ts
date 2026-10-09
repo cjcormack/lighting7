@@ -15,16 +15,50 @@
  * `ggx`; and the presets that carry two, `velour` and `paint`. `lobeCost` is each one's milliseconds
  * a frame over `lambert`, the number to set beside a list entry's.
  *
+ * **Transmittance** (scrim plan session 3): with `?scrims=1` every collider is a bobbinet scrim
+ * standing between the wall and the lights, so with `pass=1` every entry is tested *and crossed*,
+ * and each multiplies the share rather than ending the loop — the worst case a list of nets can be.
+ * `?only=twin` draws none of that: it runs `OCCLUSION_GLSL`'s `boxTransmit` over the fixed scene in
+ * `scene/occlusionTwin.ts` on this GPU and prints each case's share beside its TypeScript twin's
+ * (`segmentTransmit`) — the GLSL and the twin compared on a real renderer.
+ *
  * The answer is printed as JSON: the renderer, the canvas and the mean milliseconds a frame for
  * each, the faster of two passes. Query parameters `w`, `h`, `lights` and `frames` change the load,
  * and `only=lobes` skips the box runs. `FU-MANUAL-STAGE-LIGHT-BUDGET` says what to read off it.
  */
 
-import { Mesh, OrthographicCamera, PlaneGeometry, Scene, WebGLRenderer, type ShaderMaterial } from 'three'
-import { boxCollider } from './scene/beamReach'
+import {
+  DataTexture,
+  FloatType,
+  Mesh,
+  NearestFilter,
+  OrthographicCamera,
+  PlaneGeometry,
+  RGBAFormat,
+  Scene,
+  ShaderMaterial,
+  WebGLRenderer,
+  WebGLRenderTarget,
+} from 'three'
+import { boxCollider, type Collider } from './scene/beamReach'
+import { LANDING_GLSL, REACH_EPS_M } from './scene/landing'
 import { LightTable, makeLightRow } from './scene/lightTable'
 import { LAMBERT_LOBES, type FinishLobes } from './scene/lobes'
-import { LIST_OVERFLOW, LIST_TEXELS, MAX_LIGHT_COLLIDERS, packColliders, packEntry } from './scene/occlusion'
+import { makeMaskAtlasTexture } from './scene/maskAtlas'
+import {
+  emptyPackedCollider,
+  LIST_OVERFLOW,
+  LIST_TEXELS,
+  makeColliderSet,
+  MAX_LIGHT_COLLIDERS,
+  OCCLUSION_GLSL,
+  packColliders,
+  packEntry,
+  segmentTransmit,
+  unpackCollider,
+} from './scene/occlusion'
+import { twinAtlas, twinCases, TWIN_MASK_LAYERS } from './scene/occlusionTwin'
+import { createSceneMaskCache } from './scene/sceneMasks'
 import { FINISH_LOBES } from './scene/sceneParts'
 import { makeLightTexture, makeOcclusionTextures, makeSurfaceMaterial, makeSurfaceUniforms } from './scene/surfaceShader'
 
@@ -34,7 +68,9 @@ const height = Number(params.get('h') ?? 640)
 const lights = Number(params.get('lights') ?? 12)
 const frames = Number(params.get('frames') ?? 10)
 const pass = params.get('pass') === '1'
+const scrims = params.get('scrims') === '1'
 const lobesOnly = params.get('only') === 'lobes'
+const twinOnly = params.get('only') === 'twin'
 
 const canvas = document.createElement('canvas')
 document.body.appendChild(canvas)
@@ -76,8 +112,15 @@ const packed = table.pack(lights, data)
 uniforms.uLightCount.value = packed
 texture.needsUpdate = true
 
-// Off to the side of everything: in every list, in no fragment's way.
-packColliders(Array.from({ length: MAX_LIGHT_COLLIDERS }, (_, i) => boxCollider(200 + i, 0, 0, 0.5, 0.5, 0.5, i * 0.1)), occlusion.set)
+// Off to the side of everything: in every list, in no fragment's way. Or, with `scrims`, a stack of
+// bobbinet scrims between the wall and the lights, in every fragment's way and passing it on.
+const benchColliders: Collider[] = Array.from({ length: MAX_LIGHT_COLLIDERS }, (_, i) => {
+  if (!scrims) return boxCollider(200 + i, 0, 0, 0.5, 0.5, 0.5, i * 0.1)
+  const net = boxCollider(0, 0, 1 + i * 0.05, 50, 50, 0.005)
+  net.transmit = { kind: 'angle', r: 0.15, gather: 1 }
+  return net
+})
+packColliders(benchColliders, occlusion.set)
 occlusion.colliders.needsUpdate = true
 
 function fillLists(length: number): void {
@@ -114,7 +157,7 @@ function measure(runs: ReadonlyArray<readonly [string, () => void]>): Record<str
 }
 
 const boxRuns: [string, number][] = [['planes', LIST_OVERFLOW], ['list 0', 0], ['list 8', 8], ['list 16', 16], ['list 32', 32], ['list 64', 64]]
-const boxes = lobesOnly
+const boxes = lobesOnly || twinOnly
   ? {}
   : measure(
       boxRuns.map(([name, length]) => [
@@ -135,7 +178,7 @@ const lobeMaterials: [string, ShaderMaterial][] = [
   ['velour', material(FINISH_LOBES.VELOUR)],
   ['paint', material(FINISH_LOBES.PAINT)],
 ]
-const lobes = measure(
+const lobes = twinOnly ? { lambert: 0 } : measure(
   lobeMaterials.map(([name, m]) => [
     name,
     () => {
@@ -145,19 +188,87 @@ const lobes = measure(
   ]),
 )
 
+/**
+ * The twin: each case of the fixed scene through the GLSL's `boxTransmit` on this GPU, one pixel a
+ * case into a float target, beside `segmentTransmit` on the same packed colliders and atlas.
+ */
+function runTwin(): Record<string, { glsl: number; ts: number; want: number }> {
+  const cases = twinCases()
+  const set = makeColliderSet(cases.length)
+  packColliders(cases.map((c) => c.collider), set, TWIN_MASK_LAYERS)
+  const collidersTexture = new DataTexture(set.data, 3, cases.length, RGBAFormat, FloatType)
+  const caseData = new Float32Array(cases.length * 2 * 4)
+  cases.forEach((c, i) => {
+    caseData.set([...c.p, c.tMax, ...c.d, 0], i * 8)
+  })
+  const casesTexture = new DataTexture(caseData, 2, cases.length, RGBAFormat, FloatType)
+  for (const t of [collidersTexture, casesTexture]) {
+    t.magFilter = NearestFilter
+    t.minFilter = NearestFilter
+    t.needsUpdate = true
+  }
+  const atlas = twinAtlas()
+  const masks = createSceneMaskCache({ load: async () => null })
+  masks.atlas.set(atlas)
+  const material = new ShaderMaterial({
+    uniforms: {
+      uColliders: { value: collidersTexture },
+      uLightColliders: { value: collidersTexture },
+      uMaskAtlas: { value: makeMaskAtlasTexture(masks) },
+      uCases: { value: casesTexture },
+    },
+    vertexShader: /* glsl */ `void main() { gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      #define REACH_EPS ${REACH_EPS_M.toFixed(3)}
+      uniform sampler2D uCases;
+      ${LANDING_GLSL}
+      ${OCCLUSION_GLSL}
+      void main() {
+        int i = int(gl_FragCoord.x);
+        vec4 a = texelFetch(uCases, ivec2(0, i), 0);
+        vec4 b = texelFetch(uCases, ivec2(1, i), 0);
+        gl_FragColor = vec4(boxTransmit(a.xyz, b.xyz, a.w, i), 0.0, 0.0, 1.0);
+      }
+    `,
+  })
+  const target = new WebGLRenderTarget(cases.length, 1, { type: FloatType })
+  const quad = new Mesh(new PlaneGeometry(1, 1), material)
+  const twinScene = new Scene()
+  twinScene.add(quad)
+  renderer.setRenderTarget(target)
+  renderer.render(twinScene, camera)
+  const out = new Float32Array(cases.length * 4)
+  renderer.readRenderTargetPixels(target, 0, 0, cases.length, 1, out)
+  renderer.setRenderTarget(null)
+  const result: Record<string, { glsl: number; ts: number; want: number }> = {}
+  cases.forEach((c, i) => {
+    const b = unpackCollider(set.data, i, emptyPackedCollider())
+    result[c.name] = {
+      glsl: Number(out[i * 4].toFixed(5)),
+      ts: Number(segmentTransmit(...c.p, ...c.d, c.tMax, b, atlas).toFixed(5)),
+      want: Number(c.want.toFixed(5)),
+    }
+  })
+  return result
+}
+
 const round2 = (v: number) => Number(v.toFixed(2))
 const info = gl.getExtension('WEBGL_debug_renderer_info')
+const twin = twinOnly ? runTwin() : undefined
 const result = {
   renderer: info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : 'unknown',
   canvas: `${width} × ${height}`,
   lights: packed,
-  entries: pass ? 'every one tested' : 'every one skipped',
-  msPerFrame: Object.fromEntries(Object.entries({ ...boxes, ...lobes }).map(([k, v]) => [k, round2(v)])),
-  lobeCost: Object.fromEntries(
-    Object.entries(lobes)
-      .filter(([k]) => k !== 'lambert')
-      .map(([k, v]) => [k, round2(v - lobes.lambert)]),
-  ),
+  entries: `${pass ? 'every one tested' : 'every one skipped'}${scrims ? ', each a scrim crossed' : ''}`,
+  ...(twin && { twin, twinAgrees: Object.values(twin).every((c) => Math.abs(c.glsl - c.ts) < 1e-3) }),
+  ...(!twinOnly && {
+    msPerFrame: Object.fromEntries(Object.entries({ ...boxes, ...lobes }).map(([k, v]) => [k, round2(v)])),
+    lobeCost: Object.fromEntries(
+      Object.entries(lobes)
+        .filter(([k]) => k !== 'lambert')
+        .map(([k, v]) => [k, round2(v - lobes.lambert)]),
+    ),
+  }),
 }
 const out = document.getElementById('out')
 if (out) out.textContent = JSON.stringify(result, null, 1)

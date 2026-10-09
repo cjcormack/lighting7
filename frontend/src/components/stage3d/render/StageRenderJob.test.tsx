@@ -15,9 +15,11 @@ vi.mock('../Stage3D', () => ({
   },
 }))
 
-// The painted cloths' images: settled at once unless a test holds them back.
+// The painted cloths' images and masks: settled at once unless a test holds them back.
 const paint = vi.hoisted(() => ({ settled: () => Promise.resolve() }))
 vi.mock('../scene/paintTextures', () => ({ paintTextures: paint }))
+const masks = vi.hoisted(() => ({ settled: () => Promise.resolve() }))
+vi.mock('../scene/sceneMasks', async (importOriginal) => ({ ...(await importOriginal<object>()), sceneMasks: masks }))
 
 import type { ComponentProps } from 'react'
 import { store } from '../../../store'
@@ -177,6 +179,27 @@ describe('StageRenderJob', () => {
     }
   })
 
+  it('waits for the cut cloths’ masks before it draws (scrim plan session 3)', async () => {
+    let release = () => {}
+    masks.settled = () => new Promise<void>((r) => (release = r))
+    try {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mount(request({ timeoutMs: 5_000 }))
+      await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
+      const draw = vi.fn(async () => {})
+      act(() => last().capture!.onReady({ draw, toPng: async () => new Blob(['png']) }))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(draw).not.toHaveBeenCalled()
+      release()
+      await waitFor(() => expect(draw).toHaveBeenCalled())
+      expect(outcomes).toHaveLength(1)
+    } finally {
+      masks.settled = () => Promise.resolve()
+    }
+  })
+
   it('names the painted cloths’ images when it gives up waiting for them', async () => {
     paint.settled = () => new Promise<void>(() => {})
     try {
@@ -188,7 +211,7 @@ describe('StageRenderJob', () => {
       await act(async () => {
         vi.advanceTimersByTime(2_100)
       })
-      expect(outcomes).toEqual([{ reason: "it gave up after 2 s, waiting for the painted cloths' images" }])
+      expect(outcomes).toEqual([{ reason: "it gave up after 2 s, waiting for the painted cloths' images and masks" }])
       expect(draw).not.toHaveBeenCalled()
     } finally {
       paint.settled = () => Promise.resolve()
