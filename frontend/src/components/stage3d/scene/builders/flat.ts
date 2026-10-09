@@ -1,5 +1,5 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
-import { boxPart, elementFinish, type ElementBuild, type PartFinish, type ScenePart } from '../sceneParts'
+import { boxPart, elementFinish, paramPaint, type ElementBuild, type PartFinish, type ScenePart } from '../sceneParts'
 
 /** One opening in a wall, along its width from its stage-right end (local −x), as the backend's `FlatOpening`. */
 export interface WallOpening {
@@ -32,6 +32,10 @@ export function flatOpenings(element: Pick<StageElementDto, 'params'>): WallOpen
  * through it — as solid boxes: the full-height piers between openings, and under and over each
  * opening the sill and the head. Openings are taken in order along the wall; two that overlap cut
  * the overlap once. Shared by the flat and the proscenium, whose opening is one more of these.
+ *
+ * A finish carrying paint (a flat's, scrim plan D4) gives each piece its share of the face as its
+ * [ScenePart.uv] — the wall's width and height mapped onto the image once — so an opening cuts a
+ * hole in the picture and the piers, sills and heads round it each show the part of it they cover.
  */
 export function wallWithOpenings(
   keyPrefix: string,
@@ -45,8 +49,11 @@ export function wallWithOpenings(
   const push = (p: ScenePart | null) => {
     if (p != null) parts.push(p)
   }
-  const segment = (key: string, a: number, b: number, z0: number, z1: number) =>
-    push(boxPart(`${keyPrefix}${key}`, -w / 2 + (a + b) / 2, 0, z0, b - a, t, z1 - z0, finish))
+  const painted = finish.paint != null
+  const segment = (key: string, a: number, b: number, z0: number, z1: number) => {
+    const part = boxPart(`${keyPrefix}${key}`, -w / 2 + (a + b) / 2, 0, z0, b - a, t, z1 - z0, finish)
+    push(part != null && painted ? { ...part, uv: { u0: a / w, u1: b / w, v0: z0 / h, v1: z1 / h } } : part)
+  }
   let cursor = 0
   const sorted = [...openings]
     .map((o) => ({ ...o, fromM: Math.max(0, o.fromM), end: Math.min(w, o.fromM + o.widthM) }))
@@ -70,12 +77,15 @@ export function wallWithOpenings(
 /**
  * A `FLAT`: a panel [widthM] across, [depthM] thick and [heightM] tall, standing on its base about
  * its origin, with its `openings` — doors, windows, French windows, arches — cut through. Each
- * opening is drawn square-topped: an arch's curve is not modelled, only its clear opening.
+ * opening is drawn square-topped: an arch's curve is not modelled, only its clear opening. Its
+ * `paint` (scrim plan D4) is stretched over its downstage and upstage faces, never its edges.
  */
 export function buildFlat(element: StageElementDto): ElementBuild {
   const w = element.widthM
   const t = element.depthM
   const h = element.heightM
   if (!(w > 0 && t > 0 && h > 0)) return { parts: [], seats: [] }
-  return { parts: wallWithOpenings('', w, t, h, flatOpenings(element), elementFinish(element)), seats: [] }
+  const paint = paramPaint(element)
+  const finish = paint != null ? { ...elementFinish(element), paint } : elementFinish(element)
+  return { parts: wallWithOpenings('', w, t, h, flatOpenings(element), finish), seats: [] }
 }

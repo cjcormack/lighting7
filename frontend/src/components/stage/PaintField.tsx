@@ -27,8 +27,8 @@ import { formatError } from '@/lib/formatError'
  * A hash this machine does not hold (a partial import) reads "Image missing on this machine", and
  * the cloth draws unpainted.
  *
- * The painted surfaces themselves are drawn from scrim plan session 2: until then a painted cloth
- * still renders as velour.
+ * The Stage view draws the paint since scrim plan session 2 (`stage3d/scene/paintTextures.ts` and
+ * the surface shader's `PAINT`; `docs/stage-vis-engineering.md` §"Painted cloths").
  */
 export function PaintField({
   projectId,

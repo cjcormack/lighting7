@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — session 1 shipped 2026-10-09 as `2729120d`.** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — sessions 1–2 shipped 2026-10-09, as `2729120d` and `6c6f4f85`.** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -214,7 +214,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Docs:** `fixtures-engineering.md` §"The scene document", `sync-engineering.md` §"Version 23",
   `mcp-engineering.md`, and CLAUDE.md's Stage Scene Endpoints and MCP lines.
 
-### Session 2 — painted surfaces (frontend)
+### Session 2 — painted surfaces (frontend) — done, `6c6f4f85`
 
 - **Flat cloth (D2):** `buildDrape` draws flat geometry for every fabric but velour. A drawn cloth
   folds as it gathers, through `pleat.ts`, with amplitude rising from 0 at `open` 0.

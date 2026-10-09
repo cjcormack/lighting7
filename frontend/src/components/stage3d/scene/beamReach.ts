@@ -282,8 +282,15 @@ export interface PartBox {
 }
 
 /**
+ * Half the thickness of the box round cloth that hangs flat (a `sheet`, scrim plan D2), or a
+ * gathered half drawn open, whose fold has no depth: thin, but a box with a front and a back.
+ */
+export const SHEET_HALF_M = 0.005
+
+/**
  * A part's box in its element's lighting frame — for a quad, the thin slab behind its face; for a
- * pleat, just deep enough to hold the cloth's folds (its `pleat`, `pleat.ts`'s [pleatShape]).
+ * pleat, just deep enough to hold the cloth's folds (its `pleat`, `pleat.ts`'s [pleatShape]), and
+ * never thinner than a flat sheet's.
  */
 export function partBox(geometry: PartGeometry): PartBox {
   const b = shapeBox(geometry)
@@ -306,9 +313,11 @@ function shapeBox(geometry: PartGeometry): Omit<PartBox, 'capSkin'> {
     case 'disc':
       return { ox: 0, oy: 0, oz: 0, hx: geometry.r, hy: geometry.d / 2, hz: geometry.r, skin: e }
     case 'pleat': {
-      const a = geometry.pleat.amplitudeM
+      const a = Math.max(geometry.pleat.amplitudeM, SHEET_HALF_M)
       return { ox: 0, oy: 0, oz: 0, hx: geometry.w / 2, hy: a, hz: geometry.h / 2, skin: 2 * a + e }
     }
+    case 'sheet':
+      return { ox: 0, oy: 0, oz: 0, hx: geometry.w / 2, hy: SHEET_HALF_M, hz: geometry.h / 2, skin: 2 * SHEET_HALF_M + e }
     case 'quad':
       switch (geometry.facing) {
         case 'up':

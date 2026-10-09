@@ -4,6 +4,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
+  Float32BufferAttribute,
   CylinderGeometry,
   InstancedMesh,
   MathUtils,
@@ -18,9 +19,20 @@ import { seatingParams } from '../../../lib/stageSeats'
 import { BANQUET_FRAME_COLOUR, chairGeometry } from './chairs'
 import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
-import { setPleatShift } from './surfaceShader'
+import { PAINT_FACE_ATTRIBUTE, setPaintTextures, setPleatAmplitude, setPleatShift } from './surfaceShader'
 import { pleatOffset, pleatShift, pleatSlope } from './pleat'
-import { elementBaseZ, elementFinish, finishLobes, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
+import type { PaintVariant } from './paintTextures'
+import { usePaintTexture } from './usePaintTexture'
+import { useStageInvalidate } from '../stageInvalidate'
+import {
+  elementBaseZ,
+  elementFinish,
+  finishLobes,
+  type ElementBuild,
+  type PartGeometry,
+  type PartUv,
+  type ScenePart,
+} from './sceneParts'
 
 /** The `userData` key an element's group carries its uuid under, for the scenery pick. */
 export const SCENE_ELEMENT_UUID = 'sceneElementUuid'
@@ -45,12 +57,16 @@ export interface SeatPicking {
  * cast, made only once R3F has found nothing of the rig under the pointer (`sceneryPick.ts`).
  *
  * Nothing here moves per frame, so nothing here asks for one: a new element list, a layer toggled
- * or a tab drawn is a new prop, and R3F draws it.
+ * or a tab drawn is a new prop, and R3F draws it. A painted cloth's image is the exception — it
+ * arrives after the part has drawn (`paintTextures.ts`), and its part asks for the frame that shows it.
  */
 export const StageSceneElements = memo(function StageSceneElements({
+  projectId,
   builds,
   seatPicking,
 }: {
+  /** The project the elements are this canvas's, whose scene images their paint names. */
+  projectId: number | null
   builds: readonly SceneBuild[]
   seatPicking?: SeatPicking | null
 }) {
@@ -67,7 +83,12 @@ export const StageSceneElements = memo(function StageSceneElements({
             rotation={[0, MathUtils.degToRad(element.yawDeg), 0]}
           >
             {build.parts.map((part) => (
-              <ScenePartMesh key={part.key} part={part} />
+              <ScenePartMesh
+                key={part.key}
+                part={part}
+                projectId={projectId}
+                variant={element.fullDetail === true ? 'detail' : 'display'}
+              />
             ))}
           </group>
         ),
@@ -86,9 +107,43 @@ const PLEAT_SEGMENTS = 10
 
 /**
  * A part's geometry in its element's three.js frame (x across, y up, z towards the house), centred
- * on the origin: the part's `at` places it.
+ * on the origin: the part's `at` places it. With [uv] — a painted part's, scrim plan D4 — it carries
+ * where each vertex lands on the element's images, and which face it is on
+ * ([PAINT_FACE_ATTRIBUTE]): a cloth's one sheet is the downstage face, its back drawn by facing; a
+ * box's downstage and upstage faces are painted and its edges are not.
  */
-export function partGeometry(geometry: PartGeometry): BufferGeometry {
+export function partGeometry(geometry: PartGeometry, uv?: PartUv): BufferGeometry {
+  const g = shapeGeometry(geometry)
+  if (uv != null) paintUvs(g, geometry, uv)
+  return g
+}
+
+/**
+ * Write [uv] onto [g]: each vertex's x across and z up the part, from −w/2…w/2 and −h/2…h/2, onto
+ * the image's `u0…u1` and `v0…v1` as seen from downstage. The fold of a pleat moves its vertices out
+ * of the plane, never across it, so the image lies on the pleats as it would on the flat cloth.
+ */
+function paintUvs(g: BufferGeometry, geometry: PartGeometry, uv: PartUv) {
+  const size =
+    geometry.shape === 'box' || geometry.shape === 'pleat' || geometry.shape === 'sheet' ? { w: geometry.w, h: geometry.h } : null
+  const pos = g.attributes.position
+  const nor = g.attributes.normal
+  const uvs = new Float32Array(pos.count * 2)
+  const faces = new Float32Array(pos.count)
+  for (let i = 0; i < pos.count; i++) {
+    if (size == null) continue
+    uvs[i * 2] = uv.u0 + (pos.getX(i) / size.w + 0.5) * (uv.u1 - uv.u0)
+    uvs[i * 2 + 1] = uv.v0 + (pos.getY(i) / size.h + 0.5) * (uv.v1 - uv.v0)
+    // three's +z is downstage: a box's downstage face is painted with the front image, its upstage
+    // face with the back, its edges with neither. A cloth is one sheet facing downstage.
+    const nz = nor.getZ(i)
+    faces[i] = geometry.shape === 'box' ? (nz > 0.5 ? 1 : nz < -0.5 ? -1 : 0) : 1
+  }
+  g.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+  g.setAttribute(PAINT_FACE_ATTRIBUTE, new Float32BufferAttribute(faces, 1))
+}
+
+function shapeGeometry(geometry: PartGeometry): BufferGeometry {
   switch (geometry.shape) {
     case 'box':
       return new BoxGeometry(geometry.w, geometry.h, geometry.d)
@@ -116,6 +171,9 @@ export function partGeometry(geometry: PartGeometry): BufferGeometry {
       }
       return g
     }
+    case 'sheet':
+      // Flat cloth, facing downstage and drawn from both sides by its material.
+      return new PlaneGeometry(geometry.w, geometry.h)
     case 'quad': {
       // A PlaneGeometry faces +z (three) — downstage, lighting −y — before it is turned.
       const g = new PlaneGeometry(geometry.w, geometry.h)
@@ -147,22 +205,51 @@ function geometryKey(g: PartGeometry): string {
   return JSON.stringify(g)
 }
 
-function ScenePartMesh({ part }: { part: ScenePart }) {
-  const key = geometryKey(part.geometry)
+function ScenePartMesh({
+  part,
+  projectId,
+  variant,
+}: {
+  part: ScenePart
+  projectId: number | null
+  variant: PaintVariant
+}) {
+  const paint = part.finish.paint
+  const uv = paint != null ? part.uv : undefined
+  const painted = uv != null
+  const key = geometryKey(part.geometry) + (uv != null ? JSON.stringify(uv) : '')
   // Keyed on the shape's numbers, not the part object, which every build makes afresh.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `part.geometry` serialised whole
-  const geometry = useMemo(() => partGeometry(part.geometry), [key])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `part.geometry` and `uv` serialised whole
+  const geometry = useMemo(() => partGeometry(part.geometry, uv), [key])
   useEffect(() => () => geometry.dispose(), [geometry])
-  // The fold alone keys the material: a drawn half's width moves every frame of a draw, and only
-  // its shift (a uniform) moves with it.
-  const pleatKey = part.geometry.shape === 'pleat' ? JSON.stringify(part.geometry.pleat) : ''
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `pleatKey` is `part.geometry.pleat` serialised whole
-  const pleat = useMemo(() => (part.geometry.shape === 'pleat' ? part.geometry.pleat : undefined), [pleatKey])
-  const material = useSurfaceMaterial(part.finish, { doubleSided: pleat != null, pleat })
+  // The fold's pitch and wander alone key the material: a drawn half's width moves every frame of a
+  // draw, and with it only its shift and — for cloth that hangs flat — its depth, both uniforms.
+  const fold = part.geometry.shape === 'pleat' ? part.geometry.pleat : null
+  const pleatKey = fold != null ? JSON.stringify([fold.pitchM, fold.warp]) : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `pleatKey` is the fold's pitch and wander serialised
+  const pleat = useMemo(() => fold ?? undefined, [pleatKey])
+  const material = useSurfaceMaterial(part.finish, {
+    doubleSided: pleat != null || part.geometry.shape === 'sheet',
+    pleat,
+    painted,
+  })
   const shift = part.geometry.shape === 'pleat' ? pleatShift(part.geometry.w, part.geometry.anchor) : 0
+  const amplitude = fold?.amplitudeM ?? 0
   useLayoutEffect(() => {
-    if (pleat != null) setPleatShift(material, shift)
-  }, [material, pleat, shift])
+    if (pleat == null) return
+    setPleatShift(material, shift)
+    setPleatAmplitude(material, amplitude)
+  }, [material, pleat, shift, amplitude])
+  // The images, loaded once by the cache and bound when they arrive: a uniform write, so this asks
+  // for the frame that shows it.
+  const front = usePaintTexture(painted ? projectId : null, paint?.front, variant)
+  const back = usePaintTexture(painted ? projectId : null, paint?.back, variant)
+  const invalidate = useStageInvalidate()
+  useLayoutEffect(() => {
+    if (!painted) return
+    setPaintTextures(material, front, back)
+    invalidate()
+  }, [material, painted, front, back, invalidate])
   return (
     <mesh
       geometry={geometry}

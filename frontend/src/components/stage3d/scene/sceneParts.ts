@@ -1,3 +1,4 @@
+import { paintOf, type ScenePaint } from '../../../api/sceneImageApi'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import type { SeatPoint } from '../../../lib/stageSeats'
 import { LAMBERT_LOBES, type FinishLobes } from './lobes'
@@ -36,6 +37,11 @@ export type PartGeometry =
    * from its centre, or from its [anchor] edge — and seen from both sides.
    */
   | { shape: 'pleat'; w: number; h: number; pleat: PleatShape; anchor?: PleatAnchor }
+  /**
+   * Cloth that hangs flat (scrim plan D2): [w] wide along x and [h] tall along z in the plane
+   * y = 0, seen from both sides — every fabric but velour, hung dead or flown.
+   */
+  | { shape: 'sheet'; w: number; h: number }
 
 export type FinishPattern = 'PLAIN' | 'PANELS' | 'TILES' | 'BOARDS'
 
@@ -46,7 +52,31 @@ export interface PartFinish {
   emissive: boolean
   /** How light leaves it ([finishLobes]): one of [FINISH_LOBES], so a finish compares by identity. */
   lobes: FinishLobes
+  /**
+   * The images painted on it (scrim plan D4), each a stored image's SHA-256: `front` on the
+   * downstage face, `back` on the upstage one. A drape's and a flat's only (D14), and only with a
+   * side set. Where on the image each part's faces land is the part's [ScenePart.uv].
+   */
+  paint?: ScenePaint
 }
+
+/**
+ * Where a part's own x and z land on its element's images (scrim plan §3.5): x from −w/2 to w/2
+ * runs [u0] to [u1] and z from −h/2 to h/2 runs [v0] to [v1], as the image is seen from downstage
+ * (u = 0 its left edge, at stage right; v = 0 its bottom). The upstage face sees the image the
+ * other way round, `1 − u`, so a back painting reads the right way from behind. A flat's pieces
+ * each carry their share of the face, so an opening cuts the picture rather than squeezing it; a
+ * drawn cloth's halves each carry their half of it, compressed as they gather.
+ */
+export interface PartUv {
+  u0: number
+  u1: number
+  v0: number
+  v1: number
+}
+
+/** The whole image over the whole part. */
+export const FULL_UV: PartUv = { u0: 0, u1: 1, v0: 0, v1: 1 }
 
 export interface ScenePart {
   /** Stable within its element, for React keys and tests. */
@@ -57,6 +87,8 @@ export interface ScenePart {
   finish: PartFinish
   /** Whether a beam stops at it ([`beamReach.ts`](./beamReach.ts)). A surround strip does not. */
   collides: boolean
+  /** Where its faces land on the element's paint, for a part whose finish carries [PartFinish.paint]. */
+  uv?: PartUv
 }
 
 export interface ElementBuild {
@@ -137,6 +169,9 @@ const HEX = /^#[0-9a-fA-F]{6}$/
  * - `FLOOR` — the stage floor: a satin dance floor, the sharpest highlight here, so a lamp upstage
  *   reads on it from the house as a soft streak.
  * - `DECK` — a platform, a rostrum, a room's floor: a sealed or painted deck, a broader one.
+ * - `NET` — a scrim's net (sharkstooth, bobbinet): matte, no sheen. Its own preset, so the
+ *   see-through draw (scrim plan session 4) can give the threads their wrap without touching
+ *   `MATTE`.
  * - `LAMBERT` — no lobes: the housings, which a fill lights, and a catch surface.
  */
 // Estimate: judged by eye in `?profileHarness=rake`, `=cyc`, `=floor` and `=gloss`, not measured.
@@ -147,16 +182,24 @@ export const FINISH_LOBES = {
   VELOUR: { diffuseRoughness: 0.5, sheen: 0.1, sheenRoughness: 0.3, specular: 0, roughness: 1 },
   FLOOR: { diffuseRoughness: 0, sheen: 0, sheenRoughness: 1, specular: 0.04, roughness: 0.35 },
   DECK: { diffuseRoughness: 0, sheen: 0, sheenRoughness: 1, specular: 0.04, roughness: 0.55 },
+  NET: { diffuseRoughness: 0.5, sheen: 0, sheenRoughness: 1, specular: 0, roughness: 1 },
 } as const satisfies Record<string, FinishLobes>
 
 /** Which part of an element a finish is for: its body, or one the builder names. */
 export type FinishPart = 'body' | 'floor' | 'ceiling' | 'surround' | 'rail' | 'seat' | 'frame'
 
 /**
- * A finish's lobes by the element's [kind], a drape's [role] and the [part]. No element carries its
- * own (stage-light plan P2: an override would be a portable field), so this table is the whole of it.
+ * A finish's lobes by the element's [kind], a drape's [role] and [fabric], and the [part]. No
+ * element carries its own (stage-light plan P2: an override would be a portable field), so this
+ * table is the whole of it. A drape's fabric (scrim plan D1) outranks its role: canvas and muslin
+ * are `MATTE`, the two nets `NET`, and only velour — no fabric — keeps the role's.
  */
-export function finishLobes(kind: string, role: string | null, part: FinishPart = 'body'): FinishLobes {
+export function finishLobes(
+  kind: string,
+  role: string | null,
+  part: FinishPart = 'body',
+  fabric: string | null = null,
+): FinishLobes {
   switch (part) {
     case 'floor':
       return FINISH_LOBES.DECK
@@ -175,6 +218,14 @@ export function finishLobes(kind: string, role: string | null, part: FinishPart 
     case 'ROOM':
       return FINISH_LOBES.MATTE
     case 'DRAPE':
+      switch (fabric) {
+        case 'CANVAS':
+        case 'MUSLIN':
+          return FINISH_LOBES.MATTE
+        case 'SHARKSTOOTH':
+        case 'BOBBINET':
+          return FINISH_LOBES.NET
+      }
       return role === 'CYC' ? FINISH_LOBES.MATTE : FINISH_LOBES.VELOUR
     case 'PLATFORM':
       return FINISH_LOBES.DECK
@@ -205,7 +256,7 @@ export function elementFinish(
     colour,
     pattern: isFinishPattern(pattern) ? pattern : 'PLAIN',
     emissive: element.emissive === true,
-    lobes: finishLobes(element.kind, paramEnum(element, 'role'), part),
+    lobes: finishLobes(element.kind, paramEnum(element, 'role'), part, element.kind === 'DRAPE' ? paramEnum(element, 'fabric') : null),
   }
 }
 
@@ -231,6 +282,21 @@ export function paramNumber(element: Pick<StageElementDto, 'params'>, key: strin
 export function paramEnum(element: Pick<StageElementDto, 'params'>, key: string): string | null {
   const v = element.params[key]
   return typeof v === 'string' ? v.trim().toUpperCase() : null
+}
+
+/** A drape's fabrics (scrim plan D1); absent is velour. */
+export type DrapeFabric = 'VELOUR' | 'CANVAS' | 'MUSLIN' | 'SHARKSTOOTH' | 'BOBBINET'
+
+/** A drape's `fabric`, velour where it names none or one this build does not know. */
+export function paramFabric(element: Pick<StageElementDto, 'params'>): DrapeFabric {
+  const v = paramEnum(element, 'fabric')
+  return v === 'CANVAS' || v === 'MUSLIN' || v === 'SHARKSTOOTH' || v === 'BOBBINET' ? v : 'VELOUR'
+}
+
+/** An element's `paint` (scrim plan D4), well-formed hashes only; null when neither side is set. */
+export function paramPaint(element: Pick<StageElementDto, 'params'>): ScenePaint | null {
+  const paint = paintOf(element.params)
+  return paint.front != null || paint.back != null ? paint : null
 }
 
 /** A solid box part, bottom at [z0] — the builders stand things on their base more than they centre them. */

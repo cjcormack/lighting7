@@ -9,6 +9,8 @@ import {
   NearestFilter,
   RGBAFormat,
   ShaderMaterial,
+  Texture,
+  UnsignedByteType,
   Vector2,
   Vector3,
   Vector4,
@@ -75,6 +77,20 @@ import type { WorkLightLevels } from './workLights'
  * black serge shows its folds as a dark grey while every light still sees the finish's own: a spot
  * on it is exactly as bright with work lights on as off. With the lift at 0 the term is an exact
  * 0, and off draws what it drew before there was a switch.
+ *
+ * **Paint** (scrim plan D4, D5, `PAINT`): a painted cloth or flat samples its images as its albedo,
+ * in place of the finish's colour and pattern — the front image on its downstage face, the back on
+ * its upstage one — and every light, the fill and the lift then treat it as any albedo. The lobes'
+ * uniforms are the material's, built from the finish colour, so a painted velour's faint grazing
+ * sheen keeps the finish's tint rather than the picture's (left for the tuning session). A part
+ * says which of its faces are painted by a vertex attribute (`aPaintFace`, [PAINT_FACE_ATTRIBUTE]:
+ * 1 the downstage face, −1 the upstage, 0 an edge), which a two-sided cloth's back face flips
+ * through `gl_FrontFacing`. An image pixel below half opacity is a **hole**, whichever side's image
+ * it is in: the fragment is discarded on both faces, so a cut-out reads from the house and from
+ * behind. Holes are cut in the surface only; the shadows, beams and haze pass them from session 3.
+ * The textures arrive later than the material (`paintTextures.ts`), so they are uniforms beside a
+ * flag of which have loaded ([setPaintTextures]); until then, and for good when an image is missing,
+ * the face draws its finish.
  */
 
 /**
@@ -239,11 +255,19 @@ export function makeSurfaceUniforms(texture: DataTexture, occlusion: OcclusionTe
 
 const PATTERN_INDEX: Record<FinishPattern, number> = { PLAIN: 0, PANELS: 1, TILES: 2, BOARDS: 3 }
 
+/** The vertex attribute a painted part's faces carry: 1 downstage, −1 upstage, 0 unpainted. */
+export const PAINT_FACE_ATTRIBUTE = 'aPaintFace'
+
 const SURFACE_VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
   #ifdef USE_INSTANCING_COLOR
   varying vec3 vTint;
+  #endif
+  #ifdef PAINT
+  attribute float ${PAINT_FACE_ATTRIBUTE};
+  varying vec2 vPaintUv;
+  varying float vPaintFace;
   #endif
 
   void main() {
@@ -256,6 +280,10 @@ const SURFACE_VERTEX_SHADER = /* glsl */ `
     vWorldNormal = normalize(mat3(m) * normal);
     #ifdef USE_INSTANCING_COLOR
     vTint = instanceColor;
+    #endif
+    #ifdef PAINT
+    vPaintUv = uv;
+    vPaintFace = ${PAINT_FACE_ATTRIBUTE};
     #endif
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
@@ -308,6 +336,15 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${PLEAT_GLSL}
   #endif
 
+  #ifdef PAINT
+  uniform sampler2D uPaintFront;
+  uniform sampler2D uPaintBack;
+  // Which images have loaded: x the front's, y the back's.
+  uniform vec2 uPaintOn;
+  varying vec2 vPaintUv;
+  varying float vPaintFace;
+  #endif
+
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
   float gridLine(vec2 q, vec2 cell, float w) {
@@ -347,6 +384,21 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     vec3 albedo = uAlbedo * finishPattern(vWorldPos, n);
     #if defined(USE_INSTANCING_COLOR) || defined(USE_COLOR)
     albedo *= vTint;
+    #endif
+
+    #ifdef PAINT
+    // Which face this is: the downstage (1) or upstage (−1) one, a two-sided cloth's back flipped.
+    float paintFace = vPaintFace * (gl_FrontFacing ? 1.0 : -1.0);
+    // The images' rows are top first, and the upstage face sees the image from behind. Both are
+    // sampled here, in uniform control flow, so their mipmaps' derivatives are defined.
+    vec4 paintFront = texture(uPaintFront, vec2(vPaintUv.x, 1.0 - vPaintUv.y));
+    vec4 paintBack = texture(uPaintBack, vec2(1.0 - vPaintUv.x, 1.0 - vPaintUv.y));
+    if (abs(paintFace) > 0.5) {
+      // A hole in either image is a hole in the cloth, seen from either side (D5).
+      if ((uPaintOn.x > 0.5 && paintFront.a < 0.5) || (uPaintOn.y > 0.5 && paintBack.a < 0.5)) discard;
+      if (paintFace > 0.0 && uPaintOn.x > 0.5) albedo = paintFront.rgb;
+      if (paintFace < 0.0 && uPaintOn.y > 0.5) albedo = paintBack.rgb;
+    }
     #endif
 
     #ifdef EMISSIVE
@@ -479,6 +531,35 @@ export function setPleatShift(material: ShaderMaterial, shift: number) {
   if (pleat != null) pleat.z = shift
 }
 
+/**
+ * Set [material]'s fold depth — half of it, `pleat.ts`'s `amplitudeM` — without a rebuild: a drawn
+ * cloth that hangs flat folds deeper as it gathers (scrim plan D2), every frame of a draw.
+ */
+export function setPleatAmplitude(material: ShaderMaterial, amplitudeM: number) {
+  const pleat = material.uniforms.uPleat?.value as Vector4 | undefined
+  if (pleat != null) pleat.y = amplitudeM
+}
+
+/**
+ * What a painted face samples before its image has loaded: one opaque white texel, never drawn —
+ * `uPaintOn` says so — but always a valid texture to bind. Shared by every canvas.
+ */
+const NO_PAINT = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat, UnsignedByteType)
+NO_PAINT.needsUpdate = true
+
+/**
+ * Bind [material]'s loaded images (scrim plan D4): [front] on the downstage face, [back] on the
+ * upstage, null for one not loaded or missing, which draws the finish. A uniform write, not a
+ * rebuild: the caller asks for a frame. A material compiled without paint ignores it.
+ */
+export function setPaintTextures(material: ShaderMaterial, front: Texture | null, back: Texture | null) {
+  const on = material.uniforms.uPaintOn?.value as Vector2 | undefined
+  if (on == null) return
+  material.uniforms.uPaintFront.value = front ?? NO_PAINT
+  material.uniforms.uPaintBack.value = back ?? NO_PAINT
+  on.set(front != null ? 1 : 0, back != null ? 1 : 0)
+}
+
 export interface SurfaceMaterialOptions {
   /** Drawn from both faces: cloth, and anything a camera can see the back of. */
   doubleSided?: boolean
@@ -495,6 +576,12 @@ export interface SurfaceMaterialOptions {
    * coincident surfaces are won by whichever material three draws last, which is creation order.
    */
   behind?: boolean
+  /**
+   * Painted (scrim plan D4): the geometry carries `uv` and [PAINT_FACE_ATTRIBUTE], and the images
+   * are bound later by [setPaintTextures]. Whether it is painted, not which image: a new image is
+   * a uniform write.
+   */
+  painted?: boolean
 }
 
 /**
@@ -519,6 +606,9 @@ export function makeSurfaceMaterial(
   const lobeValues = lobes != null ? lobeUniformValues(lobes, albedo.r, albedo.g, albedo.b) : null
   const pleat = options.pleat != null ? pleatUniformValues(options.pleat) : null
   if (pleat != null) defines.PLEAT = ''
+  // A catch surface is never painted; an emissive one shows its paint at its own colours.
+  const painted = options.painted === true && options.catchOnly !== true
+  if (painted) defines.PAINT = ''
   const opacity = options.opacity ?? 1
   const material = new ShaderMaterial({
     defines,
@@ -537,6 +627,11 @@ export function makeSurfaceMaterial(
       ...(pleat != null && {
         uPleat: { value: new Vector4(...pleat.pleat) },
         uPleatWarp: { value: Array.from({ length: pleat.warp.length / 3 }, (_, i) => new Vector3(...pleat.warp.slice(i * 3, i * 3 + 3))) },
+      }),
+      ...(painted && {
+        uPaintFront: { value: NO_PAINT },
+        uPaintBack: { value: NO_PAINT },
+        uPaintOn: { value: new Vector2(0, 0) },
       }),
     },
     vertexShader: SURFACE_VERTEX_SHADER,

@@ -45,7 +45,7 @@ enum class DrapeOperation { DEAD, DRAW, FLY }
  * What a drape is woven from (scrim plan D1): a cloth's, not a role's, so a flown gauze is
  * `BACKCLOTH` + `FLY` + `SHARKSTOOTH`. Absent is velour, the only fabric that pleats (D2). Canvas is
  * the flat painted cloth; muslin is translucent (D6); the two nets are scrims (D3). Nothing reads it
- * on the desk: the Stage view draws it, and until scrim session 2 draws every fabric as velour.
+ * on the desk: the Stage view draws it (since scrim session 2, every fabric but velour hangs flat).
  */
 enum class DrapeFabric { CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET }
 

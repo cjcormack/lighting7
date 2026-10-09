@@ -88,15 +88,16 @@ export function useSurfaceLighting(): SurfaceLighting {
 /**
  * A receiver material for [finish] on this canvas, rebuilt when the finish changes, disposed on
  * unmount. A `pleat` and the finish's `lobes` are compared by identity, so a caller holds them
- * stable across builds (`FINISH_LOBES`' presets are).
+ * stable across builds (`FINISH_LOBES`' presets are). The finish's `paint` does not key it: whether
+ * the part is painted is `options.painted`, and its images are bound by `setPaintTextures`.
  */
 export function useSurfaceMaterial(finish: PartFinish, options: SurfaceMaterialOptions = {}): ShaderMaterial {
   const { uniforms } = useSurfaceLighting()
   const { colour, pattern, emissive, lobes } = finish
-  const { doubleSided, opacity, fill, catchOnly, behind, pleat } = options
+  const { doubleSided, opacity, fill, catchOnly, behind, pleat, painted } = options
   const material = useMemo(
-    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive, lobes }, { doubleSided, opacity, fill, catchOnly, behind, pleat }),
-    [uniforms, colour, pattern, emissive, lobes, doubleSided, opacity, fill, catchOnly, behind, pleat],
+    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive, lobes }, { doubleSided, opacity, fill, catchOnly, behind, pleat, painted }),
+    [uniforms, colour, pattern, emissive, lobes, doubleSided, opacity, fill, catchOnly, behind, pleat, painted],
   )
   useEffect(() => () => material.dispose(), [material])
   return material

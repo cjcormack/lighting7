@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { Color, SRGBColorSpace } from 'three'
+import { Color, SRGBColorSpace, Texture } from 'three'
 import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
-import { LIFT_ALBEDO_FLOOR, litByFill, LUMA, makeLightTexture, makeSurfaceMaterial, makeSurfaceUniforms, ROLL_OFF_GLSL, rollOff, setPleatShift, SURFACE_AMBIENT, SURFACE_LIGHT_GAIN } from './scene/surfaceShader'
+import { LIFT_ALBEDO_FLOOR, litByFill, LUMA, makeLightTexture, makeSurfaceMaterial, makeSurfaceUniforms, PAINT_FACE_ATTRIBUTE, ROLL_OFF_GLSL, rollOff, setPaintTextures, setPleatAmplitude, setPleatShift, SURFACE_AMBIENT, SURFACE_LIGHT_GAIN } from './scene/surfaceShader'
 import { WORK_LIGHT_LEVELS } from './scene/workLights'
 import { LAMBERT_LOBES } from './scene/lobes'
 import { pleatShape } from './scene/pleat'
@@ -98,7 +98,43 @@ describe('the surfaces', () => {
     expect(cloth.fragmentShader).toContain('if (!pleatFaceSeesLamp(lampOut, gl_FrontFacing)) continue;')
     setPleatShift(cloth, 1.25)
     expect(cloth.uniforms.uPleat.value.z).toBe(1.25)
+    // A gathered cloth's fold deepens as it is drawn, as a uniform (scrim plan D2).
+    setPleatAmplitude(cloth, 0.08)
+    expect(cloth.uniforms.uPleat.value.y).toBe(0.08)
     expect(cloth.fragmentShader).toContain('ao = troughAmbient(across, gl_FrontFacing);')
+  })
+
+  it('paints a painted part from its images by face, cutting holes in both, as uniforms (scrim plan D4, D5)', () => {
+    expect(surface().defines.PAINT).toBeUndefined()
+    expect(surface().uniforms.uPaintOn).toBeUndefined()
+    // A catch surface is never painted.
+    expect(surface({ painted: true, catchOnly: true }).defines.PAINT).toBeUndefined()
+    const cloth = surface({ painted: true, doubleSided: true })
+    expect(cloth.defines.PAINT).toBe('')
+    expect(cloth.vertexShader).toContain(`attribute float ${PAINT_FACE_ATTRIBUTE};`)
+    expect(cloth.vertexShader).toContain('vPaintUv = uv;')
+    const f = cloth.fragmentShader
+    // The face drawn picks the image; the back sees it mirrored; rows top first.
+    expect(f).toContain('float paintFace = vPaintFace * (gl_FrontFacing ? 1.0 : -1.0);')
+    expect(f).toContain('texture(uPaintFront, vec2(vPaintUv.x, 1.0 - vPaintUv.y))')
+    expect(f).toContain('texture(uPaintBack, vec2(1.0 - vPaintUv.x, 1.0 - vPaintUv.y))')
+    expect(f).toContain('if ((uPaintOn.x > 0.5 && paintFront.a < 0.5) || (uPaintOn.y > 0.5 && paintBack.a < 0.5)) discard;')
+    // The paint is the albedo every light, the fill and the work lights' lift then see.
+    expect(f.indexOf('albedo = paintFront.rgb;')).toBeGreaterThan(-1)
+    expect(f.indexOf('albedo = paintFront.rgb;')).toBeLessThan(f.indexOf('vec3 lift = max(albedo'))
+    // Nothing on until an image is bound; binding is a uniform write, never a recompile.
+    expect(cloth.uniforms.uPaintOn.value.toArray()).toEqual([0, 0])
+    const version = cloth.version
+    const front = new Texture()
+    setPaintTextures(cloth, front, null)
+    expect(cloth.uniforms.uPaintFront.value).toBe(front)
+    expect(cloth.uniforms.uPaintOn.value.toArray()).toEqual([1, 0])
+    setPaintTextures(cloth, null, front)
+    expect(cloth.uniforms.uPaintOn.value.toArray()).toEqual([0, 1])
+    expect(cloth.uniforms.uPaintFront.value).not.toBe(front)
+    expect(cloth.version).toBe(version)
+    // An unpainted material ignores it.
+    expect(() => setPaintTextures(surface(), front, front)).not.toThrow()
   })
 
   it('takes a fill of its own, none by default', () => {

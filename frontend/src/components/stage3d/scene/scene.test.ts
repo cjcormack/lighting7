@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { packBlades } from '../beamMask'
 import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
-import { beamReach, boxCollider, elementColliders, partBox, quadNormal, sightBlocked, type BeamHit } from './beamReach'
+import { beamReach, boxCollider, elementColliders, partBox, quadNormal, SHEET_HALF_M, sightBlocked, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
 import { packGobos } from '../goboLayers'
 import {
@@ -21,7 +21,7 @@ import {
   UNPACK_FOCUS_GLSL,
 } from './lightTable'
 import { LAND_NONE, LAND_UP, landingReach, packLanding, planeReach, REACH_EPS_M } from './landing'
-import { CYC_DEPTH_MAX_M, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } from './pleat'
+import { CYC_DEPTH_MAX_M, gatherShape, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } from './pleat'
 import type { Facing, PartGeometry } from './sceneParts'
 import { partGeometry } from './StageSceneElements'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
@@ -191,12 +191,17 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
     ...[0.005, 0.05, 0.1, 0.2, 1].map((d) => cloth(d)),
     cloth(0.1, 'CYC'),
     { ...(cloth(0.1) as Extract<PartGeometry, { shape: 'pleat' }>), anchor: 'left' },
+    // Cloth that hangs flat, and a drawn half of it closed (no fold), part drawn and drawn.
+    { shape: 'sheet', w: 2.3, h: 4 },
+    ...[1, 1.6, 6.25].map((fullness): PartGeometry => ({
+      shape: 'pleat', w: 1.4, h: 4, pleat: gatherShape({ uuid: `gather-${fullness}` }, 'sr', fullness), anchor: 'left',
+    })),
     ...FACINGS.map((facing): PartGeometry => ({ shape: 'quad', w: 2, h: 1.5, facing })),
   ]
   // The lighting-frame axes a beam lands on to light the part: every face of a solid, the broad
   // faces of a thin one. A beam landing on a cloth's or a disc's edge grazes along it, and the part
   // shadows itself past its first fold — session 3's boxes, not the skin, are what draw that.
-  const LIT_AXES: Record<PartGeometry['shape'], number[]> = { box: [0, 1, 2], cylinder: [0, 1, 2], disc: [1], pleat: [1], quad: [] }
+  const LIT_AXES: Record<PartGeometry['shape'], number[]> = { box: [0, 1, 2], cylinder: [0, 1, 2], disc: [1], pleat: [1], sheet: [1], quad: [] }
   const QUAD_AXIS: Record<Facing, number> = { left: 0, right: 0, upstage: 1, downstage: 1, up: 2, down: 2 }
 
   for (const shape of SHAPES) {
@@ -220,7 +225,7 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
         for (const k of axes) {
           for (const side of [1, -1]) {
             // A cloth is drawn from both sides, so either side of it faces either face.
-            const faces = shape.shape === 'pleat' || side * n[k] > 1e-6
+            const faces = shape.shape === 'pleat' || shape.shape === 'sheet' || side * n[k] > 1e-6
             if (!faces) continue
             const depth = side * (centre[k] + side * half[k] - p[k])
             if (k === 2) deepestCap = Math.max(deepestCap, depth)
@@ -247,6 +252,22 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
     expect(skinOf(drape(0.001))).toBeCloseTo(PLEAT_DEPTH_MIN_M + REACH_EPS_M, 12)
     expect(skinOf(drape(4))).toBeCloseTo(PLEAT_DEPTH_MAX_M + REACH_EPS_M, 12)
     expect(skinOf(drape(0.15, 'CYC'))).toBeCloseTo(CYC_DEPTH_MAX_M + REACH_EPS_M, 12)
+  })
+
+  it('holds flat cloth in a thin box whatever its depth, and a gathered half as deep as its fold (scrim plan D2)', () => {
+    const fabric = (fabric: string, depthM: number) =>
+      element({ kind: 'DRAPE', widthM: 4, heightM: 3, depthM, params: { role: 'BACKCLOTH', fabric } })
+    const boxOf = (e: StageElementDto) => elementColliders(e, buildElement(e))[0]
+    for (const f of ['CANVAS', 'MUSLIN', 'SHARKSTOOTH', 'BOBBINET']) {
+      // A sheet's box is a centimetre thick, its skin the sheet behind its face: depthM folds nothing.
+      expect(boxOf(fabric(f, 0.2)).skin).toBeCloseTo(2 * SHEET_HALF_M + REACH_EPS_M, 12)
+      expect(boxOf(fabric(f, 0.02)).skin).toBeCloseTo(2 * SHEET_HALF_M + REACH_EPS_M, 12)
+    }
+    expect(partBox({ shape: 'sheet', w: 2, h: 3 })).toMatchObject({ hx: 1, hy: SHEET_HALF_M, hz: 1.5 })
+    // A closed half has no fold, and is still a box with a front and a back.
+    expect(partBox({ shape: 'pleat', w: 2, h: 3, pleat: gatherShape({ uuid: 'g' }, 'sr', 1) })).toMatchObject({ hy: SHEET_HALF_M })
+    const drawn = gatherShape({ uuid: 'g' }, 'sr', 3)
+    expect(partBox({ shape: 'pleat', w: 2, h: 3, pleat: drawn })).toMatchObject({ hy: drawn.amplitudeM, skin: 2 * drawn.amplitudeM + REACH_EPS_M })
   })
 })
 

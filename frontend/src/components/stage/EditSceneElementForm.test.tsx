@@ -34,7 +34,7 @@ vi.mock('@/store/sceneImages', () => ({
   useSetElementDisplayDetailMutation: () => [setDisplayDetail, { isLoading: false }],
 }))
 
-import { EditSceneElementForm } from './EditSceneElementForm'
+import { DRAPE_DEPTH_HINT, EditSceneElementForm } from './EditSceneElementForm'
 
 function element(over: Partial<StageElementDto> = {}): StageElementDto {
   return {
@@ -328,6 +328,15 @@ describe('EditSceneElementForm — fabric and paint (scrim plan session 1)', () 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(update).toHaveBeenCalled())
     expect(update.mock.calls[0]![0].params).toEqual({ role: 'BACKCLOTH', operation: 'FLY', fabric: 'SHARKSTOOTH' })
+  })
+
+  it('says on a drape that its depth folds only velour, and nowhere else (scrim plan §4)', () => {
+    render(<EditSceneElementForm element={cloth()} projectId={3} onClose={() => {}} />)
+    expect(screen.getByText('The depth of the pleats. Only velour folds; every other fabric hangs flat.')).toBeTruthy()
+    expect(DRAPE_DEPTH_HINT).toBe('The depth of the pleats. Only velour folds; every other fabric hangs flat.')
+    cleanup()
+    render(<EditSceneElementForm element={element()} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByText(DRAPE_DEPTH_HINT)).toBeNull()
   })
 
   it('a flat takes paint but no fabric; other kinds take neither', () => {

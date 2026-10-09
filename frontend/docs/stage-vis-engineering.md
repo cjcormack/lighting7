@@ -575,6 +575,8 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   canvas keeps rendering with no channel moving. A **move in flight** (§"Travel time") asks the same
   way, through the director's `animating` and the colour arms' ticker registration, until it lands. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
+- **A painted cloth's image landing** (§"Painted cloths"): bound as a uniform when it loads, after
+  the part has drawn, so the part asks for the frame that shows it.
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
   unmounts, a body's `hide` and `setActive` — and the region uniforms (below). A body's parts are
   written from its own frame loop (§"Fixture bodies"), so they need no request of their own. The light table is packed in the emitters'
@@ -667,7 +669,8 @@ without a room — the back wall and the catch floor:
 - **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
   face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
   one fold, which the mesh, the box and the fold shadow all read: the element's `depthM` crest to
-  trough, 2–30 cm — a cyc's no more than 2 cm), and its skin is that depth plus `REACH_EPS`; a cylinder's side faces take its radius, since a box round a column has its
+  trough, 2–30 cm — a cyc's no more than 2 cm), and its skin is that depth plus `REACH_EPS` (a cloth
+  that hangs flat, any fabric but velour, is a 1 cm box, §"Painted cloths"); a cylinder's side faces take its radius, since a box round a column has its
   tangent at the front face, and its flat top and bottom `REACH_EPS` (a lamp shade's top and bottom
   its height, which its sloped side faces); every other face's is `REACH_EPS`. A collider carries the
   two (`skin` for its level faces, `capSkin` for its top and bottom), the hit takes the one for the
@@ -888,8 +891,10 @@ without a room — the back wall and the catch floor:
   (`sheenAlbedo`, `specularAlbedo`, closed fits to the lobes' integrals). `lobes.test.ts` integrates
   every preset over the hemisphere: within 5 % of the light that arrives at every incidence, and at
   least 87 % of Lambert square on. **The finishes** are `sceneParts.ts`'s `FINISH_LOBES`, defaulted
-  by kind, a drape's role and the part (`finishLobes`; P2, no per-element override): `VELOUR` for
-  drapes but a cyc and for seat pads, `MATTE` for a room's walls and ceiling, a cyc and a pros's
+  by kind, a drape's role and fabric, and the part (`finishLobes`; P2, no per-element override):
+  `VELOUR` for velour drapes but a cyc and for seat pads, `NET` (matte, no sheen — its own preset so
+  the scrim's see-through draw can give its threads their wrap) for the two nets, `MATTE` for canvas
+  and muslin, `MATTE` for a room's walls and ceiling, a cyc and a pros's
   surround, `PAINT` for flats, a pros, objects, rails and seat frames, `DECK` for platforms, region
   decks and a room's floor, `FLOOR` (the satin, the sharpest) for the stage's own floor, and
   `LAMBERT` for housings and catch surfaces. Each is an estimate judged in the material scenes.
@@ -941,6 +946,70 @@ measure) give way to it, and the beams in the air clip to the lowest room floor,
 upstage wall and the outermost side walls (`beamClipFor`). The stage floor stays; a room's faces
 sit 4 mm outside its box (`ROOM_FACE_INSET_M`) so a region's top at the room's floor does not
 z-fight it.
+
+### Painted cloths
+
+Scrim plan session 2 (`../../docs/plans/scrim-plan.md` D2, D4, D5, D12). A drape's `fabric` and a
+drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene document") are
+drawn; nothing yet lets light **through** a net or a hole — beam reach, the box shadows and the haze
+still treat every cloth as solid (sessions 3–5).
+
+- **Only velour pleats** (D2). `buildDrape` draws a velour drape — no `fabric` — as it always has,
+  pleated by its `depthM`. Every other fabric hangs flat whatever its depth: a `sheet` part, one
+  plane seen from both sides, in a collider `SHEET_HALF_M` (5 mm) either side of it. A drawn half of
+  any fabric but velour folds **only as it gathers**: `pleat.ts`'s `gatherShape` takes the half's
+  fullness — the cloth's half-width over the width it is gathered into, 1 while closed — and finds the
+  sine at a fixed pitch (`GATHER_PITCH_M`, 15 cm) that holds that much cloth, no deeper than a drape's
+  deepest fold. So it is flat at `open` 0 and deepens as it is drawn. Its pitch and wander do not move
+  with the draw, so the part's material keys on them alone and the depth rides `uPleat.y`
+  (`setPleatAmplitude`), as the shift rides `uPleat.z`: a draw rebuilds the geometry each frame, as it
+  always did, and never the material. A drawn velour keeps its hung pleats, unchanged.
+- **The finish follows the fabric.** Canvas and muslin are `MATTE`, the nets `NET`; a net or a muslin
+  with no `finishColour` is off-white (`#e9e5da`), above a cyc's grey. Canvas keeps its role's colour.
+- **Paint is the albedo** (D4). `PartFinish.paint` carries the hashes, a drape's and a flat's only
+  (D14), and each painted part carries a **`uv` rect**: where its own x and z land on the image as seen
+  from downstage. A dead or flown cloth carries the whole image. A flat's piers, sills and heads each
+  carry their share of its face (`wallWithOpenings`), so an opening cuts a hole in the picture rather
+  than squeezing it round the door. A drawn cloth's halves carry `u` 0–½ and ½–1, **compressed as they
+  gather**: the picture stays whole at every `open`, the two halves meeting at ½ while closed. On
+  velour the image lies on the pleats — `u` runs with the cloth's flat x, which the fold never moves —
+  so seen square on it reads undistorted, shaded by its folds. `partGeometry` writes the rect onto the
+  vertices with an `aPaintFace` attribute: a cloth's one sheet is the downstage face (1) and its back is
+  drawn by `gl_FrontFacing`; a box's downstage face is 1, its upstage −1, its edges and reveals 0.
+- **`PAINT` in the surface shader.** A painted face samples `uPaintFront` at `(u, 1 − v)` or
+  `uPaintBack` at `(1 − u, 1 − v)` — rows top first (an `ImageBitmap` ignores `flipY`), and the back seen
+  from behind — in place of the finish's colour and pattern. Every light, the fill and the work
+  lights' lift then see the paint as they see any albedo, so work lights lift a painted cloth exactly
+  as they lift a plain one. The lobes' uniforms are built per material from the finish colour, so a
+  painted velour's sheen (0.1, grazing only) keeps the finish's tint rather than the picture's — a
+  known approximation left for the tuning session; canvas, muslin and the nets have no sheen. Both images are sampled before any branch, so their mipmap
+  derivatives are defined.
+- **Alpha below half is a hole** (D5), in the surface only this session: the fragment is discarded
+  where **either** image is below 0.5, on both faces, so a cut cloth reads from the house and from
+  behind, and a flat's front cut-out shows through its back. The shadows, beam reach and haze still
+  stop at it.
+- **The texture cache** (`scene/paintTextures.ts`, D12) is module-level, keyed by hash and variant,
+  and shared by every canvas — a `Texture` belongs to no renderer, each context uploads its own. Each
+  is fetched once from `GET …/scene-images/{hash}?variant=display` (2048 px), or `detail` (4096 px)
+  for an element whose `fullDetail` is on, decoded off the main thread (`createImageBitmap`,
+  unpremultiplied) and uploaded as sRGB with mipmaps, trilinear filtering and an anisotropy of 8 (three
+  clamps it to the GPU's). A part holds each image through a **slot** (`usePaintTexture`): switching
+  Full detail keeps drawing the 2048 copy until the 4096 one is in, then lets it go. One nothing holds
+  is disposed — its bitmap closed — after `PAINT_GRACE_MS` (5 s), so a remount or a quick switch back
+  does not download it again.
+- **A missing image draws unpainted.** A 404, a failed decode or a network error settles as
+  `missing`, never a throw or a toast: the face draws its finish. An image that arrives later — a sync
+  pull filling the store — shows once the cloth is drawn afresh (a reload, or the element's paint
+  changing), since a missing entry is kept while held.
+- **Binding is a uniform write.** `PAINT` is decided by whether the part is painted, when its
+  material is made; the images arrive later, so they are uniforms beside `uPaintOn`, which says which
+  have loaded. `setPaintTextures` swaps them without a recompile, and the part `invalidate`s, because a
+  texture landing changes the picture without changing a prop (§"The frameloop renders on demand").
+- **A `render_view` capture waits for the paint.** The cache is not a React context, so nothing needs
+  bridging into the capture's root (`CaptureCanvas.tsx`); a part asks for its images in **layout**
+  effects, so by the time the scene reports ready every image is asked for, and `StageRenderJob`
+  awaits `paintTextures.settled()` before its frames. One that never comes is named in the give-up
+  reason (*waiting for the painted cloths' images*); a missing one settles and draws unpainted.
 
 ### Haze degrades before frame rate
 
@@ -1237,7 +1306,7 @@ and writes the value as `windows.viewOptions {viewpoint}`.
 
 **Each element kind has a builder** in `components/stage3d/scene/builders/`, one file each, replacing
 `StageSceneBoxes`. A builder is pure — an element in, **parts** out (`scene/sceneParts.ts`: boxes,
-quads, cylinders, discs and pleated cloth in the element's own lighting frame, each with a finish and
+quads, cylinders, discs, pleated cloth and flat cloth (`sheet`) in the element's own lighting frame, each with a finish and
 whether it stops a beam) — so `builders.test.ts` pins each kind without a canvas, and one renderer
 (`StageSceneElements.tsx`) turns parts into meshes on the surface shader. The group is placed at the
 element's origin — its base, a platform's top, a flown piece's trim — and turned by its yaw.
@@ -1248,8 +1317,10 @@ element's origin — its base, a platform's top, a flown piece's trim — and tu
   that stop beams — and a surround that does not.
 - **Flat**: a wall with its openings cut from its stage-right end, a pier before each and a sill and
   head around it (a door has no sill); an arch is drawn square-topped.
-- **Drape**: one pleated cloth, or for a `DRAW` operation two halves gathered to their sides by the
-  `open` state (closed when unstated), each hanging from its own edge. A cyc defaults pale.
+- **Drape**: one cloth — pleated if velour, a flat `sheet` for any other fabric — or for a `DRAW`
+  operation two halves gathered to their sides by the `open` state (closed when unstated), each
+  hanging from its own edge; a velour half keeps its pleats, any other folds only as it gathers. A cyc
+  defaults pale, a net or a muslin off-white. See §"Painted cloths".
 - **Platform**: the deck hangs **below** its Z, which is its top; a rail on the edge it names. A
   platform linked to a region draws its own deck all the same; the region draws no surface under it.
 - **Seating**: no parts, only seats — `seatList` in `lib/stageSeats.ts`, the same seat maths the
@@ -1389,8 +1460,9 @@ views, scene elements, patches, regions, riggings, fixtures and types — with `
 `set_scene` a moment before is in the picture and an entry that errored earlier cannot fail this
 render before its own fetch has run. Then it resolves the viewpoint once (a refetch mid-render moves
 the cache `Stage3D` draws from, never the camera, and never unmounts the canvas), mounts `Stage3D`,
-and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it — and
-for the source to settle. Then four frames a task apart (the
+and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it — for
+the source to settle, and for every painted cloth's image to have loaded or settled missing
+(`paintTextures.settled()`, §"Painted cloths"). Then four frames a task apart (the
 emitters lay out and pack the light table; the next draws through the camera the viewpoint swapped
 in), and `toBlob`. It gives up three seconds before the desk would, naming what never
 arrived, so Claude hears *waiting for the scene to mount* rather than a bare timeout.
