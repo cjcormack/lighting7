@@ -21,10 +21,10 @@ import type { DrapeFabric, PartLight } from './sceneParts'
  *   front's dye.
  */
 
-/** The share of a grazing light a net's round threads still catch (D9). **Estimate**, judged in session 6. */
+/** The share of a grazing light a net's round threads still catch (D9). **Estimate**, judged in `?profileHarness=scrim` (session 6) and kept. */
 export const SCRIM_THREAD_WRAP = 0.45
 
-/** How brightly a net's threads glow with light from behind, at its full incidence (D9). **Estimate**, session 6. */
+/** How brightly a net's threads glow with light from behind, at its full incidence (D9). **Estimate**, judged in `?profileHarness=scrim` (session 6) and kept. */
 export const SCRIM_THREAD_GLOW = 0.18
 
 /**
@@ -34,7 +34,7 @@ export const SCRIM_THREAD_GLOW = 0.18
  */
 export const SCRIM_WRAP_FADE = 0.05
 
-/** τ, the share of light from behind that reaches a muslin's front through its weave (D6). **Estimate**, session 6. */
+/** τ, the share of light from behind that reaches a muslin's front through its weave (D6). **Estimate**, judged in `?profileHarness=daynight` (session 6) and kept. */
 export const MUSLIN_TRANSMITTANCE = 0.45
 
 /** GLSL's `smoothstep`. */

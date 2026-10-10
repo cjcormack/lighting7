@@ -15,9 +15,10 @@
  */
 
 /**
- * The thread's share of the pitch for each net (D3). **Estimates**, judged by eye in the scrim
- * harness (session 6): sharkstooth's threads are about a third of its pitch, bobbinet's hexagonal
- * mesh is finer and more open.
+ * The thread's share of the pitch for each net (D3). **Estimates**, judged by eye in
+ * `?profileHarness=scrim` (session 6) and kept: sharkstooth's threads are about a third of its pitch,
+ * bobbinet's hexagonal mesh is finer and more open — so the bobbinet stays nearly clear from a side
+ * seat where the sharkstooth reads as a veil. `FU-MANUAL-SCRIM-ESTIMATES` is the desk's check.
  */
 export const SCRIM_THREAD_SHARE = {
   SHARKSTOOTH: 0.3,
