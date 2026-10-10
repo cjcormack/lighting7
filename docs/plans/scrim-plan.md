@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — sessions 1–4 shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09) and `324c3b99` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — sessions 1–5 shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09), `324c3b99` and `302ac2a1` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -256,7 +256,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   pinned; muslin's back term zero without back paint.
 - **Docs:** §"Light lands through one surface shader" gains the scrim and muslin bullets.
 
-### Session 5 — haze (frontend)
+### Session 5 — haze (frontend) — done, `302ac2a1`
 
 - **The list (D10):** eight planes, filled per frame nearest the eye first. Each beam row names the
   planes on its path, and the march applies both shares.
