@@ -7,10 +7,13 @@
  * the axis hits the riser, the half above it carries on to the deck, and the deck's plane is the
  * second. Behind both planes is the inside of the stage, the only part of the beam the edge stops.
  *
- * **A transmitting collider is never a landing plane** (scrim plan D7): beam reach skips a net, and a
- * painted cloth where the beam crosses a hole in it, so a beam through a gauze lands on the set
- * behind and its air runs on to there. The surfaces that fall back to these planes multiply by the
- * transmitting colliders their light's list still names (`occlusion.ts`'s `lightTransmit`).
+ * **A transmitting collider is never a landing plane** (scrim plan D7, session 5): a landing cast
+ * skips a net and a painted cloth whose mask cuts holes (`beamReach.ts`'s `isLandingSurface`), so a
+ * beam through a gauze or at a cut cloth lands on the set behind and its air runs on to there. What
+ * stops it at the cloth is the haze's own list of planes (`hazePlanes.ts`): each beam's row names the
+ * planes of that list it crosses ([hazePlanesCrossed]), and its march multiplies by their shares. The
+ * surfaces that fall back to these planes multiply by the transmitting colliders their light's list
+ * still names (`occlusion.ts`'s `lightTransmit`).
  *
  * Both planes ride one vec4: the beam's `aBeamLand` attribute and the light table's texel 3, which
  * have no room for a second (sixteen attributes; six texels). A collider turns about y only, so a
@@ -18,6 +21,8 @@
  *
  * Pure and three.js-free, so the packing is pinned by a node test.
  */
+
+import { coneReachesBox } from './coneBox'
 
 /**
  * How far behind a landing plane a fragment may sit and still be lit, and the skin of a collider
@@ -179,4 +184,36 @@ export function landingReach(
   if (oa > eps) s = Math.max(s, planeReach(oa, pa, eps))
   if (ob > eps) s = Math.max(s, planeReach(ob, pb, eps))
   return s > 0 ? s : 1
+}
+
+/**
+ * Which of the haze's planes a beam crosses (scrim plan D10): bit k for the list's k-th plane, which
+ * the beam's row carries (`aBeamFx.z`) so its march tests only those on its own side. [planes] holds
+ * [count] planes [stride] floats apart, each a packed collider's texels (`hazePlanes.ts`'s list):
+ * its centre and its turn's folded cosine, then its half-extents. The beam is its cull cone — from
+ * the apex ([ax], [ay], [az]) along the unit ([dx], [dy], [dz]), [length] long, half-angle cosine
+ * [cosCone] and sine [sinCone] — tested against each box as conservatively as a light's colliders
+ * are (`coneBox.ts`), so a plane the beam might cross is named and the march's own test decides.
+ * Nothing for a beam not drawn ([length] 0).
+ */
+export function hazePlanesCrossed(
+  planes: ArrayLike<number>,
+  count: number,
+  stride: number,
+  ax: number, ay: number, az: number,
+  dx: number, dy: number, dz: number,
+  length: number, cosCone: number, sinCone: number,
+): number {
+  if (!(length > 0)) return 0
+  let bits = 0
+  for (let k = 0; k < count; k++) {
+    const o = k * stride
+    const cos = planes[o + 3]
+    // The turn is folded into [0, π] (`occlusion.ts`'s `packColliders`), so its sine is ≥ 0.
+    const sin = Math.sqrt(Math.max(0, 1 - cos * cos))
+    if (coneReachesBox(ax, ay, az, dx, dy, dz, length, cosCone, sinCone, planes[o], planes[o + 1], planes[o + 2], cos, sin, planes[o + 4], planes[o + 5], planes[o + 6])) {
+      bits |= 1 << k
+    }
+  }
+  return bits
 }

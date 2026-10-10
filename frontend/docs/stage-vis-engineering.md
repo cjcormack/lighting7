@@ -668,12 +668,17 @@ without a room — the back wall and the catch floor:
   keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
   window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
   Everywhere and the Positions plan (which draws only the drapes and the Set layer, no house) draw it
-  whole. **A transmitting collider is skipped** (scrim plan D7, session 3; §"Painted cloths"): beam
-  reach passes a net (`Collider.transmit` of kind `angle`) and a painted cloth where its axis crosses
-  a hole (kind `mask`, its mask read at the middle of the crossing — `maskPasses`), so a beam
-  through a gauze lands on the set behind it, its air runs on to there, and a transmitting collider
-  is never a landing plane (`landing.ts`). `sightBlocked` passes the same two, so a label behind a
-  gauze still shows. *Focus here* still takes the point it is given.
+  whole. **A transmitting collider is skipped** (scrim plan D7, sessions 3 and 5; §"Painted
+  cloths"): beam reach passes a net (`Collider.transmit` of kind `angle`) and a painted cloth where
+  its axis crosses a hole (kind `mask`, its mask read at the middle of the crossing — `maskPasses`).
+  **A landing passes a cut cloth whole** (session 5): a transmitting collider is never a landing
+  plane (`beamReach.ts`'s `isLandingSurface` — a net, or a painted cloth whose mask holds an atlas
+  layer, so one with no hole to cut still lands a beam), so the emitters' `reach` casts a landing by
+  default and a beam's air runs on past a gauze or a cut cloth to the next solid surface; the haze
+  splits at the cloth instead (§"The haze splits at a cloth", below). Where the axis itself stops —
+  on a cut cloth's cloth — is a separate cast (`reach(…, axis)`, `landBeam`'s `axis`), and that is
+  what *Focus here* is given (`reportAxisLanding`). `sightBlocked` passes a net and a hole, so a
+  label behind a gauze still shows.
 - **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
   face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
   one fold, which the mesh, the box and the fold shadow all read: the element's `depthM` crest to
@@ -752,7 +757,9 @@ without a room — the back wall and the catch floor:
     irradiance is multiplied by what is left. Texel 2 is fetched only once the slab test says the
     segment crosses the box, so on a GPU a miss should cost what it did — unmeasured: on
     SwiftShader every branch's code is paid, taken or not (the third-texel bullet below). The GLSL and `segmentTransmit` change
-    together: `occlusion.test.ts` runs the twin over a fixed scene (`scene/occlusionTwin.ts` —
+    together — since scrim plan session 5 each as a crossing (`segmentCrossing`) and its share
+    (`crossingShare`), `TRANSMIT_GLSL`, which the haze reads too: `occlusion.test.ts` runs the twin
+    over a fixed scene (`scene/occlusionTwin.ts` —
     solid, a sharkstooth at 0°, 45° and 80°, gathered two deep, a mask's hole and its cloth, and a
     fragment on the scrim itself), and the bench's `?only=twin` runs the GLSL over the same cases on
     a real renderer and prints both (they agreed to five places on SwiftShader).
@@ -805,14 +812,15 @@ without a room — the back wall and the catch floor:
     session 3. So does a scene with more colliders than the texture's 1024 rows. **The fallback
     multiplies likewise** (scrim plan D8): an overflowed row still lists the transmitting colliders
     in its cone, as many as the cap allows, and its count reads `LIST_OVERFLOW − n` — the planes
-    stand for the solid boxes (they lie at the next solid surface past a net, since beam reach
-    skipped it), and the listed nets and cut cloths multiply what the planes let through. *Off*
+    stand for the solid boxes (they lie at the next solid surface past a net or a cut cloth, since a
+    landing skips both — the cut cloth since session 5), and the listed nets and cut cloths multiply what the planes let through. *Off*
     lists none: every light on its planes alone. It is the
     machine's because the machines differ by more than any one cap suits: the same bench in Safari
     on the desk Mac matched Chromium (+0.10 ms an entry skipped, +0.27 tested; 7.5 and 18.2 ms at
     64), and on an iPad cost +0.65 and +1.86 (46.7 and 123.8 ms at 64, from 5 ms on the planes). A
     `render_view` capture keeps the default: it draws one frame, with no frame rate to guard.
-  - **The haze keeps its planes** (`aBeamLand`, `edgeLanding`). It samples a beam pixel twelve times
+  - **The haze keeps its planes for the solid boxes** (`aBeamLand`, `edgeLanding`); the cloths it
+    splits at are a list of their own (the next bullet). It samples a beam pixel twelve times
     (eight above DPR 1), so a box test per sample would cost about twelve times what a surface pixel
     pays: +22 to +53 ms a frame at the bench's load for a 16-entry list, against the surfaces' +1.8
     to +4.4. So a beam in the air still stops at the planes and still passes a box it overhangs on
@@ -826,6 +834,42 @@ without a room — the back wall and the catch floor:
     corner is cut by the deck's plane alone, and its hull ran on through the back cloth and the back
     wall and showed behind the stage house. A room's wall seen from outside still shows the beam in
     the room, being drawn from inside only.
+  - **The haze splits at a cloth** (scrim plan D10, session 5; `scene/hazePlanes.ts`). A gauze or a
+    cut cloth is never where a beam lands, so the chord runs on past it, and the march multiplies
+    each sample by what a list of **eight transmitting planes** passes — scrims and cut cloths
+    together, filled every frame **nearest the eye first** from the packed colliders (each plane a
+    collider's three texels, `fillHazePlanes`, by the distance from the camera to the box's nearest
+    point; a collider packed solid — a mask loading, missing or with no hole — is not one). Two
+    shares, each a plane's once at its `^gather`:
+    - **the eye's**: a sample behind a plane, seen from the eye, keeps what the eye sees through it —
+      a gauze its `open(θ_eye)^gather`, the gauze's own blend's share (§"Light lands through one
+      surface shader"), a cut cloth 1 through a hole and 0 behind cloth. The view ray is crossed
+      with every plane **once a pixel** (`hazeEyeCrossings`, each plane's crossing and share), so a
+      sample only compares and multiplies; on a section the ray is the camera's axis, as the gauze's
+      own eye angle is.
+    - **the beam's**: a sample past a plane on the beam's own path keeps the beam's share of it, from
+      the sample towards the apex as far as the aperture's plane — a net at the angle that ray crosses
+      it, a cut cloth by its mask where it crosses — so a shaft through a hole carries on and one
+      through cloth stops. Each beam's row **names the planes it crosses**, bit k for the list's k-th
+      plane, in its `aBeamFx.z` (`landing.ts`'s `hazePlanesCrossed`, the beam's cull cone against
+      each box, conservatively, through `coneBox.ts`, the halving the light lists use), so a sample
+      tests only those. The flush names them (`StageEmitters`' `nameHazePlanes`) after it fills the
+      list, so a beam and the list it indexes are one frame's.
+
+    **A ninth** still passes light on the surfaces — its collider is in every light's list — but its
+    haze does not split: the air behind it draws whole, and its count is the list's `over`. The
+    crossing, `open(θ)` and the mask lookup are the shadows' own: `occlusion.ts`'s
+    `TRANSMIT_GLSL` (`segmentCrossing`, `crossingShare`, the mask atlas sampler, `SCRIM_OPEN_GLSL`),
+    which `OCCLUSION_GLSL`'s `boxTransmit` is now built from, and `HAZE_PLANES_GLSL` adds only the
+    two loops; `hazeSampleShare` is the twin, pinned over a fixed scene (`scene/hazeTwin.ts`) by
+    `hazePlanes.test.ts`, and the bench's `?only=haze` runs the GLSL over the same cases (they agreed
+    to five places on SwiftShader). **Uniforms, never a define**: the list reaches the march as
+    `uHazePlaneCount` and `uHazePlanes`, written every frame the air is drawn by the emitters' flush —
+    after the camera rig has moved and before the frame renders, so the list nearest this frame's eye
+    is this frame's — and the planes ride a buffer write; a list changed by anything else (the
+    colliders, a mask landing) has asked for its frame already, through the pack. The gathered net's
+    over-coverage on the surfaces (the scrim bullet) is not the haze's: it applies each plane's share
+    once.
   - **An eye standing in a beam sees the hull's back face**, and the depth test dropped that face
     wherever it lay behind the surface, taking the haze of the whole ray from the eye with it: a black
     ring round the pool, out to the hull, on the hall's *Centre stage* view inside the balcony spot.
@@ -1007,7 +1051,9 @@ without a room — the back wall and the catch floor:
   the catch floor 0, and an edit-mode rigging guide drawn faint the scrim's own 1, since it writes no
   depth either and three then sorts the two by distance — so the additive haze lands on top of the
   gauze, and a guide in front of a gauze is not blended over by it. Writing no depth, the gauze hides
-  nothing: until session 5 the haze behind it draws at full strength over it. **A gathered net
+  nothing by depth: since session 5 the haze's march dims what lies behind it by the same
+  `open(θ_eye)^gather` (§"The haze splits at a cloth"), once, so the air behind a gauze reads through
+  it as the set does. **A gathered net
   over-covers seen obliquely** (a known approximation, Chris's call, 2026-10-09): a drawn half that
   has gathered is a sine-folded sheet, two-sided and writing no depth, and every facet a ray crosses
   blends the whole `1 − open^gather`. Square on a ray crosses it once, which is D3 and D9 exactly
@@ -1018,8 +1064,8 @@ without a room — the back wall and the catch floor:
   with the shadows) or a nearest-layer stencil are the ways out if it reads wrong.
 - **Muslin is lit from behind** (scrim plan session 4, D6). A muslin part carries `finish.translucent`
   (τ, `MUSLIN_TRANSMITTANCE` 0.45, an estimate) and compiles with `TRANSLUCENT`; it stays opaque — its
-  `ScenePart.light` is still `'solid'` (or a cut cloth's mask), so beam reach stops at it and its
-  shadow is unchanged — and a light **behind** the face drawn, which every other surface skips
+  `ScenePart.light` is still `'solid'` (or a cut cloth's mask), so the axis stops at it (a landing
+  passes a cut cloth's mask whole, session 5) and its shadow is unchanged — and a light **behind** the face drawn, which every other surface skips
   (`facing ≤ 0`, the back-face flip), is summed into its own `accBehind` at its cosine from the back,
   with no lobes and no fold shadow (`pleatFaceSeesLamp` and `foldLight` are a face's own side's) — which
   side is the **cloth's**: a drawn half that gathers asks its plane (`pleatFaceSeesLamp`), not a fold's
@@ -1059,7 +1105,7 @@ z-fight it.
 
 ### Painted cloths
 
-Scrim plan sessions 2–4 (`../../docs/plans/scrim-plan.md` D2–D9, D12). A drape's
+Scrim plan sessions 2–5 (`../../docs/plans/scrim-plan.md` D2–D10, D12). A drape's
 `fabric` and a drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene
 document") are drawn, and since session 3 **light passes a net and a hole**: a flat front light
 lights the set through a gauze, a steep wash barely does, a beam's air runs on to the next solid
@@ -1068,9 +1114,11 @@ passes them too**: a net no longer draws opaque but blends over what is behind i
 so a gauze lit from the front with the set dark reads solid and with the front out and the set lit
 nearly vanishes — the reveal — and a muslin is lit from behind through both its paints, the day/night
 cloth (§"Light lands through one surface shader"'s scrim and muslin bullets). A cut cloth stays
-opaque cloth with holes in it. The haze still stops at the landing planes, which lie past a net, and
-does not yet split at a cloth: a gauze writes no depth, so the haze behind it draws whole on top of
-it (session 5 dims it by the eye's share).
+opaque cloth with holes in it. Since session 5 **the haze splits at both**: neither is a landing
+plane, so a beam's air runs on past it, and the march keeps the eye's share of the air behind it and
+the beam's share of the air past it on the beam's path — a back light's haze reads through a gauze
+at `open(θ_eye)`, and shafts cross a cut cloth's holes and stop at its cloth (§"The haze splits at a
+cloth").
 
 - **Only velour pleats** (D2). `buildDrape` draws a velour drape — no `fabric` — as it always has,
   pleated by its `depthM`. Every other fabric hangs flat whatever its depth: a `sheet` part, one
@@ -1104,8 +1152,8 @@ it (session 5 dims it by the eye's share).
   derivatives are defined.
 - **Alpha below half is a hole** (D5): the fragment is discarded where **either** image is below
   0.5, on both faces, so a cut cloth reads from the house and from behind, and a flat's front cut-out
-  shows through its back. Since session 3 the shadows and beam reach pass it too (below); the haze
-  still stops at it (session 5). A cut cloth is **opaque elsewhere** (D9): it keeps depth writes and
+  shows through its back. Since session 3 the shadows and beam reach pass it too (below), and since
+  session 5 the haze, through its holes only. A cut cloth is **opaque elsewhere** (D9): it keeps depth writes and
   no blend under every session-4 define — a painted muslin discards its holes and is lit from behind
   round them — so it stays cloth with holes in it, and a `render_view` capture draws it so.
 - **A part says how it meets light** (D7, session 3): `ScenePart.light` is `'solid'`, `'none'` (a
@@ -1954,6 +2002,29 @@ DPR cap): an orbit drag ran at a median of 17–21 ms a frame and the governor h
 sizes stay as they were — 12 steps, a 64-light default budget — until the Safari and iPad passes.
 `data-lights` and `data-haze-tier` on the container are what to read.
 
+**The haze planes' cost** (scrim plan session 5, §"The haze splits at a cloth") was measured on
+SwiftShader only — Chromium in the cloud session, 1280 × 720, two back lights through a gauze and a
+cut cloth plus six full-width gauzes in their path, an eye drag, median ms a frame (the governor,
+which an eye drag never engages, held tier 0):
+
+| scene | `main`, haze | branch, haze | `main`, haze off | branch, haze off |
+|---|---|---|---|---|
+| no cloths | 298 | 380 | 183 | 185 |
+| a gauze and a cut cloth (2 planes) | 277 | 495 | 203 | 216 |
+| 8 planes, every one crossed by both beams | 519 | 921 | 472 | 456 |
+| 8 planes, an orbit drag (the governor engaged) | 438, tier 3 | 707, tier 3 | — | — |
+
+So on that renderer the haze's own share of a frame went from 47–115 ms to 195–465, and even a scene
+with no cloth pays about 80 ms for the planes' code being in the program at all: SwiftShader runs a
+masked branch's code whatever the mask, so its cost follows the code, not the work (the reason the
+loops break rather than test under an `if` — that alone was 665–685 ms against 302 with no cloth —
+and why a uniform `if` round the whole share bought nothing). A define that left the code out while
+the scene holds no plane would remove it, and is refused: a cue revealing a gauze would recompile the
+program mid-show. The governor stepped to its last tier on both, which on SwiftShader it always does;
+whether it absorbs the planes on a GPU is `FU-MANUAL-STAGE-LIGHT-BUDGET`'s step 9, and if the iPad
+cannot hold at the last tier with eight crossed the list shrinks (`MAX_HAZE_PLANES`, which the GLSL
+holds in two `vec4`s, to 4) before the visuals do.
+
 ### Focus
 
 Fixture-optics plan session 1 ("focus that reads"; D9, D11). The symptom was a Source Four
@@ -2088,7 +2159,8 @@ wall and the deck.
 - **Packed into one float** (`packGobos`): layer A's and layer B's pattern (5 bits each), which one
   turns (1 bit) and its angle (13 bits, 0.044° a step) — 24 bits, exact in a float32, every decode a
   division by a power of two. One angle suffices because a type has one gobo rotation channel. It
-  rides the haze's `aBeamFx.y` (`aBeamFx.z` is now spare) as a flat varying, and the light table's
+  rides the haze's `aBeamFx.y` (`aBeamFx.z` names the haze planes the beam crosses since scrim plan
+  session 5) as a flat varying, and the light table's
   texel 4 `.z`.
 - **Where texel 4 found the room** (`scene/lightTable.ts`'s header has the long form). Every packed
   float was full but texel 2's alpha, which has four bits spare. Texel 4 spent three floats on the

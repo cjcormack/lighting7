@@ -1,4 +1,5 @@
 import { coneReachesSphere } from '../beamLobes'
+import { coneReachesBox } from './coneBox'
 import { MIN_REACH_M, type Collider } from './beamReach'
 import { LIGHT_TEXELS } from './lightTable'
 import { MASK_HOLE_BELOW, MASK_SIZE, sceneMasks, maskHole } from './sceneMasks'
@@ -271,12 +272,6 @@ export function cullLightColliders(
     const cosCone = Math.min(1, Math.max(-1, lights[o + 7]))
     const sinCone = Math.sqrt(Math.max(0, 1 - cosCone * cosCone))
     const near = lights[o + 20]
-    APEX.x = ax
-    APEX.y = ay
-    APEX.z = az
-    AXIS.x = dx
-    AXIS.y = dy
-    AXIS.z = dz
     const px = ax + dx * near
     const py = ay + dy * near
     const pz = az + dz * near
@@ -285,7 +280,7 @@ export function cullLightColliders(
     let n = 0
     let overflow = false
     for (let i = 0; i < set.count; i++) {
-      if (!boxReachesCone(set, i, length, cosCone, sinCone)) continue
+      if (!boxReachesCone(set, i, ax, ay, az, dx, dy, dz, length, cosCone, sinCone)) continue
       if (containsPoint(set.data, i, px, py, pz)) continue
       if (n >= limit) {
         overflow = true
@@ -304,7 +299,7 @@ export function cullLightColliders(
     let t = 0
     for (let i = 0; i < set.count && t < limit; i++) {
       if (!transmits(set.data, i)) continue
-      if (!boxReachesCone(set, i, length, cosCone, sinCone)) continue
+      if (!boxReachesCone(set, i, ax, ay, az, dx, dy, dz, length, cosCone, sinCone)) continue
       if (containsPoint(set.data, i, px, py, pz)) continue
       writeEntry(out, row + 4 + t * 4, i, ax, ay, az, s)
       t++
@@ -392,80 +387,35 @@ export function entryMayShadow(list: ArrayLike<number>, o: number, lx: number, l
   return dist >= e.nearM
 }
 
-const APEX = { x: 0, y: 0, z: 0 }
-const AXIS = { x: 0, y: 0, z: 0 }
-const CENTRE = { x: 0, y: 0, z: 0 }
-
 /**
- * A sphere at most this wide for its distance from the apex is tight enough to trust: past it, a
- * box is halved along its longest axis and each half tried. A room's wall is 18 m long, and the
- * sphere round it reaches into every cone pointed anywhere near it.
+ * Whether the cone from the apex ([ax], [ay], [az]) along ([dx], [dy], [dz]) reaches collider [i]
+ * of [set] — conservatively, as `coneReachesSphere` is: its bounding sphere first, on the cull's
+ * own copy, then the box itself in pieces (`coneBox.ts`).
  */
-const SPLIT_ANGULAR_RADIUS = 0.05
-/** How many halvings a box may take before its last sphere is trusted: 2¹⁰ pieces at most. */
-const SPLIT_DEPTH = 10
-/** The halving's stack: depth + 1 entries of a centre in the box's frame and half-extents. */
-const SPLIT_STACK = new Float64Array((SPLIT_DEPTH + 1) * 7)
-
-/**
- * Whether the cone from [APEX] along [AXIS] reaches collider [i] of [set] — conservatively, as
- * [coneReachesSphere] is, but tighter for a big box: a box whose sphere is wide for its distance is
- * halved along its longest axis, and each half tried in turn, until a piece the cone reaches is
- * small enough to trust or no piece is left.
- */
-function boxReachesCone(set: ColliderSet, i: number, length: number, cosCone: number, sinCone: number): boolean {
+function boxReachesCone(
+  set: ColliderSet, i: number,
+  ax: number, ay: number, az: number,
+  dx: number, dy: number, dz: number,
+  length: number, cosCone: number, sinCone: number,
+): boolean {
   const s = set.spheres
+  APEX.x = ax
+  APEX.y = ay
+  APEX.z = az
+  AXIS.x = dx
+  AXIS.y = dy
+  AXIS.z = dz
   CENTRE.x = s[i * 4]
   CENTRE.y = s[i * 4 + 1]
   CENTRE.z = s[i * 4 + 2]
   if (!coneReachesSphere(APEX, AXIS, length, cosCone, sinCone, CENTRE, s[i * 4 + 3])) return false
   const b = unpackCollider(set.data, i, SCRATCH)
-  const stack = SPLIT_STACK
-  let top = 0
-  stack[0] = 0
-  stack[1] = 0
-  stack[2] = 0
-  stack[3] = b.hx
-  stack[4] = b.hy
-  stack[5] = b.hz
-  stack[6] = 0
-  top = 1
-  while (top > 0) {
-    top--
-    const o = top * 7
-    const lx = stack[o]
-    const ly = stack[o + 1]
-    const lz = stack[o + 2]
-    const hx = stack[o + 3]
-    const hy = stack[o + 4]
-    const hz = stack[o + 5]
-    const depth = stack[o + 6]
-    // Out of the box's frame by +yaw, as `beamReach` turns a face's normal.
-    CENTRE.x = b.cx + b.cos * lx + b.sin * lz
-    CENTRE.y = b.cy + ly
-    CENTRE.z = b.cz - b.sin * lx + b.cos * lz
-    const r = Math.hypot(hx, hy, hz)
-    if (!coneReachesSphere(APEX, AXIS, length, cosCone, sinCone, CENTRE, r)) continue
-    const dist = Math.hypot(CENTRE.x - APEX.x, CENTRE.y - APEX.y, CENTRE.z - APEX.z)
-    if (depth >= SPLIT_DEPTH || r <= SPLIT_ANGULAR_RADIUS * dist) return true
-    // Halve along the longest axis: two pieces, depth-first, the stack never deeper than SPLIT_DEPTH.
-    const axis = hx >= hy && hx >= hz ? 0 : hy >= hz ? 1 : 2
-    for (const sign of SIGNS) {
-      const p = top * 7
-      stack[p] = axis === 0 ? lx + (sign * hx) / 2 : lx
-      stack[p + 1] = axis === 1 ? ly + (sign * hy) / 2 : ly
-      stack[p + 2] = axis === 2 ? lz + (sign * hz) / 2 : lz
-      stack[p + 3] = axis === 0 ? hx / 2 : hx
-      stack[p + 4] = axis === 1 ? hy / 2 : hy
-      stack[p + 5] = axis === 2 ? hz / 2 : hz
-      stack[p + 6] = depth + 1
-      top++
-    }
-  }
-  return false
+  return coneReachesBox(ax, ay, az, dx, dy, dz, length, cosCone, sinCone, b.cx, b.cy, b.cz, b.cos, b.sin, b.hx, b.hy, b.hz)
 }
 
-const SIGNS = [-1, 1] as const
+const APEX = { x: 0, y: 0, z: 0 }
+const AXIS = { x: 0, y: 0, z: 0 }
+const CENTRE = { x: 0, y: 0, z: 0 }
 
 const SCRATCH: PackedCollider = emptyPackedCollider()
 
@@ -483,21 +433,34 @@ function containsPoint(data: Float32Array, i: number, x: number, y: number, z: n
 /** A direction component this small is taken as this, keeping its sign: no infinities in the slab test. */
 const MIN_DIR = 1e-8
 
+/** Where a segment lies in a box's own frame: its start and its direction, turned by −yaw ([segmentCrossing]). */
+export interface BoxFrame {
+  lox: number
+  loy: number
+  loz: number
+  ldx: number
+  ldy: number
+  ldz: number
+}
+
+/** A [BoxFrame] with every field zero: what a caller hands [segmentCrossing] to fill. */
+export function emptyBoxFrame(): BoxFrame {
+  return { lox: 0, loy: 0, loz: 0, ldx: 0, ldy: 0, ldz: 0 }
+}
+
 /**
- * How much of the light the segment from [px, py, pz] along the unit [dx, dy, dz] — towards the lamp
- * — for [tMax] metres keeps through packed collider [b]: the twin of [OCCLUSION_GLSL]'s
- * `boxTransmit`, step for step. 1 where the segment misses the box, ends inside it, or starts inside
- * it within its skin of the face it leaves by (a cloth does not shadow itself); otherwise the box's
- * share of a crossing — 0 for a solid box, `open(θ)^gather` for a net (θ from the cloth's normal, its
- * local z), and for a painted cloth 1 or 0 as its mask in [atlas] is a hole or cloth at the middle of
- * the crossing.
+ * How the segment from [px, py, pz] along the unit [dx, dy, dz] for [tMax] metres meets packed
+ * collider [b]: the twin of [TRANSMIT_GLSL]'s `segmentCrossing`, step for step. −1 where it passes
+ * the box — misses it, ends inside it, or starts inside it within its skin of the face it leaves by
+ * (a cloth does not shadow itself); otherwise how far along it the middle of its crossing lies, with
+ * the segment in the box's frame written into [frame].
  */
-export function segmentTransmit(
+export function segmentCrossing(
   px: number, py: number, pz: number,
   dx: number, dy: number, dz: number,
   tMax: number,
   b: PackedCollider,
-  atlas: Uint8Array = sceneMasks.atlas,
+  frame: BoxFrame,
 ): number {
   const rx = px - b.cx
   const ry = py - b.cy
@@ -519,25 +482,60 @@ export function segmentTransmit(
   const farZ = Math.max(t1z, t2z)
   const tNear = Math.max(Math.min(t1x, t2x), Math.min(t1y, t2y), Math.min(t1z, t2z))
   const tFar = Math.min(farX, farY, farZ)
-  if (tNear > tFar || tFar <= 0 || tNear >= tMax) return 1
+  if (tNear > tFar || tFar <= 0 || tNear >= tMax) return -1
   if (tNear <= OCCLUSION_START_EPS_M) {
     // Inside, or on a face. A segment that never leaves the box ends inside it with the lamp: kept.
-    if (tFar >= tMax) return 1
+    if (tFar >= tMax) return -1
     // How far behind the face it leaves by is the distance to that face's plane.
     const depth =
       farX <= farY && farX <= farZ ? farX * Math.abs(ldx) : farY <= farZ ? farY * Math.abs(ldy) : farZ * Math.abs(ldz)
-    if (depth <= b.skin) return 1
+    if (depth <= b.skin) return -1
   }
+  frame.lox = lox
+  frame.loy = loy
+  frame.loz = loz
+  frame.ldx = ldx
+  frame.ldy = ldy
+  frame.ldz = ldz
+  return (Math.max(tNear, 0) + Math.min(tFar, tMax)) / 2
+}
+
+/**
+ * What a crossing of packed collider [b] keeps, the segment in its [frame] and [t] the middle of the
+ * crossing ([segmentCrossing]): the twin of [TRANSMIT_GLSL]'s `crossingShare`. 0 for a solid box,
+ * `open(θ)^gather` for a net (θ from the cloth's normal, its local z), and for a painted cloth 1 or 0
+ * as its mask in [atlas] is a hole or cloth at [t] — the one copy of each, which the surfaces' shadows
+ * and the haze (`hazePlanes.ts`) both read.
+ */
+export function crossingShare(b: PackedCollider, frame: BoxFrame, t: number, atlas: Uint8Array = sceneMasks.atlas): number {
   if (b.kind < 0.5) return 0
   // A net: its share at the angle the segment crosses it, through as many layers as it is gathered.
-  if (b.kind < 1.5) return scrimShare(Math.abs(ldz), b.k1, b.k2)
+  if (b.kind < 1.5) return scrimShare(Math.abs(frame.ldz), b.k1, b.k2)
   // A cut cloth: its mask at the middle of the crossing.
-  const t = (Math.max(tNear, 0) + Math.min(tFar, tMax)) / 2
   const [u0, u1] = unpackUnitPair(b.k2)
   const [v0, v1] = unpackUnitPair(b.k3)
-  const u = u0 + ((lox + ldx * t) / b.hx + 1) * 0.5 * (u1 - u0)
-  const v = v0 + ((loy + ldy * t) / b.hy + 1) * 0.5 * (v1 - v0)
+  const u = u0 + ((frame.lox + frame.ldx * t) / b.hx + 1) * 0.5 * (u1 - u0)
+  const v = v0 + ((frame.loy + frame.ldy * t) / b.hy + 1) * 0.5 * (v1 - v0)
   return maskHole(atlas, Math.round(b.k1), u, v) ? 1 : 0
+}
+
+const SCRATCH_FRAME: BoxFrame = emptyBoxFrame()
+
+/**
+ * How much of the light the segment from [px, py, pz] along the unit [dx, dy, dz] — towards the lamp
+ * — for [tMax] metres keeps through packed collider [b]: the twin of [OCCLUSION_GLSL]'s
+ * `boxTransmit`, step for step. 1 where the segment passes the box ([segmentCrossing]); otherwise the
+ * box's share of the crossing ([crossingShare]).
+ */
+export function segmentTransmit(
+  px: number, py: number, pz: number,
+  dx: number, dy: number, dz: number,
+  tMax: number,
+  b: PackedCollider,
+  atlas: Uint8Array = sceneMasks.atlas,
+): number {
+  const t = segmentCrossing(px, py, pz, dx, dy, dz, tMax, b, SCRATCH_FRAME)
+  return t < 0 ? 1 : crossingShare(b, SCRATCH_FRAME, t, atlas)
 }
 
 function nonZero(v: number): number {
@@ -554,20 +552,15 @@ export function occlusionReach(dist: number, cosAxis: number, near: number): num
 }
 
 /**
- * The GLSL of [segmentTransmit], [occlusionReach] and the per-light loop, with the scrim share it
- * reads (`scrimOpen.ts`'s [SCRIM_OPEN_GLSL]): `lightTransmit(i, p, toLamp, dist, cosAxis, near,
- * landing)` is how much of light row [i] reaches point [p] — the product of the shares of the boxes
- * in its list the segment crosses, 0 at the first solid one; or, for a light that overflowed its
- * list, 0 behind its landing planes (`landing.ts`'s `behindLanding`, which the caller's program must
- * include, with `REACH_EPS`) and otherwise the product over the transmitting boxes its row still
- * lists. A box's texel 2 is fetched only once the segment is known to cross it.
+ * The GLSL of [segmentCrossing] and [crossingShare], with the scrim share it reads (`scrimOpen.ts`'s
+ * [SCRIM_OPEN_GLSL]) and the mask atlas it samples: the one copy of the crossing, of `open(θ)` and of
+ * the mask lookup, which [OCCLUSION_GLSL] holds for the surfaces and the haze's march holds for the
+ * air (`hazePlanes.ts`'s `HAZE_PLANES_GLSL`). Neither texture of colliders is declared here, so the
+ * beam program, which reads its planes from uniforms, takes it without them.
  */
-export const OCCLUSION_GLSL = /* glsl */ `
+export const TRANSMIT_GLSL = /* glsl */ `
   #define OCCLUSION_START_EPS ${OCCLUSION_START_EPS_M.toFixed(4)}
-  #define OCCLUSION_MIN_REACH ${MIN_REACH_M.toFixed(4)}
   #define OCCLUSION_MIN_DIR ${MIN_DIR.toExponential(1)}
-  uniform sampler2D uColliders;
-  uniform sampler2D uLightColliders;
   uniform sampler2DArray uMaskAtlas;
   ${SCRIM_OPEN_GLSL}
 
@@ -580,13 +573,11 @@ export const OCCLUSION_GLSL = /* glsl */ `
     return vec2(hi, p - hi * ${UNIT_BASE}.0) / ${UNIT_STEPS}.0;
   }
 
-  float boxTransmit(vec3 p, vec3 d, float tMax, int k) {
-    vec4 a = texelFetch(uColliders, ivec2(0, k), 0);
-    vec4 b = texelFetch(uColliders, ivec2(1, k), 0);
+  float segmentCrossing(vec3 p, vec3 d, float tMax, vec4 a, vec4 b, out vec3 lo, out vec3 ld) {
     float s = sqrt(max(0.0, 1.0 - a.w * a.w));
     vec3 rel = p - a.xyz;
-    vec3 lo = vec3(a.w * rel.x - s * rel.z, rel.y, s * rel.x + a.w * rel.z);
-    vec3 ld = vec3(
+    lo = vec3(a.w * rel.x - s * rel.z, rel.y, s * rel.x + a.w * rel.z);
+    ld = vec3(
       occlusionNonZero(a.w * d.x - s * d.z),
       occlusionNonZero(d.y),
       occlusionNonZero(s * d.x + a.w * d.z)
@@ -597,17 +588,19 @@ export const OCCLUSION_GLSL = /* glsl */ `
     vec3 tNearV = min(t1, t2);
     float tNear = max(max(tNearV.x, tNearV.y), tNearV.z);
     float tFar = min(min(tFarV.x, tFarV.y), tFarV.z);
-    if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return 1.0;
+    if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return -1.0;
     if (tNear <= OCCLUSION_START_EPS) {
-      if (tFar >= tMax) return 1.0;
+      if (tFar >= tMax) return -1.0;
       float depth = tFarV.x <= tFarV.y && tFarV.x <= tFarV.z ? tFarV.x * abs(ld.x)
         : tFarV.y <= tFarV.z ? tFarV.y * abs(ld.y) : tFarV.z * abs(ld.z);
-      if (depth <= b.w) return 1.0;
+      if (depth <= b.w) return -1.0;
     }
-    vec4 m = texelFetch(uColliders, ivec2(2, k), 0);
+    return (max(tNear, 0.0) + min(tFar, tMax)) * 0.5;
+  }
+
+  float crossingShare(vec4 m, vec4 b, vec3 lo, vec3 ld, float t) {
     if (m.x < 0.5) return 0.0;
     if (m.x < 1.5) return scrimShare(abs(ld.z), m.y, m.z);
-    float t = (max(tNear, 0.0) + min(tFar, tMax)) * 0.5;
     vec2 us = unpackUnitPair(m.z);
     vec2 vs = unpackUnitPair(m.w);
     float u = us.x + ((lo.x + ld.x * t) / b.x + 1.0) * 0.5 * (us.y - us.x);
@@ -616,6 +609,31 @@ export const OCCLUSION_GLSL = /* glsl */ `
     float alpha = texelFetch(uMaskAtlas, ivec3(texel, int(m.y + 0.5)), 0).r;
     // A byte below MASK_HOLE_BELOW, read normalised: halfway between it and the byte under it.
     return alpha < ${((MASK_HOLE_BELOW - 0.5) / 255).toFixed(6)} ? 1.0 : 0.0;
+  }
+`
+
+/**
+ * The GLSL of [segmentTransmit], [occlusionReach] and the per-light loop, over [TRANSMIT_GLSL]:
+ * `lightTransmit(i, p, toLamp, dist, cosAxis, near, landing)` is how much of light row [i] reaches
+ * point [p] — the product of the shares of the boxes in its list the segment crosses, 0 at the first
+ * solid one; or, for a light that overflowed its list, 0 behind its landing planes (`landing.ts`'s
+ * `behindLanding`, which the caller's program must include, with `REACH_EPS`) and otherwise the
+ * product over the transmitting boxes its row still lists. A box's texel 2 is fetched only once the
+ * segment is known to cross it.
+ */
+export const OCCLUSION_GLSL = /* glsl */ `
+  #define OCCLUSION_MIN_REACH ${MIN_REACH_M.toFixed(4)}
+  uniform sampler2D uColliders;
+  uniform sampler2D uLightColliders;
+  ${TRANSMIT_GLSL}
+
+  float boxTransmit(vec3 p, vec3 d, float tMax, int k) {
+    vec4 b = texelFetch(uColliders, ivec2(1, k), 0);
+    vec3 lo;
+    vec3 ld;
+    float t = segmentCrossing(p, d, tMax, texelFetch(uColliders, ivec2(0, k), 0), b, lo, ld);
+    if (t < 0.0) return 1.0;
+    return crossingShare(texelFetch(uColliders, ivec2(2, k), 0), b, lo, ld, t);
   }
 
   float lightTransmit(int i, vec3 p, vec3 toLamp, float dist, float cosAxis, float near, vec4 landing) {

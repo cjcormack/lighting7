@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StageElementDto } from '../../../api/stageElementApi'
-import { beamReach, boxCollider, elementColliders, sightBlocked, type BeamHit, type Collider } from './beamReach'
+import { beamReach, boxCollider, elementColliders, isLandingSurface, sightBlocked, type BeamHit, type Collider } from './beamReach'
 import { buildElement } from './builders'
 import { landPlane, LAND_UP, packLanding } from './landing'
 import type { MaskSampler } from './sceneMasks'
@@ -21,8 +21,8 @@ function element(fields: Partial<StageElementDto>): StageElementDto {
 
 const CUT = 'c'.repeat(64)
 /** The cut cloth's mask: a hole wherever u < ½ (its stage-right half). */
-const halfCut: MaskSampler = { holeAt: (hash, u) => hash === CUT && u < 0.5 }
-const nothingLoaded: MaskSampler = { holeAt: () => false }
+const halfCut: MaskSampler = { holeAt: (hash, u) => hash === CUT && u < 0.5, layerOf: (hash) => (hash === CUT ? 0 : -1) }
+const nothingLoaded: MaskSampler = { holeAt: () => false, layerOf: () => -1 }
 
 const hit = (): BeamHit => ({ t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null })
 
@@ -96,6 +96,37 @@ describe('a transmitting collider is never a landing plane', () => {
     packLanding({ px: p[0], py: p[1], pz: p[2], nx: out.nx, ny: out.ny, nz: out.nz, skin: out.skin }, null, packed, 0)
     expect(packed[0]).toBe(LAND_UP)
     expect(landPlane(packed[0], packed[1])).toEqual([0, 1, 0, 0])
+  })
+})
+
+describe('a landing passes every transmitting collider (scrim plan session 5)', () => {
+  const land = (colliders: Collider[], x: number, masks: MaskSampler) => {
+    const out = hit()
+    return beamReach(x, 2, 8, 0, 0, -1, colliders, 40, out, masks, true) ? out : null
+  }
+
+  it('lands past a cut cloth whose mask cuts holes, through its cloth as through a hole', () => {
+    const { cloth, wall, all } = scene({ paint: { front: CUT } })
+    expect(isLandingSurface(cloth[0], halfCut)).toBe(false)
+    expect(land(all, 1.5, halfCut)!.collider).toBe(wall)
+    expect(land(all, -1.5, halfCut)!.collider).toBe(wall)
+    // The axis itself still stops at the cloth — what Focus here is given.
+    expect(castAt(all, 1.5, halfCut)!.collider).toBe(cloth[0])
+  })
+
+  it('lands past a net, and on a cut cloth whose mask cuts no hole — loading, missing or opaque', () => {
+    const net = scene({ fabric: 'SHARKSTOOTH' })
+    expect(isLandingSurface(net.cloth[0], halfCut)).toBe(false)
+    expect(land(net.all, 0, halfCut)!.collider).toBe(net.wall)
+    const { cloth, all } = scene({ paint: { front: CUT } })
+    expect(isLandingSurface(cloth[0], nothingLoaded)).toBe(true)
+    expect(land(all, -1.5, nothingLoaded)!.collider).toBe(cloth[0])
+    // Velour, canvas and muslin are solid: a landing stops at them as the axis does.
+    for (const fabric of [undefined, 'CANVAS', 'MUSLIN']) {
+      const solid = scene({ fabric })
+      expect(isLandingSurface(solid.cloth[0], halfCut)).toBe(true)
+      expect(land(solid.all, 0, halfCut)!.collider).toBe(solid.cloth[0])
+    }
   })
 })
 

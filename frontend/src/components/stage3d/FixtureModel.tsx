@@ -256,14 +256,17 @@ const EDGE_BISECTIONS = 5
  * [coneLandingDepth] and cut at the hit's plane, and at [edgeLanding]'s where it is split across an
  * edge. How much of it shows in the air is the window's
  * Haze setting: Stage clips it at the proscenium (`hazeClipFor`), Everywhere and the Positions plan
- * draw it whole. Cast from the **aperture**, not the apex behind it.
+ * draw it whole. Cast from the **aperture**, not the apex behind it. A landing passes every
+ * transmitting collider — a gauze, a cut cloth — so the haze runs on past it and splits there
+ * (`scene/hazePlanes.ts`); [axis] casts where the axis itself stops instead, on a cut cloth's cloth.
  */
 export function landBeam(
   emitters: Pick<EmittersHandle, 'reach'>,
   origin: Vector3,
   dir: Vector3,
+  axis = false,
 ): { hit: SurfaceHit | null; length: number } {
-  if (!emitters.reach(origin, dir, MAX_THROW_M, SCRATCH_BEAM_HIT)) return { hit: null, length: BEAM_LENGTH }
+  if (!emitters.reach(origin, dir, MAX_THROW_M, SCRATCH_BEAM_HIT, axis)) return { hit: null, length: BEAM_LENGTH }
   const t = SCRATCH_BEAM_HIT.t
   SCRATCH_SURFACE_HIT.px = origin.x + dir.x * t
   SCRATCH_SURFACE_HIT.py = origin.y + dir.y * t
@@ -1341,6 +1344,8 @@ const SCRATCH_BEAM: BeamWrite = {
   bladesA: 0,
   bladesB: 0,
   shadowMask: 0,
+  cullCos: 1,
+  cullSin: 0,
   land: null,
   edgeLand: null,
 }
@@ -1367,7 +1372,8 @@ function reportAxisLanding(
 ): void {
   const first = spec.cells[0]
   const axis = SCRATCH_REPORT_DIR.set(0, spec.emitAxis, 0).transformDirection(head.matrixWorld)
-  const hit = first ? landBeam(emitters, apertureWorld(first, head, SCRATCH_REPORT_ORIGIN), axis).hit : null
+  // Where the axis stops, not where its haze lands: a cut cloth's cloth stops it.
+  const hit = first ? landBeam(emitters, apertureWorld(first, head, SCRATCH_REPORT_ORIGIN), axis, true).hit : null
   recordLanding(reporter, patchKey, hit ? fromThree(SCRATCH_REPORT_POINT.set(hit.px, hit.py, hit.pz)) : null)
 }
 
@@ -1919,10 +1925,13 @@ function useBeamDirector({
       // channel's past the field.
       if (aspect > 0 || spread > 1) {
         const cull = Math.atan(tanEdge) + REGION_CULL_SLACK_RAD
-        beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, Math.cos(cull), Math.sin(cull), regionGeometry)
+        beam.cullCos = Math.cos(cull)
+        beam.cullSin = Math.sin(cull)
       } else {
-        beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry)
+        beam.cullCos = geom.cosCull
+        beam.cullSin = geom.sinCull
       }
+      beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, beam.cullCos, beam.cullSin, regionGeometry)
       if (!multi || cells.pool[lobe] >= LIGHT_OFF_OPACITY) emitters.writeBeam(slot, lobe, beam)
 
       if (!multi) {

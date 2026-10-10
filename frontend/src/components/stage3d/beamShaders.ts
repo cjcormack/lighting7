@@ -4,6 +4,9 @@ import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL, FOCUS_SPREAD_MAX } from './beamMask'
 import { GOBO_LAYERS_GLSL } from './goboLayers'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
 import { LANDING_GLSL, LANDING_REACH_GLSL, REACH_EPS_M } from './scene/landing'
+import { getMaskAtlasTexture } from './scene/maskAtlas'
+import { TRANSMIT_GLSL } from './scene/occlusion'
+import { HAZE_PLANE_FLOATS, HAZE_PLANES_GLSL, MAX_HAZE_PLANES, type HazePlaneList } from './scene/hazePlanes'
 import {
   FOCUS_LOD_MAX,
   GOBO_BLUR_TEXELS,
@@ -107,6 +110,13 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 //
 // The air is dense by the lamp and thins along the throw and as the beam spreads (`washConfig.ts`),
 // rolled off by `1 − exp(−light)` and encoded here, so two beams crossing visibly sum.
+//
+// **The haze splits at a cloth** (scrim plan D10, session 5; `scene/hazePlanes.ts`): a gauze or a cut
+// cloth is never where a beam lands, so the chord runs on past it, and each sample is multiplied by
+// what the list of eight transmitting planes passes — the eye's share of each plane the view ray
+// crossed before it (a gauze's open(θ_eye)^gather, a cut cloth's mask), found once a pixel, and the
+// beam's share of each plane its row names (`aBeamFx.z`) between the sample and the aperture. The
+// crossing, open(θ) and the mask lookup are the shadows' own (`occlusion.ts`'s TRANSMIT_GLSL).
 
 // Whether a point is inside the hull as it is drawn unfolded: the test the vertex shader's fold and
 // the fragment shader's face both start from. The cone is the field, or past it by the most a focus
@@ -135,7 +145,8 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   // Packed to stay inside WebGL's guaranteed sixteen vertex attributes: three's prefix declares
   // position, normal and uv, the instance matrix takes four, and these eight take the rest —
   // fifteen. The colour carries the opacity in .a; the fx carry the edge, the packed gobo layers
-  // (goboLayers.ts, fixture-optics session 4), a spare slot and the focal distance; the shape carries near,
+  // (goboLayers.ts, fixture-optics session 4), the haze planes the beam crosses (bit k for plane k of
+  // scene/hazePlanes.ts's list, scrim plan session 5) and the focal distance; the shape carries near,
   // iris, aspect and the depth of field (fixture-optics session 1); the gate carries the half-angle,
   // the shadow mask and the two packed blade words (stage-view plan session 7). A program past
   // sixteen does not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
@@ -164,6 +175,8 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   // by an ulp and unpack as the wrong blade or pattern.
   flat varying vec2 vBeamBlades;
   flat varying float vBeamGobos;
+  // Flat for the same reason: a bit mask.
+  flat varying float vBeamPlanes;
 
   ${LANDING_GLSL}
   ${LANDING_REACH_GLSL}
@@ -173,6 +186,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
     vBeamShape = aBeamShape;
     vBeamBlades = aBeamGate.zw;
     vBeamGobos = aBeamFx.y;
+    vBeamPlanes = aBeamFx.z;
     // The drawn length is the instance's y scale, from the apex: far enough for the whole cone to
     // cross the planes it landed on (the director's coneLandingDepth), or BEAM_LENGTH past its
     // aperture in open air.
@@ -241,6 +255,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying vec4 vBeamLandEdge;
   flat varying vec2 vBeamBlades;
   flat varying float vBeamGobos;
+  flat varying float vBeamPlanes;
 
   ${RAY_OBB_T_GLSL}
   ${IN_HULL_GLSL}
@@ -248,6 +263,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   ${BEAM_MASK_GLSL}
   ${BEAM_FOCUS_GLSL}
   ${GOBO_LAYERS_GLSL}
+  ${TRANSMIT_GLSL}
+  ${HAZE_PLANES_GLSL}
 
   // Clamp the chord [t0, t1] to the half-space value(t) = base + t*rate >= 0.
   void clampHalfSpace(float base, float rate, inout float t0, inout float t1) {
@@ -416,6 +433,15 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     goboRots(aspect <= 0.0 ? vBeamGobos : 0.0, goboA, goboB);
     bool hasGobo = goboA.w > 0.5 || goboB.w > 0.5;
 
+    // Where the view ray crosses each haze plane, and what it keeps of what lies behind it: a
+    // per-fragment constant, so the march compares and multiplies (scene/hazePlanes.ts).
+    vec4 eyeAt0;
+    vec4 eyeAt1;
+    vec4 eyeShare0;
+    vec4 eyeShare1;
+    hazeEyeCrossings(camPos, rayDir, eyeAt0, eyeAt1, eyeShare0, eyeShare1);
+    int planes = int(vBeamPlanes + 0.5);
+
     int lightMask = int(vShadowMask + 0.5);
     float sum = 0.0;
     for (int i = 0; i < MAX_VOL_STEPS; i++) {
@@ -428,6 +454,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       vec3 lightDir = rel / relLen;
 
       float cosAngle = dot(lightDir, d);
+      // What reaches this sample through the cloths: the eye's side and the beam's, to the aperture.
+      float through = hazeSampleShare(t, p, -lightDir, relLen - near / max(cosAngle, 1e-4), planes, eyeAt0, eyeAt1, eyeShare0, eyeShare1);
+      if (through <= 0.0) continue;
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
       // Focus is a distance along the axis from the aperture, not from the apex behind it.
       float blur = beamFocusBlur(rel, d, near, focusDist, dof);
@@ -456,7 +485,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       // cross-section, so a wide wash is not a white wall to look down.
       float axial = max(0.0, relLen * cosAngle);
       float density = (1.0 - uVolAxialFade * clamp(axial / vBeamLen, 0.0, 1.0)) / (uVolSpreadNear + uVolSpread * axial * tanHalf);
-      sum += gobo * radial * lit * density;
+      sum += gobo * radial * lit * density * through;
     }
 
     // The prototype integrated in the unit cone's frame scaled by its end radius: metres side-on,
@@ -469,9 +498,14 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   }
 `
 
-export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
+export function makeVolumeMaterial(gobo: DataArrayTexture, maskAtlas: DataArrayTexture = getMaskAtlasTexture()): ShaderMaterial {
   return new ShaderMaterial({
     uniforms: {
+      // The haze planes (scene/hazePlanes.ts) and the masks a cut cloth's are cut by: uniforms the
+      // flush writes every frame (writeHazePlanes), never a define.
+      uHazePlaneCount: { value: 0 },
+      uHazePlanes: { value: new Float32Array(MAX_HAZE_PLANES * HAZE_PLANE_FLOATS) },
+      uMaskAtlas: { value: maskAtlas },
       uFloorY: { value: 0.0 },
       uWallZ: { value: NO_WALL_Z },
       uSideX: { value: new Vector2(-NO_SIDE_X, NO_SIDE_X) },
@@ -495,6 +529,17 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
     depthWrite: false,
     side: DoubleSide,
   })
+}
+
+/**
+ * Write the frame's haze planes into the beam materials (scene/hazePlanes.ts's list, filled nearest
+ * the eye first): two uniforms, so the list moving never recompiles a program.
+ */
+export function writeHazePlanes(materials: ReadonlyArray<ShaderMaterial>, list: HazePlaneList): void {
+  for (const mat of materials) {
+    mat.uniforms.uHazePlaneCount.value = list.count
+    ;(mat.uniforms.uHazePlanes.value as Float32Array).set(list.data)
+  }
 }
 
 export function makeRegionUniforms() {

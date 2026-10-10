@@ -20,7 +20,9 @@
  * and each multiplies the share rather than ending the loop — the worst case a list of nets can be.
  * `?only=twin` draws none of that: it runs `OCCLUSION_GLSL`'s `boxTransmit` over the fixed scene in
  * `scene/occlusionTwin.ts` on this GPU and prints each case's share beside its TypeScript twin's
- * (`segmentTransmit`) — the GLSL and the twin compared on a real renderer.
+ * (`segmentTransmit`) — the GLSL and the twin compared on a real renderer. `?only=haze` does the
+ * same for the haze's split at a cloth (scrim plan session 5): `HAZE_PLANES_GLSL`'s eye crossings and
+ * sample share over `scene/hazeTwin.ts`'s fixed scene, beside `hazeSampleShare`.
  *
  * The answer is printed as JSON: the renderer, the canvas and the mean milliseconds a frame for
  * each, the faster of two passes. Query parameters `w`, `h`, `lights` and `frames` change the load,
@@ -53,11 +55,14 @@ import {
   MAX_LIGHT_COLLIDERS,
   OCCLUSION_GLSL,
   packColliders,
+  TRANSMIT_GLSL,
   packEntry,
   segmentTransmit,
   unpackCollider,
 } from './scene/occlusion'
 import { twinAtlas, twinCases, TWIN_MASK_LAYERS } from './scene/occlusionTwin'
+import { fillHazePlanes, HAZE_PLANES_GLSL, makeHazePlaneList } from './scene/hazePlanes'
+import { HAZE_TWIN_EYE, hazeTwinCases, hazeTwinScene, hazeTwinShare } from './scene/hazeTwin'
 import { createSceneMaskCache } from './scene/sceneMasks'
 import { FINISH_LOBES } from './scene/sceneParts'
 import { makeLightTexture, makeOcclusionTextures, makeSurfaceMaterial, makeSurfaceUniforms } from './scene/surfaceShader'
@@ -70,7 +75,8 @@ const frames = Number(params.get('frames') ?? 10)
 const pass = params.get('pass') === '1'
 const scrims = params.get('scrims') === '1'
 const lobesOnly = params.get('only') === 'lobes'
-const twinOnly = params.get('only') === 'twin'
+const hazeOnly = params.get('only') === 'haze'
+const twinOnly = params.get('only') === 'twin' || hazeOnly
 
 const canvas = document.createElement('canvas')
 document.body.appendChild(canvas)
@@ -252,9 +258,84 @@ function runTwin(): Record<string, { glsl: number; ts: number; want: number }> {
   return result
 }
 
+/**
+ * The haze's twin: each case of `scene/hazeTwin.ts` through the march's own functions on this GPU —
+ * `hazeEyeCrossings` along the view ray, then `hazeSampleShare` at the sample towards the apex — one
+ * pixel a case into a float target, beside `hazeTwinShare` on the same list and atlas.
+ */
+function runHazeTwin(): Record<string, { glsl: number; ts: number; want: number }> {
+  const cases = hazeTwinCases()
+  const set = makeColliderSet()
+  packColliders(hazeTwinScene(), set, TWIN_MASK_LAYERS)
+  const list = makeHazePlaneList()
+  fillHazePlanes(set, ...HAZE_TWIN_EYE, list)
+  const caseData = new Float32Array(cases.length * 4 * 4)
+  cases.forEach((c, i) => {
+    caseData.set([...c.o, c.t, ...c.d, c.planes, ...c.apex, 0, ...c.axis, c.near], i * 16)
+  })
+  const casesTexture = new DataTexture(caseData, 4, cases.length, RGBAFormat, FloatType)
+  casesTexture.magFilter = NearestFilter
+  casesTexture.minFilter = NearestFilter
+  casesTexture.needsUpdate = true
+  const atlas = twinAtlas()
+  const masks = createSceneMaskCache({ load: async () => null })
+  masks.atlas.set(atlas)
+  const material = new ShaderMaterial({
+    uniforms: {
+      uMaskAtlas: { value: makeMaskAtlasTexture(masks) },
+      uHazePlaneCount: { value: list.count },
+      uHazePlanes: { value: list.data },
+      uCases: { value: casesTexture },
+    },
+    vertexShader: /* glsl */ `void main() { gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uCases;
+      ${TRANSMIT_GLSL}
+      ${HAZE_PLANES_GLSL}
+      void main() {
+        int i = int(gl_FragCoord.x);
+        vec4 a = texelFetch(uCases, ivec2(0, i), 0);
+        vec4 b = texelFetch(uCases, ivec2(1, i), 0);
+        vec4 c = texelFetch(uCases, ivec2(2, i), 0);
+        vec4 e = texelFetch(uCases, ivec2(3, i), 0);
+        vec4 eyeAt0;
+        vec4 eyeAt1;
+        vec4 eyeShare0;
+        vec4 eyeShare1;
+        hazeEyeCrossings(a.xyz, b.xyz, eyeAt0, eyeAt1, eyeShare0, eyeShare1);
+        vec3 p = a.xyz + b.xyz * a.w;
+        vec3 rel = p - c.xyz;
+        float relLen = max(length(rel), 1e-4);
+        vec3 lightDir = rel / relLen;
+        float cosAngle = dot(lightDir, e.xyz);
+        float keep = hazeSampleShare(a.w, p, -lightDir, relLen - e.w / max(cosAngle, 1e-4), int(b.w + 0.5), eyeAt0, eyeAt1, eyeShare0, eyeShare1);
+        gl_FragColor = vec4(keep, 0.0, 0.0, 1.0);
+      }
+    `,
+  })
+  const target = new WebGLRenderTarget(cases.length, 1, { type: FloatType })
+  const quad = new Mesh(new PlaneGeometry(1, 1), material)
+  const hazeScene = new Scene()
+  hazeScene.add(quad)
+  renderer.setRenderTarget(target)
+  renderer.render(hazeScene, camera)
+  const out = new Float32Array(cases.length * 4)
+  renderer.readRenderTargetPixels(target, 0, 0, cases.length, 1, out)
+  renderer.setRenderTarget(null)
+  const result: Record<string, { glsl: number; ts: number; want: number }> = {}
+  cases.forEach((c, i) => {
+    result[c.name] = {
+      glsl: Number(out[i * 4].toFixed(5)),
+      ts: Number(hazeTwinShare(list, c, atlas).toFixed(5)),
+      want: Number(c.want.toFixed(5)),
+    }
+  })
+  return result
+}
+
 const round2 = (v: number) => Number(v.toFixed(2))
 const info = gl.getExtension('WEBGL_debug_renderer_info')
-const twin = twinOnly ? runTwin() : undefined
+const twin = hazeOnly ? runHazeTwin() : twinOnly ? runTwin() : undefined
 const result = {
   renderer: info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : 'unknown',
   canvas: `${width} × ${height}`,
