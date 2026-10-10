@@ -6,11 +6,12 @@ live in it, so a second show in the same hall copies the room. This is `FU-STAGE
 the material structure of a venue doesn't change between shows, some things always do (the set),
 and some sometimes do (fixture positions). Two refinements followed the same day:
 
-- **Seating is per show.** The seats are not fixed.
+- **Seating is per show.** The seats are not fixed. Revised the same evening: some venues have
+  static seating, so it can be part of the venue. That became a per-block choice (D6).
 - **Venue details are versioned.** Changing the house patch or universes must not change an old
   show. Opening a show on an older version warns, and offers an update.
 
-**Status: boards drawn 2026-10-10, awaiting sign-off.** No plan has been written yet. A live copy of
+**Status: boards drawn 2026-10-10; every question answered; awaiting sign-off.** No plan has been written yet. A live copy of
 all five boards on one page is at <https://claude.ai/artifact/LxMaLSktSQa73AkoXQzUvh>, private to
 Chris, a convenience; the files here
 are the authority. Where a board and the plan disagree, the plan wins on behaviour and the boards on
@@ -18,7 +19,7 @@ layout and copy, as with every record in this directory.
 
 ## Decided before the boards were drawn
 
-Chris answered these on 2026-10-10. The boards draw them; the Model board numbers them D1–D9.
+Chris answered these on 2026-10-10, in two rounds. The boards draw them; the Model board numbers them D1–D12.
 
 | Question | Answer |
 | --- | --- |
@@ -28,6 +29,11 @@ Chris answered these on 2026-10-10. The boards draw them; the Model board number
 | Will a show move venue? | **Not for now.** Detach covers the archive and the rare move. |
 | Where does the venue sync? | **Its own repo.** A version is a tagged commit; a show names `venueUuid` + `venueVersion`. |
 | Who edits and publishes the venue? | **Admins only.** Operators see it read-only. |
+| Fixed or movable seating? | **Per seating block.** A Fixed block (the balcony) is the venue's, with its seat views; a Preset (the stalls layouts) is copied into a show. The hall is both, so one switch per venue was declined. |
+| What does the hall own? | **Everything patched in project 9 today**: dimmers, house lights, hazer, Revolutions, movers, LED kit and the cannon. A show adds what it brings in; the panto will add fixtures. |
+| The Programmer in a venue? | **Yes, with Record off**, for testing and focusing. |
+| Venue groups? | **Yes.** A show adds its own, which may hold venue fixtures; a venue group never holds a show's. |
+| Do the four facets fit? | **Yes**: Address · Position · Focus · Media. |
 
 ## What was found in the code
 
@@ -74,17 +80,14 @@ one-page copy published as the live artifact.
 
 | File | Draws |
 | --- | --- |
-| `Projects.dc.html` | The Projects page with a Venues row; show cards naming venue and version (current, behind, behind with output changes, none); a show's menu with *Update venue* and *Detach*; *Create New Project* with the venue picker open and the seating preset. |
+| `Projects.dc.html` | The Projects page with a Venues row; show cards naming venue and version (current, behind, behind with output changes, none); a show's menu with *Update venue* and *Detach*; *Create New Project* with the venue picker open and the stalls layout. |
 | `Venue.dc.html` | The Commemoration Hall open as a venue: the editing band, the Patch list filtered to draft changes, the History table, the *Publish v6* sheet with output and drawing changes and the shows affected. |
-| `Show.dc.html` | TCH 2026's Patch list: venue rows, facet overrides, drift, a hidden house unit, show additions; the Edit Fixture sheet's per-facet switches; a plan of the hall coloured by owner, seating the show's. |
+| `Show.dc.html` | Panto 2027's Patch list: venue rows (a mover re-hung on a boom), facet overrides, drift, a hidden house unit, the panto's hired spots; the Edit Fixture sheet's per-facet switches; a plan of the hall coloured by owner, the balcony the venue's and the stalls the show's. |
 | `Update.dc.html` | Spring Concert 2026 opened against v5: the Blind hold, the drawing-only banner, the *Run against v3* banner, and the update review. |
 | `Model.dc.html` | Versions and pins; the show's layer; what's whose; D1–D9; storage and the uuid-link prerequisite; seven sessions; what was declined; the four questions still open. |
 
-## Still open
+## Names on the boards
 
-1. **What does the hall own?** The split drawn (dimmers, Revolutions, hazer and house lights the
-   venue's; movers, MACs and the cannon TCH 2026's) is illustrative. Extract needs the real list.
-2. **The Programmer in a venue**: for testing with Record off, or not at all?
-3. **Venue groups**: allowed, or always the show's?
-4. **Do the four facets fit?** Address · Position (rigging, pose, extra placements) · Focus
-   (lantern, zoom, shutters, iris, softness) · Media (gel, gobos).
+The venue is extracted from project 9, *The Commemoration Hall*. Panto 2027 is the show the brief
+names; Summer Show 2026, Christmas Concert 2026, Spring Concert 2026 and Studio test are example
+names, and the version history and its dates are illustrative.

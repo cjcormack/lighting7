@@ -233,7 +233,7 @@ ${appbar()}
       <div class="pn"><span style="color:var(--ven)">${ico(I.hall, 'ico16')}</span>Commemoration Hall<span class="vtag">VENUE</span></div>
       <div class="pd">The hall as hung — house patch, bars, room, tabs. 7.2 × 6.0 m stage, balcony.</div>
       <div class="badges"><span class="badge">${ico(I.tag, 'ico12')}v5 · 3 Oct 2026</span><span class="own d">${ico(I.pencil, 'ico12')}Draft · 6 changes</span><span class="badge">${ico(I.cloud, 'ico12')}synced</span></div>
-      <div class="pd" style="display:flex; gap:14px; font-size:11px"><span>31 house fixtures · 4 universes · 6 riggings</span><span>3 shows · 2 behind</span></div>
+      <div class="pd" style="display:flex; gap:14px; font-size:11px"><span>50 house fixtures · 4 universes · 6 riggings · fixed balcony</span><span>3 shows · 2 behind</span></div>
     </div>
     <div class="pcard" style="border-style:dashed; align-items:center; justify-content:center; color:var(--mfg); font-size:12px; gap:4px">
       ${ico(I.split, 'ico16')}<span><b style="color:var(--fg)">Extract a venue from a project…</b></span><span style="font-size:11px; text-align:center">Moves a project's room, house patch, universes and bars into a new venue at v1, and points the project at it.</span>
@@ -241,8 +241,8 @@ ${appbar()}
   </div>
   <div class="lbl" style="display:flex; align-items:center; gap:8px; margin-top:6px">${ico(I.ticket, 'ico12')}Shows</div>
   <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; position:relative">
-    ${card({ name: 'TCH 2026', desc: 'Summer show — movers, cannon, LX3 batten.', cur: true, badges: `<span class="badge fill">active</span>${venueChip('v5')}<span class="badge">${ico(I.cloud, 'ico12')}synced</span>` })}
-    ${card({ name: 'Panto 2027', desc: 'Cinderella. Rehearsals from November.', badges: `<span class="badge">inactive</span>${venueChip('v4')}<span class="own d">${ico(I.up, 'ico12')}v5 available</span>` })}
+    ${card({ name: 'Summer Show 2026', desc: 'Set on the rostrum, cannon finale.', cur: true, badges: `<span class="badge fill">active</span>${venueChip('v5')}<span class="badge">${ico(I.cloud, 'ico12')}synced</span>` })}
+    ${card({ name: 'Christmas Concert 2026', desc: 'Carols with the choir. December.', badges: `<span class="badge">inactive</span>${venueChip('v4')}<span class="own d">${ico(I.up, 'ico12')}v5 available</span>` })}
     ${card({ name: 'Spring Concert 2026', desc: 'Archived after the April run.', badges: `<span class="badge">inactive</span>${venueChip('v3')}<span class="own x">${ico(I.up, 'ico12')}v5 · re-patched</span>` })}
     ${card({ name: 'Studio test', desc: 'Bench rig for fixture work.', badges: `<span class="badge">inactive</span><span class="own h">No venue</span>` })}
     <div class="menu" style="left:calc(33.3% + 4px); top:150px; width:250px">
@@ -271,9 +271,9 @@ ${appbar()}
       </div>
     </div>
     <div style="height:84px"></div>
-    <div class="fl"><label>Seating</label><div class="sel">${ico(I.seat, 'ico12')}Theatre rows · 168 seats</div>
-      <p class="cap">Copied in from the venue's presets: Theatre rows · Cabaret, 12 tables · Concert, standing · None. The copy is this show's — moving chairs never changes the venue or another show.</p></div>
-    <div class="note"><p class="cap"><b>What the show starts with.</b> The venue's rig at v5 — 31 house fixtures, 4 universes, 6 riggings, the room and tabs — referenced, not copied. Hired kit, the set and seating are the show's own.</p></div>
+    <div class="fl"><label>Stalls seating</label><div class="sel">${ico(I.seat, 'ico12')}Theatre rows · 168 seats</div>
+      <p class="cap">The venue's movable layouts: Theatre rows · Cabaret, 12 tables · Concert, standing · None. The copy is this show's; moving chairs never changes the venue or another show. The balcony is fixed seating and comes with the venue.</p></div>
+    <div class="note"><p class="cap"><b>What the show starts with.</b> The venue's rig at v5 — all 50 house fixtures, movers and cannon included, 4 universes, 6 riggings, the room, tabs and balcony — referenced, not copied. Hired kit, the set and the stalls seating are the show's own.</p></div>
     ${callout(3, 'left:-10px; top:238px')}
     ${callout(4, 'left:-10px; top:372px')}
   </div>
@@ -285,7 +285,7 @@ ${legend([
     [1, '<b>Venues get their own row.</b> A venue is a project of kind <i>Venue</i>: open it to edit the house rig in the views you already have. It never holds cues, Looks or templates. Admins see its draft.'],
     [2, '<b>Every show names its venue and version.</b> Amber when a newer version exists; red-amber when the newer one changes output (addresses, universes, types) — that show opens in Blind.'],
     [3, '<b>A new show picks a venue</b>, latest version by default, or none — a standalone project keeps working exactly as today.'],
-    [4, '<b>Seating is the show\'s.</b> The venue keeps named layouts; one is copied in at creation (and <i>Replace from preset…</i> later).'],
+    [4, '<b>Seating is set per block.</b> A fixed block (the balcony) comes with the venue. A movable one is a preset copied in at creation, or later by <i>Replace from preset…</i>.'],
     [5, '<b>The show\'s menu gains Update venue and Detach.</b> Detach flattens venue + show into one standalone project — the archive and the rare move elsewhere.'],
   ])}`
   boards['Projects.dc.html'] = { title: 'Projects and venues · the list, a new show', h: H, html: doc('Projects and venues', W, H, body) }
@@ -332,14 +332,15 @@ ${appbar()}
       <table class="wtbl">
         <tr><th>Version</th><th>Published</th><th>Note</th><th>Shows on it</th><th></th></tr>
         <tr><td>Draft</td><td style="color:var(--mfg)">editing</td><td>6 changes</td><td>—</td><td><span class="btn ghost sm">Discard</span></td></tr>
-        <tr><td>v5</td><td>3 Oct 2026 · Chris</td><td>Added house lights on U4</td><td>TCH 2026</td><td><span class="btn ghost sm">Compare</span></td></tr>
-        <tr><td>v4</td><td>12 Aug 2026 · Chris</td><td>LX2 extended to 6 m</td><td>Panto 2027</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v5</td><td>3 Oct 2026 · Chris</td><td>Added house lights on U4</td><td>Summer Show 2026, Panto 2027</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v4</td><td>12 Aug 2026 · Chris</td><td>LX2 extended to 6 m</td><td>Christmas Concert 2026</td><td><span class="btn ghost sm">Compare</span></td></tr>
         <tr><td>v3</td><td>2 Apr 2026 · Chris</td><td>Re-patch: dimmers to 1–24</td><td>Spring Concert 2026</td><td><span class="btn ghost sm">Compare</span></td></tr>
-        <tr><td>v1</td><td>28 Mar 2026 · Chris</td><td>Extracted from TCH 2026</td><td style="color:var(--mfg)">—</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v1</td><td>28 Mar 2026 · Chris</td><td>Extracted from project 9</td><td style="color:var(--mfg)">—</td><td><span class="btn ghost sm">Compare</span></td></tr>
       </table></div>
     <div class="stack">
       <div class="note"><p class="cap"><b>The rail is the venue's.</b> Patch, Fixtures, Groups, Programmer (to test and focus — <i>Record</i> is off), Stage, Channels, and Project Settings: Regions, Rigging, Sync. Scripts, FX, Looks, Templates, Show, Prompt Book and Busk are hidden.</p></div>
       <div class="note"><p class="cap"><b>Operators</b> can open a venue to look, read-only: no draft, no Publish, no History actions.</p></div>
+      <div class="note"><p class="cap"><b>Seating is marked per block.</b> <i>Balcony</i> is Fixed: part of the venue, in every show, with its seat views. <i>Theatre rows</i>, <i>Cabaret</i> and <i>Concert</i> are Presets, copied into a show.</p></div>
     </div>
     ${callout(5, 'left:2px; top:8px')}
     ${callout(6, 'right:-8px; top:8px')}
@@ -361,9 +362,10 @@ ${appbar()}
       <div class="chg"><span class="sym c">~</span><span class="tx">LX2 FRES position<small>x −1.20 → −0.90 m on LX2</small></span></div>
       <div class="chg"><span class="sym c">~</span><span class="tx">LX2 C FRES media<small>gel L201 → L202</small></span></div>
     </div>
-    <div class="stack"><div class="grouph">${ico(I.ticket, 'ico12')}Shows on this venue<span class="ct">3</span></div>
-      <div class="chg"><span class="tx"><b>TCH 2026</b> · v5<small>Offered v6 when next opened — opens in Blind until updated</small></span><span class="own x">output</span></div>
-      <div class="chg"><span class="tx"><b>Panto 2027</b> · v4<small>Already behind; will be offered v6</small></span></div>
+    <div class="stack"><div class="grouph">${ico(I.ticket, 'ico12')}Shows on this venue<span class="ct">4</span></div>
+      <div class="chg"><span class="tx"><b>Summer Show 2026</b> · v5<small>Offered v6 when next opened — opens in Blind until updated</small></span><span class="own x">output</span></div>
+      <div class="chg"><span class="tx"><b>Panto 2027</b> · v5<small>Offered v6 when next opened — opens in Blind until updated</small></span><span class="own x">output</span></div>
+      <div class="chg"><span class="tx"><b>Christmas Concert 2026</b> · v4<small>Already behind; will be offered v6</small></span></div>
       <div class="chg"><span class="tx"><b>Spring Concert 2026</b> · v3<small>Already behind; will be offered v6</small></span></div>
     </div>
     ${callout(3, 'left:-10px; top:120px')}
@@ -407,8 +409,11 @@ ${legend([
   <rect x="270" y="78" width="80" height="14" rx="2" fill="oklch(0.8 0.12 255 / 0.35)" stroke="oklch(0.8 0.12 255)"/><text x="310" y="88" fill="#dfe6ff" font-size="9" text-anchor="middle">rostrum</text>
   <circle cx="140" cy="60" r="6" fill="none" stroke="oklch(0.8 0.12 255)" stroke-width="2"/><text x="100" y="64" fill="oklch(0.8 0.12 255)" font-size="9">boom SR</text>
   <circle cx="480" cy="60" r="6" fill="none" stroke="oklch(0.8 0.12 255)" stroke-width="2"/><text x="492" y="64" fill="oklch(0.8 0.12 255)" font-size="9">boom SL</text>
-  ${Array.from({ length: 7 }, (_, row) => Array.from({ length: 14 }, (_, c) => `<rect x="${150 + c * 23 + (c > 6 ? 14 : 0)}" y="${150 + row * 20}" width="16" height="12" rx="2" fill="oklch(0.8 0.12 255 / 0.28)" stroke="oklch(0.8 0.12 255 / 0.8)"/>`).join('')).join('')}
-  <text x="310" y="300" fill="oklch(0.8 0.12 255)" font-size="10" text-anchor="middle">Seating · Theatre rows · this show's (copied from the venue's preset)</text>
+  ${Array.from({ length: 5 }, (_, row) => Array.from({ length: 14 }, (_, c) => `<rect x="${150 + c * 23 + (c > 6 ? 14 : 0)}" y="${146 + row * 18}" width="16" height="12" rx="2" fill="oklch(0.8 0.12 255 / 0.28)" stroke="oklch(0.8 0.12 255 / 0.8)"/>`).join('')).join('')}
+  <text x="310" y="244" fill="oklch(0.8 0.12 255)" font-size="10" text-anchor="middle">Stalls · Theatre rows · this show's (a copy of the venue's preset)</text>
+  <line x1="140" y1="256" x2="480" y2="256" stroke="oklch(0.82 0.09 190)" stroke-width="2" stroke-dasharray="6 3"/>
+  ${Array.from({ length: 2 }, (_, row) => Array.from({ length: 14 }, (_, c) => `<rect x="${150 + c * 23 + (c > 6 ? 14 : 0)}" y="${264 + row * 18}" width="16" height="12" rx="2" fill="oklch(0.6 0.09 190 / 0.3)" stroke="oklch(0.82 0.09 190 / 0.9)"/>`).join('')).join('')}
+  <text x="310" y="312" fill="oklch(0.82 0.09 190)" font-size="10" text-anchor="middle">Balcony · fixed seating · the venue's</text>
   <line x1="40" y1="290" x2="120" y2="290" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="40" y="282" fill="oklch(0.82 0.09 190)" font-size="9">FOH bridge</text>
 </svg>`
   const body = `
@@ -416,11 +421,11 @@ ${legend([
 ${rail('patch')}
 <div class="main">
 ${appbar()}
-<div class="hdrrow"><span class="vt">TCH 2026</span><span class="crumbs" style="font-size:13px"><span class="active">active</span> › <b>Patch List</b></span><span class="spacer"></span>
+<div class="hdrrow"><span class="vt">Panto 2027</span><span class="crumbs" style="font-size:13px"><span class="active">active</span> › <b>Patch List</b></span><span class="spacer"></span>
   ${venueChip('v5')}<span class="btn out sm" style="margin-right:430px">${ico(I.hall, 'ico12')}Open venue</span></div>
 <div class="body">
 <div style="flex:1; min-width:0; display:flex; flex-direction:column; padding-right:430px; position:relative">
-  <div class="uchips"><span class="lbl">Groups</span>${own('v', 'FOH', 'hall')}${own('v', 'LX1', 'hall')}${own('v', 'LX2', 'hall')}${own('v', 'House', 'hall')}${own('s', 'Movers', 'ticket')}${own('s', 'Cannon', 'ticket')}</div>
+  <div class="uchips"><span class="lbl">Groups</span>${own('v', 'FOH', 'hall')}${own('v', 'LX1', 'hall')}${own('v', 'LX2', 'hall')}${own('v', 'House', 'hall')}${own('v', 'Movers', 'hall')}${own('s', 'Panto specials', 'ticket')}</div>
   <div class="toolbar"><span class="seg"><span class="on">All</span><span>${ico(I.hall, 'ico12')}Venue</span><span>${ico(I.ticket, 'ico12')}This show</span><span>Changed</span><span>Hidden</span></span><span class="field" style="width:180px; color:var(--mfg)">${ico(I.search, 'ico12')}Filter…</span><span class="spacer"></span><span class="btn out sm">Groups</span><span class="btn out sm">Columns ▾</span><span class="btn pri sm">${ico(I.plus, 'ico12')}Patch</span></div>
   <table class="tbl">
     <tr><th></th><th>Fixture</th><th>Head</th><th>Address</th><th>Type</th><th>Key</th><th>Mount</th><th>Gel</th><th>This show</th></tr>
@@ -429,16 +434,17 @@ ${appbar()}
     ${r('v', 'LX1 FRES', 9, '1-009', 'Generic dimmer', 'lx1-fres', '<span class="ovv">Boom SR</span>', 'L201', own('o', 'Position') + ' ' + own('o', 'Focus'))}
     ${r('v', 'LX2 C FRES', 21, '1-021', 'Generic dimmer', 'lx2-c-fres', 'LX2', '<span class="ovv">L201</span>', own('o', 'Media') + ' ' + own('d', 'venue changed', 'warn'), 'pick')}
     ${r('v', 'ADV CANS', 12, '1-012', 'Generic dimmer', 'adv-cans', 'ADV1', '—', own('h', 'Hidden in this show', 'eyeOff'), 'hid')}
-    ${r('s', 'MOVER 1', 101, '1-101', 'Gear4Music Orbit-70', 'mover-1', 'LX3', '—', own('s', 'Added', 'ticket'))}
-    ${r('s', 'MAC 250 SR', 111, '1-140', 'Martin MAC 250', 'mac-sr', 'Boom SR', '—', own('s', 'Added', 'ticket'))}
-    ${r('s', 'TWIN SHOT', '—', '5-001', 'Equinox Twin Shot MKII', 'cannon', 'Free', '—', own('s', 'Added', 'ticket'))}
+    ${r('v', 'MOVER 1', 101, '1-101', 'Gear4Music Orbit-70', 'mover-1', '<span class="ovv">Boom SL</span>', '—', own('o', 'Position'))}
+    ${r('v', 'TWIN SHOT', '—', '5-001', 'Equinox Twin Shot MKII', 'cannon', 'Free', '—')}
+    ${r('s', 'FUSION SPOT 1', 201, '5-101', 'Fusion 100 Spot MkII', 'fusion-1', 'Boom SR', '—', own('s', 'Added · hired', 'ticket'))}
+    ${r('s', 'FUSION SPOT 2', 202, '5-121', 'Fusion 100 Spot MkII', 'fusion-2', 'Boom SL', '—', own('s', 'Added · hired', 'ticket'))}
   </table>
   <div style="display:grid; grid-template-columns:1.25fr 1fr; gap:16px; padding:16px 12px; position:relative">
     <div class="fr"><div class="fcap">Stage · Plan · who owns what</div>${plan}</div>
     <div class="stack" style="gap:10px">
       <div style="display:flex; gap:6px; flex-wrap:wrap">${own('v', 'Venue v5', 'hall')}${own('s', 'This show', 'ticket')}${own('o', 'Overridden here')}${own('d', 'Venue changed under it', 'warn')}</div>
-      <div class="note"><p class="cap"><b>The venue's:</b> the room, the stage and its deck regions, the proscenium and house tabs, LX1–3 and the FOH bridge, the house patch and its universes, camera viewpoints.</p></div>
-      <div class="note"><p class="cap"><b>This show's:</b> the set, <b>seating</b> and the seat viewpoints in it, booms and stands, hired fixtures, show groups — and everything that was already a show's: cues, Looks, templates, busk, prompt book.</p></div>
+      <div class="note"><p class="cap"><b>The venue's:</b> the room, the stage and its deck regions, the proscenium and house tabs, LX1–3 and the FOH bridge, the <b>balcony</b>'s fixed seats and their views, every fixture patched today (movers and cannon included), the universes, camera viewpoints.</p></div>
+      <div class="note"><p class="cap"><b>This show's:</b> the set, the <b>stalls</b> seating and the seat views in it, booms and stands, the hired Fusion spots, show groups — and everything that was already a show's: cues, Looks, templates, busk, prompt book.</p></div>
       <div class="note"><p class="cap"><b>Keys are one namespace.</b> A show can't patch a fixture called <span class="mono">c-face</span> while the venue has one; to replace a house unit, hide it and add your own.</p></div>
     </div>
     ${callout(7, 'left:2px; top:8px')}
@@ -447,7 +453,7 @@ ${appbar()}
   ${callout(2, 'left:845px; top:178px')}
   ${callout(3, 'left:900px; top:214px')}
   ${callout(4, 'left:870px; top:250px')}
-  ${callout(5, 'left:820px; top:286px')}
+  ${callout(5, 'left:900px; top:358px')}
 </div>
 <div class="vsheet">
   <div class="sh"><span class="t">Edit Fixture</span><div style="display:flex; gap:6px; align-items:center">${venueChip('v5')}<span class="cap">house fixture</span></div></div>
@@ -474,9 +480,9 @@ ${legend([
     [2, '<b>An override is a whole facet</b> — Address, Position, Focus or Media — and the row names which. Shutters without the position they were cut against mean nothing.'],
     [3, '<b>Drift</b>: an update moved the venue under an override. Amber until you keep yours or take the venue\'s.'],
     [4, '<b>Hidden</b>: a house unit this show doesn\'t use. Rows that name it stay, marked <i>Missing fixture</i> as today.'],
-    [5, '<b>Additions</b> are ordinary patches owned by the show — hires, the cannon, booms.'],
+    [5, '<b>Additions</b> are ordinary patches owned by the show: the panto\'s hired spots and the booms they hang on.'],
     [6, '<b>The fixture sheet</b> gains a Venue | This show switch per facet; identity is read-only with a way into the venue.'],
-    [7, '<b>Seating is the show\'s</b>, with the set and booms; the room, stage, pros, tabs and bars are the venue\'s.'],
+    [7, '<b>Seating is per block.</b> The balcony is fixed and the venue\'s. The stalls are a preset copied into this show, like the set and booms.'],
   ])}`
   boards['Show.dc.html'] = { title: 'A show on a venue · inherited, overridden, added, hidden', h: H, html: doc('A show on a venue', W, H, body) }
 }
@@ -560,15 +566,15 @@ ${legend([
 
 /* ─────────────────────────────── Model ─────────────────────────────── */
 {
-  const H = 1330
+  const H = 1420
   const vx = (i) => 70 + i * 150
   const timeline = `
 <svg viewBox="0 0 960 230" style="width:100%; height:auto; display:block">
   <line x1="40" y1="60" x2="${vx(5) + 20}" y2="60" stroke="oklch(0.6 0.09 190)" stroke-width="2"/>
   ${['v1', 'v2', 'v3', 'v4', 'v5'].map((v, i) => `<circle cx="${vx(i)}" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="${vx(i)}" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">${v}</text>`).join('')}
   <circle cx="${vx(5)}" cy="60" r="13" fill="none" stroke="oklch(0.82 0.13 80)" stroke-width="2" stroke-dasharray="3 3"/><text x="${vx(5)}" y="64" fill="oklch(0.86 0.13 80)" font-size="9" font-weight="700" text-anchor="middle">draft</text>
-  ${[['28 Mar', 'Extracted from TCH 2026'], ['1 Apr', 'Tabs re-measured'], ['2 Apr', 'Re-patch 1–24'], ['12 Aug', 'LX2 to 6 m'], ['3 Oct', 'House lights U4'], ['', '6 changes · admins']].map(([d, n], i) => `<text x="${vx(i)}" y="30" fill="#9aa" font-size="10" text-anchor="middle">${d}</text><text x="${vx(i)}" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">${n}</text>`).join('')}
-  ${[['Spring Concert 2026', 2, 'oklch(0.8 0.13 35)', 'behind · output'], ['Panto 2027', 3, 'oklch(0.86 0.13 80)', 'behind · drawing'], ['TCH 2026', 4, 'oklch(0.8 0.12 255)', 'current']].map(([n, v, c, s], k) => {
+  ${[['28 Mar', 'Extracted from project 9'], ['1 Apr', 'Tabs re-measured'], ['2 Apr', 'Re-patch 1–24'], ['12 Aug', 'LX2 to 6 m'], ['3 Oct', 'House lights U4'], ['', '6 changes · admins']].map(([d, n], i) => `<text x="${vx(i)}" y="30" fill="#9aa" font-size="10" text-anchor="middle">${d}</text><text x="${vx(i)}" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">${n}</text>`).join('')}
+  ${[['Spring Concert 2026', 2, 'oklch(0.8 0.13 35)', 'behind · output'], ['Christmas Concert', 3, 'oklch(0.86 0.13 80)', 'behind · drawing'], ['Summer Show · Panto', 4, 'oklch(0.8 0.12 255)', 'current']].map(([n, v, c, s], k) => {
     const x = vx(v) - 70, y = 150
     return `<rect x="${x}" y="${y}" width="140" height="44" rx="8" fill="oklch(0.21 0.006 285.885)" stroke="${c}"/><text x="${x + 70}" y="${y + 18}" fill="#eee" font-size="11" font-weight="600" text-anchor="middle">${n}</text><text x="${x + 70}" y="${y + 34}" fill="${c}" font-size="10" text-anchor="middle">pins v${v + 1} · ${s}</text><line x1="${vx(v)}" y1="${y}" x2="${vx(v)}" y2="76" stroke="${c}" stroke-width="1.5" stroke-dasharray="4 3"/>`
   }).join('')}
@@ -582,7 +588,7 @@ ${legend([
       <div class="fr"><div class="fcap">Versions and pins</div><div style="padding:10px 12px">${timeline}</div></div>
       <div class="fr"><div class="fcap">The show's rig = venue at its pinned version ⊕ the show's layer</div>
         <div style="padding:10px 12px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px">
-          <div class="note"><p class="cap">${own('s', 'Additions', 'plus')}<br>Patches, riggings, elements, groups and viewpoints the show owns — hires, booms, the set, seating.</p></div>
+          <div class="note"><p class="cap">${own('s', 'Additions', 'plus')}<br>Patches, riggings, elements, groups and viewpoints the show owns — hires, booms, the set, movable seating.</p></div>
           <div class="note"><p class="cap">${own('o', 'Facet overrides')}<br>One row per (venue record uuid, facet): Address, Position, Focus, Media. A whole facet or nothing.</p></div>
           <div class="note"><p class="cap">${own('h', 'Hides', 'eyeOff')}<br>A venue fixture, rigging or element this show doesn't use. The venue keeps it.</p></div>
         </div></div>
@@ -596,8 +602,8 @@ ${legend([
           <tr><td>Universes</td><td>${own('v', 'Venue')} ${own('s', '+ show')}</td><td>Addresses stay machine-local overrides, keyed by uuid as today.</td></tr>
           <tr><td>House patch</td><td>${own('v', 'Venue')} ${own('o', 'facets')}</td><td>Identity is the venue's; Address, Position, Focus, Media overridable.</td></tr>
           <tr><td>Groups</td><td>${own('v', 'Venue')} ${own('s', '+ show')}</td><td>A show group may hold venue fixtures; a venue group never a show's.</td></tr>
-          <tr><td>Viewpoints</td><td>${own('v', 'cameras')} ${own('s', 'seats')}</td><td>A seat view names its seating, which is the show's.</td></tr>
-          <tr><td>Seating</td><td>${own('s', 'Show')}</td><td>Copied from a venue preset; never a reference.</td></tr>
+          <tr><td>Viewpoints</td><td>${own('v', 'cameras')} ${own('s', '+ show')}</td><td>A seat view goes with its seating block: the balcony's are the venue's, the stalls' the show's.</td></tr>
+          <tr><td>Seating</td><td>${own('v', 'Fixed')} ${own('s', 'Preset')}</td><td>Per block. A Fixed block is the venue's; a Preset is copied into a show, never referenced.</td></tr>
           <tr><td>Set, scenery, cues, Looks, templates, busk, prompt book, speed masters, scripts, FX</td><td>${own('s', 'Show')}</td><td>Unchanged.</td></tr>
         </table></div>
     </div>
@@ -608,10 +614,13 @@ ${legend([
         <span class="dn">D3</span><span><b>Explicit publish</b> from one draft, with a note. Versions are immutable. Admins only.</span>
         <span class="dn">D4</span><span><b>Overrides are per facet:</b> Address, Position, Focus, Media. Identity (name, key, type, head) is the venue's.</span>
         <span class="dn">D5</span><span><b>The show layer</b> is additions, facet overrides and hides, over one key namespace.</span>
-        <span class="dn">D6</span><span><b>Seating is the show's.</b> The venue keeps presets, copied in at creation or by <i>Replace from preset</i>.</span>
+        <span class="dn">D6</span><span><b>Seating is per block.</b> Fixed blocks (the balcony) are the venue's, with their seat views. Preset blocks are copied into a show at creation or by <i>Replace from preset</i>.</span>
         <span class="dn">D7</span><span><b>Output-affecting drift opens in Blind</b>; drawing-only drift is a banner. <i>Run against vN</i> is per session; the installed version's trigger and command channels stay guarded.</span>
         <span class="dn">D8</span><span><b>A venue syncs as its own repo.</b> A version is a commit tagged <span class="mono">v5</span>; a show's <span class="mono">project.json</span> carries <span class="mono">venueUuid</span> + <span class="mono">venueVersion</span>, and importing one whose venue is absent asks for the venue repo.</span>
         <span class="dn">D9</span><span><b>No touring tool.</b> Detach flattens venue ⊕ show into a standalone project.</span>
+        <span class="dn">D10</span><span><b>The hall owns everything patched today</b>, movers, LED kit and cannon included. A show adds what it brings in, like the panto's hires.</span>
+        <span class="dn">D11</span><span><b>The Programmer works in a venue</b> for testing and focus; Record is off.</span>
+        <span class="dn">D12</span><span><b>Venues have groups</b> (FOH, LX1, House, Movers). A show adds its own, which may hold venue fixtures; a venue group never holds a show's.</span>
       </div></div>
       <div class="fr"><div class="fcap">Stored · wire · the prerequisite</div><div class="kvt" style="padding:12px">
         <span class="k">projects</span><span><span class="mono">kind</span> (SHOW | VENUE), <span class="mono">venue_uuid</span>, <span class="mono">venue_version</span>; stage bounds read from the venue.</span>
@@ -622,7 +631,7 @@ ${legend([
       </div></div>
       <div class="fr"><div class="fcap">Sessions</div><div class="dec" style="padding:12px">
         <span class="dn">S1</span><span><b>uuid links</b> for group members, rig tiles, cue events, scenery. No behaviour change.</span>
-        <span class="dn">S2</span><span><b>Venue kind, versions, publish</b> and the frozen snapshot; <i>Extract a venue</i> (TCH 2026 → Commemoration Hall v1).</span>
+        <span class="dn">S2</span><span><b>Venue kind, versions, publish</b> and the frozen snapshot; <i>Extract a venue</i> (project 9 → the Commemoration Hall at v1, every patched fixture with it).</span>
         <span class="dn">S3</span><span><b>The effective rig</b>: loader merges venue vN ⊕ show; additions, hides, key namespace; the Patch list's source column.</span>
         <span class="dn">S4</span><span><b>Facet overrides</b>, the fixture sheet's switches, drift.</span>
         <span class="dn">S5</span><span><b>Behind</b>: banners, the Blind hold, the update review, <i>Run against vN</i>.</span>
@@ -637,13 +646,14 @@ ${legend([
       <div class="note no"><p class="cap"><b>A version per save.</b> The list fills with noise and every show is always behind.</p></div>
       <div class="note no"><p class="cap"><b>The venue copied into each show's repo.</b> Self-contained, but two sources of truth for one hall.</p></div>
       <div class="note no"><p class="cap"><b>Per-field overrides.</b> A shutter cut without the position it was cut against is meaningless; facets keep related fields together.</p></div>
+      <div class="note no"><p class="cap"><b>One seating switch per venue</b> (fixed or per show). The Commemoration Hall is both: a fixed balcony over movable stalls.</p></div>
       <div class="note no"><p class="cap"><b>Separate venue tables</b> re-pointed from project to venue: a non-additive change to every table, with no migrations.</p></div>
     </div>
-    <div class="stack"><span class="h2">Left open by the boards</span>
-      <div class="note warn"><p class="cap"><b>Q1 · What does the hall own?</b> The split drawn here (dimmers, Revolutions, hazer and house lights the venue's; movers, MACs and the cannon TCH 2026's) is illustrative. Extract needs the real list.</p></div>
-      <div class="note warn"><p class="cap"><b>Q2 · Programmer in a venue.</b> Drawn as available for testing with Record off. Or no programmer at all?</p></div>
-      <div class="note warn"><p class="cap"><b>Q3 · Venue groups.</b> Drawn as allowed (FOH, LX1, House). Or groups always the show's?</p></div>
-      <div class="note warn"><p class="cap"><b>Q4 · Do the facets fit?</b> Address · Position (rigging, pose, extra placements) · Focus (lantern, zoom, shutters, iris, softness) · Media (gel, gobos).</p></div>
+    <div class="stack"><span class="h2">Settled in the second round</span>
+      <div class="note key"><p class="cap"><b>The hall's kit.</b> Every fixture patched in project 9 today is the hall's (D10). Shows other than the panto are example names.</p></div>
+      <div class="note key"><p class="cap"><b>Seating per block</b>, not one switch per venue: the hall itself is mixed, a fixed balcony over movable stalls (D6).</p></div>
+      <div class="note key"><p class="cap"><b>Programmer and groups</b> in a venue, as drawn (D11, D12).</p></div>
+      <div class="note key"><p class="cap"><b>The four facets</b> stand: Address · Position (rigging, pose, extra placements) · Focus (lantern, zoom, shutters, iris, softness) · Media (gel, gobos).</p></div>
     </div>
   </div>
 </div>`
@@ -665,9 +675,9 @@ writeFileSync(`${OUT}/canvas.json`, JSON.stringify({
 // The one-page copy published as the live artifact: each board in its own frame, scaled to fit.
 const esc = (h) => h.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 const SECTIONS = [
-  ['projects', 'Projects.dc.html', 'Projects and venues', 'Venues get their own row; every show names its venue and version; a new show picks a venue and a seating preset.'],
+  ['projects', 'Projects.dc.html', 'Projects and venues', 'Venues get their own row; every show names its venue and version; a new show picks a venue and a stalls layout.'],
   ['venue', 'Venue.dc.html', 'Editing the venue', 'Admins edit the house rig in a draft and publish an immutable version with a note. Publish shows who it will affect.'],
-  ['show', 'Show.dc.html', 'A show on a venue', 'The Patch list says whose each row is. A show overrides whole facets, hides house units and adds its own kit. Seating and the set are the show\'s.'],
+  ['show', 'Show.dc.html', 'A show on a venue', 'The Patch list says whose each row is. A show overrides whole facets, hides house units and adds its own kit. Stalls seating and the set are the show\'s; the balcony is the venue\'s.'],
   ['update', 'Update.dc.html', 'Opening a show that\'s behind', 'Output-affecting drift opens in Blind. The update review shows the hall\'s changes beside what they do to this show.'],
   ['model', 'Model.dc.html', 'The model', 'Versions and pins, what\'s whose, the decisions, the storage and the seven sessions.'],
 ]
@@ -706,15 +716,15 @@ const combined = `<title>Venues and Shows</title>
 </style>
 <div class="wrap">
   <header>
-    <div class="eyebrow"><span>lighting7 · design for sign-off</span><b>not yet a plan</b><span>2026-10-10</span></div>
+    <div class="eyebrow"><span>lighting7 · design for sign-off</span><b>every question answered · awaiting sign-off</b><span>2026-10-10</span></div>
     <h1>Separating the <span class="v">venue</span> from the <span class="s">show</span></h1>
-    <p>A venue is the hall as hung: room, tabs, bars, house patch, universes. It is versioned; a show pins one version and layers its own kit, overrides and hides on top. Seating is the show's. Five boards show how it looks and works, from the Projects page to opening a show the hall has moved on from.</p>
+    <p>A venue is the hall as hung: room, tabs, bars, house patch, universes. It is versioned; a show pins one version and layers its own kit, overrides and hides on top. Seating is fixed or movable per block. Five boards show how it looks and works, from the Projects page to opening a show the hall has moved on from.</p>
   </header>
   <div class="asks">
-    <div class="ask"><b>Q1 · What does the hall own?</b>The boards treat the dimmers, Revolutions, hazer and house lights as the hall's, and the movers, MACs and cannon as TCH 2026's. That split is only an illustration.</div>
-    <div class="ask"><b>Q2 · Programmer in a venue</b>Drawn as available for testing and focusing, with Record off. Or no programmer at all?</div>
-    <div class="ask"><b>Q3 · Venue groups</b>Drawn as allowed (FOH, LX1, House). Or are groups always the show's?</div>
-    <div class="ask"><b>Q4 · The four facets</b>Address · Position · Focus · Media. Do they cover what a show changes?</div>
+    <div class="ask"><b>The hall's kit</b>Everything patched today is the Commemoration Hall's, movers and cannon included. A show adds only what it brings in.</div>
+    <div class="ask"><b>Seating per block</b>The balcony is Fixed and part of the venue. The stalls layouts are Presets copied into each show.</div>
+    <div class="ask"><b>Programmer and groups</b>The Programmer works in a venue with Record off. Venues have groups; shows add their own.</div>
+    <div class="ask"><b>The four facets</b>Address · Position · Focus · Media, unchanged.</div>
   </div>
   <nav aria-label="Boards">${SECTIONS.map(([id, , t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
   ${SECTIONS.map(([id, f, t, d]) => `<section id="${id}"><h2>${t}<small>${f}</small></h2><p>${d}</p>
