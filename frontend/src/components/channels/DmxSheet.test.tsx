@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -148,6 +148,18 @@ function cell(channelNo: number): HTMLElement {
     .find((button): button is HTMLButtonElement => button != null)
   if (!match) throw new Error(`no cell for ${channelNo}`)
   return match
+}
+
+/**
+ * The selection bar the verbs sit in, found by its cell count.
+ *
+ * A `*ByRole` query computes every candidate's accessible name and walks `getComputedStyle` up its
+ * ancestors, and over the whole page that is the grid's 32 popover cells: about half a second a
+ * query alone, and several under a loaded suite, which timed these tests out. Scoped to the bar it
+ * is a handful of elements.
+ */
+function selectionBar() {
+  return within(screen.getByText(/^\d+ channels?$/).parentElement!)
 }
 
 /** A marquee along row 0 from column `from` to column `to`. */
@@ -427,7 +439,7 @@ describe('DmxSheet', () => {
     dragRow0(6, 9)
     expect(screen.getByText('4 channels')).toBeInTheDocument()
     expect(screen.getByText('Value')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.click(selectionBar().getByRole('button', { name: 'Set' }))
     const field = await screen.findByLabelText('Value')
     fireEvent.change(field, { target: { value: '178' } })
     for (const channelNo of [7, 8, 9, 10]) {
@@ -438,10 +450,10 @@ describe('DmxSheet', () => {
   it('clears the selected addresses to 0 and parks them at their current values', () => {
     draw()
     dragRow0(6, 7)
-    fireEvent.click(screen.getByRole('button', { name: 'Clear cells' }))
+    fireEvent.click(selectionBar().getByRole('button', { name: 'Clear cells' }))
     expect(updateChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 7, value: 0 })
     expect(updateChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 8, value: 0 })
-    fireEvent.click(screen.getByRole('button', { name: /Park$/ }))
+    fireEvent.click(selectionBar().getByRole('button', { name: /Park$/ }))
     expect(parkChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 7, value: 100 })
     expect(parkChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 8, value: 0 })
   })
@@ -450,7 +462,7 @@ describe('DmxSheet', () => {
     draw({ parkValueMap: new Map([[8, 60]]) })
     dragRow0(6, 7)
     expect(cell(8)).toHaveTextContent('60')
-    fireEvent.click(screen.getByRole('button', { name: /Unpark/ }))
+    fireEvent.click(selectionBar().getByRole('button', { name: /Unpark/ }))
     expect(unparkChannel).toHaveBeenCalledTimes(1)
     expect(unparkChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 8 })
   })
@@ -464,7 +476,7 @@ describe('DmxSheet', () => {
     dragRow0(6, 7)
     expect(screen.getByText('2 channels')).toBeInTheDocument()
     for (const name of ['Set', 'Clear cells', 'Spread']) {
-      const button = screen.getByRole('button', { name })
+      const button = selectionBar().getByRole('button', { name })
       expect(button).toBeDisabled()
       expect(button).toHaveAttribute('title', expect.stringMatching(/desk|connect/i))
     }
