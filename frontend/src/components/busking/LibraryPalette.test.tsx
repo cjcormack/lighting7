@@ -57,6 +57,16 @@ function draw(onPage = new Set<string>()) {
   )
 }
 
+/**
+ * One row from each of the three requests the palette makes. They settle in no guaranteed order,
+ * so a test that reads rows from more than one of them waits for all three.
+ */
+async function loaded() {
+  await screen.findByText('Amber Key')
+  await screen.findByText('Storm Wash')
+  await screen.findByText('Blackout')
+}
+
 const rowNames = () =>
   Array.from(document.querySelectorAll('.min-h-10 .truncate:not(.text-\\[11px\\])')).map(
     (el) => el.textContent,
@@ -108,14 +118,14 @@ describe('the library palette', () => {
 
   it('filters by family, and a cue belongs to none', async () => {
     draw()
-    await screen.findByText('Blackout')
+    await loaded()
     fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
     expect(rowNames()).toEqual(['Amber Key', 'Storm Wash'])
   })
 
   it('searches names and cue numbers', async () => {
     draw()
-    await screen.findByText('Blackout')
+    await loaded()
     fireEvent.change(screen.getByLabelText('Search the library'), { target: { value: 'amb' } })
     expect(rowNames()).toEqual(['Amber Key'])
     fireEvent.change(screen.getByLabelText('Search the library'), { target: { value: '20' } })
@@ -124,7 +134,7 @@ describe('the library palette', () => {
 
   it('marks exactly the records with a pad on the page being edited', async () => {
     draw(new Set(['look:6', 'cue:20']))
-    await screen.findByText('Blackout')
+    await loaded()
     expect(screen.getAllByText('on page')).toHaveLength(2)
   })
 
@@ -167,7 +177,7 @@ describe('the palette while a slot is the drop target', () => {
 
   it('marks the rows a slot cannot take, and leaves the rest alone', async () => {
     draw()
-    await screen.findByText('Storm Wash')
+    await loaded()
 
     const refusedIn = (name: string) =>
       screen.getByText(name).closest('.min-h-10')!.textContent!.includes('needs a selection')
