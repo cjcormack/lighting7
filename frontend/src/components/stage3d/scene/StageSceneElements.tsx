@@ -19,7 +19,15 @@ import { seatingParams } from '../../../lib/stageSeats'
 import { BANQUET_FRAME_COLOUR, chairGeometry } from './chairs'
 import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
-import { PAINT_FACE_ATTRIBUTE, setPaintTextures, setPleatAmplitude, setPleatShift } from './surfaceShader'
+import {
+  PAINT_FACE_ATTRIBUTE,
+  setPaintTextures,
+  setPleatAmplitude,
+  setPleatShift,
+  setScrimNet,
+  setTranslucency,
+} from './surfaceShader'
+import { surfaceDrawOf, surfaceRenderOrder } from './seeThrough'
 import { pleatOffset, pleatShift, pleatSlope } from './pleat'
 import type { PaintVariant } from './paintTextures'
 import { usePaintTexture } from './usePaintTexture'
@@ -228,10 +236,14 @@ function ScenePartMesh({
   const pleatKey = fold != null ? JSON.stringify([fold.pitchM, fold.warp]) : ''
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `pleatKey` is the fold's pitch and wander serialised
   const pleat = useMemo(() => fold ?? undefined, [pleatKey])
+  // How it is seen through (scrim plan session 4): a define, so decided from the part's fabric —
+  // its light and its τ — and never switched per frame. The net's numbers and τ are uniforms.
+  const draw = surfaceDrawOf(part.light, part.finish.translucent)
   const material = useSurfaceMaterial(part.finish, {
     doubleSided: pleat != null || part.geometry.shape === 'sheet',
     pleat,
     painted,
+    draw,
   })
   const shift = part.geometry.shape === 'pleat' ? pleatShift(part.geometry.w, part.geometry.anchor) : 0
   const amplitude = fold?.amplitudeM ?? 0
@@ -240,11 +252,22 @@ function ScenePartMesh({
     setPleatShift(material, shift)
     setPleatAmplitude(material, amplitude)
   }, [material, pleat, shift, amplitude])
+  // A net's thread share and its gather (which a draw moves every frame), and a muslin's τ: uniform
+  // writes, so this asks for the frame that shows them.
+  const net = typeof part.light === 'object' && part.light.kind === 'angle' ? part.light : null
+  const netR = net?.r ?? 0
+  const netGather = net?.gather ?? 1
+  const tau = part.finish.translucent
+  const invalidate = useStageInvalidate()
+  useLayoutEffect(() => {
+    if (draw === 'scrim') setScrimNet(material, netR, netGather)
+    if (draw === 'translucent' && tau != null) setTranslucency(material, tau)
+    if (draw !== 'opaque') invalidate()
+  }, [material, draw, netR, netGather, tau, invalidate])
   // The images, loaded once by the cache and bound when they arrive: a uniform write, so this asks
   // for the frame that shows it.
   const front = usePaintTexture(painted ? projectId : null, paint?.front, variant)
   const back = usePaintTexture(painted ? projectId : null, paint?.back, variant)
-  const invalidate = useStageInvalidate()
   useLayoutEffect(() => {
     if (!painted) return
     setPaintTextures(material, front, back)
@@ -255,6 +278,8 @@ function ScenePartMesh({
       geometry={geometry}
       material={material}
       position={[part.at.x, part.at.z, -part.at.y]}
+      // A scrim blends after the opaque surfaces and before the beams, so the haze lands on top of it.
+      renderOrder={surfaceRenderOrder(draw)}
       raycast={NO_RAYCAST}
     />
   )

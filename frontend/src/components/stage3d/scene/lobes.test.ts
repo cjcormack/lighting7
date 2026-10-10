@@ -237,7 +237,8 @@ describe('the GLSL', () => {
     expect(fragment).toContain('diffuse *= specularKeeps(facing);')
     expect(fragment).toContain('acc += irradiance * diffuse;')
     // D6 unchanged: one exposure, one roll-off, the gloss beside the albedo's light, not under it.
-    expect(fragment).toContain('vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss) * uLightGain);')
+    expect(fragment).toContain('vec3 light = albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss;')
+    expect(fragment).toContain('vec3 lit = rollOff(light * uLightGain);')
   })
 })
 

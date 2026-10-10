@@ -1,6 +1,7 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
 import { gatherShape, pleatShape } from '../pleat'
 import { SCRIM_THREAD_SHARE } from '../scrimOpen'
+import { fabricTranslucency } from '../seeThrough'
 import {
   elementFinish,
   elementStates,
@@ -41,7 +42,8 @@ const OFF_WHITE = '#e9e5da'
 
 /**
  * A drape's finish: the element's, with its role's or fabric's colour where it names none — a
- * net's or a muslin's off-white outranks a cyc's grey — and its paint, if any.
+ * net's or a muslin's off-white outranks a cyc's grey — its paint, if any, and a muslin's τ (D6,
+ * `seeThrough.ts`), which lets light from behind through to its front.
  */
 function drapeFinish(element: StageElementDto): PartFinish {
   const base = elementFinish(element)
@@ -55,7 +57,8 @@ function drapeFinish(element: StageElementDto): PartFinish {
           ? CYC_COLOUR
           : base.colour
   const paint = paramPaint(element)
-  return { ...base, colour, ...(paint != null && { paint }) }
+  const translucent = fabricTranslucency(fabric)
+  return { ...base, colour, ...(paint != null && { paint }), ...(translucent != null && { translucent }) }
 }
 
 /**

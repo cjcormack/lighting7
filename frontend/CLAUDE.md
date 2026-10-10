@@ -501,7 +501,14 @@ Transmit` — a net `{kind: 'angle', r, gather}`, a painted cloth or flat `{kind
 over its paint rect — so the shadows, beam reach and sight lines pass a gauze and a cut cloth's holes,
 through masks from a second module-level cache, `scene/sceneMasks.ts` (`?variant=mask`, keyed by
 hash, held by `useSceneMaskHolds`, a mask not loaded or missing counting as solid, its landing a
-re-pack and an `invalidate`); the cloth still draws opaque until session 4. The textures come from one
+re-pack and an `invalidate`). **And the eye passes them** (session 4, `scene/seeThrough.ts`): a net
+is drawn as a premultiplied blend (`SCRIM`, no depth write, `renderOrder` after the opaque surfaces and
+before the beams) covering `1 − open(θ_eye)^gather` of the pixel, θ_eye from the cloth's normal to the
+eye — the camera's axis on a section — so a gauze is about half open square on and solid edge-on, its
+round threads wrapping a grazing light and glowing from behind; a muslin stays opaque but is lit from
+behind (`TRANSLUCENT`) through `τ · paint_front ⊙ paint_back`; a cut cloth stays opaque cloth with
+holes. Both are defines chosen when the material is made, the net's gather and τ uniforms; the haze
+splits at a cloth only in session 5. The textures come from one
 **module-level** cache, `scene/paintTextures.ts` — keyed by hash and variant, `?variant=display` or
 `detail` for an element with `fullDetail`, mipmapped and anisotropic, loaded once, disposed 5 s after
 nothing holds it — never a React context, which a `render_view` capture would not bridge. A part binds

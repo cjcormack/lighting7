@@ -7,6 +7,7 @@ import { toThree } from '../../lib/stageCoords'
 import { DEFAULT_RIGGING_LENGTH_M } from '../../lib/stageGeometry'
 import { StageLabel } from './StageLabel'
 import { isClick } from './dragThreshold'
+import { SCRIM_RENDER_ORDER } from './scene/seeThrough'
 import { riggingShape, TRUSS_SECTION_M, TUBE_RADIUS_M } from './riggingShape'
 
 interface RiggingMeshesProps {
@@ -78,8 +79,10 @@ function RiggingMesh({ rig, selected, editMode, onClick }: RiggingMeshProps) {
     if (isClick(e)) onClick?.(rig, e.eventObject)
   }
 
+  // A faint guide writes no depth, so it sorts with the gauzes (`seeThrough.ts`): by distance, after
+  // the opaque surfaces and before the beams — never blended over by a scrim it hangs in front of.
   const tube = (key: string, y: number, z: number, faint: boolean) => (
-    <mesh key={key} position={[0, y, z]} rotation={[0, 0, Math.PI / 2]} raycast={NO_PICK}>
+    <mesh key={key} position={[0, y, z]} rotation={[0, 0, Math.PI / 2]} raycast={NO_PICK} renderOrder={faint ? SCRIM_RENDER_ORDER : 0}>
       <cylinderGeometry args={[TUBE_RADIUS_M, TUBE_RADIUS_M, length, 10]} />
       <meshBasicMaterial color={colour} transparent={faint} opacity={faint ? 0.35 : 1} depthWrite={!faint} />
     </mesh>

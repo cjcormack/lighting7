@@ -120,6 +120,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCENE-IMAGE-WEBP`](#fu-scene-image-webp) | Trigger | Stage | a designer's cloth images arrive as WebP |
 | [`FU-STAGE-PAINT-ALL-SURFACES`](#fu-stage-paint-all-surfaces) | Trigger | Stage | a set the painted drapes and flats cannot dress |
 | [`FU-STAGE-CUT-NET`](#fu-stage-cut-net) | Trigger | Stage | a show hangs a gauze painted with cut-outs whose holes must let light through more than the net does |
+| [`FU-STAGE-PROJECTION`](#fu-stage-projection) | Trigger | Stage | a show with projection: a projector's image must land on a cloth in the Stage view |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
@@ -2405,6 +2406,24 @@ net's `open(θ)^gather` where the mask is cloth, 1 where it is a hole — which 
 `r`, `gather`, the atlas layer and the uv rect at once (one more texel, or `r` and `gather` packed in
 one float), `segmentTransmit` and `boxTransmit` changed together, and beam reach skipping the net
 everywhere as it does now.
+
+### `FU-STAGE-PROJECTION`
+
+**A projector's image landing on a cloth** · Trigger · scrim plan D14 / §8, session 4, 2026-10-09
+
+Projection mapping is out of the scrim plan (D14, §7): a cloth shows its own `paint` (D4) and the
+light that lands on it, and nothing projects a picture onto it. Since session 4 a gauze is seen
+through (`SCRIM`, a blend by `open(θ_eye)`) and a muslin is lit from behind (`TRANSLUCENT`, τ through
+both paints), which is the half of a projection surface that already exists — a back-projected muslin
+would glow through its front as a back light does now. **Trigger**: a show with projection, where a
+projector's image on a gauze, a cyc or a muslin is part of what the Stage view must show. **Then**: a
+projector as a light whose cross-section carries an image rather than a gobo — a fixture type or a
+patch naming a video or still source, its throw and lens as a profile's — packed into the light table
+as a gobo light is (the image a layer of its own, sampled in the beam's frame by the surface shader
+as `goboPair` samples the gobo atlas, and in the haze by the same function), so it lands on every
+surface, passes a net at its share, lights a muslin's front from behind through `translucentTint`,
+and is cut by a cut cloth's holes. The picture's source and how it reaches the browser (a still
+through the scene-image store; a moving image is a larger question) is the plan to write first.
 
 ### `FU-STAGE-FOCUS-FRINGE`
 
