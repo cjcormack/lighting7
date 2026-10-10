@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, TriangleAlert } from 'lucide-react'
 import { TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, Mesh, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3, type InstancedMesh, type Intersection } from 'three'
 import { useProjectQuery } from '../../store/projects'
@@ -199,8 +199,11 @@ interface Stage3DProps {
    * panel's plan) is a second camera and must not move the Stage view's.
    */
   persistCamera?: boolean
-  /** The viewpoint's name and how to drive it, drawn over the canvas's top right; none when absent. */
-  caption?: { name: string; note: string } | null
+  /**
+   * The viewpoint's name and how to drive it, drawn over the canvas's top right; none when absent.
+   * A seat view's [hint] is its scrim warning (scrim plan D13), drawn on a line of its own under it.
+   */
+  caption?: { name: string; note: string; hint?: string } | null
   /**
    * Read the scene document and draw its elements (session 3's builders). The Stage route's canvas
    * draws the whole of it; the Positions panel's plan draws a [sceneSubset] of it — the drapes and
@@ -974,7 +977,7 @@ export function Stage3D({
           onElementPositionChange={onElementPositionChange}
         />
       )}
-      {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} />}
+      {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} hint={caption.hint} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}
       <FrameRateReadout
         stats={stats}
@@ -1053,11 +1056,19 @@ function seatName(seatId: string): string {
 }
 
 /** The viewpoint's name and how to drive it, over the canvas's top-right corner (`Stage.dc.html`). */
-function ViewpointCaption({ name, note }: { name: string; note: string }) {
+function ViewpointCaption({ name, note, hint }: { name: string; note: string; hint?: string }) {
   return (
-    <div className="pointer-events-none absolute right-3 top-3 max-w-[calc(100%-1.5rem)] truncate rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur">
-      <span className="font-semibold">{name}</span>
-      <span className="ml-1.5 text-muted-foreground">{note}</span>
+    <div className="pointer-events-none absolute right-3 top-3 max-w-[calc(100%-1.5rem)] rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur">
+      <div className="truncate">
+        <span className="font-semibold">{name}</span>
+        <span className="ml-1.5 text-muted-foreground">{note}</span>
+      </div>
+      {hint != null && (
+        <div className="mt-0.5 flex items-center gap-1 text-amber-600 dark:text-amber-400" data-seat-scrim-hint>
+          <TriangleAlert className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{hint}</span>
+        </div>
+      )}
     </div>
   )
 }

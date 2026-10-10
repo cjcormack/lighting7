@@ -2,8 +2,11 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { aimStatic, buildHarness, DRAPE_HARNESS_CHANNELS, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive, materialScene } from "./profileHarness"
+import { aimStatic, buildHarness, CLOTH_HARNESS_CHANNELS, clothScene, DRAPE_HARNESS_CHANNELS, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive, materialScene } from "./profileHarness"
 import { buildElement } from "./scene/builders"
+import { partTransmit } from "./scene/sceneParts"
+import { SCRIM_THREAD_SHARE } from "./scene/scrimOpen"
+import { MUSLIN_TRANSMITTANCE, surfaceDrawOf } from "./scene/seeThrough"
 import { resolveDeclaredFocusDistance, resolveFocusParam } from "./beamOptics"
 import type { SliderPropertyDescriptor } from "../../store/fixtures"
 import focusInverse from "../../../../src/test/resources/stage/focusInverse.fixture.json"
@@ -141,6 +144,84 @@ describe("the material scenes (stage-light plan session 2)", () => {
   })
 })
 
+describe("the cloth scenes (scrim plan session 6)", () => {
+  const FOLIAGE = "f".repeat(64)
+  const DAY = "d".repeat(64)
+  const NIGHT = "a".repeat(64)
+  const images = { foliage: FOLIAGE, dayFront: DAY, nightBack: NIGHT }
+  const transmits = (mode: "scrim" | "cutcloth" | "daynight") =>
+    clothScene(mode, images).elements.flatMap((e) => buildElement(e).parts.map((p) => ({ element: e.name, part: p, transmit: partTransmit(p) })))
+
+  it("each builds, every lantern dimmed by its side's channel, a fixture to a patch", () => {
+    for (const mode of ["scrim", "cutcloth", "daynight"] as const) {
+      const data = buildHarness(10, 8, 6, mode, images)
+      expect(data.elements!.length).toBeGreaterThan(0)
+      expect(data.patches.length).toBe(clothScene(mode).spots.length)
+      for (const element of data.elements!) expect(buildElement(element).parts.length).toBeGreaterThan(0)
+      const sides = new Set<number>()
+      for (const patch of data.patches) {
+        const fixture = data.fixtureFor?.get(patch.key)
+        expect(fixture?.key).toBe(patch.key)
+        expect(fixture?.properties[0]).toMatchObject({ category: "dimmer", channel: { universe: 1 } })
+        const channelNo = (fixture?.properties[0] as SliderPropertyDescriptor).channel.channelNo
+        expect(Object.values(CLOTH_HARNESS_CHANNELS)).toContain(channelNo)
+        sides.add(channelNo)
+        // Inside the default stage box, and in front of its back wall.
+        expect(patch.stageY!).toBeLessThan(8)
+      }
+      // Something on each side of the cloth; the scrim scene's threads have two channels of their own.
+      expect(sides.size).toBe(mode === "scrim" ? 4 : 2)
+    }
+  })
+
+  it("=scrim hangs a sharkstooth and a bobbinet gauze side by side, each a net through the one open(θ)", () => {
+    const nets = transmits("scrim").filter((t) => t.transmit?.kind === "angle")
+    expect(nets.map((t) => t.element).sort()).toEqual(["Bobbinet gauze", "Sharkstooth gauze"])
+    expect(nets.map((t) => (t.transmit as { r: number }).r).sort()).toEqual([SCRIM_THREAD_SHARE.BOBBINET, SCRIM_THREAD_SHARE.SHARKSTOOTH].sort())
+    for (const net of nets) expect(surfaceDrawOf(net.part.light, net.part.finish.translucent)).toBe("scrim")
+    // A grazing light and a light behind for each net's threads, at the angles the comment says.
+    for (const spot of clothScene("scrim").spots.filter((s) => s.side === "graze" || s.side === "behind")) {
+      const dx = spot.at.x - spot.from.x
+      const dy = spot.at.y - spot.from.y
+      const dz = spot.at.z - spot.from.z
+      const offNormal = (Math.acos(Math.abs(dy) / Math.hypot(dx, dy, dz)) * 180) / Math.PI
+      expect(offNormal).toBeCloseTo(spot.side === "graze" ? 83.3 : 53.97, 1)
+      expect(spot.from.y > 3).toBe(spot.side === "behind")
+    }
+    // Behind each, something solid for the reveal to show.
+    const solid = transmits("scrim").filter((t) => t.part.light === "solid").map((t) => t.element)
+    expect(solid).toEqual(expect.arrayContaining(["Doorway 1", "Doorway 2", "Column 1", "Column 2", "Black backcloth"]))
+  })
+
+  it("=cutcloth paints a canvas border whose paint's alpha cuts it, back lights behind it", () => {
+    const border = transmits("cutcloth").find((t) => t.element === "Foliage border")!
+    expect(border.transmit).toMatchObject({ kind: "mask", image: FOLIAGE })
+    expect(surfaceDrawOf(border.part.light, border.part.finish.translucent)).toBe("opaque")
+    const { spots } = clothScene("cutcloth")
+    for (const spot of spots.filter((s) => s.side === "back")) {
+      // Upstage of the border, aimed down through it at the front of the stage.
+      expect(spot.from.y).toBeGreaterThan(3)
+      const t = (spot.from.y - 3) / (spot.from.y - spot.at.y)
+      const z = spot.from.z + (spot.at.z - spot.from.z) * t
+      expect(z).toBeGreaterThan(2.6)
+      expect(z).toBeLessThan(5.6)
+    }
+    // Unpainted until its image lands: a plain canvas border, solid.
+    const plain = clothScene("cutcloth").elements.find((e) => e.name === "Foliage border")!
+    expect(buildElement(plain).parts[0].light).toBe("solid")
+  })
+
+  it("=daynight paints a muslin front and back, lit from either side", () => {
+    const cloth = transmits("daynight").find((t) => t.element === "Day/night cloth")!
+    expect(cloth.part.finish.paint).toEqual({ front: DAY, back: NIGHT })
+    expect(cloth.part.finish.translucent).toBe(MUSLIN_TRANSMITTANCE)
+    expect(surfaceDrawOf(cloth.part.light, cloth.part.finish.translucent)).toBe("translucent")
+    const { spots } = clothScene("daynight")
+    expect(spots.filter((s) => s.side === "front").every((s) => s.from.y < 3.6)).toBe(true)
+    expect(spots.filter((s) => s.side === "back").every((s) => s.from.y > 3.6)).toBe(true)
+  })
+})
+
 describe("isHarnessActive", () => {
   const originalSearch = window.location.search
 
@@ -177,6 +258,13 @@ describe("isHarnessActive", () => {
 
   it("returns a material scene for ?profileHarness=rake, floor, cyc, shadow and gloss", () => {
     for (const mode of ["rake", "floor", "cyc", "shadow", "gloss"]) {
+      setSearch(`?profileHarness=${mode}`)
+      expect(harnessMode()).toBe(mode)
+    }
+  })
+
+  it("returns a cloth scene for ?profileHarness=scrim, cutcloth and daynight", () => {
+    for (const mode of ["scrim", "cutcloth", "daynight"]) {
       setSearch(`?profileHarness=${mode}`)
       expect(harnessMode()).toBe(mode)
     }

@@ -522,7 +522,18 @@ nothing holds it — never a React context, which a `render_view` capture would 
 its images as uniforms when they land (`setPaintTextures`, no recompile) and **asks for the frame**;
 a missing image settles unpainted, never an error; a Full detail switch keeps the 2048 copy until the
 4096 one is in; and `StageRenderJob` awaits `paintTextures.settled()` and `sceneMasks.settled()` before it draws. The element
-sheet's Depth hint says it folds only velour (`DRAPE_DEPTH_HINT`).
+sheet's Depth hint says it folds only velour (`DRAPE_DEPTH_HINT`). **The estimates were judged and
+kept** (session 6) in three cloth scenes, `?profileHarness=scrim`, `=cutcloth` and `=daynight`
+(`stage3d/profileHarness.ts`, their paint drawn by `harnessImages.ts` and stored through the desk's own
+scene-image route; their lanterns on universe 1's channels 41 front and 42 back, and 43 / 44 for the
+gauze's grazing and back light): the nets' thread share — sharkstooth 0.30, bobbinet 0.15 — the
+threads' wrap 0.45 and glow 0.18, and muslin's τ 0.45; the desk's confirmation is
+`FU-MANUAL-SCRIM-ESTIMATES`. **A seat that sees a gauze as near-solid says so** (D13,
+`stage3d/seatScrimHint.ts`): its row in the viewpoint picker and its canvas caption carry *Forest gauze
+reads near-solid from F6 (open 12 %)* when a shown net's worst point (its centre and corners, read
+through `scrimOpen.ts`'s one `open(θ)^gather`) falls below half its head-on open — nets only, the live
+scenery laid over first, so a hidden or flown-out gauze never flags. See the stage-vis doc's §"Saved
+views and seats" and §"Painted cloths".
 
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored

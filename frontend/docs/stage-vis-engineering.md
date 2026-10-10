@@ -1040,7 +1040,8 @@ without a room — the back wall and the catch floor:
   out, it nearly vanishes. **Its threads are round**: a light's incidence reaches them through
   `scrimThreadLight` — a front light wrapped (`SCRIM_THREAD_WRAP`, 0.45 at grazing, rising to 1 square
   on, faded in over a cosine of 0.05) and a light behind glowing through them
-  (`SCRIM_THREAD_GLOW`, 0.18 of its incidence), both estimates for session 6; the lobes (the `NET`
+  (`SCRIM_THREAD_GLOW`, 0.18 of its incidence), both estimates, judged by eye in the cloth scenes
+  (session 6, below) and kept; the lobes (the `NET`
   preset's Oren–Nayar) shape the front light only. A painted net keeps its paint as the albedo under
   the blend and discards its painted holes as any painted face does; its light stays angle-only
   (`FU-STAGE-CUT-NET`). Measured once on SwiftShader (a one-off harness, not committed), the GPU's
@@ -1059,11 +1060,15 @@ without a room — the back wall and the catch floor:
   blends the whole `1 − open^gather`. Square on a ray crosses it once, which is D3 and D9 exactly
   (the Front section included); obliquely it crosses two or three and the coverage compounds — a
   sharkstooth gathered two deep is 84 % cloth at 45° through one crossing and about 99 % through
-  three. A dead or flown gauze hangs flat and is crossed once from anywhere. Left for the tuning
-  session (the plan's §5 "Session 6") to judge by eye; one layer per crossing (losing D3's parity
-  with the shadows) or a nearest-layer stencil are the ways out if it reads wrong.
+  three. A dead or flown gauze hangs flat and is crossed once from anywhere. Judged in session 6 with
+  the scrim scene's gauzes changed for the look to travellers 60 % open (a temporary variant; the
+  shipped scene hangs them dead): the gathered halves read near-solid square
+  on and solid from the side, which is how a bunched gauze looks, so it stays as recorded. One layer
+  per crossing (losing D3's parity with the shadows) or a nearest-layer stencil are the ways out if a
+  desk shows it reading wrong.
 - **Muslin is lit from behind** (scrim plan session 4, D6). A muslin part carries `finish.translucent`
-  (τ, `MUSLIN_TRANSMITTANCE` 0.45, an estimate) and compiles with `TRANSLUCENT`; it stays opaque — its
+  (τ, `MUSLIN_TRANSMITTANCE` 0.45, an estimate judged in the day/night scene and kept) and compiles
+  with `TRANSLUCENT`; it stays opaque — its
   `ScenePart.light` is still `'solid'` (or a cut cloth's mask), so the axis stops at it (a landing
   passes a cut cloth's mask whole, session 5) and its shadow is unchanged — and a light **behind** the face drawn, which every other surface skips
   (`facing ≤ 0`, the back-face flip), is summed into its own `accBehind` at its cosine from the back,
@@ -1105,7 +1110,7 @@ z-fight it.
 
 ### Painted cloths
 
-Scrim plan sessions 2–5 (`../../docs/plans/scrim-plan.md` D2–D10, D12). A drape's
+Scrim plan sessions 2–6 (`../../docs/plans/scrim-plan.md` D2–D10, D12, D13). A drape's
 `fabric` and a drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene
 document") are drawn, and since session 3 **light passes a net and a hole**: a flat front light
 lights the set through a gauze, a steep wash barely does, a beam's air runs on to the next solid
@@ -1148,7 +1153,7 @@ cloth").
   lights' lift then see the paint as they see any albedo, so work lights lift a painted cloth exactly
   as they lift a plain one. The lobes' uniforms are built per material from the finish colour, so a
   painted velour's sheen (0.1, grazing only) keeps the finish's tint rather than the picture's — a
-  known approximation left for the tuning session; canvas, muslin and the nets have no sheen. Both images are sampled before any branch, so their mipmap
+  known approximation, not judged in session 6 (its cloth scenes paint no velour) and still open; canvas, muslin and the nets have no sheen. Both images are sampled before any branch, so their mipmap
   derivatives are defined.
 - **Alpha below half is a hole** (D5): the fragment is discarded where **either** image is below
   0.5, on both faces, so a cut cloth reads from the house and from behind, and a flat's front cut-out
@@ -1158,8 +1163,9 @@ cloth").
   round them — so it stays cloth with holes in it, and a `render_view` capture draws it so.
 - **A part says how it meets light** (D7, session 3): `ScenePart.light` is `'solid'`, `'none'` (a
   proscenium's surround strip, drawn and nothing more — it was `collides: false`) or a `Transmit`:
-  `{kind: 'angle', r, gather}` for a sharkstooth (r 0.30) or a bobbinet (0.15) — estimates, judged in
-  session 6 — with `gather` the half's fullness (`gatherShape`'s, 1 hanging open), and
+  `{kind: 'angle', r, gather}` for a sharkstooth (r 0.30) or a bobbinet (0.15) — estimates, judged by
+  eye in the scrim scene (session 6) and kept — with `gather` the half's fullness (`gatherShape`'s, 1
+  hanging open), and
   `{kind: 'mask', image, uv}` for a painted cloth or flat, its `uv` the part's paint rect, so a drawn
   half's mask is its own half of the image, compressed as it gathers. Velour, canvas, muslin and an
   unpainted cloth stay solid; a net keeps its angle even painted (its holes are its weave), so a
@@ -1209,6 +1215,42 @@ cloth").
   held in a layout effect too — before its frames. One that never comes is named in the give-up
   reason (*waiting for the painted cloths' images and masks*); a missing image settles and draws
   unpainted, a missing mask settles and is solid.
+- **The estimates were judged in the cloth scenes** (session 6; `profileHarness.ts`'s
+  `?profileHarness=scrim`, `=cutcloth` and `=daynight`, built from real elements through this whole
+  pipeline — the design record's renderer is a sketch, not shipped). Each scene's lanterns are on
+  dimmer channels of universe 1, nothing lit until one is written (`CLOTH_HARNESS_CHANNELS`): **41**
+  every light in front of the cloth, **42** every light on what is behind it, and in the scrim scene
+  **43** a light grazing each gauze from its wing 83° off its normal and **44** a low light on each
+  gauze's back 54° off. `=scrim` is a sharkstooth gauze beside a bobbinet one, each under a flat FOH
+  wash with a doorway and a column behind under a steep top light; `=cutcloth` a 9.6 × 3 m canvas
+  border painted with leaves on a transparent ground, three back lights throwing through it towards
+  the house; `=daynight` an 8 × 4.5 m muslin painted a day on its front and a night on its back. The
+  two paintings and the leaves are drawn pixel by pixel (`harnessImages.ts`, seeded, deterministic)
+  and **stored through the desk's own `POST scene-images`** on the first visit, once per project per
+  page load, so the cloths go through the store, its derived copies and mask, both caches and the
+  atlas as any painted cloth does; until they land the cloths draw unpainted. The images are never
+  referenced by a stored element, so the desk prunes them after 7 days. What the captures showed, on
+  SwiftShader at the stalls' centre and from a side seat 8 m off the centre line:
+  - **r** — under the flat FOH the doorways read through both nets (the FOH passes `open(6°)` to
+    them), the sharkstooth as a denser veil than the bobbinet; front out and the top light in, both
+    nets all but vanish square on, and from the side seat the sharkstooth (55° off) reads as a dark
+    veil with the set dimmed behind it while the bobbinet (34°) stays nearly clear. Kept: 0.30, 0.15.
+  - **Wrap** — the grazing light (channel 43) lays a bright pool on each gauze while almost none of it
+    reaches the set behind (only the cone's less oblique edge leaks through): the threads take side
+    light and pass little of it, which is why a gauze is lit steeply for a reveal. Kept: 0.45.
+  - **Glow** — the light on the gauze's back (44) shows as a soft luminous patch, dimmer than a front
+    light makes, with its beam through the holes beyond: a back-lit gauze, and the reason designers
+    keep light off a gauze's back. Kept: 0.18.
+  - **τ** — front lit, the muslin is the day; front out and the floods behind at 90 of 255, only the
+    night's openings come through, each in the front's dye — a warm yellow moon where the sun is
+    painted, pale windows, bluish stars. At full the floods, 2.8 m behind, blow the openings to white:
+    exposure, not τ. Kept: 0.45.
+  - **Cut cloth** — the back lights' shafts come through the leaves' holes and stop at the leaves,
+    and the floor is dappled; front lit, the paint reads with its holes' shadows on the serge behind.
+    The dappling is blocky at a rake, the 256 px mask over 9.6 m (D12), not an estimate.
+
+  The values stand until a desk says otherwise: `FU-MANUAL-SCRIM-ESTIMATES` in
+  `../../docs/plans/manual-validation.md` is the check, on a real GPU, in Safari and on the iPad.
 
 ### Haze degrades before frame rate
 
@@ -1492,7 +1534,40 @@ announce key, which the desk's bare Json would drop. It lands through the same l
 saved view, the trigger reads *Row F, seat 6* with an *unsaved* caption, and the Screens row's picker
 lists it as unsaved. *Save this view…* from there saves a `SEAT` row (`viewpointFromCamera` already
 built one from a seat), and the window moves onto the new row. A seat whose seating has gone is
-dropped once the scene has loaded, as a deleted saved view is.
+dropped once the scene has loaded, as a deleted saved view is. While the window sits in an unsaved
+seat, the header's picker lists it first under *Seats*, marked *unsaved*, as the Screens row's does.
+
+**A seat that sees a gauze as solid says so** (scrim plan session 6, D13;
+`components/stage3d/seatScrimHint.ts`). When a seat sees a shown scrim at below half of its head-on
+open (`SCRIM_HINT_RATIO`), its row in the picker carries an amber line under its name — *Forest gauze
+reads near-solid from F6 (open 12 %)*, with *· 1 more* where another scrim crosses the line too and
+every one named on the row's hover — and so does the canvas caption while the window sits in it, on a
+line of its own. The route computes it, outside the canvas: `shownScrims` lays the desk's **live**
+scenery (`useLiveScenery`) over the stored elements, landed, and builds each shown drape through the
+builders, so a drawn traveller is read at its live `open` with its halves' gather; `seatScrimHint`
+then reads each net part from the seat's seated eye (`seatEyeOf`, the point a `SEAT` view lands) at
+its centre and four corners, through `scrimOpen.ts`'s one `scrimShare` — `open(θ)^gather`, θ from the
+cloth's normal — against the same net's head-on share through the same gather. Four rules:
+
+- **Nets only.** A part is a scrim where its light is an `angle` transmit (sharkstooth, bobbinet);
+  muslin is opaque to the eye and a cut cloth's holes are holes, so neither ever flags.
+- **Shown only.** A hidden drape, one its `visible` state switches off — the live scenery's included —
+  and one **flown out**, its live base at the stored trim `trimsOf` calls its out, is not read; part
+  of the way in, it is read where it hangs.
+- **The worst point, the worst scrim.** A scrim's reading is its worst of the five points, because a
+  reveal plays across the whole cloth and a gauze that reads solid over its far end from a side seat
+  fails there for that seat — which a centre-only reading, the point a seat looks at most squarely,
+  would never see. The hint names the scrim furthest below its own head-on and counts the others,
+  rather than the nearest: the nearest gauze can read fine while a deeper one, seen more obliquely,
+  is the one that fails.
+- **No occlusion.** A point hidden from the seat by the proscenium or another piece is still read; the
+  hint is a warning about the cloth, not a render.
+
+A net hanging flat crosses the line where a point is 62.5° off its normal for sharkstooth and 75° for
+bobbinet, so a centre seat a few rows back reads a gauze fine and the end of a near row may not; a
+drawn net's gathered halves cross it sooner, since `(open(θ)/open(0))^gather` falls with every layer —
+a traveller drawn fully open (each half six layers deep) flags from about 37° for sharkstooth and
+51° for bobbinet.
 
 **The Screens row's Viewpoint is a picker now** (`Screens.dc.html` §1): `lib/windowViews.ts`'s
 `STAGE_VIEWPOINT_OPTION` is a `picker` kind, and the control is `StageViewpointRowPicker` — the Stage

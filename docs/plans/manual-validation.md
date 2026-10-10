@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SCRIM-ESTIMATES`](#fu-manual-scrim-estimates) | the scrim plan's estimates read right on the desk's own GPU — the nets' thread share, the threads' wrap and glow and muslin's τ, judged by eye on SwiftShader and kept — and a far-side seat flags a gauze where the centre seat does not | Scrim S6, 2026-10-10 |
 | [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update template, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched and the haze split at up to eight cloths | Stage view S3 · S6, 2026-09-30; scrim S5, 2026-10-10 |
@@ -77,6 +78,53 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-SCRIM-ESTIMATES`
+
+**What it proves**: *a gauze, a cut cloth and a day/night cloth look on the desk as they do on a
+stage*, at the values the scrim plan's session 6 kept — sharkstooth `r` 0.30, bobbinet 0.15
+(`SCRIM_THREAD_SHARE`), the threads' wrap 0.45 (`SCRIM_THREAD_WRAP`) and glow 0.18
+(`SCRIM_THREAD_GLOW`), muslin's τ 0.45 (`MUSLIN_TRANSMITTANCE`) — and that the seat hint (D13) says
+what the eye sees.
+
+**Why it is here**: session 6 judged every one of them in `render_view` captures and a headless
+browser, both on SwiftShader, in a cloud container with no GPU, no Safari and no iPad. The values were
+kept because nothing there read wrong (`frontend/docs/stage-vis-engineering.md` §"Painted cloths",
+the last bullet, says what each capture showed); a real GPU's blending and the desk's own exposure
+are what a designer will look at, and they were never seen.
+
+**Test**, in the Stage view on the operator's Mac (Safari, then Chrome) and on the iPad, Haze on. The
+harness scenes' lanterns are on universe 1 and need a patch on that universe; write the channels on
+the DMX sheet. Each scene replaces the project's scene in that window only and writes nothing to it
+but its paint images, which the desk prunes after 7 days.
+
+1. **The nets** — `/projects/<id>/stage?profileHarness=scrim`, sharkstooth stage right, bobbinet
+   stage left. Channel 43 alone (a light grazing each gauze from its wing): both gauzes read as lit
+   cloth and the doorways behind stay dark. 43 out, 42 in (the set's top light): the gauzes all but
+   vanish, the bobbinet more than the sharkstooth. 41 alone (a flat front wash): the doorways read
+   through both, through a veil. Orbit to the side of the house: the sharkstooth thickens to a veil
+   well before the bobbinet does. 44 alone (a low light on each gauze's back): a soft glow, dimmer than
+   43 makes. If a gauze reads too open or too dense, `r` is the value to move; too dull under 43, the
+   wrap; too bright or too dark under 44, the glow.
+2. **The cut cloth** — `?profileHarness=cutcloth`, 42 at full: shafts through the leaves' holes in
+   the haze, stopping at the leaves; 41 alone: the leaves painted, their holes' shadows on the black
+   behind.
+3. **The day/night cloth** — `?profileHarness=daynight`, 41 alone: the day. 41 out, 42 at about 90:
+   the night — the windows, a crescent moon and the stars, each tinted by the day's paint there (the
+   moon warm, the stars blue). If the night is too faint or too bright against the day at the same
+   level, τ is the value to move.
+4. **The seat hint** — in a project with a sharkstooth drape about 10 m wide a metre upstage of the
+   setting line and a seating block a few metres downstage, save a seat view at the end of the front
+   row and one in the middle a few rows back. Open the viewpoint picker: the end seat's row says *<the
+   gauze> reads near-solid from <seat> (open n %)*, the centre seat's says nothing. Sit in each: the
+   caption says the same. Hide the gauze from its scenery popover: the hint goes.
+
+Where something reads wrong, change the value with its GLSL twin and test (`scrimOpen.ts`,
+`seeThrough.ts`), or promote it to a `FU-` item in `followups.md`.
+
+30 minutes.
 
 ---
 

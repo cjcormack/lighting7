@@ -67,10 +67,12 @@ import {
   savedViewCamera,
   savedViewCameras,
   savedViewCaption,
+  seatEyeOf,
   seatViewpointCaption,
   seatViewpointName,
   viewpointFromCamera,
 } from '../components/stage3d/savedViewpoints'
+import { seatScrimHint, shownScrims, type SeatScrimHint } from '../components/stage3d/seatScrimHint'
 import {
   setBoxShadows,
   setFrameRateReadout,
@@ -117,6 +119,7 @@ import {
 } from '../store/stageElements'
 import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
 import { useDeskSelection } from '../store/selection'
+import { useLiveScenery } from '../store/scenery'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu, type StageViewMenuTab } from '../components/stage3d/StageViewMenu'
@@ -320,14 +323,37 @@ export function Stage() {
       ? savedViewCamera(savedRow)
       : (cameraOfViewpoint(viewpoint) ?? 'orbit')
   const isOrtho = isOrthoCamera(camera)
+  // A seat that sees a shown gauze as near-solid says so (scrim plan D13): every shown net, read
+  // with the desk's live scenery landed over the elements, from each seat's eye.
+  const liveScenery = useLiveScenery(projectId != null)
+  const scrims = useMemo(() => shownScrims(sceneElements ?? [], liveScenery), [sceneElements, liveScenery])
+  const seatHints = useMemo(() => {
+    const hints = new Map<string, SeatScrimHint>()
+    if (scrims.length === 0) return hints
+    for (const row of savedViews ?? []) {
+      if (row.kind !== 'SEAT' || row.seatId == null) continue
+      const eye = seatEyeOf(row.seatElementUuid, row.seatId, sceneElements ?? [])
+      const hint = eye == null ? null : seatScrimHint(eye, row.seatId, scrims)
+      if (hint != null) hints.set(row.uuid, hint)
+    }
+    const picked = parseSeatViewpointRef(pickedSeat)
+    if (pickedSeat != null && picked != null) {
+      const eye = seatEyeOf(picked.elementUuid, picked.seatId, sceneElements ?? [])
+      const hint = eye == null ? null : seatScrimHint(eye, picked.seatId, scrims)
+      if (hint != null) hints.set(pickedSeat, hint)
+    }
+    return hints
+  }, [scrims, savedViews, sceneElements, pickedSeat])
+  // The caption's hint by its text, so a scenery frame that changes no hint hands the canvas no new prop.
+  const captionHint = seatHints.get(pickedSeat ?? savedRow?.uuid ?? '')?.text
   const caption = useMemo(
     () =>
       pickedSeat != null
-        ? { name: seatViewpointName(pickedSeat), note: seatViewpointCaption(pickedSeat) }
+        ? { name: seatViewpointName(pickedSeat), note: seatViewpointCaption(pickedSeat), hint: captionHint }
         : savedRow != null
-          ? { name: savedRow.name, note: savedViewCaption(savedRow) }
+          ? { name: savedRow.name, note: savedViewCaption(savedRow), hint: captionHint }
           : { name: STAGE_CAMERA_LABELS[camera], note: STAGE_CAMERA_NOTES[camera] },
-    [pickedSeat, savedRow, camera],
+    [pickedSeat, savedRow, camera, captionHint],
   )
   // A saved view this project does not have — the window was on another project's, or the row was
   // deleted — is let go once the list has settled, back to the camera it was drawing through, so the
@@ -1126,6 +1152,7 @@ export function Stage() {
             onSit={startSitting}
             canSit={canSit}
             sitting={sitting}
+            seatHints={seatHints}
           />
           {/* The camera — Orbit, Eye and the three sections of the one scene (D1). */}
           <ToggleGroup

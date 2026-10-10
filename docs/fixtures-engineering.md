@@ -1709,7 +1709,11 @@ cutting a hole (`frontend/docs/stage-vis-engineering.md` §"Painted cloths"). Si
 light passes a net (by its `open(θ)`) and a hole in the shadows, beam reach and sight lines; since
 session 4 a net is drawn see-through (a blend by `open(θ_eye)`) and a muslin is lit from behind through
 both its paints; since session 5 the haze splits at a net or a cut cloth (neither is where a beam lands; the
-march keeps the eye's and the beam's share of each, from one list of eight). The keys travel inside `params`; the images travel beside them at `formatVersion` 23
+march keeps the eye's and the beam's share of each, from one list of eight). Session 6 judged the
+light model's estimates by eye in three harness scenes and kept them — the nets' thread share
+(sharkstooth 0.30, bobbinet 0.15), the threads' wrap of a grazing light (0.45) and glow from behind
+(0.18), and muslin's τ (0.45) — and a seat view now says when it sees a gauze at below half its
+head-on open. The keys travel inside `params`; the images travel beside them at `formatVersion` 23
 (`docs/sync-engineering.md` §"Version 23 — painted cloths").
 
 **The scene-image store** (`state/SceneImageStore.kt`, `State.sceneImages`) holds the originals

@@ -23,17 +23,30 @@
 // lit from the side so its shadow lands on the wall clear of the flat. And
 // `?profileHarness=gloss` (session 4): the stage floor under three backlights from
 // upstage, so their highlights face the house as `=floor`'s front light cannot.
+//
+// `?profileHarness=scrim`, `=cutcloth` and `=daynight` are the **cloth scenes**
+// (scrim plan session 6), where the nets' thread share, their threads' wrap and
+// glow and muslin's τ were judged: the classic reveal through a sharkstooth gauze
+// beside a bobbinet one, a foliage border with holes back-lit in haze, and a
+// day/night cloth. Their lanterns are on two dimmer channels, front and back
+// ([CLOTH_HARNESS_CHANNELS]), so each scene is played as the trick is: write one,
+// then the other. See [clothScene].
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/fixtures'
+import type { HarnessImages } from './harnessImages'
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
 
-/** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`), the drape scene (`=drape`) or a material scene. */
-export type HarnessMode = 'load' | 'focus' | 'drape' | MaterialHarness
+/** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`), the drape scene (`=drape`), a material scene or a cloth scene. */
+export type HarnessMode = 'load' | 'focus' | 'drape' | MaterialHarness | ClothHarness
+
+/** The cloth scenes (scrim plan session 6). */
+export type ClothHarness = 'scrim' | 'cutcloth' | 'daynight'
+const CLOTH_HARNESSES: readonly string[] = ['scrim', 'cutcloth', 'daynight'] satisfies ClothHarness[]
 
 /** The material scenes (stage-light plan session 2), the shadow scene (session 3) and the gloss scene (session 4). */
 export type MaterialHarness = 'rake' | 'floor' | 'cyc' | 'shadow' | 'gloss'
@@ -45,6 +58,7 @@ export function harnessMode(): HarnessMode | null {
     const flag = new URLSearchParams(window.location.search).get('profileHarness')
     if (flag === '1') return 'load'
     if (flag === 'focus' || flag === 'drape') return flag
+    if (flag != null && CLOTH_HARNESSES.includes(flag)) return flag as ClothHarness
     return flag != null && MATERIAL_HARNESSES.includes(flag) ? (flag as MaterialHarness) : null
   } catch {
     return null
@@ -132,14 +146,20 @@ function makeBeamShapingProperties(): PropertyDescriptor[] {
   ]
 }
 
+/**
+ * The synthetic scene [mode] draws. [images] are the cloth scenes' paint, by the hashes the desk
+ * stored them under (`harnessImages.ts`); a cloth whose image has not landed is drawn unpainted.
+ */
 export function buildHarness(
   stageW: number,
   stageD: number,
   stageH: number,
   mode: HarnessMode = harnessMode() ?? 'load',
+  images: HarnessImages = {},
 ): HarnessData {
   if (mode === 'focus') return buildFocusHarness(stageD)
   if (mode === 'drape') return buildDrapeHarness()
+  if (mode === 'scrim' || mode === 'cutcloth' || mode === 'daynight') return buildClothHarness(mode, images)
   if (mode === 'rake' || mode === 'floor' || mode === 'cyc' || mode === 'shadow' || mode === 'gloss') return buildMaterialHarness(mode)
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
@@ -796,4 +816,233 @@ function materialDrape(
   params: Record<string, unknown>,
 ): StageElementDto {
   return { ...drapeElement(id, name, x, y, widthM, heightM, params), uuid: `harness-material-${id}`, finishColour, depthM }
+}
+
+// — the cloth scenes ——————————————————————————————————————————————————————
+
+const CLOTH_TYPE_KEY = '__profileHarness_cloth_type__'
+
+/**
+ * The cloth scenes' dimmer channels on universe 1: every lantern in front of the cloth on [front],
+ * every one lighting what is behind it on [back]. Nothing is lit until one is written, which is how
+ * the tricks are played — the gauze solid under the front wash, then the front out and the back in.
+ * The scrim scene has two more, for the nets' threads alone: [graze], a light from the wing all but
+ * in the gauze's plane, which the threads' wrap catches, and [behind], a low light on the gauze's
+ * back, which they glow with.
+ */
+export const CLOTH_HARNESS_CHANNELS = { front: 41, back: 42, graze: 43, behind: 44 } as const
+
+/** One of a cloth scene's lanterns, and which of the two channels dims it. */
+export interface ClothSpot extends MaterialSpot {
+  side: keyof typeof CLOTH_HARNESS_CHANNELS
+}
+
+/** A drape of the cloth scenes: the element, with what its fabric draws unless it names a colour. */
+function clothDrape(
+  id: number,
+  name: string,
+  x: number,
+  y: number,
+  widthM: number,
+  heightM: number,
+  params: Record<string, unknown>,
+  fields: Partial<StageElementDto> = {},
+): StageElementDto {
+  return { ...drapeElement(id, name, x, y, widthM, heightM, params), uuid: `harness-cloth-${id}`, finishColour: null, ...fields }
+}
+
+/** The black serge every cloth scene hangs in front of, so the room does not read behind the trick. */
+function serge(id: number, y: number, widthM: number, heightM: number): StageElementDto {
+  return clothDrape(id, 'Black backcloth', 0, y, widthM, heightM, { operation: 'DEAD', role: 'BACKCLOTH' }, { finishColour: BLACK_SERGE, depthM: 0.12 })
+}
+
+/** Where a cloth scene's lanterns hang, what they light and what the cloth is painted with. */
+export function clothScene(mode: ClothHarness, images: HarnessImages = {}): { spots: ClothSpot[]; elements: StageElementDto[] } {
+  switch (mode) {
+    case 'scrim': {
+      // The classic reveal, twice: a sharkstooth gauze stage right and a bobbinet one stage left,
+      // each 4.8 × 4.2 m on the setting line 3 m upstage, each under a flat front-of-house wash from
+      // 10 m out (6° up). Behind each a scene — a red doorway flat and a stone column — under a
+      // steep top light that never reaches the gauze. Front in, the gauzes read as cloth; front out
+      // and back in, the scenes appear through them. From each gauze's outer edge a light grazes its
+      // face 83° off its normal (graze), and from between it and its scene a low light reaches its
+      // back 54° off (behind): the threads' wrap and glow, each on a channel of its own.
+      const sides = [
+        { x: -2.6, fabric: 'SHARKSTOOTH', name: 'Sharkstooth gauze', tag: 'sharkstooth' },
+        { x: 2.6, fabric: 'BOBBINET', name: 'Bobbinet gauze', tag: 'bobbinet' },
+      ]
+      const elements: StageElementDto[] = []
+      const spots: ClothSpot[] = []
+      sides.forEach((side, i) => {
+        const id = 1 + i * 3
+        elements.push(
+          clothDrape(id, side.name, side.x, 3, 4.8, 4.2, { operation: 'DEAD', role: 'BACKCLOTH', fabric: side.fabric }),
+          { ...clothDrape(id + 1, `Doorway ${i + 1}`, side.x - 0.9, 5.2, 1.4, 2.6, {}, { finishColour: '#8a2d2d', depthM: 0.08 }), kind: 'FLAT' },
+          {
+            ...clothDrape(id + 2, `Column ${i + 1}`, side.x + 1, 5.6, 0.5, 2.8, { shape: 'CYLINDER' }, { finishColour: '#b8ab92', depthM: 0.5 }),
+            kind: 'OBJECT',
+          },
+        )
+        spots.push(
+          { key: `scrim-front-${side.tag}`, side: 'front', from: { x: side.x, y: -7, z: 3.2 }, at: { x: side.x, y: 3, z: 2.1 }, beamDeg: 32 },
+          { key: `scrim-back-${side.tag}`, side: 'back', from: { x: side.x, y: 4.6, z: 5.6 }, at: { x: side.x, y: 5.5, z: 1 }, beamDeg: 46 },
+          {
+            key: `scrim-graze-${side.tag}`,
+            side: 'graze',
+            from: { x: side.x + Math.sign(side.x) * 2.3, y: 2.6, z: 2.1 },
+            at: { x: side.x - Math.sign(side.x) * 1.1, y: 3, z: 2.1 },
+            beamDeg: 36,
+          },
+          { key: `scrim-behind-${side.tag}`, side: 'behind', from: { x: side.x, y: 4.6, z: 0.4 }, at: { x: side.x, y: 3, z: 2.6 }, beamDeg: 50 },
+        )
+      })
+      elements.push(serge(7, 7.2, 11, 5.5))
+      return { spots, elements }
+    }
+    case 'cutcloth': {
+      // A foliage border 9.6 × 3 m, its bottom at 2.6 m, 3 m upstage: canvas painted with leaves on
+      // a transparent ground, so its alpha cuts the holes (D5). Three back lights 7 m upstage and
+      // 5.6 m up throw through its leaves towards the front of the stage, so in haze their shafts
+      // come through the holes and stop at the leaves; a front wash on the other channel shows the
+      // paint.
+      const paint = images.foliage != null ? { paint: { front: images.foliage } } : {}
+      return {
+        spots: [
+          ...[-3, 0, 3].map((x, i): ClothSpot => ({
+            key: `cutcloth-back-${i}`,
+            side: 'back',
+            from: { x, y: 7, z: 5.6 },
+            at: { x: x * 0.8, y: -2, z: 1 },
+            beamDeg: 26,
+          })),
+          ...[-2.5, 2.5].map((x, i): ClothSpot => ({
+            key: `cutcloth-front-${i}`,
+            side: 'front',
+            from: { x, y: -7, z: 4 },
+            at: { x, y: 3, z: 4.1 },
+            beamDeg: 30,
+          })),
+        ],
+        elements: [
+          clothDrape(1, 'Foliage border', 0, 3, 9.6, 3, { operation: 'DEAD', role: 'BORDER', fabric: 'CANVAS', ...paint }, { positionZ: 2.6, finishColour: '#2f5a2a' }),
+          serge(2, 7.6, 11, 6),
+        ],
+      }
+    }
+    case 'daynight': {
+      // A muslin 8 × 4.5 m, 3.6 m upstage, painted a day on its front and a night on its back (black
+      // but for the windows, the moon and the stars). Front in, it is day; front out and the floods
+      // behind it in, only the night's openings come through, coloured by the day's dye (D6).
+      const paint =
+        images.dayFront != null || images.nightBack != null
+          ? { paint: { ...(images.dayFront != null && { front: images.dayFront }), ...(images.nightBack != null && { back: images.nightBack }) } }
+          : {}
+      return {
+        spots: [
+          ...[-2, 2].map((x, i): ClothSpot => ({
+            key: `daynight-front-${i}`,
+            side: 'front',
+            from: { x, y: -7, z: 3.8 },
+            at: { x, y: 3.6, z: 2.45 },
+            beamDeg: 30,
+          })),
+          ...[-2, 2].map((x, i): ClothSpot => ({
+            key: `daynight-back-${i}`,
+            side: 'back',
+            from: { x, y: 6.4, z: 2.6 },
+            at: { x, y: 3.6, z: 2.45 },
+            beamDeg: 70,
+          })),
+        ],
+        elements: [
+          clothDrape(1, 'Day/night cloth', 0, 3.6, 8, 4.5, { operation: 'DEAD', role: 'BACKCLOTH', fabric: 'MUSLIN', ...paint }, { positionZ: 0.2 }),
+          serge(2, 7.4, 11, 6),
+        ],
+      }
+    }
+  }
+}
+
+/**
+ * A cloth scene (`?profileHarness=scrim`, `=cutcloth`, `=daynight`; scrim plan session 6): its
+ * cloths, built from real scene elements and drawn through the real pipeline, under profiles each
+ * dimmed by its side's channel ([CLOTH_HARNESS_CHANNELS]) — every lantern its own fixture, so the
+ * patch keys stay one to a fixture.
+ */
+function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessData {
+  const { spots, elements } = clothScene(mode, images)
+  const dimmer = (channelNo: number): PropertyDescriptor => ({
+    type: 'slider',
+    name: 'dimmer',
+    displayName: 'Dimmer',
+    category: 'dimmer',
+    channel: { universe: 1, channelNo },
+    min: 0,
+    max: 255,
+  })
+  const syntheticType: FixtureTypeInfo = {
+    typeKey: CLOTH_TYPE_KEY,
+    manufacturer: 'Harness',
+    model: 'Cloth profile',
+    modeName: 'Dimmer',
+    channelCount: 1,
+    isRegistered: true,
+    capabilities: [],
+    properties: [dimmer(CLOTH_HARNESS_CHANNELS.front)],
+    elementGroupProperties: null,
+    acceptsBeamAngle: true,
+    acceptsGel: false,
+    kind: 'PROFILE',
+    body: { archetype: 'profile' },
+  }
+  const fixtureFor = new Map<string, Fixture>()
+  const patches: FixturePatch[] = spots.map((spot, i) => {
+    const channelNo = CLOTH_HARNESS_CHANNELS[spot.side]
+    fixtureFor.set(spot.key, {
+      key: spot.key,
+      name: spot.key,
+      typeKey: CLOTH_TYPE_KEY,
+      universe: 1,
+      firstChannel: channelNo,
+      channelCount: 1,
+      channels: [],
+      properties: [dimmer(channelNo)],
+      capabilities: [],
+      groups: [],
+      compatibleLookIds: [],
+    })
+    return {
+      id: i + 1,
+      key: spot.key,
+      displayName: spot.key,
+      fixtureTypeKey: CLOTH_TYPE_KEY,
+      startChannel: channelNo,
+      channelCount: 1,
+      manufacturer: 'Harness',
+      model: 'Cloth profile',
+      modeName: 'Dimmer',
+      universe: 1,
+      subnet: 0,
+      sortOrder: i + 1,
+      groups: [],
+      stageX: spot.from.x,
+      stageY: spot.from.y,
+      stageZ: spot.from.z,
+      ...aimStatic(spot.from, spot.at),
+      riggingUuid: null,
+      beamAngleDeg: spot.beamDeg,
+      gelCode: null,
+      kindOverride: null,
+      stageHidden: false,
+    }
+  })
+  return {
+    patches,
+    regions: [],
+    riggings: [],
+    syntheticFixture: fixtureFor.get(spots[0].key)!,
+    syntheticType,
+    fixtureFor,
+    elements,
+  }
 }

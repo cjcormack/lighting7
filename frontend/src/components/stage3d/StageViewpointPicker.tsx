@@ -1,4 +1,4 @@
-import { Armchair, Bookmark, Camera, ChevronDown, Crosshair, Eye, Plus, Rotate3d, Square } from 'lucide-react'
+import { Armchair, Bookmark, Camera, ChevronDown, Crosshair, Eye, Plus, Rotate3d, Square, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import {
   type StageViewpoint,
 } from '@/lib/stageViewpoint'
 import { savedViewNote, seatViewpointName } from './savedViewpoints'
+import type { SeatScrimHint } from './seatScrimHint'
 
 /** The built-ins the picker lists: Eye is a camera, but a place to stand is a saved view. */
 const BUILT_INS: readonly { id: StageCamera; note: string; shortcut?: string }[] = [
@@ -42,6 +43,20 @@ function SavedIcon({ row, className }: { row: StageViewpointDto; className?: str
 
 const SECTION_LABEL = 'text-[10px] uppercase tracking-wide text-muted-foreground'
 
+/** A seat's scrim warning (scrim plan D13), on a line of its own under the seat's name. */
+function SeatHintLine({ hint }: { hint: SeatScrimHint }) {
+  const more = hint.others.length
+  return (
+    <span className="flex items-start gap-1 whitespace-normal text-[11px] leading-tight text-amber-600 dark:text-amber-400" data-seat-scrim-hint>
+      <TriangleAlert className="mt-px size-3 shrink-0" aria-hidden />
+      <span>
+        {hint.text}
+        {more > 0 && ` · ${more} more`}
+      </span>
+    </span>
+  )
+}
+
 /**
  * The viewpoint picker (`Stage.dc.html` §4): the current viewpoint by name, and a menu of the
  * built-ins, the project's **saved views** and **seats** (session 2's `stage_viewpoints` rows),
@@ -51,7 +66,11 @@ const SECTION_LABEL = 'text-[10px] uppercase tracking-wide text-muted-foreground
  * A saved view the window cannot land — a seat whose seating has gone, or no longer has that seat —
  * is listed disabled rather than hidden, so the operator can see what went. ***Sit in a seat…***
  * (session 3, S) arms a pick on the seating mesh: the seat clicked is the viewpoint, unsaved, named
- * on the trigger as *Row F, seat 6* until *Save this view…* makes it a row.
+ * on the trigger as *Row F, seat 6* until *Save this view…* makes it a row, and is listed under
+ * *Seats* as *unsaved* while the window sits in it.
+ *
+ * A seat that sees a shown gauze as near-solid says so under its name (scrim plan D13,
+ * `seatScrimHint.ts`), its hover naming every scrim that crosses the line.
  */
 export function StageViewpointPicker({
   viewpoint,
@@ -66,6 +85,7 @@ export function StageViewpointPicker({
   onSit,
   canSit = false,
   sitting = false,
+  seatHints,
 }: {
   viewpoint: StageViewpoint
   /** The camera the viewpoint draws through — its own, or a saved view's. */
@@ -86,6 +106,8 @@ export function StageViewpointPicker({
   canSit?: boolean
   /** Whether the pick is armed now. */
   sitting?: boolean
+  /** Each seat's scrim warning, by its saved row's uuid or a picked seat's `seat:` key; absent, none. */
+  seatHints?: ReadonlyMap<string, SeatScrimHint>
 }) {
   const current = saved.find((row) => row.uuid === viewpoint)
   const pickedSeat = isSeatViewpointRef(viewpoint) ? viewpoint : null
@@ -101,20 +123,26 @@ export function StageViewpointPicker({
 
   const savedItem = (row: StageViewpointDto) => {
     const ok = landable(row)
+    const hint = ok ? seatHints?.get(row.uuid) : undefined
     return (
       <DropdownMenuItem
         key={row.uuid}
         onSelect={() => onPick(row.uuid as StageViewpoint)}
         disabled={!ok}
         aria-current={viewpoint === row.uuid ? 'true' : undefined}
-        title={ok ? undefined : 'Its seat is gone: the seating was moved, resized or deleted'}
+        title={ok ? hint?.detail : 'Its seat is gone: the seating was moved, resized or deleted'}
+        className={hint != null ? 'items-start' : undefined}
       >
-        <SavedIcon row={row} className="size-3.5" />
-        <span className={`truncate ${viewpoint === row.uuid ? 'font-semibold' : ''}`}>{row.name}</span>
+        <SavedIcon row={row} className={hint != null ? 'mt-0.5 size-3.5' : 'size-3.5'} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className={`truncate ${viewpoint === row.uuid ? 'font-semibold' : ''}`}>{row.name}</span>
+          {hint != null && <SeatHintLine hint={hint} />}
+        </span>
         <DropdownMenuShortcut>{ok ? savedViewNote(row) : 'seat gone'}</DropdownMenuShortcut>
       </DropdownMenuItem>
     )
   }
+  const pickedHint = pickedSeat != null ? seatHints?.get(pickedSeat) : undefined
 
   return (
     <DropdownMenu>
@@ -147,10 +175,25 @@ export function StageViewpointPicker({
             {views.map(savedItem)}
           </>
         )}
-        {seats.length > 0 && (
+        {(seats.length > 0 || pickedSeat != null) && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className={SECTION_LABEL}>Seats</DropdownMenuLabel>
+            {pickedSeat != null && (
+              <DropdownMenuItem
+                onSelect={() => onPick(pickedSeat)}
+                aria-current="true"
+                title={pickedHint?.detail}
+                className={pickedHint != null ? 'items-start' : undefined}
+              >
+                <Armchair className={pickedHint != null ? 'mt-0.5 size-3.5' : 'size-3.5'} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-semibold">{seatViewpointName(pickedSeat)}</span>
+                  {pickedHint != null && <SeatHintLine hint={pickedHint} />}
+                </span>
+                <DropdownMenuShortcut>unsaved</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            )}
             {seats.map(savedItem)}
           </>
         )}

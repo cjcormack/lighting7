@@ -10,7 +10,11 @@ now."
 This record holds the proposal, the pictures and the answers. The engineering plan is
 [`../scrim-plan.md`](../scrim-plan.md); where the two disagree, the plan wins.
 
-**Status: scope agreed (below), planned, awaiting approval, nothing built.**
+**Status: approved and built — all six sessions of [`../scrim-plan.md`](../scrim-plan.md) shipped,
+the last (tuning and the seat hint) on 2026-10-10.** Every estimate this record names — the nets'
+thread share, the threads' wrap and glow, muslin's τ — was judged by eye in the harness's cloth scenes
+and kept at the value proposed here; the desk's confirmation is `FU-MANUAL-SCRIM-ESTIMATES`. The
+renderer in `scrim.html` stays a sketch of the model, not the shipped one (the plan's P4).
 
 | File | What it is |
 | --- | --- |
@@ -111,7 +115,7 @@ of it, a room set, a figure, a foliage cut cloth and a muslin sky cloth painted 
 on its front and night on its back. It is lit by ten units, which share the desk's luminance roll-off
 but not its optics: no gobos, no lens focus, and `I / (d² + 4)` falloff. It applies D2, D3, D5, D6
 and D8–D10 as written, so the pictures show what the rules do, not what was painted to look right.
-Its tuning numbers would be re-judged in the harness scenes (session 6).
+Its tuning numbers were re-judged in the harness scenes in session 6, and kept.
 
 ## Since the record
 

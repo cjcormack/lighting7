@@ -71,6 +71,18 @@ function seatOf(seatElementUuid: string | null, seatId: string | null, elements:
 }
 
 /**
+ * A seat's seated eye in lighting metres — where a `SEAT` view of it stands — or null when its
+ * seating is gone or no longer has the seat. What the seat's scrim hint reads from (`seatScrimHint.ts`).
+ */
+export function seatEyeOf(
+  seatElementUuid: string | null,
+  seatId: string | null,
+  elements: readonly StageElementDto[],
+): LightingPoint3 | null {
+  return seatOf(seatElementUuid, seatId, elements)?.eye ?? null
+}
+
+/**
  * Landing in a picked seat (session 3's *Sit in a seat…*), or null when its seating is gone or no
  * longer has the seat: the eye at the seat's seated eye, facing the stage, through a seat view's
  * lens — exactly what a saved `SEAT` row with no target of its own lands.

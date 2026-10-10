@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — sessions 1–5 shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09), `324c3b99` and `302ac2a1` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — all six sessions shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09), `324c3b99`, `302ac2a1` and `9420fa28` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -266,7 +266,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Tests:** the march's share for a sample behind one, two and nine planes; list order by distance.
 - **Docs:** the haze paragraphs.
 
-### Session 6 — tuning and the seat hint (frontend)
+### Session 6 — tuning and the seat hint (frontend) — done, `9420fa28`
 
 - **Harness:** `?profileHarness=scrim` (the classic reveal and a flat FOH), `=cutcloth` (a foliage
   border in haze), and `=daynight` (a muslin front and back). Judge r, the wrap, the glow and τ by eye
@@ -274,6 +274,9 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Seat hint (D13):** in `StageViewpointPicker` and the seat popover.
 - **Tests:** the hint's threshold on a seat straight on and one 45° off; harness scenes build.
 - **Docs:** the estimates' final values; the record's status line.
+- **As shipped:** every estimate was judged and kept (r 0.30 / 0.15, wrap 0.45, glow 0.18, τ 0.45;
+  `FU-MANUAL-SCRIM-ESTIMATES` is the desk's check). There is no seat popover in the Stage view, so
+  D13's "its popover" is the seat's canvas caption and the picker row's hover.
 
 ## 6. Migration
 

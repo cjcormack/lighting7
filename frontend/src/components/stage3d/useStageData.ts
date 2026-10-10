@@ -8,7 +8,8 @@ import type { RiggingDto } from '../../api/riggingApi'
 import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
-import { buildHarness, isHarnessActive } from './profileHarness'
+import { buildHarness, harnessMode } from './profileHarness'
+import { useHarnessImages } from './harnessImages'
 import { useLanternIndex } from '../../hooks/useLanternIndex'
 import type { LanternIndex } from '../../lib/lanterns'
 import { useGelIndex } from '../../hooks/useGelIndex'
@@ -30,7 +31,7 @@ interface StageData {
 }
 
 // Single source of truth for Stage 3D's input data. When the profiling
-// harness is active (?profileHarness=1, or =focus) it swaps in a synthetic scene and
+// harness is active (?profileHarness=1, =focus, or another named scene) it swaps in a synthetic scene and
 // augments the fixture-lookup maps so the harness patches resolve to a
 // beam-emitting fixture type. Otherwise it returns the live RTK Query data.
 export function useStageData(
@@ -47,10 +48,13 @@ export function useStageData(
   const lanterns = useLanternIndex()
   const gels = useGelIndex()
 
+  // A cloth scene's paint is stored through the desk's own scene-image route before it is drawn.
+  const mode = harnessMode()
+  const harnessImages = useHarnessImages(projectId, mode)
   const harness = useMemo(() => {
-    if (!isHarnessActive()) return null
-    return buildHarness(stageW, stageD, stageH)
-  }, [stageW, stageD, stageH])
+    if (mode == null) return null
+    return buildHarness(stageW, stageD, stageH, mode, harnessImages)
+  }, [mode, stageW, stageD, stageH, harnessImages])
 
   return useMemo(() => {
     if (!harness) {
