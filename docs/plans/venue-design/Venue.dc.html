@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Editing the venue</title>
+  <style>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { z-index:6; position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+    /* ── additions for the stage-view boards ─────────────────────────────── */
+    .appbar .armed { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.21 27); border:1px solid oklch(0.7 0.19 27); font-size:12px; font-weight:700; letter-spacing:0.06em; }
+    .viewhdr { height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .viewhdr .vt { font-size:14px; font-weight:600; margin-right:6px; }
+    .vp { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); font-size:12.5px; font-weight:600; color:oklch(0.85 0.1 255); }
+    .vp small { font-weight:400; color:var(--mfg); }
+    .btn .kbd, .kbd { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:1px 5px; border-radius:4px; border:1px solid var(--bd); color:var(--mfg); }
+    .spacer { flex:1; }
+    .canvas { position:relative; flex:1; min-width:0; background:#07090d; overflow:hidden; }
+    .canvas > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .ov { position:absolute; }
+    .ovcap { left:12px; top:10px; font-size:12px; color:var(--mfg); }
+    .ovcap b { color:var(--fg); font-weight:600; }
+    .poslbl { position:absolute; padding:1px 6px; border-radius:4px; font:700 10px ui-monospace,Menlo,monospace; letter-spacing:0.06em; color:var(--amber); background:oklch(0.141 0.005 285.823 / 0.82); border:1px solid oklch(0.82 0.16 80 / 0.4); }
+    .fxlbl { position:absolute; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:oklch(0.3 0.09 260 / 0.92); border:1px solid var(--pri); }
+    .selbar { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; display:flex; gap:10px; align-items:center; background:oklch(0.21 0.006 285.885 / 0.94); border:1px solid var(--bd); border-radius:10px; padding:6px 8px 6px 12px; font-size:12px; white-space:nowrap; }
+    .selbar .m { color:var(--mfg); }
+    .selbar .b { border:1px solid var(--bd); background:var(--muted); border-radius:6px; padding:2px 8px; font-size:11px; }
+    .panel { width:360px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+    .panel .ph { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .panel .ph b { font-size:14px; }
+    .panel .pb { padding:12px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sec .st { display:flex; align-items:center; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .sec .st::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .row2 { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; align-items:center; font-size:12px; }
+    .row2 > span:first-child { color:var(--mfg); font-size:11px; }
+    .row3 { display:grid; grid-template-columns:62px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; font-size:11px; }
+    .row3 > span:first-child { color:var(--mfg); }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .sel::after { content:'▾'; margin-left:auto; color:var(--mfg); font-size:10px; }
+    .num { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font:12px ui-monospace,Menlo,monospace; display:flex; align-items:center; font-variant-numeric:tabular-nums; }
+    .gate { width:132px; height:132px; flex:0 0 auto; }
+    .chipx { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px 0 4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11px; white-space:nowrap; }
+    .chipx i { width:14px; height:14px; border-radius:3px; background:#2a2d33; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08); display:block; }
+    .chipx b { font-weight:400; color:var(--mfg); font:10px ui-monospace,Menlo,monospace; }
+    .chipx.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.18); }
+    .prow { display:grid; grid-template-columns:70px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--bd); align-items:start; }
+    .prow .pn { font:700 10px ui-monospace,Menlo,monospace; color:var(--amber); letter-spacing:0.04em; padding-top:4px; }
+    .prow .pn small { display:block; font-weight:400; color:var(--mfg); letter-spacing:0; }
+    .prow .cs { display:flex; flex-wrap:wrap; gap:4px; }
+    .edge { text-align:center; font:700 9px ui-monospace,Menlo,monospace; letter-spacing:0.2em; color:var(--mfg); padding:4px 0; border-top:1px dashed var(--bd); border-bottom:1px dashed var(--bd); }
+    .pal { width:220px; flex-shrink:0; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+    .pal .pi { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; font-size:12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.5); }
+    .pal .pi svg { color:var(--mfg); }
+    .pal .ph2 { padding:10px 12px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .el { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; font-size:12px; padding:4px 0; align-items:baseline; }
+    .el .k { font:10px ui-monospace,Menlo,monospace; color:oklch(0.8 0.12 255); }
+    .el .d { font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .el.on { background:oklch(0.623 0.214 259.815 / 0.14); border-radius:6px; padding:4px 6px; margin:0 -6px; }
+    .sheet { width:520px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; }
+    .item { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; }
+    .item .m { color:var(--mfg); font-size:11px; }
+    .item.new { border-color:oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.18); }
+    .item.danger { border-color:oklch(0.55 0.2 27 / 0.7); background:oklch(0.3 0.08 27 / 0.25); }
+    .dim { opacity:0.45; }
+    .hatch { background-image:repeating-linear-gradient(135deg, oklch(0.274 0.006 286.033 / 0.5) 0 6px, transparent 6px 12px); }
+    .frame { position:absolute; border:2px dashed var(--amber); border-radius:10px; pointer-events:none; }
+    .btn.pri { background:var(--pri); color:#fff; border:0; }
+    .btn.red { background:oklch(0.55 0.21 27); color:#fff; border:0; }
+
+    /* ── additions for the venue boards ───────────────────────────────────── */
+    :root { --ven:oklch(0.82 0.09 190); --venbd:oklch(0.6 0.09 190 / 0.55); --venbg:oklch(0.3 0.05 190 / 0.35);
+      --shw:oklch(0.8 0.12 255); --shwbd:oklch(0.55 0.14 255 / 0.55); --shwbg:oklch(0.3 0.08 255 / 0.3);
+      --ovr:oklch(0.82 0.12 300); --ovrbd:oklch(0.55 0.14 300 / 0.6); --ovrbg:oklch(0.3 0.08 300 / 0.3);
+      --out:oklch(0.8 0.13 35); --outbd:oklch(0.58 0.16 35 / 0.6); --outbg:oklch(0.3 0.08 35 / 0.3); }
+    .own { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:999px; font-size:10.5px; font-weight:600; white-space:nowrap; border:1px solid var(--bd); color:var(--mfg); }
+    .own.v { color:var(--ven); border-color:var(--venbd); background:var(--venbg); }
+    .own.s { color:var(--shw); border-color:var(--shwbd); background:var(--shwbg); }
+    .own.o { color:var(--ovr); border-color:var(--ovrbd); background:var(--ovrbg); }
+    .own.d { color:oklch(0.86 0.13 80); border-color:oklch(0.65 0.13 80 / 0.6); background:oklch(0.32 0.07 80 / 0.35); }
+    .own.x { color:var(--out); border-color:var(--outbd); background:var(--outbg); }
+    .own.h { border-style:dashed; }
+    .src { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; }
+    .src.v { color:var(--ven); background:var(--venbg); }
+    .src.s { color:var(--shw); background:var(--shwbg); }
+    .main { flex:1; min-width:0; display:flex; flex-direction:column; position:relative; }
+    .body { flex:1; min-height:0; position:relative; display:flex; }
+    .tbl { width:100%; border-collapse:collapse; font-size:12px; }
+    .tbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:7px 8px; border-bottom:1px solid var(--bd); white-space:nowrap; background:oklch(0.17 0.005 286); }
+    .tbl td { height:36px; padding:0 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); white-space:nowrap; vertical-align:middle; }
+    .tbl td.m { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:11.5px; }
+    .tbl td.dim { color:var(--mfg); }
+    .tbl tr.pick td { background:oklch(0.623 0.214 259.815 / 0.12); }
+    .tbl tr.gone td.nm, .tbl tr.gone td.m, .tbl tr.hid td.nm, .tbl tr.hid td.m { text-decoration:line-through; color:var(--mfg); }
+    .tbl tr.hid td { opacity:0.75; }
+    .tbl .ovv { color:var(--ovr); font-weight:600; }
+    .uchips { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); }
+    .uchip { display:inline-flex; flex-direction:column; gap:3px; padding:4px 9px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:11px; font-weight:600; min-width:72px; }
+    .uchip i { display:block; height:3px; border-radius:2px; background:var(--muted); position:relative; overflow:hidden; }
+    .uchip i b { position:absolute; left:0; top:0; bottom:0; background:var(--pri); }
+    .uchip.new { border-color:oklch(0.62 0.17 145 / 0.6); }
+    .toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); }
+    .vsheet { position:absolute; top:0; right:0; bottom:0; width:430px; background:var(--card); border-left:1px solid var(--bd); box-shadow:-16px 0 36px rgba(0,0,0,0.5); display:flex; flex-direction:column; z-index:5; }
+    .vsheet .sh { padding:14px 16px 12px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:6px; }
+    .vsheet .sh .t { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .vsheet .sb { padding:14px 16px; display:flex; flex-direction:column; gap:14px; flex:1; overflow:hidden; }
+    .vsheet .sf { padding:10px 16px; border-top:1px solid var(--bd); display:flex; gap:8px; align-items:center; }
+    .fl { display:flex; flex-direction:column; gap:5px; position:relative; }
+    .fl > label { font-size:11.5px; font-weight:600; }
+    .ta { min-height:54px; padding:7px 9px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; line-height:1.45; }
+    .sel.open { border-color:var(--pri); box-shadow:0 0 0 2px oklch(0.623 0.214 259.815 / 0.25); }
+    .sel .caret { margin-left:auto; color:var(--mfg); }
+    .menu { position:absolute; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 14px 32px rgba(0,0,0,0.55); padding:4px; z-index:7; min-width:230px; }
+    .menu .mi { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 8px; border-radius:6px; font-size:12px; }
+    .menu .mi.on { background:var(--muted); }
+    .menu .mi small { margin-left:auto; color:var(--mfg); font-size:10.5px; padding-left:12px; }
+    .menu .mi .sub { display:block; font-size:10.5px; color:var(--mfg); }
+    .menu .ms { height:1px; background:var(--bd); margin:4px 0; }
+    .menu .mi.red { color:oklch(0.72 0.18 27); }
+    .menu .mi.new { color:var(--ven); }
+    .menu .ml { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px 2px; }
+    .pcard { border:1px solid var(--bd); border-radius:12px; background:var(--card); padding:14px 14px 12px; display:flex; flex-direction:column; gap:8px; position:relative; }
+    .pcard.cur { background:oklch(0.623 0.214 259.815 / 0.10); border-color:oklch(0.623 0.214 259.815 / 0.45); }
+    .pcard.ven { border-color:var(--venbd); background:oklch(0.25 0.03 190 / 0.35); }
+    .pcard .pn { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .pcard .pd { font-size:12px; color:var(--mfg); }
+    .pcard .kebab { position:absolute; right:10px; top:12px; color:var(--mfg); }
+    .badges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:6px; font-size:10.5px; font-weight:600; border:1px solid var(--bd); color:var(--fg); white-space:nowrap; }
+    .badge.fill { background:var(--pri); border-color:var(--pri); color:#fff; }
+    .banner { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid; font-size:12.5px; flex-shrink:0; }
+    .banner .bt { flex:1; line-height:1.45; }
+    .banner .bt b { font-weight:700; }
+    .banner .bt span { color:oklch(0.8 0.01 286); }
+    .banner.info { background:var(--venbg); border-color:var(--venbd); }
+    .banner.info > svg { color:var(--ven); }
+    .banner.hold { background:oklch(0.34 0.08 70 / 0.4); border-color:oklch(0.72 0.14 75 / 0.6); }
+    .banner.hold > svg { color:oklch(0.86 0.14 80); }
+    .banner.edit { background:var(--venbg); border-color:var(--venbd); padding:7px 16px; font-size:12px; }
+    .blind { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.75 0.15 80 / 0.8); background:oklch(0.4 0.1 80 / 0.55); color:oklch(0.92 0.12 85); font-size:12px; font-weight:700; }
+    .facet { border:1px solid var(--bd); border-radius:10px; padding:9px 10px; display:flex; flex-direction:column; gap:7px; background:var(--bg); }
+    .facet.ovr { border-color:var(--ovrbd); }
+    .facet .fh { display:flex; align-items:center; gap:8px; }
+    .facet .fh b { font-size:12.5px; flex:1; }
+    .facet .fv { font-size:11.5px; color:var(--mfg); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .facet .fv .mono { color:var(--fg); }
+    .seg.vs span.on.v { background:var(--venbg); color:var(--ven); }
+    .seg.vs span.on.s { background:var(--ovrbg); color:var(--ovr); }
+    .chg { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 9px; border-radius:7px; background:var(--bg); border:1px solid var(--bd); font-size:11.5px; line-height:1.35; }
+    .chg .sym { width:14px; flex:0 0 auto; text-align:center; font:800 13px ui-monospace,Menlo,monospace; }
+    .chg .sym.p { color:oklch(0.8 0.15 145); }
+    .chg .sym.m { color:oklch(0.75 0.17 27); }
+    .chg .sym.c { color:oklch(0.85 0.13 80); }
+    .chg .tx { flex:1; min-width:0; }
+    .chg .tx small { display:block; color:var(--mfg); font-size:10.5px; }
+    .grouph { display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--mfg); }
+    .grouph .ct { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px; padding:0 5px; border-radius:999px; background:var(--muted); color:var(--fg); font-size:10px; letter-spacing:0; }
+    .grouph.x { color:var(--out); }
+    .grouph.ok { color:oklch(0.8 0.15 145); }
+    .grouph.d { color:oklch(0.86 0.13 80); }
+    .stack { display:flex; flex-direction:column; gap:6px; }
+    .dlg { position:absolute; background:var(--card); border:1px solid var(--bd); border-radius:14px; box-shadow:0 24px 60px rgba(0,0,0,0.6); display:flex; flex-direction:column; z-index:6; overflow:hidden; }
+    .dlg .dh { padding:16px 20px 12px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:6px; }
+    .dlg .dh .t { font-size:17px; font-weight:600; }
+    .dlg .db { padding:16px 20px; display:grid; gap:20px; flex:1; min-height:0; }
+    .dlg .df { padding:12px 20px; border-top:1px solid var(--bd); display:flex; gap:8px; align-items:center; background:oklch(0.17 0.005 286); }
+    .scrim { position:absolute; inset:0; background:rgba(0,0,0,0.45); z-index:5; }
+    .fr { border:1px solid var(--bd); border-radius:10px; overflow:hidden; background:var(--bg); }
+    .fr .fcap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 10px; background:oklch(0.17 0.005 286); border-bottom:1px solid var(--bd); }
+    .hdrrow { display:flex; align-items:center; gap:10px; padding:0 16px; height:48px; border-bottom:1px solid var(--bd); flex-shrink:0; }
+    .hdrrow .vt { font-size:14px; font-weight:600; }
+    .vtag { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px; border-radius:5px; font-size:9.5px; font-weight:800; letter-spacing:0.08em; background:var(--venbg); color:var(--ven); border:1px solid var(--venbd); }
+    .board { padding:20px 24px; display:flex; flex-direction:column; gap:16px; }
+    .kvt { display:grid; grid-template-columns:150px 1fr; gap:6px 14px; font-size:11.5px; line-height:1.45; }
+    .kvt .k { color:var(--fg); font-weight:600; }
+    .kvt > span:nth-child(even) { color:var(--mfg); }
+    .wtbl { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .wtbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); }
+    .wtbl td { padding:6px 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); vertical-align:top; line-height:1.4; }
+    .wtbl td:first-child { white-space:nowrap; font-weight:600; }
+    .dec { display:grid; grid-template-columns:34px 1fr; gap:4px 10px; font-size:11.5px; line-height:1.45; color:var(--mfg); }
+    .dec b { color:var(--fg); font-weight:600; }
+    .dec .dn { font:700 11px ui-monospace,Menlo,monospace; color:var(--amber); }
+
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1180px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+
+<div style="display:flex; flex:1; min-height:0;">
+<div class="rail"><div class="rh"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div><div class="ri on"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v4"/></svg></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/></svg></div><div class="rsep"></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></div><div class="rsep"></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M9 20V4M14 20v-7M19 20V8"/></svg></div><div class="rsep"></div><div class="ri "><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></div></div>
+<div class="main">
+<div class="appbar"><span class="title">Chris' DMX Controller v7</span><span class="conn"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Connected</span><span class="avatar">CC</span></div>
+<div class="hdrrow"><span style="color:var(--ven)"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg></span><span class="vt">Commemoration Hall</span><span class="vtag">VENUE</span><span class="crumbs" style="font-size:13px">› <b>Patch List</b></span>
+  <span class="spacer"></span>
+  <span class="own d"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Draft · 6 changes since v5</span>
+  <span class="btn out sm"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>History</span>
+  <span class="btn pri sm" style="margin-right:430px"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>Publish v6…</span></div>
+<div class="banner edit"><span style="color:var(--ven)"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg></span><span class="bt"><b>Editing the venue.</b> <span>Changes collect in a draft. No show sees them until you publish, and then only when each show takes the update.</span></span></div>
+<div class="body">
+<div style="flex:1; min-width:0; display:flex; flex-direction:column; padding-right:430px">
+  <div class="uchips"><span class="lbl">Universes</span>
+    <span class="uchip">U1 <i><b style="width:24%"></b></i></span><span class="uchip">U2 <i><b style="width:12%"></b></i></span>
+    <span class="uchip new">U3 <span class="tag new" style="height:14px">new</span><i><b style="width:5%"></b></i></span><span class="uchip">U4 <i><b style="width:1%"></b></i></span></div>
+  <div class="toolbar"><span class="seg"><span class="on">All</span><span>1</span><span>2</span><span>3</span><span>4</span></span><span class="field" style="width:200px; color:var(--mfg)"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Filter…</span>
+    <span class="seg"><span>All</span><span class="on">Changed in draft</span></span><span class="spacer"></span><span class="btn out sm">Groups</span><span class="btn out sm">Columns ▾</span><span class="btn pri sm"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Patch</span></div>
+  <table class="tbl">
+    <tr><th>Fixture</th><th>Head</th><th>Address</th><th>Type</th><th>Key</th><th>Mount</th><th>Lantern</th><th>Draft</th></tr>
+    <tr class=""><td class="nm" style="font-weight:600">SR FACE 19°</td><td class="m dim">5</td><td class="m">1-005</td><td>Generic dimmer</td><td class="m dim">sr-face</td><td>ADV2</td><td class="dim">Source Four 19°</td><td></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">C FACE 19°</td><td class="m dim">6</td><td class="m">1-006</td><td>Generic dimmer</td><td class="m dim">c-face</td><td>ADV2</td><td class="dim">Source Four 19°</td><td></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">LX2 FRES</td><td class="m dim">10</td><td class="m">1-010</td><td>Generic dimmer</td><td class="m dim">lx2-fres</td><td>LX2</td><td class="dim">Cantata F</td><td><span class="own ">Position</span></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">LX2 C FRES</td><td class="m dim">21</td><td class="m">1-021</td><td>Generic dimmer</td><td class="m dim">lx2-c-fres</td><td>LX2</td><td class="dim">Cantata F</td><td><span class="own ">Media · L201 → L202</span></td></tr>
+    <tr class="gone"><td class="nm" style="font-weight:600">NON DIM (LX3)</td><td class="m dim">23</td><td class="m">1-023</td><td>Generic dimmer</td><td class="m dim">non-dim-lx3</td><td>LX3</td><td class="dim">—</td><td><span class="own x">Removed</span></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">LX3 BATTEN 1</td><td class="m dim">31</td><td class="m">3-001</td><td>Kam Liteobar 252</td><td class="m dim">lx3-batten-1</td><td>LX3</td><td class="dim">—</td><td><span class="own x">Added</span></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">LX3 BATTEN 2</td><td class="m dim">32</td><td class="m">3-012</td><td>Kam Liteobar 252</td><td class="m dim">lx3-batten-2</td><td>LX3</td><td class="dim">—</td><td><span class="own x">Added</span></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">HAZER</td><td class="m dim">—</td><td class="m">1-512</td><td>ADJ Fog Fury Jett</td><td class="m dim">hazer</td><td>Free</td><td class="dim">—</td><td><span class="own x">Address · 1-500 → 1-512</span></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">house 1</td><td class="m dim">—</td><td class="m">4-001</td><td>House light</td><td class="m dim">house-1</td><td>Free</td><td class="dim">—</td><td></td></tr>
+    <tr class=""><td class="nm" style="font-weight:600">Revolution SR</td><td class="m dim">41</td><td class="m">2-001</td><td>Source 4 Revolution</td><td class="m dim">rev-sr</td><td>LX1</td><td class="dim">—</td><td></td></tr>
+  </table>
+  <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px; padding:16px 12px; position:relative">
+    <div class="fr"><div class="fcap">History · Commemoration Hall</div>
+      <table class="wtbl">
+        <tr><th>Version</th><th>Published</th><th>Note</th><th>Shows on it</th><th></th></tr>
+        <tr><td>Draft</td><td style="color:var(--mfg)">editing</td><td>6 changes</td><td>—</td><td><span class="btn ghost sm">Discard</span></td></tr>
+        <tr><td>v5</td><td>3 Oct 2026 · Chris</td><td>Added house lights on U4</td><td>Summer Show 2026, Panto 2027</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v4</td><td>12 Aug 2026 · Chris</td><td>LX2 extended to 6 m</td><td>Christmas Concert 2026</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v3</td><td>2 Apr 2026 · Chris</td><td>Re-patch: dimmers to 1–24</td><td>Spring Concert 2026</td><td><span class="btn ghost sm">Compare</span></td></tr>
+        <tr><td>v1</td><td>28 Mar 2026 · Chris</td><td>Extracted from project 9</td><td style="color:var(--mfg)">—</td><td><span class="btn ghost sm">Compare</span></td></tr>
+      </table></div>
+    <div class="stack">
+      <div class="note"><p class="cap"><b>The rail is the venue's.</b> Patch, Fixtures, Groups, Programmer (to test and focus — <i>Record</i> is off), Stage, Channels, and Project Settings: Regions, Rigging, Sync. Scripts, FX, Looks, Templates, Show, Prompt Book and Busk are hidden.</p></div>
+      <div class="note"><p class="cap"><b>Operators</b> can open a venue to look, read-only: no draft, no Publish, no History actions.</p></div>
+      <div class="note"><p class="cap"><b>Seating is marked per block.</b> <i>Balcony</i> is Fixed: part of the venue, in every show, with its seat views. <i>Theatre rows</i>, <i>Cabaret</i> and <i>Concert</i> are Presets, copied into a show.</p></div>
+    </div>
+    <span class="callout" style="left:2px; top:8px">5</span>
+    <span class="callout" style="right:-8px; top:8px">6</span>
+  </div>
+  <span class="callout" style="left:12px; top:-30px">1</span>
+  <span class="callout" style="left:calc(100% - 470px); top:96px">2</span>
+</div>
+<div class="vsheet">
+  <div class="sh"><span class="t"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>Publish Commemoration Hall v6</span><p class="cap">v6 becomes the hall as hung. It is immutable; the draft starts empty again.</p></div>
+  <div class="sb">
+    <div class="fl"><label>What changed?</label><div class="ta">Rehung LX3 as two LED battens on a new universe 3; re-gelled LX2 centre; moved the hazer to 512.</div></div>
+    <div class="stack"><div class="grouph x"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>Changes output<span class="ct">4</span></div>
+      <div class="chg"><span class="sym p">+</span><span class="tx">Universe 3 · Art-Net 0:3</span></div>
+      <div class="chg"><span class="sym p">+</span><span class="tx">LX3 BATTEN 1–2 · 3-001, 3-012</span></div>
+      <div class="chg"><span class="sym m">−</span><span class="tx">NON DIM (LX3) · 1-023</span></div>
+      <div class="chg"><span class="sym c">~</span><span class="tx">HAZER · 1-500 → 1-512</span></div>
+    </div>
+    <div class="stack"><div class="grouph"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Drawing only<span class="ct">2</span></div>
+      <div class="chg"><span class="sym c">~</span><span class="tx">LX2 FRES position<small>x −1.20 → −0.90 m on LX2</small></span></div>
+      <div class="chg"><span class="sym c">~</span><span class="tx">LX2 C FRES media<small>gel L201 → L202</small></span></div>
+    </div>
+    <div class="stack"><div class="grouph"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4Z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Shows on this venue<span class="ct">4</span></div>
+      <div class="chg"><span class="tx"><b>Summer Show 2026</b> · v5<small>Offered v6 when next opened — opens in Blind until updated</small></span><span class="own x">output</span></div>
+      <div class="chg"><span class="tx"><b>Panto 2027</b> · v5<small>Offered v6 when next opened — opens in Blind until updated</small></span><span class="own x">output</span></div>
+      <div class="chg"><span class="tx"><b>Christmas Concert 2026</b> · v4<small>Already behind; will be offered v6</small></span></div>
+      <div class="chg"><span class="tx"><b>Spring Concert 2026</b> · v3<small>Already behind; will be offered v6</small></span></div>
+    </div>
+    <span class="callout" style="left:-10px; top:120px">3</span>
+    <span class="callout" style="left:-10px; top:400px">4</span>
+  </div>
+  <div class="sf"><span class="btn ghost" style="color:oklch(0.72 0.18 27)">Discard draft</span><span class="spacer"></span><span class="btn out">Cancel</span><span class="btn pri">Publish v6</span></div>
+</div>
+</div>
+</div></div>
+<div class="legend"><div><span class="n">1</span><span><b>Same views, in venue mode.</b> The header says VENUE and the draft's size; the band says nothing reaches a show until it is published and taken.</span></div><div><span class="n">2</span><span><b>Every draft change is marked on its row</b> — Added, Removed, or the facet that changed — red-amber when it changes output.</span></div><div><span class="n">3</span><span><b>Publish splits output from drawing</b>, the same classification a show's update uses, so the note writes itself.</span></div><div><span class="n">4</span><span><b>Who is affected</b>: every show on this venue and what it will see next time it opens.</span></div><div><span class="n">5</span><span><b>Versions are immutable.</b> Compare any two; a version a show is pinned to is never pruned.</span></div><div><span class="n">6</span><span><b>Admins only</b> edit and publish. The Programmer stays for testing and focusing; it cannot record into a venue.</span></div></div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Venue model</title>
+  <style>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { z-index:6; position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+    /* ── additions for the stage-view boards ─────────────────────────────── */
+    .appbar .armed { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.21 27); border:1px solid oklch(0.7 0.19 27); font-size:12px; font-weight:700; letter-spacing:0.06em; }
+    .viewhdr { height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .viewhdr .vt { font-size:14px; font-weight:600; margin-right:6px; }
+    .vp { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); font-size:12.5px; font-weight:600; color:oklch(0.85 0.1 255); }
+    .vp small { font-weight:400; color:var(--mfg); }
+    .btn .kbd, .kbd { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:1px 5px; border-radius:4px; border:1px solid var(--bd); color:var(--mfg); }
+    .spacer { flex:1; }
+    .canvas { position:relative; flex:1; min-width:0; background:#07090d; overflow:hidden; }
+    .canvas > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .ov { position:absolute; }
+    .ovcap { left:12px; top:10px; font-size:12px; color:var(--mfg); }
+    .ovcap b { color:var(--fg); font-weight:600; }
+    .poslbl { position:absolute; padding:1px 6px; border-radius:4px; font:700 10px ui-monospace,Menlo,monospace; letter-spacing:0.06em; color:var(--amber); background:oklch(0.141 0.005 285.823 / 0.82); border:1px solid oklch(0.82 0.16 80 / 0.4); }
+    .fxlbl { position:absolute; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:oklch(0.3 0.09 260 / 0.92); border:1px solid var(--pri); }
+    .selbar { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; display:flex; gap:10px; align-items:center; background:oklch(0.21 0.006 285.885 / 0.94); border:1px solid var(--bd); border-radius:10px; padding:6px 8px 6px 12px; font-size:12px; white-space:nowrap; }
+    .selbar .m { color:var(--mfg); }
+    .selbar .b { border:1px solid var(--bd); background:var(--muted); border-radius:6px; padding:2px 8px; font-size:11px; }
+    .panel { width:360px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+    .panel .ph { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .panel .ph b { font-size:14px; }
+    .panel .pb { padding:12px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sec .st { display:flex; align-items:center; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .sec .st::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .row2 { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; align-items:center; font-size:12px; }
+    .row2 > span:first-child { color:var(--mfg); font-size:11px; }
+    .row3 { display:grid; grid-template-columns:62px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; font-size:11px; }
+    .row3 > span:first-child { color:var(--mfg); }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .sel::after { content:'▾'; margin-left:auto; color:var(--mfg); font-size:10px; }
+    .num { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font:12px ui-monospace,Menlo,monospace; display:flex; align-items:center; font-variant-numeric:tabular-nums; }
+    .gate { width:132px; height:132px; flex:0 0 auto; }
+    .chipx { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px 0 4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11px; white-space:nowrap; }
+    .chipx i { width:14px; height:14px; border-radius:3px; background:#2a2d33; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08); display:block; }
+    .chipx b { font-weight:400; color:var(--mfg); font:10px ui-monospace,Menlo,monospace; }
+    .chipx.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.18); }
+    .prow { display:grid; grid-template-columns:70px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--bd); align-items:start; }
+    .prow .pn { font:700 10px ui-monospace,Menlo,monospace; color:var(--amber); letter-spacing:0.04em; padding-top:4px; }
+    .prow .pn small { display:block; font-weight:400; color:var(--mfg); letter-spacing:0; }
+    .prow .cs { display:flex; flex-wrap:wrap; gap:4px; }
+    .edge { text-align:center; font:700 9px ui-monospace,Menlo,monospace; letter-spacing:0.2em; color:var(--mfg); padding:4px 0; border-top:1px dashed var(--bd); border-bottom:1px dashed var(--bd); }
+    .pal { width:220px; flex-shrink:0; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+    .pal .pi { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; font-size:12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.5); }
+    .pal .pi svg { color:var(--mfg); }
+    .pal .ph2 { padding:10px 12px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .el { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; font-size:12px; padding:4px 0; align-items:baseline; }
+    .el .k { font:10px ui-monospace,Menlo,monospace; color:oklch(0.8 0.12 255); }
+    .el .d { font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .el.on { background:oklch(0.623 0.214 259.815 / 0.14); border-radius:6px; padding:4px 6px; margin:0 -6px; }
+    .sheet { width:520px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; }
+    .item { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; }
+    .item .m { color:var(--mfg); font-size:11px; }
+    .item.new { border-color:oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.18); }
+    .item.danger { border-color:oklch(0.55 0.2 27 / 0.7); background:oklch(0.3 0.08 27 / 0.25); }
+    .dim { opacity:0.45; }
+    .hatch { background-image:repeating-linear-gradient(135deg, oklch(0.274 0.006 286.033 / 0.5) 0 6px, transparent 6px 12px); }
+    .frame { position:absolute; border:2px dashed var(--amber); border-radius:10px; pointer-events:none; }
+    .btn.pri { background:var(--pri); color:#fff; border:0; }
+    .btn.red { background:oklch(0.55 0.21 27); color:#fff; border:0; }
+
+    /* ── additions for the venue boards ───────────────────────────────────── */
+    :root { --ven:oklch(0.82 0.09 190); --venbd:oklch(0.6 0.09 190 / 0.55); --venbg:oklch(0.3 0.05 190 / 0.35);
+      --shw:oklch(0.8 0.12 255); --shwbd:oklch(0.55 0.14 255 / 0.55); --shwbg:oklch(0.3 0.08 255 / 0.3);
+      --ovr:oklch(0.82 0.12 300); --ovrbd:oklch(0.55 0.14 300 / 0.6); --ovrbg:oklch(0.3 0.08 300 / 0.3);
+      --out:oklch(0.8 0.13 35); --outbd:oklch(0.58 0.16 35 / 0.6); --outbg:oklch(0.3 0.08 35 / 0.3); }
+    .own { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:999px; font-size:10.5px; font-weight:600; white-space:nowrap; border:1px solid var(--bd); color:var(--mfg); }
+    .own.v { color:var(--ven); border-color:var(--venbd); background:var(--venbg); }
+    .own.s { color:var(--shw); border-color:var(--shwbd); background:var(--shwbg); }
+    .own.o { color:var(--ovr); border-color:var(--ovrbd); background:var(--ovrbg); }
+    .own.d { color:oklch(0.86 0.13 80); border-color:oklch(0.65 0.13 80 / 0.6); background:oklch(0.32 0.07 80 / 0.35); }
+    .own.x { color:var(--out); border-color:var(--outbd); background:var(--outbg); }
+    .own.h { border-style:dashed; }
+    .src { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; }
+    .src.v { color:var(--ven); background:var(--venbg); }
+    .src.s { color:var(--shw); background:var(--shwbg); }
+    .main { flex:1; min-width:0; display:flex; flex-direction:column; position:relative; }
+    .body { flex:1; min-height:0; position:relative; display:flex; }
+    .tbl { width:100%; border-collapse:collapse; font-size:12px; }
+    .tbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:7px 8px; border-bottom:1px solid var(--bd); white-space:nowrap; background:oklch(0.17 0.005 286); }
+    .tbl td { height:36px; padding:0 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); white-space:nowrap; vertical-align:middle; }
+    .tbl td.m { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:11.5px; }
+    .tbl td.dim { color:var(--mfg); }
+    .tbl tr.pick td { background:oklch(0.623 0.214 259.815 / 0.12); }
+    .tbl tr.gone td.nm, .tbl tr.gone td.m, .tbl tr.hid td.nm, .tbl tr.hid td.m { text-decoration:line-through; color:var(--mfg); }
+    .tbl tr.hid td { opacity:0.75; }
+    .tbl .ovv { color:var(--ovr); font-weight:600; }
+    .uchips { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); }
+    .uchip { display:inline-flex; flex-direction:column; gap:3px; padding:4px 9px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:11px; font-weight:600; min-width:72px; }
+    .uchip i { display:block; height:3px; border-radius:2px; background:var(--muted); position:relative; overflow:hidden; }
+    .uchip i b { position:absolute; left:0; top:0; bottom:0; background:var(--pri); }
+    .uchip.new { border-color:oklch(0.62 0.17 145 / 0.6); }
+    .toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); }
+    .vsheet { position:absolute; top:0; right:0; bottom:0; width:430px; background:var(--card); border-left:1px solid var(--bd); box-shadow:-16px 0 36px rgba(0,0,0,0.5); display:flex; flex-direction:column; z-index:5; }
+    .vsheet .sh { padding:14px 16px 12px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:6px; }
+    .vsheet .sh .t { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .vsheet .sb { padding:14px 16px; display:flex; flex-direction:column; gap:14px; flex:1; overflow:hidden; }
+    .vsheet .sf { padding:10px 16px; border-top:1px solid var(--bd); display:flex; gap:8px; align-items:center; }
+    .fl { display:flex; flex-direction:column; gap:5px; position:relative; }
+    .fl > label { font-size:11.5px; font-weight:600; }
+    .ta { min-height:54px; padding:7px 9px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; line-height:1.45; }
+    .sel.open { border-color:var(--pri); box-shadow:0 0 0 2px oklch(0.623 0.214 259.815 / 0.25); }
+    .sel .caret { margin-left:auto; color:var(--mfg); }
+    .menu { position:absolute; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 14px 32px rgba(0,0,0,0.55); padding:4px; z-index:7; min-width:230px; }
+    .menu .mi { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 8px; border-radius:6px; font-size:12px; }
+    .menu .mi.on { background:var(--muted); }
+    .menu .mi small { margin-left:auto; color:var(--mfg); font-size:10.5px; padding-left:12px; }
+    .menu .mi .sub { display:block; font-size:10.5px; color:var(--mfg); }
+    .menu .ms { height:1px; background:var(--bd); margin:4px 0; }
+    .menu .mi.red { color:oklch(0.72 0.18 27); }
+    .menu .mi.new { color:var(--ven); }
+    .menu .ml { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px 2px; }
+    .pcard { border:1px solid var(--bd); border-radius:12px; background:var(--card); padding:14px 14px 12px; display:flex; flex-direction:column; gap:8px; position:relative; }
+    .pcard.cur { background:oklch(0.623 0.214 259.815 / 0.10); border-color:oklch(0.623 0.214 259.815 / 0.45); }
+    .pcard.ven { border-color:var(--venbd); background:oklch(0.25 0.03 190 / 0.35); }
+    .pcard .pn { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .pcard .pd { font-size:12px; color:var(--mfg); }
+    .pcard .kebab { position:absolute; right:10px; top:12px; color:var(--mfg); }
+    .badges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:6px; font-size:10.5px; font-weight:600; border:1px solid var(--bd); color:var(--fg); white-space:nowrap; }
+    .badge.fill { background:var(--pri); border-color:var(--pri); color:#fff; }
+    .banner { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid; font-size:12.5px; flex-shrink:0; }
+    .banner .bt { flex:1; line-height:1.45; }
+    .banner .bt b { font-weight:700; }
+    .banner .bt span { color:oklch(0.8 0.01 286); }
+    .banner.info { background:var(--venbg); border-color:var(--venbd); }
+    .banner.info > svg { color:var(--ven); }
+    .banner.hold { background:oklch(0.34 0.08 70 / 0.4); border-color:oklch(0.72 0.14 75 / 0.6); }
+    .banner.hold > svg { color:oklch(0.86 0.14 80); }
+    .banner.edit { background:var(--venbg); border-color:var(--venbd); padding:7px 16px; font-size:12px; }
+    .blind { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.75 0.15 80 / 0.8); background:oklch(0.4 0.1 80 / 0.55); color:oklch(0.92 0.12 85); font-size:12px; font-weight:700; }
+    .facet { border:1px solid var(--bd); border-radius:10px; padding:9px 10px; display:flex; flex-direction:column; gap:7px; background:var(--bg); }
+    .facet.ovr { border-color:var(--ovrbd); }
+    .facet .fh { display:flex; align-items:center; gap:8px; }
+    .facet .fh b { font-size:12.5px; flex:1; }
+    .facet .fv { font-size:11.5px; color:var(--mfg); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .facet .fv .mono { color:var(--fg); }
+    .seg.vs span.on.v { background:var(--venbg); color:var(--ven); }
+    .seg.vs span.on.s { background:var(--ovrbg); color:var(--ovr); }
+    .chg { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 9px; border-radius:7px; background:var(--bg); border:1px solid var(--bd); font-size:11.5px; line-height:1.35; }
+    .chg .sym { width:14px; flex:0 0 auto; text-align:center; font:800 13px ui-monospace,Menlo,monospace; }
+    .chg .sym.p { color:oklch(0.8 0.15 145); }
+    .chg .sym.m { color:oklch(0.75 0.17 27); }
+    .chg .sym.c { color:oklch(0.85 0.13 80); }
+    .chg .tx { flex:1; min-width:0; }
+    .chg .tx small { display:block; color:var(--mfg); font-size:10.5px; }
+    .grouph { display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--mfg); }
+    .grouph .ct { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px; padding:0 5px; border-radius:999px; background:var(--muted); color:var(--fg); font-size:10px; letter-spacing:0; }
+    .grouph.x { color:var(--out); }
+    .grouph.ok { color:oklch(0.8 0.15 145); }
+    .grouph.d { color:oklch(0.86 0.13 80); }
+    .stack { display:flex; flex-direction:column; gap:6px; }
+    .dlg { position:absolute; background:var(--card); border:1px solid var(--bd); border-radius:14px; box-shadow:0 24px 60px rgba(0,0,0,0.6); display:flex; flex-direction:column; z-index:6; overflow:hidden; }
+    .dlg .dh { padding:16px 20px 12px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:6px; }
+    .dlg .dh .t { font-size:17px; font-weight:600; }
+    .dlg .db { padding:16px 20px; display:grid; gap:20px; flex:1; min-height:0; }
+    .dlg .df { padding:12px 20px; border-top:1px solid var(--bd); display:flex; gap:8px; align-items:center; background:oklch(0.17 0.005 286); }
+    .scrim { position:absolute; inset:0; background:rgba(0,0,0,0.45); z-index:5; }
+    .fr { border:1px solid var(--bd); border-radius:10px; overflow:hidden; background:var(--bg); }
+    .fr .fcap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 10px; background:oklch(0.17 0.005 286); border-bottom:1px solid var(--bd); }
+    .hdrrow { display:flex; align-items:center; gap:10px; padding:0 16px; height:48px; border-bottom:1px solid var(--bd); flex-shrink:0; }
+    .hdrrow .vt { font-size:14px; font-weight:600; }
+    .vtag { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px; border-radius:5px; font-size:9.5px; font-weight:800; letter-spacing:0.08em; background:var(--venbg); color:var(--ven); border:1px solid var(--venbd); }
+    .board { padding:20px 24px; display:flex; flex-direction:column; gap:16px; }
+    .kvt { display:grid; grid-template-columns:150px 1fr; gap:6px 14px; font-size:11.5px; line-height:1.45; }
+    .kvt .k { color:var(--fg); font-weight:600; }
+    .kvt > span:nth-child(even) { color:var(--mfg); }
+    .wtbl { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .wtbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); }
+    .wtbl td { padding:6px 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); vertical-align:top; line-height:1.4; }
+    .wtbl td:first-child { white-space:nowrap; font-weight:600; }
+    .dec { display:grid; grid-template-columns:34px 1fr; gap:4px 10px; font-size:11.5px; line-height:1.45; color:var(--mfg); }
+    .dec b { color:var(--fg); font-weight:600; }
+    .dec .dn { font:700 11px ui-monospace,Menlo,monospace; color:var(--amber); }
+
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1420px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+
+<div class="board" style="flex:1">
+  <div style="display:flex; align-items:baseline; gap:12px"><span class="h1">Venues and shows · the model</span><span class="cap">Decisions from Chris, 2026-10-10. The boards before this one draw them.</span></div>
+  <div style="display:grid; grid-template-columns:1.15fr 1fr; gap:20px">
+    <div class="stack" style="gap:12px">
+      <div class="fr"><div class="fcap">Versions and pins</div><div style="padding:10px 12px">
+<svg viewBox="0 0 960 230" style="width:100%; height:auto; display:block">
+  <line x1="40" y1="60" x2="840" y2="60" stroke="oklch(0.6 0.09 190)" stroke-width="2"/>
+  <circle cx="70" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="70" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">v1</text><circle cx="220" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="220" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">v2</text><circle cx="370" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="370" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">v3</text><circle cx="520" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="520" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">v4</text><circle cx="670" cy="60" r="13" fill="oklch(0.3 0.05 190)" stroke="oklch(0.82 0.09 190)" stroke-width="2"/><text x="670" y="64" fill="oklch(0.9 0.05 190)" font-size="11" font-weight="700" text-anchor="middle">v5</text>
+  <circle cx="820" cy="60" r="13" fill="none" stroke="oklch(0.82 0.13 80)" stroke-width="2" stroke-dasharray="3 3"/><text x="820" y="64" fill="oklch(0.86 0.13 80)" font-size="9" font-weight="700" text-anchor="middle">draft</text>
+  <text x="70" y="30" fill="#9aa" font-size="10" text-anchor="middle">28 Mar</text><text x="70" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">Extracted from project 9</text><text x="220" y="30" fill="#9aa" font-size="10" text-anchor="middle">1 Apr</text><text x="220" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">Tabs re-measured</text><text x="370" y="30" fill="#9aa" font-size="10" text-anchor="middle">2 Apr</text><text x="370" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">Re-patch 1–24</text><text x="520" y="30" fill="#9aa" font-size="10" text-anchor="middle">12 Aug</text><text x="520" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">LX2 to 6 m</text><text x="670" y="30" fill="#9aa" font-size="10" text-anchor="middle">3 Oct</text><text x="670" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">House lights U4</text><text x="820" y="30" fill="#9aa" font-size="10" text-anchor="middle"></text><text x="820" y="94" fill="#c8ccd4" font-size="10" text-anchor="middle">6 changes · admins</text>
+  <rect x="300" y="150" width="140" height="44" rx="8" fill="oklch(0.21 0.006 285.885)" stroke="oklch(0.8 0.13 35)"/><text x="370" y="168" fill="#eee" font-size="11" font-weight="600" text-anchor="middle">Spring Concert 2026</text><text x="370" y="184" fill="oklch(0.8 0.13 35)" font-size="10" text-anchor="middle">pins v3 · behind · output</text><line x1="370" y1="150" x2="370" y2="76" stroke="oklch(0.8 0.13 35)" stroke-width="1.5" stroke-dasharray="4 3"/><rect x="450" y="150" width="140" height="44" rx="8" fill="oklch(0.21 0.006 285.885)" stroke="oklch(0.86 0.13 80)"/><text x="520" y="168" fill="#eee" font-size="11" font-weight="600" text-anchor="middle">Christmas Concert</text><text x="520" y="184" fill="oklch(0.86 0.13 80)" font-size="10" text-anchor="middle">pins v4 · behind · drawing</text><line x1="520" y1="150" x2="520" y2="76" stroke="oklch(0.86 0.13 80)" stroke-width="1.5" stroke-dasharray="4 3"/><rect x="600" y="150" width="140" height="44" rx="8" fill="oklch(0.21 0.006 285.885)" stroke="oklch(0.8 0.12 255)"/><text x="670" y="168" fill="#eee" font-size="11" font-weight="600" text-anchor="middle">Summer Show · Panto</text><text x="670" y="184" fill="oklch(0.8 0.12 255)" font-size="10" text-anchor="middle">pins v5 · current</text><line x1="670" y1="150" x2="670" y2="76" stroke="oklch(0.8 0.12 255)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="40" y="222" fill="#9aa" font-size="10">A show moves along the line only by Update. Publishing never moves a show.</text>
+</svg></div></div>
+      <div class="fr"><div class="fcap">The show's rig = venue at its pinned version ⊕ the show's layer</div>
+        <div style="padding:10px 12px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px">
+          <div class="note"><p class="cap"><span class="own s"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Additions</span><br>Patches, riggings, elements, groups and viewpoints the show owns — hires, booms, the set, movable seating.</p></div>
+          <div class="note"><p class="cap"><span class="own o">Facet overrides</span><br>One row per (venue record uuid, facet): Address, Position, Focus, Media. A whole facet or nothing.</p></div>
+          <div class="note"><p class="cap"><span class="own h"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>Hides</span><br>A venue fixture, rigging or element this show doesn't use. The venue keeps it.</p></div>
+        </div></div>
+      <div class="fr"><div class="fcap">What's whose</div>
+        <table class="wtbl">
+          <tr><th>Record</th><th>Owner</th><th>Notes</th></tr>
+          <tr><td>Room, proscenium, tabs, masking</td><td><span class="own v">Venue</span></td><td>Scene elements, layer VENUE. A show may hide one.</td></tr>
+          <tr><td>Stage regions (the deck)</td><td><span class="own v">Venue</span> <span class="own s">+ show</span></td><td>A thrust or extension is a show addition.</td></tr>
+          <tr><td>Stage bounds</td><td><span class="own v">Venue</span></td><td>Moves off <span class="mono">projects</span> onto the venue.</td></tr>
+          <tr><td>Riggings</td><td><span class="own v">Venue</span> <span class="own s">+ show</span></td><td>Bars and bridge the venue's; booms and stands the show's.</td></tr>
+          <tr><td>Universes</td><td><span class="own v">Venue</span> <span class="own s">+ show</span></td><td>Addresses stay machine-local overrides, keyed by uuid as today.</td></tr>
+          <tr><td>House patch</td><td><span class="own v">Venue</span> <span class="own o">facets</span></td><td>Identity is the venue's; Address, Position, Focus, Media overridable.</td></tr>
+          <tr><td>Groups</td><td><span class="own v">Venue</span> <span class="own s">+ show</span></td><td>A show group may hold venue fixtures; a venue group never a show's.</td></tr>
+          <tr><td>Viewpoints</td><td><span class="own v">cameras</span> <span class="own s">+ show</span></td><td>A seat view goes with its seating block: the balcony's are the venue's, the stalls' the show's.</td></tr>
+          <tr><td>Seating</td><td><span class="own v">Fixed</span> <span class="own s">Preset</span></td><td>Per block. A Fixed block is the venue's; a Preset is copied into a show, never referenced.</td></tr>
+          <tr><td>Set, scenery, cues, Looks, templates, busk, prompt book, speed masters, scripts, FX</td><td><span class="own s">Show</span></td><td>Unchanged.</td></tr>
+        </table></div>
+    </div>
+    <div class="stack" style="gap:12px">
+      <div class="fr"><div class="fcap">Decisions</div><div class="dec" style="padding:12px">
+        <span class="dn">D1</span><span><b>A venue is a project of kind VENUE.</b> A show references one — venue uuid + version — or none. Every existing table keeps its project FK; extracting a venue moves rows between projects with their uuids.</span>
+        <span class="dn">D2</span><span><b>Pinned, not live.</b> A venue change reaches a show only through Update.</span>
+        <span class="dn">D3</span><span><b>Explicit publish</b> from one draft, with a note. Versions are immutable. Admins only.</span>
+        <span class="dn">D4</span><span><b>Overrides are per facet:</b> Address, Position, Focus, Media. Identity (name, key, type, head) is the venue's.</span>
+        <span class="dn">D5</span><span><b>The show layer</b> is additions, facet overrides and hides, over one key namespace.</span>
+        <span class="dn">D6</span><span><b>Seating is per block.</b> Fixed blocks (the balcony) are the venue's, with their seat views. Preset blocks are copied into a show at creation or by <i>Replace from preset</i>.</span>
+        <span class="dn">D7</span><span><b>Output-affecting drift opens in Blind</b>; drawing-only drift is a banner. <i>Run against vN</i> is per session; the installed version's trigger and command channels stay guarded.</span>
+        <span class="dn">D8</span><span><b>A venue syncs as its own repo.</b> A version is a commit tagged <span class="mono">v5</span>; a show's <span class="mono">project.json</span> carries <span class="mono">venueUuid</span> + <span class="mono">venueVersion</span>, and importing one whose venue is absent asks for the venue repo.</span>
+        <span class="dn">D9</span><span><b>No touring tool.</b> Detach flattens venue ⊕ show into a standalone project.</span>
+        <span class="dn">D10</span><span><b>The hall owns everything patched today</b>, movers, LED kit and cannon included. A show adds what it brings in, like the panto's hires.</span>
+        <span class="dn">D11</span><span><b>The Programmer works in a venue</b> for testing and focus; Record is off.</span>
+        <span class="dn">D12</span><span><b>Venues have groups</b> (FOH, LX1, House, Movers). A show adds its own, which may hold venue fixtures; a venue group never holds a show's.</span>
+      </div></div>
+      <div class="fr"><div class="fcap">Stored · wire · the prerequisite</div><div class="kvt" style="padding:12px">
+        <span class="k">projects</span><span><span class="mono">kind</span> (SHOW | VENUE), <span class="mono">venue_uuid</span>, <span class="mono">venue_version</span>; stage bounds read from the venue.</span>
+        <span class="k">venue_versions</span><span>venue, number, note, published at/by, and a frozen read-only snapshot project holding that version's rows. DB uuids aren't unique-indexed, so snapshots share them.</span>
+        <span class="k">show_overrides · show_hides</span><span>Portable with the show: record table + uuid, facet, value. Canonical JSON; <span class="mono">formatVersion</span> 24.</span>
+        <span class="k">uuid links first</span><span>Group members, busk rig tiles, cue events and scenery rows point at patches and elements by row id. They must point by uuid so a show can change version without rewriting its rows.</span>
+        <span class="k">Migrations</span><span>Additive columns and tables only; the extract step moves rows. If a second install exists by then, the migration seam comes back first.</span>
+      </div></div>
+      <div class="fr"><div class="fcap">Sessions</div><div class="dec" style="padding:12px">
+        <span class="dn">S1</span><span><b>uuid links</b> for group members, rig tiles, cue events, scenery. No behaviour change.</span>
+        <span class="dn">S2</span><span><b>Venue kind, versions, publish</b> and the frozen snapshot; <i>Extract a venue</i> (project 9 → the Commemoration Hall at v1, every patched fixture with it).</span>
+        <span class="dn">S3</span><span><b>The effective rig</b>: loader merges venue vN ⊕ show; additions, hides, key namespace; the Patch list's source column.</span>
+        <span class="dn">S4</span><span><b>Facet overrides</b>, the fixture sheet's switches, drift.</span>
+        <span class="dn">S5</span><span><b>Behind</b>: banners, the Blind hold, the update review, <i>Run against vN</i>.</span>
+        <span class="dn">S6</span><span><b>Projects page</b>: venues, a new show with seating presets, Detach.</span>
+        <span class="dn">S7</span><span><b>Sync</b>: the venue repo, tags, a show import resolving its venue.</span>
+      </div></div>
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px">
+    <div class="stack"><span class="h2">Considered and declined</span>
+      <div class="note no"><p class="cap"><b>Live inheritance.</b> A venue fix would reach every show at once, including archived ones whose addresses then drive the wrong kit.</p></div>
+      <div class="note no"><p class="cap"><b>A version per save.</b> The list fills with noise and every show is always behind.</p></div>
+      <div class="note no"><p class="cap"><b>The venue copied into each show's repo.</b> Self-contained, but two sources of truth for one hall.</p></div>
+      <div class="note no"><p class="cap"><b>Per-field overrides.</b> A shutter cut without the position it was cut against is meaningless; facets keep related fields together.</p></div>
+      <div class="note no"><p class="cap"><b>One seating switch per venue</b> (fixed or per show). The Commemoration Hall is both: a fixed balcony over movable stalls.</p></div>
+      <div class="note no"><p class="cap"><b>Separate venue tables</b> re-pointed from project to venue: a non-additive change to every table, with no migrations.</p></div>
+    </div>
+    <div class="stack"><span class="h2">Settled in the second round</span>
+      <div class="note key"><p class="cap"><b>The hall's kit.</b> Every fixture patched in project 9 today is the hall's (D10). Shows other than the panto are example names.</p></div>
+      <div class="note key"><p class="cap"><b>Seating per block</b>, not one switch per venue: the hall itself is mixed, a fixed balcony over movable stalls (D6).</p></div>
+      <div class="note key"><p class="cap"><b>Programmer and groups</b> in a venue, as drawn (D11, D12).</p></div>
+      <div class="note key"><p class="cap"><b>The four facets</b> stand: Address · Position (rigging, pose, extra placements) · Focus (lantern, zoom, shutters, iris, softness) · Media (gel, gobos).</p></div>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1420}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>

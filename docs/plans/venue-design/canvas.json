@@ -1,0 +1,41 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Projects.dc.html": {
+      "h": 1060,
+      "title": "Projects and venues · the list, a new show",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Venue.dc.html": {
+      "h": 1180,
+      "title": "Editing the venue · draft, publish, history",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Show.dc.html": {
+      "h": 1160,
+      "title": "A show on a venue · inherited, overridden, added, hidden",
+      "w": 1440,
+      "x": 0,
+      "y": 1260
+    },
+    "Update.dc.html": {
+      "h": 1090,
+      "title": "Opening a show that's behind · Blind, review, update",
+      "w": 1440,
+      "x": 1520,
+      "y": 1260
+    },
+    "Model.dc.html": {
+      "h": 1420,
+      "title": "The model · versions, ownership, decisions, sessions",
+      "w": 1440,
+      "x": 0,
+      "y": 2500
+    }
+  }
+}
