@@ -1,6 +1,6 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — sessions 1–3 shipped 2026-10-09, as `2729120d`, `6c6f4f85` and `14dcb7bd`.** Scope agreed with Chris, 2026-10-09,
+> **Document status: APPROVED — sessions 1–4 shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09) and `324c3b99` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -247,7 +247,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   the 33rd-mask fallback; `open(θ)` pins (49 %, 40 % and 9 % at 0°, 45° and 70° for sharkstooth).
 - **Docs:** the occlusion paragraphs in `stage-vis-engineering.md`.
 
-### Session 4 — see-through surfaces (frontend)
+### Session 4 — see-through surfaces (frontend) — done, `324c3b99`
 
 - **Scrim (D9):** the `SCRIM` define, its render order before the beams, and `open(θ_eye)` with the
   gather exponent. The threads' wrap and glow.
