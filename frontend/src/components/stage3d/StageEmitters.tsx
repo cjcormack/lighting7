@@ -34,6 +34,7 @@ import { packLanding } from './scene/landing'
 import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import { sceneMasks } from './scene/sceneMasks'
+import { BEAM_RENDER_ORDER } from './scene/seeThrough'
 import type { HazeQuality } from './scene/hazeGovernor'
 import type { StageStatsStore } from './scene/stageStats'
 
@@ -554,6 +555,8 @@ export function buildEmitters(
   volumeGeo.setAttribute('aBeamLand', volumeLand)
 
   const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
+  // After every scrim (`seeThrough.ts`), so the additive haze lands on top of a gauze.
+  volumeMesh.renderOrder = BEAM_RENDER_ORDER
   volumeMesh.frustumCulled = false
   volumeMesh.count = lobeCount
 

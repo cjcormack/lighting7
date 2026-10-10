@@ -58,6 +58,12 @@ export interface PartFinish {
    * side set. Where on the image each part's faces land is the part's [ScenePart.uv].
    */
   paint?: ScenePaint
+  /**
+   * τ for a translucent cloth (scrim plan D6, `seeThrough.ts`): the share of light from behind that
+   * lights its front, through both its paints. A muslin drape's only; absent, light behind a face
+   * lights nothing on it.
+   */
+  translucent?: number
 }
 
 /**

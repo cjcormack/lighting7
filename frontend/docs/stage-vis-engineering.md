@@ -981,6 +981,63 @@ without a room — the back wall and the catch floor:
   shadow lets its soft edge through, and the box test passes a point within the cloth's own skin, so
   black serge seen from behind showed the pool in front as faint stripes. `pleat.ts` holds the twins,
   pinned against a march along the ray.
+- **A scrim is seen through** (scrim plan session 4, D9; `scene/seeThrough.ts`). A sharkstooth or
+  bobbinet part — its light a `Transmit` of kind `angle` — compiles with `SCRIM`: `transparent`,
+  `depthWrite: false`, `premultipliedAlpha`, its exit `vec4(encoded · cover, cover)`, so what is
+  behind keeps `1 − cover` of itself. **cover is `1 − open(θ_eye)^gather`**, `scrimCover` in
+  `seeThrough.ts` over `scrimOpen.ts`'s one `open(θ)` — the chunk reads `SCRIM_OPEN_GLSL`'s
+  `scrimShare` through `OCCLUSION_GLSL`, there is no second copy — θ_eye from the **cloth's** normal
+  (a drawn half's `pleatZ`, not its fold's: the folds are the layers `gather` counts, as the shadows
+  read them) to the eye, `towardEye()`: `cameraPosition − p` in perspective, the camera's own axis on
+  an orthographic section. So a gauze is 51 % cloth square on — the Front section, about half open —
+  60 % at 45° and 91 % at 70° from the side of the house, and edge-on in Plan and Side it is a solid
+  line. The same `open(θ)` lets the light in (the shadows, above) and lets the eye out, which is the
+  reveal: front light on the threads and the set dark, the gauze reads solid; the set lit and the front
+  out, it nearly vanishes. **Its threads are round**: a light's incidence reaches them through
+  `scrimThreadLight` — a front light wrapped (`SCRIM_THREAD_WRAP`, 0.45 at grazing, rising to 1 square
+  on, faded in over a cosine of 0.05) and a light behind glowing through them
+  (`SCRIM_THREAD_GLOW`, 0.18 of its incidence), both estimates for session 6; the lobes (the `NET`
+  preset's Oren–Nayar) shape the front light only. A painted net keeps its paint as the albedo under
+  the blend and discards its painted holes as any painted face does; its light stays angle-only
+  (`FU-STAGE-CUT-NET`). Measured once on SwiftShader (a one-off harness, not committed), the GPU's
+  blend weight read back off a cleared target matched `scrimCover` within one 8-bit step at 0°–70°
+  and gather 1 and 2. **It draws after the
+  opaque surfaces and before the beams**: three draws its opaque list first, then the transparent one
+  by `renderOrder` — a scrim's `SCRIM_RENDER_ORDER` (1), the beam volume's `BEAM_RENDER_ORDER` (2),
+  the catch floor 0, and an edit-mode rigging guide drawn faint the scrim's own 1, since it writes no
+  depth either and three then sorts the two by distance — so the additive haze lands on top of the
+  gauze, and a guide in front of a gauze is not blended over by it. Writing no depth, the gauze hides
+  nothing: until session 5 the haze behind it draws at full strength over it. **A gathered net
+  over-covers seen obliquely** (a known approximation, Chris's call, 2026-10-09): a drawn half that
+  has gathered is a sine-folded sheet, two-sided and writing no depth, and every facet a ray crosses
+  blends the whole `1 − open^gather`. Square on a ray crosses it once, which is D3 and D9 exactly
+  (the Front section included); obliquely it crosses two or three and the coverage compounds — a
+  sharkstooth gathered two deep is 84 % cloth at 45° through one crossing and about 99 % through
+  three. A dead or flown gauze hangs flat and is crossed once from anywhere. Left for the tuning
+  session (the plan's §5 "Session 6") to judge by eye; one layer per crossing (losing D3's parity
+  with the shadows) or a nearest-layer stencil are the ways out if it reads wrong.
+- **Muslin is lit from behind** (scrim plan session 4, D6). A muslin part carries `finish.translucent`
+  (τ, `MUSLIN_TRANSMITTANCE` 0.45, an estimate) and compiles with `TRANSLUCENT`; it stays opaque — its
+  `ScenePart.light` is still `'solid'` (or a cut cloth's mask), so beam reach stops at it and its
+  shadow is unchanged — and a light **behind** the face drawn, which every other surface skips
+  (`facing ≤ 0`, the back-face flip), is summed into its own `accBehind` at its cosine from the back,
+  with no lobes and no fold shadow (`pleatFaceSeesLamp` and `foldLight` are a face's own side's) — which
+  side is the **cloth's**: a drawn half that gathers asks its plane (`pleatFaceSeesLamp`), not a fold's
+  normal, so a flank turned from a lamp in front stays dark rather than taking it as one behind, and a
+  lamp behind meets every flank at its cosine from the back — and
+  added as `translucentTint(τ, albedo, otherSide) · accBehind`: τ times this face's paint (or finish)
+  times the other face's paint, white where that side is unpainted or its image has not loaded. So
+  front light shows the front paint, and back light shows the back painting's openings coloured by
+  the front's dye — the day/night cloth; with no light behind the term is 0. The occlusion test lets
+  the back light through the cloth's own box, because the fragment is within its skin of the face the
+  segment leaves by (§"Boxes cast shadows on surfaces"); any other solid box between still stops it.
+  Velour and canvas carry neither define, so nothing behind them ever lights them —
+  `seeThrough.ts`'s `lightIncidence` is the loop's first question as a twin. **Nothing recompiles**:
+  which define a part gets is `surfaceDrawOf(part.light, finish.translucent)`, decided when its
+  material is made (`useSurfaceMaterial`'s `draw`), and the net's thread share and gather (a draw
+  moves it every frame), and τ, are uniforms — `setScrimNet`, `setTranslucency`, written by
+  `ScenePartMesh` in a layout effect that asks for a frame; the eye angle reads three's own
+  `cameraPosition` and `viewMatrix`.
 - **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers samples the
   gobo atlas in its own frame, blurred by the same focus term as its edge — §"Gobos on surfaces"
   under §"Fixture bodies".
@@ -1002,13 +1059,18 @@ z-fight it.
 
 ### Painted cloths
 
-Scrim plan sessions 2 and 3 (`../../docs/plans/scrim-plan.md` D2–D5, D7, D8, D12). A drape's
+Scrim plan sessions 2–4 (`../../docs/plans/scrim-plan.md` D2–D9, D12). A drape's
 `fabric` and a drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene
 document") are drawn, and since session 3 **light passes a net and a hole**: a flat front light
 lights the set through a gauze, a steep wash barely does, a beam's air runs on to the next solid
-surface behind the cloth, and a cut cloth's shadow follows its holes. The cloth itself still draws
-**opaque** — the scrim's see-through blend and muslin's back light are session 4 — and the haze still
-stops at the landing planes, which now lie past a net (session 5 splits it at the cloth).
+surface behind the cloth, and a cut cloth's shadow follows its holes. Since session 4 **the eye
+passes them too**: a net no longer draws opaque but blends over what is behind it by `open(θ_eye)`,
+so a gauze lit from the front with the set dark reads solid and with the front out and the set lit
+nearly vanishes — the reveal — and a muslin is lit from behind through both its paints, the day/night
+cloth (§"Light lands through one surface shader"'s scrim and muslin bullets). A cut cloth stays
+opaque cloth with holes in it. The haze still stops at the landing planes, which lie past a net, and
+does not yet split at a cloth: a gauze writes no depth, so the haze behind it draws whole on top of
+it (session 5 dims it by the eye's share).
 
 - **Only velour pleats** (D2). `buildDrape` draws a velour drape — no `fabric` — as it always has,
   pleated by its `depthM`. Every other fabric hangs flat whatever its depth: a `sheet` part, one
@@ -1043,7 +1105,9 @@ stops at the landing planes, which now lie past a net (session 5 splits it at th
 - **Alpha below half is a hole** (D5): the fragment is discarded where **either** image is below
   0.5, on both faces, so a cut cloth reads from the house and from behind, and a flat's front cut-out
   shows through its back. Since session 3 the shadows and beam reach pass it too (below); the haze
-  still stops at it (session 5).
+  still stops at it (session 5). A cut cloth is **opaque elsewhere** (D9): it keeps depth writes and
+  no blend under every session-4 define — a painted muslin discards its holes and is lit from behind
+  round them — so it stays cloth with holes in it, and a `render_view` capture draws it so.
 - **A part says how it meets light** (D7, session 3): `ScenePart.light` is `'solid'`, `'none'` (a
   proscenium's surround strip, drawn and nothing more — it was `collides: false`) or a `Transmit`:
   `{kind: 'angle', r, gather}` for a sharkstooth (r 0.30) or a bobbinet (0.15) — estimates, judged in

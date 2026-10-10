@@ -4,7 +4,7 @@
  * the pitch. Square on, a beam passes everything between the threads, `(1 − r)²` of it; tilted, the
  * round threads hide the holes behind them, until past `cos θ = r` nothing passes at all. One
  * function decides what a beam passes (`occlusion.ts`'s `segmentTransmit`, beam reach skipping the
- * cloth) and — from session 4 — what an eye sees through.
+ * cloth) and, since session 4, what an eye sees through (`seeThrough.ts`'s `scrimCover`).
  *
  * **Gathered net stacks** (D3): a drawn net gathered into less width than it has holds `c` layers
  * of itself, its width over the width it is gathered into ([ScenePart]'s `gather`, the half's

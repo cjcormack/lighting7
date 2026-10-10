@@ -26,6 +26,8 @@ import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL,
 import { COLLIDER_TEXELS, LIST_TEXELS, makeColliderSet, OCCLUSION_GLSL, type ColliderSet } from './occlusion'
 import { PLEAT_GLSL, pleatUniformValues, type PleatShape } from './pleat'
 import type { FinishPattern, PartFinish } from './sceneParts'
+import { MUSLIN_TRANSMITTANCE, SEE_THROUGH_GLSL, type SurfaceDraw } from './seeThrough'
+import { SCRIM_THREAD_SHARE } from './scrimOpen'
 import type { WorkLightLevels } from './workLights'
 
 /**
@@ -94,6 +96,19 @@ import type { WorkLightLevels } from './workLights'
  * The textures arrive later than the material (`paintTextures.ts`), so they are uniforms beside a
  * flag of which have loaded ([setPaintTextures]); until then, and for good when an image is missing,
  * the face draws its finish.
+ *
+ * **Seeing through** (scrim plan session 4, D6, D9; `seeThrough.ts` holds the twins). A **scrim**
+ * (`SCRIM`, a net) is a premultiplied blend over what is behind it, writing no depth, covering
+ * `1 − open(θ_eye)^gather` of the pixel — θ_eye from the cloth's own normal (the fold's normal is
+ * not it: a gathered net's folds are its layers) to the eye, or the camera's axis on an orthographic
+ * section — so the light that lands behind it shows through by the same `open(θ)` that let it in. Its
+ * threads take a light's incidence through `scrimThreadLight`: a front light wraps them, a light
+ * behind glows through them. A **translucent** cloth (`TRANSLUCENT`, muslin) stays opaque, and every
+ * light behind the face drawn — which every other surface skips — adds its irradiance through
+ * `translucentTint`, τ times this face's paint times the other face's (white unpainted), with no
+ * lobes and no fold shadow. The occlusion test lets that light through the cloth's own box (the
+ * fragment is within its skin of the face it leaves by), and a light beyond any other solid box is
+ * still stopped. Velour and canvas carry neither define, so nothing behind them lights them.
  */
 
 /**
@@ -335,11 +350,22 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${BEAM_FRAME_GLSL}
   ${GOBO_LAYERS_GLSL}
   ${ROLL_OFF_GLSL}
+  ${SEE_THROUGH_GLSL}
 
   #ifdef PLEAT
   // The part's own frame, x across the cloth and z out of it: the fold is drawn in it.
   uniform mat4 modelMatrix;
   ${PLEAT_GLSL}
+  #endif
+
+  #ifdef SCRIM
+  // The net: x its thread share, y the layers it is gathered into (1 hanging open).
+  uniform vec2 uScrim;
+  #endif
+
+  #ifdef TRANSLUCENT
+  // τ: the share of light behind the cloth that reaches the face drawn, through both paints.
+  uniform float uTranslucent;
   #endif
 
   #ifdef PAINT
@@ -350,6 +376,13 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vPaintUv;
   varying float vPaintFace;
   #endif
+
+  // Towards the eye: the camera's own axis for an orthographic section, where every ray is parallel.
+  vec3 towardEye() {
+    return isOrthographic
+      ? normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]))
+      : normalize(cameraPosition - vWorldPos);
+  }
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -386,10 +419,26 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     // The fold's own normal at this point, smoother than the facets' interpolated.
     n = normalize(pleatZ - uPleat.y * pleatRate(across) * cos(pleatPhase(across)) * pleatX);
     #endif
+    #ifdef SCRIM
+    // How much of the pixel the net covers, seen along this ray: its cloth's own normal, not a
+    // fold's — a gathered net's folds are the layers its gather counts, as the shadows read them.
+    #ifdef PLEAT
+    vec3 clothN = pleatZ;
+    #else
+    vec3 clothN = normalize(vWorldNormal);
+    #endif
+    float cover = scrimCover(dot(clothN, towardEye()), uScrim.x, uScrim.y) * uOpacity;
+    #endif
     if (!gl_FrontFacing) n = -n;
     vec3 albedo = uAlbedo * finishPattern(vWorldPos, n);
     #if defined(USE_INSTANCING_COLOR) || defined(USE_COLOR)
     albedo *= vTint;
+    #endif
+
+    #ifdef TRANSLUCENT
+    // The other face's paint, which light from behind passes through before this face's: white
+    // where it is unpainted, or its image has not loaded.
+    vec3 otherSide = vec3(1.0);
     #endif
 
     #ifdef PAINT
@@ -404,11 +453,19 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if ((uPaintOn.x > 0.5 && paintFront.a < 0.5) || (uPaintOn.y > 0.5 && paintBack.a < 0.5)) discard;
       if (paintFace > 0.0 && uPaintOn.x > 0.5) albedo = paintFront.rgb;
       if (paintFace < 0.0 && uPaintOn.y > 0.5) albedo = paintBack.rgb;
+      #ifdef TRANSLUCENT
+      if (paintFace > 0.0 && uPaintOn.y > 0.5) otherSide = paintBack.rgb;
+      if (paintFace < 0.0 && uPaintOn.x > 0.5) otherSide = paintFront.rgb;
+      #endif
     }
     #endif
 
     #ifdef EMISSIVE
+    #ifdef SCRIM
+    gl_FragColor = vec4(linearToOutputTexel(vec4(albedo, 1.0)).rgb * cover, cover);
+    #else
     gl_FragColor = linearToOutputTexel(vec4(albedo, uOpacity));
+    #endif
     return;
     #endif
 
@@ -419,16 +476,17 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     float footprint = length(fwidth(vWorldPos));
 
     #if defined(LOBE_OREN_NAYAR) || defined(LOBE_SHEEN) || defined(LOBE_GGX)
-    // Towards the eye: the camera's own axis for an orthographic section, where every ray is parallel.
-    vec3 V = isOrthographic
-      ? normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]))
-      : normalize(cameraPosition - vWorldPos);
+    vec3 V = towardEye();
     float NV = max(dot(n, V), 1e-4);
     #endif
 
     // The diffuse light (times the albedo below) and the gloss the finish adds over it (not).
     vec3 acc = vec3(0.0);
     vec3 gloss = vec3(0.0);
+    #ifdef TRANSLUCENT
+    // The light that reaches the cloth from behind the face drawn (times its tint below).
+    vec3 accBehind = vec3(0.0);
+    #endif
     for (int i = 0; i < uLightCount; i++) {
       vec4 axis = texelFetch(uLights, ivec2(1, i), 0);
       vec4 apex = texelFetch(uLights, ivec2(0, i), 0);
@@ -439,13 +497,39 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       float c = dot(L, axis.xyz);
       if (c < axis.w) continue;
       float facing = dot(n, -L);
+      #if defined(SCRIM) || defined(TRANSLUCENT)
+      // A light behind the face drawn lights it only through a net's threads or a muslin's weave.
+      // Which side of the cloth the lamp is on is the cloth's question, not a fold's: a gathered
+      // cloth asks its plane (pleatFaceSeesLamp), so a fold's flank turned from a lamp in front
+      // stays dark, as it does on any cloth, rather than taking that lamp as one behind.
+      #ifdef PLEAT
+      bool behind = !pleatFaceSeesLamp(dot(apex.xyz - pleatO, pleatZ), gl_FrontFacing);
+      #else
+      bool behind = facing <= 0.0;
+      #endif
+      if (!behind && facing <= 0.0) continue;
+      // What the light's incidence passes to the face: its cosine; a light behind meets the cloth at
+      // its cosine from the back, whichever way a fold leans. A net's round threads wrap a front light
+      // and glow with one behind; a muslin's front takes one behind through its weave.
+      float incidence = behind ? abs(facing) : facing;
+      #ifdef SCRIM
+      incidence = scrimThreadLight(behind ? -incidence : incidence);
+      if (incidence <= 0.0) continue;
+      #endif
+      #else
       if (facing <= 0.0) continue;
+      bool behind = false;
+      float incidence = facing;
+      #endif
       float shade = 1.0;
       #ifdef PLEAT
-      float lampOut = dot(apex.xyz - pleatO, pleatZ);
-      if (!pleatFaceSeesLamp(lampOut, gl_FrontFacing)) continue;
-      shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, lampOut);
-      if (shade <= 0.0) continue;
+      // A face's own folds shadow only the light on its own side.
+      if (!behind) {
+        float lampOut = dot(apex.xyz - pleatO, pleatZ);
+        if (!pleatFaceSeesLamp(lampOut, gl_FrontFacing)) continue;
+        shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, lampOut);
+        if (shade <= 0.0) continue;
+      }
       #endif
       vec4 aperture = texelFetch(uLights, ivec2(5, i), 0);
       float axial = dist * c;
@@ -489,22 +573,34 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       // beam's own footprint: a narrow beam puts the same light on less of the surface.
       float da = max(dist - aperture.x, 0.3);
       float spread = clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX);
-      vec3 irradiance = colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
+      vec3 irradiance = colour.rgb * m * incidence * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
+      #ifdef TRANSLUCENT
+      // Through the weave, diffusely: no lobes, tinted by both paints below.
+      if (behind) {
+        accBehind += irradiance;
+        continue;
+      }
+      #endif
       float diffuse = 1.0;
-      #if defined(LOBE_SHEEN) || defined(LOBE_GGX)
-      vec3 H = normalize(V - L);
-      float NH = max(dot(n, H), 0.0);
-      #endif
-      #ifdef LOBE_OREN_NAYAR
-      diffuse = orenNayar(facing, NV, dot(-L, V));
-      #endif
-      #ifdef LOBE_SHEEN
-      gloss += irradiance * charlieSheen(facing, NV, NH);
-      diffuse *= sheenKeeps(facing);
-      #endif
-      #ifdef LOBE_GGX
-      gloss += irradiance * ggxSpecular(facing, NV, NH, max(dot(V, H), 0.0));
-      diffuse *= specularKeeps(facing);
+      #if defined(LOBE_OREN_NAYAR) || defined(LOBE_SHEEN) || defined(LOBE_GGX)
+      // The lobes shape light on the eye's side only; a net's glow from behind is its threads' own.
+      if (!behind) {
+        #if defined(LOBE_SHEEN) || defined(LOBE_GGX)
+        vec3 H = normalize(V - L);
+        float NH = max(dot(n, H), 0.0);
+        #endif
+        #ifdef LOBE_OREN_NAYAR
+        diffuse = orenNayar(facing, NV, dot(-L, V));
+        #endif
+        #ifdef LOBE_SHEEN
+        gloss += irradiance * charlieSheen(facing, NV, NH);
+        diffuse *= sheenKeeps(facing);
+        #endif
+        #ifdef LOBE_GGX
+        gloss += irradiance * ggxSpecular(facing, NV, NH, max(dot(V, H), 0.0));
+        diffuse *= specularKeeps(facing);
+        #endif
+      }
       #endif
       acc += irradiance * diffuse;
     }
@@ -525,10 +621,19 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     // The work lights' lift, along the fill's direction, off at least the floor albedo (D7): an
     // exact 0 with them off.
     vec3 lift = max(albedo, vec3(uLiftAlbedoFloor)) * (uLift * fillDirection * ao);
-    vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss) * uLightGain);
+    vec3 light = albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss;
+    #ifdef TRANSLUCENT
+    light += translucentTint(uTranslucent, albedo, otherSide) * accBehind;
+    #endif
+    vec3 lit = rollOff(light * uLightGain);
     // The finishes are sRGB hex, held linear by three's colour management: out through the
     // canvas's output transfer, as three's own materials are.
+    #ifdef SCRIM
+    // Premultiplied: what is behind keeps 1 − cover of itself (the material's premultipliedAlpha).
+    gl_FragColor = vec4(linearToOutputTexel(vec4(lit, 1.0)).rgb * cover, cover);
+    #else
     gl_FragColor = linearToOutputTexel(vec4(lit, uOpacity));
+    #endif
     #endif
   }
 `
@@ -554,6 +659,25 @@ export function setPleatAmplitude(material: ShaderMaterial, amplitudeM: number) 
  */
 const NO_PAINT = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, RGBAFormat, UnsignedByteType)
 NO_PAINT.needsUpdate = true
+
+/**
+ * Set a scrim [material]'s net (scrim plan D3, D9): its thread share [r] and the layers [gather] it is
+ * gathered into — 1 hanging open, more as a drawn half gathers, every frame of a draw. A uniform
+ * write, not a rebuild: the caller asks for a frame. A material compiled without `SCRIM` ignores it.
+ */
+export function setScrimNet(material: ShaderMaterial, r: number, gather: number) {
+  const net = material.uniforms.uScrim?.value as Vector2 | undefined
+  if (net != null) net.set(r, gather)
+}
+
+/**
+ * Set a translucent [material]'s τ (scrim plan D6). A uniform write, not a rebuild: the caller asks
+ * for a frame. A material compiled without `TRANSLUCENT` ignores it.
+ */
+export function setTranslucency(material: ShaderMaterial, tau: number) {
+  const u = material.uniforms.uTranslucent
+  if (u != null) u.value = tau
+}
 
 /**
  * Bind [material]'s loaded images (scrim plan D4): [front] on the downstage face, [back] on the
@@ -590,6 +714,14 @@ export interface SurfaceMaterialOptions {
    * a uniform write.
    */
   painted?: boolean
+  /**
+   * How the surface is seen through (scrim plan session 4, `seeThrough.ts`'s `SurfaceDraw`):
+   * `scrim` is the `SCRIM` blend — transparent, premultiplied, no depth write, its net set by
+   * [setScrimNet]; `translucent` adds `TRANSLUCENT`'s light from behind, its τ set by
+   * [setTranslucency]. Decided when the material is made, from the part's fabric: nothing switches it
+   * per frame. Default `opaque`.
+   */
+  draw?: SurfaceDraw
 }
 
 /**
@@ -617,6 +749,12 @@ export function makeSurfaceMaterial(
   // A catch surface is never painted; an emissive one shows its paint at its own colours.
   const painted = options.painted === true && options.catchOnly !== true
   if (painted) defines.PAINT = ''
+  // A catch surface is never seen through. An emissive net is — it blends at its own colour — but an
+  // emissive cloth draws its colour and no light, so it is never lit from behind.
+  const draw = options.catchOnly === true ? 'opaque' : (options.draw ?? 'opaque')
+  const scrim = draw === 'scrim'
+  if (scrim) defines.SCRIM = ''
+  if (draw === 'translucent' && !finish.emissive) defines.TRANSLUCENT = ''
   const opacity = options.opacity ?? 1
   const material = new ShaderMaterial({
     defines,
@@ -641,12 +779,17 @@ export function makeSurfaceMaterial(
         uPaintBack: { value: NO_PAINT },
         uPaintOn: { value: new Vector2(0, 0) },
       }),
+      ...(scrim && { uScrim: { value: new Vector2(SCRIM_THREAD_SHARE.SHARKSTOOTH, 1) } }),
+      ...(defines.TRANSLUCENT != null && { uTranslucent: { value: MUSLIN_TRANSMITTANCE } }),
     },
     vertexShader: SURFACE_VERTEX_SHADER,
     fragmentShader: SURFACE_FRAGMENT_SHADER,
     side: options.doubleSided ? DoubleSide : FrontSide,
-    transparent: options.catchOnly === true || opacity < 1,
-    depthWrite: options.catchOnly !== true,
+    // A scrim blends over what is behind it and hides nothing: the haze and the set behind it are
+    // drawn whole, and it covers them by its share.
+    transparent: options.catchOnly === true || scrim || opacity < 1,
+    depthWrite: options.catchOnly !== true && !scrim,
+    premultipliedAlpha: scrim,
   })
   if (options.catchOnly) material.blending = AdditiveBlending
   if (options.behind) {

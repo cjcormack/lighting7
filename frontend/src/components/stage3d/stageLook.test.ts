@@ -61,7 +61,10 @@ describe('the surfaces', () => {
 
   it('falls off from the lens, not the apex behind it, over the beam’s own footprint', () => {
     expect(fragment).toContain('max(dist - aperture.x, 0.3)')
-    expect(fragment).toContain('vec3 irradiance = colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);')
+    // `incidence` is the face's cosine to the light, but through a net's threads or a muslin's weave
+    // (scrim plan session 4, `seeThrough.ts`).
+    expect(fragment).toContain('float incidence = facing;')
+    expect(fragment).toContain('vec3 irradiance = colour.rgb * m * incidence * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);')
     expect(fragment).toContain('acc += irradiance * diffuse;')
     // A beam narrower than 20° puts the same light on less of the surface; a wider one is unchanged.
     expect(fragment).toContain('clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX)')
@@ -71,7 +74,8 @@ describe('the surfaces', () => {
   it('rolls the finish, the ambient, the fill and every light off together, and encodes every exit', () => {
     // The finish takes its own share of every light: no reflectance floor (stage-light plan D6). The
     // sheen and the specular (session 4) are rolled off with it, beside the albedo's light.
-    expect(fragment).toContain('vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss) * uLightGain);')
+    expect(fragment).toContain('vec3 light = albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss;')
+    expect(fragment).toContain('vec3 lit = rollOff(light * uLightGain);')
     expect(fragment).not.toContain('uReflectFloor')
     // Work lights' lift (stage-view menu D6, D7): along the fill's direction, off at least the floor
     // albedo — the lift's share only, never a light's.
@@ -81,7 +85,8 @@ describe('the surfaces', () => {
     expect(fragment).toContain(ROLL_OFF_GLSL)
     const exits = [...fragment.matchAll(/gl_FragColor = (.*);/g)].map((m) => m[1])
     expect(exits.length).toBeGreaterThan(0)
-    for (const exit of exits) expect(exit.startsWith('linearToOutputTexel(')).toBe(true)
+    // A scrim's exits premultiply the encoded colour by its cover (scrim plan D9): encoded all the same.
+    for (const exit of exits) expect(exit.startsWith('linearToOutputTexel(') || exit.startsWith('vec4(linearToOutputTexel(')).toBe(true)
   })
 
   it('folds only pleated cloth, in the mesh\'s own frame', () => {
