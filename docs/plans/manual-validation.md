@@ -17,7 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update template, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
-| [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
+| [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched and the haze split at up to eight cloths | Stage view S3 · S6, 2026-09-30; scrim S5, 2026-10-10 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
 | [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
 | [`FU-MANUAL-S5-LIBRARY-OPTICS`](#fu-manual-s5-library-optics) | the library optics pass's estimates match the units — the Varytec's and the Wash-42's colours, the Whex's first program, the Robe's three zoom steps and its iris and frost holding past 179, and an animated colour band reading as the wheel does | Fixture optics plan S5, 2026-10-04 |
@@ -287,7 +287,27 @@ price for a box the segment misses. So:
    `?pass=1&scrims=1` (every entry a net the segment crosses). If the iPad's skipped entry has
    moved materially from +0.65, say so here, and whether *Box shadows*' default should follow.
 
-55 minutes; all of it is the desk's.
+**Since scrim plan session 5 the haze splits at a cloth**: the march keeps the eye's and the beam's
+share of up to eight transmitting planes, gauzes and cut cloths, nearest the eye first
+(`frontend/docs/stage-vis-engineering.md` §"The haze splits at a cloth"). On SwiftShader the haze's
+own share of a frame rose from 47–115 ms to 195–465, and a scene with no cloth pays about 80 ms for
+the code being in the program (the table under §"Budget" there) — a software renderer's price for
+code it runs masked, which a GPU should not pay. The session's scene was two back lights 12 m
+upstage, one through a sharkstooth gauze and one through a cut cloth 6 m upstage, with six full-width
+gauzes added in their path for eight planes; build one like it in Blind (or the show's own gauzes).
+So:
+
+9. On the desk Mac in **Safari**, then the iPad, orbit continuously for ten seconds in each of: no
+   cloth, one gauze in the beams, and eight transmitting cloths every beam crosses, with Haze on and
+   then off, noting fps, ms and Performance's Haze tier for each — and the same no-cloth scene on
+   `main` as it stood before session 5 (`5cea1e4`), so the no-cloth cost is measured on a GPU. If the
+   iPad cannot hold a frame at the governor's last tier with eight crossed, lower `MAX_HAZE_PLANES`
+   (`scene/hazePlanes.ts`) to 4 in the same commit — the list shrinks before the visuals do — and say
+   so here. While there, look through the gauze square on and from the side of the house: the back
+   light's haze behind it reads at about half square on and dimmer from the side, and shafts cross a
+   cut cloth's holes and stop at its cloth.
+
+70 minutes; all of it is the desk's.
 
 ---
 

@@ -234,8 +234,9 @@ light's own culled list (`scene/occlusion.ts`), capped per machine by *Box shado
 plan's session 3 a collider may **transmit**: `segmentTransmit` answers a share — 0 past a solid box,
 `open(θ)^gather` through a net (`scene/scrimOpen.ts`), 1 or 0 through a cut cloth's hole or cloth
 (its mask in a 32-layer `R8` atlas, `scene/maskAtlas.ts`) — the collider's third texel saying which,
-and beam reach skips what transmits, so a beam lands past a gauze; the GLSL and its twin change
-together;
+and beam reach skips what transmits, so a beam lands past a gauze; a **landing** passes a cut cloth
+whole too (session 5: a transmitting collider is never a landing plane, `isLandingSurface`), while
+*Focus here* still takes where the axis stops; the GLSL and its twin change together;
 the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
@@ -507,8 +508,14 @@ before the beams) covering `1 − open(θ_eye)^gather` of the pixel, θ_eye from
 eye — the camera's axis on a section — so a gauze is about half open square on and solid edge-on, its
 round threads wrapping a grazing light and glowing from behind; a muslin stays opaque but is lit from
 behind (`TRANSLUCENT`) through `τ · paint_front ⊙ paint_back`; a cut cloth stays opaque cloth with
-holes. Both are defines chosen when the material is made, the net's gather and τ uniforms; the haze
-splits at a cloth only in session 5. The textures come from one
+holes. Both are defines chosen when the material is made, the net's gather and τ uniforms. **And the haze
+splits at them** (session 5, `scene/hazePlanes.ts`): one list of eight transmitting planes, scrims and
+cut cloths, filled every frame nearest the eye first, reaches the march as uniforms; each sample keeps
+the eye's share of each plane the view ray crossed before it (a gauze's `open(θ_eye)^gather`, a cut
+cloth's mask) and the beam's share of each plane its row names (`aBeamFx.z`, `hazePlanesCrossed`)
+between it and the aperture — through the shadows' own crossing, `open(θ)` and mask lookup
+(`occlusion.ts`'s `TRANSMIT_GLSL`), never a copy. A ninth passes light on surfaces but does not split
+the haze. The textures come from one
 **module-level** cache, `scene/paintTextures.ts` — keyed by hash and variant, `?variant=display` or
 `detail` for an element with `fullDetail`, mipmapped and anisotropic, loaded once, disposed 5 s after
 nothing holds it — never a React context, which a `render_view` capture would not bridge. A part binds

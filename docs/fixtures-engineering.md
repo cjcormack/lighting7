@@ -1708,7 +1708,8 @@ as it gathers, and the images lie on the cloth's two sides or the flat's two fac
 cutting a hole (`frontend/docs/stage-vis-engineering.md` §"Painted cloths"). Since scrim session 3
 light passes a net (by its `open(θ)`) and a hole in the shadows, beam reach and sight lines; since
 session 4 a net is drawn see-through (a blend by `open(θ_eye)`) and a muslin is lit from behind through
-both its paints; the haze splits at a cloth in session 5. The keys travel inside `params`; the images travel beside them at `formatVersion` 23
+both its paints; since session 5 the haze splits at a net or a cut cloth (neither is where a beam lands; the
+march keeps the eye's and the beam's share of each, from one list of eight). The keys travel inside `params`; the images travel beside them at `formatVersion` 23
 (`docs/sync-engineering.md` §"Version 23 — painted cloths").
 
 **The scene-image store** (`state/SceneImageStore.kt`, `State.sceneImages`) holds the originals

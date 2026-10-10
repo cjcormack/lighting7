@@ -16,7 +16,7 @@ import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { NO_RAYCAST } from './raycast'
 import { getGoboTexture } from './goboAtlas'
-import { makeVolumeMaterial } from './beamShaders'
+import { makeVolumeMaterial, writeHazePlanes } from './beamShaders'
 import { HAZE_LEVEL, VOLUMETRIC_STEPS } from './washConfig'
 import {
   MAX_BEAM_REGIONS,
@@ -30,7 +30,8 @@ import {
 } from './emitterLayout'
 import { LightTable, type LightRow } from './scene/lightTable'
 import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
-import { packLanding } from './scene/landing'
+import { hazePlanesCrossed, packLanding } from './scene/landing'
+import { fillHazePlanes, HAZE_PLANE_FLOATS, makeHazePlaneList, type HazePlaneList } from './scene/hazePlanes'
 import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import { sceneMasks } from './scene/sceneMasks'
@@ -139,6 +140,13 @@ export interface BeamWrite {
   bladesB: number
   /** Bitmask of the regions this beam can reach, from the CPU cone-vs-sphere cull. */
   shadowMask: number
+  /**
+   * The cone that cull was made with, from the apex over the drawn length: the cosine and sine of its
+   * half-angle. The haze planes the beam crosses are named from it too (`scene/landing.ts`'s
+   * `hazePlanesCrossed`).
+   */
+  cullCos: number
+  cullSin: number
   /** Where the axis landed; null in open air. The march stops behind it and [edgeLand] both. */
   land: SurfaceHit | null
   /** The second face a beam split across an edge lands on (`scene/landing.ts`); null for none. */
@@ -171,8 +179,11 @@ export interface EmittersHandle {
   /**
    * Where a beam from [origin] along the unit [dir] first meets a surface of the view, within
    * [maxT] — the **axial reach** (`scene/beamReach.ts`). Writes [out] and answers true on a hit.
+   * A **landing** by default: a transmitting collider is never a landing plane, so a cut cloth is
+   * passed whole and the haze splits at it instead (scrim plan session 5). [axis] casts where the axis
+   * itself stops — on a cut cloth's cloth — which is what *Focus here* is given.
    */
-  reach(origin: Vector3, dir: Vector3, maxT: number, out: BeamHit): boolean
+  reach(origin: Vector3, dir: Vector3, maxT: number, out: BeamHit, axis?: boolean): boolean
 
   /** Place and shape a (slot, lobe)'s beam in the air. */
   writeBeam(slot: number, lobe: number, beam: BeamWrite): void
@@ -463,7 +474,20 @@ export function StageEmitters({
   const statsCounts = useRef({ packed: 0, lit: 0 })
   // Nothing packs the table once the emitters are gone (Light or Fixtures off).
   useEffect(() => () => stats?.setLights(null), [stats])
-  useFrame(() => {
+  useFrame((state) => {
+    // The haze planes (`scene/hazePlanes.ts`), every frame the air is drawn: the camera has moved by
+    // now (its rig runs at priority 0) and the frame has not rendered, so the list nearest the eye
+    // and each beam's planes reach this very frame, as uniforms and a buffer write — nothing
+    // recompiles. A list that changes for any other reason — the colliders, a mask landing — has
+    // already asked for the frame (the pack above).
+    if (built.volumeMesh.visible) {
+      const eye = state.camera.position
+      fillHazePlanes(lighting.occlusion.set, eye.x, eye.y, eye.z, built.hazePlanes)
+      // Every frame, not only on a change: a rebuilt emitter set starts an empty list on the same
+      // material, and ninety-six floats are nothing beside the march they feed.
+      writeHazePlanes(materials, built.hazePlanes)
+      nameHazePlanes(built)
+    }
     flushDirty(built, groups)
     if (built.lights.dirty) {
       const packed = built.lights.pack(budgetRef.current, lighting.data)
@@ -516,6 +540,22 @@ export interface BuiltEmitters {
   volumeGate: InstancedBufferAttribute
   /** Where the beam lands, two planes packed (`scene/landing.ts`'s `packLanding`). */
   volumeLand: InstancedBufferAttribute
+  /**
+   * Each beam's cull cone, CPU only: the cosine and sine of its half-angle and its drawn length from
+   * the apex (0 for a beam parked) — what its haze planes are named from ([nameHazePlanes]).
+   */
+  beamCones: Float32Array
+  /** The haze planes, nearest the eye, as the flush last filled them (`scene/hazePlanes.ts`). */
+  hazePlanes: HazePlaneList
+  /** Whether any beam's row names a plane: a list that empties clears them once. */
+  planesNamed: boolean
+  /**
+   * What each beam's planes were last named from — its apex, axis and cull cone (nine floats) — and
+   * the list's [HazePlaneList.version] then: a beam whose cone and list are both unchanged keeps its
+   * bits without the cone being tested again.
+   */
+  namedFrom: Float32Array
+  namedVersion: number
 
   /** One row per light, in the layout's slot order. */
   lights: LightTable
@@ -579,8 +619,74 @@ export function buildEmitters(
     volumeShape,
     volumeGate,
     volumeLand,
+    beamCones: new Float32Array(beamCap * 3),
+    hazePlanes: makeHazePlaneList(),
+    planesNamed: false,
+    namedFrom: new Float32Array(beamCap * 9),
+    namedVersion: -1,
     lights: new LightTable(layout.totalLights),
   }
+}
+
+/** Copy three floats of [src] at [at] into [dst] at [to], answering whether they were already there. */
+function keepFloats(dst: Float32Array, to: number, src: Float32Array, at: number): boolean {
+  let kept = true
+  for (let k = 0; k < 3; k++) {
+    if (dst[to + k] !== src[at + k]) {
+      dst[to + k] = src[at + k]
+      kept = false
+    }
+  }
+  return kept
+}
+
+/**
+ * Name each drawn beam's haze planes — the planes of [b]'s list its cull cone crosses, bit k for
+ * plane k (`scene/landing.ts`'s `hazePlanesCrossed`) — into its `aBeamFx.z`, flagging the buffer only
+ * when a beam's planes moved. Answers whether any did. Run by the flush after the list is filled, so
+ * a beam and the list it names planes of are always the same frame's. A beam whose cone is what it was
+ * last named from, against the same list, is skipped: the directors rewrite every beam every frame,
+ * and an orbit over a still rig would otherwise test every cone against every plane each frame.
+ */
+export function nameHazePlanes(b: BuiltEmitters): boolean {
+  const list = b.hazePlanes
+  if (list.count === 0 && !b.planesNamed) return false
+  const fx = b.volumeFx.array as Float32Array
+  const origin = b.volumeOrigin.array as Float32Array
+  const dir = b.volumeDir.array as Float32Array
+  const cones = b.beamCones
+  const from = b.namedFrom
+  const sameList = b.namedVersion === list.version
+  b.namedVersion = list.version
+  let moved = false
+  let named = false
+  for (let i = 0; i < b.volumeMesh.count; i++) {
+    const f = i * 9
+    // Three copies, not one `||` chain: each must run, so the cache holds this frame's cone.
+    const keptOrigin = keepFloats(from, f, origin, i * 3)
+    const keptDir = keepFloats(from, f + 3, dir, i * 3)
+    const keptCone = keepFloats(from, f + 6, cones, i * 3)
+    if (sameList && keptOrigin && keptDir && keptCone) {
+      if (fx[i * 4 + 2] !== 0) named = true
+      continue
+    }
+    const bits = hazePlanesCrossed(
+      list.data, list.count, HAZE_PLANE_FLOATS,
+      origin[i * 3], origin[i * 3 + 1], origin[i * 3 + 2],
+      dir[i * 3], dir[i * 3 + 1], dir[i * 3 + 2],
+      cones[i * 3 + 2], cones[i * 3], cones[i * 3 + 1],
+    )
+    if (bits !== 0) named = true
+    if (fx[i * 4 + 2] !== bits) {
+      fx[i * 4 + 2] = bits
+      moved = true
+    }
+  }
+  b.planesNamed = named
+  // `aBeamFx` is the attributes group's, and a buffer is in one group: the flush's naming is a
+  // writer of it like `writeBeam`, which already flags the group on any frame a director drew.
+  if (moved) b.dirty |= DIRTY_BEAM_ATTRS
+  return moved
 }
 
 function vec3InstAttr(count: number): InstancedBufferAttribute {
@@ -663,7 +769,10 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
     if (fromLobe >= count) return
     b.dirty |= DIRTY_BEAM_MATRIX
     for (let lobe = Math.max(0, fromLobe); lobe < count; lobe++) {
-      b.volumeMesh.setMatrixAt(beamInstanceIndex(layout, slot, lobe), ZERO_MATRIX)
+      const i = beamInstanceIndex(layout, slot, lobe)
+      b.volumeMesh.setMatrixAt(i, ZERO_MATRIX)
+      // Parked: it crosses no plane.
+      b.beamCones[i * 3 + 2] = 0
     }
   }
   function hideLights(slot: number, fromLight: number): void {
@@ -679,8 +788,8 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
     lobesFor: (slot) => lobesFor(layout, slot),
     lightsFor: (slot) => lightsFor(layout, slot),
 
-    reach(origin, dir, maxT, out) {
-      return beamReach(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, colliders(), maxT, out)
+    reach(origin, dir, maxT, out, axis = false) {
+      return beamReach(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, colliders(), maxT, out, sceneMasks, !axis)
     },
 
     writeBeam(slot, lobe, w) {
@@ -692,9 +801,15 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeDir.setXYZ(i, w.dir.x, w.dir.y, w.dir.z)
       b.volumeRight.setXYZ(i, w.right.x, w.right.y, w.right.z)
       b.volumeColor.setXYZW(i, w.color.r, w.color.g, w.color.b, w.opacity)
-      b.volumeFx.setXYZW(i, w.edge, w.gobos, 0, w.focusDist)
+      // .z is the haze planes the beam crosses, which the flush names against the frame's list.
+      b.volumeFx.setXYZW(i, w.edge, w.gobos, b.volumeFx.getZ(i), w.focusDist)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, w.dof)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
+      const e = w.matrix.elements
+      b.beamCones[i * 3] = w.cullCos
+      b.beamCones[i * 3 + 1] = w.cullSin
+      // The hull's y scale: from the apex, its drawn length (`FixtureModel`'s `composeBeamHull`).
+      b.beamCones[i * 3 + 2] = Math.hypot(e[4], e[5], e[6])
       packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0, false)
       b.volumeLand.setXYZW(i, SCRATCH_LAND[0], SCRATCH_LAND[1], SCRATCH_LAND[2], SCRATCH_LAND[3])
     },

@@ -305,6 +305,8 @@ export function createSceneMaskCache(options: SceneMaskCacheOptions = {}): Scene
 /** What beam reach and the occlusion twin ask of the masks: whether a point of one is a hole. */
 export interface MaskSampler {
   holeAt(hash: string, u: number, v: number): boolean
+  /** [SceneMaskCache.layerOf]: ≥ 0 for a mask that cuts holes, so light passes the cloth somewhere. */
+  layerOf(hash: string): number
 }
 
 /** The one cache the scene cuts light by. */

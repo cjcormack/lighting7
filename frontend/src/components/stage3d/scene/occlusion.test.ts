@@ -22,6 +22,7 @@ import {
   makeColliderSet,
   MAX_LIGHT_COLLIDERS,
   OCCLUSION_GLSL,
+  TRANSMIT_GLSL,
   OCCLUSION_START_EPS_M,
   occlusionReach,
   packColliders,
@@ -454,15 +455,22 @@ describe('the segment test', () => {
     expect(OCCLUSION_GLSL).toContain(`#define OCCLUSION_START_EPS ${OCCLUSION_START_EPS_M.toFixed(4)}`)
     expect(OCCLUSION_GLSL).toContain(`#define OCCLUSION_MIN_REACH ${MIN_REACH_M.toFixed(4)}`)
     expect(OCCLUSION_GLSL).toContain('float s = sqrt(max(0.0, 1.0 - a.w * a.w));')
-    expect(OCCLUSION_GLSL).toContain('if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return 1.0;')
+    // The crossing passes the box at −1 — missed, ended in it, or started in it within its skin.
+    expect(OCCLUSION_GLSL).toContain('if (tNear > tFar || tFar <= 0.0 || tNear >= tMax) return -1.0;')
     expect(OCCLUSION_GLSL).toContain('if (tNear <= OCCLUSION_START_EPS) {')
-    expect(OCCLUSION_GLSL).toContain('if (tFar >= tMax) return 1.0;')
-    expect(OCCLUSION_GLSL).toContain('if (depth <= b.w) return 1.0;')
+    expect(OCCLUSION_GLSL).toContain('if (tFar >= tMax) return -1.0;')
+    expect(OCCLUSION_GLSL).toContain('if (depth <= b.w) return -1.0;')
+    expect(OCCLUSION_GLSL).toContain('return (max(tNear, 0.0) + min(tFar, tMax)) * 0.5;')
+    // boxTransmit keeps a passed box whole, and fetches texel 2 only for a crossing.
+    expect(OCCLUSION_GLSL).toContain('float t = segmentCrossing(p, d, tMax, texelFetch(uColliders, ivec2(0, k), 0), b, lo, ld);')
+    expect(OCCLUSION_GLSL).toContain('if (t < 0.0) return 1.0;')
+    expect(OCCLUSION_GLSL).toContain('return crossingShare(texelFetch(uColliders, ivec2(2, k), 0), b, lo, ld, t);')
+    // One copy of the crossing and the share, which the haze's march reads too.
+    expect(OCCLUSION_GLSL).toContain(TRANSMIT_GLSL)
+    expect(TRANSMIT_GLSL).not.toContain('uColliders')
     // Texel 2 only once the segment crosses: solid, then a net's share, then the mask's texel.
-    expect(OCCLUSION_GLSL).toContain('vec4 m = texelFetch(uColliders, ivec2(2, k), 0);')
     expect(OCCLUSION_GLSL).toContain('if (m.x < 0.5) return 0.0;')
     expect(OCCLUSION_GLSL).toContain('if (m.x < 1.5) return scrimShare(abs(ld.z), m.y, m.z);')
-    expect(OCCLUSION_GLSL).toContain('float t = (max(tNear, 0.0) + min(tFar, tMax)) * 0.5;')
     expect(OCCLUSION_GLSL).toContain('float u = us.x + ((lo.x + ld.x * t) / b.x + 1.0) * 0.5 * (us.y - us.x);')
     expect(OCCLUSION_GLSL).toContain('float v = vs.x + ((lo.y + ld.y * t) / b.y + 1.0) * 0.5 * (vs.y - vs.x);')
     expect(OCCLUSION_GLSL).toContain('ivec2 texel = clamp(ivec2(floor(vec2(u, v) * 256.0)), ivec2(0), ivec2(255));')

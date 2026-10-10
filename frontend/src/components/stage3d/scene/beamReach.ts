@@ -19,9 +19,12 @@ import { elementBaseZ, partCollides, partTransmit, type ElementBuild, type Facin
  *
  * **A collider may transmit** (scrim plan D7, [Collider.transmit]): a net passes a share of every
  * beam, so beam reach skips it and the beam carries on to the next solid surface — whose plane is
- * where it lands, so a net is never a landing plane; a painted cloth with holes is skipped where the
- * beam crosses a hole and stops the beam where it crosses cloth, read from its mask at the crossing
- * (`sceneMasks.ts`, looked up as the beam is cast). *Focus here* still takes the point it is given.
+ * where it lands, so a net is never a landing plane. A painted cloth with holes stops the axis where
+ * it crosses cloth and passes it through a hole, read from its mask at the crossing (`sceneMasks.ts`,
+ * looked up as the beam is cast) — which is where the axis stops, and what *Focus here* is given. A
+ * **landing** cast passes it whole (scrim plan session 5): a transmitting collider is never a landing
+ * plane, so the haze runs on past a cut cloth to the next solid surface and splits at the cloth by its
+ * mask instead (`hazePlanes.ts`), and the surfaces behind it take its share through their shadows.
  *
  * Pure and three.js-free: numbers in, numbers out, allocation-free on the per-frame path.
  */
@@ -93,10 +96,24 @@ const SLAB_M = 0.02
 export const MIN_REACH_M = 0.05
 
 /**
+ * Whether a beam may land on [b] (scrim plan session 5): **a transmitting collider is never a landing
+ * plane** — a net, and a painted cloth whose mask cuts holes (it holds an atlas layer). Light passes
+ * both somewhere, so the beam's air runs on to the next solid surface and the haze splits at the
+ * cloth by its share (`hazePlanes.ts`). A painted cloth with no hole to cut — a JPEG, an opaque PNG,
+ * a mask still loading or missing — is cloth everywhere, and lands a beam as any solid does.
+ */
+export function isLandingSurface(b: Pick<Collider, 'transmit'>, masks: MaskSampler = sceneMasks): boolean {
+  const t = b.transmit
+  if (t == null) return true
+  return t.kind === 'mask' ? masks.layerOf(t.image) < 0 : false
+}
+
+/**
  * The nearest collider the ray from [ox, oy, oz] along the unit [dx, dy, dz] meets within [maxT],
  * written into [out]; false when it meets none. A box the ray starts inside is skipped — a head
  * inside a deck's box is mounted on it, not blocked by it. So is a net, and a painted cloth where
- * the ray crosses a hole in it ([maskPasses], read from [masks]).
+ * the ray crosses a hole in it ([maskPasses], read from [masks]). With [landing] — a landing plane's
+ * cast — every collider [isLandingSurface] refuses is skipped whole, a cut cloth's cloth included.
  */
 export function beamReach(
   ox: number,
@@ -109,6 +126,7 @@ export function beamReach(
   maxT: number,
   out: BeamHit,
   masks: MaskSampler = sceneMasks,
+  landing = false,
 ): boolean {
   let best = maxT
   let found = false
@@ -116,6 +134,7 @@ export function beamReach(
     const b = colliders[i]
     // A net passes every beam on to what is behind it (D7): never where one lands.
     if (b.transmit?.kind === 'angle') continue
+    if (landing && !isLandingSurface(b, masks)) continue
     const rx = ox - b.cx
     const ry = oy - b.cy
     const rz = oz - b.cz

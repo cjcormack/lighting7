@@ -3,7 +3,7 @@
 // jsdom only because this module imports @react-three/fiber at top level. Nothing here renders,
 // and no WebGL context is ever created — the meshes and buffers are plain JS objects.
 import { packBlade } from './beamMask'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   Color,
   InstancedBufferAttribute,
@@ -18,14 +18,20 @@ import {
   dirtyGroups,
   flushDirty,
   makeHandle,
+  nameHazePlanes,
   writeHazeClip,
   writeRegionUniforms,
   type BeamWrite,
   type BuiltEmitters,
   type EmittersHandle,
 } from './StageEmitters'
-import { makeVolumeMaterial } from './beamShaders'
+import { makeVolumeMaterial, writeHazePlanes } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
+import { boxCollider, type BeamHit, type Collider } from './scene/beamReach'
+import { fillHazePlanes, makeHazePlaneList, MAX_HAZE_PLANES } from './scene/hazePlanes'
+import { makeColliderSet, packColliders } from './scene/occlusion'
+import { sceneMasks } from './scene/sceneMasks'
+import { SCRIM_THREAD_SHARE } from './scene/scrimOpen'
 import { packGobos } from './goboLayers'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { LAND_NONE, LAND_UP, REACH_EPS_M } from './scene/landing'
@@ -122,6 +128,8 @@ function beamWrite(): BeamWrite {
     bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
     bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
+    cullCos: 0.95,
+    cullSin: Math.sqrt(1 - 0.95 * 0.95),
     land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M, collider: null },
     edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1, skin: REACH_EPS_M, collider: null },
   }
@@ -393,5 +401,194 @@ describe('region uniforms', () => {
       { uuid: 'r', centerX: 0, centerY: 0, centerZ: 0, widthM: 2, depthM: 2, heightM: 0.95, yawDeg: 0 },
     ] as Parameters<typeof computeRegionGeometry>[0])
     expect(r.obbCenter.y).toBeCloseTo(-0.475, 12)
+  })
+})
+
+/** A 6 × 4 m sharkstooth gauze facing the house, [z] down the stage, [x] across. */
+function gauze(z: number, x = 0): Collider {
+  const c = boxCollider(x, 2, z, 3, 2, 0.005, 0, 0.04, 0.04)
+  c.transmit = { kind: 'angle', r: SCRIM_THREAD_SHARE.SHARKSTOOTH, gather: 1 }
+  return c
+}
+
+/** A beam from [apex] along [dir], drawn [length] from the apex in a 5° cull cone. */
+function beamAt(apex: Vector3, dir: Vector3, length = 20): BeamWrite {
+  return {
+    ...beamWrite(),
+    apex,
+    dir,
+    matrix: new Matrix4().makeScale(1, length, 1),
+    cullCos: Math.cos((5 * Math.PI) / 180),
+    cullSin: Math.sin((5 * Math.PI) / 180),
+  }
+}
+
+describe('the haze planes (scrim plan session 5)', () => {
+  // Three gauzes: two on the beam's path up the stage, one 20 m off to the side.
+  const scene = [gauze(-3), gauze(-1), gauze(-2, 20)]
+  const set = makeColliderSet()
+  packColliders(scene, set)
+
+  it("names on each beam's row the planes of the list its cone crosses, by their place in the list", () => {
+    const b = build()
+    const h = makeHandle(b)
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    h.writeBeam(0, 1, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, 1)))
+    h.writeBeam(0, 2, beamAt(new Vector3(20, 2, 5), new Vector3(0, 0, -1)))
+    // Nearest the eye first: the gauze at −1, then −3, then the one off to the side.
+    fillHazePlanes(set, 0, 2, 10, b.hazePlanes)
+    expect(Array.from(b.hazePlanes.index.slice(0, 3))).toEqual([1, 0, 2])
+    b.dirty = 0
+    expect(nameHazePlanes(b)).toBe(true)
+    const fx = b.volumeFx.array
+    expect(fx[2]).toBe(0b011)
+    // Pointing at the house, it crosses none; the one off to the side crosses only its own.
+    expect(fx[4 + 2]).toBe(0)
+    expect(fx[8 + 2]).toBe(0b100)
+    // The rest of the attribute is the writer's: the edge, the gobos and the focus around it.
+    expect([fx[0], fx[3]]).toEqual([Math.fround(0.7), 6])
+    // A buffer that moved is flagged for upload; naming again with nothing moved flags nothing.
+    expect(b.dirty).not.toBe(0)
+    b.dirty = 0
+    expect(nameHazePlanes(b)).toBe(false)
+    expect(b.dirty).toBe(0)
+  })
+
+  it('names them against the list as it stands: a list reordered by the eye renames each beam', () => {
+    const b = build()
+    makeHandle(b).writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    fillHazePlanes(set, 0, 2, 10, b.hazePlanes)
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0b011)
+    // From the side of the stage the off-stage gauze is nearest: the two on the path move down one.
+    fillHazePlanes(set, 25, 2, -2, b.hazePlanes)
+    expect(Array.from(b.hazePlanes.index.slice(0, 3))).toEqual([2, 0, 1])
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0b110)
+  })
+
+  it('skips a beam whose cone and list are what it was named from, and renames it when either moves', () => {
+    const b = build()
+    const h = makeHandle(b)
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    fillHazePlanes(set, 0, 2, 10, b.hazePlanes)
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0b011)
+    // A list unchanged since the beam was named, rewritten in place behind the version's back: the
+    // beam is not re-tested, so its row keeps what it was named — the cache is what answered.
+    const kept = b.hazePlanes.data.slice()
+    b.hazePlanes.data.fill(0)
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    expect(nameHazePlanes(b)).toBe(false)
+    expect(b.volumeFx.array[2]).toBe(0b011)
+    b.hazePlanes.data.set(kept)
+    // The beam turns to the house: its cone moved, so it is named again and crosses none.
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, 1)))
+    expect(nameHazePlanes(b)).toBe(true)
+    expect(b.volumeFx.array[2]).toBe(0)
+    // And back, with the list refilled from a new eye: renamed against the list as it now stands.
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    fillHazePlanes(set, 25, 2, -2, b.hazePlanes)
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0b110)
+  })
+
+  it('keeps a beam’s planes across its own rewrite, and drops them when it is parked or the list empties', () => {
+    const b = build()
+    const h = makeHandle(b)
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    fillHazePlanes(set, 0, 2, 10, b.hazePlanes)
+    nameHazePlanes(b)
+    // A director rewrites the beam every frame; the row keeps the planes until the flush names them.
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    expect(b.volumeFx.array[2]).toBe(0b011)
+    h.hideLobes(0, 0)
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0)
+    h.writeBeam(0, 0, beamAt(new Vector3(0, 2, 5), new Vector3(0, 0, -1)))
+    nameHazePlanes(b)
+    expect(b.volumeFx.array[2]).toBe(0b011)
+    fillHazePlanes(makeColliderSet(), 0, 2, 10, b.hazePlanes)
+    expect(nameHazePlanes(b)).toBe(true)
+    expect(b.volumeFx.array[2]).toBe(0)
+    // Nothing named and nothing to name: the pass is skipped.
+    expect(nameHazePlanes(b)).toBe(false)
+  })
+
+  it('lands a beam past a cut cloth, and casts the axis onto its cloth for Focus here', () => {
+    const image = 'f'.repeat(64)
+    const cloth = boxCollider(0, 2, -2, 3, 2, 0.005)
+    cloth.transmit = { kind: 'mask', image, uv: { u0: 0, u1: 1, v0: 0, v1: 1 } }
+    const wall = boxCollider(0, 2, -6, 5, 2, 0.01)
+    // The cloth's mask cuts holes (it holds a layer), and here the axis meets cloth.
+    const layer = vi.spyOn(sceneMasks, 'layerOf').mockImplementation((hash) => (hash === image ? 0 : -1))
+    const hole = vi.spyOn(sceneMasks, 'holeAt').mockReturnValue(false)
+    try {
+      const h = makeHandle(build(), () => [cloth, wall])
+      const out: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+      expect(h.reach(new Vector3(0, 2, 5), new Vector3(0, 0, -1), 40, out)).toBe(true)
+      expect(out.collider).toBe(wall)
+      expect(h.reach(new Vector3(0, 2, 5), new Vector3(0, 0, -1), 40, out, true)).toBe(true)
+      expect(out.collider).toBe(cloth)
+    } finally {
+      layer.mockRestore()
+      hole.mockRestore()
+    }
+  })
+})
+
+describe('nothing recompiles when a light, the camera or the haze planes move', () => {
+  it('holds every define and the program across every write a frame makes', () => {
+    const m = makeVolumeMaterial(getGoboTexture())
+    const defines = { ...m.defines }
+    const version = m.version
+    const key = m.customProgramCacheKey()
+    const fragment = m.fragmentShader
+    const set = makeColliderSet()
+    const list = makeHazePlaneList()
+    // The list fills, reorders as the camera moves, grows to eight and empties again; the march
+    // steps, the haze level, the regions and the clip move with it. All uniforms.
+    for (const [scene, eye] of [
+      [[gauze(-3), gauze(-1)], [0, 2, 10]],
+      [[gauze(-3), gauze(-1)], [0, 2, -10]],
+      [Array.from({ length: 9 }, (_, k) => gauze(-1 - k)), [3, 1, 6]],
+      [[], [0, 2, 10]],
+    ] as Array<[Collider[], [number, number, number]]>) {
+      packColliders(scene, set)
+      fillHazePlanes(set, ...eye, list)
+      writeHazePlanes([m], list)
+      expect(m.uniforms.uHazePlaneCount.value).toBe(Math.min(scene.length, MAX_HAZE_PLANES))
+      m.uniforms.uVolSteps.value = 7
+      m.uniforms.uHaze.value = 0.3
+      writeRegionUniforms([m], REGIONS, REGIONS.length, 8)
+      writeHazeClip([m], { nx: 0, ny: 1, d: 0.3 })
+    }
+    // The camera reaches the march only through three's built-ins; nothing here names it, or the planes.
+    expect(Object.keys(m.defines ?? {}).some((d) => /HAZE|PLANE|CAMERA|EYE/.test(d))).toBe(false)
+    expect(m.defines).toEqual(defines)
+    expect(m.version).toBe(version)
+    expect(m.customProgramCacheKey()).toBe(key)
+    expect(m.fragmentShader).toBe(fragment)
+    expect(fragment).toContain('uniform int uHazePlaneCount;')
+    expect(fragment).toContain('vec3 camPos = cameraPosition;')
+  })
+
+  it('splits the march at the planes: the eye’s crossings once a pixel, both shares at every sample', () => {
+    const { vertexShader, fragmentShader } = makeVolumeMaterial(getGoboTexture())
+    expect(vertexShader).toContain('vBeamPlanes = aBeamFx.z;')
+    expect(fragmentShader).toContain('flat varying float vBeamPlanes;')
+    const eye = fragmentShader.indexOf('hazeEyeCrossings(camPos, rayDir, eyeAt0, eyeAt1, eyeShare0, eyeShare1);')
+    const march = fragmentShader.indexOf('for (int i = 0; i < MAX_VOL_STEPS; i++) {')
+    expect(eye).toBeGreaterThan(-1)
+    expect(eye).toBeLessThan(march)
+    expect(fragmentShader).toContain(
+      'float through = hazeSampleShare(t, p, -lightDir, relLen - near / max(cosAngle, 1e-4), planes, eyeAt0, eyeAt1, eyeShare0, eyeShare1);',
+    )
+    expect(fragmentShader).toContain('if (through <= 0.0) continue;')
+    expect(fragmentShader).toContain('sum += gobo * radial * lit * density * through;')
+    // One open(θ), one crossing and one mask lookup in the program: the shadows' own.
+    expect(fragmentShader.match(/float scrimOpen\(/g)).toHaveLength(1)
+    expect(fragmentShader.match(/float segmentCrossing\(/g)).toHaveLength(1)
+    expect(fragmentShader.match(/texelFetch\(uMaskAtlas/g)).toHaveLength(1)
   })
 })
