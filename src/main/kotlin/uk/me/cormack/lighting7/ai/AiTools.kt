@@ -1107,9 +1107,13 @@ class AiTools(private val state: State) {
     private fun programmerSceneryJson(): JsonArray {
         val snapshot = state.programmerScenery.flow.value
         if (snapshot.elements.isEmpty()) return JsonArray(emptyList())
-        val names = transaction(state.database) {
-            DaoStageElement.find { DaoStageElements.uuid inList snapshot.elements.keys }.associate { it.uuid to it.name }
-        }
+        // Scoped to the overlay's project: element uuids are not unique across projects.
+        val names = snapshot.projectId?.let { projectId ->
+            transaction(state.database) {
+                RigScope.of(projectId).stageElements(DaoStageElements.uuid inList snapshot.elements.keys)
+                    .associate { it.uuid to it.name }
+            }
+        }.orEmpty()
         return buildJsonArray {
             for ((uuid, held) in snapshot.elements) {
                 addJsonObject {

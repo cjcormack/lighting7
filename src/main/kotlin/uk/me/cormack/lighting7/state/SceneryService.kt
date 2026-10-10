@@ -27,10 +27,10 @@ import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoStageElement
-import uk.me.cormack.lighting7.models.DaoStageElements
 import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.LayerSourceKind
 import uk.me.cormack.lighting7.models.MAX_SCENERY_TRANSITION
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.elementTravelS
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.decodeSceneryState
@@ -457,7 +457,7 @@ class SceneryService(private val state: State) {
         return transaction(state.database) {
             val dao = DaoProject.findById(project.id) ?: return@transaction null
             val heldByUuid = if (overlay.projectId == dao.id.value) overlay.elements else emptyMap()
-            val all = DaoStageElement.find { DaoStageElements.project eq dao.id }.toList()
+            val all = RigScope.of(dao).stageElements().toList()
             val idByUuid = all.associate { it.uuid to it.id.value }
             val missingHeld = heldByUuid.keys.filter { it !in idByUuid }
             if (all.isEmpty()) {

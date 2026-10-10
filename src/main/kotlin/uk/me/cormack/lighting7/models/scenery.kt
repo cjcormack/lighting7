@@ -352,7 +352,7 @@ private val SCENERY_STATE_KEYS = setOf("visible", "open", "trimM")
 
 /** The project's elements as a scenery write checks them, by uuid. Must run inside a transaction. */
 fun sceneryElementsOf(project: DaoProject): Map<UUID, SceneryElementInfo> =
-    DaoStageElement.find { DaoStageElements.project eq project.id }.associate { it.uuid to it.sceneryInfo() }
+    RigScope.of(project).stageElements().associate { it.uuid to it.sceneryInfo() }
 
 fun DaoStageElement.sceneryInfo(): SceneryElementInfo {
     val kind = enumOrNull<StageElementKind>(kind)

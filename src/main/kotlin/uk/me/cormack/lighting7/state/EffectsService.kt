@@ -23,8 +23,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
-import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
@@ -445,7 +445,7 @@ class EffectsService(private val state: State) {
      */
     private fun lookUpPatch(target: Show, fixtureKey: String): UUID? {
         val (uuid, rows) = transaction(state.database) {
-            val uuid = DaoFixturePatch.find { (DaoFixturePatches.project eq target.project.id) and (DaoFixturePatches.key eq fixtureKey) }
+            val uuid = RigScope.of(target.project).patches(DaoFixturePatches.key eq fixtureKey)
                 .firstOrNull()?.uuid ?: return@transaction null to emptyList()
             uuid to DaoEffectTubeStates.selectAll().where { DaoEffectTubeStates.patchUuid eq uuid }
                 .map { (it[DaoEffectTubeStates.patchUuid] to it[DaoEffectTubeStates.trigger]) to it[DaoEffectTubeStates.spentAt] }
@@ -457,7 +457,7 @@ class EffectsService(private val state: State) {
     }
 
     private fun readPatchUuids(target: Show): Map<String, UUID> = transaction(state.database) {
-        DaoFixturePatch.find { DaoFixturePatches.project eq target.project.id }
+        RigScope.of(target.project).patches()
             .filter { FixtureTriggers.reservedNamesForTypeKey(it.fixtureTypeKey).isNotEmpty() }
             .associate { it.key to it.uuid }
     }

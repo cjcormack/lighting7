@@ -23,7 +23,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     get<ProjectPatchGroupsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val groups = transaction(state.database) {
-                DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+                RigScope.of(project).groups()
                     .orderBy(DaoFixtureGroups.name to SortOrder.ASC)
                     .map { it.toSummaryDto() }
             }
@@ -61,9 +61,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
 
                 // Rename
                 request.name?.let { newName ->
-                    val existing = DaoFixtureGroup.find {
-                        (DaoFixtureGroups.project eq project.id) and (DaoFixtureGroups.name eq newName)
-                    }.firstOrNull()
+                    val existing = RigScope.of(project).groups(DaoFixtureGroups.name eq newName).firstOrNull()
                     if (existing != null && existing.id != group.id) {
                         return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group name '$newName' already exists")
                     }

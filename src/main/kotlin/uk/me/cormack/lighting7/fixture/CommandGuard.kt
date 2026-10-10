@@ -1,11 +1,7 @@
 package uk.me.cormack.lighting7.fixture
 
-import org.jetbrains.exposed.v1.core.eq
-import uk.me.cormack.lighting7.models.DaoFixtureGroup
-import uk.me.cormack.lighting7.models.DaoFixtureGroups
-import uk.me.cormack.lighting7.models.DaoFixturePatch
-import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -148,7 +144,8 @@ class CommandIndex private constructor(
 
         /** From [project]'s stored patches and groups. Must run inside a transaction. */
         fun of(project: DaoProject): CommandIndex {
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.toList()
+            val rig = RigScope.of(project)
+            val patches = rig.patches().toList()
             val reservedById = patches.mapNotNull { p ->
                 FixtureCommands.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (p.displayName to it)) }
             }.toMap()
@@ -158,8 +155,8 @@ class CommandIndex private constructor(
             }.toMap()
             val groups = mutableMapOf<String, Set<String>>()
             val groupBands = mutableMapOf<String, Map<String, List<FixtureCommands.SharedBand>>>()
-            for (g in DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }) {
-                val members = g.members.map { it.fixturePatch.id.value }
+            for (g in rig.groups()) {
+                val members = rig.members(g).map { it.fixturePatch.id.value }
                 members.flatMapTo(LinkedHashSet()) { reservedById[it]?.second?.second.orEmpty() }
                     .takeIf { it.isNotEmpty() }?.let { groups[g.name] = it }
                 mergeBands(members.mapNotNull { bandsById[it]?.second?.second })?.let { groupBands[g.name] = it }

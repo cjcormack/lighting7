@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.detachPlacementsFromRigging
 import uk.me.cormack.lighting7.state.State
 
@@ -27,7 +28,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
     get<ProjectRiggingsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val riggings = transaction(state.database) {
-                DaoRigging.find { DaoRiggings.project eq project.id }
+                RigScope.of(project).riggings()
                     .orderBy(
                         DaoRiggings.sortOrder to SortOrder.ASC,
                         DaoRiggings.name to SortOrder.ASC,
@@ -76,13 +77,11 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
             }
 
             val result = transaction(state.database) {
-                val existing = DaoRigging.find {
-                    (DaoRiggings.project eq project.id) and (DaoRiggings.name eq trimmedName)
-                }.firstOrNull()
+                val existing = RigScope.of(project).riggings(DaoRiggings.name eq trimmedName).firstOrNull()
                 if (existing != null) {
                     return@transaction Pair<RiggingDto?, String?>(null, "Rigging '$trimmedName' already exists")
                 }
-                val maxSortOrder = DaoRigging.find { DaoRiggings.project eq project.id }
+                val maxSortOrder = RigScope.of(project).own.riggings()
                     .maxOfOrNull { it.sortOrder } ?: -1
                 val rigging = DaoRigging.new {
                     this.project = project
@@ -138,9 +137,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                     if (trimmed.isEmpty()) {
                         return@transaction Pair<RiggingDto?, String?>(null, "Rigging name must not be blank")
                     }
-                    val collision = DaoRigging.find {
-                        (DaoRiggings.project eq project.id) and (DaoRiggings.name eq trimmed)
-                    }.firstOrNull()
+                    val collision = RigScope.of(project).riggings(DaoRiggings.name eq trimmed).firstOrNull()
                     if (collision != null && collision.id != rigging.id) {
                         return@transaction Pair<RiggingDto?, String?>(null, "Rigging '$trimmed' already exists")
                     }

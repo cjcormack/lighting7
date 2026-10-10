@@ -1125,6 +1125,8 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `DmxChannelMode.kt` | Multi-mode channel configuration interface |
 | `MultiModeFixtureFamily.kt` | Multi-mode fixture marker interface |
 | `show/Fixtures.kt` | Registry and transaction wrapper |
+| `models/RigScope.kt` | The rig scope: every project-scoped rig read (§"The rig scope") |
+| `models/VenueLinks.kt` | Every foreign key into a venue-ownable table, and its re-point |
 
 ## Existing Fixture Implementations
 
@@ -1897,3 +1899,70 @@ aim skipped is not pointing there, and is listed as not focused.
   template is one family, and focus is beam where an aim is position, so `aim_fixtures`'
   `saveAsTemplate` stays position-only; `record_cue` keeps a focus.
 
+
+## The rig scope
+
+`models/RigScope.kt` is the one answer to "which rows make up this project's rig" (venue plan P4).
+Every project-wide query of a rig table goes through it — patches and their extra placements,
+riggings, universe configs, scene elements, stage regions, viewpoints, and groups and their members —
+rather than filtering on `project_id` itself (no `Dao…s.project eq` is left outside the scope): the loader (`DbFixtureLoader.loadFixtures`), the patch,
+rigging, region, scene and group routes, the trigger and command guards, scenery and cue-event
+validation, aim and focus, the AI's `describe_rig`, `get_patch`, `get_scene` and the setup tools.
+A method per kind, each taking an optional extra condition and answering a `SizedIterable`, so a
+caller still orders and maps as before:
+
+```kotlin
+val rig = RigScope.of(project)
+rig.patches().orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
+rig.riggings(DaoRiggings.uuid eq uuid).firstOrNull()
+rig.placementsByPatch(patches); rig.members(group)
+rig.own.riggings().maxOfOrNull { it.sortOrder }   // the next sort order for a row this project adds
+```
+
+**Why.** Today a project's rig is exactly its own rows, so every method is the query its callers
+used to write — `RigScopeEquivalenceTest` pins each to that query across `RichProjectFixture` and a
+second copy of it that keeps every record uuid. It stops being true when a show sits on a venue
+(venue plan session 3): its rig is then its own rows plus the pinned version's, less its hides and
+the version's Preset seating, with facet overrides applied. That has to change in one place, not at
+the ~80 sites that read the rig.
+
+**Effective and own.** The scope is the **effective** rig: what is loaded, drawn, listed, linked to,
+and checked for a clash (a patch key, a head number, a rigging, region, element, viewpoint or group
+name). `RigScope.own` is the rows the project itself **owns**: what a write may find to change or
+delete, the next `sortOrder` of a row it adds, and what its own sync export carries (the scene images
+`SceneImageRepoSync.referencedHashes` keeps). Writes stay project-specific — a show never edits a
+venue's row in place — so a find-or-create, a delete by name and an update by key or id read `own`,
+while the clash checks around them read the effective rig. One find is effective on purpose: the
+**universe** a new patch lands on (the patch route, `patch_fixtures`), since a show may patch a fixture
+onto a venue's universe; a missing one is still created as the project's own. In session 1 the two
+views are the same rows; the distinction is recorded at each call site now so session 3 changes only
+the scope.
+
+**What stays outside it, and why.** Three kinds of rig access do not go through the scope, and are
+always the project's own rows: sync export and import, project clone (which is export → import) and
+project delete walk the project's own collections (`project.fixturePatches` and the like), because a
+show's repo, copy or deletion is of what it owns; and a route that takes a record's id (the
+patch, element, viewpoint and group routes, among others) looks it up with `findById` and checks the
+row is this project's. Session 3 has to keep the first own, and decide per route whether a venue
+row may be addressed by id.
+
+**No uuid lookup is global.** A record uuid is not unique across projects — an import keeps them,
+and a venue's versions will share them — so a lookup by uuid goes through the scope too
+(`resolveRiggingForProject`, the programmer's scenery names in `get_current_state`). A global lookup
+finds whichever project's row comes first.
+
+**Links into the rig: `VenueLinks`.** `models/VenueLinks.kt` registers every foreign key that points
+into a table a venue can own — the twelve in eight tables: a patch's universe and rigging, a
+placement's patch and rigging, a group member's group and patch, a busk rig tile's group and patch,
+a cue event's patch, and the cue, stack and Look scenery rows' element. Each entry names how its row
+belongs to a project (its own `project_id`, or its parent's) and can **re-point** one project's links
+from the rows of one project to the same-uuid rows of another, reporting any uuid the target project
+lacks and leaving that row as it was. Venue Update, Extract and Detach will re-point through it
+rather than turning the links into uuid columns, which would be a non-additive change to eight tables
+with no migrations (venue plan P3). Nothing calls it in production yet; `VenueLinksRepointTest`
+exercises every link.
+
+`VenueLinksCoverageTest` reads every table in `ALL_TABLES` through Exposed's foreign-key metadata and
+fails, naming the column, on a foreign key into a venue-ownable table with no entry — as
+`SyncCoverageTest` does for sync. Adding a `reference` to a patch, rigging, universe, element, region,
+viewpoint or group means adding its `VenueLinks` entry and a row in the re-point test's show.

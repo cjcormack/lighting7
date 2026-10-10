@@ -28,10 +28,11 @@ import uk.me.cormack.lighting7.fixture.FixtureCommands
  */
 fun stripCommandRows(project: DaoProject): Int {
     val index = CommandIndex.of(project)
-    val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.toList()
+    val rig = RigScope.of(project)
+    val patches = rig.patches().toList()
     val typeByKey = patches.associate { it.key to it.fixtureTypeKey }
     val memberTypesByGroup: Map<String, List<String>> by lazy {
-        DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }.associate { g -> g.name to g.members.map { it.fixturePatch.fixtureTypeKey } }
+        rig.groups().associate { g -> g.name to rig.members(g).map { it.fixturePatch.fixtureTypeKey } }
     }
 
     fun namedCommand(type: String?, key: String?, property: String?) = index.refusal(type, key, property, "") != null

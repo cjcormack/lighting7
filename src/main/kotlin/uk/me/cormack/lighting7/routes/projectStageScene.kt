@@ -306,23 +306,21 @@ internal fun DaoStageElement.store(fields: StageElementFields, params: ElementPa
 }
 
 internal fun stageElementsOf(project: DaoProject): List<DaoStageElement> =
-    DaoStageElement.find { DaoStageElements.project eq project.id }
+    RigScope.of(project).stageElements()
         .orderBy(DaoStageElements.sortOrder to SortOrder.ASC, DaoStageElements.name to SortOrder.ASC)
         .toList()
 
 internal fun stageViewpointsOf(project: DaoProject): List<DaoStageViewpoint> =
-    DaoStageViewpoint.find { DaoStageViewpoints.project eq project.id }
+    RigScope.of(project).stageViewpoints()
         .orderBy(DaoStageViewpoints.sortOrder to SortOrder.ASC, DaoStageViewpoints.name to SortOrder.ASC)
         .toList()
 
 internal fun regionUuidsOf(project: DaoProject): Set<String> =
-    DaoStageRegion.find { DaoStageRegions.project eq project.id }.map { it.uuid.toString() }.toSet()
+    RigScope.of(project).stageRegions().map { it.uuid.toString() }.toSet()
 
 /** Names of the seat views that name [elementUuid] as their seating. */
 internal fun seatViewsOf(project: DaoProject, elementUuid: UUID): List<String> =
-    DaoStageViewpoint.find {
-        (DaoStageViewpoints.project eq project.id) and (DaoStageViewpoints.seatElementUuid eq elementUuid)
-    }.map { it.name }
+    RigScope.of(project).stageViewpoints(DaoStageViewpoints.seatElementUuid eq elementUuid).map { it.name }
 
 /** [fields] as a seating element, or null when the element is not one (or its params are unreadable). */
 internal fun seatingOf(fields: StageElementFields, params: ElementParams?): SeatingElement? {
@@ -333,7 +331,7 @@ internal fun seatingOf(fields: StageElementFields, params: ElementParams?): Seat
 
 /** Every seating element of [project], by uuid, as stored. */
 internal fun seatingElementsOf(project: DaoProject): Map<UUID, SeatingElement> =
-    DaoStageElement.find { DaoStageElements.project eq project.id }.mapNotNull { e ->
+    RigScope.of(project).stageElements().mapNotNull { e ->
         val fields = e.toFields()
         val params = if (fields.kind == StageElementKind.SEATING) readElementParams(fields.kind, e.params) else null
         seatingOf(fields, params)?.let { e.uuid to it }
@@ -355,9 +353,8 @@ internal fun seatViewsBrokenBy(
     before: SeatingElement?,
     seating: SeatingElement?,
 ): List<String> =
-    DaoStageViewpoint.find {
-        (DaoStageViewpoints.project eq project.id) and (DaoStageViewpoints.seatElementUuid eq elementUuid)
-    }.filter { view -> seatResolves(before, view.seatId) && !seatResolves(seating, view.seatId) }
+    RigScope.of(project).stageViewpoints(DaoStageViewpoints.seatElementUuid eq elementUuid)
+        .filter { view -> seatResolves(before, view.seatId) && !seatResolves(seating, view.seatId) }
         .map { it.name }
 
 /**
@@ -368,9 +365,7 @@ internal fun seatViewsBrokenBy(
  */
 internal fun unlinkRegionFromPlatforms(project: DaoProject, regionUuid: UUID): Int {
     var unlinked = 0
-    for (element in DaoStageElement.find {
-        (DaoStageElements.project eq project.id) and (DaoStageElements.kind eq StageElementKind.PLATFORM.name)
-    }) {
+    for (element in RigScope.of(project).own.stageElements(DaoStageElements.kind eq StageElementKind.PLATFORM.name)) {
         val params = readElementParams(StageElementKind.PLATFORM, element.params) as? PlatformParams ?: continue
         if (params.regionUuid != regionUuid.toString()) continue
         element.params = encodeElementParams(StageElementKind.PLATFORM, params.copy(regionUuid = null))
@@ -445,9 +440,7 @@ private fun writeStageElement(
     )
     if (parsed == null) return ElementWrite.Invalid(problems)
 
-    val collision = DaoStageElement.find {
-        (DaoStageElements.project eq project.id) and (DaoStageElements.name eq fields.name)
-    }.firstOrNull()
+    val collision = RigScope.of(project).stageElements(DaoStageElements.name eq fields.name).firstOrNull()
     if (collision != null && collision.id != element?.id) return ElementWrite.NameTaken(fields.name)
 
     if (element != null && !force) {
@@ -460,7 +453,7 @@ private fun writeStageElement(
         this.name = fields.name
         this.kind = fields.kind.name
         this.layer = fields.layer.name
-        this.sortOrder = (stageElementsOf(project).maxOfOrNull { it.sortOrder } ?: -1) + 1
+        this.sortOrder = (RigScope.of(project).own.stageElements().maxOfOrNull { it.sortOrder } ?: -1) + 1
     }
     target.store(fields, parsed)
     sortOrder?.let { target.sortOrder = it }
@@ -574,16 +567,14 @@ private fun writeStageViewpoint(project: DaoProject, viewpoint: DaoStageViewpoin
     validateStageViewpoint(fields, { seating[it] }, "", problems, storedSeat)
     if (problems.isNotEmpty()) return ViewpointWrite.Invalid(problems)
 
-    val collision = DaoStageViewpoint.find {
-        (DaoStageViewpoints.project eq project.id) and (DaoStageViewpoints.name eq fields.name)
-    }.firstOrNull()
+    val collision = RigScope.of(project).stageViewpoints(DaoStageViewpoints.name eq fields.name).firstOrNull()
     if (collision != null && collision.id != viewpoint?.id) return ViewpointWrite.NameTaken(fields.name)
 
     val row = viewpoint ?: DaoStageViewpoint.new {
         this.project = project
         this.name = fields.name
         this.kind = fields.kind.name
-        this.sortOrder = (stageViewpointsOf(project).maxOfOrNull { it.sortOrder } ?: -1) + 1
+        this.sortOrder = (RigScope.of(project).own.stageViewpoints().maxOfOrNull { it.sortOrder } ?: -1) + 1
     }
     row.store(fields)
     sortOrder?.let { row.sortOrder = it }

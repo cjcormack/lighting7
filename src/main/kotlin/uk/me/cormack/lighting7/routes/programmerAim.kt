@@ -8,7 +8,6 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -22,11 +21,9 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoRigging
-import uk.me.cormack.lighting7.models.DaoRiggings
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.AimAxis
 import uk.me.cormack.lighting7.show.AimSolution
@@ -198,10 +195,11 @@ internal data class AimPlacement(
 internal fun aimPlacements(state: State, project: DaoProject, keys: Collection<String>): Map<String, AimPlacement> {
     if (keys.isEmpty()) return emptyMap()
     return transaction(state.database) {
-        val poses = DaoRigging.find { DaoRiggings.project eq project.id }.associate { r ->
+        val rig = RigScope.of(project)
+        val poses = rig.riggings().associate { r ->
             r.id.value to RiggingPose(r.positionX, r.positionY, r.positionZ, r.yawDeg, r.pitchDeg, r.rollDeg)
         }
-        DaoFixturePatch.find { (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key inList keys) }
+        rig.patches(DaoFixturePatches.key inList keys)
             .associate { p ->
                 val riggingId = p.readValues.getOrNull(DaoFixturePatches.rigging)?.value
                 p.key to AimPlacement(

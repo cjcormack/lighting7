@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.show
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
@@ -43,8 +42,9 @@ object DbFixtureLoader {
         val (universeConfigs, patches, groups) = transaction(database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project $projectId not found")
+            val rig = RigScope.of(project)
 
-            val configs = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
+            val configs = rig.universeConfigs()
                 .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
                 .map {
                     val address = Overrides.resolveUniverseAddress(project.id.value, it.uuid)
@@ -56,7 +56,7 @@ object DbFixtureLoader {
                     )
                 }
 
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            val patches = rig.patches()
                 .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
                 .map {
                     PatchData(
@@ -74,9 +74,9 @@ object DbFixtureLoader {
                     )
                 }
 
-            val groups = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+            val groups = rig.groups()
                 .map { group ->
-                    val members = group.members
+                    val members = rig.members(group)
                         .sortedBy { it.sortOrder }
                         .map { member ->
                             GroupMemberData(member.fixturePatch.key, member.panOffset, member.tiltOffset, member.sortOrder)

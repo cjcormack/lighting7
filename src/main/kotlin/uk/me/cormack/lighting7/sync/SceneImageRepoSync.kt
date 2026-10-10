@@ -1,9 +1,7 @@
 package uk.me.cormack.lighting7.sync
 
-import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.models.DaoStageElement
-import uk.me.cormack.lighting7.models.DaoStageElements
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.SCENE_IMAGE_HASH
 import uk.me.cormack.lighting7.models.paintHashesOf
 import uk.me.cormack.lighting7.state.SceneImageFormat
@@ -34,7 +32,7 @@ object SceneImageRepoSync {
 
     /** Every hash [projectId]'s elements paint with. Must run inside a transaction. */
     fun referencedHashes(projectId: Int): Set<String> =
-        DaoStageElement.find { DaoStageElements.project eq projectId }
+        RigScope.of(projectId).own.stageElements()
             .flatMap { paintHashesOf(it.params) }
             .toSet()
 
