@@ -11,7 +11,7 @@ and some sometimes do (fixture positions). Two refinements followed the same day
 - **Venue details are versioned.** Changing the house patch or universes must not change an old
   show. Opening a show on an older version warns, and offers an update.
 
-**Status: boards drawn 2026-10-10; every question answered; awaiting sign-off.** No plan has been written yet. A live copy of
+**Status: approved 2026-10-10.** The implementation plan is [`../venue-plan.md`](../venue-plan.md). It departs from the Model board once: links into the venue are re-pointed through a registry rather than converted to uuid columns (the plan's P3), so the boards' sessions are re-cut there. A live copy of
 all five boards on one page is at <https://claude.ai/artifact/LxMaLSktSQa73AkoXQzUvh>, private to
 Chris, a convenience; the files here
 are the authority. Where a board and the plan disagree, the plan wins on behaviour and the boards on

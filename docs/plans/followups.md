@@ -123,7 +123,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-PROJECTION`](#fu-stage-projection) | Trigger | Stage | a show with projection: a projector's image must land on a cloth in the Stage view |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
-| [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
+| [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Ready | Stage | fired 2026-10-10 (the panto); planned in [`venue-plan.md`](venue-plan.md) |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -2459,6 +2459,10 @@ carry a binary in canonical JSON. Author meshes ourselves: GDTF-Share's cannot b
 copies the room. **Trigger**: a second show plays the Commemoration Hall. **Then**: a Venue entity
 projects reference, with its own sync identity; decide whether a project may override a venue
 element, and what a clone of a project that references one carries.
+
+**Fired 2026-10-10**: the panto is a second show in the hall. Designed in
+[`venue-design/`](venue-design/INDEX.md) and planned in [`venue-plan.md`](venue-plan.md); this
+section becomes a Completed row when the plan's last session lands.
 
 ### `FU-STAGE-INDEPENDENT-HEADS`
 
