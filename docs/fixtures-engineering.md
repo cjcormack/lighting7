@@ -1666,7 +1666,7 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 | `ROOM` | `omit` (sides not drawn: `DOWNSTAGE · UPSTAGE · STAGE_LEFT · STAGE_RIGHT · FLOOR · CEILING`), `floor` and `ceiling` finishes. |
 | `PROSCENIUM` | `openingWidthM`, `openingHeightM` (required), `openingSillM`, `surroundM` — the opening must fit the wall. |
 | `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. `paint` (below). |
-| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's), `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`; absent is velour), `paint` (below). |
+| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's), `drawFrom` (`STAGE_LEFT · STAGE_RIGHT`, a `DRAW` drape's: a one-way traveller stacking at that side, its local +X end being stage left; absent is a bi-parting pair meeting in the middle), `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`; absent is velour), `paint` (below). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
 | `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`. |
 | `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`, `travelS` (a flown piece's). |

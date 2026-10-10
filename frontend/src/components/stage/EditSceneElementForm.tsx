@@ -63,6 +63,9 @@ import { paintOf, withPaintSide, type PaintSide, type SceneImageInfo } from '@/a
  * flown object — takes its **travel time** (`travelS`, D6): how long a full travel takes when no
  * cue's own clock moves it. `withKindParam` drops it with the travel.
  *
+ * A drawn drape's **Draws from** is its one side for a one-way traveller (`drawFrom`); absent is a
+ * bi-parting pair, and `withKindParam` drops it when the drape stops drawing.
+ *
  * *Fabric and paint* (scrim plan §4, session 1): a drape's **Fabric** — velour unless it says
  * otherwise (D1) — and on a drape or a flat the two painted faces (`PaintField`, D4), each an image
  * in the desk's store named by its hash in `params.paint`. **Full detail** is this machine's switch
@@ -87,6 +90,9 @@ const EDGES = ['DOWNSTAGE', 'UPSTAGE', 'STAGE_LEFT', 'STAGE_RIGHT'] as const
 const PATTERNS = ['PLAIN', 'PANELS', 'TILES', 'BOARDS'] as const
 const DRAPE_ROLES = ['LEG', 'BORDER', 'TABS', 'CYC', 'BACKCLOTH'] as const
 const DRAPE_OPERATIONS = ['DEAD', 'DRAW', 'FLY'] as const
+/** A drawn drape's one side (`drawFrom`): absent is a bi-parting pair. */
+const DRAW_SIDES = ['STAGE_LEFT', 'STAGE_RIGHT'] as const
+const DRAW_SIDE_LABELS: Record<string, string> = { STAGE_LEFT: 'Stage left only', STAGE_RIGHT: 'Stage right only' }
 const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
 const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
 const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
@@ -183,6 +189,7 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
         }
         case 'DRAPE':
           p(['role', 'operation', 'fabric', 'paint', 'paint.front', 'paint.back'])
+          if (drawn) p(['drawFrom'])
           break
         case 'PLATFORM':
           p(['railHeightM', 'railEdge', 'regionUuid'])
@@ -469,6 +476,20 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
               <div className="grid grid-cols-2 gap-2">
                 {paramSelect('role', 'Role', DRAPE_ROLES)}
                 {paramSelect('operation', 'Moves by', DRAPE_OPERATIONS, 'Dead (default)')}
+                {drawn && (
+                  <div className="col-span-2">
+                    <Field id="element-drawFrom" label="Draws from" errors={filed.at('params.drawFrom')}>
+                      <NativeSelect
+                        id="element-drawFrom"
+                        value={str(params.drawFrom).toUpperCase()}
+                        onChange={(v) => setParam('drawFrom', v || null)}
+                        options={DRAW_SIDES}
+                        labels={DRAW_SIDE_LABELS}
+                        none="Both sides, meeting in the middle"
+                      />
+                    </Field>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <Field id="element-fabric" label="Fabric" errors={filed.at('params.fabric')}>
                     <NativeSelect

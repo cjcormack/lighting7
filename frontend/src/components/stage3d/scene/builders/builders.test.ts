@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StageElementDto } from '../../../../api/stageElementApi'
 import { seatBase, seatingParams } from '../../../../lib/stageSeats'
 import { buildElement } from '.'
-import { DRAWN_GATHER, drawnHalfWidth } from './drape'
+import { DRAWN_GATHER, drawnHalfWidth, drawnOneWayWidth } from './drape'
 import { SCRIM_THREAD_SHARE } from '../scrimOpen'
 import { ROOM_FACE_INSET_M } from './room'
 import { elementBaseZ, FINISH_LOBES, FULL_UV, type PartUv, type ScenePart } from '../sceneParts'
@@ -103,6 +103,45 @@ describe('the element builders (stage-view plan session 3)', () => {
     expect(drawnHalfWidth(5.7, 0.5)).toBeCloseTo(2.85 * (1 - (1 - DRAWN_GATHER) * 0.5), 9)
     // A dead drape is one cloth, open state or not.
     expect(keys(buildElement(element({ kind: 'DRAPE', params: { role: 'LEG' } })).parts)).toEqual(['cloth'])
+  })
+
+  it('draws a one-way traveller as one cloth stacking at its drawFrom side, closed across the whole width', () => {
+    const tabs = (drawFrom: string, open?: number, extra: Record<string, unknown> = {}) =>
+      element({
+        kind: 'DRAPE', widthM: 7.5, heightM: 4.2, depthM: 0.1,
+        params: { role: 'TABS', operation: 'DRAW', drawFrom, ...(open == null ? {} : { states: { open } }), ...extra },
+      })
+    const closed = buildElement(tabs('STAGE_LEFT')).parts
+    expect(keys(closed)).toEqual(['cloth-sl'])
+    const whole = part(closed, 'cloth-sl')
+    expect(whole.geometry).toMatchObject({ shape: 'pleat', w: 7.5, anchor: 'right' })
+    expect(whole.at.x).toBeCloseTo(0, 9)
+
+    // Open, it gathers into its side: the stage-left (+x) edge stays put.
+    const sl = part(buildElement(tabs('stage_left', 1)).parts, 'cloth-sl')
+    const slW = (sl.geometry as { w: number }).w
+    expect(slW).toBeCloseTo(7.5 * DRAWN_GATHER, 9)
+    expect(sl.at.x + slW / 2).toBeCloseTo(3.75, 9)
+
+    const sr = part(buildElement(tabs('STAGE_RIGHT', 0.5)).parts, 'cloth-sr')
+    const srW = (sr.geometry as { w: number }).w
+    expect(sr.geometry).toMatchObject({ anchor: 'left' })
+    expect(srW).toBeCloseTo(drawnOneWayWidth(7.5, 0.5), 9)
+    expect(drawnOneWayWidth(7.5, 0.5)).toBeCloseTo(7.5 * (1 - (1 - DRAWN_GATHER) * 0.5), 9)
+    expect(sr.at.x - srW / 2).toBeCloseTo(-3.75, 9)
+
+    // A painted one-way cloth carries the whole image, as a dead one does; a net stacks its fullness.
+    const painted = part(buildElement(tabs('STAGE_LEFT', 0.6, { paint: { front: FRONT } })).parts, 'cloth-sl')
+    expect(painted.uv).toEqual(FULL_UV)
+    expect(painted.light).toEqual({ kind: 'mask', image: FRONT, uv: FULL_UV })
+    // Velour keeps its hung pleats as it gathers, folds measured from the stacking edge.
+    const velour = part(buildElement(tabs('STAGE_LEFT', 1)).parts, 'cloth-sl')
+    expect(velour.geometry).toMatchObject({ shape: 'pleat', pleat: pleatShape(tabs('STAGE_LEFT', 1), 'sl'), anchor: 'right' })
+    const net = part(buildElement(tabs('STAGE_LEFT', 1, { fabric: 'BOBBINET' })).parts, 'cloth-sl')
+    expect((net.light as { gather: number }).gather).toBeCloseTo(1 / DRAWN_GATHER, 9)
+
+    // An unknown side is the bi-parting pair.
+    expect(keys(buildElement(tabs('CENTRE')).parts)).toEqual(['cloth-sl', 'cloth-sr'])
   })
 
   it("hangs a platform's deck below its top, rails the edge it names, and draws its deck when linked to a region", () => {

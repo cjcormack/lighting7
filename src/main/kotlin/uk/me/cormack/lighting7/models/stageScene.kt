@@ -42,6 +42,14 @@ enum class DrapeRole { LEG, BORDER, TABS, CYC, BACKCLOTH }
 enum class DrapeOperation { DEAD, DRAW, FLY }
 
 /**
+ * Which side a drawn drape stacks at when open, for a one-way traveller: the whole cloth closes
+ * from there across to the other side. Absent is a bi-parting pair, each half from its own side,
+ * meeting in the middle. Sides are the element's own, as [FlatOpening.fromM]'s are: stage left is
+ * its local +X end. Nothing reads it on the desk: the Stage view draws it.
+ */
+enum class DrapeDrawFrom { STAGE_LEFT, STAGE_RIGHT }
+
+/**
  * What a drape is woven from (scrim plan D1): a cloth's, not a role's, so a flown gauze is
  * `BACKCLOTH` + `FLY` + `SHARKSTOOTH`. Absent is velour, the only fabric that pleats (D2). Canvas is
  * the flat painted cloth; muslin is translucent (D6); the two nets are scrims (D3). Nothing reads it
@@ -148,6 +156,8 @@ data class DrapeParams(
     val fabric: DrapeFabric? = null,
     /** Images on its two sides (scrim plan D4). */
     val paint: ScenePaint? = null,
+    /** A drawn drape's one side ([DrapeDrawFrom]); null is bi-parting. */
+    val drawFrom: DrapeDrawFrom? = null,
 ) : ElementParams
 
 @Serializable
@@ -505,7 +515,11 @@ fun parseElementParams(
         StageElementKind.DRAPE -> {
             val role = r.enum<DrapeRole>("role", required = true)
             val operation = r.enum<DrapeOperation>("operation")
-            role?.let { DrapeParams(it, operation, fabric = fabric, paint = paint) }
+            val drawFrom = r.enum<DrapeDrawFrom>("drawFrom")
+            if (drawFrom != null && operation != DrapeOperation.DRAW) {
+                problems += "$where.drawFrom is a drawn drape's (a DRAPE with operation DRAW); this one is ${operation ?: DrapeOperation.DEAD}"
+            }
+            role?.let { DrapeParams(it, operation, fabric = fabric, paint = paint, drawFrom = drawFrom) }
         }
         StageElementKind.PLATFORM -> {
             val rail = r.number("railHeightM", 0.1, 3.0)

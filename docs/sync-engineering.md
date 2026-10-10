@@ -464,7 +464,9 @@ keeps a `travelS` it does not read, and writes it back unchanged on its next exp
 not know (`unknown field 'travelS'`), from its form and its `set_scene` alike, until it is updated —
 mixed-version editing, not sync. It is portable —
 how long the venue's tabs take to draw is the venue's — and `RichProjectFixture`'s house tabs carry
-one, so the round trip and the clone test it. The programmer's scenery (`state/ProgrammerScenery.kt`)
+one, so the round trip and the clone test it. A drawn drape's `drawFrom` (`STAGE_LEFT · STAGE_RIGHT`,
+a one-way traveller's side; absent is bi-parting) rides the same way, and the house tabs carry that too.
+The programmer's scenery (`state/ProgrammerScenery.kt`)
 is runtime only and never reaches an archive.
 
 **It bumped `formatVersion`** by the sharp-edge rule: a v17 reader ignores both folders, imports every

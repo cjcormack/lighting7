@@ -413,6 +413,7 @@ class ProjectRoundTripTest {
         assertEquals(1.0, tabs.params!!["states"]!!.jsonObject["open"]!!.jsonPrimitive.double)
         // An optional param (scenery-programmer plan P2): carried in the nested params, no version bump.
         assertEquals(4.5, tabs.params["travelS"]!!.jsonPrimitive.double)
+        assertEquals("STAGE_LEFT", tabs.params["drawFrom"]!!.jsonPrimitive.content)
 
         val regions = Files.list(exportDirA.resolve("stageRegions")).use { stream ->
             stream.toList().map { canonicalDecode(StageRegionJson.serializer(), Files.readString(it)) }
