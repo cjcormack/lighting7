@@ -35,6 +35,20 @@ export function drawnHalfWidth(widthM: number, open: number): number {
   return (widthM / 2) * (1 - (1 - DRAWN_GATHER) * o)
 }
 
+/**
+ * The width a one-way `DRAW` drape covers at [open], from the side it stacks at: at 0 the whole
+ * width, at 1 gathered to [DRAWN_GATHER] of it — a bi-parting pair's two halves end to end.
+ */
+export function drawnOneWayWidth(widthM: number, open: number): number {
+  return 2 * drawnHalfWidth(widthM, open)
+}
+
+/** A drawn drape's one side (`drawFrom`): the side it stacks at when open. Null is bi-parting. */
+export function paramDrawFrom(element: Pick<StageElementDto, 'params'>): 'STAGE_LEFT' | 'STAGE_RIGHT' | null {
+  const v = paramEnum(element, 'drawFrom')
+  return v === 'STAGE_LEFT' || v === 'STAGE_RIGHT' ? v : null
+}
+
 /** A cyc's colour where it names none: a pale grey-blue sheet. */
 const CYC_COLOUR = '#d6dbe2'
 /** A scrim's or a muslin's where it names none (scrim plan session 2): off-white cloth. */
@@ -81,7 +95,8 @@ function drapeLight(fabric: DrapeFabric, finish: PartFinish, uv: PartUv, gather:
  *
  * - `DRAW` — a pair of tabs on a track: two halves, each gathered towards its own side by its
  *   `open` state (0 closed, 1 drawn, closed when unstated), so a Look or a cue that opens the tabs
- *   (session 8) moves the cloth and the gap between them.
+ *   (session 8) moves the cloth and the gap between them. A one-way traveller (`drawFrom`) is one
+ *   cloth gathered towards that side instead, closing across the whole width.
  * - `FLY` — its Z is its trim.
  * - `DEAD`, or none — hangs where it is.
  *
@@ -90,8 +105,8 @@ function drapeLight(fabric: DrapeFabric, finish: PartFinish, uv: PartUv, gather:
  * `sheet`), and a drawn half of one folds only as it gathers ([gatherShape]): flat while closed,
  * deepening as it is drawn. A drawn velour keeps its hung pleats as it gathers, as it always has.
  *
- * **Paint** (D4) is stretched over the face: a dead or flown cloth carries the whole image, and each
- * drawn half its own half of it — compressed as the half gathers, so the picture stays whole however
+ * **Paint** (D4) is stretched over the face: a dead, flown or one-way cloth carries the whole image,
+ * and each drawn half its own half of it — compressed as the half gathers, so the picture stays whole however
  * far the tabs are open ([ScenePart.uv]). On velour it lies on the pleats.
  */
 export function buildDrape(element: StageElementDto): ElementBuild {
@@ -110,7 +125,34 @@ export function buildDrape(element: StageElementDto): ElementBuild {
       seats: [],
     }
   }
-  const half = drawnHalfWidth(w, elementStates(element).open ?? 0)
+  const open = elementStates(element).open ?? 0
+  const drawFrom = paramDrawFrom(element)
+  if (drawFrom != null) {
+    const side = drawFrom === 'STAGE_LEFT' ? 'sl' : 'sr'
+    const cover = drawnOneWayWidth(w, open)
+    const fullness = w / cover
+    const sign = side === 'sl' ? 1 : -1
+    return {
+      parts: [
+        {
+          key: `cloth-${side}`,
+          geometry: {
+            shape: 'pleat',
+            w: cover,
+            h,
+            pleat: velour ? pleatShape(element, side) : gatherShape(element, side, fullness),
+            anchor: side === 'sl' ? 'right' : 'left',
+          },
+          at: { x: sign * (w / 2 - cover / 2), y: 0, z: h / 2 },
+          finish,
+          light: drapeLight(fabric, finish, FULL_UV, fullness),
+          ...(painted && { uv: FULL_UV }),
+        },
+      ],
+      seats: [],
+    }
+  }
+  const half = drawnHalfWidth(w, open)
   // How much cloth a half has against the width it is gathered into: 1 while closed.
   const fullness = w / 2 / half
   const fold = (side: 'sr' | 'sl') => (velour ? pleatShape(element, side) : gatherShape(element, side, fullness))

@@ -1134,9 +1134,9 @@ cloth").
   with no `finishColour` is off-white (`#e9e5da`), above a cyc's grey. Canvas keeps its role's colour.
 - **Paint is the albedo** (D4). `PartFinish.paint` carries the hashes, a drape's and a flat's only
   (D14), and each painted part carries a **`uv` rect**: where its own x and z land on the image as seen
-  from downstage. A dead or flown cloth carries the whole image. A flat's piers, sills and heads each
+  from downstage. A dead, flown or one-way cloth carries the whole image. A flat's piers, sills and heads each
   carry their share of its face (`wallWithOpenings`), so an opening cuts a hole in the picture rather
-  than squeezing it round the door. A drawn cloth's halves carry `u` 0–½ and ½–1, **compressed as they
+  than squeezing it round the door. A bi-parting cloth's halves carry `u` 0–½ and ½–1, **compressed as they
   gather**: the picture stays whole at every `open`, the two halves meeting at ½ while closed. On
   velour the image lies on the pleats — `u` runs with the cloth's flat x, which the fold never moves —
   so seen square on it reads undistorted, shaded by its folds. `partGeometry` writes the rect onto the
@@ -1518,7 +1518,10 @@ element's origin — its base, a platform's top, a flown piece's trim — and tu
   head around it (a door has no sill); an arch is drawn square-topped.
 - **Drape**: one cloth — pleated if velour, a flat `sheet` for any other fabric — or for a `DRAW`
   operation two halves gathered to their sides by the `open` state (closed when unstated), each
-  hanging from its own edge; a velour half keeps its pleats, any other folds only as it gathers. A cyc
+  hanging from its own edge; a velour half keeps its pleats, any other folds only as it gathers. A
+  one-way traveller (`drawFrom: STAGE_LEFT | STAGE_RIGHT`, the element's own sides) is one cloth
+  gathered towards that side instead, closed across the whole width and open to `DRAWN_GATHER` of
+  it (`drawnOneWayWidth`), carrying the whole image as a dead cloth does. A cyc
   defaults pale, a net or a muslin off-white. See §"Painted cloths".
 - **Platform**: the deck hangs **below** its Z, which is its top; a rail on the edge it names. A
   platform linked to a region draws its own deck all the same; the region draws no surface under it.

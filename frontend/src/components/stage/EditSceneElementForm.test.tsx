@@ -282,6 +282,34 @@ describe('EditSceneElementForm (stage-view plan session 5)', () => {
     expect(update.mock.calls[0]![0].params).toEqual({ role: 'TABS', operation: 'DEAD' })
   })
 
+  it('a drawn drape picks the side it draws from, both by default, and loses it when it stops drawing', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve(element()) })
+    const tabs = element({ uuid: 'tabs', name: 'Half tabs', kind: 'DRAPE', layer: 'VENUE', params: { role: 'TABS', operation: 'DRAW' } })
+    render(<EditSceneElementForm element={tabs} projectId={3} onClose={() => {}} />)
+    const side = screen.getByLabelText('Draws from') as HTMLSelectElement
+    expect(side.value).toBe('')
+    expect([...side.options].map((o) => o.textContent)).toEqual([
+      'Both sides, meeting in the middle',
+      'Stage left only',
+      'Stage right only',
+    ])
+    fireEvent.change(side, { target: { value: 'STAGE_LEFT' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'TABS', operation: 'DRAW', drawFrom: 'STAGE_LEFT' })
+
+    cleanup()
+    update.mockClear()
+    const oneWay = { ...tabs, params: { role: 'TABS', operation: 'DRAW', drawFrom: 'STAGE_LEFT' } }
+    render(<EditSceneElementForm element={oneWay} projectId={3} onClose={() => {}} />)
+    expect((screen.getByLabelText('Draws from') as HTMLSelectElement).value).toBe('STAGE_LEFT')
+    fireEvent.change(document.getElementById('element-operation')!, { target: { value: 'FLY' } })
+    expect(screen.queryByLabelText('Draws from')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'TABS', operation: 'FLY' })
+  })
+
   it('shows where a drag on a section has moved it, without saving', () => {
     const ref = { current: null as null | { setPosition: (p: { positionX: number; positionY: number; positionZ: number }) => void } }
     render(<EditSceneElementForm ref={ref} element={element()} projectId={3} onClose={() => {}} />)

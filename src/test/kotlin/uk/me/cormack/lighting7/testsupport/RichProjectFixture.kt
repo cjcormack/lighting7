@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoStageElement
 import uk.me.cormack.lighting7.models.encodeSceneryState
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
+import uk.me.cormack.lighting7.models.DrapeDrawFrom
 import uk.me.cormack.lighting7.models.DrapeFabric
 import uk.me.cormack.lighting7.models.DrapeOperation
 import uk.me.cormack.lighting7.models.FlatOpening
@@ -225,8 +226,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         widthM = 5.6; depthM = 0.12; heightM = 3.1
         params = encodeElementParams(
             StageElementKind.DRAPE,
-            // travelS (scenery-programmer plan D6): an optional param, off its null default.
-            DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0), travelS = 4.5),
+            // travelS (scenery-programmer plan D6) and drawFrom: optional params, off their null defaults.
+            DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0), travelS = 4.5, drawFrom = DrapeDrawFrom.STAGE_LEFT),
         )
     }
     // v23: the painted cloths (scrim plan session 1). A muslin drape painted front (an image with

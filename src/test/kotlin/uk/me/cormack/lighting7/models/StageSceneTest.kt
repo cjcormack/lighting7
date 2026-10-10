@@ -233,6 +233,29 @@ class StageSceneTest {
         assertTrue(check(seat.copy(eye = StagePoint(0.0, 0.0, 1.0))).any { "leave eye out" in it })
     }
 
+    /** `drawFrom`: a one-way traveller's side, a drawn drape's only, refused by name on any other drape. */
+    @Test
+    fun `drawFrom is a drawn drape's, canonical and case-insensitive`() {
+        val (oneWay, problems) = parse(StageElementKind.DRAPE, """{"role":"tabs","operation":"draw","drawFrom":"stage_left"}""")
+        assertEquals(emptyList(), problems)
+        assertEquals(DrapeDrawFrom.STAGE_LEFT, assertIs<DrapeParams>(oneWay).drawFrom)
+        val text = encodeElementParams(StageElementKind.DRAPE, oneWay)
+        assertEquals("""{"drawFrom":"STAGE_LEFT","operation":"DRAW","role":"TABS"}""", text)
+        assertEquals(oneWay, readElementParams(StageElementKind.DRAPE, text))
+
+        // Bi-parting is the absence of a side: nothing is written for it.
+        val (pair, _) = parse(StageElementKind.DRAPE, """{"role":"TABS","operation":"DRAW"}""")
+        assertNull(assertIs<DrapeParams>(pair).drawFrom)
+
+        val (dead, deadProblems) = parse(StageElementKind.DRAPE, """{"role":"LEG","drawFrom":"STAGE_RIGHT"}""")
+        assertNull(dead)
+        assertEquals(listOf("params.drawFrom is a drawn drape's (a DRAPE with operation DRAW); this one is DEAD"), deadProblems)
+        val (_, flown) = parse(StageElementKind.DRAPE, """{"role":"BACKCLOTH","operation":"FLY","drawFrom":"STAGE_RIGHT"}""")
+        assertEquals(listOf("params.drawFrom is a drawn drape's (a DRAPE with operation DRAW); this one is FLY"), flown)
+        val (_, bad) = parse(StageElementKind.DRAPE, """{"role":"TABS","operation":"DRAW","drawFrom":"CENTRE"}""")
+        assertEquals(listOf("params.drawFrom must be one of STAGE_LEFT, STAGE_RIGHT"), bad)
+    }
+
     /** `travelS` (scenery-programmer plan D6): a moving piece's only, refused by name elsewhere. */
     @Test
     fun `travelS is a drawn or flown piece's, and refused by name on anything that does not travel`() {
