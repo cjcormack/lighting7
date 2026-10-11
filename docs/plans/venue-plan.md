@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–5 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee` and `45afbef` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–6 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee`, `45afbef` and `c7fe1e7` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -374,7 +374,7 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
     with no bump, so a session-4 desk refuses a show carrying overrides. `FU-VENUE-ELEMENT-OVERRIDES` is
     recorded.
 
-### Session 6 — a show that's behind (backend + frontend)
+### Session 6 — a show that's behind (backend + frontend) — done, `c7fe1e7`
 
 - **Classification** of the gap between pin and installed version; `ProjectDto.venue.behind`.
 - **The hold** (P5): a held flag on `DmxController`, checked above park, set by the loader for an
@@ -390,6 +390,49 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
   while running against an older pin.
 - **Docs:** `dmx-engineering.md` (the hold), `websocket-engineering.md` (`venue.hold`),
   `lighting-composition-model.md`.
+- **As shipped** (PR #109). What session 7 inherits that the bullets above do not say:
+  - **Behind is judged per show, not per venue** (`venue/ShowBehind.kt`): History's own diff between the
+    pin and the installed version, less what the show's layer stands between — a change to a patch it
+    hides, and a re-address of a patch whose Address it overrides where the override applies at both
+    versions (the hold is for what an Update would change on the wire). A re-type, a universe change
+    and an added patch always reach the show; a gap that cannot be read fails closed as `OUTPUT`.
+    `ProjectDto.venue` carries `behind` and `drawingChanges` (the drawing-only banner's count).
+  - **The hold is `dmx/OutputHold.kt`, one per show**, handed to every controller by the loader, which
+    judges it first (`Show.rigHold` → `state/VenueHoldService.kt`); it zeroes the bytes handed to the
+    transport and nothing else, so the listeners, `getValue` and every view keep the composed show.
+    `MockDmxController.transmittedValue` is the wire for a test. Arm, fire and command are refused
+    (`VENUE_HOLD`) while running against too, not only held: the installed version's cannon is reserved
+    idle, so a fire there would be drawn and never happen. A rehearsal is not refused.
+  - **Run against is runtime only, keyed to (project, pin, installed)**: a reload keeps it (patch
+    edits, a pull that leaves the pin), another project, a moved pin, a newer version or a restart
+    drops it. Lifting it from the public listener needs `requireEffectsAccess`; putting the hold back
+    (`on: false`, the banner's *Hold output*) never does. **Departure, decided with Chris:** a publish
+    or venue pull that puts a *running*, unheld show behind does not black it out — it carries on as if
+    run against its pin, guarded, and opens held next time (`refreshCurrent`). D7's "opens held" is
+    kept to opening.
+  - **Update** (`venue/VenueUpdate.kt`) re-points link by link through `VenueLinks.ALL` (in
+    `repointAll`'s order) so each link's unmatched rows drop as that link needs: a show patch or
+    placement on a removed rigging comes off it, keeping its position; a member, tile, cue event or
+    scenery row goes; a show patch on a removed universe is a blocker. Hides and overrides of records
+    the target lacks are deleted. Drift keeps its base, so the session 5 chip lights after; `TAKE_VENUES`
+    on a drift is a revert in the same request. Decisions (P8) are `KEEP_BOTH | READDRESS_MINE |
+    HIDE_VENUES | REMOVE_MINE` — *Hide the venue's* only where `ShowHides.hideRefusal` allows it,
+    re-addresses suggested and applied in turn so two never collide. Key and name clashes (the §3.3
+    namespace) block. Forward only (`VENUE_UP_TO_DATE`); a live show reloads through `switchProject`.
+    **Detach can reuse** `deleteOwnPatch`, the drop rules per link and the review-as-rollback pattern;
+    it must write `RigScope.effective`'s fields (overrides applied) into the show's own rows before it
+    re-points every link from the snapshot to them and clears the pin.
+  - **Operators** may Update and Run against (`desk-accounts.md`); `projectWriteGuard` treats
+    `venue/run-against` as a runtime gesture.
+  - **Frontend:** `VenueBehindBanner` under the app header (held, running against, drawing-only with
+    *Later* per session and installed version, and "opens held" on a non-live show),
+    `ProgrammerIndicator` and the immersive `ShowHeader` say *Blind · venue*, `VenueUpdateSheet` (a
+    Sheet, not the board's modal: its decisions are a form), `RunAgainstDialog`. The busk band's
+    `BLIND` pill stays the programmer's. The Projects page's *Update venue* is session 7's.
+  - **Sync:** no `formatVersion` change — a pulled pin move reloads the live show, which re-judges.
+    Recorded `FU-VENUE-UPDATE-BINDINGS` (the review does not read surface bindings).
+  - **Fixed on the way:** `Fixtures.changeListeners` is copy-on-write; a switch's collector
+    registering while the next switch iterated it threw `ConcurrentModificationException`.
 
 ### Session 7 — Projects page and the rest (frontend + backend)
 
