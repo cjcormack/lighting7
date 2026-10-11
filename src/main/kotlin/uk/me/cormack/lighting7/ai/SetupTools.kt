@@ -247,25 +247,26 @@ class SetupTools(
             // Re-read the row: `currentProject` is the entity loaded at the last project switch,
             // and its columns are that load's values — a set_stage since then would read stale.
             val project = DaoProject.findById(current.id) ?: current
-            val riggings = DaoRigging.find { DaoRiggings.project eq project.id }
+            val rig = RigScope.of(project)
+            val riggings = rig.riggings()
                 .orderBy(DaoRiggings.sortOrder to SortOrder.ASC).toList()
             val riggingNames = riggings.associate { it.id.value to it.name }
             val riggingPoses = riggings.associate { r ->
                 r.id.value to RiggingPose(r.positionX, r.positionY, r.positionZ, r.yawDeg, r.pitchDeg, r.rollDeg)
             }
-            val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }
+            val regions = rig.stageRegions()
                 .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).toList()
-            val universes = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
+            val universes = rig.universeConfigs()
                 .sortedWith(compareBy({ it.subnet }, { it.universe }))
             val universeById = universes.associateBy { it.id.value }
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            val patches = rig.patches()
                 .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC).toList()
-            val groups = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+            val groups = rig.groups()
                 .orderBy(DaoFixtureGroups.name to SortOrder.ASC).toList()
             val keyByPatchId = patches.associate { it.id.value to it.key }
-            val placementsByPatch = extraPlacementsByPatch(patches.map { it.id })
+            val placementsByPatch = rig.placementsByPatch(patches)
             val membersByGroup = groups.associate { g ->
-                g.name to g.members.sortedBy { it.sortOrder }.mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
+                g.name to rig.members(g).sortedBy { it.sortOrder }.mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
             }
             val groupsByKey = mutableMapOf<String, MutableList<String>>()
             membersByGroup.forEach { (group, keys) -> keys.forEach { groupsByKey.getOrPut(it) { mutableListOf() }.add(group) } }
@@ -401,9 +402,10 @@ class SetupTools(
         )
 
         val (existing, riggingIds) = transaction(state.database) {
-            val universes = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
+            val rig = RigScope.of(project)
+            val universes = rig.universeConfigs()
                 .associate { it.id.value to it.universe }
-            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.map { p ->
+            rig.patches().map { p ->
                 val count = FixtureTypeRegistry.channelCountForTypeKey(p.fixtureTypeKey) ?: 1
                 Existing(
                     p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel,
@@ -536,11 +538,11 @@ class SetupTools(
         }
 
         val newGroups = transaction(state.database) {
-            var sortOrder = (DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            var sortOrder = (RigScope.of(project).own.patches()
                 .maxOfOrNull { it.sortOrder } ?: -1) + 1
             // Loaded once rather than per row per group: a patch export runs to hundreds of rows,
             // and the pool's one connection serialises every lookup.
-            val groupsByName = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+            val groupsByName = RigScope.of(project).own.groups()
                 .associateBy { it.name }.toMutableMap()
             val groupsBefore = groupsByName.keys.toSet()
             val members = groupsByName.values.flatMap { g -> g.members.map { g.id.value to it } }
@@ -556,7 +558,11 @@ class SetupTools(
                     controllerType = "ARTNET"
                     address = null
                 }
-                val patch = existingByKey[row.key]?.let { DaoFixturePatch.findById(it.id)!! } ?: DaoFixturePatch.new {
+                // `existing` is the rig as patched, for the clash checks above; the row an update
+                // changes is one this project owns (`RigScope.own`), never another's in place.
+                val patch = existingByKey[row.key]?.let {
+                    RigScope.of(project).own.patches(DaoFixturePatches.id eq it.id).single()
+                } ?: DaoFixturePatch.new {
                     this.project = project
                     key = row.key
                     this.sortOrder = sortOrder++
@@ -628,7 +634,7 @@ class SetupTools(
         val force = optionalBoolean(input, "force", problems) == true
         val project = state.projectManager.currentProject
         val groups = transaction(state.database) {
-            DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+            RigScope.of(project).own.groups()
                 .associate { it.name to (it.id.value to it.members.count()) }
         }
 
@@ -680,13 +686,12 @@ class SetupTools(
         )
     }
 
-    private fun findUniverse(project: DaoProject, universe: Int): DaoUniverseConfig? = DaoUniverseConfig.find {
-        (DaoUniverseConfigs.project eq project.id) and (DaoUniverseConfigs.subnet eq 0) and
-            (DaoUniverseConfigs.universe eq universe)
-    }.firstOrNull()
+    private fun findUniverse(project: DaoProject, universe: Int): DaoUniverseConfig? = RigScope.of(project).universeConfigs(
+        (DaoUniverseConfigs.subnet eq 0) and (DaoUniverseConfigs.universe eq universe)
+    ).firstOrNull()
 
     private fun riggingIdsByName(project: DaoProject): Map<String, Int> =
-        DaoRigging.find { DaoRiggings.project eq project.id }.associate { it.name to it.id.value }
+        RigScope.of(project).riggings().associate { it.name to it.id.value }
 
     // ─── Placement ──────────────────────────────────────────────────────
 
@@ -917,7 +922,7 @@ class SetupTools(
         val project = state.projectManager.currentProject
         data class Stored(val id: Int, val typeKey: String, val focus: LanternFocus, val kindOverride: String?)
         val (patches, riggingIds) = transaction(state.database) {
-            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            RigScope.of(project).own.patches()
                 .associate { it.key to Stored(it.id.value, it.fixtureTypeKey, it.focus, it.kindOverride) } to
                 riggingIdsByName(project)
         }
@@ -1016,8 +1021,9 @@ class SetupTools(
         val removeRiggings = input.stringList("removeRiggings")
 
         val (knownRegions, knownRiggings) = transaction(state.database) {
-            DaoStageRegion.find { DaoStageRegions.project eq project.id }.map { it.name }.toSet() to
-                riggingIdsByName(project).keys
+            // What a remove may name: the rows this project owns, not the whole rig.
+            val own = RigScope.of(project).own
+            own.stageRegions().map { it.name }.toSet() to own.riggings().map { it.name }.toSet()
         }
         removeRegions.filter { it !in knownRegions }.forEach { problems += "removeRegions: no region named '$it'" }
         removeRiggings.filter { it !in knownRiggings }.forEach { problems += "removeRiggings: no rigging named '$it'" }
@@ -1033,6 +1039,7 @@ class SetupTools(
         // The stage box as stored after the write, answered so the caller sees what landed.
         var storedStage: Triple<Double?, Double?, Double?>? = null
         transaction(state.database) {
+            val own = RigScope.of(project).own
             if (stage != null) {
                 val p = DaoProject.findById(project.id)!!
                 if ("widthM" in stage) p.stageWidthM = width
@@ -1040,11 +1047,9 @@ class SetupTools(
                 if ("heightM" in stage) p.stageHeightM = height
                 storedStage = Triple(p.stageWidthM, p.stageDepthM, p.stageHeightM)
             }
-            var regionOrder = (DaoStageRegion.find { DaoStageRegions.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            var regionOrder = (own.stageRegions().maxOfOrNull { it.sortOrder } ?: -1) + 1
             for ((name, row) in regions) {
-                val region = DaoStageRegion.find {
-                    (DaoStageRegions.project eq project.id) and (DaoStageRegions.name eq name)
-                }.firstOrNull() ?: DaoStageRegion.new {
+                val region = own.stageRegions(DaoStageRegions.name eq name).firstOrNull() ?: DaoStageRegion.new {
                     this.project = project
                     this.name = name
                     sortOrder = regionOrder++
@@ -1057,11 +1062,9 @@ class SetupTools(
                 if ("heightM" in row) region.heightM = row.double("heightM")
                 if ("yawDeg" in row) region.yawDeg = row.double("yawDeg")
             }
-            var riggingOrder = (DaoRigging.find { DaoRiggings.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            var riggingOrder = (own.riggings().maxOfOrNull { it.sortOrder } ?: -1) + 1
             for ((name, row) in riggings) {
-                val rigging = DaoRigging.find {
-                    (DaoRiggings.project eq project.id) and (DaoRiggings.name eq name)
-                }.firstOrNull() ?: DaoRigging.new {
+                val rigging = own.riggings(DaoRiggings.name eq name).firstOrNull() ?: DaoRigging.new {
                     this.project = project
                     this.name = name
                     sortOrder = riggingOrder++
@@ -1076,14 +1079,14 @@ class SetupTools(
                 if ("lengthM" in row) rigging.lengthM = row.double("lengthM")
             }
             for (name in removeRegions) {
-                DaoStageRegion.find { (DaoStageRegions.project eq project.id) and (DaoStageRegions.name eq name) }
+                own.stageRegions(DaoStageRegions.name eq name)
                     .forEach { region ->
                         platformsUnlinked += unlinkRegionFromPlatforms(project, region.uuid)
                         region.delete()
                     }
             }
             for (name in removeRiggings) {
-                DaoRigging.find { (DaoRiggings.project eq project.id) and (DaoRiggings.name eq name) }.forEach { rigging ->
+                own.riggings(DaoRiggings.name eq name).forEach { rigging ->
                     // As the rigging route's delete: detach first, since Exposed does not enforce
                     // the FK's SET NULL.
                     DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }.forEach { it.rigging = null; detached++ }

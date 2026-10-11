@@ -1,11 +1,7 @@
 package uk.me.cormack.lighting7.fixture
 
-import org.jetbrains.exposed.v1.core.eq
-import uk.me.cormack.lighting7.models.DaoFixtureGroup
-import uk.me.cormack.lighting7.models.DaoFixtureGroups
-import uk.me.cormack.lighting7.models.DaoFixturePatch
-import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -119,13 +115,14 @@ class TriggerIndex private constructor(
 
         /** From [project]'s stored patches and groups. Must run inside a transaction. */
         fun of(project: DaoProject): TriggerIndex {
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.toList()
+            val rig = RigScope.of(project)
+            val patches = rig.patches().toList()
             val reservedById = patches.mapNotNull { p ->
                 FixtureTriggers.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (p.displayName to it)) }
             }.toMap()
             if (reservedById.isEmpty()) return EMPTY
-            val groups = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }.mapNotNull { g ->
-                g.members.flatMapTo(LinkedHashSet()) { m -> reservedById[m.fixturePatch.id.value]?.second?.second.orEmpty() }
+            val groups = rig.groups().mapNotNull { g ->
+                rig.members(g).flatMapTo(LinkedHashSet()) { m -> reservedById[m.fixturePatch.id.value]?.second?.second.orEmpty() }
                     .takeIf { it.isNotEmpty() }?.let { g.name to it }
             }.toMap()
             return TriggerIndex(reservedById.values.toMap(), groups)

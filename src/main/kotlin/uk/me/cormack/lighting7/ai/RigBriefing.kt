@@ -8,7 +8,6 @@ import uk.me.cormack.lighting7.fixture.FixtureTriggers
 
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
@@ -283,12 +282,13 @@ class RigBriefing(private val state: State) {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
             val p = DaoProject.findById(project.id) ?: return@transaction null
-            val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }
+            val rig = RigScope.of(project)
+            val regions = rig.stageRegions()
                 .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).map { it.name }
-            val riggings = DaoRigging.find { DaoRiggings.project eq project.id }.toList()
+            val riggings = rig.riggings().toList()
                 .sortedByDescending { it.positionY ?: Double.NEGATIVE_INFINITY }
-            val elements = DaoStageElement.find { DaoStageElements.project eq project.id }.toList()
-            val viewpoints = DaoStageViewpoint.find { DaoStageViewpoints.project eq project.id }
+            val elements = rig.stageElements().toList()
+            val viewpoints = rig.stageViewpoints()
                 .orderBy(DaoStageViewpoints.sortOrder to SortOrder.ASC).map { it.name }
             val box = listOf(p.stageWidthM, p.stageDepthM, p.stageHeightM)
             if (box.all { it == null } && regions.isEmpty() && riggings.isEmpty() && elements.isEmpty() && viewpoints.isEmpty()) {
@@ -334,15 +334,14 @@ class RigBriefing(private val state: State) {
      */
     private fun mountMismatches(projectId: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>): String? {
         data class MountedUnit(val name: String, val rigging: DaoRigging?, val yaw: Double?, val pitch: Double?, val roll: Double?)
-        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey, it.kindOverride, it.lanternType) }
+        val scope = RigScope.of(projectId)
+        val heads = scope.patches().filter { isMovingHead(it.fixtureTypeKey, it.kindOverride, it.lanternType) }
         if (heads.isEmpty()) return null
-        val placements = DaoFixturePatchPlacement
-            .find { DaoFixturePatchPlacements.fixturePatch inList heads.map { it.id } }
-            .groupBy { it.fixturePatch.id }
+        val placements = scope.placementsByPatch(heads)
         val units = heads.flatMap { p ->
             val name = p.displayName.ifBlank { p.key }
             listOf(MountedUnit(name, p.rigging, p.baseYawDeg, p.basePitchDeg, p.baseRollDeg)) +
-                placements[p.id].orEmpty().map { pl ->
+                placements[p.id.value].orEmpty().map { pl ->
                     MountedUnit(
                         pl.label?.takeIf { it.isNotBlank() }?.let { "$name · $it" } ?: name,
                         pl.rigging, pl.baseYawDeg, pl.basePitchDeg, pl.baseRollDeg,
@@ -385,10 +384,11 @@ class RigBriefing(private val state: State) {
     private fun patchLanterns(): Map<String, String> {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            val rig = RigScope.of(project)
+            val patches = rig.patches()
                 .filter { FixtureTypeRegistry.typeInfoForKey(it.fixtureTypeKey)?.acceptsLantern == true }
             if (patches.isEmpty()) return@transaction emptyMap()
-            val placements = extraPlacementsByPatch(patches.map { it.id })
+            val placements = rig.placementsByPatch(patches)
             patches.associate { p ->
                 val kind = effectiveKind(p.fixtureTypeKey, p.kindOverride, p.lanternType) ?: FixtureKind.GENERIC
                 fun name(own: String?, inherited: String?): String {
@@ -416,10 +416,11 @@ class RigBriefing(private val state: State) {
     private fun patchMedia(): Map<String, String> {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
-            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            val rig = RigScope.of(project)
+            val patches = rig.patches()
                 .filter { FittedMedia.loadableSettings(it.fixtureTypeKey).isNotEmpty() }
             if (patches.isEmpty()) return@transaction emptyMap()
-            val placements = extraPlacementsByPatch(patches.map { it.id })
+            val placements = rig.placementsByPatch(patches)
             patches.associate { p ->
                 val own = p.fittedMedia
                 val others = placements[p.id.value].orEmpty()
@@ -454,7 +455,7 @@ class RigBriefing(private val state: State) {
     private fun patchHeadNumbers(): Map<String, Int> {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
-            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+            RigScope.of(project).patches()
                 .mapNotNull { p -> p.headNumber?.let { p.key to it } }
                 .toMap()
         }

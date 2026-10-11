@@ -12,8 +12,8 @@ import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoStageElement
-import uk.me.cormack.lighting7.models.DaoStageElements
 import uk.me.cormack.lighting7.models.ElementStates
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.decodeSceneryState
 import uk.me.cormack.lighting7.models.encodeSceneryState
 import uk.me.cormack.lighting7.models.stackSceneryOf
@@ -223,5 +223,5 @@ private fun sameAs(held: ElementStates, shown: ElementStates?): Boolean {
 
 /** [project]'s scene elements by uuid, as a scenery write needs them: the row, and the resolver's view of it. */
 private fun elementsOf(project: DaoProject): Map<UUID, Pair<DaoStageElement, SceneryResolver.Element>> =
-    DaoStageElement.find { DaoStageElements.project eq project.id }
+    RigScope.of(project).stageElements()
         .associate { it.uuid to (it to it.toSceneryElement()) }

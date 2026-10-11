@@ -25,7 +25,7 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
     get<ProjectUniverseConfigsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val configs = transaction(state.database) {
-                DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
+                RigScope.of(project).universeConfigs()
                     .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
                     .map { it.toDto(project.id.value) }
             }

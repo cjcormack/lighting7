@@ -13,18 +13,18 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageRegions
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.state.State
 
 internal fun Route.routeApiRestProjectStageRegions(state: State) {
     get<ProjectStageRegionsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val regions = transaction(state.database) {
-                DaoStageRegion.find { DaoStageRegions.project eq project.id }
+                RigScope.of(project).stageRegions()
                     .orderBy(
                         DaoStageRegions.sortOrder to SortOrder.ASC,
                         DaoStageRegions.name to SortOrder.ASC,
@@ -73,13 +73,11 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
             }
 
             val result = transaction(state.database) {
-                val existing = DaoStageRegion.find {
-                    (DaoStageRegions.project eq project.id) and (DaoStageRegions.name eq trimmedName)
-                }.firstOrNull()
+                val existing = RigScope.of(project).stageRegions(DaoStageRegions.name eq trimmedName).firstOrNull()
                 if (existing != null) {
                     return@transaction Pair<StageRegionDto?, String?>(null, "Stage region '$trimmedName' already exists")
                 }
-                val maxSortOrder = DaoStageRegion.find { DaoStageRegions.project eq project.id }
+                val maxSortOrder = RigScope.of(project).own.stageRegions()
                     .maxOfOrNull { it.sortOrder } ?: -1
                 val region = DaoStageRegion.new {
                     this.project = project
@@ -134,9 +132,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
                     if (trimmed.isEmpty()) {
                         return@transaction Pair<StageRegionDto?, String?>(null, "Stage region name must not be blank")
                     }
-                    val collision = DaoStageRegion.find {
-                        (DaoStageRegions.project eq project.id) and (DaoStageRegions.name eq trimmed)
-                    }.firstOrNull()
+                    val collision = RigScope.of(project).stageRegions(DaoStageRegions.name eq trimmed).firstOrNull()
                     if (collision != null && collision.id != region.id) {
                         return@transaction Pair<StageRegionDto?, String?>(null, "Stage region '$trimmed' already exists")
                     }

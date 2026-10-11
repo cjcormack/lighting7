@@ -85,7 +85,7 @@ data class CueEventWrite(
 
 /** The project's patches as an event write checks them, by id. Must run inside a transaction. */
 fun cueEventPatchesOf(project: DaoProject): Map<Int, CueEventPatchInfo> =
-    DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.associate { p ->
+    RigScope.of(project).patches().associate { p ->
         p.id.value to CueEventPatchInfo(p.id.value, p.uuid, p.key, p.displayName, FixtureTriggers.specsForTypeKey(p.fixtureTypeKey))
     }
 

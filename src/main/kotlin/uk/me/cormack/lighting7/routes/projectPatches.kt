@@ -39,10 +39,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     get<ProjectPatchesResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val patches = transaction(state.database) {
-                val rows = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                val rig = RigScope.of(project)
+                val rows = rig.patches()
                     .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
                     .toList()
-                val placementsByPatch = extraPlacementsByPatch(rows.map { it.id })
+                val placementsByPatch = rig.placementsByPatch(rows)
                 rows.map { it.toDto(placementsByPatch[it.id.value].orEmpty()) }
             }
             call.respond(patches)
@@ -159,11 +160,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
 
                 // Find or create universe config
-                val universeConfig = DaoUniverseConfig.find {
-                    (DaoUniverseConfigs.project eq project.id) and
-                        (DaoUniverseConfigs.subnet eq 0) and
-                        (DaoUniverseConfigs.universe eq request.universe)
-                }.firstOrNull() ?: DaoUniverseConfig.new {
+                val universeConfig = RigScope.of(project).universeConfigs(
+                    (DaoUniverseConfigs.subnet eq 0) and (DaoUniverseConfigs.universe eq request.universe)
+                ).firstOrNull() ?: DaoUniverseConfig.new {
                     this.project = project
                     this.subnet = 0
                     this.universe = request.universe
@@ -187,9 +186,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
 
                 // Check key uniqueness
-                val existingKey = DaoFixturePatch.find {
-                    (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key eq request.key)
-                }.firstOrNull()
+                val existingKey = RigScope.of(project).patches(DaoFixturePatches.key eq request.key).firstOrNull()
                 if (existingKey != null) {
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Duplicate key: ${request.key}")
                 }
@@ -199,7 +196,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                 }
 
-                val maxSortOrder = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                val maxSortOrder = RigScope.of(project).own.patches()
                     .maxOfOrNull { it.sortOrder } ?: -1
 
                 val patch = DaoFixturePatch.new {
@@ -381,9 +378,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 body["displayName"].nullableString()?.let { patch.displayName = it }
                 if ("headNumber" in body) patch.headNumber = headNumber
                 body["key"].nullableString()?.let { newKey ->
-                    val existing = DaoFixturePatch.find {
-                        (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key eq newKey)
-                    }.firstOrNull()
+                    val existing = RigScope.of(project).patches(DaoFixturePatches.key eq newKey).firstOrNull()
                     if (existing != null && existing.id != patch.id) {
                         return@transaction Pair<FixturePatchDto?, String?>(null, "Key '$newKey' already exists")
                     }
@@ -635,9 +630,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val outcome = transaction(state.database) {
                 // One query for every patch, indexed by id — not findById in a loop.
                 val ids = prepared.map { it.first }
-                val byId = DaoFixturePatch.find {
-                    (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.id inList ids)
-                }.associateBy { it.id.value }
+                val byId = RigScope.of(project).own.patches(DaoFixturePatches.id inList ids).associateBy { it.id.value }
 
                 // Resolve each DISTINCT rigging once; resolveRiggingForProject does a
                 // find() per call, and a 40-fixture hang would repeat it 40 times. That
@@ -1148,11 +1141,14 @@ private fun DaoFixturePatch.toDto(
     )
 }
 
+/**
+ * The rigging [uuidStr] names in [project]'s rig, or null. Looked up within the rig scope, not
+ * globally: a uuid is not unique across projects (an import keeps record uuids, and a venue's
+ * versions share them), so a global lookup could find another project's row first and miss this one.
+ */
 internal fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoRigging? {
     val parsedUuid = runCatching { UUID.fromString(uuidStr) }.getOrNull() ?: return null
-    val rigging = DaoRigging.find { DaoRiggings.uuid eq parsedUuid }.firstOrNull() ?: return null
-    if (rigging.project.id != project.id) return null
-    return rigging
+    return RigScope.of(project).riggings(DaoRiggings.uuid eq parsedUuid).firstOrNull()
 }
 
 /**
@@ -1221,9 +1217,7 @@ internal fun parseHeadNumber(element: JsonElement?): Result<Int?> {
 
 /** The patch in [project] that holds head [number], other than [exceptPatchId]; null when free. */
 internal fun headNumberHolder(project: DaoProject, number: Int, exceptPatchId: Int?): DaoFixturePatch? =
-    DaoFixturePatch.find {
-        (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.headNumber eq number)
-    }.firstOrNull { it.id.value != exceptPatchId }
+    RigScope.of(project).patches(DaoFixturePatches.headNumber eq number).firstOrNull { it.id.value != exceptPatchId }
 
 internal fun headNumberTaken(number: Int, holder: DaoFixturePatch): String =
     "Head number $number is already '${holder.displayName}' (${holder.key})"
@@ -1243,7 +1237,7 @@ internal fun headNumberClashes(
     assigned: Map<Int, Int?>,
     rejected: Set<Int>,
 ): List<BulkPlacementFailure> {
-    val stored = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.toList()
+    val stored = RigScope.of(project).patches().toList()
     val byId = stored.associateBy { it.id.value }
     val failed = mutableMapOf<Int, String>()
     while (true) {
@@ -1294,9 +1288,7 @@ internal fun normaliseKindOverride(raw: String?): String? {
  * Find or create a fixture group by name within a project.
  */
 private fun findOrCreateGroup(project: DaoProject, groupName: String): DaoFixtureGroup {
-    return DaoFixtureGroup.find {
-        (DaoFixtureGroups.project eq project.id) and (DaoFixtureGroups.name eq groupName)
-    }.firstOrNull() ?: DaoFixtureGroup.new {
+    return RigScope.of(project).own.groups(DaoFixtureGroups.name eq groupName).firstOrNull() ?: DaoFixtureGroup.new {
         this.project = project
         this.name = groupName
     }

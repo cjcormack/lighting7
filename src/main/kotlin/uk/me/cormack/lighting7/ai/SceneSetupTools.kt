@@ -14,7 +14,6 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.blankElementFields
@@ -115,15 +114,20 @@ internal class SceneSetupTools(private val state: State) {
 
         var swept = 0
         val plan = transaction(state.database) {
+            // The rig as drawn, for validating the scene as it will stand; and the rows this project
+            // owns, which are all a write may change, delete or number after (`RigScope.own`).
             val stored = stageElementsOf(project).associateBy { it.name }
             val storedViews = stageViewpointsOf(project).associateBy { it.name }
-            val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }.toList()
+            val own = RigScope.of(project).own
+            val ownElements = own.stageElements().associateBy { it.name }
+            val ownViews = own.stageViewpoints().associateBy { it.name }
+            val regions = RigScope.of(project).stageRegions().toList()
             val regionUuidByName = regions.associate { it.name to it.uuid.toString() }
             val regionUuids = regionUuidByName.values.toSet()
             val projectUuid = project.uuid.toString()
 
-            removeElements.filter { it !in stored }.forEach { problems += "removeElements: no element named '$it'" }
-            removeViewpoints.filter { it !in storedViews }.forEach { problems += "removeViewpoints: no viewpoint named '$it'" }
+            removeElements.filter { it !in ownElements }.forEach { problems += "removeElements: no element named '$it'" }
+            removeViewpoints.filter { it !in ownViews }.forEach { problems += "removeViewpoints: no viewpoint named '$it'" }
             removeElements.filter { it in rows }.forEach { problems += "element '$it' is both set and removed" }
             removeViewpoints.filter { r -> viewpointRows.any { it.second == r } }.forEach { problems += "viewpoint '$it' is both set and removed" }
 
@@ -180,11 +184,11 @@ internal class SceneSetupTools(private val state: State) {
             }
             if (problems.isNotEmpty() || dryRun) return@transaction Triple(written.size, viewWrites.size, false)
 
-            var order = (stored.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            var order = (ownElements.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (p in written) {
                 // What it painted before this write; a new element painted nothing.
-                val released = stored[p.fields.name]?.let { paintHashesOf(it.params) }.orEmpty()
-                val element = stored[p.fields.name] ?: DaoStageElement.new {
+                val released = ownElements[p.fields.name]?.let { paintHashesOf(it.params) }.orEmpty()
+                val element = ownElements[p.fields.name] ?: DaoStageElement.new {
                     this.project = project
                     name = p.fields.name
                     kind = p.fields.kind.name
@@ -196,9 +200,9 @@ internal class SceneSetupTools(private val state: State) {
                 // Every image it names now, and every one it let go, starts the prune's week again.
                 state.sceneImages.touch(projectUuid, released + paintHashesOf(element.params))
             }
-            var viewOrder = (storedViews.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            var viewOrder = (ownViews.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (fields in viewWrites) {
-                val view = storedViews[fields.name] ?: DaoStageViewpoint.new {
+                val view = ownViews[fields.name] ?: DaoStageViewpoint.new {
                     this.project = project
                     name = fields.name
                     kind = fields.kind.name
@@ -206,9 +210,9 @@ internal class SceneSetupTools(private val state: State) {
                 }
                 view.store(fields)
             }
-            for (name in removeViewpoints) storedViews[name]?.delete()
+            for (name in removeViewpoints) ownViews[name]?.delete()
             for (name in removeElements) {
-                val element = stored[name] ?: continue
+                val element = ownElements[name] ?: continue
                 swept += deleteSceneryForElements(listOf(element.id))
                 forgetElement(state, project, element)
                 element.delete()
@@ -298,7 +302,7 @@ internal class SceneSetupTools(private val state: State) {
         val imageInfo = paintHashes.associateWith { state.sceneImages.info(project.uuid.toString(), it) }
         val body = transaction(state.database) {
             val elements = stageElementsOf(project)
-            val regionNames = DaoStageRegion.find { DaoStageRegions.project eq project.id }.associate { it.uuid.toString() to it.name }
+            val regionNames = RigScope.of(project).stageRegions().associate { it.uuid.toString() to it.name }
             val nameByUuid = elements.associate { it.uuid to it.name }
             val seating = elements.mapNotNull { e ->
                 val f = e.toFields()
@@ -707,7 +711,7 @@ internal class SceneSetupTools(private val state: State) {
     // ─── Helpers ────────────────────────────────────────────────────────
 
     private fun currentRegionNames(project: DaoProject): Set<String> = transaction(state.database) {
-        DaoStageRegion.find { DaoStageRegions.project eq project.id }.map { it.name }.toSet()
+        RigScope.of(project).stageRegions().map { it.name }.toSet()
     }
 
     private fun JsonObjectBuilder.putPoint(name: String, p: StagePoint) {
