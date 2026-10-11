@@ -49,7 +49,9 @@ class RigScope private constructor(
     /**
      * The venue this project's rig sits on: its pin resolved to the snapshot project, with the
      * show's hides. Null for a standalone show, a venue, a version, a pin whose snapshot this desk
-     * does not hold (the rig is then the show's own rows), and always for [own].
+     * does not hold, and always for [own]. A missing snapshot reads as the show's own rows here, so its
+     * lists and writes still work; nothing loads it, though — the switch refuses it and the loader loads
+     * no rig for it (`venue/VenuePins.kt`, `VENUE_MISSING`).
      */
     val venue: VenueLayer? by lazy { if (ownOnly) null else VenueLayer.resolve(projectId) }
 

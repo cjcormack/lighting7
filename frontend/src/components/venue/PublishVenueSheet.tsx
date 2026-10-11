@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Upload, XCircle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { formatError } from '@/lib/formatError'
+import { venueSyncRefusal } from '@/lib/venueSyncRefusal'
 import {
   Sheet,
   SheetBody,
@@ -27,6 +30,12 @@ const NOTE_MAX = 500
  * into **changes output** and **drawing only**, and the shows on the venue. Publishing freezes the
  * draft as the next version — immutable — and the draft starts empty again. The shows section names
  * every show pinned to the venue (session 3); a publish changes none of them.
+ *
+ * With a repo attached the publish goes through it (session 4, P7): the desk pulls first, and a
+ * number another desk has published is refused as `VENUE_VERSION_TAKEN` — named here, with the
+ * desk's sentence, since the pull has put that version in History and the draft wants checking
+ * against it. A pull-only desk is refused as `VENUE_PUBLISH_PULL_ONLY`. Every refusal is drawn in
+ * the sheet rather than toasted (`publishVenue` is in `SILENT_ENDPOINTS`), so the note survives it.
  */
 export function PublishVenueSheet({
   open,
@@ -44,17 +53,19 @@ export function PublishVenueSheet({
     { venueId: history.venueId, from: history.installed ?? 0, to: 'draft' },
     { skip: !open },
   )
-  const [publish, { isLoading: publishing }] = usePublishVenueMutation()
+  const [publish, { isLoading: publishing, error, reset }] = usePublishVenueMutation()
+  const refusal = error ? venueSyncRefusal(error) : null
   const changes = (diff?.output.length ?? 0) + (diff?.drawing.length ?? 0)
   const canPublish = !publishing && changes > 0 && note.trim().length > 0
 
   const close = () => {
     setNote('')
+    reset()
     onOpenChange(false)
   }
 
   const handlePublish = async () => {
-    // A refusal (the draft emptied under us, a note too long) is reported by errorToastMiddleware.
+    // A refusal is drawn in the sheet, from the mutation's error, and the note is kept for a retry.
     try {
       await publish({ venueId: history.venueId, note: note.trim() }).unwrap()
     } catch {
@@ -77,6 +88,13 @@ export function PublishVenueSheet({
             </SheetDescription>
           </SheetHeader>
           <SheetBody>
+            {error && (
+              <Alert variant="destructive">
+                <XCircle className="size-4" />
+                <AlertTitle>{refusal?.title ?? 'Not published'}</AlertTitle>
+                <AlertDescription>{refusal?.message ?? formatError(error)}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="venue-note">What changed?</Label>
               <Textarea

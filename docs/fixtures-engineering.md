@@ -1981,7 +1981,7 @@ gives the archive a fresh project uuid, and imports it with `ProjectImporter` as
 projects (record uuids are not unique across projects — §"The rig scope"). Its `venue_versions` row
 (`number`, `note`, `published_at`, `published_by`, `snapshot_project_id`, unique on venue and number)
 is written inside the import's own transaction, so a version is never half there. The row is
-machine-local (`SyncCoverageTest`): session 4 rebuilds it from the venue repo's tags. A snapshot's
+machine-local (`SyncCoverageTest`), rebuilt from the venue repo's tags (below). A snapshot's
 project name is `venue-version:<its uuid>` — `projects.name` is unique, and no one sees it: History
 names a version by its venue and number. It was the test helper `importWithKeptRecordUuids`, which
 now calls the production mechanism.
@@ -1995,8 +1995,20 @@ few that resolve their project another way (a project's `PUT` and `DELETE`, `set
 export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts|cues}/{id}/copy`),
 so the four copy routes judge the target by the same rule (`refusedCopyTarget`). Its reads answer, so a client draws a removed patch from the installed version's patch list.
 Deleting a venue deletes its versions with it, and is refused 409 `VENUE_IN_USE` while a show pins
-it. Sync is refused for both kinds until session 4 (409
-`SYNC_VENUE_PENDING` on the whole per-project sync subtree, and the auto-sync tick skips them).
+it.
+
+**Sync** (session 4, `docs/sync-engineering.md` §"Venue repos"). A venue syncs as its **own repo**,
+attached through the same Sync tab as a show's: the branch holds the latest published version plus
+`venueVersion.json`, and each version is a commit `vN: note` tagged `vN`. The draft never syncs (a
+snapshot of a venue is 409 `VENUE_DRAFT_NOT_SYNCED`). *Sync now* exchanges versions — every tag this
+desk lacks is **materialised** as a snapshot with its index row (so `venue_versions` is rebuilt from
+the tags, only ever gaining rows), and every version the remote lacks is pushed — and a draft with no
+changes of its own follows the newest version in. With a repo attached, **Publish pulls first** and
+refuses 409 `VENUE_VERSION_TAKEN` when the remote already has the number, then commits, tags, pushes
+and only then makes the version here, from the tagged tree; a pull-only desk refuses it
+(`VENUE_PUBLISH_PULL_ONLY`). A version has no repo of its own: its sync subtree is 409
+`VENUE_VERSION_READ_ONLY`, and the auto-sync tick skips it. Adding a venue's repo as a remote
+project makes a venue whose draft is the latest version, with every version beside it.
 
 **What a snapshot carries, and what it does not.** Exactly what an import carries:
 
@@ -2073,11 +2085,13 @@ rows(kind) = the show's own rows(kind)
 members(group) = group.members − the hidden patches
 ```
 
-A pin whose snapshot this desk does not hold resolves to nothing, and the rig is the show's own
-rows. `RigScope.own` is never widened: a write, a sort order and an export are still the show's.
+A pin whose snapshot this desk does not hold resolves to nothing, and the scope is the show's own
+rows — but nothing loads such a show (`VENUE_MISSING`, below). `RigScope.own` is never widened: a
+write, a sort order and an export are still the show's.
 
 **Hides** (`show_hides`: project, `record_kind` — `PATCH | RIGGING | ELEMENT | REGION | GROUP |
-VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own for session 4's export)
+VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own, exported as
+`showHides/{uuid}.json` from `formatVersion` 24)
 are the one change a show makes to a venue's row this session (`venue/ShowHides.kt`). A uuid is a
 record's identity across versions, so a hide outlives an Update to a version that still holds it.
 Only a venue record hides (409 `NOT_A_VENUE_RECORD` for a standalone show or a show's own row — delete
@@ -2188,13 +2202,27 @@ scope's uuids before and after, on `RichProjectFixture`).
 
 The UI is session 7's (*Extract a venue…* on the Projects page); until then it is the API or Swagger.
 
-**Not yet, and where.** A show's pin and hides do not export (session 4: `formatVersion` 24), so a
-show on a venue refuses sync, export and clone (`docs/sync-engineering.md` §"Venues: not synced
-yet"). Facet overrides are session 5; a show that is behind its venue, the hold and Update, session
-6; the Projects page, Create's preset seating and Detach, session 7.
+**Sync, export and clone** (session 4, `docs/sync-engineering.md` §"Version 24"). A show's archive
+holds its **own rows only**, its hides (`showHides/{uuid}.json`) and its pin in `project.json`
+(`venueUuid`, `venueVersion`, and `venueRepo`, a hint naming where the venue syncs); its links into
+the venue are the venue records' uuids. The importer seeds its uuid maps from the pinned snapshot
+before a row lands, so those links resolve to the venue's rows. **A show whose pinned version this
+desk does not hold is 409 `VENUE_MISSING`** — on an import, an add-remote-project, a clone and a pull
+(checked before the working tree moves) — naming the venue (by name, when an older version is here)
+and the repo it syncs from: import the venue's repo first, then the show. A **clone** keeps the pin:
+only the show's own rows are re-identified, so it is a show on the same version, loading the same rig.
+A show with a missing version that is somehow on the desk (a hand-edited database — a venue a show
+pins refuses delete) is refused by the switch with `VENUE_MISSING`, and if it is current when the desk
+starts it loads **no rig** — no fixture, no controller — so the desk comes up outputting nothing and
+can switch away (`venue/VenuePins.kt`, `DbFixtureLoader`).
+
+**Not yet, and where.** Facet overrides are session 5 (`showOverrides/` is reserved in the archive:
+a v24 desk refuses one rather than dropping it); a show that is behind its venue, the hold and Update,
+session 6; the Projects page, Create's preset seating and Detach, session 7.
 
 **Files.** `models/RigScope.kt` (the effective rig, `VenueLayer`), `models/showHides.kt`,
 `venue/ShowHides.kt`, `venue/VenueRigGuard.kt` (`VENUE_OWNED`, the key namespace),
-`venue/VenueExtract.kt`, `routes/showHides.kt`, `routes/venueExtract.kt`. `ShowsOnVenueTest` and
-`McpVenueToolsTest` pin it.
+`venue/VenueExtract.kt`, `venue/VenuePins.kt` (`VENUE_MISSING`, the repo hint),
+`routes/showHides.kt`, `routes/venueExtract.kt`. `ShowsOnVenueTest` and `McpVenueToolsTest` pin it;
+`ProjectRoundTripTest` and `VenueRepoSyncTest` the sync.
 

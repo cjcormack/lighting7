@@ -68,6 +68,7 @@ import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedRichProject
+import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -201,17 +202,14 @@ class SyncCoverageTest {
         DaoRemoteAccessSettingsTable to Disposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
         DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
         DaoEffectTubeStates to Disposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),
-        // Venue plan §3.2: this desk's index of its venue snapshots. Session 4 rebuilds it from the
-        // venue repo's tags; the version itself travels as a tagged commit, never as this row.
+        // Venue plan §3.2: this desk's index of its venue snapshots, rebuilt from the venue repo's
+        // tags (session 4, `VenueRepoSync`); the version itself travels as a tagged commit, never as this row.
         DaoVenueVersions to Disposition.MachineLocal("this desk's index of venue versions; rebuilt from the venue repo's tags"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
-        // Venue plan §3.2 calls a show's hides portable, exported as `showHides/{uuid}.json` — a JSON
-        // layout change that is `formatVersion` 24, venue plan session 4. Until then they are not
-        // exported, and a show on a venue (the only project that holds any) refuses sync with
-        // `SYNC_VENUE_PENDING` and clone with `VENUE_CLONE_PENDING`, so nothing carries one off the
-        // desk without them. Session 4 turns this into `Portable("showHides")`.
-        DaoShowHides to Disposition.Excluded("a show's hides of venue records: portable from formatVersion 24, venue plan session 4"),
+        // Venue plan §3.2, exported from formatVersion 24 (session 4). Only a show on a venue holds
+        // any, so the exporter check below reads them from `seedShowOnVenue`'s export.
+        DaoShowHides to Disposition.Portable("showHides"),
     )
 
     private lateinit var state: State
@@ -252,16 +250,22 @@ class SyncCoverageTest {
     fun `every portable table is written by the exporter`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDir)
+        // A show on a venue (venue plan session 4) holds the one table a standalone show cannot — its
+        // hides — so it is exported too, from a fresh database, and a table passes when either export
+        // carries it.
+        runCatching { state.shutdown() }
+        IntegrationTestDb.reset()
+        state = State(testAppConfig())
+        val venueShowDir = exportDir.resolve("venue-show")
+        ProjectExporter(state).export(seedShowOnVenue(state).showId, venueShowDir)
 
         val missing = mutableListOf<String>()
         val emptyEmbeds = mutableListOf<String>()
         for ((table, disposition) in dispositions) {
             if (disposition !is Disposition.Portable) continue
-            val dir = exportDir.resolve(disposition.exportDir)
-            val files = if (Files.isDirectory(dir)) {
-                Files.list(dir).use { it.toList() }
-            } else {
-                emptyList()
+            val files = listOf(exportDir, venueShowDir).flatMap { root ->
+                val dir = root.resolve(disposition.exportDir)
+                if (Files.isDirectory(dir)) Files.list(dir).use { it.toList() } else emptyList()
             }
             if (files.isEmpty()) {
                 missing += "${table.tableName} -> ${disposition.exportDir}/"

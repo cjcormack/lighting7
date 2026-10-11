@@ -102,6 +102,18 @@ export type SyncErrorCode =
   | "SESSION_NOT_FOUND"
   | "SESSION_STALE"
   | "UNRESOLVED_CONFLICTS"
+  | "REPO_URL_IMMUTABLE"
+  | "PROJECT_MISMATCH"
+  /** A show's repo pins a venue version this desk lacks — sync or import the venue first. */
+  | "VENUE_MISSING"
+  /** A venue version's number is the remote's already, published on another desk. */
+  | "VENUE_VERSION_TAKEN"
+  /** A pull-only desk cannot publish a venue that has a repo. */
+  | "VENUE_PUBLISH_PULL_ONLY"
+  /** A venue's draft never syncs — no snapshot of it is taken. */
+  | "VENUE_DRAFT_NOT_SYNCED"
+  /** A venue repo's tag is not a version this desk can read. */
+  | "VENUE_REPO_INVALID"
 
 export interface CommitInfo {
   sha: string

@@ -50,9 +50,10 @@ anything it didn't put there, so don't hand-place files in it.
 In a Claude Code cloud container, `scripts/cloud-session.sh [owner/repo …]` does the whole
 stand-up: installs JDK 24 (the image has 21 and the network policy blocks foojay), writes a
 pull-only `local.conf` into the data dir (`~/lighting7-data`), starts `./gradlew run` in the
-background, creates an `admin` / `lighting7-dev` account, and imports each show repo through
-cloud sync. Attach a show repo to the session before importing it — the session's git proxy
-supplies the credentials, so the stored token is a placeholder. The script's header has the
+background, creates an `admin` / `lighting7-dev` account, and imports each show or venue repo
+through cloud sync — venue repos first, since a show's import needs its pinned venue version
+(`VENUE_MISSING` otherwise). Attach each repo to the session before importing it — the session's git
+proxy supplies the credentials, so the stored token is a placeholder. The script's header has the
 details; `sync.push = false` is in `docs/sync-engineering.md` §"Pull-only installs".
 
 Run Gradle there under `LC_ALL=C.UTF-8`: the image's locale is POSIX, and `compileTestKotlin`
@@ -245,7 +246,13 @@ the switcher), never current, and refuses every write: `routes/projectWriteGuard
 of the whole `/projects/{id}/…` subtree, so every route under it — `withProject`'s and the rest —
 answers a snapshot's write 409 `VENUE_VERSION_READ_ONLY`, and an operator's stored write to a venue
 403 `VENUE_ADMIN_ONLY` (opening one and the runtime gestures pass). Record is off in a venue
-(`VENUE_RECORD_OFF`, REST and MCP); a venue does not sync until session 4 (409 `SYNC_VENUE_PENDING`).
+(`VENUE_RECORD_OFF`, REST and MCP). A venue **syncs as its own repo of published versions**
+(session 4, `sync/VenueRepoSync.kt`): attached through the same Sync tab as a show's, the branch the
+latest version plus `venueVersion.json`, each version a commit `vN: note` tagged `vN`; *Sync now*
+materialises every tag the desk lacks as a snapshot (rebuilding `venue_versions`, which only ever
+gains rows) and pushes every version the remote lacks, and a clean draft follows the newest in. The
+draft never syncs (`VENUE_DRAFT_NOT_SYNCED`); a version's sync subtree is `VENUE_VERSION_READ_ONLY`.
+`docs/sync-engineering.md` §"Venue repos".
 What separates a version from the draft is `venue/VenueDiff.kt`, classified **changes output** or
 **drawing only** — `docs/fixtures-engineering.md` §"Venue versions".
 
@@ -260,9 +267,14 @@ reuse is `KEY_TAKEN_BY_SHOW`); a write through a show to a venue's row is 409 `V
 override of a venue record resolves against the **venue's** id (P4), so a universe's address is the
 same everywhere and is still set through a show. **Extract** moves a show's rig into a new venue,
 publishes v1 and pins the show, in one transaction, its dry run that run rolled back
-(`venue/VenueExtract.kt`). Until session 4 a venue-bound show refuses sync, export
-(`SYNC_VENUE_PENDING`) and clone (`VENUE_CLONE_PENDING`), and a venue a show pins refuses delete
-(`VENUE_IN_USE`). `docs/fixtures-engineering.md` §"Shows on a venue".
+(`venue/VenueExtract.kt`). A show's archive (`formatVersion` 24, session 4) is its own rows, its
+hides (`showHides/`) and its pin in `project.json` (`venueUuid`, `venueVersion`, a `venueRepo` hint);
+the importer seeds its uuid maps from the pinned snapshot, and a show whose pinned version the desk
+lacks is 409 **`VENUE_MISSING`** — on import, add-remote-project, clone and pull — naming the venue and
+its repo, so a fresh desk imports the venue's repo first. A clone keeps the pin; a show with a
+missing version cannot be made current and, current at startup, loads no rig
+(`venue/VenuePins.kt`). `showOverrides/` is reserved for session 5 (a v24 desk refuses one). A venue a
+show pins refuses delete (`VENUE_IN_USE`). `docs/fixtures-engineering.md` §"Shows on a venue".
 
 ### Property System
 Properties provide a unified interface for fixture and group control:
@@ -462,7 +474,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 All four are **admin only** (mounted in `adminOnly`; venue plan §3.5, D3), REST only — no WS operation:
 - `GET /api/rest/venues/{id}/versions` - History: every version newest first (`number`, `note`, `publishedAt`, `publishedBy`, `snapshotProjectId`), `installed`, and the draft's `{changes, outputChanges}` against it
 - `GET /api/rest/venues/{id}/versions/{from}/diff/{to}` - What changed, `{output: [...], drawing: [...]}`; each side a version number, `0` the empty venue before v1, or `draft`. 404 `VENUE_VERSION_UNKNOWN`, 400 `VENUE_VERSION_INVALID`
-- `POST /api/rest/venues/{id}/publish` `{note}` - Freeze the draft as the next version; 400 `VENUE_NOTE_REQUIRED` / `VENUE_NOTE_TOO_LONG` (500 characters), 409 `VENUE_DRAFT_EMPTY`. Fires `projectDetailsChanged`
+- `POST /api/rest/venues/{id}/publish` `{note}` - Freeze the draft as the next version; 400 `VENUE_NOTE_REQUIRED` / `VENUE_NOTE_TOO_LONG` (500 characters), 409 `VENUE_DRAFT_EMPTY`. With a repo attached it publishes through it (session 4, P7): pulls first, 409 `VENUE_VERSION_TAKEN` when the remote already has the number (or refuses the push), else commits `vN: note`, tags and pushes, then makes the version here from the tagged tree; 409 `VENUE_PUBLISH_PULL_ONLY` on a `sync.push = false` desk. Fires `projectDetailsChanged`
 - `DELETE /api/rest/venues/{id}/draft` - Discard the draft: the venue's rows become the installed version's again, uuids and all (name and description stay); 409 `VENUE_NOTHING_PUBLISHED`. A live venue reloads
 - A show's id on any of them is 409 `NOT_A_VENUE`. *Add venue* is `POST /projects` `{kind: "VENUE"}` (admin); `ProjectDto` carries `kind`, and `FixturePatchDto` its `uuid`. Deleting a venue deletes its versions — refused 409 `VENUE_IN_USE` while a show pins it. History also answers `shows` (every show on the venue, with its version)
 
@@ -470,6 +482,7 @@ All four are **admin only** (mounted in `adminOnly`; venue plan §3.5, D3), REST
 Venue plan session 3; REST only, no WS operation (`venue.hold` is session 6):
 - `POST /api/rest/projects/{id}/venue/extract` `{name, include?, dryRun?}` - **Admin only**: move a show's universes, patches, riggings, regions, VENUE-layer elements, seating (Fixed moves, Preset is copied), groups and camera views into a new venue, publish v1 and pin the show — one transaction, uuids kept, links re-pointed through `VenueLinks`, the moved records' machine overrides and scene images following them. `dryRun` answers the same run rolled back. 400 `VENUE_EXTRACT_INCOMPLETE` (a part that would point out of the venue), 409 `VENUE_EXTRACT_REFUSED` / `_EMPTY`. A live show reloads
 - `POST /api/rest/projects` `{…, venueId}` - A new show on that venue, pinned to its installed version (409 `VENUE_NOTHING_PUBLISHED` before v1); `ProjectDto.venue` is `{uuid, id, name, version, installed}`
+- Sync, export, import and clone take a show on a venue (session 4): `POST /projects/{id}/export` writes its own rows, hides and pin; `POST /projects/import`, `POST /cloud-sync/import` and `POST /projects/{id}/clone` answer 409 `VENUE_MISSING` (`{error, code}`) for a show whose pinned version is not on the desk, and so does `POST /projects/{id}/set-current` for one already here; `POST /projects/{id}/sync/run` refuses a pull that would pin one (`VENUE_MISSING`, before the working tree moves). A clone keeps the pin
 - `PUT /api/rest/projects/{id}/patches/{pid}/hidden` `{hidden}` + `GET .../patches/hidden` - Hide a venue patch in a show, or bring it back; the hidden ones as Patch list rows. `GET /projects/{id}/hides` and `PUT .../hides/{KIND}/{uuid}` `{hidden}` do it for all six kinds (`PATCH | RIGGING | ELEMENT | REGION | GROUP | VIEWPOINT`). 409 `NOT_A_VENUE_RECORD`, `VENUE_HIDE_IN_USE` (something in the show still uses it), `KEY_TAKEN_BY_SHOW`. `FixturePatchDto`, `PatchGroupDto` and `UniverseConfigDto` carry `owner` (`SHOW | VENUE`)
 
 ### Library Endpoints

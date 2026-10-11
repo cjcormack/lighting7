@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.sync.SceneImageRepoSync
+import uk.me.cormack.lighting7.venue.VenuePins
 import org.slf4j.LoggerFactory
 
 /**
@@ -96,6 +97,11 @@ class ProjectManager(
         if (newProject.kind == ProjectKind.VENUE_VERSION) {
             throw IllegalStateException("A venue version cannot be made current")
         }
+        // A show whose pinned venue version this desk lacks has no rig to load (venue plan §3.4): refuse
+        // it rather than run its own additions without the venue they sit on. Every way in — import,
+        // pull, clone — refuses such a show already, so only a hand-edited database gets here.
+        transaction(database) { newProject.takeIf { VenuePins.isMissing(it) }?.let { VenuePins.missing(it) } }
+            ?.let { throw it }
 
         val previousProjectId = _currentProject?.id?.value
 

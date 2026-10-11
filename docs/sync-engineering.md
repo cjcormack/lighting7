@@ -55,8 +55,12 @@ lives directly under the export folder:
 
 ```
 formatVersion.json
-project.json
+project.json                   # v24+: `kind` (absent = SHOW), and a show's pin — `venueUuid`,
+                               # `venueVersion`, `venueRepo` (a hint); see §"Version 24"
 installs.json                  # populated with the local install's identity (Phase 2)
+showHides/{uuid}.json          # v24+: a show on a venue's hides of venue records (recordKind,
+                               # recordUuid). `showOverrides/` is reserved (venue plan session 5)
+venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
 cues/{uuid}.json               # carries cueStackUuid (nullable); v20+: `scenery` embedded, each
@@ -206,7 +210,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 23`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 24`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -259,6 +263,80 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 24 — venues and shows on them
+
+Bumped when venues began to sync (venue plan session 4, §3.4, D8, P7 — `docs/plans/venue-plan.md`).
+`SUPPORTED_FORMAT_VERSION = 24`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, so a v24 install reads
+every earlier repo: every new key defaults, and a missing folder is no hides. The writer emits
+`formatVersion = 24`. What lands under the one number:
+
+* **`project.json` says what the project is.** `kind` — `SHOW | VENUE | VENUE_VERSION` — omitted for
+  a show, its default, so a standalone show's `project.json` is byte-identical to v23's. A show on a
+  venue adds its **pin**, `venueUuid` (the venue project's uuid) and `venueVersion`, and `venueRepo`,
+  a hint naming where the venue syncs — `owner/repo` for a GitHub remote, else the URL. The hint the
+  show arrived with is kept and written back as it is (`projects.venue_repo`, a column added for it),
+  so every desk that imported the show writes the same bytes whatever it has attached; a show made on
+  this desk, with none, names the venue's own attached repo when there is one.
+* **A show's archive is its own rows only** — which is all the exporter ever wrote, since every
+  table there reads the project's own back-reference and never `RigScope`'s effective rig. Its links
+  into the venue (a patch on a venue universe or rigging, a group member, a busk tile, a cue event, a
+  scenery change on a venue element) are the venue records' uuids, as every link already is.
+  **`showHides/{uuid}.json`** carries the show's hides (`ShowHideJson`: `uuid`, `recordKind`,
+  `recordUuid`); `show_hides` is `Portable("showHides")` in `SyncCoverageTest`.
+* **The importer seeds its maps from the pinned snapshot.** Before a row lands, `populateProject`
+  fills `universeMap`, `riggingMap`, `elementMap`, `patchMap` and `groupMap` with every row of the
+  pinned version — hidden or not, since a show group may hold a hidden venue patch — and lays the
+  archive's own rows over them, so a link resolves to the show's own row where it has one (a Preset
+  seating it copied keeps the venue's uuid) and the venue's otherwise. A pin whose snapshot is not on
+  the desk is refused before anything is written: **409 `VENUE_MISSING`** (`ImportError.code`),
+  naming the venue — by name when an older version of it is here, else by uuid — the versions held
+  and the repo hint (`venue/VenuePins.kt`). It is refused on the manual import, the cloud-sync import
+  (add a remote project), a clone, and a pull (below).
+* **`showOverrides/` is reserved** for venue plan session 5's facet overrides. A v24 reader writes
+  none and **refuses an archive holding any file in it** (`RESERVED_FOLDERS`, 422, and
+  `FORMAT_TOO_NEW` before a pull moves the working tree), because dropping one would load a different
+  rig — an overridden address. So session 5 adds the folder at v24 with no bump: every v24 desk
+  either applies it or refuses it, and none silently drops it.
+* **A venue syncs as its own repo** of tagged versions — §"Venue repos".
+
+Why the number moves: v4's reason, twice. A v23 reader would import a pinned show as a standalone one
+whose links name rows it does not have (and fail on the first, or import a rig with holes), and its
+next wipe-then-export push would write the pin and every hide away.
+
+**A pull checks the pin before it moves the tree.** Beside the pre-pull `formatVersion.json` check,
+`RemoteSyncEngine` reads the fetched `project.json` and refuses — before `resetHard` — a remote of
+another kind than the local project (`PROJECT_MISMATCH`), a show pinned to a version this desk lacks
+(`SyncErrorCode.VENUE_MISSING`), and a remote holding `showOverrides/` (`FORMAT_TOO_NEW`). Moving the
+tree first would let the next snapshot write the old pin back over the remote's.
+`replaceFromWorkingTree` takes the pin from the tree (a peer's Update moves it, venue plan session 6),
+refuses an archive of another kind, and now also deletes a show's cue events and scenery **through
+their owners** (cue, stack, Look) — they may name venue patches and elements, which the old sweep
+through the project's own patches and elements never reached, leaving orphans with
+`PRAGMA foreign_keys` off. The project delete takes the same sweep.
+
+**A clone keeps the pin.** `ProjectCloner` is export → fresh uuids → import as before: the remapper
+mints a uuid for every identity in the archive — the show's own rows and its hides' own `uuid` — and
+the venue's records are no identity of the show's archive, so every link into the venue (and a hide's
+`recordUuid`) keeps naming the venue's records. The clone is a show on the same version, loading the
+same rig. The archive carries `kind`, so the importer takes it from there (a venue's clone is still a
+venue with no versions). `VENUE_CLONE_PENDING` is gone.
+
+**What a loaded show does with a missing snapshot.** Every way in refuses one, and a venue a show
+pins refuses delete, so it takes a hand-edited database. Then `RigScope` still answers the show's own
+rows (its lists and writes work), but nothing loads it: `ProjectManager.switchProject` refuses it with
+`VENUE_MISSING` (the set-current route, and MCP's `switch_project`, answer 409), and a desk that
+**starts** with one current loads **no rig** — no fixture, no controller — logging the refusal, so
+the desk comes up, outputs nothing, and can switch away. Refusing to output is better than outputting
+the show's additions without the rig they sit on.
+
+`RichProjectFixture` stays a standalone show; the venue half is `testsupport/VenueTestSupport.kt`'s
+`seedShowOnVenue` — the rich project extracted into a venue, a v2 published, and the show given a
+hide, an addition on a venue universe and a show group holding a venue patch (facet overrides are
+session 5's, so none). `SyncCoverageTest` exports both. `ProjectRoundTripTest` round-trips the show,
+round-trips a venue's versions through its repo onto a fresh desk (and refuses the show there until
+the venue is in, `VENUE_MISSING`), imports a v23 archive and refuses a `showOverrides/` one;
+`VenueRepoSyncTest` covers the venue repo between two desks.
 
 ### Version 23 — painted cloths
 
@@ -2137,31 +2215,94 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
    `encodeDefaults = false` (i.e. it's a required field with no default),
    that's a `formatVersion` bump — see "Format versioning".
 
-## Venues: not synced yet
+## Venue repos
 
-Venue plan session 2 adds venues (`projects.kind = VENUE`) and their frozen versions
-(`VENUE_VERSION`), but a venue syncs as its own repo only from session 4 (§3.4, `formatVersion` 24).
-Until then **sync is refused for both** (P6): the per-project sync subtree answers 409
-`SYNC_VENUE_PENDING` for a venue or a version, reads included (`GET …/sync/config` creates the config
-row it answers with), and `AutoSyncScheduler` treats one as disabled. So no repo is ever attached to a
-venue, and an auto-sync cannot push a show repo without its rig. Nothing about a standalone show changes: every
-project is a `SHOW` unless made otherwise, and `kind` is not exported yet (a clone of a venue is told
-it by `ProjectCloner`). `venue_versions` is `MachineLocal` in `SyncCoverageTest`; session 4 rebuilds
-it from the venue repo's tags. `SeatingParams.block` rides a seating's `params` object, which every
-version since 18 already carries, so it needs no bump.
+A venue (`projects.kind = VENUE`, venue plan sessions 2–3) syncs **as its own repo of published
+versions** (D8, P7; `sync/VenueRepoSync.kt`). Its draft — the venue project's own rows — never
+syncs (`FU-VENUE-DRAFT-SYNC`); a version is a frozen `VENUE_VERSION` project, and on the repo it is
+a tagged commit.
 
-**Shows on a venue are refused too** (venue plan session 3). A show pins a venue version
-(`projects.venue_uuid` + `.venue_version`) and hides some of its records (`show_hides`); its rig is
-its own rows **plus** the pinned version's (`RigScope`). §3.2 calls the pin and the hides portable,
-but exporting them changes the JSON layout, and `formatVersion` 24 is session 4. So neither is wired
-through `ProjectExporter` / `ProjectImporter` yet, `show_hides` is `Excluded` in `SyncCoverageTest`
-with a reason naming session 4, and **nothing can carry a venue-bound show off the desk without its
-rig**: the per-project sync subtree answers 409 `SYNC_VENUE_PENDING` for one as it does for a venue
-(`refuseVenueSync`, reads included), `AutoSyncScheduler` treats one as disabled — a show that was
-synced before it was extracted keeps its config row, and stops ticking — the manual export
-(`POST /projects/{id}/export`) answers the same 409 (`refusedVenueBoundExport`), and the clone is
-409 `VENUE_CLONE_PENDING` (the route, and `ProjectCloner` as the belt), since a clone that keeps the
-pin is §3.4's, session 4's. A standalone show is untouched: everything here keys on the pin.
+**The layout.** The branch holds the latest published version in the usual export layout — with the
+venue's own `project.json` (its uuid, name and description, `kind: VENUE`, the version's stage size)
+— plus `venueVersion.json` (`VenueVersionJson`: `number`, `note`, `publishedAt`, `publishedBy`). Each
+version is one commit, message `vN: note`, tagged `vN` (an annotated tag). Its tree is exactly the
+version's export, scene images and prompt PDFs included.
+
+**How a repo is attached.** The same `sync_configs` row as a show's, through the same Sync tab and
+routes (`PUT …/sync/config`, credentials, disconnect, reconnect, auto-sync): one way to attach a
+repo, whatever the project. What differs is what the routes do with it:
+
+* `POST …/sync/run` (*Sync now*, and every auto-sync tick) on a venue runs `VenueRepoSync.exchange`
+  instead of the snapshot pipeline: fetch the branch and the tags (into
+  `refs/remotes/origin/tags/`, beside the local tags, never over them), refuse a remote that is not
+  this venue's (`PROJECT_MISMATCH`) or too new (`FORMAT_TOO_NEW`), **materialise** every tag this
+  desk lacks, reset the local branch onto the remote's, and **push** every version this desk holds
+  that the remote lacks, oldest first, each as a commit on top tagged with its number. The result is
+  the ordinary `SyncRunResult` — `FAST_FORWARDED` with `pulled` versions, `PUSHED` with `pushed`
+  versions, `NO_OP` — its `message` naming them (`Fetched v3; the draft follows v3`).
+* `POST …/sync/snapshot` on a venue is refused, 409 `VENUE_DRAFT_NOT_SYNCED`: the draft is never
+  committed to the repo. Conflict sessions never open on a venue.
+* A venue **version** has no repo of its own: the whole sync subtree answers it 409
+  `VENUE_VERSION_READ_ONLY` (`refuseVersionSync`, reads included, since `GET …/sync/config` creates
+  the row it answers with), and `AutoSyncScheduler` skips one.
+
+**Materialising a tag** (`materialise`): the tag's tree is written out byte for byte
+(`JGitClient.extractTree`), checked — `venueVersion.json` present and naming the tag's number, the
+`project.json` this venue's — and imported through `KeptUuidCopy.fromArchive` as a `VENUE_VERSION`
+project with a fresh uuid and every record uuid kept, its `venue_versions` row (number, note,
+`publishedAt`, `publishedBy` from `venueVersion.json`) written in the same transaction. So History
+reads the same on every desk, and **`venue_versions` is rebuilt from the tags** — it stays the
+machine-local index (`MachineLocal` in `SyncCoverageTest`). **A rebuild only ever adds rows**: a
+local version the remote lacks is pushed (or, on a pull-only desk, kept on this desk), never
+deleted. A number both sides hold must be one publish — the same `note` and `publishedAt` — and a
+pair that differs (two desks published it apart, before sharing a repo) is refused as
+`VENUE_VERSION_TAKEN`, never overwritten: one venue's history has to be chosen by a person
+(`FU-VENUE-DRAFT-SYNC`). Materialising never moves which project is current.
+
+**What a pull does to the draft.** A draft with **no changes** against the installed version before
+the pull follows the newest version in — `VenueVersions.replaceDraftWithInstalled`, a discard's work —
+and a live venue reloads. A draft with changes of its own is kept as it is, and the result says so;
+it is now based on an older version, and publishing it as the next would overwrite the newer one's
+changes, which is the two-admins case the plan leaves to `FU-VENUE-DRAFT-SYNC`.
+
+**Publish** (`POST /venues/{id}/publish`, P7). Without a repo attached it is session 2's local
+publish (`KeptUuidCopy` of the draft). With one, under the venue lock and the venue's sync lock
+(`RemoteSyncEngine.publishVenue`):
+
+1. The number the draft was going to take is read **before** the pull: installed + 1.
+2. **Pull first** — the whole exchange above. If that brought the number in (another desk published
+   it while this draft was open), the publish is refused, 409 **`VENUE_VERSION_TAKEN`**, naming the
+   other desk's note and publisher; the version is in History now, and the draft wants checking
+   against it before publishing again (as the next number).
+3. The draft is exported into the working tree with `venueVersion.json`, committed `vN: note` and
+   tagged `vN`.
+4. The branch and the tag are pushed together. A refusal of either — the tag taken in the race, or
+   the branch moved on, which only another publish does — drops the local tag, puts the branch back
+   on the remote's and refuses `VENUE_VERSION_TAKEN`. Nothing is left behind but the fetch.
+5. Only then is the version made on this desk — **materialised from the tagged tree**, exactly as
+   every other desk will read it.
+
+**A pull-only install** (`sync.push = false`, §"Pull-only installs") exchanges without pushing —
+`NO_OP` with the `PUSH_DISABLED_PREFIX` message when it holds versions the remote lacks — and
+**refuses to publish a venue with a repo attached**, 409 `VENUE_PUBLISH_PULL_ONLY`: a `vN` made here
+could never reach the repo, and would clash with the real `vN` the moment another desk published one.
+A pull-only desk can still publish a venue with no repo, locally.
+
+**Adding a venue's repo as a remote project** (`POST /cloud-sync/import`): the clone becomes a venue
+whose draft is the branch's tip — the latest version — and every tag is materialised beside it
+(`VenueRepoSync.materialiseAll`). A failure there leaves the venue and its repo attached; *Sync now*
+finishes the job. A manual folder import of a venue's tree makes a venue with that draft and no
+versions (a folder holds one version).
+
+**The import order a fresh desk needs:** the venue's repo first, then each show on it — a show's
+import (and its sync) is refused with `VENUE_MISSING` until its pinned version is here, naming the
+venue and the repo it syncs from. `scripts/cloud-session.sh` reads each repo's `project.json` kind
+and imports venues first.
+
+`JGitClient` gained `tag` / `deleteTag` / `listTags`, `fetchTags` / `listRemoteTags`,
+`pushWithTag`, `extractTree` and `hasPath` for it. `VenueRepoSyncTest` runs two desks on one bare
+remote: publish and its tags, `VENUE_VERSION_TAKEN` on publish and on a clash, the clean and dirty
+draft, a pull-only desk, and a show's pull refused until its venue is synced.
 
 ## How to add a new table
 

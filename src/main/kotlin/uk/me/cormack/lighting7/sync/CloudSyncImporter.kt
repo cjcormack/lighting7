@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
@@ -25,7 +26,11 @@ import uk.me.cormack.lighting7.models.nowUtc
  * Errors are surfaced as typed exceptions:
  *  * [SyncException] for credential resolution issues — mapped to 4xx by the route.
  *  * [GitAuthException] when GitHub rejects the clone over HTTPS.
- *  * [ImportError] for archive validation issues (raised from [ProjectImporter]).
+ *  * [ImportError] for archive validation issues (raised from [ProjectImporter]) — among them 409
+ *    `VENUE_MISSING` for a show whose pinned venue version this desk lacks.
+ *
+ * A venue's repo imports as a venue whose draft is the latest published version, with every tagged
+ * version materialised beside it ([VenueRepoSync.materialiseAll]).
  */
 class CloudSyncImporter(
     private val state: State,
@@ -112,6 +117,29 @@ class CloudSyncImporter(
                         this.lastSyncedSha = headSha
                         this.lastSyncedAt = nowUtc()
                     }
+                }
+            }
+            // A venue's repo (venue plan §3.4): the clone made its draft from the branch's tip, the
+            // latest version; every tag is a version, materialised here as a snapshot with its index
+            // row. The venue is imported whatever happens here — its project, working tree and repo
+            // are committed — so a failure is the venue's activity log's and the log's, not the
+            // import's: a retry could only 409 on the project it already made. Auto-sync is on for
+            // an imported repo, and its first tick (or Sync now) materialises what is missing.
+            val isVenue = transaction(state.database) { DaoProject[result.projectId].kind == ProjectKind.VENUE }
+            if (isVenue) {
+                try {
+                    JGitClient.open(SyncWorkingTree(state).pathFor(targetUuid))!!.use { repo ->
+                        VenueRepoSync(state, authResolver).materialiseAll(result.projectId, repo, repoUrl)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val code = (e as? SyncException)?.code?.name ?: e::class.simpleName
+                    logger.warn("Imported venue {} but its versions did not all materialise: {}", result.projectId, e.message)
+                    state.syncLogger.error(
+                        result.projectId, SyncLogEvent.RUN_FAILED,
+                        "$code: the venue was imported, but its versions were not all read (${e.message}). Sync now retries.",
+                    )
                 }
             }
             state.autoSyncScheduler.reschedule(result.projectId)

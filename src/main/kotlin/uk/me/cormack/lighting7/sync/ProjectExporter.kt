@@ -11,6 +11,12 @@ import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoShowHide
+import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.isVenueBound
+import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.venue.VenuePins
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.cueSceneryOf
 import uk.me.cormack.lighting7.models.cueEventsOf
 import uk.me.cormack.lighting7.models.DaoCueEvent
@@ -75,8 +81,9 @@ import java.util.UUID
  *
  * ```
  * /formatVersion.json
- * /project.json
+ * /project.json                  -- v24: `kind`, and a show's pin (`venueUuid`, `venueVersion`, `venueRepo`)
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
+ * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json
  * /cuePropertyAssignments/{uuid}.json
@@ -169,9 +176,30 @@ class ProjectExporter(private val state: State) {
                     stageWidthM = project.stageWidthM,
                     stageDepthM = project.stageDepthM,
                     stageHeightM = project.stageHeightM,
+                    // v24: what the project is, and a show's pin with the hint naming where its venue
+                    // syncs. The hint the show arrived with wins, so every desk that imported it writes
+                    // the same bytes whatever it has attached; a show made here, with none, names the
+                    // venue's own attached repo when this desk has one.
+                    kind = project.kind,
+                    venueUuid = project.venueUuid?.takeIf { project.isVenueBound }?.toString(),
+                    venueVersion = project.venueVersion?.takeIf { project.isVenueBound },
+                    venueRepo = project.venueUuid?.takeIf { project.isVenueBound }?.let { venueUuid ->
+                        project.venueRepo ?: VenuePins.venueOf(venueUuid)?.let { VenuePins.repoHintOf(it.id.value) }
+                    },
                 ),
             )
             var count = 3
+
+            // v24: a show's hides of its venue's records. Only the show's own rows travel in its
+            // archive (every table below reads the project's own rows, never `RigScope`'s effective
+            // rig); the hides are what it subtracts from the venue's.
+            count += writeAll(
+                targetDir, "showHides",
+                DaoShowHide.find { DaoShowHides.project eq project.id }.toList(),
+                ShowHideJson.serializer(), { it.uuid }, liveKeys,
+            ) { h ->
+                ShowHideJson(uuid = h.uuid.toString(), recordKind = h.recordKind, recordUuid = h.recordUuid.toString())
+            }
 
             count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->
                 CueStackJson(

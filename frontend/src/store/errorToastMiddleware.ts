@@ -153,6 +153,10 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // caller of this endpoint.
   'bulkPlacements',
 
+  // A venue's publish draws its refusal in the Publish sheet, by code (`VENUE_VERSION_TAKEN`,
+  // `VENUE_PUBLISH_PULL_ONLY`, a note or an empty draft) — src/components/venue/PublishVenueSheet.tsx.
+  'publishVenue',
+
   // Cloud sync — src/routes/CloudSync.tsx and src/components/cloudSync/*
   'updateCloudSyncConfig',
   'cloudSyncReconnect',

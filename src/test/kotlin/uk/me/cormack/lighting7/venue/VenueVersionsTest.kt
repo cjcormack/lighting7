@@ -35,7 +35,6 @@ import uk.me.cormack.lighting7.models.DaoVenueVersion
 import uk.me.cormack.lighting7.models.DaoVenueVersions
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.UserRole
-import uk.me.cormack.lighting7.routes.CODE_SYNC_VENUE_PENDING
 import uk.me.cormack.lighting7.routes.CODE_VENUE_ADMIN_ONLY
 import uk.me.cormack.lighting7.routes.CODE_VENUE_RECORD_OFF
 import uk.me.cormack.lighting7.routes.CODE_VENUE_VERSION_READ_ONLY
@@ -101,7 +100,9 @@ class VenueVersionsTest : RouteIntegrationTest() {
             val draftProject = TestJson.parseToJsonElement(draft.getValue("project.json")).jsonObject
             val snapProject = TestJson.parseToJsonElement(snap.getValue("project.json")).jsonObject
             assertNotEquals(draftProject["uuid"], snapProject["uuid"], "the project's own uuid is fresh")
-            assertEquals(draftProject - setOf("uuid", "name"), snapProject - setOf("uuid", "name"))
+            // And its kind (v24): the draft's says VENUE, the snapshot's VENUE_VERSION.
+            assertEquals("VENUE_VERSION", snapProject["kind"]?.jsonPrimitive?.content)
+            assertEquals(draftProject - setOf("uuid", "name", "kind"), snapProject - setOf("uuid", "name", "kind"))
         } finally {
             draftDir.toFile().deleteRecursively()
             snapDir.toFile().deleteRecursively()
@@ -387,7 +388,7 @@ class VenueVersionsTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a live venue refuses Record, and no venue syncs yet`() = testApplication {
+    fun `a live venue refuses Record, and syncs its versions, never a version or its draft`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val venueId = seedVenue()
@@ -397,10 +398,17 @@ class VenueVersionsTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Conflict, record.status)
         assertTrue(CODE_VENUE_RECORD_OFF in record.bodyAsText())
 
-        val sync = client.get("/api/rest/projects/$venueId/sync/config")
-        assertEquals(HttpStatusCode.Conflict, sync.status)
-        assertTrue(CODE_SYNC_VENUE_PENDING in sync.bodyAsText())
+        // Venue plan session 4: a venue's sync subtree answers; a version's never does, and a venue's
+        // draft is never snapshotted into its repo.
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects/$venueId/sync/config").status)
         assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects/$projectId/sync/config").status)
+        val snapshot = client.post("/api/rest/projects/$venueId/sync/snapshot") { json("{}") }
+        assertEquals(HttpStatusCode.Conflict, snapshot.status)
+        assertTrue("VENUE_DRAFT_NOT_SYNCED" in snapshot.bodyAsText())
+        val published = runBlocking { state.venueVersions.publish(venueId, "v1", null) }
+        val versionSync = client.get("/api/rest/projects/${published.snapshotProjectId}/sync/config")
+        assertEquals(HttpStatusCode.Conflict, versionSync.status)
+        assertTrue(CODE_VENUE_VERSION_READ_ONLY in versionSync.bodyAsText())
     }
 
     private fun HttpRequestBuilder.json(body: String) {

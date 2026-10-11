@@ -301,6 +301,9 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(project)
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Project not found"))
+            } catch (e: VenueException) {
+                // A show whose pinned venue version is not on this desk (`VENUE_MISSING`).
+                call.respond(e.status, ErrorResponse(e.message ?: "Refused", e.code))
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.InternalServerError,
@@ -354,8 +357,8 @@ internal fun Route.routeApiRestProjects(state: State) {
         // place where an authenticated caller reaches outside the app's own data directory.
         adminOnly {
             routeApiRestProjectExport(state)
-            // A venue's sync waits for venue plan session 4 (P6).
-            refuseVenueSync(state) { routeApiRestProjectCloudSync(state) }
+            // A version syncs only as a tag of its venue's repo (venue plan §3.4).
+            refuseVersionSync(state) { routeApiRestProjectCloudSync(state) }
         }
 
         // POST /{id}/clone - Clone a project, whole graph. Runs through the cloud-sync
@@ -363,16 +366,8 @@ internal fun Route.routeApiRestProjects(state: State) {
         // bespoke table walker, so newly-synced tables are cloned without a code change here.
         post<CloneProjectResource> { resource ->
             val request = call.receive<CloneProjectRequest>()
-            // A show on a venue clones with its pin in venue plan session 4 (§3.4); until then a clone
-            // would be a show with none of the venue's rig, so it is refused.
-            if (transaction(state.database) { DaoProject.findById(resource.id)?.isVenueBound } == true) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ErrorResponse("A show on a venue cannot be cloned yet: a clone keeps its venue in a later release", CODE_VENUE_CLONE_PENDING),
-                )
-                return@post
-            }
-
+            // A show on a venue clones with its pin (venue plan §3.4): the clone is a show on the same
+            // version, its own rows copied and its links into the venue kept.
             val result = try {
                 // Export + import do file IO inside Exposed transactions; off-loading keeps
                 // the Ktor worker free, matching the manual export route.
@@ -380,7 +375,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     ProjectCloner(state).clone(resource.id, request.name, request.description)
                 }
             } catch (e: ImportError) {
-                call.respond(e.status, ErrorResponse(e.message ?: "Clone failed"))
+                call.respond(e.status, ErrorResponse(e.message ?: "Clone failed", e.code))
                 return@post
             } catch (e: CancellationException) {
                 // The clone commits inside a blocking transaction, so cancellation surfaces
@@ -570,9 +565,6 @@ internal fun showsOnVenue(venue: DaoProject): List<DaoProject> =
 /** A venue a show pins cannot be deleted: the show's rig links into its versions (venue plan P3). */
 internal const val CODE_VENUE_IN_USE = "VENUE_IN_USE"
 
-/** A show on a venue clones with its pin from venue plan session 4 (§3.4); until then it is refused. */
-internal const val CODE_VENUE_CLONE_PENDING = "VENUE_CLONE_PENDING"
-
 /**
  * Delete [project] and every row it owns, children before parents (no FK here cascades). Inside a
  * transaction; the files a project keeps outside the database are [deleteProjectFiles]'s, after the
@@ -602,11 +594,16 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     deleteSceneryForElements(project.stageElements.map { it.id })
     // Cue events name a cue and a patch, both going below: through the patches, so all go.
     deleteCueEventsForPatches(project.fixturePatches.map { it.id })
+    // And through their owners, for a show on a venue: its cues fire venue patches and its cues,
+    // stacks and Looks move venue elements, which the two sweeps above (this project's own rows)
+    // never reach.
     project.cues.forEach { cue ->
+        deleteCueEvents(cue.id)
+        deleteCueScenery(cue.id)
         deleteCueChildren(cue)
         cue.delete()
     }
-    project.cueStacks.forEach { it.delete() }
+    project.cueStacks.forEach { deleteStackScenery(it.id); it.delete() }
     project.cueSlots.forEach { it.delete() }
     // Preset property assignments before their presets: the FK has no ON DELETE
     // cascade, so PostgreSQL rejects the preset delete while assignments remain.
@@ -615,6 +612,7 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     // at a look by the time it goes. No DB-level cascade — SQLite doesn't enforce one
     // without a per-connection pragma.
     project.looks.forEach { look ->
+        deleteLookScenery(look.id)
         look.rows.forEach { it.delete() }
         look.effects.forEach { it.delete() }
         look.delete()

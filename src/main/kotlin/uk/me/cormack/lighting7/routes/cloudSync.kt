@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.models.DaoSyncLinkedRepo
@@ -162,6 +163,17 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
     post<ProjectSyncSnapshotResource> { resource ->
         val request = call.receive<TakeSnapshotRequest?>() ?: TakeSnapshotRequest()
         withProject(state, resource.parent.projectId) { project ->
+            // A venue's draft never syncs (venue plan P7): its tree only ever holds a published
+            // version, written by a publish.
+            if (transaction(state.database) { project.kind } == ProjectKind.VENUE) {
+                respondSyncError(
+                    SyncException(
+                        SyncErrorCode.VENUE_DRAFT_NOT_SYNCED,
+                        "A venue's draft never syncs: its repo holds the versions it publishes. Publish the draft instead.",
+                    ),
+                )
+                return@withProject
+            }
             // Refuse to take a snapshot while a conflict session is open — the snapshot
             // would race the canonical-JSON the resolution UI is showing.
             val activeSessionId = transaction(state.database) {

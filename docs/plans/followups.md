@@ -125,6 +125,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Ready | Stage | fired 2026-10-10 (the panto); planned in [`venue-plan.md`](venue-plan.md) |
 | [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
+| [`FU-VENUE-DRAFT-SYNC`](#fu-venue-draft-sync) | Trigger | Venue | two admins edit one venue on two desks |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -1458,6 +1459,11 @@ instruction for session 9): none of the stage-view plan's four bumps carries att
 design for machine-local users is still owed, and there is no further planned bump to fold it into;
 the gate now waits for its own trigger or the next bump someone plans.
 
+**v22–v24 passed without it too** (fixture optics plan session 3, the scrim plan's session 1, venue
+plan session 4, 2026-10-11): v24 is the venue plan's one bump and carries the pin, the hides and the
+venue repo's layout, none of which concerns who made an edit, and the design for machine-local users
+is still owed. Flagged rather than folded in, as the gate asks.
+
 ### `FU-AUTH-AUDIT-LOG`
 
 **A `user_audit` table for logins, resets and user changes** · Trigger · Multi-user-auth §out of
@@ -2478,6 +2484,21 @@ version — never one a show is pinned to (the boards' callout 5), so this waits
 through the project delete's own row walk and `deleteProjectFiles`, keeping the `venue_versions` row
 (number, note, date) so History still lists what was published; a pruned version cannot be compared.
 Session 4's venue repo keeps every tagged version anyway, so a pruned one can be pulled back.
+
+### `FU-VENUE-DRAFT-SYNC`
+
+**A venue's draft is one desk's** · Trigger · venue plan §8 (session 4), 2026-10-11
+
+A venue syncs only its published versions (venue plan P7; `docs/sync-engineering.md` §"Venue
+repos"): the draft never leaves the desk it is edited on. Two desks drafting one venue meet only at
+a publish. The one that publishes second is refused `VENUE_VERSION_TAKEN` and sees the other's
+version in History, but its draft is still based on the older version, and publishing it again (as
+the next number) overwrites the other desk's changes. And a pull leaves a draft with changes of its
+own where it is, rather than merging the newer version in. Two desks that published one number apart
+before sharing a repo are refused outright and have to choose one history by hand. **Trigger**: two
+admins edit one venue on two desks. **Then**: either a shared draft (the show's three-way merge over
+the venue's rows, with its conflict sessions) or a draft *rebase* onto the newer version — the
+draft's diff against its base re-applied to the newer one, a clash a decision as P8's are.
 
 ### `FU-STAGE-INDEPENDENT-HEADS`
 

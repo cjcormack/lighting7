@@ -24,9 +24,14 @@ import {
 } from "@/store/cloudSync"
 import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
+import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
 
-/** Working-tree status, "Take snapshot" and "Sync now", with the reason either is unavailable. */
-export function StatusPanel({ projectId }: { projectId: number }) {
+/**
+ * Working-tree status, "Take snapshot" and "Sync now", with the reason either is unavailable. A
+ * venue ([isVenue]) has no snapshot — its draft never syncs, and its tree holds only the versions it
+ * publishes — and its sync reports the versions it fetched and pushed in the desk's own words.
+ */
+export function StatusPanel({ projectId, isVenue = false }: { projectId: number; isVenue?: boolean }) {
   const { data: status, isLoading } = useCloudSyncStatusQuery(projectId)
   const { data: config } = useCloudSyncConfigQuery(projectId)
   const { data: conflictsData } = useCloudSyncConflictsQuery(projectId)
@@ -65,6 +70,12 @@ export function StatusPanel({ projectId }: { projectId: number }) {
   const handleSyncNow = async () => {
     try {
       const result = await runSync(projectId).unwrap()
+      if (isVenue) {
+        // The desk names the versions (`Fetched v3. Pushed v4.`), which a commit count would not.
+        if (result.outcome === "NO_OP") toast(result.message)
+        else toast.success(result.message)
+        return
+      }
       switch (result.outcome) {
         case "NO_OP":
           toast("Already in sync — nothing to push or pull")
@@ -90,7 +101,11 @@ export function StatusPanel({ projectId }: { projectId: number }) {
           break
       }
     } catch (err) {
-      toast.error(`Sync failed: ${formatError(err)}`)
+      // `VENUE_MISSING` (this show's new pin is a version the desk lacks) and `VENUE_VERSION_TAKEN`
+      // (two desks published one number) say what to do; anything else is the desk's sentence.
+      const refusal = venueSyncRefusal(err)
+      if (refusal) toast.error(refusal.title, { description: refusal.message })
+      else toast.error(`Sync failed: ${formatError(err)}`)
     }
   }
 
@@ -127,6 +142,7 @@ export function StatusPanel({ projectId }: { projectId: number }) {
           <LastSyncedBody config={config} />
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
+          {!isVenue && (
           <Popover open={snapshotPopoverOpen} onOpenChange={setSnapshotPopoverOpen}>
             <PopoverTrigger asChild>
               <Button disabled={isSnapshotting} variant="outline">
@@ -159,6 +175,7 @@ export function StatusPanel({ projectId }: { projectId: number }) {
               </div>
             </PopoverContent>
           </Popover>
+          )}
           <Button
             onClick={handleSyncNow}
             disabled={!syncEnabled}

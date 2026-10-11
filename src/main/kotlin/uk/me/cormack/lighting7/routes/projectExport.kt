@@ -53,7 +53,6 @@ internal fun Route.routeApiRestProjectExport(state: State) {
 
     post<ProjectExportResource> { resource ->
         val request = call.receive<ProjectExportRequest>()
-        if (refusedVenueBoundExport(state, resource.id)) return@post
         val project = transaction(state.database) {
             DaoProject.findById(resource.id)
         }
@@ -100,7 +99,7 @@ internal fun Route.routeApiRestProjectExport(state: State) {
                 )
             )
         } catch (e: ImportError) {
-            call.respond(e.status, ErrorResponse(e.message ?: "Import failed"))
+            call.respond(e.status, ErrorResponse(e.message ?: "Import failed", e.code))
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Import failed: ${e.message}"))
         }

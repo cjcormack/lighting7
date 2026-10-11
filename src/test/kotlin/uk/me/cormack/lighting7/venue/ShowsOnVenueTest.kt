@@ -46,8 +46,6 @@ import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.UserRole
-import uk.me.cormack.lighting7.routes.CODE_SYNC_VENUE_PENDING
-import uk.me.cormack.lighting7.routes.CODE_VENUE_CLONE_PENDING
 import uk.me.cormack.lighting7.routes.CODE_VENUE_IN_USE
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
@@ -372,18 +370,29 @@ class ShowsOnVenueTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a show on a venue refuses sync, export and clone, and its venue cannot be deleted`() = testApplication {
+    fun `a show on a venue syncs, exports and clones with its pin, and its venue cannot be deleted`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val showId = seedShow()
         val venueId = extract(showId).venueId!!
 
-        assertCode(HttpStatusCode.Conflict, CODE_SYNC_VENUE_PENDING, client.get("/api/rest/projects/$showId/sync/config"))
-        assertCode(HttpStatusCode.Conflict, CODE_SYNC_VENUE_PENDING, client.post("/api/rest/projects/$showId/export") { json("{}") })
-        assertCode(
-            HttpStatusCode.Conflict, CODE_VENUE_CLONE_PENDING,
-            client.post("/api/rest/projects/$showId/clone") { json("""{"name":"Copy"}""") },
-        )
+        // Venue plan session 4: nothing about the pin refuses sync or export any more.
+        assertEquals(HttpStatusCode.OK, client.get("/api/rest/projects/$showId/sync/config").status)
+        val exported = client.post("/api/rest/projects/$showId/export") { json("{}") }
+        assertEquals(HttpStatusCode.OK, exported.status, exported.bodyAsText())
+
+        // A clone is a show on the same version, loading the same rig.
+        val cloned = client.post("/api/rest/projects/$showId/clone") { json("""{"name":"Copy"}""") }
+        assertEquals(HttpStatusCode.Created, cloned.status, cloned.bodyAsText())
+        val cloneId = TestJson.parseToJsonElement(cloned.bodyAsText()).jsonObject["project"]!!.jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        transaction(state.database) {
+            val show = DaoProject[showId]
+            val clone = DaoProject[cloneId]
+            assertEquals(show.venueUuid, clone.venueUuid)
+            assertEquals(show.venueVersion, clone.venueVersion)
+        }
+        assertEquals(loadedRig(showId), loadedRig(cloneId))
+
         assertCode(HttpStatusCode.Conflict, CODE_VENUE_IN_USE, client.delete("/api/rest/projects/$venueId"))
         transaction(state.database) { assertNotNull(DaoProject.findById(venueId)) }
     }

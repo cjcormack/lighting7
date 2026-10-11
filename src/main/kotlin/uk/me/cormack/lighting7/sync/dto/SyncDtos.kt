@@ -11,6 +11,8 @@ import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
@@ -29,6 +31,18 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v24: venues sync (venue plan session 4, §3.4). `project.json` gains `kind` (absent = SHOW, so a
+    // standalone show's is unchanged), a show's pin — `venueUuid`, `venueVersion` — and `venueRepo`, a
+    // hint naming where its venue syncs; a show on a venue gains `showHides/{uuid}.json`, its hides of
+    // venue records. A show's archive carries only its own rows: its links into the venue are the
+    // venue records' uuids, resolved on import against the pinned version's snapshot, which must be on
+    // the desk (`VENUE_MISSING` otherwise). A venue syncs as its own repo, one tagged commit per
+    // published version, `venueVersion.json` beside the usual layout. The number moves for v4's reason
+    // — a v23 reader would import a pinned show as a standalone one whose links name rows it does not
+    // have, and its next push would write the pin and the hides away. `showOverrides/` (session 5) is
+    // reserved: a v24 reader refuses an archive holding one, so session 5 adds it without a bump.
+    // `minReader` stays at **5**: every key defaults, and a v23 archive imports unchanged.
+    //
     // v23: painted cloths (scrim plan session 1, P2). No DTO changes: a drape's `fabric` and a drape's
     // or a flat's `paint` (`{front?, back?}`, each an image's SHA-256) ride inside `StageElementJson`'s
     // params, which already travel whole. What moves the number is the new top-level
@@ -196,7 +210,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 23,
+    val formatVersion: Int = 24,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -223,6 +237,39 @@ data class ProjectJson(
     val stageWidthM: Double? = null,
     val stageDepthM: Double? = null,
     val stageHeightM: Double? = null,
+    /** v24: what the project is; a show (every project before venues) is the default and is omitted. */
+    val kind: ProjectKind = ProjectKind.SHOW,
+    /** v24: a show's pin — its venue project's uuid and the version it sits on. Both or neither. */
+    val venueUuid: String? = null,
+    val venueVersion: Int? = null,
+    /** v24: where the pinned venue syncs, `owner/repo` (or a remote URL) — a hint for a desk without it. */
+    val venueRepo: String? = null,
+)
+
+/**
+ * v24: one of a show's hides (venue plan §3.2) — a venue record it leaves out of its rig, named by
+ * kind and uuid. `recordUuid` names a record of the pinned venue, never of the show's own archive, so
+ * a clone keeps it as it is (only `uuid`, the hide's own identity, is remapped).
+ */
+@Serializable
+data class ShowHideJson(
+    val uuid: String,
+    val recordKind: HideKind,
+    val recordUuid: String,
+)
+
+/**
+ * v24: `venueVersion.json` at the root of a venue repo's tagged commit — which version the commit is
+ * (venue plan §3.4). Never in a show's repo. A desk that materialises the tag records these in its own
+ * `venue_versions` row, so History reads the same on every desk.
+ */
+@Serializable
+data class VenueVersionJson(
+    val number: Int,
+    val note: String,
+    /** ISO-8601 UTC, as `toIsoUtc` writes it. */
+    val publishedAt: String,
+    val publishedBy: String? = null,
 )
 
 @Serializable

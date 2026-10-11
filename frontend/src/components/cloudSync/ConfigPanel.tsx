@@ -38,7 +38,8 @@ import { formatRepoUrl } from "@/lib/formatRepoUrl"
  * panel has two shapes: an attach call-to-action when not synced, and a read-only
  * summary + disconnect when synced.
  */
-export function ConfigPanel({ projectId }: { projectId: number }) {
+/** [isVenue]: the venue's repo of published versions (venue plan session 4) — only the copy differs. */
+export function ConfigPanel({ projectId, isVenue = false }: { projectId: number; isVenue?: boolean }) {
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
 
   if (isLoading || !config) {
@@ -50,7 +51,7 @@ export function ConfigPanel({ projectId }: { projectId: number }) {
   }
 
   return config.synced
-    ? <SyncedConfigPanel projectId={projectId} config={config} />
+    ? <SyncedConfigPanel projectId={projectId} config={config} isVenue={isVenue} />
     : <AttachConfigPanel projectId={projectId} config={config} />
 }
 
@@ -177,7 +178,15 @@ function AttachConfigPanel({ projectId, config }: { projectId: number; config: S
 }
 
 /** Synced state: read-only repo summary, Advanced (auto-sync + PAT), and Disconnect. */
-function SyncedConfigPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+function SyncedConfigPanel({
+  projectId,
+  config,
+  isVenue,
+}: {
+  projectId: number
+  config: SyncConfig
+  isVenue: boolean
+}) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const repoLabel = formatRepoUrl(config.repoUrl) ?? config.repoUrl ?? "—"
@@ -188,7 +197,9 @@ function SyncedConfigPanel({ projectId, config }: { projectId: number; config: S
         <div>
           <h2 className="text-sm font-semibold">Cloud sync</h2>
           <p className="text-xs text-muted-foreground">
-            Synced to a GitHub repository. Changes push and pull automatically.
+            {isVenue
+              ? "Synced to a GitHub repository. Published versions push and pull; the draft stays here."
+              : "Synced to a GitHub repository. Changes push and pull automatically."}
           </p>
         </div>
         <Badge variant="secondary" className="text-[10px] shrink-0">synced</Badge>

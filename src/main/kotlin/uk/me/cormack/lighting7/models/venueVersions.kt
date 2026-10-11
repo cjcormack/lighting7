@@ -9,8 +9,9 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * A venue's published versions (venue plan §3.2, P2): one row per publish, naming the frozen
  * `VENUE_VERSION` project that holds it. Versions are immutable, numbered densely from 1 per venue.
  *
- * **Machine-local**: an index of this desk's snapshots, never exported. Session 4 rebuilds it
- * from the venue repo's tags (§3.4), so what travels is the tagged commit, not this row.
+ * **Machine-local**: an index of this desk's snapshots, never exported. A sync of the venue's repo
+ * rebuilds it from the tags (§3.4, `sync/VenueRepoSync.kt`), so what travels is the tagged commit,
+ * not this row; a rebuild only ever adds rows.
  */
 object DaoVenueVersions : IntIdTable("venue_versions") {
     val venueProject = reference("venue_project_id", DaoProjects)

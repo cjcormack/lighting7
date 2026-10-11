@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { venueSyncRefusal } from "./lib/venueSyncRefusal"
 import { XCircle } from "lucide-react"
 import { useImportProjectMutation } from "./store/projects"
 
@@ -71,6 +72,9 @@ export default function ImportProjectDialog({
         "Failed to import project"
       )
     : undefined
+  // A show whose venue this desk lacks (`VENUE_MISSING`) names what to do first; the desk's sentence
+  // says which venue and where it syncs.
+  const refusal = error ? venueSyncRefusal(error) : null
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -85,6 +89,7 @@ export default function ImportProjectDialog({
           {errorMessage && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
+              {refusal && <AlertTitle>{refusal.title}</AlertTitle>}
               <AlertDescription>{errorMessage}</AlertDescription>
             </Alert>
           )}

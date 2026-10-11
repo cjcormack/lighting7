@@ -41,6 +41,12 @@ import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.DaoShowHide
+import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.VenuePins
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import uk.me.cormack.lighting7.models.DaoPromptBook
@@ -59,6 +65,10 @@ import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.deleteSceneryForElements
 import uk.me.cormack.lighting7.models.deleteCueEventsForPatches
+import uk.me.cormack.lighting7.models.deleteCueEvents
+import uk.me.cormack.lighting7.models.deleteCueScenery
+import uk.me.cormack.lighting7.models.deleteStackScenery
+import uk.me.cormack.lighting7.models.deleteLookScenery
 import uk.me.cormack.lighting7.models.DaoCueEvent
 import uk.me.cormack.lighting7.models.stripTriggerRows
 import uk.me.cormack.lighting7.models.stripCommandRows
@@ -145,6 +155,16 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v24 made venues sync (venue plan session 4): `project.json`'s `kind`, a show's pin (`venueUuid`,
+// `venueVersion`) and `venueRepo` hint, and `showHides/`. A show's archive holds only its own rows, so
+// its links into the venue — a patch on a venue universe, a group member, a cue event, a scenery change,
+// a busk tile — name venue records the archive lacks: [populateProject] seeds its uuid maps from the
+// pinned snapshot first, and a pin whose snapshot this desk lacks is refused (`VENUE_MISSING`).
+// SUPPORTED moved for v4's reason — a v23 reader would import a pinned show as a standalone one and
+// fail on its first venue link, or write the pin and hides away. `showOverrides/` is reserved for venue
+// plan session 5: this reader refuses an archive holding one ([RESERVED_FOLDERS]), so that session can
+// add it at v24. MIN stays at 5: every key defaults, and a v23 archive imports unchanged.
+//
 // v23 added the scene's painted cloths (scrim plan P2): `DrapeParams.fabric` and the drape's and the
 // flat's `paint`, inside the element's params, and a top-level `sceneImages/{sha256}.{png|jpg}`
 // folder of the images they name — raw bytes, content-addressed, moved by `SceneImageRepoSync`. The
@@ -185,21 +205,37 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 23
+internal const val SUPPORTED_FORMAT_VERSION = 24
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
  * on the exception keeps the catch block in `routes/projectExport.kt` to a single arm.
  */
-class ImportError(val status: HttpStatusCode, message: String) : RuntimeException(message) {
+class ImportError(
+    val status: HttpStatusCode,
+    message: String,
+    /** A machine-readable code for a refusal a client branches on (`VENUE_MISSING`), else null. */
+    val code: String? = null,
+) : RuntimeException(message) {
     companion object {
-        fun conflict(message: String) = ImportError(HttpStatusCode.Conflict, message)
+        fun conflict(message: String, code: String? = null) = ImportError(HttpStatusCode.Conflict, message, code)
         fun unsupportedFormat(message: String) = ImportError(HttpStatusCode.UnprocessableEntity, message)
         fun invalidArchive(message: String) = ImportError(HttpStatusCode.BadRequest, message)
         fun notFound(message: String) = ImportError(HttpStatusCode.NotFound, message)
+
+        /** A venue rule's refusal ([VenuePins.missing]), carried with its status and code. */
+        fun of(e: VenueException) = ImportError(e.status, e.message ?: e.code, e.code)
     }
 }
+
+/**
+ * Folders a later session's archive may hold that this reader cannot apply, refused by name rather
+ * than by `formatVersion` (so the session that fills one needs no bump): `showOverrides/` is a show's
+ * facet overrides of venue patches, venue plan session 5. Dropping one would load a different rig — an
+ * overridden address — so an archive holding any file in it is refused as too new.
+ */
+internal val RESERVED_FOLDERS = listOf("showOverrides")
 
 class ProjectImporter(private val state: State) {
 
@@ -221,11 +257,12 @@ class ProjectImporter(private val state: State) {
         nameOverride: String?,
         descriptionOverride: String? = null,
         /**
-         * The new project's kind. An archive carries none yet (venues sync from session 4), so every
-         * import is a show unless the caller says otherwise — a venue snapshot
-         * (`venue/VenueVersions.kt`) or a clone of a venue ([ProjectCloner]).
+         * The new project's kind, overriding the archive's (v24) — what a venue snapshot passes
+         * (`venue/VenueVersions.kt`, `sync/VenueRepoSync.kt`). Null takes the archive's: a show,
+         * unless it says otherwise. An archive of a version is never imported as one by itself: a
+         * version is a tag of its venue's repo, with no index row of its own here.
          */
-        kind: ProjectKind = ProjectKind.SHOW,
+        kind: ProjectKind? = null,
         /**
          * Run inside the import's own transaction once every row has landed, so whatever the caller
          * records about the new project (a venue version's index row) commits or rolls back with it.
@@ -235,6 +272,13 @@ class ProjectImporter(private val state: State) {
         val (_, projectJson) = loadAndValidateArchive(sourceDir)
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
+        val targetKind = kind ?: projectJson.kind
+        if (kind == null && targetKind == ProjectKind.VENUE_VERSION) {
+            throw ImportError.invalidArchive(
+                "This archive is a venue version: import its venue's repo, which brings every version with it",
+            )
+        }
+        val pin = pinOf(projectJson, targetKind)
 
         val result = transaction(state.database) {
             // UUID-collision check first — a same-UUID project means we'd be merging, which
@@ -253,6 +297,10 @@ class ProjectImporter(private val state: State) {
                 )
             }
 
+            // The pinned version must be here before a row lands: the show's links into it resolve
+            // against its snapshot (v24).
+            pin?.let { requireSnapshot(it, targetName) }
+
             // isCurrent forced false: importing must never silently switch which project the
             // operator is operating on. activeStackId stays null — importing doesn't preserve
             // operator UI state (which stack is live).
@@ -265,7 +313,10 @@ class ProjectImporter(private val state: State) {
                 stageDepthM = projectJson.stageDepthM
                 stageHeightM = projectJson.stageHeightM
                 uuid = targetUuid
-                this.kind = kind
+                this.kind = targetKind
+                venueUuid = pin?.venueUuid
+                venueVersion = pin?.version
+                venueRepo = pin?.hint
             }
 
             populateProject(sourceDir, project)
@@ -322,6 +373,15 @@ class ProjectImporter(private val state: State) {
                         "Refusing to clobber a different project."
                 )
             }
+            // A project is what it was made as: a show's repo never turns it into a venue.
+            if (project.kind != projectJson.kind) {
+                throw ImportError.conflict(
+                    "Working tree's project is a ${projectJson.kind.name.lowercase()}, but local project ${project.id.value} " +
+                        "is a ${project.kind.name.lowercase()}. Refusing to replace it.",
+                )
+            }
+            val pin = pinOf(projectJson, project.kind)
+            pin?.let { requireSnapshot(it, project.name) }
 
             // Mirrors the project-delete cascade in `routes/projects.kt` (same FK-safe
             // order) but leaves the DaoProject row plus non-synced child tables (machine
@@ -345,15 +405,20 @@ class ProjectImporter(private val state: State) {
             deleteSceneryForElements(project.stageElements.map { it.id })
             // Cue events before their cues and patches, through the patches (v21).
             deleteCueEventsForPatches(project.fixturePatches.map { it.id })
+            // And through their owners, for a show on a venue (v24): its cues fire venue patches and
+            // its cues, stacks and Looks move venue elements, which the sweeps above never reach.
             project.cues.forEach { cue ->
+                deleteCueEvents(cue.id)
+                deleteCueScenery(cue.id)
                 deleteCueChildren(cue)
                 cue.delete()
             }
-            project.cueStacks.forEach { it.delete() }
+            project.cueStacks.forEach { deleteStackScenery(it.id); it.delete() }
             project.cueSlots.forEach { it.delete() }
             // Layers before cues would be redundant — deleteCueChildren already drops them — but
             // looks must go after every layer that points at one.
             project.looks.forEach { look ->
+                deleteLookScenery(look.id)
                 look.rows.forEach { it.delete() }
                 look.effects.forEach { it.delete() }
                 look.delete()
@@ -381,12 +446,18 @@ class ProjectImporter(private val state: State) {
             project.fxDefinitions.forEach { it.delete() }
             project.scripts.forEach { it.delete() }
             project.controlSurfaceBindings.forEach { it.delete() }
+            DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
 
             project.name = projectJson.name
             project.description = projectJson.description
             project.stageWidthM = projectJson.stageWidthM
             project.stageDepthM = projectJson.stageDepthM
             project.stageHeightM = projectJson.stageHeightM
+            // The pin follows the repo (a peer's Update moves it, venue plan session 6), and the hint
+            // with it.
+            project.venueUuid = pin?.venueUuid
+            project.venueVersion = pin?.version
+            project.venueRepo = pin?.hint
 
             populateProject(sourceDir, project)
 
@@ -428,7 +499,36 @@ class ProjectImporter(private val state: State) {
             throw ImportError.invalidArchive("Missing project.json")
         }
         val projectJson = canonicalDecode(ProjectJson.serializer(), Files.readString(projectPath))
+        RESERVED_FOLDERS.firstOrNull { folder ->
+            val dir = sourceDir.resolve(folder)
+            dir.isDirectory() && Files.list(dir).use { it.findAny().isPresent }
+        }?.let { folder ->
+            throw ImportError.unsupportedFormat(
+                "This archive holds $folder/, which a newer lighting7 writes and this install cannot apply. Upgrade lighting7."
+            )
+        }
         return format to projectJson
+    }
+
+    /** A show's pin as an archive states it (v24), or null for a standalone show, a venue and a version. */
+    private data class Pin(val venueUuid: UUID, val version: Int, val hint: String?)
+
+    private fun pinOf(projectJson: ProjectJson, kind: ProjectKind): Pin? {
+        if (kind != ProjectKind.SHOW) return null
+        val venueUuid = projectJson.venueUuid ?: return null
+        val uuid = runCatching { UUID.fromString(venueUuid) }.getOrNull()
+            ?: throw ImportError.invalidArchive("project.json's venueUuid is not a uuid: $venueUuid")
+        val version = projectJson.venueVersion
+            ?: throw ImportError.invalidArchive("project.json names venue $venueUuid but no venueVersion")
+        if (version < 1) throw ImportError.invalidArchive("project.json's venueVersion must be at least 1: $version")
+        return Pin(uuid, version, projectJson.venueRepo?.takeIf { it.isNotBlank() })
+    }
+
+    /** Refuse (409 `VENUE_MISSING`) a pin whose snapshot is not on this desk. Inside a transaction. */
+    private fun requireSnapshot(pin: Pin, showName: String) {
+        if (VenuePins.snapshotOf(pin.venueUuid, pin.version) == null) {
+            throw ImportError.of(VenuePins.missing(pin.venueUuid, pin.version, pin.hint, showName))
+        }
     }
 
     /**
@@ -438,21 +538,28 @@ class ProjectImporter(private val state: State) {
      * dereference them through the maps returned by each step.
      */
     private fun populateProject(sourceDir: Path, project: DaoProject) {
+        // v24: a show on a venue links into the pinned snapshot's rows, which its archive does not
+        // carry. Every map starts from them, and the archive's own rows are laid over the top — so a
+        // link resolves to the show's own row where it has one (a Preset seating it copied keeps the
+        // venue's uuid) and to the venue's otherwise. Hides are imported here too, before the strip
+        // passes below judge rows through the rig scope.
+        val venue = VenueSeed.of(project)
+        importShowHides(sourceDir, project)
         // Elements first (v20): a Look's, a stack's and a cue's scenery name one, and an element
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
-        val elementMap = importStageElements(sourceDir, project)
+        val elementMap = venue.elements + importStageElements(sourceDir, project)
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
         val lookMap = importLooks(sourceDir, project, elementMap)
         val templateMap = importTemplates(sourceDir, project)
         importSpeedMasters(sourceDir, project)
-        val universeMap = importUniverseConfigs(sourceDir, project)
-        val riggingMap = importRiggings(sourceDir, project)
+        val universeMap = venue.universes + importUniverseConfigs(sourceDir, project)
+        val riggingMap = venue.riggings + importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
         // The viewpoints after the elements their seats name (v18), imported above.
         importStageViewpoints(sourceDir, project)
-        val patchMap = importFixturePatches(sourceDir, project, universeMap, riggingMap)
-        val groupMap = importFixtureGroups(sourceDir, project, patchMap)
+        val patchMap = venue.patches + importFixturePatches(sourceDir, project, universeMap, riggingMap)
+        val groupMap = venue.groups + importFixtureGroups(sourceDir, project, patchMap)
         // The rig after the groups and patches its tiles name (v12).
         importBuskRig(sourceDir, project, groupMap, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project, elementMap)
@@ -478,6 +585,66 @@ class ProjectImporter(private val state: State) {
         // before the commands existed.
         val strippedCommands = stripCommandRows(project)
         if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
+    }
+
+    /**
+     * v24: a show's hides, stored as the archive has them. A hide naming no record of the pinned
+     * version is kept — it hides nothing, and an Update to a version that has the record again
+     * (session 6) honours it — and one an archive repeats (a merge that kept both sides) is kept once.
+     */
+    private fun importShowHides(dir: Path, project: DaoProject) {
+        val seen = HashSet<Pair<HideKind, UUID>>()
+        readDir(dir.resolve("showHides")) { json ->
+            val h = canonicalDecode(ShowHideJson.serializer(), json)
+            val uuid = runCatching { UUID.fromString(h.uuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("A show hide's uuid is not a uuid: ${h.uuid}")
+            val recordUuid = runCatching { UUID.fromString(h.recordUuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("Show hide ${h.uuid} names no record uuid: ${h.recordUuid}")
+            if (project.kind != ProjectKind.SHOW || project.venueUuid == null) {
+                logger.warn("Import: hide {} in a project on no venue; dropping it", h.uuid)
+            } else if (seen.add(h.recordKind to recordUuid)) {
+                DaoShowHide.new {
+                    this.project = project
+                    recordKind = h.recordKind
+                    this.recordUuid = recordUuid
+                    this.uuid = uuid
+                }
+            } else {
+                logger.warn("Import: hide {} names {} {} a second time; dropping it", h.uuid, h.recordKind, h.recordUuid)
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * The pinned snapshot's rows a show's links may name (v24), by uuid: every row of the version,
+     * hidden or not — a show group may hold a venue patch the show hides, and the rig scope filters
+     * it. Empty for anything but a show on a venue. Inside the import's transaction.
+     */
+    private class VenueSeed(
+        val universes: Map<UUID, DaoUniverseConfig>,
+        val riggings: Map<UUID, DaoRigging>,
+        val elements: Map<UUID, DaoStageElement>,
+        val patches: Map<UUID, DaoFixturePatch>,
+        val groups: Map<UUID, DaoFixtureGroup>,
+    ) {
+        companion object {
+            private val NONE = VenueSeed(emptyMap(), emptyMap(), emptyMap(), emptyMap(), emptyMap())
+
+            fun of(project: DaoProject): VenueSeed {
+                if (project.kind != ProjectKind.SHOW) return NONE
+                val venueUuid = project.venueUuid ?: return NONE
+                val snapshot = VenuePins.snapshotOf(venueUuid, project.venueVersion ?: return NONE)
+                    ?: throw ImportError.of(VenuePins.missing(project))
+                return VenueSeed(
+                    universes = snapshot.universeConfigs.associateBy { it.uuid },
+                    riggings = snapshot.riggings.associateBy { it.uuid },
+                    elements = snapshot.stageElements.associateBy { it.uuid },
+                    patches = snapshot.fixturePatches.associateBy { it.uuid },
+                    groups = snapshot.fixtureGroups.associateBy { it.uuid },
+                )
+            }
+        }
     }
 
     private fun importScripts(dir: Path, project: DaoProject): Map<UUID, DaoScript> {
