@@ -27,7 +27,9 @@ import java.util.UUID
  * [ALL_TABLES] through Exposed's foreign-key metadata and fails, naming the column, on a foreign
  * key into a [VENUE_OWNABLE] table that has no entry here — as `SyncCoverageTest` does for sync.
  *
- * Nothing calls [Link.repoint] in production yet; venue plan sessions 2, 6 and 7 will.
+ * Extract (`venue/VenueExtract.kt`) calls [repointAll]; Update (`venue/VenueUpdate.kt`) re-points link
+ * by link through [ALL], in the same order, so it can drop each link's unmatched rows as that link
+ * needs. Detach (venue plan session 7) will re-point too.
  * `docs/fixtures-engineering.md` §"The rig scope" has the rule.
  */
 object VenueLinks {

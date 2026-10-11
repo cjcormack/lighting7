@@ -443,6 +443,17 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.venue.VenueVersions(this)
     }
 
+    /**
+     * The current show's hold (venue plan P5, session 6): behind its venue on output it sends zero,
+     * unless run against its older pin — `venue.hold`. See [VenueHoldService].
+     */
+    val venueHold: VenueHoldService by lazy { VenueHoldService(this) }
+
+    /** *Update* a show to a newer version of its venue (venue plan session 6): `venue/VenueUpdate.kt`. */
+    val venueUpdate: uk.me.cormack.lighting7.venue.VenueUpdate by lazy {
+        uk.me.cormack.lighting7.venue.VenueUpdate(this)
+    }
+
     /** *Extract a venue* (venue plan session 3): `venue/VenueExtract.kt`. */
     val venueExtract: uk.me.cormack.lighting7.venue.VenueExtract by lazy {
         uk.me.cormack.lighting7.venue.VenueExtract(this)

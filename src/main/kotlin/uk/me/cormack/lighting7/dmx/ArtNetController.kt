@@ -24,6 +24,11 @@ class ArtNetController(
     initialValues: Map<Int, UByte> = emptyMap(),
     private val parkSource: ParkSource? = null,
     private val transport: ArtNetTransport = DefaultArtNetTransport(),
+    /**
+     * The show's hold (venue plan P5): read once per frame, above park and every modifier. Null —
+     * tests, and anything built outside a show — is never held.
+     */
+    private val hold: OutputHold? = null,
 ): DmxController {
     companion object {
         /** Default Art-Net frame interval: 40 Hz. */
@@ -67,6 +72,8 @@ class ArtNetController(
         }
 
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
+
+    override val held: Boolean get() = hold?.isHeld == true
 
     private val transmitModifiers = java.util.concurrent.CopyOnWriteArrayList<TransmitModifier>()
 
@@ -369,16 +376,22 @@ class ArtNetController(
         // Grab the universe park snapshot once per frame: at 40 Hz x 512 channels x N
         // controllers, dropping the per-channel outer-map lookup is meaningful.
         val parkedView = parkSource?.universeView(universe.universe)
+        // The show's hold, likewise once per frame (venue plan P5): the reserved channels of a show
+        // running against an older pin, and whether it is held outright.
+        val reservedView = hold?.reservedView(universe.universe)
+        val heldNow = hold?.isHeld == true
 
         currentValues.forEach { (channelNo, channelValue) ->
             val parked = parkedView?.get(channelNo)
-            val outputValue = if (parked != null) {
+            val composed = if (parked != null) {
                 parked
             } else {
                 var v = channelValue
                 for (mod in transmitModifiers) v = mod.modify(universe, channelNo, v)
                 v
             }
+            // A reserved channel is what the wire carries, so the listeners see it too.
+            val outputValue = reservedView?.get(channelNo)?.guard(composed) ?: composed
             val byteValue = outputValue.toByte()
             dmxData[channelNo - 1] = byteValue
 
@@ -388,10 +401,13 @@ class ArtNetController(
         }
         previousSentDmxData = dmxData
 
+        // Held, the wire carries zeros on every channel — park included — while the listeners
+        // below still hear what the show composed, so every view keeps drawing it.
+        val wire = if (heldNow) ByteArray(512) else dmxData
         if (address == null) {
-            transport.broadcastDmx(universe.subnet, universe.universe, dmxData)
+            transport.broadcastDmx(universe.subnet, universe.universe, wire)
         } else {
-            transport.unicastDmx(address, universe.subnet, universe.universe, dmxData)
+            transport.unicastDmx(address, universe.subnet, universe.universe, wire)
         }
         packetCounter.record()
 

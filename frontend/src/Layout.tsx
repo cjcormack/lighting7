@@ -17,6 +17,7 @@ import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher, { useViewedProject } from "./ProjectSwitcher"
 import { VenueBand } from "./components/venue/VenueBand"
+import { VenueBehindBanner } from "./components/venue/VenueBehindBanner"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { PositionsPanel } from "./components/positions/PositionsPanel"
@@ -289,6 +290,10 @@ export default function Layout() {
                 so a full-height live view shrinks to fit rather than scrolling by the band's height.
                 Not while immersive, with the rest of the chrome (D7). */}
             {!immersive && <VenueBand projectId={viewedProject?.id} />}
+            {/* A show behind its venue (venue plan session 6): held, running against, or a drawing-only
+                banner. The same slot and the same reason as the band above; immersive, the live view's
+                header carries *Blind · venue* instead. */}
+            {!immersive && <VenueBehindBanner projectId={viewedProject?.id} />}
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
                 column rather than above it so it doesn't shift the ShowBar or the panels;

@@ -64,6 +64,12 @@ class CommandOutput(
     private val parks: ParkSource,
     /** Whether the programmer is blind: a command is refused then. */
     private val isBlind: () -> Boolean,
+    /**
+     * Why the show's venue hold refuses a command now (venue plan P5, `VenueHoldService.effectsRefusal`),
+     * or null. A held show sends nothing; one running against an older pin may be driving another
+     * unit on these channels.
+     */
+    private val venueRefusal: () -> String? = { null },
 ) : ParkSource, FixturesChangeListener, TransmitModifier {
 
     /** A dedicated command channel: whose it is, and the commands on it. */
@@ -95,6 +101,8 @@ class CommandOutput(
         data class Unknown(val message: String) : Outcome
         data object Blind : Outcome
         data class Parked(val message: String) : Outcome
+        /** The show is behind its venue on output (`VENUE_HOLD`). */
+        data class VenueHeld(val message: String) : Outcome
     }
 
     private val lock = Any()
@@ -183,6 +191,7 @@ class CommandOutput(
                 else "'${fixture.fixtureName}' has no command '$commandName' — it has ${commands.joinToString { it.name }}",
             )
         if (isBlind()) return Outcome.Blind
+        venueRefusal()?.let { return Outcome.VenueHeld(it) }
         val channels = listOf(command.channelNo) + command.alongside.map { it.channelNo }
         channels.firstOrNull { parks.isParked(command.universe, it) }?.let { ch ->
             return Outcome.Parked(

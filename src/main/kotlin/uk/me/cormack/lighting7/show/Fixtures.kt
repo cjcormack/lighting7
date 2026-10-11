@@ -125,9 +125,10 @@ class Fixtures {
      *
      * A version rather than a [FixturesChangeListener] on purpose. [register] fires its
      * listeners *outside* the write lock, so an evict-on-signal cache has a window where a
-     * reader sees the new register and the old cached value; and `changeListeners` is a plain
-     * list iterated without a lock. Bumping here, inside the write lock, has neither problem,
-     * and needs no re-attach when a project switch replaces the whole `Show`.
+     * reader sees the new register and the old cached value; and `changeListeners` is iterated
+     * without a lock (copy-on-write, so safely, but not atomically with the register). Bumping here,
+     * inside the write lock, has neither problem, and needs no re-attach when a project switch
+     * replaces the whole `Show`.
      *
      * **Read this before the register lookups it stamps, never after.** In that order the only
      * race is stamping a *stale* version onto an expansion built from the new register, which
@@ -173,7 +174,13 @@ class Fixtures {
 
     private fun channelMappingKey(universe: Universe, channel: Int) = "${universe.universe}:$channel"
 
-    private val changeListeners: MutableList<FixturesChangeListener> = mutableListOf()
+    /**
+     * Copy-on-write, because it is iterated outside [registerLock] (see [structureVersion]) while a
+     * project switch's collector registers the services on it from another thread: a plain list threw
+     * `ConcurrentModificationException` out of the next switch's `register` when two switches came close
+     * together. Registration is rare and iteration constant, which is the trade copy-on-write makes.
+     */
+    private val changeListeners: MutableList<FixturesChangeListener> = java.util.concurrent.CopyOnWriteArrayList()
 
     class FixturesWithTransaction(@PublishedApi internal val baseFixtures: Fixtures, val transaction: ControllerTransaction) {
         val controllers: List<DmxController> get () = baseFixtures.controllers

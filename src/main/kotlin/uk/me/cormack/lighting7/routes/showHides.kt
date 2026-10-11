@@ -101,7 +101,7 @@ private fun announceHideChange(state: State, projectId: Int, kind: HideKind) {
     when (kind) {
         HideKind.PATCH, HideKind.GROUP -> {
             if (state.projectManager.currentProject.id.value == projectId) {
-                DbFixtureLoader.loadFixtures(projectId, fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(projectId, fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             fixtures.patchListChanged()
         }

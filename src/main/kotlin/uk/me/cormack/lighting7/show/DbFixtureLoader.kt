@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.MockDmxController
+import uk.me.cormack.lighting7.dmx.OutputHold
 import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
@@ -34,13 +35,21 @@ object DbFixtureLoader {
      * parked channels survive the rebuild — controllers consult the source at
      * transmit time rather than holding their own park cache. Pass `null` from
      * tests that don't exercise the park subsystem.
+     *
+     * The optional [hold] is the show's (venue plan P5, session 6): judged **first**, before a
+     * controller exists — so a show that is behind its venue on output never puts a frame on the rig
+     * — and then shared by every controller built here. Every load judges it afresh, so an Update or a
+     * pulled pin move lifts or re-applies it at the reload that follows. Pass `null` from tests that
+     * don't exercise the hold.
      */
     fun loadFixtures(
         projectId: Int,
         fixtures: Fixtures,
         database: Database,
         parkSource: ParkSource? = null,
+        hold: RigHold? = null,
     ) {
+        hold?.judge(projectId)
         val (universeConfigs, patches, groups) = transaction(database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project $projectId not found")
@@ -126,7 +135,7 @@ object DbFixtureLoader {
                 val priorValues = priorValuesByUniverse[universe] ?: emptyMap()
 
                 val controller = when (config.controllerType.uppercase()) {
-                    "MOCK" -> MockDmxController(universe, parkSource = parkSource)
+                    "MOCK" -> MockDmxController(universe, parkSource = parkSource, hold = hold?.output)
                         .also { it.restoreState(priorValues) }
                     // ARTNET, and anything unrecognised, defaults to ArtNet.
                     else -> ArtNetController(
@@ -135,6 +144,7 @@ object DbFixtureLoader {
                         refreshIntervalMs = config.refreshIntervalMs,
                         initialValues = priorValues,
                         parkSource = parkSource,
+                        hold = hold?.output,
                     )
                 }
                 addController(controller)

@@ -43,8 +43,8 @@ import java.util.UUID
  *   moment. Editing the override's value later keeps it, so a drift the venue introduced stays drawn
  *   until the show answers it — *Keep mine* ([keepMine]: base becomes the venue's current value) or
  *   *Take venue's* (a revert).
- * - **Drift** is the pinned version's current value of the facet differing from [base] ([drift]). Only
- *   an Update moves a pin (session 6), so today a re-pin is what makes it.
+ * - **Drift** is the pinned version's current value of the facet differing from [base] ([drift]). An
+ *   Update moves the pin and leaves the base (`venue/VenueUpdate.kt`), so that is what makes it.
  *
  * Inside the caller's transaction. Every refusal is a [VenueException].
  */
@@ -203,7 +203,7 @@ object ShowOverrides {
     }
 
     /**
-     * One override set against a version — what drift is, and what session 6's Update review lists.
+     * One override set against a version — what drift is, and what the Update review lists (`VenueUpdate`).
      * [current] is that version's value of the facet; null with [missing] when the version has no such
      * patch (an Update would drop the override's subject).
      */
@@ -229,7 +229,7 @@ object ShowOverrides {
     /**
      * Every override [project] holds, judged against the venue version whose snapshot is [snapshotId] —
      * the pinned one by default. This is the drift read: today it answers the Patch list's amber chips
-     * (through [statesOf]); session 6's Update calls it with the target version's snapshot to list what
+     * (through [statesOf]); the Update review calls it with the target version's snapshot to list what
      * an update would move under the show's overrides. Empty for a project on no venue.
      */
     fun drift(project: DaoProject, snapshotId: EntityID<Int>? = null): List<FacetDrift> {

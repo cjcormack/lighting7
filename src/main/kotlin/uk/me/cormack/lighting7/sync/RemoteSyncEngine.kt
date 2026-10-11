@@ -116,6 +116,8 @@ class RemoteSyncEngine(
             }
         }
         if (exchange.draftReplaced) reloadShowIfActive(venueId)
+        // A pulled version may be newer than the live show's pin: judge its hold again (venue plan P5).
+        withContext(Dispatchers.IO) { state.venueHold.refreshCurrent() }
         return exchange.result
     }
 
@@ -427,7 +429,8 @@ class RemoteSyncEngine(
      * into the merged tree at [tree], which holds the remote's `project.json`: where only this desk's
      * pin moved since the merge base, it is written over the remote's. Where only the remote's moved,
      * or both did, the remote's stands — as the rest of `project.json` (name, description, stage size)
-     * always has; two desks re-pinning one show apart is session 6's Update to arbitrate. No merge base
+     * always has; nothing arbitrates two desks re-pinning one show apart (an Update only moves a pin
+     * forward, on one desk). No merge base
      * (unrelated histories) reads as a base with no pin.
      */
     private fun mergeProjectPin(repo: Repository, tree: Path, localSha: String, remoteSha: String) {

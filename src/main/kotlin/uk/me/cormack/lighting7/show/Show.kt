@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.LayeredParkSource
+import uk.me.cormack.lighting7.dmx.OutputHold
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
@@ -146,7 +147,12 @@ class Show(
      * session 7) — see [CommandOutput]. Beside the trigger output, under park; its band guard is a
      * transmit modifier, attached in [start].
      */
-    val commandOutput = CommandOutput(fixtures, parkManager, isBlind = { programmerStore.blind }).also { fixtures.registerListener(it) }
+    val commandOutput = CommandOutput(
+        fixtures,
+        parkManager,
+        isBlind = { programmerStore.blind },
+        venueRefusal = { state.venueHold.effectsRefusal() },
+    ).also { fixtures.registerListener(it) }
 
     /**
      * What the controllers consult at transmit time in place of the bare [parkManager]: park on top,
@@ -162,6 +168,15 @@ class Show(
             triggerOutput.admitsPark(universe, channel, value) && commandOutput.admitsPark(universe, channel, value)
         },
     )
+
+    /**
+     * The show's hold (venue plan P5, session 6): a show on a venue whose pinned version is behind the
+     * installed one on output sends zero on every channel, above park, while it composes and draws as
+     * normal; one running against its older pin keeps the installed version's trigger and command
+     * channels idle. Every `DbFixtureLoader.loadFixtures` call passes this, which judges it before it
+     * builds a controller and hands [OutputHold] to each. The judging is [State.venueHold]'s.
+     */
+    val rigHold = RigHold(OutputHold()) { projectId -> state.venueHold.judge(projectId, this) }
 
     val fxEngine = FxEngine(
         fixtures = fixtures,
@@ -241,7 +256,7 @@ class Show(
             // Park state must be loaded before controllers are constructed: controllers read
             // it via [ParkSource] on their first transmit.
             parkManager.loadFromDatabase()
-            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource)
+            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource, hold = rigHold)
             dropRefusedParks()
         } catch (e: Exception) {
             e.printStackTrace()

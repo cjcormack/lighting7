@@ -8,7 +8,8 @@ import { restApi } from './restApi'
  * so only the window that asked shows a countdown.
  *
  * Refusals, by `code`: `COMMAND_BUSY` (the unit is running another), `COMMAND_BLIND` (the programmer
- * is blind), `COMMAND_PARKED` (a channel it holds is parked), `COMMAND_UNKNOWN`, and on the desk's
+ * is blind), `COMMAND_PARKED` (a channel it holds is parked), `VENUE_HOLD` (the show is behind its
+ * venue on output), `COMMAND_UNKNOWN`, and on the desk's
  * public listener `REMOTE_COMMANDS_DISABLED` unless an admin has allowed fixture commands.
  */
 export interface FixtureCommandResponse {

@@ -107,7 +107,7 @@ class EffectsService(private val state: State) {
         val cueLabel: String? = null,
     )
 
-    enum class SkipReason { UNARMED, SPENT, ARM_DROPPED, UNKNOWN_TRIGGER }
+    enum class SkipReason { UNARMED, SPENT, ARM_DROPPED, UNKNOWN_TRIGGER, VENUE_HOLD }
 
     /** What a request to fire one tube came to. */
     sealed interface FireOutcome {
@@ -115,6 +115,8 @@ class EffectsService(private val state: State) {
         data object Unarmed : FireOutcome
         data class Spent(val spentAt: Instant) : FireOutcome
         data class Unknown(val message: String) : FireOutcome
+        /** The show is behind its venue on output ([VenueHoldService]): nothing is sent. */
+        data class Held(val message: String) : FireOutcome
     }
 
     /** One event as a GO hands it over: which tube, and when after GO. */
@@ -205,8 +207,13 @@ class EffectsService(private val state: State) {
 
     // ─── The arm ─────────────────────────────────────────────────────────────────────────────
 
-    /** Arm the desk for [seconds] (default [DEFAULT_ARM]); re-arming restarts the clock. */
+    /**
+     * Arm the desk for [seconds] (default [DEFAULT_ARM]); re-arming restarts the clock. A show behind
+     * its venue on output refuses it (`VENUE_HOLD`, [VenueHoldService]): held, or running against an
+     * older pin with the hall's cannons reserved idle, no fire could do what it says.
+     */
     fun arm(seconds: Long? = null): ArmState {
+        state.venueHold.refuseEffectsIfHeld()
         val length = Duration.ofSeconds((seconds ?: DEFAULT_ARM.seconds).coerceIn(MIN_ARM.seconds, MAX_ARM.seconds))
         val current = show ?: return _armed.value
         synchronized(lock) {
@@ -270,11 +277,13 @@ class EffectsService(private val state: State) {
      */
     fun fire(fixtureKey: String, trigger: String, source: Source, rehearse: Boolean = false, cueId: Int? = null): FireOutcome {
         val current = show ?: return FireOutcome.Unknown("The show is not running")
+        val rehearsal = rehearse || blind(current)
+        // First: a show behind its venue on output fires nothing, and saying so names the reason that matters.
+        if (!rehearsal) state.venueHold.effectsRefusal()?.let { return FireOutcome.Held(it) }
         val resolved = current.triggerOutput.triggersOf(fixtureKey).firstOrNull {
             it.name.equals(trigger, ignoreCase = true) || it.spec.label.equals(trigger, ignoreCase = true)
         } ?: return FireOutcome.Unknown(unknownTrigger(current, fixtureKey, trigger))
         val fixtureName = runCatching { current.fixtures.untypedFixture(fixtureKey).fixtureName }.getOrDefault(fixtureKey)
-        val rehearsal = rehearse || blind(current)
         val at = nowUtc()
         if (!rehearsal) {
             if (!_armed.value.armed) return FireOutcome.Unarmed
@@ -315,6 +324,7 @@ class EffectsService(private val state: State) {
             FireOutcome.Unarmed -> announce(SkipReason.UNARMED, "Not armed: the surface's fire on '$fixtureKey' did nothing", listOf(fixtureKey to trigger), Source.SURFACE)
             is FireOutcome.Spent -> announce(SkipReason.SPENT, "'$fixtureKey' $trigger is spent — reload it first", listOf(fixtureKey to trigger), Source.SURFACE)
             is FireOutcome.Unknown -> announce(SkipReason.UNKNOWN_TRIGGER, outcome.message, listOf(fixtureKey to trigger), Source.SURFACE)
+            is FireOutcome.Held -> announce(SkipReason.VENUE_HOLD, outcome.message, listOf(fixtureKey to trigger), Source.SURFACE)
         }
     }
 
@@ -382,6 +392,10 @@ class EffectsService(private val state: State) {
             is FireOutcome.Unknown -> {
                 logger.warn("Cue {}: {}", cueLabel, outcome.message)
                 announce(SkipReason.UNKNOWN_TRIGGER, "$cueLabel: ${outcome.message}", listOf(event.fixtureKey to event.trigger), Source.CUE, cueId, cueLabel)
+            }
+            is FireOutcome.Held -> {
+                logger.warn("Cue {}: {}", cueLabel, outcome.message)
+                announce(SkipReason.VENUE_HOLD, "$cueLabel: ${outcome.message}", listOf(event.fixtureKey to event.trigger), Source.CUE, cueId, cueLabel)
             }
         }
     }

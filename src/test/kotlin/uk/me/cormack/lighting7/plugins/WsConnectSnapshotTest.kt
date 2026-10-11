@@ -65,6 +65,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The arm, in the show band: on a fresh desk it is disarmed with nothing spent, and that is
         // still the frame every window's ARMED chip and cannon panel start from (stage-view session 9).
         EffectsArmedOutMessage::class,
+        // The hold (venue plan session 6), in the show band: a standalone show's frame says nothing is
+        // held, and that is still what every window's banner and Blind chip start from.
+        VenueHoldOutMessage::class,
     )
 
     @Test

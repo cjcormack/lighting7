@@ -37,6 +37,11 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command
+  // A refused update (an open decision, a clash, a version moved on) is drawn in the review sheet,
+  // which keeps the operator's answers for the retry; a refused *Run against* in its confirm, and
+  // the banner's *Hold output* toasts its own.
+  'updateVenue', // src/components/venue/VenueUpdateSheet.tsx
+  'runVenueAgainst', // src/components/venue/RunAgainstDialog.tsx, src/components/venue/VenueBehindBanner.tsx
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

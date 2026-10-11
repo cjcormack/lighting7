@@ -284,6 +284,7 @@ for each channel:
 **Key invariants:**
 
 - Modifiers do **not** see parked channels — parking is an unconditional override
+- The show's hold is applied after both and is not a modifier — see [§The hold](#the-hold)
 - Modifiers run in registration order (`CopyOnWriteArrayList` — snapshot iteration, no
   per-frame allocation)
 - Modifiers are hot-path code: they must be fast and thread-safe
@@ -459,6 +460,53 @@ To carry channel state across a rebuild, pass `initialValues` to the constructor
 calling `restoreState` afterwards: the loop starts transmitting immediately, so a
 post-construction restore races the bootstrap frame and can let one all-zero frame reach the
 rig.
+
+## The hold
+
+A show on a venue whose pinned version is behind the installed one **on output** is **held** (venue
+plan P5, D7; session 6): its addresses would drive whatever the hall has hung there since. The hold is
+[`OutputHold`](../src/main/kotlin/uk/me/cormack/lighting7/dmx/OutputHold.kt), one per show, handed by
+`DbFixtureLoader` to every controller it builds and read by `sendCurrentValues()` once per frame:
+
+```
+for each channel:
+    value = parked ?: modifiers(currentValues[channel])   // as above
+    value = reserved[channel]?.guard(value) ?: value      // run-against only, below
+    listeners hear value                                    // what every view draws
+wire = held ? zeros : values
+```
+
+- **Above park, above every modifier.** Held, every channel goes out at zero — a parked one too. A
+  park is the show's, and a v3 park on a v5 rig is as wrong as a v3 cue, so it is not the operator's
+  hand on *this* rig. `DmxController.held` says so; `MockDmxController.transmittedValue` is the wire for
+  a test.
+- **The show composes and draws as normal.** The buffer, `getValue` (park included) and the channel
+  listeners — `channelState`, the Stage view, the channel views, Preview, the surfaces' feedback —
+  carry on as if the hold were not there: only the bytes handed to the transport are zeroed. That is
+  what lets the operator look at the show before deciding to update it.
+- **Judged before a controller exists.** The loader asks `VenueHoldService.judge` (through the show's
+  `RigHold`) first, so a held show never puts one frame on the rig; every load judges afresh, so an
+  Update (which reloads) or a pulled pin move (the pull reloads) lifts or applies it. A publish or a
+  venue pull that installs a newer version while a show is live and not held does **not** black it out
+  mid-run: it carries on as if run against its pin (below) and opens held the next time it is opened.
+- **Reserved channels.** *Run against vN* lifts the hold for the session (runtime only: it survives a
+  reload of the same project at the same pin and installed version, and is dropped by another project,
+  a moved pin, a newer version or a restart). While it runs, the **installed** version's one-shot
+  trigger and arm channels and its fixture-command channels — at the venue's address and, for a unit
+  the show re-addresses, at the show's — are reserved: a dedicated one goes out at its idle level
+  whatever the old patch writes there (`Reserve.Fixed`), one the installed rig shares with a property
+  (a MAC 250's shutter) at idle only inside a command's band (`Reserve.Band`). Unlike the hold this
+  *is* what the wire carries, so the listeners hear it too. A unit the show hides counts: a hide takes
+  it out of the show, not off the bar.
+- **Not a transmit modifier.** A modifier runs under park and is a lighting rule; the hold is the last
+  word on the wire and is not, so it is a field the transmit loop reads, beside the park view.
+- Arming, firing and fixture commands are refused with `VENUE_HOLD` while the show is behind on
+  output, held or running against (`state/VenueHoldService.kt`); a rehearsed fire, drawn and never
+  sent, is not. Programmer Blind is unchanged — it is the programmer's gate, the hold is the show's.
+
+Regression coverage: `OutputHoldTest` (the wire against the listeners, park, the reserves) and
+`venue/VenueHoldTest` (a held show composes and sends zero, the refusals, the reserved trigger channel
+under *Run against*).
 
 ## Parking
 

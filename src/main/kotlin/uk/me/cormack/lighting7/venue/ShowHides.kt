@@ -109,6 +109,19 @@ object ShowHides {
         return setHidden(project, rig, venue.snapshotId, kind, uuid, hidden)
     }
 
+    /**
+     * Why hiding the venue record [uuid] of [kind] would be refused now, or null when it may hide — the
+     * same in-use rule [setHiddenByUuid] throws `VENUE_HIDE_IN_USE` for, without the throw. What an
+     * Update's review asks before it offers *Hide the venue's* (`venue/VenueUpdate.kt`).
+     */
+    fun hideRefusal(project: DaoProject, kind: HideKind, uuid: UUID): String? {
+        val rig = RigScope.of(project)
+        val venue = rig.venue ?: return "this project is not a show on a venue"
+        val row = venueRow(venue.snapshotId, kind, uuid) ?: return "the venue has no such ${kind.label()}"
+        val holders = holdersOf(project, rig, venue.snapshotId, kind, row)
+        return if (holders.isEmpty()) null else "${row.describe(kind)} is still in use in this show: ${holders.joinToString("; ")}"
+    }
+
     private fun setHidden(
         project: DaoProject,
         rig: RigScope,

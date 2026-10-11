@@ -111,7 +111,7 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             if (state.isCurrentProject(project)) {
                 if (rebuildNeeded) {
                     // Reload controllers so the new address takes effect at runtime
-                    DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                    DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
                 } else {
                     // Hot-swap: a rebuild would reconstruct the socket and 512 coroutines
                     // per universe and push a controllersChanged to every client, all to
@@ -167,7 +167,7 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
 
             // Reload controllers to remove the deleted universe
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             state.show.fixtures.patchListChanged()
 

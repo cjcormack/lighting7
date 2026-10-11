@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.plugins.toMessage
 import uk.me.cormack.lighting7.state.EffectsService
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.VenueHoldService
 
 /**
  * One-shot effects over REST (stage-view plan session 9, §3.3, P2):
@@ -39,6 +40,8 @@ import uk.me.cormack.lighting7.state.State
  *   `TRIGGER_UNKNOWN` for a trigger the fixture does not have. `rehearse` — or a blind programmer —
  *   rehearses: announced, drawn, never sent, no arm needed.
  * - `POST /projects/{id}/patches/{pid}/reload` `{trigger?}` — mark one tube (or every tube) loaded.
+ * - Arm and a real fire are 409 `VENUE_HOLD` while the show is behind its venue on output — held, or
+ *   running against an older pin (venue plan P5, `state/VenueHoldService.kt`); a rehearsal is not.
  * - `PUT /projects/{id}/cues/{cid}/events` `{events: [{patchId, trigger, offsetMs}]}` — a cue's whole
  *   event list, every problem at once.
  *
@@ -76,6 +79,10 @@ internal fun Route.routeApiRestProjectEffects(state: State) {
                     ErrorResponse("That tube is spent (fired ${outcome.spentAt.toIsoUtc()}): nothing was sent — reload it first", "TRIGGER_SPENT"),
                 )
                 is EffectsService.FireOutcome.Unknown -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, "TRIGGER_UNKNOWN"))
+                is EffectsService.FireOutcome.Held -> call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse(outcome.message, VenueHoldService.CODE_VENUE_HOLD),
+                )
             }
         }
     }

@@ -4791,7 +4791,10 @@ because it would take the switcher, Stop, the live dot and the way out, and the 
 floating button over a live view, which the full-screen work already refused. Chrome above the busk
 band went 152 → 88 → 40. What the app header took with it comes back **where it is read** (D10): a
 red *Offline* chip on the `ShowHeader`, drawn only while immersive *and* the socket is down
-(`useIsDeskConnected`) — a pill reading *Connected* all night is what immersive exists to remove;
+(`useIsDeskConnected`) — a pill reading *Connected* all night is what immersive exists to remove —
+and beside it an amber *Blind · venue* chip while the live show is held by its venue (`VenueHeldChip`,
+venue plan session 6: the app header's `ProgrammerIndicator` carries that reason too, and the venue
+banner under the header, `VenueBehindBanner`, offers *Review update* and *Run against*);
 below `md` the mobile drawer's **button** at the header's left edge while immersive, since the
 hamburger in the app header was the only navigation there (the drawer and its open state stay
 `Layout`'s, and `components/mobileDrawerContext.ts` lends the opener); the blind report and value
