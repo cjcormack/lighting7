@@ -22,6 +22,13 @@ sealed interface DmxController {
 
     val currentValues: Map<Int, UByte>
 
+    /**
+     * Whether this controller is sending zero on every channel because its show is **held** (venue
+     * plan P5, `dmx/OutputHold.kt`): checked above park, after every modifier. The buffer, [getValue]
+     * and the channel listeners carry on as if it were not — a held show composes and draws as normal.
+     */
+    val held: Boolean get() = false
+
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
 
     /**
@@ -52,7 +59,8 @@ sealed interface DmxController {
 
     /**
      * Register a [TransmitModifier] that will transform channel values at transmit time.
-     * Modifiers are applied in registration order, after park resolution.
+     * Modifiers are applied in registration order, after park resolution — and before the show's
+     * [OutputHold], which has the last word.
      *
      * No-op if the modifier is already registered.
      */

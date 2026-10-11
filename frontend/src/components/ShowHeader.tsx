@@ -22,6 +22,7 @@ import { useOpenMobileDrawer } from './mobileDrawerContext'
 import { ImmersiveToggle } from './ImmersiveToggle'
 import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ArmedChip } from './effects/ArmedChip'
+import { VenueHeldChip } from './venue/VenueHeldChip'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 import { useVenueMode } from '@/store/venues'
 
@@ -184,6 +185,9 @@ export function ShowHeader({
         {/* ARMED, while immersive: the app header that carries it is not drawn, and the arm is the
             one state no screen may hide (stage-view plan session 9, D16). */}
         {immersive && <ArmedChip className="h-6" />}
+        {/* Blind · venue, while immersive: the app header's chip that says the show is held is not
+            drawn, and a held show looks like a working one (venue plan session 6). */}
+        {immersive && <VenueHeldChip projectId={projectId} />}
         {immersive && !connected && (
           <Badge variant="destructive" className="h-5 shrink-0 px-2 text-[10px] uppercase tracking-wide" title="The desk's socket is down">
             Offline

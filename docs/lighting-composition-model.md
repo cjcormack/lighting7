@@ -26,6 +26,16 @@ Intuition: parking (Layer 1) sits on top for safety. The programmer (Layer 2) is
 **Scenery sits beside the layers, not in them** (stage-view plan session 8): a tab drawn, a
 flown piece trimmed or a piece shown is resolved separately, never as a channel — see §"Scenery" below.
 
+**The venue hold sits above the stack, not in it** (venue plan P5, session 6). A show on a venue whose
+pinned version is behind the installed one on output is held: the stack resolves exactly as above —
+park included — and every view draws the result, but the wire carries zero on every channel, because
+the show's addresses (and its parks) belong to a rig the hall no longer is. It is not a layer: nothing
+composes under or over it, and it changes no layer's state, so lifting it (an Update, or *Run against*)
+puts the composed output on the wire at once. *Run against* leaves the installed version's trigger and
+command channels reserved idle above park. Programmer Blind (Layer 2's gate) is a different thing and
+is unchanged; the app header's chip reads *Blind · venue* for this one. `docs/dmx-engineering.md`
+§"The hold" has the transmit-time rule.
+
 > **Historical note.** Before the programmer redesign the manual layer ("Direct Live
 > Writes") sat *below* playbacks at the old Layer 4, and Effects/Assignments were Layers
 > 2/3. Only the archived plans in [plans/completed/](plans/completed/) still use those

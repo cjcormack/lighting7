@@ -451,6 +451,25 @@ The **three MIDI doors** are `PickUpPad(padUuid)`, `HandPlaceInBank(bankUuid)` a
 button's place runs the same append `POST /busk/banks/{bankId}/pads` runs. See
 `docs/midi-control-surface-engineering.md`.
 
+### Venue hold — `VenueSocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `venue.hold` | `projectId?: Int`, `held: Boolean`, `pinned?: Int`, `installed?: Int`, `runAgainst: Boolean` | Connect snapshot + broadcast |
+
+The live show's hold (venue plan P5, D7; session 6; `state/VenueHoldService.kt`): `held` while it is
+behind its venue on output and every controller sends zero, `runAgainst` once the operator has lifted
+that for the session, `pinned` the version the show uses and `installed` the venue's latest. A
+standalone show, a venue and a show on its installed version send `held: false` with no versions.
+**Outbound only**: *Run against* and Update are REST (`POST …/venue/run-against`, `…/venue/update`),
+so the socket gains no operation and `FU-AUTH-WS-PER-MESSAGE` stays unfired. `StateFlow`-backed, so the
+subscription is the snapshot; a frame moves when a load judges the hold (a switch, a reload, an
+Update), when a publish or a venue pull installs a newer version (a live show that was not held then
+reads `runAgainst`, never `held` — it is not blacked out mid-run), and on *Run against*. The client's
+app-header chip reads *Blind · venue* from it and the venue banner draws held or running against.
+
+Registered in the **show band** beside effects: the hold is the current project's.
+
 ### Busk page — `BuskSocket.kt`
 
 | Message | Fields | Reply |
@@ -802,7 +821,7 @@ re-attached to the new show on a switch.
 |---|---|---|
 | `effects.armed` | `armed: Boolean`, `armedUntil?: String`, `remainingMs?: Long`, `rehearsal: Boolean`, `spent: [{fixture, trigger, spentAt}]`, `projectId?: Int` | Connect snapshot + broadcast |
 | `effects.fired` | `fixture`, `fixtureName`, `trigger`, `label`, `at: String`, `rehearsed: Boolean`, `source: "cue" \| "panel" \| "surface"`, `cueId?: Int` | Event, every socket |
-| `effects.skipped` | `reason: "UNARMED" \| "SPENT" \| "ARM_DROPPED" \| "UNKNOWN_TRIGGER"`, `message`, `tubes: [{fixture, trigger}]`, `source`, `cueId?`, `cueLabel?` | Event, every socket |
+| `effects.skipped` | `reason: "UNARMED" \| "SPENT" \| "ARM_DROPPED" \| "UNKNOWN_TRIGGER" \| "VENUE_HOLD"`, `message`, `tubes: [{fixture, trigger}]`, `source`, `cueId?`, `cueLabel?` | Event, every socket |
 
 The desk's one-shot effects (stage-view plan session 9; `state/EffectsService.kt`). **There is no
 inbound message**, and that is the design (P2): arming, firing and reloading are REST

@@ -314,7 +314,7 @@ fixture's commands beside its triggers (`commands=reset (Reset, 5.0 s),…`, wit
 for its hold). Over MCP it answers `isError` unless an admin has allowed fixture commands (§"Remote
 hardening"), and the schema says to run one only when the operator asked for that command on that
 fixture: a model cannot see the head swing or the stage go dark. Its refusals carry the route's codes
-(`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `COMMAND_UNKNOWN`). A row naming a command as a
+(`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `VENUE_HOLD`, `COMMAND_UNKNOWN`). A row naming a command as a
 property is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
 
 Tools act on the desk's **current** project. Before the show is warm a call

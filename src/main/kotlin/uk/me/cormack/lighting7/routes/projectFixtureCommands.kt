@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.state.CommandOutput
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.VenueHoldService
 
 /**
  * Fixture commands over REST (fixture optics plan session 7, §3.4, D13):
@@ -28,6 +29,8 @@ import uk.me.cormack.lighting7.state.State
  * - 409 `COMMAND_BUSY` — the fixture is holding another command (one at a time per unit);
  * - 409 `COMMAND_BLIND` — the programmer is blind, and a command would reach the rig;
  * - 409 `COMMAND_PARKED` — a channel the command holds is parked, so it would not reach the fixture;
+ * - 409 `VENUE_HOLD` — the show is behind its venue on output, held or running against an older pin
+ *   (venue plan P5, `state/VenueHoldService.kt`);
  * - 403 `REMOTE_COMMANDS_DISABLED` — on the public listener, unless an admin has allowed it
  *   ([requireCommandsAccess]); both roles may run one on the desk's own listener.
  *
@@ -90,6 +93,7 @@ internal suspend fun runFixtureCommand(state: State, fixtureKey: String, command
             "The programmer is blind: a command would reach the rig, so it is refused until Blind is off",
         )
         is CommandOutput.Outcome.Parked -> FixtureCommandResult.Refused(HttpStatusCode.Conflict, "COMMAND_PARKED", outcome.message)
+        is CommandOutput.Outcome.VenueHeld -> FixtureCommandResult.Refused(HttpStatusCode.Conflict, VenueHoldService.CODE_VENUE_HOLD, outcome.message)
     }
 }
 

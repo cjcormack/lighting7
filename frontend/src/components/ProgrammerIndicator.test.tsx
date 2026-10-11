@@ -17,6 +17,8 @@ vi.mock('../store/programmer', () => ({
 vi.mock('../store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1 } }),
 }))
+const hold = { projectId: 1, held: false, pinned: 3 as number | null, installed: 5 as number | null, runAgainst: false }
+vi.mock('../store/venueHold', () => ({ useVenueHold: () => hold }))
 
 import { ProgrammerIndicator } from './ProgrammerIndicator'
 
@@ -32,6 +34,7 @@ afterEach(() => {
   cleanup()
   summary.entryCount = 0
   summary.blind = false
+  hold.held = false
 })
 
 describe('ProgrammerIndicator', () => {
@@ -114,5 +117,20 @@ describe('ProgrammerIndicator', () => {
     summary.blind = true
     const blind = draw()
     expect(blind.container.innerHTML).toContain('amber')
+  })
+
+  it('says Blind · venue when the live show is held by its venue, and why in the tooltip', () => {
+    hold.held = true
+    draw()
+    expect(screen.getByText('Blind · venue')).toBeTruthy()
+    expect(screen.getByLabelText(/output held: this show uses v3 and the hall is v5/)).toBeTruthy()
+  })
+
+  it('does not take another project’s hold', () => {
+    hold.held = true
+    hold.projectId = 2
+    const { container } = draw()
+    expect(container.innerHTML).toBe('')
+    hold.projectId = 1
   })
 })

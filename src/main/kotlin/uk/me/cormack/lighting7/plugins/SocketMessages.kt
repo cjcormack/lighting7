@@ -56,6 +56,7 @@ sealed class InMessage
     SpeedMasterOutMessage::class,
     StageRenderOutMessage::class,
     SurfaceOutMessage::class,
+    VenueOutMessage::class,
     WindowsOutMessage::class,
 )
 sealed class OutMessage

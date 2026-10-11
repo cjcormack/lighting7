@@ -89,7 +89,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
 
             // Reload fixtures if project is current (group order affects runtime)
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             state.show.fixtures.patchListChanged()
 
@@ -114,7 +114,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
             if (deleted > 0) state.show.fixtures.buskRigChanged()
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             state.show.fixtures.patchListChanged()
 

@@ -127,7 +127,7 @@ private fun announceFacetChange(state: State, projectId: Int, facet: PatchFacet,
     if ((facet == PatchFacet.ADDRESS || facet == PatchFacet.MEDIA) &&
         state.projectManager.currentProject.id.value == projectId
     ) {
-        DbFixtureLoader.loadFixtures(projectId, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+        DbFixtureLoader.loadFixtures(projectId, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
     }
     state.show.fixtures.patchListChanged()
 }

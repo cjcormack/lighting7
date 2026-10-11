@@ -21,6 +21,7 @@ rationale — and the decisions not to re-litigate — is in
 | Install settings (`PUT /api/rest/install`), cloud sync, GitHub OAuth | yes | no |
 | A venue: editing it, its History, diff, publish and discard | yes | no — it may open one, read-only |
 | Extracting a venue from a show | yes | no |
+| Updating a show to a newer venue version, and running it against an older one | yes | yes |
 
 There are no per-project or per-fixture permissions — with the one exception of a **venue**, below. Enforcement is **compositional**: an
 admin-only subtree is wrapped in `adminOnly {}` (`auth/AuthGate.kt`) at its mount point, so
@@ -90,6 +91,11 @@ a version of it is. Two gates carry it:
   and a write to one of the venue's rows through it is 409 `VENUE_OWNED` for both — a role does not
   make a venue's row a show's. Hiding a venue record in a show (`PUT …/hidden`) is a show write, open
   to both roles.
+- **Update and *Run against*** (venue plan session 6) are **both roles'**. An Update
+  (`POST /projects/{id}/venue/update`) is a stored write to a show — its pin and its own rows' links —
+  of the same weight as hiding a venue fixture or overriding a facet, which operators make; *Run
+  against* (`POST …/venue/run-against`) is a runtime gesture, like arming, and whoever is at the desk
+  tonight is who decides to run the old patch. The venue itself stays an admin's.
 - **MCP** (`mcp/McpProtocol.kt`) holds an operator's tools to the same line on a live venue: the
   tools that store something are refused, `aim_fixtures` with `saveAsTemplate` among them. Record and
   Update are off in a venue for both roles (D11), and the Programmer's Update and *New template* are

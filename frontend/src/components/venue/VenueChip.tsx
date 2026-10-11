@@ -7,7 +7,7 @@ import type { ProjectVenue } from '@/api/projectApi'
  * A show's venue on its header (venue plan session 3, `Show.dc.html`): the venue and the version
  * the show is pinned to, and **Open venue**, which goes to the venue's own Patch list — opening it
  * there, not switching the desk's live project to it. A newer installed version is named, plainly;
- * what that means for the show (behind, held) is session 6's. A venue this desk does not hold reads
+ * what that means for the show (behind, held) is the venue banner's (`VenueBehindBanner`, session 6). A venue this desk does not hold reads
  * as its uuid's start and opens nothing.
  */
 export function VenueChip({ venue, to = 'patches' }: { venue: ProjectVenue; to?: string }) {

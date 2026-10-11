@@ -751,8 +751,9 @@ The library's commands:
 - **What refuses a command**, each with its own code on the route: another command on the same unit
   (`COMMAND_BUSY` — one at a time per fixture; different fixtures run together), Blind
   (`COMMAND_BLIND` — it would reach the rig), a parked channel among those it holds (`COMMAND_PARKED`
-  — a park beats the hold, so it would not reach the fixture), and the public listener unless an
-  admin allows it (`REMOTE_COMMANDS_DISABLED`). A project switch or shutdown ends a hold as
+  — a park beats the hold, so it would not reach the fixture), a show behind its venue on output
+  (`VENUE_HOLD`, §"Behind, the hold and Update"), and the public listener unless an admin allows it
+  (`REMOTE_COMMANDS_DISABLED`). A project switch or shutdown ends a hold as
   *interrupted*, as does a repatch that takes the fixture or its command away, and so does a park
   landing mid-hold on any channel the hold owns (its own or a precondition's — polled every 100 ms):
   the park would hide the rest of the hold from the fixture, so the request answers `completed:
@@ -1959,10 +1960,10 @@ placement's patch and rigging, a group member's group and patch, a busk rig tile
 a cue event's patch, and the cue, stack and Look scenery rows' element. Each entry names how its row
 belongs to a project (its own `project_id`, or its parent's) and can **re-point** one project's links
 from the rows of one project to the same-uuid rows of another, reporting any uuid the target project
-lacks and leaving that row as it was. Venue Update, Extract and Detach will re-point through it
-rather than turning the links into uuid columns, which would be a non-additive change to eight tables
-with no migrations (venue plan P3). Extract (session 3) is its first production caller;
-`VenueLinksRepointTest` exercises every link.
+lacks and leaving that row as it was. Extract (session 3) and Update (session 6) re-point through it,
+and Detach (session 7) will, rather than turning the links into uuid columns, which would be a
+non-additive change to eight tables with no migrations (venue plan P3); `VenueLinksRepointTest`
+exercises every link.
 
 `VenueLinksCoverageTest` reads every table in `ALL_TABLES` through Exposed's foreign-key metadata and
 fails, naming the column, on a foreign key into a venue-ownable table with no entry — as
@@ -2062,8 +2063,9 @@ Each change is classified the way a show's update will be (venue plan §3.1, D7)
 A patch change also names its **facets** (§3.2's Address, Position, Focus, Media, plus Type, Identity
 and Other), which is what the Patch list's Draft column says (`Media · L201 → L202`). A renumbered
 universe is an output change on the universe and on every patch on it, each of which really has a new
-address. Session 6's hold and Update will read the same classification, so what Publish says will
-reach a show is what the show will see.
+address. A show's hold and its Update review read the same classification (§"Behind, the hold and
+Update"), so what Publish says will reach a show is what the show will see — less what the show's own
+layer stands between.
 
 **Files.** `models/venueVersions.kt` (the index), `sync/KeptUuidCopy.kt` (the copy),
 `venue/VenueVersions.kt` (publish, history, diff, discard), `venue/VenueDiff.kt` (the rule),
@@ -2159,7 +2161,7 @@ venue's paint.
 **Projects.** `POST /projects {venueId}` pins a new show to the venue's installed version (409
 `VENUE_NOTHING_PUBLISHED` before v1; `NOT_A_VENUE` for any other project); its stage size is the
 venue's, so the request's is not stored. `ProjectDto` carries `venue: {uuid, id, name, version,
-installed}` (`behind` is session 6's). **A venue a show pins cannot be deleted** (409
+installed, behind}` (`behind` below, §"Behind, the hold and Update"). **A venue a show pins cannot be deleted** (409
 `VENUE_IN_USE`, naming the shows): a show's rows link into its version's rows by id, and the venue's
 delete takes its versions; Detach (session 7) is the way off. History answers `shows` — every show
 on the venue with its version — which the Publish sheet and History name.
@@ -2230,8 +2232,8 @@ operator's write to a venue). An Address or Media write to the live show reloads
 `{patch, changed, warnings}`.
 
 **Drift** is the pinned version's current value of a facet differing from the override's `base`: the
-venue changed something the show had overridden. Only an Update moves a pin (session 6), so today a
-re-pin makes it. **Editing an override keeps its base**, so the drift stays drawn until the show
+venue changed something the show had overridden. An Update moves the pin and leaves the base, so the
+drift appears then (§"Behind, the hold and Update"). **Editing an override keeps its base**, so the drift stays drawn until the show
 answers it: ***Keep mine*** — `POST …/facets/{facet}/keep-mine`, the override stays and `base` becomes
 the venue's current value (409 `FACET_NOT_OVERRIDDEN` with none) — or ***Take venue's***, which is a
 revert (`{value: null}`). `FixturePatchDto.facets` lists a venue patch's overridden facets, each
@@ -2239,8 +2241,8 @@ revert (`{value: null}`). `FixturePatchDto.facets` lists a venue patch's overrid
 already the overridden ones; `universeConfigUuid` beside them names the universe an Address facet
 does. **The drift read is `ShowOverrides.drift(project, snapshotId?)`** — every override against the
 pinned version, or against any version's snapshot, each `{recordUuid, patchKey, facet, value, base,
-current, missing, dormant}` with `drifted` (`dormant` judged against the pinned version only) — which is what session 6's Update review calls with the target
-version's snapshot (`missing` is an override whose patch that version lacks).
+current, missing, dormant}` with `drifted` (`dormant` judged against the pinned version only) — which is what the Update review calls with the target
+version's snapshot (`missing` is an override whose patch that version lacks; §"Behind, the hold and Update").
 
 **Not a drag.** The Stage editor's drag of a venue patch is still `VENUE_OWNED` (the bulk placement
 route): a Position override is a decision taken whole, in the fixture sheet's *This show*, with a base
@@ -2249,6 +2251,73 @@ the Stage editor's) draws a *Venue | This show* switch per facet, the drift note
 *Take venue's*, and the Patch list's *This show* column four chips, lit where overridden and amber
 where drifted. A venue rigging, element, region, group or viewpoint is still only hidden
 (`FU-VENUE-ELEMENT-OVERRIDES`).
+
+### Behind, the hold and Update
+
+A show is **behind** when its pin is older than the installed version (venue plan §3.1, D2, D7;
+session 6). `venue/ShowBehind.kt` judges how far, reading the gap through `VenueVersions.diff` — the
+same diff History draws, through its snapshot cache — and §"The diff rule" above:
+
+- **`OUTPUT`** when an output-affecting change **reaches the show**. Two kinds do not, and count as
+  drawing: a change to a patch the show **hides** (removed, re-addressed or re-typed, it drives that
+  unit at neither version), and a **re-address** of a patch whose Address the show **overrides**,
+  where the override applies at both versions (its universe is in both rigs) — the show sends that unit
+  to its own address either way, and the venue's move is drift, said by the review and the Patch
+  list's chip. A re-type, a universe change and an added patch always reach it. The reasoning: the
+  hold is for what an Update would change on the wire, and a hold over a change the update itself
+  would not make only darkens the rig until someone presses a button that sends the same thing. A gap
+  that cannot be read fails closed, as `OUTPUT`.
+- **`DRAWING`** otherwise; **`NONE`** on the installed version, for a standalone show, a venue, and a
+  pin this desk lacks (it loads no rig, `VENUE_MISSING`).
+
+`ProjectDto.venue.behind` carries it. A show behind on output **opens held**: `DbFixtureLoader` asks
+`state/VenueHoldService.kt` before it builds a controller, and every controller sends zero, above park,
+while the show composes and draws (`docs/dmx-engineering.md` §"The hold"). *Run against vN* (`POST
+/projects/{id}/venue/run-against {on}`, the current project, both roles, 409 `VENUE_NOT_BEHIND` when
+there is no hold) lifts it for this pin pair on this desk run — a reload keeps it, another project, a
+moved pin, a newer version or a restart drops it — and keeps the installed version's trigger, arm and
+command channels reserved idle. Arm, fire and fixture command are 409 `VENUE_HOLD` while the show is
+behind on output, held or running against. A publish and a venue pull re-judge the live show, but a
+show the hall moves under **mid-run** is never blacked out: it carries on as if run against its pin —
+output live, the new version's trigger and command channels reserved, arming refused — and opens held
+the next time it is opened (`VenueHoldService.refreshCurrent`; decided with Chris, 2026-10-11, since an
+unattended venue sync could otherwise black out a performance). `venue.hold`,
+`docs/websocket-engineering.md`.
+
+**Update** (`venue/VenueUpdate.kt`, P3, P8): `GET /projects/{id}/venue/update?to=n` is the review,
+`POST …/venue/update {to?, decisions, dryRun?}` the update, both roles (a stored show write, as a hide
+or a facet override is). One transaction:
+
+1. The pin moves; every `VenueLinks` link the show's own rows hold into the pinned snapshot is
+   re-pointed to the target's row of the same uuid, link by link through `VenueLinks.ALL` in its
+   order (as `repointAll` does), so each link's unmatched rows can be dropped as step 2 says.
+2. A link to a record the target lacks is **dropped**: a show patch or placement hung on a removed
+   rigging comes off it and keeps its position; a group member, a busk tile, a cue event or a cue's,
+   stack's or Look's scenery row is deleted. A show patch on a removed universe cannot be dropped and
+   is a **blocker** (`UNIVERSE_REMOVED`) — re-patch it first.
+3. Hides and overrides follow by uuid. A hide or an override of a record the target lacks is dropped
+   too; a drifted override is **kept** (its base untouched, so the Patch list lights the drift after),
+   unless answered `TAKE_VENUES`, a revert. An override naming a universe or rigging the target rig
+   lacks stays, dormant, and the review lists it.
+4. The target rig is checked: a **key clash** with the show's own records — a patch key or head
+   number, any other kind's name, the namespace §"Shows on a venue" keeps — is a blocker
+   (`VENUE_UPDATE_BLOCKED`); an **address overlap** the update introduces between something the show
+   owns (its own patch, or a venue patch it re-addresses) and a venue patch is a **decision** (P8):
+   `KEEP_BOTH`, `READDRESS_MINE` (the nearest free start on its universe, or `startChannel`),
+   `HIDE_VENUES` or `REMOVE_MINE` (deletes an own patch; reverts an Address override). An open one is
+   `VENUE_UPDATE_UNDECIDED`, an unknown or unfitting answer 400 `VENUE_UPDATE_INVALID`.
+5. **Dead references**: every fixture key and group name the update takes out of the rig that the
+   show's cue, Look or template rows still name, with who names them. The rows stay and read as
+   *Missing fixture*, as a deleted fixture's do.
+
+The review is the same run **rolled back**, so it cannot disagree with the update; it answers
+`{from, to, output, drawing, carryOver, drift, dropped, decisions, blockers, deadReferences}`. `to` is
+the installed version when absent and must be newer than the pin (`VENUE_UP_TO_DATE`). A live show
+reloads (`switchProject`), which judges its hold afresh. A pulled pin move (a peer's Update, through
+the show's sync) reloads the live show the same way, so the hold follows it with no `formatVersion`
+change: the pin already travels in `project.json` (session 4). `VenueUpdateTest` pins each link kind,
+the drops, the dead keys, drift before and after, P8 and the operator's reach; `VenueHoldTest` the
+classification, the hold and *Run against*.
 
 ### Extract
 
@@ -2304,13 +2373,14 @@ pins refuses delete) is refused by the switch with `VENUE_MISSING`, and if it is
 starts it loads **no rig** — no fixture, no controller — so the desk comes up outputting nothing and
 can switch away (`venue/VenuePins.kt`, `DbFixtureLoader`).
 
-**Not yet, and where.** A show that is behind its venue, the hold and Update, session 6; the Projects
-page, Create's preset seating and Detach, session 7. Facet overrides shipped in session 5
-(§"Facet overrides").
+**Not yet, and where.** The Projects page, Create's preset seating and Detach, session 7. Facet
+overrides shipped in session 5 (§"Facet overrides"); a show that is behind, the hold and Update in
+session 6 (§"Behind, the hold and Update").
 
 **Files.** `models/RigScope.kt` (the effective rig, `VenueLayer`), `models/showHides.kt`,
 `venue/ShowHides.kt`, `venue/VenueRigGuard.kt` (`VENUE_OWNED`, the key namespace),
-`venue/VenueExtract.kt`, `venue/VenuePins.kt` (`VENUE_MISSING`, the repo hint),
+`venue/VenueExtract.kt`, `venue/VenuePins.kt` (`VENUE_MISSING`, the repo hint), `venue/ShowBehind.kt`,
+`venue/VenueUpdate.kt`, `state/VenueHoldService.kt`, `dmx/OutputHold.kt`,
 `routes/showHides.kt`, `routes/venueExtract.kt`. `ShowsOnVenueTest` and `McpVenueToolsTest` pin it;
 `ProjectRoundTripTest` and `VenueRepoSyncTest` the sync.
 

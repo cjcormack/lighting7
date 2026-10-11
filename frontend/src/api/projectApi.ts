@@ -1,6 +1,7 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import { ScriptType } from "../store/scripts";
+import type { VenueBehind } from "./venueApi";
 
 /**
  * What a project is (venue plan §3.1): a show, or a venue whose own rows are its draft. A
@@ -12,8 +13,9 @@ export type ProjectKind = 'SHOW' | 'VENUE' | 'VENUE_VERSION';
 /**
  * The venue a show sits on (venue plan session 3): the venue by uuid — and its project id on this
  * desk, which *Open venue* goes to — its name, the version the show is pinned to and the venue's
- * installed (latest published) version. `id`, `name` and `installed` are absent when the venue is
- * not on this desk. Absent altogether for a standalone show and a venue.
+ * installed (latest published) version, and how far behind it the show is. `id`, `name` and
+ * `installed` are absent when the venue is not on this desk. Absent altogether for a standalone show
+ * and a venue.
  */
 export interface ProjectVenue {
   uuid: string;
@@ -21,6 +23,13 @@ export interface ProjectVenue {
   name?: string | null;
   version: number;
   installed?: number | null;
+  /**
+   * How far the pin trails the installed version (session 6): `OUTPUT` opens the show held, `DRAWING`
+   * is a banner. Absent (or `NONE`) from a desk older than session 6, and for a show on its latest.
+   */
+  behind?: VenueBehind | null;
+  /** How many changes behind the pin reach the show as drawing only: the drawing-only banner's count. */
+  drawingChanges?: number | null;
 }
 
 // Project summary for list views

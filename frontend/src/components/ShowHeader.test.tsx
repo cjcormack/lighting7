@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 
 vi.mock('./SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 vi.mock('./effects/ArmedChip', () => ({ ArmedChip: () => null }))
+vi.mock('./venue/VenueHeldChip', () => ({ VenueHeldChip: () => null }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 const venue = { isVenue: false }

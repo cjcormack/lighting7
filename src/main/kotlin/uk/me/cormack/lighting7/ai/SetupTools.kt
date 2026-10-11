@@ -698,7 +698,7 @@ class SetupTools(
             groupsByName.keys.filter { it !in groupsBefore }
         }
 
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
         state.show.fixtures.patchListChanged()
 
         val result = buildJsonObject {
@@ -766,7 +766,7 @@ class SetupTools(
             tiles to members
         }
         if (sweptTiles > 0) state.show.fixtures.buskRigChanged()
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
         state.show.fixtures.patchListChanged()
         return success(
             "Deleted ${wanted.size} group(s)",

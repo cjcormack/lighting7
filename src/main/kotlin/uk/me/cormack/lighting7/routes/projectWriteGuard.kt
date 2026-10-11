@@ -82,6 +82,9 @@ internal fun projectWriteRefusal(kind: ProjectKind, isAdmin: Boolean, rest: List
 private fun isRuntimeGesture(rest: List<String>): Boolean = when (rest.firstOrNull()) {
     "set-current", "programmer", "effects" -> true
     "patches" -> rest.size >= 3 && rest[2] in setOf("fire", "reload", "commands")
+    // *Run against* (venue plan session 6) lifts a show's hold for the session and stores nothing; on a
+    // venue it is answered by the route (nothing to run against), not refused as a stored write.
+    "venue" -> rest.getOrNull(1) == "run-against"
     else -> false
 }
 

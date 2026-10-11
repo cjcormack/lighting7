@@ -70,3 +70,95 @@ export interface VenueDiff {
   output: VenueChange[]
   drawing: VenueChange[]
 }
+
+/**
+ * How far a show trails its venue (venue plan §3.1, session 6): `OUTPUT` opens it held, `DRAWING` is a
+ * banner. On `ProjectVenue.behind`; absent from a desk older than session 6.
+ */
+export type VenueBehind = 'NONE' | 'DRAWING' | 'OUTPUT'
+
+/** An answer to one of the update review's decisions (P8), or to a drift. */
+export type UpdateAnswer = 'KEEP_BOTH' | 'READDRESS_MINE' | 'HIDE_VENUES' | 'REMOVE_MINE' | 'KEEP_MINE' | 'TAKE_VENUES'
+
+/** One line of the review: a record carried over, dropped, or blocking. */
+export interface UpdateItem {
+  /** `OVERRIDE | HIDE | ADDITION | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+  kind: string
+  name: string
+  detail: string
+  recordUuid?: string | null
+}
+
+/** An override the venue moved underneath: kept unless answered `TAKE_VENUES`. */
+export interface UpdateDrift {
+  id: string
+  recordUuid: string
+  patchKey?: string | null
+  patchName?: string | null
+  facet: 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA'
+  value?: Record<string, unknown> | null
+  venue?: Record<string, unknown> | null
+  base?: Record<string, unknown> | null
+  answer?: UpdateAnswer
+}
+
+export interface UpdateUnit {
+  uuid: string
+  patchId: number
+  key: string
+  name: string
+  address: string
+  /** `OWN | OVERRIDE | VENUE`. */
+  kind: string
+}
+
+/** A clash the update introduces that needs an answer before it can run. */
+export interface UpdateDecision {
+  id: string
+  kind: string
+  message: string
+  mine: UpdateUnit
+  other: UpdateUnit
+  answers: UpdateAnswer[]
+  suggestedStartChannel?: number | null
+  suggestedAddress?: string | null
+  decided?: boolean
+  answer?: UpdateAnswer | null
+  startChannel?: number | null
+}
+
+export interface DeadReference {
+  /** `FIXTURE | GROUP | OVERRIDE`. */
+  kind: string
+  key: string
+  name?: string | null
+  usedBy?: { kind: string; id: number; name: string }[]
+  detail: string
+}
+
+/** `GET /projects/{id}/venue/update?to=n` — the review — and what `POST` did. */
+export interface VenueUpdateReview {
+  projectId: number
+  venueId: number
+  venueName: string
+  from: number
+  to: number
+  fromNote?: string | null
+  toNote?: string | null
+  output?: VenueChange[]
+  drawing?: VenueChange[]
+  carryOver?: UpdateItem[]
+  drift?: UpdateDrift[]
+  dropped?: UpdateItem[]
+  decisions?: UpdateDecision[]
+  blockers?: UpdateItem[]
+  deadReferences?: DeadReference[]
+  dryRun?: boolean
+  applied?: boolean
+}
+
+export interface UpdateDecisionAnswer {
+  id: string
+  answer: UpdateAnswer
+  startChannel?: number
+}

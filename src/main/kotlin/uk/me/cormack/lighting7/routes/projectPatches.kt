@@ -248,7 +248,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             }
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             state.show.fixtures.patchListChanged()
 
@@ -491,7 +491,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             val touchedRebuildKey = body.keys.any { it !in PUT_KEYS_WITHOUT_REBUILD }
             if (touchedRebuildKey && state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             } else if (state.isCurrentProject(project)) {
                 // Metadata-only edits skip the rebuild, so refresh the cache directly.
                 state.show.fixtures.setPatchMetadata(
@@ -861,21 +861,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val patch = VenueRigGuard.ownForWrite(
                     RigScope.of(project), DaoFixturePatch.findById(resource.patchId), { it.project.id }, { "Patch '${it.key}'" },
                 ) ?: return@transaction null
-
-                // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
-                // FK has no cascade (`DaoBuskRigTiles`).
-                val sweptTiles = deleteBuskRigTilesReferencing(patchId = patch.id.value)
-
-                // Remove from any groups first
-                DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
-                    .forEach { it.delete() }
-                deletePlacementsOf(patch)
-                // A cue event fires one of this patch's tubes: it goes with the patch, as a busk tile
-                // does — swept, never a guard. A cue changes; it is told by `cueListChanged` below.
-                val sweptEvents = deleteCueEventsForPatches(listOf(patch.id))
-
-                patch.delete()
-                sweptTiles to sweptEvents
+                deleteOwnPatch(patch)
             }
 
             if (deleted == null) {
@@ -886,13 +872,36 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             if (deleted.second > 0) state.show.fixtures.cueListChanged()
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
             }
             state.show.fixtures.patchListChanged()
 
             call.respond(HttpStatusCode.NoContent)
         }
     }
+}
+
+/**
+ * Delete a show's own [patch] and what hangs off it, inside the caller's transaction: its busk rig
+ * tiles, its group memberships, its extra placements and its cue events — each swept, never a guard.
+ * Answers how many tiles and cue events went, for the caller's `buskRigChanged` / `cueListChanged`.
+ * The patch route's delete, and an Update's *Remove mine* (`venue/VenueUpdate.kt`).
+ */
+internal fun deleteOwnPatch(patch: DaoFixturePatch): Pair<Int, Int> {
+    // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
+    // FK has no cascade (`DaoBuskRigTiles`).
+    val sweptTiles = deleteBuskRigTilesReferencing(patchId = patch.id.value)
+
+    // Remove from any groups first
+    DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
+        .forEach { it.delete() }
+    deletePlacementsOf(patch)
+    // A cue event fires one of this patch's tubes: it goes with the patch, as a busk tile
+    // does — swept, never a guard. A cue changes; it is told by `cueListChanged`.
+    val sweptEvents = deleteCueEventsForPatches(listOf(patch.id))
+
+    patch.delete()
+    return sweptTiles to sweptEvents
 }
 
 // Resources

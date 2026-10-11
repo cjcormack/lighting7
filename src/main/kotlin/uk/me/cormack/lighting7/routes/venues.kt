@@ -59,7 +59,11 @@ internal fun Route.routeApiRestVenues(state: State) {
         val by = call.authenticatedUserOrNull?.displayName
         venueCall(HttpStatusCode.Created) {
             state.venueVersions.publish(resource.id, request.note, by)
-                .also { state.show.fixtures.projectDetailsChanged(resource.id) }
+                .also {
+                    state.show.fixtures.projectDetailsChanged(resource.id)
+                    // A show on this venue that is live is now behind it: judge its hold again (P5).
+                    withContext(Dispatchers.IO) { state.venueHold.refreshCurrent() }
+                }
         }
     }
 

@@ -21,7 +21,7 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
  * - `effects.fired` — one tube fired, or **rehearsed** (blind, or a window whose vis source is the
  *   programmer): every window draws the burst; a rehearsal sent nothing.
  * - `effects.skipped` — fires that did not happen, said so: a cue's events on an unarmed desk, a
- *   spent tube, an arm that dropped before an event's offset. Never queued.
+ *   spent tube, an arm that dropped before an event's offset, a show held by its venue. Never queued.
  */
 
 export interface SpentTube {
@@ -55,7 +55,7 @@ export interface EffectsFired {
 }
 
 export interface EffectsSkipped {
-  reason: 'UNARMED' | 'SPENT' | 'ARM_DROPPED' | 'UNKNOWN_TRIGGER' | string
+  reason: 'UNARMED' | 'SPENT' | 'ARM_DROPPED' | 'UNKNOWN_TRIGGER' | 'VENUE_HOLD' | string
   message: string
   tubes: { fixture: string; trigger: string }[]
   source: string

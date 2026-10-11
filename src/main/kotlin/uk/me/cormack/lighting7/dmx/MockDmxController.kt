@@ -7,6 +7,8 @@ package uk.me.cormack.lighting7.dmx
 class MockDmxController(
     override val universe: Universe = Universe(0, 0),
     private val parkSource: ParkSource? = null,
+    /** The show's hold (venue plan P5); see [transmittedValue]. */
+    private val hold: OutputHold? = null,
 ) : DmxController {
     private val values = mutableMapOf<Int, UByte>()
     private val _transmitModifiers = mutableListOf<TransmitModifier>()
@@ -42,6 +44,8 @@ class MockDmxController(
 
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
+
+    override val held: Boolean get() = hold?.isHeld == true
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         valuesToSet.forEach { (channel, change) ->
@@ -86,14 +90,23 @@ class MockDmxController(
     /**
      * Get the effective output value for a channel, applying modifiers. For test assertions.
      * Park takes absolute precedence via the [ParkSource]; then modifiers run over the raw
-     * value in registration order.
+     * value in registration order; then a reserved channel of the show's [OutputHold] is guarded.
+     * Not the hold itself: this is what the channel listeners would hear ([transmittedValue] is the wire).
      */
     fun getEffectiveValue(channelNo: Int): UByte {
-        parkSource?.getParkedValue(universe.universe, channelNo)?.let { return it }
-        var v = values[channelNo] ?: 0u
-        for (mod in _transmitModifiers) v = mod.modify(universe, channelNo, v)
-        return v
+        val composed = parkSource?.getParkedValue(universe.universe, channelNo) ?: run {
+            var v = values[channelNo] ?: 0u
+            for (mod in _transmitModifiers) v = mod.modify(universe, channelNo, v)
+            v
+        }
+        return hold?.guard(universe.universe, channelNo, composed) ?: composed
     }
+
+    /**
+     * What [ArtNetController] would put on the wire for this channel: [getEffectiveValue], or zero
+     * while the show is held (venue plan P5) — above park and every modifier. For test assertions.
+     */
+    fun transmittedValue(channelNo: Int): UByte = if (held) 0u else getEffectiveValue(channelNo)
 
     /**
      * Reset all channels to 0.

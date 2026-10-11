@@ -23,6 +23,8 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.adminOnly
 import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.venue.ShowBehind
+import uk.me.cormack.lighting7.venue.VenueBehind
 import uk.me.cormack.lighting7.venue.VenueException
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import uk.me.cormack.lighting7.venue.VenueVersions
@@ -114,7 +116,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // venue's history (`/venues/{id}/versions`), never picked.
         routingGet {
             val projects = transaction(state.database) {
-                listedProjects().orderBy(DaoProjects.name to SortOrder.ASC).map { it.toListDto() }
+                listedProjects().orderBy(DaoProjects.name to SortOrder.ASC).map { it.toListDto(state) }
             }
             call.respond(projects)
         }
@@ -122,7 +124,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // GET /current - Get current project
         routingGet("/current") {
             val project = transaction(state.database) {
-                state.projectManager.currentProject.toDetailDto()
+                state.projectManager.currentProject.toDetailDto(state)
             }
             call.respond(project)
         }
@@ -130,7 +132,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // GET /{id} - Get project by ID
         get<ProjectIdResource> { resource ->
             val project = transaction(state.database) {
-                DaoProject.findById(resource.id)?.toDetailDto()
+                DaoProject.findById(resource.id)?.toDetailDto(state)
             }
             if (project != null) {
                 call.respond(project)
@@ -195,7 +197,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 }
                 ensureDefaultSpeedMasters(newProject)
 
-                newProject.toDetailDto()
+                newProject.toDetailDto(state)
             }
             call.respond(HttpStatusCode.Created, project)
         }
@@ -228,7 +230,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 request.stageDepthM?.let { project.stageDepthM = it }
                 request.stageHeightM?.let { project.stageHeightM = it }
 
-                project.toDetailDto()
+                project.toDetailDto(state)
             }
 
             if (project != null) {
@@ -296,7 +298,7 @@ internal fun Route.routeApiRestProjects(state: State) {
             try {
                 state.projectManager.switchProject(resource.id)
                 val project = transaction(state.database) {
-                    state.projectManager.currentProject.toDetailDto()
+                    state.projectManager.currentProject.toDetailDto(state)
                 }
                 call.respond(project)
             } catch (e: IllegalArgumentException) {
@@ -336,6 +338,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProgrammerFocus(state)
         routeApiRestBuskPress(state)
         routeApiRestVenueExtract(state)
+        routeApiRestVenueUpdate(state)
         // Before the patch routes, so `patches/hidden` is matched as itself.
         routeApiRestShowHides(state)
         routeApiRestPatchFacets(state)
@@ -393,7 +396,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 val newProject = DaoProject.findById(result.projectId)
                     ?: error("Cloned project ${result.projectId} vanished")
                 CloneProjectResponse(
-                    project = newProject.toDetailDto(),
+                    project = newProject.toDetailDto(state),
                     scriptsCloned = newProject.scripts.count().toInt(),
                     looksCloned = newProject.looks.count().toInt(),
                     cuesCloned = newProject.cues.count().toInt(),
@@ -433,8 +436,9 @@ data class ProjectListDto(
 /**
  * A show's venue (venue plan §3.5): the venue by its uuid — and its project id on this desk, which
  * *Open venue* switches to — its name, the version the show is pinned to, and the venue's installed
- * (latest published) version. `behind` is session 6's. [name], [id] and [installed] are null when
- * the venue is not on this desk.
+ * (latest published) version. [name], [id] and [installed] are null when the venue is not on this
+ * desk. [behind] is how far the pin trails the installed version (session 6, `venue/ShowBehind.kt`):
+ * `OUTPUT` opens the show held, `DRAWING` is a banner.
  */
 @Serializable
 data class ProjectVenueDto(
@@ -443,6 +447,9 @@ data class ProjectVenueDto(
     val name: String? = null,
     val version: Int,
     val installed: Int? = null,
+    val behind: VenueBehind = VenueBehind.NONE,
+    /** How many changes behind the pin reach this show as drawing only: the drawing-only banner's count. */
+    val drawingChanges: Int = 0,
 )
 
 @Serializable
@@ -514,17 +521,17 @@ data class CloneProjectResponse(
 private enum class DeleteResult { SUCCESS, NOT_FOUND, IS_CURRENT }
 
 // Helper extensions
-private fun DaoProject.toListDto() = ProjectListDto(
+private fun DaoProject.toListDto(state: State) = ProjectListDto(
     id = id.value,
     name = name,
     description = description,
     isCurrent = isCurrent,
     kind = kind,
-    venue = venueDto(),
+    venue = venueDto(state),
 )
 
 /** The stage size is the rig's: a show on a venue reads the venue's (venue plan §3.2). */
-internal fun DaoProject.toDetailDto(): ProjectDetailDto {
+internal fun DaoProject.toDetailDto(state: State): ProjectDetailDto {
     val stage = RigScope.of(this).stageBounds()
     return ProjectDetailDto(
         id = id.value,
@@ -539,22 +546,31 @@ internal fun DaoProject.toDetailDto(): ProjectDetailDto {
         stageDepthM = stage.depthM,
         stageHeightM = stage.heightM,
         kind = kind,
-        venue = venueDto(),
+        venue = venueDto(state),
     )
 }
 
-/** This show's venue, or null for a standalone show, a venue and a version. Inside a transaction. */
-internal fun DaoProject.venueDto(): ProjectVenueDto? {
+/**
+ * This show's venue, or null for a standalone show, a venue and a version. Inside a transaction. A
+ * show behind its venue is judged ([ShowBehind]): through the version cache, so a list of shows pays
+ * one export per version the first time and a compare after that.
+ */
+internal fun DaoProject.venueDto(state: State): ProjectVenueDto? {
     if (kind != ProjectKind.SHOW) return null
     val uuid = venueUuid ?: return null
     val version = venueVersion ?: return null
     val venue = DaoProject.find { (DaoProjects.uuid eq uuid) and (DaoProjects.kind eq ProjectKind.VENUE) }.firstOrNull()
+    val installed = venue?.let { VenueVersions.versionsOf(it.id.value).firstOrNull()?.number }
+    val judgement = if (installed != null && installed > version) ShowBehind.judge(state, id.value) else null
     return ProjectVenueDto(
         uuid = uuid.toString(),
         id = venue?.id?.value,
         name = venue?.name,
         version = version,
-        installed = venue?.let { VenueVersions.versionsOf(it.id.value).firstOrNull()?.number },
+        installed = installed,
+        behind = judgement?.behind ?: VenueBehind.NONE,
+        // What the show sees as drawing only: the drawing changes and the output ones its layer stands between.
+        drawingChanges = judgement?.let { it.drawing.size + it.discounted.size } ?: 0,
     )
 }
 

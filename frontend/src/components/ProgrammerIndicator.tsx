@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import { pathHasSegment } from '@/lib/navMatch'
 import { useProgrammerSummaryQuery } from '../store/programmer'
 import { useCurrentProjectQuery } from '../store/projects'
+import { useVenueHold } from '../store/venueHold'
+import { heldByVenue } from '../lib/venueHold'
 
 /**
  * "The programmer holds data" indicator — the console convention that stops an operator
@@ -35,14 +37,24 @@ import { useCurrentProjectQuery } from '../store/projects'
  * too: two reporters a region apart, deliberate — the pill says it where the press is made and
  * this badge carries the count — and neither may be given a `shownSeparately` arm, for the reason
  * that prop was deleted.
+ *
+ * **Blind has a second reason** (venue plan P5, session 6): a live show behind its venue on output is
+ * held — every controller sends zero — and the badge says *Blind · venue*, the board's "the same Blind
+ * as the programmer's, with venue as its reason". Still a reporter: the hold is lifted by Update or
+ * *Run against* on the venue banner, never here.
  */
 export function ProgrammerIndicator({ className }: { className?: string }) {
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: currentProject } = useCurrentProjectQuery()
   const location = useLocation()
 
+  const hold = useVenueHold()
+
   const entryCount = summary?.entryCount ?? 0
-  const blind = summary?.blind ?? false
+  // The venue hold is the same Blind with another reason (venue plan P5, session 6): the live show is
+  // behind its venue on output, so nothing it does reaches the rig. The badge says *Blind · venue*.
+  const venueHeld = heldByVenue(hold, currentProject?.id)
+  const blind = (summary?.blind ?? false) || venueHeld
   if (entryCount === 0 && !blind) return null
 
   // The programmer is its own page again, so the link goes there. The "am I already there?" test
@@ -68,7 +80,7 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
       {blind ? <EyeOff className="size-3.5" /> : <SlidersHorizontal className="size-3.5" />}
       {/* The eye-off icon already says "blind"; spelling it out as well is what tips the
           app header onto a third row at phone widths. Keep the count, drop the word. */}
-      {blind && <span className="hidden @[760px]:inline">Blind</span>}
+      {blind && <span className="hidden @[760px]:inline">{venueHeld ? 'Blind · venue' : 'Blind'}</span>}
       {blind && entryCount > 0 && <span className="hidden @[760px]:inline">·</span>}
       {entryCount > 0 && <span>{entryCount}</span>}
     </span>
@@ -80,7 +92,10 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
       : 'Programmer is empty',
     // The full sentence, because the badge itself spells out "Blind" only above 760px: "5 values,
     // and none of them reaching the stage" is the useful reading, and a tooltip costs no width.
-    blind ? 'Blind — the programmer is gated out of the stage output' : null,
+    venueHeld
+      ? `Blind · venue — output held: this show uses v${hold.pinned} and the hall is v${hold.installed}. Review the update or run against v${hold.pinned}`
+      : null,
+    summary?.blind ? 'Blind — the programmer is gated out of the stage output' : null,
     // Only offer the trip if we aren't already there.
     programmerPath && !onProgrammer ? 'Go to the programmer to clear or edit' : null,
   ]

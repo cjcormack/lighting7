@@ -162,6 +162,7 @@ fun Application.configureSockets(state: State) {
             setupHandSubscriptions(scope)
             setupScenerySubscriptions(scope)
             setupEffectsSubscriptions(scope)
+            setupVenueSubscriptions(scope)
             setupStageRenderSubscriptions(scope)
 
             try {
