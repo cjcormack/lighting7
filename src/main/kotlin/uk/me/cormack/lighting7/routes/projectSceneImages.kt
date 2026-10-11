@@ -12,7 +12,10 @@ import io.ktor.utils.io.*
 import kotlinx.io.readByteArray
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.models.DaoStageElement
+import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoStageElements
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.SCENE_IMAGE_HASH
 import uk.me.cormack.lighting7.state.SceneImageException
 import uk.me.cormack.lighting7.state.SceneImageStore
@@ -71,7 +74,11 @@ internal fun Route.routeApiRestProjectSceneImages(state: State) {
 
     get<ProjectSceneImagesResource> { resource ->
         withProject(state, resource.projectId) { project ->
-            call.respond(state.sceneImages.list(project.uuid.toString()))
+            // A show on a venue lists its own images and the pinned version's — the venue's cloths
+            // are painted from the version's own store (venue plan session 3). Own first per hash.
+            val stores = transaction(state.database) { sceneImageStoresOf(project) }
+            val images = stores.flatMap { state.sceneImages.list(it) }.distinctBy { it.hash }.sortedBy { it.hash }
+            call.respond(images)
         }
     }
 
@@ -87,7 +94,10 @@ internal fun Route.routeApiRestProjectSceneImages(state: State) {
                     return@withProject
                 }
             }
-            val uuid = project.uuid.toString()
+            // The show's own store, then the pinned version's: a venue cloth's image is the version's.
+            val stores = transaction(state.database) { sceneImageStoresOf(project) }
+            val uuid = stores.takeIf { SCENE_IMAGE_HASH.matches(hash) }
+                ?.firstOrNull { state.sceneImages.exists(it, hash) } ?: project.uuid.toString()
             val path = try {
                 when {
                     !SCENE_IMAGE_HASH.matches(hash) -> null
@@ -127,10 +137,13 @@ internal fun Route.routeApiRestProjectSceneImages(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             val body = call.receive<DisplayDetailRequest>()
             val dto = transaction(state.database) {
-                val element = DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }
+                // A venue element in a show is switched too: the switch is this machine's, not the
+                // venue's, and is keyed by the venue's id (P4), so it holds wherever the element is drawn.
+                val rig = RigScope.of(project)
+                val element = rig.stageElements(DaoStageElements.id eq resource.elementId).firstOrNull()
                     ?: return@transaction null
                 Overrides.setString(
-                    project.id.value, STAGE_ELEMENTS_OVERRIDE_TABLE, element.uuid, FIELD_DISPLAY_DETAIL,
+                    rig.overrideProjectId(element.project.id), STAGE_ELEMENTS_OVERRIDE_TABLE, element.uuid, FIELD_DISPLAY_DETAIL,
                     if (body.full) DISPLAY_DETAIL_FULL else null,
                 )
                 element.toDetailDto(project)
@@ -165,3 +178,13 @@ data class ProjectStageElementDisplayDetailResource(val parent: ProjectStageElem
 
 @Serializable
 data class DisplayDetailRequest(val full: Boolean)
+
+/**
+ * The image stores [project]'s rig paints from, by project uuid: its own, then — for a show on a
+ * venue — the pinned version's, whose import hydrated the venue's images into its own store.
+ * Inside a transaction.
+ */
+internal fun sceneImageStoresOf(project: DaoProject): List<String> {
+    val snapshot = RigScope.of(project).venue?.snapshotId
+    return listOfNotNull(project.uuid.toString(), snapshot?.let { DaoProject[it].uuid.toString() })
+}

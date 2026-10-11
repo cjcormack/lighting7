@@ -6,6 +6,7 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoVenueVersions
+import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueEvents
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
@@ -205,6 +206,12 @@ class SyncCoverageTest {
         DaoVenueVersions to Disposition.MachineLocal("this desk's index of venue versions; rebuilt from the venue repo's tags"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
+        // Venue plan §3.2 calls a show's hides portable, exported as `showHides/{uuid}.json` — a JSON
+        // layout change that is `formatVersion` 24, venue plan session 4. Until then they are not
+        // exported, and a show on a venue (the only project that holds any) refuses sync with
+        // `SYNC_VENUE_PENDING` and clone with `VENUE_CLONE_PENDING`, so nothing carries one off the
+        // desk without them. Session 4 turns this into `Portable("showHides")`.
+        DaoShowHides to Disposition.Excluded("a show's hides of venue records: portable from formatVersion 24, venue plan session 4"),
     )
 
     private lateinit var state: State

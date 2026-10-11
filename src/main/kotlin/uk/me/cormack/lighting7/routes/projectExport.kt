@@ -53,6 +53,7 @@ internal fun Route.routeApiRestProjectExport(state: State) {
 
     post<ProjectExportResource> { resource ->
         val request = call.receive<ProjectExportRequest>()
+        if (refusedVenueBoundExport(state, resource.id)) return@post
         val project = transaction(state.database) {
             DaoProject.findById(resource.id)
         }

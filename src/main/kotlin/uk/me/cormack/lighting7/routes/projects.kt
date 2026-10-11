@@ -16,12 +16,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.adminOnly
 import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 import uk.me.cormack.lighting7.venue.VenueVersions
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
@@ -152,6 +155,10 @@ internal fun Route.routeApiRestProjects(state: State) {
                     return@routingPost
                 }
             }
+            if (request.venueId != null && request.kind != ProjectKind.SHOW) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Only a show sits on a venue", VenueVersions.CODE_NOT_A_VENUE))
+                return@routingPost
+            }
             val stageError = validateStageDimensions(
                 request.stageWidthM,
                 request.stageDepthM,
@@ -162,14 +169,29 @@ internal fun Route.routeApiRestProjects(state: State) {
                 return@routingPost
             }
             val project = transaction(state.database) {
+                // A show on a venue (venue plan session 3) pins the venue's installed version; its stage
+                // size is the venue's, so the request's is not stored.
+                val pin = request.venueId?.let { venueId ->
+                    val venue = VenueVersions.requireVenue(venueId)
+                    val installed = VenueVersions.versionsOf(venueId).firstOrNull()
+                        ?: throw VenueException.conflict(
+                            VenueVersions.CODE_NOTHING_PUBLISHED,
+                            "${venue.name} has no published version yet: publish it before a show can sit on it",
+                        )
+                    venue.uuid to installed.number
+                }
                 val newProject = DaoProject.new {
                     name = request.name
                     description = request.description
                     isCurrent = false
-                    stageWidthM = request.stageWidthM
-                    stageDepthM = request.stageDepthM
-                    stageHeightM = request.stageHeightM
+                    if (pin == null) {
+                        stageWidthM = request.stageWidthM
+                        stageDepthM = request.stageDepthM
+                        stageHeightM = request.stageHeightM
+                    }
                     kind = request.kind
+                    venueUuid = pin?.first
+                    venueVersion = pin?.second
                 }
                 ensureDefaultSpeedMasters(newProject)
 
@@ -193,6 +215,12 @@ internal fun Route.routeApiRestProjects(state: State) {
             val project = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction null
+                // A show on a venue reads its stage size from the venue (venue plan §3.2).
+                if (project.isVenueBound &&
+                    listOf(request.stageWidthM, request.stageDepthM, request.stageHeightM).any { it != null }
+                ) {
+                    throw VenueRigGuard.venueOwned(RigScope.of(project), "The stage's size")
+                }
 
                 request.name?.let { project.name = it }
                 request.description?.let { project.description = it }
@@ -221,6 +249,18 @@ internal fun Route.routeApiRestProjects(state: State) {
 
                 if (project.isCurrent) {
                     return@transaction DeleteResult.IS_CURRENT
+                }
+                // A show on a venue links into its pinned version's rows by id (P3), so a venue that
+                // any show pins keeps its versions: deleting them would cut those shows' rigs away.
+                if (project.kind == ProjectKind.VENUE) {
+                    val shows = showsOnVenue(project).map { it.name }
+                    if (shows.isNotEmpty()) {
+                        throw VenueException.conflict(
+                            CODE_VENUE_IN_USE,
+                            "${project.name} is the venue of ${shows.joinToString { "'$it'" }}: " +
+                                "delete those shows first (detaching a show from its venue comes in a later release)",
+                        )
+                    }
                 }
                 val snapshots = if (project.kind == ProjectKind.VENUE) {
                     VenueVersions.versionsOf(project.id.value).map { version ->
@@ -292,6 +332,9 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProgrammerAim(state)
         routeApiRestProgrammerFocus(state)
         routeApiRestBuskPress(state)
+        routeApiRestVenueExtract(state)
+        // Before the patch routes, so `patches/hidden` is matched as itself.
+        routeApiRestShowHides(state)
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)
@@ -320,6 +363,15 @@ internal fun Route.routeApiRestProjects(state: State) {
         // bespoke table walker, so newly-synced tables are cloned without a code change here.
         post<CloneProjectResource> { resource ->
             val request = call.receive<CloneProjectRequest>()
+            // A show on a venue clones with its pin in venue plan session 4 (§3.4); until then a clone
+            // would be a show with none of the venue's rig, so it is refused.
+            if (transaction(state.database) { DaoProject.findById(resource.id)?.isVenueBound } == true) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("A show on a venue cannot be cloned yet: a clone keeps its venue in a later release", CODE_VENUE_CLONE_PENDING),
+                )
+                return@post
+            }
 
             val result = try {
                 // Export + import do file IO inside Exposed transactions; off-loading keeps
@@ -378,6 +430,23 @@ data class ProjectListDto(
     val isCurrent: Boolean,
     /** `SHOW` or `VENUE` — a list never holds a `VENUE_VERSION`. */
     val kind: ProjectKind = ProjectKind.SHOW,
+    /** The venue a show sits on (venue plan session 3); absent for a standalone show and a venue. */
+    val venue: ProjectVenueDto? = null,
+)
+
+/**
+ * A show's venue (venue plan §3.5): the venue by its uuid — and its project id on this desk, which
+ * *Open venue* switches to — its name, the version the show is pinned to, and the venue's installed
+ * (latest published) version. `behind` is session 6's. [name], [id] and [installed] are null when
+ * the venue is not on this desk.
+ */
+@Serializable
+data class ProjectVenueDto(
+    val uuid: String,
+    val id: Int? = null,
+    val name: String? = null,
+    val version: Int,
+    val installed: Int? = null,
 )
 
 @Serializable
@@ -396,6 +465,8 @@ data class ProjectDetailDto(
     val stageHeightM: Double? = null,
     /** What the project is (venue plan §3.1); a `VENUE_VERSION` is read through its venue's history. */
     val kind: ProjectKind = ProjectKind.SHOW,
+    /** The venue a show sits on (venue plan session 3); absent for a standalone show and a venue. */
+    val venue: ProjectVenueDto? = null,
 )
 
 @Serializable
@@ -407,6 +478,11 @@ data class CreateProjectRequest(
     val stageHeightM: Double? = null,
     /** `VENUE` is *Add venue*, an admin's; `VENUE_VERSION` is refused. */
     val kind: ProjectKind = ProjectKind.SHOW,
+    /**
+     * The venue a new show sits on (venue plan session 3), by its project id: the show is pinned to
+     * the venue's installed version, and the stage size is the venue's. Null is a standalone show.
+     */
+    val venueId: Int? = null,
 )
 
 @Serializable
@@ -448,22 +524,54 @@ private fun DaoProject.toListDto() = ProjectListDto(
     description = description,
     isCurrent = isCurrent,
     kind = kind,
+    venue = venueDto(),
 )
 
-private fun DaoProject.toDetailDto() = ProjectDetailDto(
-    id = id.value,
-    name = name,
-    description = description,
-    isCurrent = isCurrent,
-    scriptCount = scripts.count().toInt(),
-    lookCount = looks.count().toInt(),
-    cueCount = cues.count().toInt(),
-    cueStackCount = cueStacks.count().toInt(),
-    stageWidthM = stageWidthM,
-    stageDepthM = stageDepthM,
-    stageHeightM = stageHeightM,
-    kind = kind,
-)
+/** The stage size is the rig's: a show on a venue reads the venue's (venue plan §3.2). */
+internal fun DaoProject.toDetailDto(): ProjectDetailDto {
+    val stage = RigScope.of(this).stageBounds()
+    return ProjectDetailDto(
+        id = id.value,
+        name = name,
+        description = description,
+        isCurrent = isCurrent,
+        scriptCount = scripts.count().toInt(),
+        lookCount = looks.count().toInt(),
+        cueCount = cues.count().toInt(),
+        cueStackCount = cueStacks.count().toInt(),
+        stageWidthM = stage.widthM,
+        stageDepthM = stage.depthM,
+        stageHeightM = stage.heightM,
+        kind = kind,
+        venue = venueDto(),
+    )
+}
+
+/** This show's venue, or null for a standalone show, a venue and a version. Inside a transaction. */
+internal fun DaoProject.venueDto(): ProjectVenueDto? {
+    if (kind != ProjectKind.SHOW) return null
+    val uuid = venueUuid ?: return null
+    val version = venueVersion ?: return null
+    val venue = DaoProject.find { (DaoProjects.uuid eq uuid) and (DaoProjects.kind eq ProjectKind.VENUE) }.firstOrNull()
+    return ProjectVenueDto(
+        uuid = uuid.toString(),
+        id = venue?.id?.value,
+        name = venue?.name,
+        version = version,
+        installed = venue?.let { VenueVersions.versionsOf(it.id.value).firstOrNull()?.number },
+    )
+}
+
+/** The shows pinned to [venue], any version, by name. Inside a transaction. */
+internal fun showsOnVenue(venue: DaoProject): List<DaoProject> =
+    DaoProject.find { (DaoProjects.venueUuid eq venue.uuid) and (DaoProjects.kind eq ProjectKind.SHOW) }
+        .sortedBy { it.name }
+
+/** A venue a show pins cannot be deleted: the show's rig links into its versions (venue plan P3). */
+internal const val CODE_VENUE_IN_USE = "VENUE_IN_USE"
+
+/** A show on a venue clones with its pin from venue plan session 4 (§3.4); until then it is refused. */
+internal const val CODE_VENUE_CLONE_PENDING = "VENUE_CLONE_PENDING"
 
 /**
  * Delete [project] and every row it owns, children before parents (no FK here cascades). Inside a
@@ -547,6 +655,9 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     DaoSyncLogEntry.find { DaoSyncLogEntries.project eq project.id }.forEach { it.delete() }
     DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq project.id }.forEach { it.delete() }
     DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.forEach { it.delete() }
+
+    // A show's hides of its venue's records (venue plan session 3): keyed by uuid, FK to the project.
+    DaoShowHide.find { DaoShowHides.project eq project.id }.forEach { it.delete() }
 
     // Machine-local field overrides (controller IPs). Same story as the sync rows:
     // no ON DELETE cascade, so any project the operator gave a controller IP — and

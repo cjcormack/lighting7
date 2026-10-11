@@ -38,7 +38,7 @@ internal fun Route.routeApiRestProjectScenery(state: State) {
     get<StageElementSceneryResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }?.let { elementSceneryOf(it) }
+                RigScope.of(project).stageElements(DaoStageElements.id eq resource.elementId).firstOrNull()?.let { elementSceneryOf(it) }
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(STAGE_ELEMENT_NOT_FOUND))

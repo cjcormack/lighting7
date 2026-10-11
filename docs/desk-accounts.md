@@ -20,6 +20,7 @@ rationale — and the decisions not to re-litigate — is in
 | User accounts, password resets | yes | no |
 | Install settings (`PUT /api/rest/install`), cloud sync, GitHub OAuth | yes | no |
 | A venue: editing it, its History, diff, publish and discard | yes | no — it may open one, read-only |
+| Extracting a venue from a show | yes | no |
 
 There are no per-project or per-fixture permissions — with the one exception of a **venue**, below. Enforcement is **compositional**: an
 admin-only subtree is wrapped in `adminOnly {}` (`auth/AuthGate.kt`) at its mount point, so
@@ -83,6 +84,12 @@ a version of it is. Two gates carry it:
   live venue (`refusedLiveVenueWrite`). The frontend withholds the draft, History and Publish from an
   operator, makes the Patch list, the Stage view's Edit, Rigging, Regions and Project Settings
   read-only, and says the venue is read-only; that is presentation, the routes are the gate.
+- **Extract a venue** (`POST /projects/{id}/venue/extract`, venue plan session 3) is an admin's: it
+  makes a venue and publishes its v1, so the route calls `requireAdmin()` (403 for an operator, a
+  dry run included). The show that results is still a show: its own rows stay editable by both roles,
+  and a write to one of the venue's rows through it is 409 `VENUE_OWNED` for both — a role does not
+  make a venue's row a show's. Hiding a venue record in a show (`PUT …/hidden`) is a show write, open
+  to both roles.
 - **MCP** (`mcp/McpProtocol.kt`) holds an operator's tools to the same line on a live venue: the
   tools that store something are refused, `aim_fixtures` with `saveAsTemplate` among them. Record and
   Update are off in a venue for both roles (D11), and the Programmer's Update and *New template* are

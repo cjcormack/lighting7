@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.detachPlacementsFromRigging
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectRiggings(state: State) {
     get<ProjectRiggingsResource> { resource ->
@@ -42,9 +43,7 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
     get<ProjectRiggingResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                val rigging = DaoRigging.findById(resource.riggingId) ?: return@transaction null
-                if (rigging.project.id != project.id) return@transaction null
-                rigging.toDto()
+                RigScope.of(project).riggings(DaoRiggings.id eq resource.riggingId).firstOrNull()?.toDto()
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Rigging not found"))
@@ -77,8 +76,10 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
             }
 
             val result = transaction(state.database) {
-                val existing = RigScope.of(project).riggings(DaoRiggings.name eq trimmedName).firstOrNull()
+                val rig = RigScope.of(project)
+                val existing = rig.riggings(DaoRiggings.name eq trimmedName).firstOrNull()
                 if (existing != null) {
+                    VenueRigGuard.refuseIfVenue(rig, existing.project.id, "Rigging name '$trimmedName'")
                     return@transaction Pair<RiggingDto?, String?>(null, "Rigging '$trimmedName' already exists")
                 }
                 val maxSortOrder = RigScope.of(project).own.riggings()
@@ -126,19 +127,19 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
             }
 
             val result = transaction(state.database) {
-                val rigging = DaoRigging.findById(resource.riggingId)
-                    ?: return@transaction Pair<RiggingDto?, String?>(null, "Rigging not found")
-                if (rigging.project.id != project.id) {
-                    return@transaction Pair<RiggingDto?, String?>(null, "Rigging not found")
-                }
+                val rig = RigScope.of(project)
+                val rigging = VenueRigGuard.ownForWrite(
+                    rig, DaoRigging.findById(resource.riggingId), { it.project.id }, { "Rigging '${it.name}'" },
+                ) ?: return@transaction Pair<RiggingDto?, String?>(null, "Rigging not found")
 
                 body["name"].nullableString()?.let { newName ->
                     val trimmed = newName.trim()
                     if (trimmed.isEmpty()) {
                         return@transaction Pair<RiggingDto?, String?>(null, "Rigging name must not be blank")
                     }
-                    val collision = RigScope.of(project).riggings(DaoRiggings.name eq trimmed).firstOrNull()
+                    val collision = rig.riggings(DaoRiggings.name eq trimmed).firstOrNull()
                     if (collision != null && collision.id != rigging.id) {
+                        VenueRigGuard.refuseIfVenue(rig, collision.project.id, "Rigging name '$trimmed'")
                         return@transaction Pair<RiggingDto?, String?>(null, "Rigging '$trimmed' already exists")
                     }
                     rigging.name = trimmed
@@ -178,8 +179,9 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
     delete<ProjectRiggingResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleteResult = transaction(state.database) {
-                val rigging = DaoRigging.findById(resource.riggingId) ?: return@transaction null
-                if (rigging.project.id != project.id) return@transaction null
+                val rigging = VenueRigGuard.ownForWrite(
+                    RigScope.of(project), DaoRigging.findById(resource.riggingId), { it.project.id }, { "Rigging '${it.name}'" },
+                ) ?: return@transaction null
                 // Detach any patches before deleting (FK is ON DELETE SET NULL conceptually,
                 // but Exposed's optReference doesn't enforce that — clear explicitly).
                 // Extra placements (a paired dimmer's other lantern) hang on riggings too.

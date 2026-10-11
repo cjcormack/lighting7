@@ -247,8 +247,22 @@ answers a snapshot's write 409 `VENUE_VERSION_READ_ONLY`, and an operator's stor
 403 `VENUE_ADMIN_ONLY` (opening one and the runtime gestures pass). Record is off in a venue
 (`VENUE_RECORD_OFF`, REST and MCP); a venue does not sync until session 4 (409 `SYNC_VENUE_PENDING`).
 What separates a version from the draft is `venue/VenueDiff.kt`, classified **changes output** or
-**drawing only** — `docs/fixtures-engineering.md` §"Venue versions". Shows on a venue (the pin, the
-show layer) are sessions 3 onward; today every show is standalone and behaves as before.
+**drawing only** — `docs/fixtures-engineering.md` §"Venue versions".
+
+A **show on a venue** (session 3) pins `projects.venue_uuid` + `.venue_version` — both null for a
+standalone show, which behaves exactly as before — and its rig is its own rows plus the pinned
+version's, less its **hides** (`show_hides`, six record kinds) and less the version's Preset seating:
+`RigScope` (`models/RigScope.kt`, `VenueLayer`) is the one place that says so, `RigScope.own` is
+still the show's own. Keys and names are one namespace (`KEY_TAKEN_BY_VENUE`; unhiding over a show's
+reuse is `KEY_TAKEN_BY_SHOW`); a write through a show to a venue's row is 409 `VENUE_OWNED`, never a
+404 (`venue/VenueRigGuard.kt`) — hiding is the one change a show makes to one until facet overrides
+(session 5); a show group may hold venue patches, a venue group never a show's (D12); a machine
+override of a venue record resolves against the **venue's** id (P4), so a universe's address is the
+same everywhere and is still set through a show. **Extract** moves a show's rig into a new venue,
+publishes v1 and pins the show, in one transaction, its dry run that run rolled back
+(`venue/VenueExtract.kt`). Until session 4 a venue-bound show refuses sync, export
+(`SYNC_VENUE_PENDING`) and clone (`VENUE_CLONE_PENDING`), and a venue a show pins refuses delete
+(`VENUE_IN_USE`). `docs/fixtures-engineering.md` §"Shows on a venue".
 
 ### Property System
 Properties provide a unified interface for fixture and group control:
@@ -450,7 +464,13 @@ All four are **admin only** (mounted in `adminOnly`; venue plan §3.5, D3), REST
 - `GET /api/rest/venues/{id}/versions/{from}/diff/{to}` - What changed, `{output: [...], drawing: [...]}`; each side a version number, `0` the empty venue before v1, or `draft`. 404 `VENUE_VERSION_UNKNOWN`, 400 `VENUE_VERSION_INVALID`
 - `POST /api/rest/venues/{id}/publish` `{note}` - Freeze the draft as the next version; 400 `VENUE_NOTE_REQUIRED` / `VENUE_NOTE_TOO_LONG` (500 characters), 409 `VENUE_DRAFT_EMPTY`. Fires `projectDetailsChanged`
 - `DELETE /api/rest/venues/{id}/draft` - Discard the draft: the venue's rows become the installed version's again, uuids and all (name and description stay); 409 `VENUE_NOTHING_PUBLISHED`. A live venue reloads
-- A show's id on any of them is 409 `NOT_A_VENUE`. *Add venue* is `POST /projects` `{kind: "VENUE"}` (admin); `ProjectDto` carries `kind`, and `FixturePatchDto` its `uuid`. Deleting a venue deletes its versions
+- A show's id on any of them is 409 `NOT_A_VENUE`. *Add venue* is `POST /projects` `{kind: "VENUE"}` (admin); `ProjectDto` carries `kind`, and `FixturePatchDto` its `uuid`. Deleting a venue deletes its versions — refused 409 `VENUE_IN_USE` while a show pins it. History also answers `shows` (every show on the venue, with its version)
+
+### Show-on-a-venue Endpoints
+Venue plan session 3; REST only, no WS operation (`venue.hold` is session 6):
+- `POST /api/rest/projects/{id}/venue/extract` `{name, include?, dryRun?}` - **Admin only**: move a show's universes, patches, riggings, regions, VENUE-layer elements, seating (Fixed moves, Preset is copied), groups and camera views into a new venue, publish v1 and pin the show — one transaction, uuids kept, links re-pointed through `VenueLinks`, the moved records' machine overrides and scene images following them. `dryRun` answers the same run rolled back. 400 `VENUE_EXTRACT_INCOMPLETE` (a part that would point out of the venue), 409 `VENUE_EXTRACT_REFUSED` / `_EMPTY`. A live show reloads
+- `POST /api/rest/projects` `{…, venueId}` - A new show on that venue, pinned to its installed version (409 `VENUE_NOTHING_PUBLISHED` before v1); `ProjectDto.venue` is `{uuid, id, name, version, installed}`
+- `PUT /api/rest/projects/{id}/patches/{pid}/hidden` `{hidden}` + `GET .../patches/hidden` - Hide a venue patch in a show, or bring it back; the hidden ones as Patch list rows. `GET /projects/{id}/hides` and `PUT .../hides/{KIND}/{uuid}` `{hidden}` do it for all six kinds (`PATCH | RIGGING | ELEMENT | REGION | GROUP | VIEWPOINT`). 409 `NOT_A_VENUE_RECORD`, `VENUE_HIDE_IN_USE` (something in the show still uses it), `KEY_TAKEN_BY_SHOW`. `FixturePatchDto`, `PatchGroupDto` and `UniverseConfigDto` carry `owner` (`SHOW | VENUE`)
 
 ### Library Endpoints
 - `GET /api/rest/gels` - The gel library (fixture optics plan D7), the desk's resource `gels.json` served whole: `{code, name, color, brand, estimate?}` per gel. A unit's fitted gel names one by code; see `docs/fixtures-engineering.md` §"Fitted media"

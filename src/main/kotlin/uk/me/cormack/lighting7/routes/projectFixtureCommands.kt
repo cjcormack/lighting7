@@ -6,9 +6,11 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.mcp.requireCommandsAccess
-import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.state.CommandOutput
@@ -38,7 +40,7 @@ internal fun Route.routeApiRestProjectFixtureCommands(state: State) {
         withCurrentProject(state, resource.parent.parent.parent.projectId, "Only the current project's fixtures can run a command") { project ->
             val patchId = resource.parent.parent.patchId
             val key = transaction(state.database) {
-                DaoFixturePatch.findById(patchId)?.takeIf { it.project.id == project.id }?.key
+                RigScope.of(project).patches(DaoFixturePatches.id eq patchId).firstOrNull()?.key
             } ?: return@withCurrentProject call.respond(HttpStatusCode.NotFound, ErrorResponse("Patch not found"))
             when (val outcome = runFixtureCommand(state, key, resource.command)) {
                 is FixtureCommandResult.Done -> call.respond(outcome.response)

@@ -16,6 +16,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.routes.sceneImageStoresOf
 import uk.me.cormack.lighting7.routes.blankElementFields
 import uk.me.cormack.lighting7.routes.forgetElement
 import uk.me.cormack.lighting7.routes.seatResolves
@@ -27,6 +28,7 @@ import uk.me.cormack.lighting7.routes.store
 import uk.me.cormack.lighting7.routes.toFields
 import uk.me.cormack.lighting7.state.SceneImageException
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.util.UUID
 
 /** `upload_scene_image`'s cap, decoded: smaller than the REST upload's 25 MB, since it arrives as text. */
@@ -126,8 +128,17 @@ internal class SceneSetupTools(private val state: State) {
             val regionUuids = regionUuidByName.values.toSet()
             val projectUuid = project.uuid.toString()
 
-            removeElements.filter { it !in ownElements }.forEach { problems += "removeElements: no element named '$it'" }
-            removeViewpoints.filter { it !in ownViews }.forEach { problems += "removeViewpoints: no viewpoint named '$it'" }
+            // A show on a venue: the venue's elements and viewpoints are in the scene, and the venue's
+            // (venue plan session 3) — a row or a remove naming one is refused, never a new copy.
+            val rig = RigScope.of(project)
+            val venueElements = stored.filterKeys { it !in ownElements }.keys
+            val venueViews = storedViews.filterKeys { it !in ownViews }.keys
+            (rows.keys + removeElements).filter { it in venueElements }.distinct()
+                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage element '$it'") }
+            (viewpointRows.map { it.second } + removeViewpoints).filter { it in venueViews }.distinct()
+                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage viewpoint '$it'") }
+            removeElements.filter { it !in ownElements && it !in venueElements }.forEach { problems += "removeElements: no element named '$it'" }
+            removeViewpoints.filter { it !in ownViews && it !in venueViews }.forEach { problems += "removeViewpoints: no viewpoint named '$it'" }
             removeElements.filter { it in rows }.forEach { problems += "element '$it' is both set and removed" }
             removeViewpoints.filter { r -> viewpointRows.any { it.second == r } }.forEach { problems += "viewpoint '$it' is both set and removed" }
 
@@ -296,12 +307,18 @@ internal class SceneSetupTools(private val state: State) {
         val project = state.projectManager.currentProject
         // What each painted face's image is, read before the transaction: an image with no info
         // sidecar is decoded to answer, and that must never hold the one pooled connection.
-        val paintHashes = transaction(state.database) {
-            stageElementsOf(project).flatMap { paintHashesOf(it.params) }.toSet()
+        val (paintHashes, stores) = transaction(state.database) {
+            stageElementsOf(project).flatMap { paintHashesOf(it.params) }.toSet() to sceneImageStoresOf(project)
         }
-        val imageInfo = paintHashes.associateWith { state.sceneImages.info(project.uuid.toString(), it) }
+        // A venue's cloth is painted from the pinned version's store (venue plan session 3).
+        val imageInfo = paintHashes.associateWith { hash -> stores.firstNotNullOfOrNull { state.sceneImages.info(it, hash) } }
         val body = transaction(state.database) {
             val elements = stageElementsOf(project)
+            val rig = RigScope.of(project)
+            // A show on a venue: whose each element and viewpoint is (venue plan session 3).
+            fun JsonObjectBuilder.putOwner(rowProject: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>) {
+                if (rig.venue != null) put("owner", if (rig.ownerOf(rowProject) == RigOwner.VENUE) "venue" else "show")
+            }
             val regionNames = RigScope.of(project).stageRegions().associate { it.uuid.toString() to it.name }
             val nameByUuid = elements.associate { it.uuid to it.name }
             val seating = elements.mapNotNull { e ->
@@ -314,6 +331,7 @@ internal class SceneSetupTools(private val state: State) {
                 putJsonArray("elements") {
                     for (e in elements) add(buildJsonObject {
                         put("name", e.name)
+                        putOwner(e.project.id)
                         put("kind", e.kind)
                         put("layer", e.layer)
                         put("x", e.positionX)
@@ -372,6 +390,7 @@ internal class SceneSetupTools(private val state: State) {
                 putJsonArray("viewpoints") {
                     for (v in stageViewpointsOf(project)) add(buildJsonObject {
                         put("name", v.name)
+                        putOwner(v.project.id)
                         put("kind", v.kind)
                         v.eyeX?.let { putPoint("eye", StagePoint(it, v.eyeY ?: 0.0, v.eyeZ ?: 0.0)) }
                         v.targetX?.let { putPoint("target", StagePoint(it, v.targetY ?: 0.0, v.targetZ ?: 0.0)) }
@@ -734,6 +753,7 @@ internal class SceneSetupTools(private val state: State) {
             description = "Nothing was written: ${problems.size} problem(s)",
             result = buildJsonObject {
                 put("error", "Nothing was written: fix these ${problems.size} problem(s) and send the request again")
+                VenueRigGuard.codeOf(problems)?.let { put("code", it) }
                 put("problems", buildJsonArray { shown.forEach { add(it) } })
                 if (problems.size > shown.size) put("moreProblems", problems.size - shown.size)
             }.toString(),

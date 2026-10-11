@@ -212,6 +212,9 @@ function StageDimensionsCard({ projectId }: { projectId: number }) {
     )
   }
 
+  // A show on a venue takes its stage from the venue (venue plan session 3): the desk refuses a
+  // write here with VENUE_OWNED, so the card reads the venue's box and says where it is changed.
+  const venue = project.venue ?? null
   const dirty =
     widthM !== project.stageWidthM ||
     depthM !== project.stageDepthM ||
@@ -236,7 +239,9 @@ function StageDimensionsCard({ projectId }: { projectId: number }) {
       <div>
         <h2 className="text-sm font-semibold">Stage Dimensions</h2>
         <p className="text-xs text-muted-foreground">
-          Bounding box (metres) used to frame the 3D view. Leave blank to fall back to defaults.
+          {venue
+            ? `The venue's stage (${venue.name ?? "venue"} · v${venue.version}). Change it in the venue and publish.`
+            : "Bounding box (metres) used to frame the 3D view. Leave blank to fall back to defaults."}
         </p>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -245,22 +250,25 @@ function StageDimensionsCard({ projectId }: { projectId: number }) {
           label="Width"
           value={widthM}
           onChange={setWidthM}
+          disabled={venue != null}
         />
         <DimensionField
           id="stage-depth"
           label="Depth"
           value={depthM}
           onChange={setDepthM}
+          disabled={venue != null}
         />
         <DimensionField
           id="stage-height"
           label="Height"
           value={heightM}
           onChange={setHeightM}
+          disabled={venue != null}
         />
       </div>
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!dirty || isUpdating}>
+        <Button onClick={handleSave} disabled={venue != null || !dirty || isUpdating}>
           {isUpdating ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -273,11 +281,13 @@ function DimensionField({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   id: string
   label: string
   value: number | null
   onChange: (v: number | null) => void
+  disabled?: boolean
 }) {
   return (
     <div className="space-y-1.5">
@@ -289,6 +299,7 @@ function DimensionField({
         value={value ?? ""}
         onChange={(e) => onChange(parseNullableNumber(e.target.value))}
         onFocus={(e) => e.target.select()}
+        disabled={disabled}
       />
     </div>
   )

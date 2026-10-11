@@ -49,6 +49,22 @@ class RigBriefing(private val state: State) {
     /** Fixtures, groups, the effect library, what is running and parked, speed masters and the show's records. */
     fun describeRig(): String {
         val sb = StringBuilder()
+        // Whose each record is (venue plan session 3): a show on a venue holds the venue's rig at
+        // its pinned version and its own additions, and the setup tools refuse writes to the former.
+        val owners = ownership()
+        owners?.let { o ->
+            sb.appendLine("## Venue")
+            sb.appendLine(
+                "This show sits on the venue **${o.venueName}** at v${o.version}. Every record below says whose it is: " +
+                    "`owner=venue` is the venue's — this show cannot change it (setup tools refuse it with VENUE_OWNED); " +
+                    "the operator can hide it in this show, and changing a venue fixture's address, position, focus or media " +
+                    "per show comes with facet overrides in a later release. `owner=show` is this show's own. " +
+                    "Keys and names are one namespace across both.",
+            )
+            sb.appendLine()
+        }
+        fun ownerLabel(set: (Ownership) -> Set<String>, name: String): String =
+            owners?.let { o -> if (name in set(o)) ", owner=venue" else ", owner=show" } ?: ""
         // Fixtures
         sb.appendLine("## Available Fixtures")
         val infrastructureKeys = state.show.fixtures.infrastructureKeys()
@@ -74,6 +90,7 @@ class RigBriefing(private val state: State) {
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     triggerLabel(fixture) +
                     commandLabel(fixture) +
+                    ownerLabel({ it.patches }, fixture.key) +
                     ")")
         }
         sb.appendLine()
@@ -84,7 +101,7 @@ class RigBriefing(private val state: State) {
             sb.appendLine("## Infrastructure (not lighting — do not target unless the operator names it)")
             for (fixture in infrastructure) {
                 sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
-                    "key=`${fixture.key}`, type=`${fixture.typeKey}`)")
+                    "key=`${fixture.key}`, type=`${fixture.typeKey}`" + ownerLabel({ it.patches }, fixture.key) + ")")
             }
             sb.appendLine()
         }
@@ -93,7 +110,10 @@ class RigBriefing(private val state: State) {
         sb.appendLine("## Available Groups")
         for (group in state.show.fixtures.groups) {
             val caps = group.detectCapabilities()
-            sb.appendLine("- **${group.name}** (${group.allMembers.size} members, capabilities=${caps.joinToString(",")})")
+            sb.appendLine(
+                "- **${group.name}** (${group.allMembers.size} members, capabilities=${caps.joinToString(",")}" +
+                    ownerLabel({ it.groups }, group.name) + ")",
+            )
         }
         sb.appendLine()
 
@@ -274,6 +294,35 @@ class RigBriefing(private val state: State) {
         return sb.toString()
     }
 
+    /** Whose the live rig's records are, when the current project is a show on a venue; else null. */
+    private class Ownership(
+        val venueName: String,
+        val version: Int,
+        /** The venue's records, by patch key and by name. */
+        val patches: Set<String>,
+        val groups: Set<String>,
+        val riggings: Set<String>,
+        val regions: Set<String>,
+    )
+
+    private fun ownership(): Ownership? {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val rig = RigScope.of(project)
+            val venue = rig.venue ?: return@transaction null
+            fun <T> venueNames(rows: Iterable<T>, project: (T) -> org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>, name: (T) -> String) =
+                rows.filter { rig.ownerOf(project(it)) == RigOwner.VENUE }.map(name).toSet()
+            Ownership(
+                venue.venueName,
+                venue.version,
+                patches = venueNames(rig.patches(), { it.project.id }, { it.key }),
+                groups = venueNames(rig.groups(), { it.project.id }, { it.name }),
+                riggings = venueNames(rig.riggings(), { it.project.id }, { it.name }),
+                regions = venueNames(rig.stageRegions(), { it.project.id }, { it.name }),
+            )
+        }
+    }
+
     /**
      * The stage box, the regions, the riggings upstage first with their kind and trim, and a count
      * of the scene's elements and viewpoints. Null when the project has none of it.
@@ -283,14 +332,19 @@ class RigBriefing(private val state: State) {
         return transaction(state.database) {
             val p = DaoProject.findById(project.id) ?: return@transaction null
             val rig = RigScope.of(project)
+            // A show on a venue marks the venue's regions and riggings (venue plan session 3).
+            fun whose(rowProject: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>) =
+                if (rig.venue != null && rig.ownerOf(rowProject) == RigOwner.VENUE) " [venue's]" else ""
             val regions = rig.stageRegions()
-                .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).map { it.name }
+                .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).map { it.name + whose(it.project.id) }
             val riggings = rig.riggings().toList()
                 .sortedByDescending { it.positionY ?: Double.NEGATIVE_INFINITY }
             val elements = rig.stageElements().toList()
             val viewpoints = rig.stageViewpoints()
                 .orderBy(DaoStageViewpoints.sortOrder to SortOrder.ASC).map { it.name }
-            val box = listOf(p.stageWidthM, p.stageDepthM, p.stageHeightM)
+            // The stage's size is the rig's: a show on a venue reads the venue's (venue plan §3.2).
+            val bounds = rig.stageBounds()
+            val box = listOf(bounds.widthM, bounds.depthM, bounds.heightM)
             if (box.all { it == null } && regions.isEmpty() && riggings.isEmpty() && elements.isEmpty() && viewpoints.isEmpty()) {
                 return@transaction null
             }
@@ -301,13 +355,13 @@ class RigBriefing(private val state: State) {
             }
             buildString {
                 appendLine("Metres, FOH-relative and Z-up: origin at the centre of the stage's downstage edge at deck level, +y upstage, +x audience right.")
-                if (box.any { it != null }) appendLine("Stage box ${m(p.stageWidthM)} × ${m(p.stageDepthM)} × ${m(p.stageHeightM)} m (width × depth × trim).")
+                if (box.any { it != null }) appendLine("Stage box ${m(bounds.widthM)} × ${m(bounds.depthM)} × ${m(bounds.heightM)} m (width × depth × trim).")
                 if (regions.isNotEmpty()) appendLine("Regions: ${regions.joinToString()}.")
                 if (riggings.isNotEmpty()) {
                     appendLine(
                         "Riggings, upstage first: " + riggings.joinToString { r ->
                             val stood = if (standsOn(r.kind)) ", units stand on it" else ""
-                            "${r.name} (${r.kind?.lowercase()?.replace('_', ' ') ?: "rigging"}, y ${m(r.positionY)}, z ${m(r.positionZ)}$stood)"
+                            "${r.name}${whose(r.project.id)} (${r.kind?.lowercase()?.replace('_', ' ') ?: "rigging"}, y ${m(r.positionY)}, z ${m(r.positionZ)}$stood)"
                         } + ".",
                     )
                 }

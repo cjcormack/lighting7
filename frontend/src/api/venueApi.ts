@@ -21,6 +21,18 @@ export interface VenueHistory {
   installed?: number | null
   draft: { changes: number; outputChanges: number }
   versions: VenueVersion[]
+  /**
+   * The shows on this venue (venue plan session 3), by name, each with the version it is pinned
+   * to. Absent from a desk older than session 3.
+   */
+  shows?: VenueShow[]
+}
+
+/** A show on a venue, and the version it is pinned to. */
+export interface VenueShow {
+  id: number
+  name: string
+  version: number
 }
 
 /** `OTHER` is any table outside the rig a venue holds (a Look, a parked channel), named by `table`. */

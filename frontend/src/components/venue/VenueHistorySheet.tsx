@@ -17,6 +17,7 @@ import { changesPhrase, publishedDate } from '@/lib/venue'
 import { cn } from '@/lib/utils'
 import { VenueChangeList } from './VenueChangeList'
 import { DiscardDraftDialog } from './DiscardDraftDialog'
+import { VenueShowsList } from './VenueShowsList'
 
 /** A side of a comparison: a version number, 0 the empty venue before v1, or the draft. */
 type Side = number | 'draft'
@@ -107,6 +108,8 @@ export function VenueHistorySheet({
             {history.versions.length === 0 && (
               <p className="text-sm text-muted-foreground">Nothing published yet. Publish the draft to make v1.</p>
             )}
+
+            <VenueShowsList shows={history.shows ?? []} />
 
             {compare && (
               <section className="space-y-3 border-t pt-3" aria-label="Compare">

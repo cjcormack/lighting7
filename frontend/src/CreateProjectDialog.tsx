@@ -12,7 +12,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { useCreateProjectMutation } from "./store/projects"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useCreateProjectMutation, useProjectListQuery } from "./store/projects"
+
+/** The Venue select's "none": a standalone show, which holds its whole rig as every project did. */
+const NO_VENUE = "none"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -32,11 +36,17 @@ export default function CreateProjectDialog({
   const isVenue = kind === "VENUE"
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  // A new show on a venue (venue plan session 3): the minimal select — the venue picker with its
+  // versions and the stalls preset is the Projects page's, in session 7.
+  const [venueId, setVenueId] = useState(NO_VENUE)
+  const { data: projects } = useProjectListQuery(undefined, { skip: !open || isVenue })
+  const venues = (projects ?? []).filter((p) => p.kind === "VENUE")
   const [createProject, { isLoading }] = useCreateProjectMutation()
 
   const handleClose = () => {
     setName("")
     setDescription("")
+    setVenueId(NO_VENUE)
     setOpen(false)
   }
 
@@ -48,6 +58,7 @@ export default function CreateProjectDialog({
         name,
         description: description || undefined,
         ...(isVenue ? { kind } : {}),
+        ...(!isVenue && venueId !== NO_VENUE ? { venueId: Number(venueId) } : {}),
       }).unwrap()
     } catch {
       return
@@ -88,6 +99,29 @@ export default function CreateProjectDialog({
               rows={2}
             />
           </div>
+          {!isVenue && venues.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="project-venue">Venue</Label>
+              <Select value={venueId} onValueChange={setVenueId}>
+                <SelectTrigger id="project-venue">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={String(v.id)}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NO_VENUE}>None — standalone</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {venueId === NO_VENUE
+                  ? "The project holds its whole rig, as every project does today."
+                  : "The show starts from the venue's latest published version — referenced, not copied — and adds its own on top."}
+              </p>
+            </div>
+          )}
         </SheetBody>
         <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={handleClose} disabled={isLoading}>

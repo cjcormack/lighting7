@@ -17,15 +17,17 @@ import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     // GET /{projectId}/patch-groups - List groups
     get<ProjectPatchGroupsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val groups = transaction(state.database) {
-                RigScope.of(project).groups()
+                val rig = RigScope.of(project)
+                rig.groups()
                     .orderBy(DaoFixtureGroups.name to SortOrder.ASC)
-                    .map { it.toSummaryDto() }
+                    .map { it.toSummaryDto(rig) }
             }
             call.respond(groups)
         }
@@ -35,9 +37,8 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     get<ProjectPatchGroupResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val group = transaction(state.database) {
-                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
-                if (group.project.id != project.id) return@transaction null
-                group.toDetailDto()
+                val rig = RigScope.of(project)
+                rig.groups(DaoFixtureGroups.id eq resource.groupId).firstOrNull()?.toDetailDto(rig)
             }
 
             if (group == null) {
@@ -53,16 +54,16 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             val request = call.receive<UpdatePatchGroupRequest>()
             val result = transaction(state.database) {
-                val group = DaoFixtureGroup.findById(resource.groupId)
-                    ?: return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
-                if (group.project.id != project.id) {
-                    return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
-                }
+                val rig = RigScope.of(project)
+                val group = VenueRigGuard.ownForWrite(
+                    rig, DaoFixtureGroup.findById(resource.groupId), { it.project.id }, { "Group '${it.name}'" },
+                ) ?: return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
 
                 // Rename
                 request.name?.let { newName ->
-                    val existing = RigScope.of(project).groups(DaoFixtureGroups.name eq newName).firstOrNull()
+                    val existing = rig.groups(DaoFixtureGroups.name eq newName).firstOrNull()
                     if (existing != null && existing.id != group.id) {
+                        VenueRigGuard.refuseIfVenue(rig, existing.project.id, "Group name '$newName'")
                         return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group name '$newName' already exists")
                     }
                     group.name = newName
@@ -76,7 +77,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                     }
                 }
 
-                Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(), null)
+                Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(rig), null)
             }
 
             val (groupDto, error) = result
@@ -100,8 +101,9 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     delete<ProjectPatchGroupResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
-                if (group.project.id != project.id) return@transaction null
+                val group = VenueRigGuard.ownForWrite(
+                    RigScope.of(project), DaoFixtureGroup.findById(resource.groupId), { it.project.id }, { "Group '${it.name}'" },
+                ) ?: return@transaction null
                 deleteFixtureGroupRows(group)
             }
 
@@ -148,6 +150,8 @@ data class PatchGroupDto(
     val id: Int,
     val name: String,
     val memberCount: Int,
+    /** Whose the group is in this rig (venue plan D12): a show's may hold venue patches, a venue's never a show's. */
+    val owner: RigOwner = RigOwner.SHOW,
 )
 
 @Serializable
@@ -155,6 +159,7 @@ data class PatchGroupDetailDto(
     val id: Int,
     val name: String,
     val members: List<PatchGroupMemberDto>,
+    val owner: RigOwner = RigOwner.SHOW,
 )
 
 @Serializable
@@ -173,16 +178,18 @@ data class UpdatePatchGroupRequest(
 )
 
 // Helpers
-private fun DaoFixtureGroup.toSummaryDto() = PatchGroupDto(
+private fun DaoFixtureGroup.toSummaryDto(rig: RigScope) = PatchGroupDto(
     id = id.value,
     name = name,
-    memberCount = members.count().toInt(),
+    memberCount = rig.members(this).count().toInt(),
+    owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
 )
 
-private fun DaoFixtureGroup.toDetailDto() = PatchGroupDetailDto(
+private fun DaoFixtureGroup.toDetailDto(rig: RigScope) = PatchGroupDetailDto(
     id = id.value,
     name = name,
-    members = members
+    owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
+    members = rig.members(this)
         .sortedBy { it.sortOrder }
         .map { PatchGroupMemberDto(
             patchId = it.fixturePatch.id.value,

@@ -2144,11 +2144,24 @@ Venue plan session 2 adds venues (`projects.kind = VENUE`) and their frozen vers
 Until then **sync is refused for both** (P6): the per-project sync subtree answers 409
 `SYNC_VENUE_PENDING` for a venue or a version, reads included (`GET …/sync/config` creates the config
 row it answers with), and `AutoSyncScheduler` treats one as disabled. So no repo is ever attached to a
-venue, and an auto-sync cannot push a show repo without its rig. Nothing about a show changes: every
+venue, and an auto-sync cannot push a show repo without its rig. Nothing about a standalone show changes: every
 project is a `SHOW` unless made otherwise, and `kind` is not exported yet (a clone of a venue is told
 it by `ProjectCloner`). `venue_versions` is `MachineLocal` in `SyncCoverageTest`; session 4 rebuilds
 it from the venue repo's tags. `SeatingParams.block` rides a seating's `params` object, which every
 version since 18 already carries, so it needs no bump.
+
+**Shows on a venue are refused too** (venue plan session 3). A show pins a venue version
+(`projects.venue_uuid` + `.venue_version`) and hides some of its records (`show_hides`); its rig is
+its own rows **plus** the pinned version's (`RigScope`). §3.2 calls the pin and the hides portable,
+but exporting them changes the JSON layout, and `formatVersion` 24 is session 4. So neither is wired
+through `ProjectExporter` / `ProjectImporter` yet, `show_hides` is `Excluded` in `SyncCoverageTest`
+with a reason naming session 4, and **nothing can carry a venue-bound show off the desk without its
+rig**: the per-project sync subtree answers 409 `SYNC_VENUE_PENDING` for one as it does for a venue
+(`refuseVenueSync`, reads included), `AutoSyncScheduler` treats one as disabled — a show that was
+synced before it was extracted keeps its config row, and stops ticking — the manual export
+(`POST /projects/{id}/export`) answers the same 409 (`refusedVenueBoundExport`), and the clone is
+409 `VENUE_CLONE_PENDING` (the route, and `ProjectCloner` as the belt), since a clone that keeps the
+pin is §3.4's, session 4's. A standalone show is untouched: everything here keys on the pin.
 
 ## How to add a new table
 

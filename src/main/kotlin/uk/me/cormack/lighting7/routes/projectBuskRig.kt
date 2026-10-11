@@ -8,6 +8,7 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
@@ -20,8 +21,11 @@ import uk.me.cormack.lighting7.models.DaoBuskRigRow
 import uk.me.cormack.lighting7.models.DaoBuskRigTile
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.buskRigTileKind
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.show.Fixtures
@@ -248,10 +252,12 @@ internal fun applyBuskRig(fixtures: Fixtures, project: DaoProject, request: Busk
 
     // References: every group and patch named is in this project, and every cell is one the live
     // fixture has — validated against the fixture's own `elements`, never by parsing the key.
+    // A show on a venue tiles the venue's groups and patches too: they are in its rig (venue plan §3.3).
+    val rig = RigScope.of(project)
     val groups = allTiles.mapNotNull { it.groupId }.toSet()
-        .associateWith { id -> DaoFixtureGroup.findById(id)?.takeIf { it.project.id == project.id } }
+        .associateWith { id -> rig.groups(DaoFixtureGroups.id eq id).firstOrNull() }
     val patches = allTiles.mapNotNull { it.patchId }.toSet()
-        .associateWith { id -> DaoFixturePatch.findById(id)?.takeIf { it.project.id == project.id } }
+        .associateWith { id -> rig.patches(DaoFixturePatches.id eq id).firstOrNull() }
     val missingGroups = groups.filterValues { it == null }.keys.sorted()
     val missingPatches = patches.filterValues { it == null }.keys.sorted()
     if (missingGroups.isNotEmpty() || missingPatches.isNotEmpty()) {

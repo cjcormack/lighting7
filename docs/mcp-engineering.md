@@ -456,6 +456,35 @@ templates, park) and `aim_fixtures` when it is told to `saveAsTemplate`. Tools t
 it stands — apply, GO, aim, tempo — and the reads pass. A venue version is never live, so it needs
 no rule: `list_projects` leaves versions out and `switch_project` answers one as not found.
 
+### Tools on a show on a venue
+
+When the live project is a show **on a venue** (venue plan session 3), its rig is its own rows plus
+the pinned version's (`RigScope`), and the venue's records are the venue's. The setup tools refuse a
+write to one, every problem at once and before anything is written, with `VENUE_OWNED`: the problem
+line leads with the code, the result carries `"code": "VENUE_OWNED"`, and the message names hiding
+as the change a show can make (the operator's, on the Patch list or `PUT …/hidden`) and per-facet
+overrides as a later release (session 5). The writes it covers, by tool:
+
+- `patch_fixtures` — a row whose key is a venue patch's (upsert by key would change the venue's
+  row; hide it and patch your own under the key), and a `groups` entry naming a venue group (a
+  venue's group never holds a show's fixture, D12);
+- `place_fixtures` — a venue patch's key (re-hanging one per show is a Position facet override);
+- `delete_groups` — a venue group;
+- `set_stage` — the stage's size (the venue's), and a region or rigging set or removed by a venue
+  record's name;
+- `set_scene` — an element or viewpoint set or removed by a venue record's name, the
+  `proscenium-hall` template's rows included.
+
+A show's own records are written as before, and a hidden venue record is not in the rig, so its key
+or name is free. **`describe_rig` says whose each record is**: a *Venue* section naming the venue
+and the pinned version and saying what `owner=venue` means, `owner=venue | show` on every fixture and
+group line, and *[venue's]* on the stage paragraph's regions and riggings. `get_patch` carries
+`venue: {name, version, note}` and `owner` on every fixture, universe, rigging and region, and
+`get_scene` `owner` on every element and viewpoint; the stage size both answer is the venue's. A
+standalone show's answers are unchanged. `VenueException` is caught in `SetupTools.executeTool` and
+answered with its code, so a rule thrown below a tool reaches the model as the same refusal REST
+gives.
+
 ### `render_view`: Claude seeing the model
 
 Stage-view plan session 4 (D4). `set_scene` lets a model build the hall from a photo; this lets it

@@ -80,6 +80,21 @@ export interface FixturePatch extends LanternFocus {
    * (`lib/fittedMedia.ts`'s `mediaOver`). Optional because a desk that predates it omits it.
    */
   media?: FittedMedia | null;
+  /**
+   * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
+   * own, `VENUE` for its venue's at the pinned version. A venue row's every field is the venue's —
+   * the desk refuses a write to one through a show (`VENUE_OWNED`); a show can only hide it. Absent
+   * from a desk older than venues, which reads as `SHOW`.
+   */
+  owner?: RigOwner;
+}
+
+/** Whose a record of a show's rig is (venue plan §3.1). */
+export type RigOwner = 'SHOW' | 'VENUE';
+
+/** A venue row seen through a show: in the rig, not the show's to change. */
+export function isVenueOwned(record: { owner?: RigOwner }): boolean {
+  return record.owner === 'VENUE';
 }
 
 /**
@@ -153,6 +168,8 @@ export interface UniverseConfig {
   /** False when the interval is simply the default rather than pinned on this desk. */
   refreshIntervalOverridden: boolean;
   patchCount: number;
+  /** A venue's universe (venue plan session 3): its address is still set here, machine-local. */
+  owner?: RigOwner;
 }
 
 export interface CreatePatchRequest {
@@ -223,12 +240,15 @@ export interface PatchGroup {
   id: number;
   name: string;
   memberCount: number;
+  /** A venue's group holds venue fixtures only; a show's may hold the venue's too (venue plan D12). */
+  owner?: RigOwner;
 }
 
 export interface PatchGroupDetail {
   id: number;
   name: string;
   members: PatchGroupMember[];
+  owner?: RigOwner;
 }
 
 export interface PatchGroupMember {
