@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–3 shipped, as `a5f289b`, `d93e174` and `59b2263` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–4 shipped, as `a5f289b`, `d93e174`, `59b2263` and `39459ee` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -288,7 +288,7 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
     patch. Rigging, Regions and the Scene editors are **not** read-only for venue rows — their DTOs
     carry no `owner` yet — so a write there is refused by name and toasted.
 
-### Session 4 — sync (backend)
+### Session 4 — sync (backend) — done, `39459ee`
 
 - **`formatVersion` 24** (§3.4): the show export and import, the venue repo with tags, the importer
   seeding its maps from the snapshot, `VENUE_MISSING`, the clone keeping the pin. `JGitClient`
@@ -299,6 +299,35 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
   addition on a venue universe; a v23 archive still imports; a tag clash is refused.
 - **Docs:** `sync-engineering.md` §"Version 24" and §"Venue repos".
 - **Then:** Chris extracts project 9 into the Commemoration Hall, on a clone first (P6).
+- **As shipped** (PR #107). What session 5 onward inherits that the bullets above do not say:
+  - **`showOverrides/` is reserved at v24**: nothing writes it and a v24 reader refuses an archive
+    holding a file in it (422 on import, `FORMAT_TOO_NEW` before a pull), so session 5 adds overrides
+    without another `formatVersion` bump; its reader must drop the folder from
+    `ProjectImporter.RESERVED_FOLDERS`.
+  - **The fixture is `VenueTestSupport.seedShowOnVenue`, not `RichProjectFixture`** — a venue of two
+    versions (extract → v1, a moved truss → v2) and a show with a hide and an addition on a venue
+    universe, all non-default values. There is **no override** in it: those are session 5's.
+    `SyncCoverageTest` exports it beside the rich fixture so `showHides` produces output.
+  - **The pin travels in `project.json`** (`kind`, `venueUuid`, `venueVersion`, `venueRepo`), and the
+    hint is stored in a new nullable `projects.venue_repo`; a stored hint wins on export, else the
+    venue's attached repo. A diverged auto-merge three-way-merges the pin (`mergeProjectPin`),
+    because `project.json` is not a record and the remote's would otherwise win.
+  - **A missing pinned version** is `VENUE_MISSING` on import, add-remote-project, clone, a pull
+    (before the tree moves) and set-current; a show current at startup with one loads **no rig**
+    (`VenuePins.isMissing`), never a different one.
+  - **A venue repo is attached through the show's Sync tab and `sync_configs` row.** Sync now on a
+    venue is `VenueRepoSync.exchange`: tags in as snapshots (`venue_versions` only gains rows; the
+    same number published differently is `VENUE_VERSION_TAKEN`; a `vN` tag that is not a published
+    version is left alone), versions out, and a **clean** draft follows the newest pulled version
+    (re-checked inside the replace's transaction). A dirty draft is kept — the draft never syncs
+    (`VENUE_DRAFT_NOT_SYNCED`, `FU-VENUE-DRAFT-SYNC`).
+  - **Publish with a repo** pulls first and refuses `VENUE_VERSION_TAKEN`; a `sync.push = false` desk
+    pulls but refuses Publish (`VENUE_PUBLISH_PULL_ONLY`). Lock order is the venue lock, then the
+    project's sync lock.
+  - **Clone needed no venue code**: the archive carries the kind and pin, and hides keep their
+    `recordUuid` through the uuid remap.
+  - **Departure:** delete and replace now sweep cue events and scenery through their owners, closing
+    an orphan for cues that fire venue patches — found while wiring the replace.
 
 ### Session 5 — facet overrides and drift (backend + fixture sheet)
 
