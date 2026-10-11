@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
+import uk.me.cormack.lighting7.models.EffectivePlacement
 import uk.me.cormack.lighting7.models.MAX_EXTRA_PLACEMENTS
 import uk.me.cormack.lighting7.models.MAX_PLACEMENT_LABEL_LENGTH
 import uk.me.cormack.lighting7.models.extraPlacementsOf
@@ -218,6 +219,28 @@ internal fun applyExtraPlacements(
 }
 
 internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = focus.let { f -> PatchPlacementDto(
+    uuid = uuid.toString(),
+    label = label,
+    riggingUuid = rigging?.uuid?.toString(),
+    stageX = stageX,
+    stageY = stageY,
+    stageZ = stageZ,
+    baseYawDeg = baseYawDeg,
+    basePitchDeg = basePitchDeg,
+    baseRollDeg = baseRollDeg,
+    lengthM = lengthM,
+    lanternType = f.lanternType,
+    zoomDeg = f.zoomDeg,
+    lampRotationDeg = f.lampRotationDeg,
+    shutters = f.shutters,
+    gateRotationDeg = f.gateRotationDeg,
+    iris = f.iris,
+    focusSoftness = f.focusSoftness,
+    media = fittedMedia,
+) }
+
+/** A placement as its rig sees it — its patch's facet overrides laid over it — on the wire. */
+internal fun EffectivePlacement.toDto(): PatchPlacementDto = focus.let { f -> PatchPlacementDto(
     uuid = uuid.toString(),
     label = label,
     riggingUuid = rigging?.uuid?.toString(),

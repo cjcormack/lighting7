@@ -10,6 +10,8 @@ import org.jetbrains.exposed.v1.core.notInList
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.SizedIterable
 import org.jetbrains.exposed.v1.jdbc.select
+import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import java.util.UUID
 
 /**
@@ -20,8 +22,10 @@ import java.util.UUID
  * method here rather than filtering on `project_id` itself. For a standalone show, a venue and a
  * version, a project's rig is exactly its own rows. For a show **on a venue** (venue plan session
  * 3, §3.3) it is its own rows plus the pinned snapshot's, less the show's hides (`show_hides`) and
- * less the snapshot's Preset seating — one place, rather than ~80 call sites. Facet overrides
- * (session 5) will apply here too.
+ * less the snapshot's Preset seating — one place, rather than ~80 call sites. A venue patch's
+ * **facet overrides** (session 5, `show_overrides`) apply here too: [effective] lays them over the
+ * snapshot's row, so every reader of where a unit is, what it is patched to and what is in it reads
+ * the show's version through it.
  *
  * Two views, because a rig read and a write's lookup are different questions:
  *
@@ -57,6 +61,126 @@ class RigScope private constructor(
 
     fun patches(where: Op<Boolean>? = null): SizedIterable<DaoFixturePatch> =
         DaoFixturePatch.find(scoped(DaoFixturePatches.project, DaoFixturePatches.uuid, HideKind.PATCH, where))
+
+    /**
+     * The show's facet overrides as this rig applies them (venue plan §3.3, session 5): by venue patch
+     * uuid, then facet, decoded. Empty for [own], a standalone show, a venue and a version. A row whose
+     * value does not parse is left out (it contributes nothing) rather than failing the read.
+     */
+    val overrides: Map<UUID, Map<PatchFacet, FacetValue>> by lazy {
+        if (venue == null) return@lazy emptyMap()
+        DaoShowOverride.find { DaoShowOverrides.project eq projectId }
+            .mapNotNull { o -> decodeFacet(o.facet, o.value)?.let { Triple(o.recordUuid, o.facet, it) } }
+            .groupBy({ it.first }, { it.second to it.third })
+            .mapValues { it.value.toMap() }
+    }
+
+    private val universesByUuid: Map<UUID, DaoUniverseConfig> by lazy { universeConfigs().associateBy { it.uuid } }
+    private val riggingsByUuid: Map<UUID, DaoRigging> by lazy { riggings().associateBy { it.uuid } }
+
+    private fun universeIn(uuid: String): DaoUniverseConfig? =
+        runCatching { UUID.fromString(uuid) }.getOrNull()?.let { universesByUuid[it] }
+
+    /** A rigging of this rig by [uuid]; null for none, and for a uuid naming none (see [effective]). */
+    private fun riggingIn(uuid: String): DaoRigging? =
+        runCatching { UUID.fromString(uuid) }.getOrNull()?.let { riggingsByUuid[it] }
+
+    private fun riggingsResolve(uuids: List<String?>): Boolean = uuids.all { it == null || riggingIn(it) != null }
+
+    /**
+     * The facets of [patch] this show overrides that apply: only a row of the pinned snapshot takes one,
+     * and a facet naming a universe or rigging this rig no longer has (a show universe deleted, a venue
+     * rigging hidden, a version that dropped it) is **dormant** — it contributes nothing and the venue's
+     * whole facet stands, rather than half of it. Hiding a patch leaves its overrides dormant too: a
+     * hidden patch is out of [patches], and comes back with them.
+     */
+    fun overridesOf(patch: DaoFixturePatch): Map<PatchFacet, FacetValue> {
+        val layer = venue ?: return emptyMap()
+        if (patch.readValues[DaoFixturePatches.project] != layer.snapshotId) return emptyMap()
+        val stored = overrides[patch.uuid] ?: return emptyMap()
+        return stored.filterValues { v ->
+            when (v) {
+                is AddressFacet -> universeIn(v.universeConfigUuid) != null
+                is PositionFacet -> riggingsResolve(listOf(v.riggingUuid) + v.placements.map { it.riggingUuid })
+                else -> true
+            }
+        }
+    }
+
+    /**
+     * [patch] as this rig sees it: its own row, with each facet [overridesOf] names laid over it
+     * (venue plan §3.3). Read a facet field — address, position, focus, media — through this, never
+     * off the row. Inside the scope's transaction.
+     */
+    fun effective(patch: DaoFixturePatch): EffectivePatch {
+        val o = overridesOf(patch)
+        val address = o[PatchFacet.ADDRESS] as AddressFacet?
+        val position = o[PatchFacet.POSITION] as PositionFacet?
+        val focus = o[PatchFacet.FOCUS] as FocusFacet?
+        val media = o[PatchFacet.MEDIA] as MediaFacet?
+        return EffectivePatch(
+            row = patch,
+            overridden = o.keys,
+            universeConfig = address?.let { universeIn(it.universeConfigUuid) } ?: patch.universeConfig,
+            startChannel = address?.startChannel ?: patch.startChannel,
+            rigging = if (position != null) position.riggingUuid?.let(::riggingIn) else patch.rigging,
+            stageX = if (position != null) position.stageX else patch.stageX,
+            stageY = if (position != null) position.stageY else patch.stageY,
+            stageZ = if (position != null) position.stageZ else patch.stageZ,
+            baseYawDeg = if (position != null) position.baseYawDeg else patch.baseYawDeg,
+            basePitchDeg = if (position != null) position.basePitchDeg else patch.basePitchDeg,
+            baseRollDeg = if (position != null) position.baseRollDeg else patch.baseRollDeg,
+            lengthM = if (position != null) position.lengthM else patch.lengthM,
+            focus = focus?.lantern ?: patch.focus,
+            beamAngleDeg = if (focus != null) focus.beamAngleDeg else patch.beamAngleDeg,
+            kindOverride = if (focus != null) kindUnderLantern(focus.lanternType, patch.lanternType, patch.kindOverride) else patch.kindOverride,
+            gelCode = if (media != null) media.gelCode else patch.gelCode,
+            fittedMedia = if (media != null) media.media else patch.fittedMedia,
+        )
+    }
+
+    /** [effective] over many rows, in their order. */
+    fun effective(patches: Iterable<DaoFixturePatch>): List<EffectivePatch> = patches.map(::effective)
+
+    /**
+     * [patch]'s extra [placements] (its own, in stored order) as this rig sees them: a placement the
+     * patch's Position, Focus or Media override names takes that facet's fields from it; every other
+     * keeps its own.
+     */
+    fun effectivePlacements(patch: DaoFixturePatch, placements: List<DaoFixturePatchPlacement>): List<EffectivePlacement> {
+        val o = overridesOf(patch)
+        val position = (o[PatchFacet.POSITION] as PositionFacet?)?.placements?.associateBy { it.placementUuid }.orEmpty()
+        val focus = (o[PatchFacet.FOCUS] as FocusFacet?)?.placements?.associateBy { it.placementUuid }.orEmpty()
+        val media = (o[PatchFacet.MEDIA] as MediaFacet?)?.placements?.associateBy { it.placementUuid }.orEmpty()
+        return placements.map { p ->
+            val key = p.uuid.toString()
+            val pos = position[key]
+            EffectivePlacement(
+                row = p,
+                rigging = if (pos != null) pos.riggingUuid?.let(::riggingIn) else p.rigging,
+                stageX = if (pos != null) pos.stageX else p.stageX,
+                stageY = if (pos != null) pos.stageY else p.stageY,
+                stageZ = if (pos != null) pos.stageZ else p.stageZ,
+                baseYawDeg = if (pos != null) pos.baseYawDeg else p.baseYawDeg,
+                basePitchDeg = if (pos != null) pos.basePitchDeg else p.basePitchDeg,
+                baseRollDeg = if (pos != null) pos.baseRollDeg else p.baseRollDeg,
+                lengthM = if (pos != null) pos.lengthM else p.lengthM,
+                focus = focus[key]?.lantern ?: p.focus,
+                fittedMedia = if (key in media) media.getValue(key).media else p.fittedMedia,
+            )
+        }
+    }
+
+    /** How many of the rig's patches sit on universe [universeId] as the rig sees them — an Address override counts where it puts a unit. */
+    fun patchCountOn(universeId: EntityID<Int>): Int =
+        if (overrides.isEmpty()) patches(DaoFixturePatches.universeConfig eq universeId).count().toInt()
+        else effective(patches().toList()).count { it.universeConfig.id == universeId }
+
+    /** [effectivePlacements] for many patches in one query, by patch id; a patch with none is absent. */
+    fun effectivePlacementsByPatch(patches: Collection<DaoFixturePatch>): Map<Int, List<EffectivePlacement>> {
+        val stored = placementsByPatch(patches)
+        return patches.mapNotNull { p -> stored[p.id.value]?.let { p.id.value to effectivePlacements(p, it) } }.toMap()
+    }
 
     /**
      * [patches]' extra placements, by patch id, each list in stored order; a patch with none is

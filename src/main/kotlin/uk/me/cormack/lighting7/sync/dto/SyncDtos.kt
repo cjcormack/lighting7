@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.PromptBookRectDto
@@ -39,8 +40,10 @@ data class FormatVersionJson(
     // the desk (`VENUE_MISSING` otherwise). A venue syncs as its own repo, one tagged commit per
     // published version, `venueVersion.json` beside the usual layout. The number moves for v4's reason
     // — a v23 reader would import a pinned show as a standalone one whose links name rows it does not
-    // have, and its next push would write the pin and the hides away. `showOverrides/` (session 5) is
-    // reserved: a v24 reader refuses an archive holding one, so session 5 adds it without a bump.
+    // have, and its next push would write the pin and the hides away. `showOverrides/{uuid}.json` (session
+    // 5), a show's facet overrides of venue patches, was reserved by the first v24 reader — which refuses
+    // an archive holding one — so session 5 writes it without a bump, and a session-4 desk refuses a show
+    // carrying overrides rather than loading a different rig.
     // `minReader` stays at **5**: every key defaults, and a v23 archive imports unchanged.
     //
     // v23: painted cloths (scrim plan session 1, P2). No DTO changes: a drape's `fabric` and a drape's
@@ -256,6 +259,24 @@ data class ShowHideJson(
     val uuid: String,
     val recordKind: HideKind,
     val recordUuid: String,
+)
+
+/**
+ * v24 (venue plan session 5, no bump — session 4 reserved the folder): one of a show's facet overrides
+ * of a venue patch, `showOverrides/{uuid}.json`. `recordUuid` names the venue patch, never a record of
+ * the show's own archive, so a clone keeps it; `value` and `base` are the facet's fields as
+ * `models/patchFacets.kt` shapes them — a universe or rigging named by uuid, which a clone remaps where
+ * it is the show's own and keeps where it is the venue's.
+ */
+@Serializable
+data class ShowOverrideJson(
+    val uuid: String,
+    val recordUuid: String,
+    val facet: PatchFacet,
+    /** The show's value of the facet. */
+    val value: JsonElement,
+    /** The venue's value of the facet when it was overridden (or last kept). */
+    val base: JsonElement,
 )
 
 /**

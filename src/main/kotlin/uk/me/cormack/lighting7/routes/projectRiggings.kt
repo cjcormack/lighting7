@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.detachPlacementsFromRigging
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectRiggings(state: State) {
@@ -187,7 +188,9 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 // Extra placements (a paired dimmer's other lantern) hang on riggings too.
                 val detached = DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }
                     .onEach { it.rigging = null }
-                    .count() + detachPlacementsFromRigging(rigging)
+                    .count() + detachPlacementsFromRigging(rigging) +
+                    // A venue patch a show hangs on its own rigging through a Position override.
+                    ShowOverrides.detachRigging(project.id, rigging.uuid)
                 rigging.delete()
                 detached
             }

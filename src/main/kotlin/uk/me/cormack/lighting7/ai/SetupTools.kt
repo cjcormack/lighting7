@@ -62,6 +62,7 @@ import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.time.Duration
 import java.util.UUID
@@ -277,12 +278,15 @@ class SetupTools(
             val universes = rig.universeConfigs()
                 .sortedWith(compareBy({ it.subnet }, { it.universe }))
             val universeById = universes.associateBy { it.id.value }
-            val patches = rig.patches()
+            // As the rig sees them: a venue patch's facet overrides (venue plan session 5) laid over it.
+            val patchRows = rig.patches()
                 .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC).toList()
+            val patches = rig.effective(patchRows)
             val groups = rig.groups()
                 .orderBy(DaoFixtureGroups.name to SortOrder.ASC).toList()
             val keyByPatchId = patches.associate { it.id.value to it.key }
-            val placementsByPatch = rig.placementsByPatch(patches)
+            val placementsByPatch = rig.effectivePlacementsByPatch(patchRows)
+            val driftByPatch = ShowOverrides.drift(project).filter { !it.missing }.groupBy { it.recordUuid }
             val membersByGroup = groups.associate { g ->
                 g.name to rig.members(g).sortedBy { it.sortOrder }.mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
             }
@@ -304,8 +308,12 @@ class SetupTools(
                         put("version", it.version)
                         put(
                             "note",
-                            "Records with owner=venue are the venue's: this show cannot change them (VENUE_OWNED), only hide them; " +
-                                "per-show overrides of a venue fixture's address, position, focus or media come in a later release.",
+                            "Records with owner=venue are the venue's: the setup tools refuse a write to one (VENUE_OWNED). A show " +
+                                "can hide one, or make a venue fixture's address, position, focus or media its own — a facet override, " +
+                                "PUT /api/rest/projects/{id}/patches/{patchId}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}, or the fixture " +
+                                "sheet's Venue | This show switch. A fixture's `overrides` lists those facets; its fields are already " +
+                                "the overridden ones (but for a `dormant` one, which names a universe or rigging the rig lacks, so the " +
+                                "venue's stands), and `drifted` marks a facet the venue has changed since.",
                         )
                     }
                 }
@@ -362,7 +370,18 @@ class SetupTools(
                             put("startChannel", p.startChannel)
                             put("endChannel", p.startChannel + count - 1)
                             groupsByKey[p.key]?.let { g -> putJsonArray("groups") { g.forEach { add(it) } } }
-                            val riggingId = p.readValues.getOrNull(DaoFixturePatches.rigging)?.value
+                            driftByPatch[p.uuid]?.takeIf { rig.ownerOf(p.project.id) == RigOwner.VENUE }?.let { facets ->
+                                putJsonArray("overrides") {
+                                    facets.forEach { d ->
+                                        addJsonObject {
+                                            put("facet", d.facet.name)
+                                            if (d.drifted) put("drifted", true)
+                                            if (d.dormant) put("dormant", true)
+                                        }
+                                    }
+                                }
+                            }
+                            val riggingId = p.rigging?.id?.value
                             riggingId?.let { riggingNames[it] }?.let { put("rigging", it) }
                             putOptional("x", p.stageX); putOptional("y", p.stageY); putOptional("z", p.stageZ)
                             putWorld(p.stageX, p.stageY, p.stageZ, riggingId?.let { riggingPoses[it] })
@@ -382,7 +401,7 @@ class SetupTools(
                                     alsoAt.forEach { pl ->
                                         addJsonObject {
                                             pl.label?.let { put("label", it) }
-                                            val placementRiggingId = pl.readValues.getOrNull(DaoFixturePatchPlacements.rigging)?.value
+                                            val placementRiggingId = pl.rigging?.id?.value
                                             placementRiggingId?.let { riggingNames[it] }?.let { put("rigging", it) }
                                             putOptional("x", pl.stageX); putOptional("y", pl.stageY); putOptional("z", pl.stageZ)
                                             putWorld(pl.stageX, pl.stageY, pl.stageZ, placementRiggingId?.let { riggingPoses[it] })
@@ -449,7 +468,8 @@ class SetupTools(
             val universes = rig.universeConfigs()
                 .associate { it.id.value to it.universe }
             Triple(
-                rig.patches().map { p ->
+                // As the rig sees them, so an overlap is judged where an Address override put a venue unit.
+                rig.effective(rig.patches().toList()).map { p ->
                     val count = FixtureTypeRegistry.channelCountForTypeKey(p.fixtureTypeKey) ?: 1
                     Existing(
                         p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel,
@@ -1181,6 +1201,8 @@ class SetupTools(
                     // the FK's SET NULL.
                     DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }.forEach { it.rigging = null; detached++ }
                     detached += detachPlacementsFromRigging(rigging)
+                    // And a venue patch the show hangs on it through a Position override (session 5).
+                    detached += ShowOverrides.detachRigging(project.id, rigging.uuid)
                     rigging.delete()
                 }
             }

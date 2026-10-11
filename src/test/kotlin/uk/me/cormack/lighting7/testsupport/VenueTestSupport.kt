@@ -16,7 +16,12 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.AddressFacet
+import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.PatchFacet
+import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.venue.ShowHides
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueException
 import uk.me.cormack.lighting7.venue.VenueExtract
 import java.util.UUID
@@ -66,8 +71,11 @@ fun seedVenueReadyShow(state: State): Int {
  * as **v2** — the show stays on v1 — and the show given a layer of its own: a **hide** of a venue
  * record, an **addition** on a venue universe (non-default gel and position, so canonical JSON carries
  * them), and a show group holding a venue patch beside the addition (D12). The show still holds the
- * fixture's cues, cue events, scenery and busk rig, now linking into the venue. Facet overrides are
- * venue plan session 5's, so there is no override here.
+ * fixture's cues, cue events, scenery and busk rig, now linking into the venue. And (session 5) the show
+ * **overrides** three facets of one venue patch, every value non-default so canonical JSON carries it:
+ * its Address (start channel 470 on the venue's universe 0), its Position (hung on the show's own
+ * "Panto boom SR" — a show-owned rigging, so a clone must remap the value's rigging uuid) and its Media
+ * (gel L202).
  */
 data class VenueShowFixture(
     val showId: Int,
@@ -75,6 +83,10 @@ data class VenueShowFixture(
     val hideKind: HideKind,
     val hiddenUuid: UUID,
     val additionUuid: UUID,
+    /** The venue patch the show overrides, by uuid. */
+    val overriddenUuid: UUID,
+    /** The show's own rigging the Position override hangs it on. */
+    val boomUuid: UUID,
 )
 
 fun seedShowOnVenue(state: State): VenueShowFixture {
@@ -107,7 +119,7 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
         }
     }
 
-    val additionUuid = transaction(state.database) {
+    val (additionUuid, venuePatchId) = transaction(state.database) {
         val show = DaoProject[showId]
         val rig = RigScope.of(show)
         val universe = DaoUniverseConfig.find {
@@ -142,7 +154,31 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
             sortOrder = 1
             tiltOffset = -3.0
         }
-        addition.uuid
+        addition.uuid to venuePatch.id.value
     }
-    return VenueShowFixture(showId, venueId, hideKind, hidden, additionUuid)
+
+    val (overriddenUuid, boomUuid) = transaction(state.database) {
+        val show = DaoProject[showId]
+        val boom = DaoRigging.new {
+            project = show
+            name = "Panto boom SR"
+            kind = "BOOM"
+            positionX = -4.5
+            positionY = 1.0
+            positionZ = 0.0
+            sortOrder = 30
+        }
+        val target = ShowOverrides.target(show, venuePatchId)
+        val universe = DaoUniverseConfig.find {
+            (DaoUniverseConfigs.project eq target.venue.snapshotId) and (DaoUniverseConfigs.universe eq 0)
+        }.single()
+        ShowOverrides.put(show, target, PatchFacet.ADDRESS, AddressFacet(universe.uuid.toString(), 470))
+        ShowOverrides.put(
+            show, target, PatchFacet.POSITION,
+            PositionFacet(riggingUuid = boom.uuid.toString(), stageZ = 2.25, baseYawDeg = 15.0, basePitchDeg = 180.0),
+        )
+        ShowOverrides.put(show, target, PatchFacet.MEDIA, MediaFacet(gelCode = "L202"))
+        target.patch.uuid to boom.uuid
+    }
+    return VenueShowFixture(showId, venueId, hideKind, hidden, additionUuid, overriddenUuid, boomUuid)
 }

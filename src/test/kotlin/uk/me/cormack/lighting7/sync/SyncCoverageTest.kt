@@ -7,6 +7,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoVenueVersions
 import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueEvents
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
@@ -210,6 +211,9 @@ class SyncCoverageTest {
         // Venue plan §3.2, exported from formatVersion 24 (session 4). Only a show on a venue holds
         // any, so the exporter check below reads them from `seedShowOnVenue`'s export.
         DaoShowHides to Disposition.Portable("showHides"),
+        // Venue plan §3.2, exported from session 5 at formatVersion 24 (session 4 reserved the folder).
+        // A show on a venue's alone, read from `seedShowOnVenue`'s export like the hides.
+        DaoShowOverrides to Disposition.Portable("showOverrides"),
     )
 
     private lateinit var state: State
@@ -250,8 +254,8 @@ class SyncCoverageTest {
     fun `every portable table is written by the exporter`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDir)
-        // A show on a venue (venue plan session 4) holds the one table a standalone show cannot — its
-        // hides — so it is exported too, from a fresh database, and a table passes when either export
+        // A show on a venue (venue plan sessions 4 and 5) holds the two tables a standalone show cannot —
+        // its hides and its facet overrides — so it is exported too, from a fresh database, and a table passes when either export
         // carries it.
         runCatching { state.shutdown() }
         IntegrationTestDb.reset()

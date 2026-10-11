@@ -461,9 +461,13 @@ no rule: `list_projects` leaves versions out and `switch_project` answers one as
 When the live project is a show **on a venue** (venue plan session 3), its rig is its own rows plus
 the pinned version's (`RigScope`), and the venue's records are the venue's. The setup tools refuse a
 write to one, every problem at once and before anything is written, with `VENUE_OWNED`: the problem
-line leads with the code, the result carries `"code": "VENUE_OWNED"`, and the message names hiding
-as the change a show can make (the operator's, on the Patch list or `PUT …/hidden`) and per-facet
-overrides as a later release (session 5). The writes it covers, by tool:
+line leads with the code, the result carries `"code": "VENUE_OWNED"`, and the message names the two
+changes a show can make — hiding (the operator's, on the Patch list or `PUT …/hidden`) and a facet
+override, naming its route (`PUT …/patches/{id}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}`). **No setup
+tool writes a facet** (session 5's decision): an override is a per-show decision taken whole, with a
+base recorded for drift, which the operator makes in the fixture sheet's *This show* or through the
+REST route; the tools keep refusing with `VENUE_OWNED` and say where it is done. The writes it covers,
+by tool:
 
 - `patch_fixtures` — a row whose key is a venue patch's (upsert by key would change the venue's
   row; hide it and patch your own under the key), and a `groups` entry naming a venue group (a
@@ -477,9 +481,13 @@ overrides as a later release (session 5). The writes it covers, by tool:
 
 A show's own records are written as before, and a hidden venue record is not in the rig, so its key
 or name is free. **`describe_rig` says whose each record is**: a *Venue* section naming the venue
-and the pinned version and saying what `owner=venue` means, `owner=venue | show` on every fixture and
-group line, and *[venue's]* on the stage paragraph's regions and riggings. `get_patch` carries
-`venue: {name, version, note}` and `owner` on every fixture, universe, rigging and region, and
+and the pinned version and saying what `owner=venue` and `overrides=` mean, `owner=venue | show` on
+every fixture and group line, `overrides=position,media (drifted)` on a venue fixture whose facets the
+show overrides (a drifted or a dormant one marked), and *[venue's]* on the stage paragraph's regions and riggings.
+Every field either tool shows is the effective one — a fixture's address, position, lantern and media
+as the show's overrides leave them. `get_patch` carries `venue: {name, version, note}`, `owner` on
+every fixture, universe, rigging and region, and `overrides: [{facet, drifted?, dormant?}]` on an overridden
+venue fixture, and
 `get_scene` `owner` on every element and viewpoint; the stage size both answer is the venue's. A
 standalone show's answers are unchanged. `VenueException` is caught in `SetupTools.executeTool` and
 answered with its code, so a rule thrown below a tool reaches the model as the same refusal REST

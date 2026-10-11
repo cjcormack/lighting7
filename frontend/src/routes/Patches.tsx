@@ -130,6 +130,8 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   draft: true,
   // Nor this: the route leads with it in a show on a venue only (venue plan session 3).
   source: true,
+  // Nor this: the route closes the row with it in a show on a venue only (session 5).
+  facets: true,
 }
 
 /**
@@ -242,6 +244,9 @@ function PatchListContent({
       // Whose each head is leads the value columns in a show on a venue, as the board draws it.
       ...(onVenue ? (['source'] as const) : []),
       ...PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
+      // What the show made its own of each venue head (session 5) closes the row, as the board's
+      // *This show* column does.
+      ...(onVenue ? (['facets'] as const) : []),
     ],
     [columnVisibility, draft.enabled, onVenue],
   )

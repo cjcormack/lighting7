@@ -126,6 +126,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Ready | Stage | fired 2026-10-10 (the panto); planned in [`venue-plan.md`](venue-plan.md) |
 | [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
 | [`FU-VENUE-DRAFT-SYNC`](#fu-venue-draft-sync) | Trigger | Venue | two admins edit one venue on two desks |
+| [`FU-VENUE-ELEMENT-OVERRIDES`](#fu-venue-element-overrides) | Trigger | Venue | a show needs to change a venue rigging or element rather than hide it |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -2499,6 +2500,21 @@ before sharing a repo are refused outright and have to choose one history by han
 admins edit one venue on two desks. **Then**: either a shared draft (the show's three-way merge over
 the venue's rows, with its conflict sessions) or a draft *rebase* onto the newer version — the
 draft's diff against its base re-applied to the newer one, a clash a decision as P8's are.
+
+### `FU-VENUE-ELEMENT-OVERRIDES`
+
+**A show can only hide a venue rigging or element** · Trigger · venue plan §8 (session 5), 2026-10-11
+
+A show changes a venue **patch** through its four facet overrides (`show_overrides`, Address ·
+Position · Focus · Media; `docs/fixtures-engineering.md` §"Facet overrides"), but a venue rigging,
+scene element, region, group or viewpoint it can only hide (venue plan §7). A panto that wants the
+house's LX2 a metre lower, or the house tabs re-coloured, has to hide the venue's and add its own —
+losing every link a venue patch or a cue's scenery had to it. **Trigger**: a show needs to change a
+venue rigging or element rather than hide it. **Then**: facets for those kinds through the same
+`show_overrides` table (its `record_uuid` is already kind-agnostic; a `record_kind` column beside it,
+additive), a rigging's Position (pose, length) and an element's Pose · Finish facets, `base` and drift
+exactly as a patch's, applied by `RigScope` where it reads those rows — and the Stage editor's drag of
+a venue rigging becoming one, which a patch's deliberately did not (§"Facet overrides", *Not a drag*).
 
 ### `FU-STAGE-INDEPENDENT-HEADS`
 

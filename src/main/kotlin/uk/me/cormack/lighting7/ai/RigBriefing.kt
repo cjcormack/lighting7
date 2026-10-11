@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.ai
 
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
-import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 
@@ -19,6 +18,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
 import uk.me.cormack.lighting7.show.beamDirection
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.ShowOverrides
 
 /**
  * The live rig, described in prose for a model: what the MCP server answers `describe_rig` with,
@@ -56,15 +56,21 @@ class RigBriefing(private val state: State) {
             sb.appendLine("## Venue")
             sb.appendLine(
                 "This show sits on the venue **${o.venueName}** at v${o.version}. Every record below says whose it is: " +
-                    "`owner=venue` is the venue's — this show cannot change it (setup tools refuse it with VENUE_OWNED); " +
-                    "the operator can hide it in this show, and changing a venue fixture's address, position, focus or media " +
-                    "per show comes with facet overrides in a later release. `owner=show` is this show's own. " +
-                    "Keys and names are one namespace across both.",
+                    "`owner=venue` is the venue's — its identity (name, key, type, head) is the venue's, and the setup " +
+                    "tools refuse a write to it with VENUE_OWNED; the operator can hide it in this show, or make one of its " +
+                    "four facets — address, position, focus, media — this show's own (a facet override, from the fixture " +
+                    "sheet or PUT …/patches/{id}/facets/{facet}). `overrides=` names the facets this show overrides, and every " +
+                    "field shown is already the overridden one — but for a `(dormant)` one, where the venue's stands; " +
+                    "`(drifted)` marks one the venue has changed since. " +
+                    "`owner=show` is this show's own. Keys and names are one namespace across both.",
             )
             sb.appendLine()
         }
         fun ownerLabel(set: (Ownership) -> Set<String>, name: String): String =
             owners?.let { o -> if (name in set(o)) ", owner=venue" else ", owner=show" } ?: ""
+        // A venue patch's facet overrides (venue plan session 5), after its owner.
+        fun overridesLabel(key: String): String =
+            owners?.overrides?.get(key)?.let { ", overrides=" + it.joinToString(",") } ?: ""
         // Fixtures
         sb.appendLine("## Available Fixtures")
         val infrastructureKeys = state.show.fixtures.infrastructureKeys()
@@ -91,6 +97,7 @@ class RigBriefing(private val state: State) {
                     triggerLabel(fixture) +
                     commandLabel(fixture) +
                     ownerLabel({ it.patches }, fixture.key) +
+                    overridesLabel(fixture.key) +
                     ")")
         }
         sb.appendLine()
@@ -101,7 +108,8 @@ class RigBriefing(private val state: State) {
             sb.appendLine("## Infrastructure (not lighting — do not target unless the operator names it)")
             for (fixture in infrastructure) {
                 sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
-                    "key=`${fixture.key}`, type=`${fixture.typeKey}`" + ownerLabel({ it.patches }, fixture.key) + ")")
+                    "key=`${fixture.key}`, type=`${fixture.typeKey}`" + ownerLabel({ it.patches }, fixture.key) +
+                    overridesLabel(fixture.key) + ")")
             }
             sb.appendLine()
         }
@@ -303,6 +311,8 @@ class RigBriefing(private val state: State) {
         val groups: Set<String>,
         val riggings: Set<String>,
         val regions: Set<String>,
+        /** Each overridden venue patch's facets by key, lower case, a drifted one marked. */
+        val overrides: Map<String, List<String>> = emptyMap(),
     )
 
     private fun ownership(): Ownership? {
@@ -319,6 +329,14 @@ class RigBriefing(private val state: State) {
                 groups = venueNames(rig.groups(), { it.project.id }, { it.name }),
                 riggings = venueNames(rig.riggings(), { it.project.id }, { it.name }),
                 regions = venueNames(rig.stageRegions(), { it.project.id }, { it.name }),
+                overrides = ShowOverrides.drift(project).filter { !it.missing && it.patchKey != null }
+                    .groupBy({ it.patchKey!! }, { d ->
+                        d.facet.name.lowercase() + when {
+                            d.dormant -> " (dormant: names a universe or rigging the rig lacks, so the venue's stands)"
+                            d.drifted -> " (drifted)"
+                            else -> ""
+                        }
+                    }),
             )
         }
     }
@@ -389,9 +407,11 @@ class RigBriefing(private val state: State) {
     private fun mountMismatches(projectId: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>): String? {
         data class MountedUnit(val name: String, val rigging: DaoRigging?, val yaw: Double?, val pitch: Double?, val roll: Double?)
         val scope = RigScope.of(projectId)
-        val heads = scope.patches().filter { isMovingHead(it.fixtureTypeKey, it.kindOverride, it.lanternType) }
+        // As the rig sees them: a venue patch's Position or Focus override is where it hangs and what it is.
+        val rows = scope.patches().toList()
+        val heads = scope.effective(rows).filter { isMovingHead(it.fixtureTypeKey, it.kindOverride, it.lanternType) }
         if (heads.isEmpty()) return null
-        val placements = scope.placementsByPatch(heads)
+        val placements = scope.effectivePlacementsByPatch(heads.map { it.row })
         val units = heads.flatMap { p ->
             val name = p.displayName.ifBlank { p.key }
             listOf(MountedUnit(name, p.rigging, p.baseYawDeg, p.basePitchDeg, p.baseRollDeg)) +
@@ -439,10 +459,10 @@ class RigBriefing(private val state: State) {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
             val rig = RigScope.of(project)
-            val patches = rig.patches()
+            val patches = rig.effective(rig.patches().toList())
                 .filter { FixtureTypeRegistry.typeInfoForKey(it.fixtureTypeKey)?.acceptsLantern == true }
             if (patches.isEmpty()) return@transaction emptyMap()
-            val placements = rig.placementsByPatch(patches)
+            val placements = rig.effectivePlacementsByPatch(patches.map { it.row })
             patches.associate { p ->
                 val kind = effectiveKind(p.fixtureTypeKey, p.kindOverride, p.lanternType) ?: FixtureKind.GENERIC
                 fun name(own: String?, inherited: String?): String {
@@ -471,10 +491,10 @@ class RigBriefing(private val state: State) {
         val project = state.projectManager.currentProject
         return transaction(state.database) {
             val rig = RigScope.of(project)
-            val patches = rig.patches()
+            val patches = rig.effective(rig.patches().toList())
                 .filter { FittedMedia.loadableSettings(it.fixtureTypeKey).isNotEmpty() }
             if (patches.isEmpty()) return@transaction emptyMap()
-            val placements = rig.placementsByPatch(patches)
+            val placements = rig.effectivePlacementsByPatch(patches.map { it.row })
             patches.associate { p ->
                 val own = p.fittedMedia
                 val others = placements[p.id.value].orEmpty()

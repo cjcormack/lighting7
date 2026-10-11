@@ -59,7 +59,9 @@ project.json                   # v24+: `kind` (absent = SHOW), and a show's pin 
                                # `venueVersion`, `venueRepo` (a hint); see §"Version 24"
 installs.json                  # populated with the local install's identity (Phase 2)
 showHides/{uuid}.json          # v24+: a show on a venue's hides of venue records (recordKind,
-                               # recordUuid). `showOverrides/` is reserved (venue plan session 5)
+                               # recordUuid)
+showOverrides/{uuid}.json      # v24+ (venue plan session 5): a show's facet overrides of venue
+                               # patches (recordUuid, facet, value, base)
 venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
@@ -293,11 +295,19 @@ every earlier repo: every new key defaults, and a missing folder is no hides. Th
   naming the venue — by name when an older version of it is here, else by uuid — the versions held
   and the repo hint (`venue/VenuePins.kt`). It is refused on the manual import, the cloud-sync import
   (add a remote project), a clone, and a pull (below).
-* **`showOverrides/` is reserved** for venue plan session 5's facet overrides. A v24 reader writes
-  none and **refuses an archive holding any file in it** (`RESERVED_FOLDERS`, 422, and
-  `FORMAT_TOO_NEW` before a pull moves the working tree), because dropping one would load a different
-  rig — an overridden address. So session 5 adds the folder at v24 with no bump: every v24 desk
-  either applies it or refuses it, and none silently drops it.
+* **`showOverrides/{uuid}.json`** carries a show's facet overrides of venue patches (venue plan
+  session 5; `ShowOverrideJson`: `uuid`, `recordUuid` — the venue patch — `facet`, and `value` and
+  `base`, each the facet's fields as `models/patchFacets.kt` shapes them; `fixtures-engineering.md`
+  §"Facet overrides"). `show_overrides` is `Portable("showOverrides")` in `SyncCoverageTest`. **Still
+  v24, no bump**: session 4's reader reserved the folder — it wrote none and refused an archive
+  holding any file in it (`RESERVED_FOLDERS`, 422 on import, `FORMAT_TOO_NEW` before a pull moves the
+  working tree), because dropping one would load a different rig, an overridden address. Session 5's
+  reader imports it (`importShowOverrides`: guarded uuid parsing, each value and base decoded and
+  normalised, an override naming a patch the pinned version lacks kept, a repeat for one patch and
+  facet kept once) and `RESERVED_FOLDERS` is empty, the mechanism kept for the next folder that needs
+  it. **So a session-4 desk refuses a session-5 show that carries overrides** — intended: every v24
+  desk either applies them or refuses the show, and none silently drops one. A show with none writes
+  no folder and still syncs with a session-4 desk.
 * **A venue syncs as its own repo** of tagged versions — §"Venue repos".
 
 Why the number moves: v4's reason, twice. A v23 reader would import a pinned show as a standalone one
@@ -307,10 +317,11 @@ next wipe-then-export push would write the pin and every hide away.
 **A pull checks the pin before it moves the tree.** Beside the pre-pull `formatVersion.json` check,
 `RemoteSyncEngine` reads the fetched `project.json` and refuses — before `resetHard` — a remote of
 another kind than the local project (`PROJECT_MISMATCH`), a show pinned to a version this desk lacks
-(`SyncErrorCode.VENUE_MISSING`), and a remote holding `showOverrides/` (`FORMAT_TOO_NEW`). Moving the
+(`SyncErrorCode.VENUE_MISSING`), and a remote holding a reserved folder (`FORMAT_TOO_NEW` — none
+since session 5, which reads `showOverrides/`). Moving the
 tree first would let the next snapshot write the old pin back over the remote's.
 `replaceFromWorkingTree` takes the pin from the tree (a peer's Update moves it, venue plan session 6),
-refuses an archive of another kind, and now also deletes a show's cue events and scenery **through
+refuses an archive of another kind, sweeps the show's hides and facet overrides, and now also deletes a show's cue events and scenery **through
 their owners** (cue, stack, Look) — they may name venue patches and elements, which the old sweep
 through the project's own patches and elements never reached, leaving orphans with
 `PRAGMA foreign_keys` off. The project delete takes the same sweep.
@@ -318,7 +329,9 @@ through the project's own patches and elements never reached, leaving orphans wi
 **A clone keeps the pin.** `ProjectCloner` is export → fresh uuids → import as before: the remapper
 mints a uuid for every identity in the archive — the show's own rows and its hides' own `uuid` — and
 the venue's records are no identity of the show's archive, so every link into the venue (and a hide's
-`recordUuid`) keeps naming the venue's records. The clone is a show on the same version, loading the
+or an override's `recordUuid`) keeps naming the venue's records. An override's value is remapped by the
+same blind substitution: a show-owned rigging or universe it names becomes the clone's copy, a venue's
+is kept. The clone is a show on the same version, loading the
 same rig. The archive carries `kind`, so the importer takes it from there (a venue's clone is still a
 venue with no versions). `VENUE_CLONE_PENDING` is gone.
 
@@ -332,11 +345,13 @@ the show's additions without the rig they sit on.
 
 `RichProjectFixture` stays a standalone show; the venue half is `testsupport/VenueTestSupport.kt`'s
 `seedShowOnVenue` — the rich project extracted into a venue, a v2 published, and the show given a
-hide, an addition on a venue universe and a show group holding a venue patch (facet overrides are
-session 5's, so none). `SyncCoverageTest` exports both. `ProjectRoundTripTest` round-trips the show,
-round-trips a venue's versions through its repo onto a fresh desk (and refuses the show there until
-the venue is in, `VENUE_MISSING`), imports a v23 archive and refuses a `showOverrides/` one;
-`VenueRepoSyncTest` covers the venue repo between two desks.
+hide, an addition on a venue universe, a show group holding a venue patch, and (session 5) three
+facet overrides of one venue patch — Address, Position on a show-owned boom, Media — every value
+non-default. `SyncCoverageTest` exports both. `ProjectRoundTripTest` round-trips the show (its
+overrides with it), round-trips a venue's versions through its repo onto a fresh desk (and refuses the
+show there until the venue is in, `VENUE_MISSING`), imports a v23 archive and imports an archive
+holding `showOverrides/`; `ProjectCloneTest` clones the show; `VenueRepoSyncTest` covers the venue
+repo between two desks.
 
 ### Version 23 — painted cloths
 

@@ -7,6 +7,16 @@ import org.eclipse.jgit.api.Git
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.AddressFacet
+import uk.me.cormack.lighting7.models.DaoShowOverride
+import uk.me.cormack.lighting7.models.DaoShowOverrides
+import uk.me.cormack.lighting7.models.FocusFacet
+import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.PatchFacet
+import uk.me.cormack.lighting7.models.PositionFacet
+import uk.me.cormack.lighting7.models.decodeFacet
+import uk.me.cormack.lighting7.models.facetElement
+import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.routes.deleteProjectRows
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
@@ -1010,6 +1020,17 @@ class ProjectRoundTripTest {
         assertTrue(addition.universeConfigUuid in snapshotUniverses, "the addition sits on a venue universe")
         assertEquals("L201", addition.gelCode)
 
+        // Session 5: the overrides travel as `showOverrides/{uuid}.json`, naming the venue patch by uuid,
+        // each value non-default and each base the venue's v1 value.
+        val overrides = Files.list(exportDirA.resolve("showOverrides")).use { it.toList() }
+            .map { canonicalDecode(ShowOverrideJson.serializer(), Files.readString(it)) }
+            .associateBy { it.facet }
+        assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA), overrides.keys)
+        assertTrue(overrides.values.all { it.recordUuid == f.overriddenUuid.toString() })
+        assertEquals(470, (decodeFacet(PatchFacet.ADDRESS, overrides.getValue(PatchFacet.ADDRESS).value) as AddressFacet).startChannel)
+        assertEquals(f.boomUuid.toString(), (decodeFacet(PatchFacet.POSITION, overrides.getValue(PatchFacet.POSITION).value) as PositionFacet).riggingUuid)
+        assertEquals("L202", (decodeFacet(PatchFacet.MEDIA, overrides.getValue(PatchFacet.MEDIA).value) as MediaFacet).gelCode)
+
         transaction(state.database) { deleteProjectRows(state, DaoProject[f.showId]) }
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
         ProjectExporter(state).export(imported.projectId, exportDirB)
@@ -1019,6 +1040,13 @@ class ProjectRoundTripTest {
             assertEquals(venueUuid, show.venueUuid)
             assertEquals(1, show.venueVersion)
             assertTrue(RigScope.of(show).isHidden(f.hideKind, f.hiddenUuid))
+            // The imported show's rig lays its overrides over the venue's patch again.
+            val rig = RigScope.of(show)
+            val overridden = rig.effective(rig.patches().first { it.uuid == f.overriddenUuid })
+            assertEquals(470, overridden.startChannel)
+            assertEquals("L202", overridden.gelCode)
+            assertEquals(f.boomUuid, overridden.rigging?.uuid)
+            assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA), overridden.overridden)
         }
     }
 
@@ -1134,17 +1162,35 @@ class ProjectRoundTripTest {
         assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
     }
 
-    /** `showOverrides/` is reserved for venue plan session 5: an archive holding one is refused as too new. */
+    /**
+     * `showOverrides/` was reserved by session 4's reader, which refused an archive holding one (422);
+     * this build reads it (session 5, still v24). An archive with overrides imports, every override kept,
+     * and one naming a patch the pinned version lacks is kept too — it overrides nothing until an Update
+     * to a version that has the patch.
+     */
     @Test
-    fun `an archive holding show overrides is refused as too new`() {
-        val projectId = seedRichProject(state)
-        ProjectExporter(state).export(projectId, exportDirA)
-        wipeDatabase()
-        Files.createDirectories(exportDirA.resolve("showOverrides"))
-        Files.writeString(exportDirA.resolve("showOverrides/${java.util.UUID.randomUUID()}.json"), "{}\n")
-        val refused = assertFailsWith<ImportError> { ProjectImporter(state).import(exportDirA, nameOverride = null) }
-        assertEquals(HttpStatusCode.UnprocessableEntity, refused.status)
-        assertTrue("showOverrides" in refused.message!!)
+    fun `an archive holding show overrides imports on this build`() {
+        val f = seedShowOnVenue(state)
+        ProjectExporter(state).export(f.showId, exportDirA)
+        val stray = java.util.UUID.randomUUID()
+        Files.writeString(
+            exportDirA.resolve("showOverrides/$stray.json"),
+            canonicalEncode(
+                ShowOverrideJson.serializer(),
+                ShowOverrideJson(
+                    uuid = stray.toString(), recordUuid = java.util.UUID.randomUUID().toString(), facet = PatchFacet.FOCUS,
+                    value = facetElement(FocusFacet(iris = 0.4)), base = facetElement(FocusFacet()),
+                ),
+            ),
+        )
+        transaction(state.database) { deleteProjectRows(state, DaoProject[f.showId]) }
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val rows = DaoShowOverride.find { DaoShowOverrides.project eq imported.projectId }.toList()
+            assertEquals(4, rows.size)
+            assertEquals(3, rows.count { it.recordUuid == f.overriddenUuid })
+        }
+        assertTrue(RESERVED_FOLDERS.isEmpty(), "nothing is reserved any more")
     }
 
     private fun attachRepo(state: State, projectId: Int, url: String) {

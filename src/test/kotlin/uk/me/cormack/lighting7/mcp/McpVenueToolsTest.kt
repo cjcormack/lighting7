@@ -6,7 +6,14 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.PatchFacet
+import uk.me.cormack.lighting7.models.PositionFacet
+import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
@@ -21,7 +28,7 @@ import kotlin.test.assertTrue
 
 /**
  * Venue plan session 3 over MCP: on a show on a venue the setup tools refuse every write to a venue
- * record with `VENUE_OWNED` — naming hiding as what a show can do, and facets as a later release —
+ * record with `VENUE_OWNED` — naming hiding and the facet route (session 5) as what a show can do —
  * while the show's own records stay writable; `describe_rig` and `get_patch` say whose each is.
  */
 class McpVenueToolsTest : RouteIntegrationTest() {
@@ -47,7 +54,7 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         assertEquals(VenueRigGuard.CODE_VENUE_OWNED, json["code"]?.jsonPrimitive?.content, result.result)
         val text = result.result
         assertTrue("hide" in text, "the refusal names hiding: $text")
-        assertTrue("facet overrides" in text, "and facets as a later release: $text")
+        assertTrue("/facets/" in text, "and names the facet route: $text")
     }
 
     @Test
@@ -88,5 +95,43 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         }
         assertEquals("venue", owners["hex-1"])
         assertEquals("show", owners["spot-9"])
+    }
+
+    /**
+     * Session 5: `describe_rig` and `get_patch` name a venue fixture's overridden facets — a drifted or
+     * dormant one marked — and `set_stage`'s rigging removal detaches a Position override hung on the
+     * show's own rigging, offsets kept, as the REST delete does.
+     */
+    @Test
+    fun `the tools name overridden facets, and set_stage detaches an override from a removed rigging`() {
+        liveShowOnVenue()
+        val showId = state.projectManager.currentProject.id.value
+        assertTrue(call("set_stage", """{"riggings":[{"name":"Panto boom","kind":"BOOM","x":-4.0}]}""").success)
+        transaction(state.database) {
+            val show = DaoProject[showId]
+            val rig = RigScope.of(show)
+            val boom = rig.own.riggings().single { it.name == "Panto boom" }
+            val hex1 = ShowOverrides.target(show, rig.patches().single { it.key == "hex-1" }.id.value)
+            ShowOverrides.put(show, hex1, PatchFacet.POSITION, PositionFacet(riggingUuid = boom.uuid.toString(), stageX = 0.5, stageZ = 1.75))
+            ShowOverrides.put(show, hex1, PatchFacet.MEDIA, MediaFacet(gelCode = "L106"))
+            // Dormant: a Position on hex-2 naming a rigging no rig holds.
+            val hex2 = ShowOverrides.target(show, rig.patches().single { it.key == "hex-2" }.id.value)
+            ShowOverrides.put(show, hex2, PatchFacet.POSITION, PositionFacet(riggingUuid = java.util.UUID.randomUUID().toString()))
+        }
+        val briefing = RigBriefing(state).describeRig()
+        assertTrue(briefing.lines().any { "key=`hex-1`" in it && "overrides=position,media" in it }, briefing)
+        assertTrue(briefing.lines().any { "key=`hex-2`" in it && "position (dormant" in it }, briefing)
+        val fixtures = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.associateBy { it.jsonObject["key"]!!.jsonPrimitive.content }
+        assertEquals(listOf("POSITION", "MEDIA"), fixtures.getValue("hex-1").jsonObject["overrides"]!!.jsonArray.map { it.jsonObject["facet"]!!.jsonPrimitive.content })
+        assertEquals("true", fixtures.getValue("hex-2").jsonObject["overrides"]!!.jsonArray.single().jsonObject["dormant"]!!.jsonPrimitive.content)
+
+        assertTrue(call("set_stage", """{"removeRiggings":["Panto boom"]}""").success)
+        transaction(state.database) {
+            val rig = RigScope.of(showId)
+            val hex1 = rig.effective(rig.patches().single { it.key == "hex-1" })
+            assertEquals(null, hex1.rigging, "detached")
+            assertEquals(1.75, hex1.stageZ, "offsets kept")
+            assertTrue(PatchFacet.POSITION in hex1.overridden, "the override stays live, not dormant")
+        }
     }
 }
