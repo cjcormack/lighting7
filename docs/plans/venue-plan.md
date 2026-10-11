@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — not started.** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — session 1 shipped, as `6e51c5c` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -197,7 +197,7 @@ Templates, Speed Masters, Show, Prompt Book and Busk, and keeps the Programmer w
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
 engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
 
-### Session 1 — the rig scope and the link registry (backend)
+### Session 1 — the rig scope and the link registry (backend) — done, `6e51c5c`
 
 - **`RigScope`** (P4), with every site in §1 reading through it, and the two unscoped uuid lookups
   scoped. A project's scope is still its own rows, so **nothing changes behaviour**.
