@@ -1,7 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — session 1 shipped, as `6e51c5c` (2026-10-11); session 2 built as
-> `d93e174`, in review as PR #105 (not merged).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–2 shipped, as `6e51c5c` and `d93e174` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -207,7 +206,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Tests:** the guard test; a project's scope equals today's queries across `RichProjectFixture`.
 - **Docs:** `fixtures-engineering.md` §"The rig scope".
 
-### Session 2 — venues and versions (backend + venue mode)
+### Session 2 — venues and versions (backend + venue mode) — done, `d93e174`
 
 - **Stored:** `projects.kind`, `venue_versions`, `SeatingParams.block`. The snapshot (P2), the
   `withProject` write guard, and snapshots left out of every list.
@@ -219,8 +218,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   classification over each kind of change; operators refused.
 - **Docs:** CLAUDE.md (a venue, and the routes), `desk-accounts.md` (admin-only), the diff rule in
   `fixtures-engineering.md`.
-- **As built, in review** (`d93e174`, PR #105 — the done-marker waits for the merge). What session
-  3 onward inherits that the bullets above do not say:
+- **As shipped** (PR #105). What session 3 onward inherits that the bullets above do not say:
   - **The write guard is not in `withProject`.** It sits at the head of the whole `/projects/{id}/…`
     subtree (`routes/projectWriteGuard.kt`), so routes that resolve their project another way are
     covered too; the copy routes judge their body's target (`refusedCopyTarget`) and the FX
