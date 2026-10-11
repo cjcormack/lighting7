@@ -26,6 +26,10 @@ import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.ProjectImporter
 import uk.me.cormack.lighting7.sync.PromptScriptRepoSync
 import uk.me.cormack.lighting7.sync.SceneImageRepoSync
+import uk.me.cormack.lighting7.sync.VenueRepoSync
+import uk.me.cormack.lighting7.sync.canonicalDecode
+import uk.me.cormack.lighting7.sync.canonicalEncode
+import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.nio.file.Files
 import java.util.UUID
 
@@ -96,7 +100,7 @@ class VenueVersions(private val state: State) {
         if (trimmed.length > VENUE_VERSION_NOTE_MAX) {
             throw VenueException.badRequest(CODE_NOTE_TOO_LONG, "A note may be at most $VENUE_VERSION_NOTE_MAX characters")
         }
-        withContext(Dispatchers.IO) {
+        val local = withContext(Dispatchers.IO) {
             val installed = transaction(state.database) {
                 requireVenue(venueId)
                 versionsOf(venueId).firstOrNull()?.toDto()
@@ -108,6 +112,9 @@ class VenueVersions(private val state: State) {
                     else "Nothing to publish: the draft is v${installed.number}",
                 )
             }
+            // A venue with a repo publishes through it (venue plan P7): pull first, refuse a number the
+            // remote already has, push the tagged commit, and only then make the version here.
+            if (VenueRepoSync.attachedRepo(state, venueId) != null) return@withContext null
             val number = (installed?.number ?: 0) + 1
             val snapshotUuid = UUID.randomUUID()
             var published: VenueVersionDto? = null
@@ -130,6 +137,19 @@ class VenueVersions(private val state: State) {
             logger.info("Published venue {} v{} ({})", venueId, number, snapshotUuid)
             published ?: error("Version row was not written")
         }
+        local ?: state.remoteSyncEngine.publishVenue(venueId, trimmed, publishedBy)
+    }
+
+    /**
+     * Run [block] holding the lock publish and discard hold — what a venue's sync run takes before its
+     * sync lock (`RemoteSyncEngine.runSync`), so the three never interleave. Not reentrant.
+     */
+    suspend fun <T> locked(block: suspend () -> T): T = lock.withLock { block() }
+
+    /** How many changes the draft of [venueId] holds against its installed version. Blocking. */
+    fun draftChanges(venueId: Int): Int {
+        val installed = transaction(state.database) { versionsOf(venueId).firstOrNull()?.toDto() }
+        return draftDiff(venueId, installed).size
     }
 
     /**
@@ -140,40 +160,72 @@ class VenueVersions(private val state: State) {
     suspend fun discard(venueId: Int): VenueHistoryDto {
         lock.withLock {
             withContext(Dispatchers.IO) {
-                val installed = transaction(state.database) {
-                    val venue = requireVenue(venueId)
-                    val version = versionsOf(venueId).firstOrNull()
-                        ?: throw VenueException.conflict(CODE_NOTHING_PUBLISHED, "Nothing has been published to go back to")
-                    Installed(version.number, version.snapshotProject.id.value, version.snapshotProject.uuid, venue.uuid)
-                }
-                val venueUuid = installed.venueUuid
-                val staging = Files.createTempDirectory("venue-discard-")
-                try {
-                    ProjectExporter(state).export(installed.snapshotId, staging)
-                    ExportUuidRemapper.applyMapping(staging, mapOf(installed.snapshotUuid to venueUuid))
-                    transaction(state.database) {
-                        val venue = DaoProject[venueId]
-                        val name = venue.name
-                        val description = venue.description
-                        ProjectImporter(state).replaceFromWorkingTree(venueId, staging)
-                        venue.name = name
-                        venue.description = description
+                transaction(state.database) {
+                    requireVenue(venueId)
+                    if (versionsOf(venueId).none()) {
+                        throw VenueException.conflict(CODE_NOTHING_PUBLISHED, "Nothing has been published to go back to")
                     }
-                    // The store may have pruned an image the draft stopped naming; the version still names it.
-                    runCatching { SceneImageRepoSync.hydrateStore(state, venueUuid, staging) }
-                        .onFailure { logger.warn("Scene image hydrate after discard failed for venue {}: {}", venueId, it.message) }
-                    runCatching { PromptScriptRepoSync.hydrateStore(state, venueUuid, staging) }
-                        .onFailure { logger.warn("Prompt PDF hydrate after discard failed for venue {}: {}", venueId, it.message) }
-                } finally {
-                    staging.toFile().deleteRecursively()
                 }
-                logger.info("Discarded the draft of venue {} back to v{}", venueId, installed.number)
+                replaceDraftWithInstalled(venueId)
             }
         }
         if (state.projectManager.currentProject.id.value == venueId) {
             state.projectManager.switchProject(venueId)
         }
         return history(venueId)
+    }
+
+    /**
+     * Make the draft of [venueId] its installed version again — [discard]'s work, and what a sync
+     * pull does to a clean draft when a newer version arrives (`sync/VenueRepoSync.kt`). Blocking; the
+     * caller holds [lock] and reloads a live venue. False when nothing is published.
+     *
+     * [ifDraftIs], when given, is the draft as the caller last read it: the replace goes ahead only if
+     * the draft still holds exactly those records, checked inside the replace's own transaction (one
+     * pooled connection, so no write lands between the check and the replace). Draft edits take no
+     * venue lock, so this is what keeps a sync pull from overwriting an edit made while it fetched.
+     */
+    fun replaceDraftWithInstalled(venueId: Int, ifDraftIs: VenueDiff.Records? = null): Boolean {
+        val installed = transaction(state.database) {
+            val venue = requireVenue(venueId)
+            val version = versionsOf(venueId).firstOrNull() ?: return@transaction null
+            Installed(version.number, version.snapshotProject.id.value, version.snapshotProject.uuid, venue.uuid)
+        } ?: return false
+        val venueUuid = installed.venueUuid
+        val staging = Files.createTempDirectory("venue-discard-")
+        try {
+            ProjectExporter(state).export(installed.snapshotId, staging)
+            ExportUuidRemapper.applyMapping(staging, mapOf(installed.snapshotUuid to venueUuid))
+            // The archive is the snapshot's, which says it is a version; the rows go back into the venue.
+            val projectPath = staging.resolve("project.json")
+            val project = canonicalDecode(ProjectJson.serializer(), Files.readString(projectPath))
+            Files.writeString(projectPath, canonicalEncode(ProjectJson.serializer(), project.copy(kind = ProjectKind.VENUE)))
+            val replaced = transaction(state.database) {
+                if (ifDraftIs != null && VenueDiff.recordsOf(state, venueId).byKey != ifDraftIs.byKey) {
+                    return@transaction false
+                }
+                val venue = DaoProject[venueId]
+                val name = venue.name
+                val description = venue.description
+                ProjectImporter(state).replaceFromWorkingTree(venueId, staging)
+                venue.name = name
+                venue.description = description
+                true
+            }
+            if (!replaced) {
+                logger.info("Venue {}'s draft changed since it was read; leaving it as it is", venueId)
+                return false
+            }
+            // The store may have pruned an image the draft stopped naming; the version still names it.
+            runCatching { SceneImageRepoSync.hydrateStore(state, venueUuid, staging) }
+                .onFailure { logger.warn("Scene image hydrate after discard failed for venue {}: {}", venueId, it.message) }
+            runCatching { PromptScriptRepoSync.hydrateStore(state, venueUuid, staging) }
+                .onFailure { logger.warn("Prompt PDF hydrate after discard failed for venue {}: {}", venueId, it.message) }
+        } finally {
+            staging.toFile().deleteRecursively()
+        }
+        logger.info("Replaced the draft of venue {} with v{}", venueId, installed.number)
+        return true
     }
 
     // ── Internals ───────────────────────────────────────────────────────────────

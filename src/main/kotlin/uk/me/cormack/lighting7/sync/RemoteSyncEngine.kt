@@ -11,6 +11,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.venue.VenuePins
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.models.DaoSyncSession
@@ -52,6 +54,9 @@ class RemoteSyncEngine(
     private val importer = ProjectImporter(state)
     private val syncLogger get() = state.syncLogger
 
+    /** A venue's repo of tagged versions (venue plan §3.4): what [runSync] runs for a venue. */
+    val venueRepo = VenueRepoSync(state, authResolver)
+
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
 
     /**
@@ -74,9 +79,56 @@ class RemoteSyncEngine(
         installUuid: UUID,
         installFriendlyName: String,
         trigger: SyncTrigger = SyncTrigger.MANUAL,
-    ): SyncRunResult = withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
-        doRun(projectId, projectUuid, installUuid, installFriendlyName, trigger)
+    ): SyncRunResult {
+        when (transaction(state.database) { DaoProject.findById(projectId)?.kind }) {
+            // A venue syncs its published versions, never its draft (venue plan §3.4).
+            ProjectKind.VENUE -> return runVenueSync(projectId, trigger)
+            ProjectKind.VENUE_VERSION -> throw SyncException(
+                SyncErrorCode.SYNC_DISABLED, "A venue version syncs as a tag of its venue's repo, never on its own.",
+            )
+            else -> Unit
+        }
+        return withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
+            doRun(projectId, projectUuid, installUuid, installFriendlyName, trigger)
+        }
     }
+
+    /**
+     * A venue's sync run: [VenueRepoSync.exchange] under the venue lock — the one publish and discard
+     * hold, taken first — and this project's sync lock, logged as a show's run is. A clean draft that a
+     * newer version replaced reloads, if the venue is live.
+     */
+    private suspend fun runVenueSync(venueId: Int, trigger: SyncTrigger): SyncRunResult {
+        val exchange = state.venueVersions.locked {
+            withProjectLock(venueId, SyncLogEvent.RUN_FAILED) {
+                if (trigger.logsIdleRuns) syncLogger.info(venueId, SyncLogEvent.RUN_STARTED, "Starting sync run")
+                val exchange = venueRepo.exchange(venueId)
+                transaction(state.database) {
+                    DaoSyncConfig.find { DaoSyncConfigs.project eq venueId }.firstOrNull()?.let { cfg ->
+                        exchange.result.headSha.takeIf { it.isNotEmpty() }?.let { cfg.lastSyncedSha = it }
+                        cfg.lastSyncedAt = nowUtc()
+                    }
+                }
+                if (trigger.logsIdleRuns || exchange.result.outcome != SyncOutcome.NO_OP) {
+                    syncLogger.info(venueId, SyncLogEvent.RUN_DONE, "${exchange.result.outcome.name}: ${exchange.result.message}")
+                }
+                exchange
+            }
+        }
+        if (exchange.draftReplaced) reloadShowIfActive(venueId)
+        return exchange.result
+    }
+
+    /**
+     * Publish venue [venueId]'s draft through its repo ([VenueRepoSync.publish]) under its sync lock.
+     * The caller (`VenueVersions.publish`) holds the venue lock and has checked the note and the draft.
+     */
+    suspend fun publishVenue(venueId: Int, note: String, publishedBy: String?): uk.me.cormack.lighting7.venue.VenueVersionDto =
+        withProjectLock(venueId, SyncLogEvent.RUN_FAILED) {
+            venueRepo.publish(venueId, note, publishedBy).also {
+                syncLogger.info(venueId, SyncLogEvent.RUN_DONE, "PUSHED: Published v${it.number}: ${it.note}")
+            }
+        }
 
     suspend fun applySession(
         projectId: Int,
@@ -240,9 +292,10 @@ class RemoteSyncEngine(
             // would treat unrelated history as Diverged and clobber it. Only an empty
             // remote (create-new-repo) or a same-uuid remote (reconnect) is permitted.
             JGitClient.readBlob(repo, remoteRef, "project.json")?.let { json ->
-                val remoteUuid = runCatching {
-                    canonicalDecode(ProjectJson.serializer(), json).uuid
+                val remoteProject = runCatching {
+                    canonicalDecode(ProjectJson.serializer(), json)
                 }.getOrNull()
+                val remoteUuid = remoteProject?.uuid
                 val localUuid = transaction(state.database) {
                     DaoProject.findById(projectId)?.uuid?.toString()
                 }
@@ -253,6 +306,16 @@ class RemoteSyncEngine(
                             "Attach an empty repository, or add it as a new remote project instead.",
                     )
                 }
+                // v24: a show's repo pins a venue version; pull nothing whose rig this desk does not
+                // hold, before the working tree moves (the next snapshot would otherwise write the
+                // old pin back over the remote's).
+                remoteProject?.let { checkRemotePin(projectId, it) }
+            }
+            RESERVED_FOLDERS.firstOrNull { JGitClient.hasPath(repo, remoteRef, it) }?.let { folder ->
+                throw SyncException(
+                    SyncErrorCode.FORMAT_TOO_NEW,
+                    "The remote holds $folder/, which a newer lighting7 writes and this install cannot apply. Upgrade lighting7 before syncing.",
+                )
             }
         }
 
@@ -357,6 +420,58 @@ class RemoteSyncEngine(
             repoUrl, branch, credentials,
             attemptsRemaining = attemptsRemaining - 1,
         )
+    }
+
+    /**
+     * Merge a show's pin (`project.json`'s `venueUuid`, `venueVersion`, `venueRepo`, v24) three-way
+     * into the merged tree at [tree], which holds the remote's `project.json`: where only this desk's
+     * pin moved since the merge base, it is written over the remote's. Where only the remote's moved,
+     * or both did, the remote's stands — as the rest of `project.json` (name, description, stage size)
+     * always has; two desks re-pinning one show apart is session 6's Update to arbitrate. No merge base
+     * (unrelated histories) reads as a base with no pin.
+     */
+    private fun mergeProjectPin(repo: Repository, tree: Path, localSha: String, remoteSha: String) {
+        fun at(ref: String?): ProjectJson? = ref
+            ?.let { JGitClient.readBlob(repo, it, "project.json") }
+            ?.let { runCatching { canonicalDecode(ProjectJson.serializer(), it) }.getOrNull() }
+        fun ProjectJson.pin() = Triple(venueUuid, venueVersion, venueRepo)
+        val local = at(localSha) ?: return
+        val path = tree.resolve("project.json")
+        if (!Files.exists(path)) return
+        val remote = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(path)) }.getOrNull() ?: return
+        if (local.pin() == remote.pin()) return
+        val basePin = at(JGitClient.mergeBase(repo, localSha, remoteSha))?.pin() ?: Triple(null, null, null)
+        if (local.pin() == basePin || remote.pin() != basePin) return
+        Files.writeString(
+            path,
+            canonicalEncode(
+                ProjectJson.serializer(),
+                remote.copy(venueUuid = local.venueUuid, venueVersion = local.venueVersion, venueRepo = local.venueRepo),
+            ),
+        )
+        logger.info("Auto-merge kept this desk's venue pin ({} v{}) over the remote's", local.venueUuid, local.venueVersion)
+    }
+
+    /**
+     * Refuse to pull [remote] into project [projectId] when it is another kind of project, or a show
+     * pinned to a venue version this desk does not hold (`VENUE_MISSING`, naming the venue and the
+     * repo it syncs from).
+     */
+    private fun checkRemotePin(projectId: Int, remote: ProjectJson) = transaction(state.database) {
+        val local = DaoProject.findById(projectId) ?: return@transaction
+        if (local.kind != remote.kind) {
+            throw SyncException(
+                SyncErrorCode.PROJECT_MISMATCH,
+                "The remote repository holds a ${remote.kind.name.lowercase()}, but this project is a ${local.kind.name.lowercase()}.",
+            )
+        }
+        if (remote.kind != ProjectKind.SHOW) return@transaction
+        val venueUuid = remote.venueUuid?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return@transaction
+        val number = remote.venueVersion ?: return@transaction
+        if (VenuePins.snapshotOf(venueUuid, number) == null) {
+            val refusal = VenuePins.missing(venueUuid, number, remote.venueRepo, local.name)
+            throw SyncException(SyncErrorCode.VENUE_MISSING, refusal.message ?: refusal.code)
+        }
     }
 
     private fun handleDiverged(
@@ -481,6 +596,11 @@ class RemoteSyncEngine(
                 else -> Unit
             }
         }
+
+        // v24: a show's pin lives in project.json, which is not a record, so the overlay above
+        // never touches it and the remote's would win — undoing a pin this desk set (an Extract
+        // on a show that already synced) and taking its rig with it. Merge the pin three-way.
+        mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
 
         importer.replaceFromWorkingTree(projectId, workingTreePath)
 
@@ -1186,6 +1306,16 @@ enum class SyncErrorCode {
     REPO_URL_IMMUTABLE,
     /** The remote repo belongs to a different project (uuid mismatch) — attach an empty repo or import it as a new project. */
     PROJECT_MISMATCH,
+    /** A show's repo pins a venue version this desk does not hold (venue plan §3.4) — sync the venue first. */
+    VENUE_MISSING,
+    /** A venue version's number is the remote's already, published on another desk (venue plan P7). */
+    VENUE_VERSION_TAKEN,
+    /** A pull-only install (`sync.push = false`) cannot publish a venue that has a repo. */
+    VENUE_PUBLISH_PULL_ONLY,
+    /** A venue's draft never syncs — no snapshot of it is taken; publish a version instead. */
+    VENUE_DRAFT_NOT_SYNCED,
+    /** A venue repo's tag is not a version this desk can read (no `venueVersion.json`, another venue's). */
+    VENUE_REPO_INVALID,
 }
 
 class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
@@ -1201,7 +1331,9 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.FORMAT_TOO_NEW -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.UNRESOLVED_CONFLICTS -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.PUSH_REJECTED, SyncErrorCode.SESSION_PENDING, SyncErrorCode.SESSION_STALE,
-    SyncErrorCode.REPO_URL_IMMUTABLE, SyncErrorCode.PROJECT_MISMATCH ->
+    SyncErrorCode.REPO_URL_IMMUTABLE, SyncErrorCode.PROJECT_MISMATCH,
+    SyncErrorCode.VENUE_MISSING, SyncErrorCode.VENUE_VERSION_TAKEN, SyncErrorCode.VENUE_PUBLISH_PULL_ONLY,
+    SyncErrorCode.VENUE_DRAFT_NOT_SYNCED, SyncErrorCode.VENUE_REPO_INVALID ->
         HttpStatusCode.Conflict
     SyncErrorCode.SESSION_NOT_FOUND -> HttpStatusCode.NotFound
 }

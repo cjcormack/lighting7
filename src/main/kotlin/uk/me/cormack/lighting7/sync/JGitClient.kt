@@ -328,6 +328,130 @@ object JGitClient {
         }
     }
 
+    // ─── Tags (venue repos, venue plan §3.4) ─────────────────────────────────
+
+    /**
+     * Tag HEAD as [name] with [message] (an annotated tag, so it carries who and when). Refuses a
+     * name that is already a local tag rather than moving it: a published version's tag never moves.
+     */
+    fun tag(repo: Repository, name: String, message: String, taggerName: String, taggerEmail: String) {
+        Git(repo).use { git ->
+            git.tag()
+                .setName(name)
+                .setMessage(message)
+                .setAnnotated(true)
+                .setTagger(org.eclipse.jgit.lib.PersonIdent(taggerName, taggerEmail))
+                .setSigned(false)
+                .setForceUpdate(false)
+                .call()
+        }
+    }
+
+    /** Delete the local tag [name], if any — undoing a [tag] whose push was refused. */
+    fun deleteTag(repo: Repository, name: String) {
+        Git(repo).use { git -> git.tagDelete().setTags(name).call() }
+    }
+
+    /** This repo's local tags, name → the commit each names (an annotated tag peeled). */
+    fun listTags(repo: Repository): Map<String, String> = refsUnder(repo, "refs/tags/")
+
+    /** The remote's tags as of the last [fetchTags], name → commit, kept apart from the local ones. */
+    fun listRemoteTags(repo: Repository, remote: String): Map<String, String> =
+        refsUnder(repo, remoteTagPrefix(remote))
+
+    private fun remoteTagPrefix(remote: String) = "refs/remotes/$remote/tags/"
+
+    private fun refsUnder(repo: Repository, prefix: String): Map<String, String> =
+        repo.refDatabase.getRefsByPrefix(prefix).associate { ref ->
+            val peeled = repo.refDatabase.peel(ref)
+            ref.name.removePrefix(prefix) to (peeled.peeledObjectId ?: ref.objectId).name
+        }
+
+    /**
+     * Fetch [remote]'s tags into `refs/remotes/{remote}/tags/` — beside this repo's own tags, never
+     * over them, so a desk can tell which versions the remote has ([listRemoteTags]). A remote with no
+     * commits yet answers nothing. The remote's own deletions are mirrored (`setRemoveDeletedRefs`), so
+     * the list is what the remote holds now.
+     */
+    fun fetchTags(repo: Repository, remote: String, credentials: GitCredentials) {
+        Git(repo).use { git ->
+            try {
+                git.fetch()
+                    .setRemote(remote)
+                    .setRefSpecs(RefSpec("+refs/tags/*:${remoteTagPrefix(remote)}*"))
+                    .setTagOpt(org.eclipse.jgit.transport.TagOpt.NO_TAGS)
+                    .setRemoveDeletedRefs(true)
+                    .setCredentialsProvider(credentials.toProvider())
+                    .call()
+            } catch (e: TransportException) {
+                throw e.toAuthOrRethrow()
+            }
+        }
+    }
+
+    /**
+     * Push [branch] and the tag [tag] together. A tag the remote already holds is refused rather than
+     * moved, and so is a branch update that is not a fast-forward. Answers each ref's outcome, by its
+     * remote name (`refs/heads/{branch}`, `refs/tags/{tag}`).
+     */
+    fun pushWithTag(
+        repo: Repository,
+        remote: String,
+        branch: String,
+        tag: String,
+        credentials: GitCredentials,
+    ): Map<String, PushResult> {
+        Git(repo).use { git ->
+            try {
+                val results = git.push()
+                    .setRemote(remote)
+                    .setRefSpecs(
+                        RefSpec("refs/heads/$branch:refs/heads/$branch"),
+                        RefSpec("refs/tags/$tag:refs/tags/$tag"),
+                    )
+                    .setCredentialsProvider(credentials.toProvider())
+                    .call()
+                return results.flatMap { it.remoteUpdates }.associate { update ->
+                    update.remoteName to when (update.status) {
+                        RemoteRefUpdate.Status.OK,
+                        RemoteRefUpdate.Status.UP_TO_DATE -> PushResult(PushStatus.OK, update.message)
+                        RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD ->
+                            PushResult(PushStatus.REJECTED_NONFASTFORWARD, update.message)
+                        RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
+                            PushResult(PushStatus.REJECTED_REMOTE_CHANGED, update.message)
+                        else -> PushResult(PushStatus.REJECTED_OTHER, update.message ?: update.status.toString())
+                    }
+                }
+            } catch (e: TransportException) {
+                throw e.toAuthOrRethrow()
+            }
+        }
+    }
+
+    /**
+     * Write every file of [ref]'s tree into [target], byte for byte — binaries included, unlike
+     * [walkTree] — without touching the working tree. How a venue repo's tag is read back as an
+     * archive to import (venue plan §3.4).
+     */
+    fun extractTree(repo: Repository, ref: String, target: Path) {
+        val commitId = repo.resolve(ref) ?: error("Cannot resolve $ref")
+        Files.createDirectories(target)
+        RevWalk(repo).use { walk ->
+            val commit = walk.parseCommit(commitId)
+            TreeWalk(repo).use { tree ->
+                tree.addTree(commit.tree)
+                tree.isRecursive = true
+                while (tree.next()) {
+                    val out = target.resolve(tree.pathString).normalize()
+                    // A tree is the remote's to write; a path that climbs out of [target] is not a file of it.
+                    require(out.startsWith(target.normalize())) { "Refusing tree path ${tree.pathString}" }
+                    Files.createDirectories(out.parent)
+                    Files.newOutputStream(out).use { repo.open(tree.getObjectId(0)).copyTo(it) }
+                }
+            }
+        }
+    }
+
     /**
      * Hard-reset the working tree to [ref]. Used to fast-forward a local branch to its
      * upstream — JGit's `MergeCommand` won't move HEAD if the branch is checked out and the
@@ -382,6 +506,16 @@ object JGitClient {
             }
         }
         return null
+    }
+
+    /** Whether [ref]'s tree holds [path] — a file, or a folder (git keeps no empty ones). */
+    fun hasPath(repo: Repository, ref: String, path: String): Boolean {
+        val commitId = repo.resolve(ref) ?: return false
+        RevWalk(repo).use { walk ->
+            val commit = walk.parseCommit(commitId)
+            TreeWalk.forPath(repo, path, commit.tree)?.use { return true }
+        }
+        return false
     }
 
     /**

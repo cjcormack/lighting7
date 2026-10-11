@@ -32,27 +32,30 @@ object DaoProjects: IntIdTable("projects") {
      * What this project is (venue plan D1, P2): a show — every project before venues — a venue, whose
      * own rows are its **draft**, or a frozen snapshot of one venue version. A `VENUE_VERSION` is
      * never listed, never current and refuses every write (`routes/projects.kt`'s guard); its index
-     * is `venue_versions`. Not exported yet: venues do not sync until session 4 (`SYNC_VENUE_PENDING`),
-     * which carries it in `project.json` under `formatVersion` 24.
+     * is `venue_versions`. Exported in `project.json` from `formatVersion` 24 (venue plan session 4),
+     * omitted for a show, which is its default.
      */
     val kind = enumerationByName<ProjectKind>("kind", 16).default(ProjectKind.SHOW)
     /**
      * A show's **pin** (venue plan §3.1, D2): the venue it sits on, by the venue project's uuid, and
      * the version it is pinned to. Both null for a standalone show, and always both null for a venue
      * or a version. The rig scope reads the pinned snapshot's rows into the show's rig
-     * (`RigScope`). Not exported until session 4 (`formatVersion` 24): until then a pinned show
-     * refuses sync (`SYNC_VENUE_PENDING`) and clone (`VENUE_CLONE_PENDING`), so it cannot leave the
-     * desk without its rig.
+     * (`RigScope`). Exported in `project.json` from `formatVersion` 24 (venue plan session 4), and an
+     * import of a show whose pinned version is not on the desk is refused (`VENUE_MISSING`).
      */
     val venueUuid = javaUUID("venue_uuid").nullable()
     val venueVersion = integer("venue_version").nullable()
+    /**
+     * Where a show's venue syncs, as a hint for a desk that lacks it (venue plan §3.4): `owner/repo`
+     * for a GitHub remote, else the remote's URL. Read from the archive on import and written back
+     * on export as it is, so every desk that imported the show writes the same bytes; a show with
+     * none (made on this desk) exports the venue's own attached repo, when there is one
+     * (`venue/VenuePins.kt`'s `repoHintOf`). Null for a standalone show, a venue and a version.
+     */
+    val venueRepo = varchar("venue_repo", 300).nullable()
 }
 
-/**
- * Whether this is a show **on a venue** (venue plan §3.1): one with a pin. Until venue plan session 4
- * such a show cannot leave the desk — sync, export and clone are refused — because its archive would
- * not carry the rig it sits on.
- */
+/** Whether this is a show **on a venue** (venue plan §3.1): one with a pin. */
 val DaoProject.isVenueBound: Boolean get() = kind == ProjectKind.SHOW && venueUuid != null
 
 /** A project's kind (venue plan §3.1). See [DaoProjects.kind]. */
@@ -72,6 +75,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var kind by DaoProjects.kind
     var venueUuid by DaoProjects.venueUuid
     var venueVersion by DaoProjects.venueVersion
+    var venueRepo by DaoProjects.venueRepo
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val looks by DaoLook referrersOn DaoLooks.project

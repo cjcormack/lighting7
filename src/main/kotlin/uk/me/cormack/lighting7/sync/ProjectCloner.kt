@@ -8,7 +8,6 @@ import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.ProjectKind
-import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.state.State
 import java.nio.file.Files
 import java.util.UUID
@@ -23,6 +22,10 @@ import java.util.UUID
  * the exporter/importer means a table is cloned the moment it's wired into sync — which
  * `CLAUDE.md`'s schema-change rules already require — and `ProjectCloneTest` holds that
  * guarantee in place.
+ *
+ * A show on a venue clones as a show on the same venue version (venue plan §3.4): only its own rows
+ * are copied (they are all its archive holds), with its pin and its hides; its links into the venue
+ * keep naming the venue's records.
  *
  * What a clone deliberately does *not* inherit:
  *  * `isCurrent` / `activeStackId` — cloning must not move the operator's playhead
@@ -62,7 +65,7 @@ class ProjectCloner(private val state: State) {
      *   source project, 409 for a name collision.
      */
     fun clone(sourceProjectId: Int, name: String, description: String?): Result {
-        val (sourceName, sourceKind) = transaction(state.database) {
+        val sourceName = transaction(state.database) {
             val source = DaoProject.findById(sourceProjectId)
                 ?: throw ImportError.notFound("Project not found: $sourceProjectId")
             // A version is frozen and has no copy of its own; the routes' guard refuses the clone
@@ -70,17 +73,12 @@ class ProjectCloner(private val state: State) {
             if (source.kind == ProjectKind.VENUE_VERSION) {
                 throw ImportError.conflict("A venue version cannot be cloned")
             }
-            // A show on a venue keeps its pin in a clone from venue plan session 4; the route refuses
-            // it first (`VENUE_CLONE_PENDING`), and this keeps a pin-less copy from ever being made.
-            if (source.isVenueBound) {
-                throw ImportError.conflict("A show on a venue cannot be cloned yet")
-            }
             // The importer checks the name too, but failing here skips a full export of a
             // project that could never land.
             if (DaoProject.find { DaoProjects.name eq name }.firstOrNull() != null) {
                 throw ImportError.conflict("A project named \"$name\" already exists. Provide a different name.")
             }
-            source.name to source.kind
+            source.name
         }
 
         val staging = Files.createTempDirectory("project-clone-")
@@ -91,9 +89,10 @@ class ProjectCloner(private val state: State) {
                 sourceDir = staging,
                 nameOverride = name,
                 descriptionOverride = description,
-                // The archive carries no kind yet, so a venue's clone is told it: a new venue with
-                // the source's draft as its own and no versions (they are this desk's index rows).
-                kind = sourceKind,
+                // The archive says what it is (v24): a venue's clone is a new venue with the source's
+                // draft as its own and no versions (they are this desk's index rows); a show on a venue
+                // is a show on the same version — its pin travels, and its links into the venue name
+                // venue records, which are no identity of its archive and so keep their uuids.
             )
 
             copyMachineOverrides(sourceProjectId, imported.projectId, mapping)

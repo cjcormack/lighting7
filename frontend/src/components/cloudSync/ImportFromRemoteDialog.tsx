@@ -17,6 +17,7 @@ import { useCloudSyncImportMutation, useCloudSyncConfigsQuery } from "@/store/cl
 import { useProjectListQuery } from "@/store/projects"
 import type { GithubRepo } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
+import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
 
 interface AddRemoteProjectDialogProps {
   open: boolean
@@ -101,7 +102,10 @@ export function AddRemoteProjectDialog({
       onOpenChange(false)
       navigate(`/projects/${result.projectId}/settings/sync`)
     } catch (err) {
-      toast.error(`Import failed: ${formatError(err)}`)
+      // A show whose venue is not on this desk (`VENUE_MISSING`): add the venue's repo first.
+      const refusal = venueSyncRefusal(err)
+      if (refusal) toast.error(refusal.title, { description: refusal.message })
+      else toast.error(`Import failed: ${formatError(err)}`)
     }
   }
 

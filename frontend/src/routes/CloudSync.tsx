@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Navigate } from "react-router"
 import { useDispatch } from "react-redux"
 import { Loader2 } from "lucide-react"
@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useProjectListQuery } from "@/store/projects"
+import type { ProjectVenue } from "@/api/projectApi"
 import {
   useCloudSyncConfigQuery,
   useCloudSyncConfigsQuery,
@@ -140,42 +141,67 @@ export function CloudSyncHubRedirect() {
  * and synced states.
  */
 export function ProjectSyncContent({ projectId }: { projectId: number }) {
-  // A venue does not sync until venue plan session 4 (P6): every route here answers it 409
-  // `SYNC_VENUE_PENDING`, so the tab says so rather than waiting on a config that never comes.
+  // Venues sync since venue plan session 4 (§3.4): a venue's repo holds its published versions, a
+  // show's its own rows and its pin. Both use the panels below; a note says what the repo holds.
   const { data: projects } = useProjectListQuery()
-  const project = projects?.find((p) => p.id === projectId)
-  if (project?.venue) {
-    // A show pinned to a venue does not sync either until session 4 (`SYNC_VENUE_PENDING`): its
-    // rig is the venue's, and a repo without it would not load anywhere else.
+  // Wait for the list: until it says what the project is, a venue would draw a show's panels.
+  if (!projects) {
     return (
       <div className="p-4 max-w-4xl">
-        <Card className="p-4 space-y-1">
-          <h2 className="text-sm font-semibold">A show on a venue does not sync yet</h2>
-          <p className="text-sm text-muted-foreground">
-            Its rig is {project.venue.name ?? "the venue"}&rsquo;s, which does not sync yet either. Until
-            venues sync, a show on one stays on this desk, and it cannot be exported or cloned.
-          </p>
+        <Card className="p-4 flex items-center justify-center">
+          <Loader2 className="size-6 animate-spin" />
         </Card>
       </div>
     )
   }
-  if (project?.kind === "VENUE") {
-    return (
-      <div className="p-4 max-w-4xl">
-        <Card className="p-4 space-y-1">
-          <h2 className="text-sm font-semibold">A venue does not sync yet</h2>
-          <p className="text-sm text-muted-foreground">
-            Venues will sync as their own repository, one tagged commit per published version. Until
-            then a venue and its versions stay on this desk.
-          </p>
-        </Card>
-      </div>
-    )
-  }
-  return <ProjectSyncPanels projectId={projectId} />
+  const project = projects.find((p) => p.id === projectId)
+  const isVenue = project?.kind === "VENUE"
+  return (
+    <ProjectSyncPanels
+      projectId={projectId}
+      isVenue={isVenue}
+      note={isVenue ? <VenueRepoNote /> : project?.venue ? <ShowOnVenueNote venue={project.venue} /> : null}
+    />
+  )
 }
 
-function ProjectSyncPanels({ projectId }: { projectId: number }) {
+/** A venue's repo holds its published versions only (venue plan D8, P7): never its draft. */
+function VenueRepoNote() {
+  return (
+    <Card className="p-4 space-y-1">
+      <h2 className="text-sm font-semibold">This repository holds the venue&rsquo;s versions</h2>
+      <p className="text-sm text-muted-foreground">
+        Every publish is a commit tagged <span className="font-mono">vN</span>; the draft stays on this desk. Sync
+        fetches the versions other desks have published and pushes any this desk holds that the repository lacks.
+      </p>
+    </Card>
+  )
+}
+
+/** A show on a venue syncs its own rows and its pin; its rig is the venue's, which syncs on its own. */
+function ShowOnVenueNote({ venue }: { venue: ProjectVenue }) {
+  return (
+    <Card className="p-4 space-y-1">
+      <h2 className="text-sm font-semibold">
+        Its rig is {venue.name ?? "the venue"}&rsquo;s v{venue.version}
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        This repository holds the show&rsquo;s own rows and which venue version it sits on. The venue syncs as its own
+        repository: a desk adding this show needs the venue first.
+      </p>
+    </Card>
+  )
+}
+
+function ProjectSyncPanels({
+  projectId,
+  isVenue,
+  note,
+}: {
+  projectId: number
+  isVenue: boolean
+  note: ReactNode
+}) {
   const dispatch = useDispatch()
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
 
@@ -211,10 +237,11 @@ function ProjectSyncPanels({ projectId }: { projectId: number }) {
 
   return (
     <div className="p-4 space-y-4 max-w-4xl">
-      <ConfigPanel projectId={projectId} />
+      {note}
+      <ConfigPanel projectId={projectId} isVenue={isVenue} />
       {config?.synced && (
         <>
-          <StatusPanel projectId={projectId} />
+          <StatusPanel projectId={projectId} isVenue={isVenue} />
           <ConflictPanel projectId={projectId} />
           {/* key= forces a fresh mount per project so accumulated paged state resets cleanly. */}
           <ActivityPanel key={`activity-${projectId}`} projectId={projectId} />

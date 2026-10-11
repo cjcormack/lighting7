@@ -1,6 +1,21 @@
 package uk.me.cormack.lighting7.sync
 
 import uk.me.cormack.lighting7.fixture.media.FittedSlot
+import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.runBlocking
+import org.eclipse.jgit.api.Git
+import uk.me.cormack.lighting7.models.DaoSyncConfig
+import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.routes.deleteProjectRows
+import uk.me.cormack.lighting7.sync.auth.AuthResolver
+import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
+import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.VenueVersionJson
+import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
+import uk.me.cormack.lighting7.venue.VenueDiff
+import uk.me.cormack.lighting7.venue.VenueVersions
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.core.eq
@@ -892,8 +907,7 @@ class ProjectRoundTripTest {
         val orphan = state.sceneImages.store(projectUuid, uk.me.cormack.lighting7.testsupport.scenePng(12, 12, seed = 99), "image/png")
         ProjectExporter(state).export(projectId, exportDirA)
 
-        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 23"), "the writer stamps v23")
-        assertEquals(23, SUPPORTED_FORMAT_VERSION)
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 23, "painted cloths travel from v23")
         val expected = RICH_PROJECT_SCENE_IMAGES.associate { (type, bytes) ->
             "${RecordHasher.sha256Hex(bytes)}.${if (type == "image/png") "png" else "jpg"}" to bytes
         }
@@ -955,6 +969,199 @@ class ProjectRoundTripTest {
             .map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
             .single { it.name == "Day/night cloth" }
         assertEquals(setOf("operation", "role", "travelS"), cloth.params!!.keys)
+    }
+
+    // ── v24: venues sync (venue plan session 4) ──────────────────────────────────
+
+    /**
+     * A show on a venue exports its own rows only — its addition, its group, its hides — with its pin
+     * in `project.json`, and its links into the venue (the addition's universe, a group member, its
+     * cues' events and scenery) by the venue records' uuids. Deleting the show and importing its
+     * archive back seeds those links from the pinned snapshot and reproduces the export byte for byte.
+     */
+    @Test
+    fun `a show on a venue round-trips with its pin, its hides and its additions`() {
+        val f = seedShowOnVenue(state)
+        ProjectExporter(state).export(f.showId, exportDirA)
+
+        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 24"), "the writer stamps v24")
+        val project = canonicalDecode(ProjectJson.serializer(), Files.readString(exportDirA.resolve("project.json")))
+        val (venueUuid, snapshotUniverses) = transaction(state.database) {
+            DaoProject[f.venueId].uuid to RigScope.of(f.showId).venue!!.let { v ->
+                DaoProject[v.snapshotId].universeConfigs.map { it.uuid.toString() }.toSet()
+            }
+        }
+        assertEquals(ProjectKind.SHOW, project.kind)
+        assertEquals(venueUuid.toString(), project.venueUuid)
+        assertEquals(1, project.venueVersion, "the show stays on v1 though v2 is published")
+        assertFalse(Files.readString(exportDirA.resolve("project.json")).contains("\"kind\""), "a show's kind is the default, omitted")
+
+        val hides = Files.list(exportDirA.resolve("showHides")).use { it.toList() }
+            .map { canonicalDecode(ShowHideJson.serializer(), Files.readString(it)) }
+        assertEquals(listOf(f.hideKind to f.hiddenUuid.toString()), hides.map { it.recordKind to it.recordUuid })
+
+        // Only the show's own rows: the venue's universes and patches are not in its archive, and its
+        // addition names a venue universe by uuid.
+        assertFalse(Files.exists(exportDirA.resolve("universeConfigs")), "the show owns no universe")
+        val patches = Files.list(exportDirA.resolve("fixturePatches")).use { it.toList() }
+            .map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        val addition = patches.single()
+        assertEquals(f.additionUuid.toString(), addition.uuid)
+        assertTrue(addition.universeConfigUuid in snapshotUniverses, "the addition sits on a venue universe")
+        assertEquals("L201", addition.gelCode)
+
+        transaction(state.database) { deleteProjectRows(state, DaoProject[f.showId]) }
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+        transaction(state.database) {
+            val show = DaoProject[imported.projectId]
+            assertEquals(venueUuid, show.venueUuid)
+            assertEquals(1, show.venueVersion)
+            assertTrue(RigScope.of(show).isHidden(f.hideKind, f.hiddenUuid))
+        }
+    }
+
+    /**
+     * A venue's versions travel as its repo's tags (§3.4): desk A pushes v1 and v2, each a tagged
+     * commit `vN: note` carrying `venueVersion.json`; a fresh desk refuses the show until it has the
+     * venue (`VENUE_MISSING`, naming the venue's repo), imports the venue repo — every tag a snapshot,
+     * `venue_versions` rebuilt, the draft the latest — and then imports the show exactly.
+     */
+    @Test
+    fun `a venue's versions travel through its repo and its tags, and a show waits for them`() {
+        val root = Files.createTempDirectory("venue-repo-")
+        try {
+            val bare = root.resolve("hall.git")
+            Git.init().setBare(true).setDirectory(bare.toFile()).setInitialBranch("main").call().close()
+            val url = bare.toUri().toString()
+            runCatching { state.shutdown() }
+            IntegrationTestDb.reset()
+            state = State(testAppConfig("sync.workingTreeRoot" to root.resolve("desk-a").toString()))
+
+            val f = seedShowOnVenue(state)
+            attachRepo(state, f.venueId, url)
+            val sync = runVenueSync(state, f.venueId, url)
+            assertEquals(SyncOutcome.PUSHED, sync.outcome, sync.message)
+            assertEquals(2, sync.pushed)
+
+            val tags = Git.open(bare.toFile()).use { git ->
+                git.tagList().call().associate { ref ->
+                    val commit = git.repository.parseCommit(git.repository.refDatabase.peel(ref).peeledObjectId ?: ref.objectId)
+                    ref.name.removePrefix("refs/tags/") to commit.fullMessage.trim()
+                }
+            }
+            assertEquals(setOf("v1", "v2"), tags.keys)
+            assertEquals("v1: Extracted from $RICH_PROJECT_NAME", tags["v1"])
+            assertEquals("v2: FOH truss moved stage left", tags["v2"])
+            val v2Json = Git.open(bare.toFile()).use { JGitClient.readBlob(it.repository, "refs/tags/v2", "venueVersion.json") }
+            val v2 = canonicalDecode(VenueVersionJson.serializer(), assertNotNull(v2Json))
+            assertEquals(2, v2.number)
+            assertEquals("Chris", v2.publishedBy)
+
+            // What desk A holds, to compare desk B's against.
+            val versionsA = transaction(state.database) {
+                VenueVersions.versionsOf(f.venueId).map { Triple(it.number, it.note, it.publishedAt) to it.snapshotProject.id.value }
+            }
+            val recordsA = versionsA.associate { (key, snapshotId) -> key.first to VenueDiff.recordsOf(state, snapshotId) }
+            ProjectExporter(state).export(f.showId, exportDirA)
+            val venueUuid = transaction(state.database) { DaoProject[f.venueId].uuid }
+
+            // Desk B: a fresh database and working tree.
+            runCatching { state.shutdown() }
+            IntegrationTestDb.reset()
+            state = State(testAppConfig("sync.workingTreeRoot" to root.resolve("desk-b").toString()))
+
+            val missing = assertFailsWith<ImportError> { ProjectImporter(state).import(exportDirA, nameOverride = null) }
+            assertEquals(HttpStatusCode.Conflict, missing.status)
+            assertEquals("VENUE_MISSING", missing.code)
+            assertTrue(venueUuid.toString() in missing.message!!, missing.message)
+            assertTrue(url in missing.message!!, "names the venue's repo: ${missing.message}")
+
+            val creds = InMemoryCredentialStore().also { it.set(url, "test-pat") }
+            val venue = runBlocking {
+                CloudSyncImporter(state, AuthResolver(creds, tokenStore = null, tokenProvider = null)).import(url, null, null)
+            }
+            transaction(state.database) {
+                val project = DaoProject[venue.projectId]
+                assertEquals(ProjectKind.VENUE, project.kind)
+                assertEquals(venueUuid, project.uuid)
+                assertEquals(
+                    versionsA.map { it.first },
+                    VenueVersions.versionsOf(venue.projectId).map { Triple(it.number, it.note, it.publishedAt) },
+                    "venue_versions rebuilt from the tags, notes and times as published",
+                )
+            }
+            val versionsB = transaction(state.database) {
+                VenueVersions.versionsOf(venue.projectId).associate { it.number to it.snapshotProject.id.value }
+            }
+            for ((number, records) in recordsA) {
+                val diff = VenueDiff.compare(records, VenueDiff.recordsOf(state, versionsB.getValue(number)))
+                assertEquals(0, diff.size, "v$number is the same records on both desks: $diff")
+            }
+            assertEquals(0, state.venueVersions.draftChanges(venue.projectId), "the draft is the latest version")
+
+            val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+            ProjectExporter(state).export(imported.projectId, exportDirB)
+            assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** A v23 archive — no `kind`, no pin, no `showHides/` — still imports (`minReader` stays 5). */
+    @Test
+    fun `a v23 archive still imports`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": $SUPPORTED_FORMAT_VERSION", "\"formatVersion\": 23"),
+        )
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val project = DaoProject[imported.projectId]
+            assertEquals(ProjectKind.SHOW, project.kind)
+            assertNull(project.venueUuid)
+        }
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        // Byte for byte but the version stamp, which this writer moves to 24.
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirB.resolve("formatVersion.json")),
+        )
+        assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+    }
+
+    /** `showOverrides/` is reserved for venue plan session 5: an archive holding one is refused as too new. */
+    @Test
+    fun `an archive holding show overrides is refused as too new`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        Files.createDirectories(exportDirA.resolve("showOverrides"))
+        Files.writeString(exportDirA.resolve("showOverrides/${java.util.UUID.randomUUID()}.json"), "{}\n")
+        val refused = assertFailsWith<ImportError> { ProjectImporter(state).import(exportDirA, nameOverride = null) }
+        assertEquals(HttpStatusCode.UnprocessableEntity, refused.status)
+        assertTrue("showOverrides" in refused.message!!)
+    }
+
+    private fun attachRepo(state: State, projectId: Int, url: String) {
+        transaction(state.database) {
+            DaoSyncConfig.new {
+                project = DaoProject[projectId]
+                repoUrl = url
+            }
+        }
+    }
+
+    /** A sync run of venue [venueId] with an in-memory PAT for [url], so the suite never touches a credential file. */
+    private fun runVenueSync(state: State, venueId: Int, url: String): SyncRunResult {
+        val creds = InMemoryCredentialStore().also { it.set(url, "test-pat") }
+        val engine = RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
+        val (uuid, install) = transaction(state.database) { DaoProject[venueId].uuid to DaoInstall.all().first() }
+        return runBlocking { engine.runSync(venueId, uuid, install.uuid, install.friendlyName) }
     }
 
     private fun wipeDatabase() {

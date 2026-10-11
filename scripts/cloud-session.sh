@@ -5,9 +5,11 @@
 # Usage:
 #   scripts/cloud-session.sh [repo ...]
 #
-#   repo   a show's sync repo, as `owner/name` or a full https://github.com/… URL, e.g.
-#          cjcormack/lighting7-tch-test. Several may be given; the first one imported is made
-#          the current project. With none, the backend starts on an empty "Default" project.
+#   repo   a show's or a venue's sync repo, as `owner/name` or a full https://github.com/… URL,
+#          e.g. cjcormack/lighting7-tch-test. Several may be given, in any order: venue repos are
+#          imported before the shows that pin them (a show whose venue version is not on the desk
+#          is refused with VENUE_MISSING), and the first show named is made the current project.
+#          With none, the backend starts on an empty "Default" project.
 #
 # What it does, in order:
 #   1. Installs JDK 24 (Temurin, from GitHub) if no JDK 24 is present. The build pins
@@ -19,7 +21,12 @@
 #      show to be ready. That builds frontend/ too. Log: <data dir>/run.log.
 #   4. Creates the first admin account (or logs in as it), so a browser test gets past the
 #      "Set up this desk" screen with the credentials below.
-#   5. Imports each repo through cloud sync and switches its auto-sync off.
+#   5. Imports each repo through cloud sync and switches its auto-sync off: every venue repo
+#      first, then every show. Which a repo is comes from its project.json (`kind`, absent for a
+#      show), read from a shallow clone before anything is imported. A venue's import brings
+#      every tagged version with it (venue plan session 4); a show's needs its pinned version
+#      already here, so the venue repo must be in the list (or imported earlier) — the import of
+#      a show without it fails naming the venue and the repo it syncs from.
 #
 # Cloud sessions only. Two things here only hold inside one:
 #   * The stored token is a placeholder. The session's git proxy authenticates github.com
@@ -159,6 +166,24 @@ ensure_admin() {
   fi
 }
 
+# `repo_kind URL` — VENUE or SHOW, from the repo's project.json (a shallow clone through the
+# session's git proxy). A repo that cannot be read is treated as a show: its import then fails
+# with the desk's own reason.
+repo_kind() {
+  local url="$1" tmp kind
+  tmp="$(mktemp -d)"
+  if git clone --quiet --depth 1 "$url" "$tmp/repo" >/dev/null 2>&1 && [[ -f "$tmp/repo/project.json" ]]; then
+    kind="$(json 'd.get("kind", "SHOW")' < "$tmp/repo/project.json")"
+  else
+    # Said out loud: a venue repo misread as a show is imported after the shows that pin it, and
+    # their VENUE_MISSING would otherwise read as the show's fault.
+    printf '\033[33mwarning:\033[0m could not read %s/project.json; importing it as a show\n' "$url" >&2
+    kind="SHOW"
+  fi
+  rm -rf "$tmp"
+  echo "$kind"
+}
+
 normalise_repo() {
   local r="${1%.git}"
   [[ "$r" == https://* ]] && echo "$r" || echo "https://github.com/$r"
@@ -197,9 +222,19 @@ main() {
   start_backend
   ensure_admin
 
-  local first="" repo id
+  # Venues before shows: a show's import resolves its links against its pinned venue version.
+  local first="" repo url id kind venues=() shows=()
   for repo in "$@"; do
-    id="$(import_repo "$(normalise_repo "$repo")")"
+    url="$(normalise_repo "$repo")"
+    kind="$(repo_kind "$url")"
+    log "$url is a ${kind,,} repo"
+    if [[ "$kind" == VENUE ]]; then venues+=("$url"); else shows+=("$url"); fi
+  done
+  for url in "${venues[@]}"; do
+    import_repo "$url" >/dev/null
+  done
+  for url in "${shows[@]}"; do
+    id="$(import_repo "$url")"
     [[ -z "$first" ]] && first="$id"
   done
   if [[ -n "$first" ]]; then

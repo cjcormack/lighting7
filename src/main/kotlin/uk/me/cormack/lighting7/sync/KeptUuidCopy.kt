@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.state.State
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 
 /**
@@ -41,13 +42,29 @@ object KeptUuidCopy {
         try {
             ProjectExporter(state).export(sourceId, staging)
             val sourceUuid = transaction(state.database) { DaoProject[sourceId].uuid }
-            ExportUuidRemapper.applyMapping(staging, mapOf(sourceUuid to projectUuid))
-            val imported = ProjectImporter(state).import(
-                staging, nameOverride = name, kind = kind, inTransaction = inTransaction,
-            )
-            return Result(imported.projectId, UUID.fromString(imported.projectUuid))
+            return fromArchive(state, staging, sourceUuid, name, kind, projectUuid, inTransaction)
         } finally {
             staging.toFile().deleteRecursively()
         }
+    }
+
+    /**
+     * [copy] from an archive already on disk — a venue repo's tagged commit, read back
+     * (`sync/VenueRepoSync.kt`) — whose project uuid is [sourceUuid]. [archive] is rewritten in place.
+     */
+    fun fromArchive(
+        state: State,
+        archive: Path,
+        sourceUuid: UUID,
+        name: String,
+        kind: ProjectKind,
+        projectUuid: UUID = UUID.randomUUID(),
+        inTransaction: (DaoProject) -> Unit = {},
+    ): Result {
+        ExportUuidRemapper.applyMapping(archive, mapOf(sourceUuid to projectUuid))
+        val imported = ProjectImporter(state).import(
+            archive, nameOverride = name, kind = kind, inTransaction = inTransaction,
+        )
+        return Result(imported.projectId, UUID.fromString(imported.projectUuid))
     }
 }

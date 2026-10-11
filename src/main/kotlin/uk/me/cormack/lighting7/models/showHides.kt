@@ -13,16 +13,14 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * an Update to a version that still holds the record). `RigScope` subtracts them from the pinned
  * snapshot's rows. A hide names a **venue** record only: a show's own row is deleted, not hidden.
  *
- * **Portable, but not exported yet.** The plan carries hides with the show (`showHides/{uuid}.json`),
- * which is a JSON layout change, and `formatVersion` 24 is session 4. Until then a show on a venue
- * refuses sync and clone, so its hides cannot be left behind (`SyncCoverageTest` records the
- * exclusion, naming session 4).
+ * **Portable** with the show, as `showHides/{uuid}.json` (`formatVersion` 24, venue plan session 4):
+ * a clone keeps them, remapping only the hide's own [uuid] — [recordUuid] names a venue record.
  */
 object DaoShowHides : IntIdTable("show_hides") {
     val project = reference("project_id", DaoProjects)
     val recordKind = enumerationByName<HideKind>("record_kind", 16)
     val recordUuid = javaUUID("record_uuid")
-    /** The hide's own identity, for the show's sync export in session 4. */
+    /** The hide's own identity in the show's sync export. */
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {

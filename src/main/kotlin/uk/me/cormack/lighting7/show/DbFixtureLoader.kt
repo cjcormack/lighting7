@@ -16,6 +16,8 @@ import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.venue.VenuePins
+import org.slf4j.LoggerFactory
 
 /**
  * Loads fixtures, controllers, and groups from DB records into the runtime Fixtures registry.
@@ -23,6 +25,7 @@ import uk.me.cormack.lighting7.sync.Overrides
  * (FX engine, cues, channel mapping, WebSocket) works identically.
  */
 object DbFixtureLoader {
+    private val logger = LoggerFactory.getLogger(DbFixtureLoader::class.java)
 
     /**
      * Load all fixture configuration from the database for the given project.
@@ -42,6 +45,14 @@ object DbFixtureLoader {
         val (universeConfigs, patches, groups) = transaction(database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project $projectId not found")
+            // A show whose pinned venue version is not on this desk loads no rig at all — no fixture,
+            // no controller — rather than its own additions without the venue's (venue plan §3.4). The
+            // switch refuses such a show; this is the desk starting with one current, which it must
+            // survive so the operator can switch away.
+            if (VenuePins.isMissing(project)) {
+                logger.error("Project {} is on a venue version this desk does not have; loading no rig. {}", projectId, VenuePins.missing(project).message)
+                return@transaction Triple(emptyList<UniverseConfigData>(), emptyList<PatchData>(), emptyList<GroupData>())
+            }
             val rig = RigScope.of(project)
 
             val configs = rig.universeConfigs()

@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.sync.SyncException
 
 /**
  * A venue's versions (venue plan §3.5, session 2), all **admin only** — mounted inside `adminOnly`
@@ -26,7 +27,9 @@ import uk.me.cormack.lighting7.venue.VenueException
  * - `GET /venues/{id}/versions/{a}/diff/{b}` — what changed from `a` to `b`, classified output /
  *   drawing (`venue/VenueDiff.kt`). Each is a version number, `0` for the empty venue before v1, or
  *   `draft`.
- * - `POST /venues/{id}/publish` `{note}` — publish the draft as the next version (P2).
+ * - `POST /venues/{id}/publish` `{note}` — publish the draft as the next version (P2). With a repo
+ *   attached it publishes through it (P7, `sync/VenueRepoSync.kt`): 409 `VENUE_VERSION_TAKEN` when the
+ *   remote already has the number, `VENUE_PUBLISH_PULL_ONLY` on a desk with `sync.push = false`.
  * - `DELETE /venues/{id}/draft` — discard the draft back to the installed version.
  *
  * REST only: publishing is not a socket operation, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
@@ -79,6 +82,11 @@ private suspend inline fun <reified T : Any> RoutingContext.venueCall(
         block()
     } catch (e: VenueException) {
         call.respond(e.status, ErrorResponse(e.message ?: "Refused", e.code))
+        return
+    } catch (e: SyncException) {
+        // A publish through the venue's repo (venue plan P7): `VENUE_VERSION_TAKEN`, a pull-only
+        // desk's `VENUE_PUBLISH_PULL_ONLY`, or the repo's own failure (credentials, network).
+        respondSyncError(e)
         return
     }
     call.respond(status, result)

@@ -128,7 +128,7 @@ internal fun Route.routeApiRestCloudSync(state: State) {
                 e,
             ))
         } catch (e: ImportError) {
-            call.respond(e.status, ErrorResponse(e.message ?: "Import failed"))
+            call.respond(e.status, ErrorResponse(e.message ?: "Import failed", e.code))
         } catch (e: Exception) {
             logger.error("Cloud-sync import from ${request.repoUrl} failed", e)
             call.respond(
