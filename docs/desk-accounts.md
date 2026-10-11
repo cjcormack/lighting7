@@ -22,6 +22,7 @@ rationale — and the decisions not to re-litigate — is in
 | A venue: editing it, its History, diff, publish and discard | yes | no — it may open one, read-only |
 | Extracting a venue from a show | yes | no |
 | Updating a show to a newer venue version, and running it against an older one | yes | yes |
+| Detaching a show from its venue, and replacing its stalls from a venue preset | yes | yes |
 
 There are no per-project or per-fixture permissions — with the one exception of a **venue**, below. Enforcement is **compositional**: an
 admin-only subtree is wrapped in `adminOnly {}` (`auth/AuthGate.kt`) at its mount point, so
@@ -96,6 +97,15 @@ a version of it is. Two gates carry it:
   of the same weight as hiding a venue fixture or overriding a facet, which operators make; *Run
   against* (`POST …/venue/run-against`) is a runtime gesture, like arming, and whoever is at the desk
   tonight is who decides to run the old patch. The venue itself stays an admin's.
+- **Detach and *Replace from preset*** (venue plan session 7) are **both roles'** too. A detach
+  (`POST /projects/{id}/detach`) writes the venue's rig into the show's own rows and clears its pin; a
+  replace (`POST /projects/{id}/seating/from-preset`) swaps the show's stalls for a fresh copy of a
+  preset. Each changes only the show — the venue and its versions are untouched — which is an
+  operator's write as an Update is, and an operator may already delete a show outright. On a venue the
+  write guard refuses an operator (`VENUE_ADMIN_ONLY`) and the route an admin (`NOT_A_VENUE_SHOW`,
+  `NOT_A_VENUE`). Reading a venue's presets (`GET …/seating/presets`) is open to both, because an
+  operator creates shows on it. On the Projects page an operator sees *Update venue* and *Detach* on a
+  show's menu, and neither *Add venue* nor *Extract a venue…*.
 - **MCP** (`mcp/McpProtocol.kt`) holds an operator's tools to the same line on a live venue: the
   tools that store something are refused, `aim_fixtures` with `saveAsTemplate` among them. Record and
   Update are off in a venue for both roles (D11), and the Programmer's Update and *New template* are

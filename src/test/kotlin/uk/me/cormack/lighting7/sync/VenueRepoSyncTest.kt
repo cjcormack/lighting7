@@ -286,6 +286,43 @@ class VenueRepoSyncTest {
     }
 
     @Test
+    fun `a detached show syncs as a standalone show, and a peer pulls it without the venue`() {
+        val (a, showId) = deskWithVenueOnRepo()
+        a.attach(showId, showUrl)
+        assertEquals(SyncOutcome.PUSHED, a.sync(showId).outcome)
+        val b = Desk("b")
+        b.importRepo(venueUrl)
+        val showB = b.importRepo(showUrl)
+        fun rig(desk: Desk, id: Int) = Fixtures().also { DbFixtureLoader.loadFixtures(id, it, desk.state.database) }.getChannelMappings()
+        val rigBefore = rig(a, showId)
+        assertEquals(rigBefore, rig(b, showB), "the peer loads the same rig through its own copy of the venue")
+
+        // A detaches and pushes: project.json drops the pin, and the show's hides go with it.
+        runBlocking { a.state.venueDetach.detach(showId, dryRun = false) }
+        assertEquals(SyncOutcome.PUSHED, a.sync(showId).outcome)
+        val peek = tmp.resolve("peek")
+        Git.cloneRepository().setURI(showUrl).setDirectory(peek.toFile()).call().close()
+        val pushed = Files.readString(peek.resolve("project.json"))
+        assertFalse("venueUuid" in pushed || "venueVersion" in pushed, "no pin: $pushed")
+        assertFalse(Files.exists(peek.resolve("showHides")) || Files.exists(peek.resolve("showOverrides")), "no show layer")
+
+        // The peer fast-forwards onto the standalone show: its rig is its own rows now, the same fixtures.
+        assertEquals(SyncOutcome.FAST_FORWARDED, b.sync(showB).outcome)
+        transaction(b.state.database) {
+            val show = DaoProject[showB]
+            assertEquals(null, show.venueUuid)
+            assertEquals(null, show.venueVersion)
+            assertTrue(DaoShowHide.find { DaoShowHides.project eq showB }.empty())
+        }
+        assertEquals(rigBefore, rig(b, showB))
+
+        // And a desk with no copy of the venue at all imports it, as any standalone show.
+        val c = Desk("c")
+        val showC = c.importRepo(showUrl)
+        assertEquals(rigBefore, rig(c, showC))
+    }
+
+    @Test
     fun `a show whose pinned version is missing loads no rig and cannot be made current`() {
         val a = Desk("a")
         val f = seedShowOnVenue(a.state)

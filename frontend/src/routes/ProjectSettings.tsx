@@ -18,6 +18,7 @@ import { RiggingsContent } from "@/components/rigging/RiggingsContent"
 import { ProjectSyncContent } from "./CloudSync"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 import { useVenueMode } from "@/store/venues"
+import { SeatingPresetCard } from "@/components/venue/SeatingPresetCard"
 
 // No `patches`: the patch list is a routed page again at `/projects/:id/patches` (CLAUDE.md
 // §List shell), and `App.tsx` redirects `/settings/patches` there.
@@ -171,9 +172,12 @@ function GeneralTab({ projectId }: { projectId: number }) {
 }
 
 function StageTab({ projectId }: { projectId: number }) {
+  const { data: project } = useProjectQuery(projectId)
   return (
     <div className="p-4 space-y-4 max-w-3xl">
       <StageDimensionsCard projectId={projectId} />
+      {/* A show on a venue seats its own copy of a venue preset (venue plan D6, session 7). */}
+      {project?.venue && <SeatingPresetCard projectId={projectId} venue={project.venue} />}
       <StageRegionsContent projectId={projectId} />
     </div>
   )

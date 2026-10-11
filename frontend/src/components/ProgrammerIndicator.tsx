@@ -71,8 +71,11 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
     <span
       className={cn(
         'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium tabular-nums',
+        // An opaque fill, not amber over whatever is behind: on the app header's blue a translucent
+        // wash took the blue under it and left amber-700 text unreadable (venue plan session 7, found
+        // reading *Blind · venue* there). On the cards it also sits on, it is the same colour as before.
         blind
-          ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+          ? 'border-amber-500/60 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
           : 'border-primary/50 bg-primary/10 text-primary',
         className,
       )}

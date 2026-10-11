@@ -41,6 +41,24 @@ export interface ProjectSummary {
   /** Absent from a desk older than venues, which has only shows. */
   kind?: ProjectKind;
   venue?: ProjectVenue | null;
+  /** A venue's card (venue plan session 7); absent for a show, and from an older desk. */
+  venueSummary?: VenueSummary | null;
+}
+
+/**
+ * A venue's card on the Projects page: its installed version (null before v1, when the counts are
+ * the draft's), what it holds, and the shows on it — how many, and how many are behind it.
+ */
+export interface VenueSummary {
+  version?: number | null;
+  publishedAt?: string | null;
+  patches?: number;
+  universes?: number;
+  riggings?: number;
+  /** Fixed seating blocks (the balcony), by name. */
+  fixedSeating?: string[];
+  shows?: number;
+  behind?: number;
 }
 
 // Full project details for editing/viewing
@@ -70,6 +88,8 @@ export interface CreateProjectRequest {
   kind?: 'SHOW' | 'VENUE';
   /** A new show on this venue (venue plan session 3), pinned to its installed version. */
   venueId?: number;
+  /** A Preset seating block of that version, copied in as the show's own stalls (venue plan D6). */
+  seatingPresetUuid?: string;
 }
 
 // For updating a project

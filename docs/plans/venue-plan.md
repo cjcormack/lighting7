@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–6 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee`, `45afbef` and `c7fe1e7` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–7 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee`, `45afbef`, `c7fe1e7` and `174e5a1` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -434,7 +434,7 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
   - **Fixed on the way:** `Fixtures.changeListeners` is copy-on-write; a switch's collector
     registering while the next switch iterated it threw `ConcurrentModificationException`.
 
-### Session 7 — Projects page and the rest (frontend + backend)
+### Session 7 — Projects page and the rest (frontend + backend) — done, `174e5a1`
 
 - **Projects page:** the Venues row, show cards' venue badges, *Extract a venue…*, the show menu's
   *Update venue* and *Detach*.
@@ -443,6 +443,43 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
   re-pointed, pin cleared.
 - **Tests:** a detached show loads the same fixtures it loaded before; a preset copy is the show's.
 - **Docs:** CLAUDE.md's project section; `followups.md` gets `FU-STAGE-VENUE-SHARED`'s Completed row.
+- **As shipped** (PR #110). Where it departed from the bullets above, and what is left:
+  - **Detach keeps every uuid.** The copies are the venue's records under the show (Extract's move in
+    reverse), so seat views, platform regions, scenery once re-pointed and a peer's importer maps keep
+    resolving. Machine overrides are **copied** to the show's id, never moved (P4). A link to a record
+    the show hides (only a show group's member can be one) is dropped and named. A copy whose key or
+    name the show's own rows already hold is refused by name (`VENUE_DETACH_BLOCKED`), not as a
+    constraint error. Its venue may then be deleted.
+  - **Decisions the plan left open:**
+    - Detach is **either role's**: it changes only the show, and an operator may already delete one.
+    - **A behind show detaches at its pin** (what it runs). The answer and the confirm say how far
+      behind it was.
+    - *Replace from preset* replaces **every** seating block the show owns.
+    - The show's own seat views move to the copy. One whose seat the copy lacks is
+      `STAGE_ELEMENT_IN_USE`, and `force` leaves it without a seat (the element delete's rule).
+    - The stalls' scenery follows a single block, and is swept when there were several.
+    - A copy keeps the preset's uuid, as Extract's does.
+    - A name clash is `SEATING_PRESET_NAME_TAKEN`.
+    - `GET …/seating/presets` is the read both Create and Replace use, open to both roles.
+  - **No new table and no `formatVersion` bump.** A detached show exports as a standalone show. A
+    peer's pull clears its pin through `mergeProjectPin` and `replaceFromWorkingTree`, and a desk
+    without the venue imports it (`VenueRepoSyncTest`).
+  - **Frontend:**
+    - Create defaults to the first published venue, per the board. *None — standalone* stays an
+      option.
+    - The list's venue rows carry `venueSummary` for their cards.
+    - *Extract a venue…* is offered from the Venues row and from a standalone show's menu.
+    - *Replace from preset* lives on Project Settings › Stage.
+    - The Projects header now wraps at phone width (pre-existing: *Create Project* was out of reach
+      there).
+  - **Session 6's open items:**
+    - The *Blind · venue* chip read dark red on the header's blue in light mode. It now has an opaque
+      fill, the same colour elsewhere.
+    - `describe_rig` and `get_patch` say when output is held.
+    - `FU-VENUE-UPDATE-BINDINGS` stays Trigger-gated.
+  - **Left for later:** `FU-VENUE-TOURING` is recorded (a show moving venue by key mapping).
+    `FU-STAGE-VENUE-SHARED` is Completed. §9's session-7 check, the panto from the stalls preset and a
+    detached copy outputting as before, is the desk's.
 
 ## 6. Migration
 

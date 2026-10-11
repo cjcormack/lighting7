@@ -14,9 +14,14 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCreateProjectMutation, useProjectListQuery } from "./store/projects"
+import { useSeatingPresetsQuery } from "./store/venues"
+import { publishedDate } from "./lib/venue"
+import type { ProjectSummary } from "./api/projectApi"
 
 /** The Venue select's "none": a standalone show, which holds its whole rig as every project did. */
 const NO_VENUE = "none"
+/** The Stalls select's "none": the show seats nothing of its own. */
+const NO_SEATING = "none"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -28,6 +33,13 @@ interface CreateProjectDialogProps {
   kind?: "SHOW" | "VENUE"
 }
 
+/**
+ * *Create Project* and *Add venue* (`Projects.dc.html`'s Create sheet). A new show picks a **venue** —
+ * pinned to its latest published version, the default whenever one is published — or none, a
+ * standalone project that holds its whole rig as every project did. On a venue it picks its **stalls**
+ * too (venue plan D6, session 7): a copy of one of the version's Preset seating blocks, the show's own,
+ * or none. A venue with nothing published is listed but cannot be chosen.
+ */
 export default function CreateProjectDialog({
   open,
   setOpen,
@@ -36,17 +48,27 @@ export default function CreateProjectDialog({
   const isVenue = kind === "VENUE"
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  // A new show on a venue (venue plan session 3): the minimal select — the venue picker with its
-  // versions and the stalls preset is the Projects page's, in session 7.
-  const [venueId, setVenueId] = useState(NO_VENUE)
+  // Null until the operator chooses: the default is the first published venue, once the list is in.
+  const [venuePick, setVenueId] = useState<string | null>(null)
+  const [seatingPick, setSeating] = useState<string | null>(null)
   const { data: projects } = useProjectListQuery(undefined, { skip: !open || isVenue })
   const venues = (projects ?? []).filter((p) => p.kind === "VENUE")
+  const published = venues.filter((v) => v.venueSummary?.version != null)
+  const venueId = venuePick ?? (published[0] ? String(published[0].id) : NO_VENUE)
+  const venue = venues.find((v) => String(v.id) === venueId)
+  const { data: offered } = useSeatingPresetsQuery(venue?.id ?? 0, { skip: !open || venue == null })
+  const presets = venue != null && offered?.venueId === venue.id ? (offered.presets ?? []) : []
+  // The operator's stalls while the venue offers them; else the venue's first preset.
+  const seating = seatingPick != null && (seatingPick === NO_SEATING || presets.some((p) => p.uuid === seatingPick))
+    ? seatingPick
+    : (presets[0]?.uuid ?? NO_SEATING)
   const [createProject, { isLoading }] = useCreateProjectMutation()
 
   const handleClose = () => {
     setName("")
     setDescription("")
-    setVenueId(NO_VENUE)
+    setVenueId(null)
+    setSeating(null)
     setOpen(false)
   }
 
@@ -58,7 +80,8 @@ export default function CreateProjectDialog({
         name,
         description: description || undefined,
         ...(isVenue ? { kind } : {}),
-        ...(!isVenue && venueId !== NO_VENUE ? { venueId: Number(venueId) } : {}),
+        ...(!isVenue && venue ? { venueId: venue.id } : {}),
+        ...(!isVenue && venue && seating !== NO_SEATING ? { seatingPresetUuid: seating } : {}),
       }).unwrap()
     } catch {
       return
@@ -73,12 +96,13 @@ export default function CreateProjectDialog({
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{isVenue ? "Add Venue" : "Create New Project"}</SheetTitle>
-          {isVenue && (
-            <SheetDescription>
-              A venue holds a hall&apos;s rig: its patch, universes, bars, room and seating. Edit it
-              as a draft, and publish a version when it is as hung.
-            </SheetDescription>
-          )}
+          <SheetDescription>
+            {isVenue
+              ? "A venue holds a hall's rig: its patch, universes, bars, room and seating. Edit it as a draft, and publish a version when it is as hung."
+              : venues.length > 0
+                ? "A show. It starts from a venue's rig and layers its own changes on top."
+                : "A show, holding its whole rig."}
+          </SheetDescription>
         </SheetHeader>
         <SheetBody>
           <div className="space-y-2">
@@ -108,18 +132,44 @@ export default function CreateProjectDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {venues.map((v) => (
-                    <SelectItem key={v.id} value={String(v.id)}>
-                      {v.name}
+                    <SelectItem key={v.id} value={String(v.id)} disabled={v.venueSummary?.version == null}>
+                      {venueOptionLabel(v)}
                     </SelectItem>
                   ))}
                   <SelectItem value={NO_VENUE}>None — standalone</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {venueId === NO_VENUE
+                {venue == null
                   ? "The project holds its whole rig, as every project does today."
-                  : "The show starts from the venue's latest published version — referenced, not copied — and adds its own on top."}
+                  : versionLine(venue, offered?.venueId === venue.id ? offered?.note : null)}
               </p>
+            </div>
+          )}
+          {!isVenue && venue != null && (
+            <div className="space-y-2">
+              <Label htmlFor="project-seating">Stalls seating</Label>
+              <Select value={seating} onValueChange={setSeating}>
+                <SelectTrigger id="project-seating">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((p) => (
+                    <SelectItem key={p.uuid} value={p.uuid}>
+                      {p.name} · {p.seats} seats
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NO_SEATING}>None</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {presets.length > 0
+                  ? `The venue's movable layouts: ${presets.map((p) => p.name).join(" · ")} · None. The copy is this show's; moving chairs never changes the venue or another show.`
+                  : "The venue offers no movable layouts."}
+                {(venue.venueSummary?.fixedSeating?.length ?? 0) > 0 &&
+                  ` ${venue.venueSummary!.fixedSeating!.join(" and ")} ${venue.venueSummary!.fixedSeating!.length === 1 ? "is" : "are"} fixed seating and come${venue.venueSummary!.fixedSeating!.length === 1 ? "s" : ""} with the venue.`}
+              </p>
+              <StartsWith venue={venue} />
             </div>
           )}
         </SheetBody>
@@ -133,5 +183,40 @@ export default function CreateProjectDialog({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  )
+}
+
+/** `Commemoration Hall · v5 (latest)`, or `… · no version yet` for a venue that cannot be chosen. */
+function venueOptionLabel(venue: ProjectSummary): string {
+  const version = venue.venueSummary?.version
+  return version == null ? `${venue.name} · no version yet` : `${venue.name} · v${version} (latest)`
+}
+
+/** `v5 latest · 3 Oct 2026 · “Added house lights on U4”`. */
+function versionLine(venue: ProjectSummary, note: string | null | undefined): string {
+  const s = venue.venueSummary
+  if (s?.version == null) return `${venue.name} has no published version yet.`
+  return [`v${s.version} latest`, s.publishedAt ? publishedDate(s.publishedAt) : null, note ? `“${note}”` : null]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`
+}
+
+/** *What the show starts with*: the venue's rig, referenced; what the show adds, its own. */
+function StartsWith({ venue }: { venue: ProjectSummary }) {
+  const s = venue.venueSummary
+  if (s?.version == null) return null
+  const fixed = s.fixedSeating ?? []
+  return (
+    <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">What the show starts with.</span> The venue&apos;s rig at v{s.version} —
+      {(s.patches ?? 0) === 1 ? " its house fixture" : ` all ${s.patches ?? 0} house fixtures`}, {plural(s.universes ?? 0, "universe")},{" "}
+      {plural(s.riggings ?? 0, "rigging")}, the room
+      {fixed.length > 0 ? ` and ${fixed.join(" and ").toLowerCase()}` : ""} — referenced, not copied. Hired kit, the set and
+      the stalls seating are the show&apos;s own.
+    </p>
   )
 }

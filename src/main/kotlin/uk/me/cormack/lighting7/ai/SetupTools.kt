@@ -315,6 +315,17 @@ class SetupTools(
                                 "the overridden ones (but for a `dormant` one, which names a universe or rigging the rig lacks, so the " +
                                 "venue's stands), and `drifted` marks a facet the venue has changed since.",
                         )
+                        // A show held behind its venue (session 6) composes and draws but sends zero:
+                        // without this a model reads every apply_cue as working while the rig stays dark.
+                        val hold = state.venueHold.status.value
+                        if (hold.projectId == project.id.value && hold.held) {
+                            put(
+                                "held",
+                                "Output is held: this show is on v${it.version} and v${hold.installed} changes its patch, so every " +
+                                    "controller sends zero. Cues, looks and the programmer still compose and draw, but nothing reaches " +
+                                    "the rig until the operator updates the show to the venue's version or runs against v${it.version}.",
+                            )
+                        }
                     }
                 }
                 putJsonObject("stage") {

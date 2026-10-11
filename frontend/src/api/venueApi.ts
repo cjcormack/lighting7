@@ -162,3 +162,91 @@ export interface UpdateDecisionAnswer {
   answer: UpdateAnswer
   startChannel?: number
 }
+
+/**
+ * The records an extract moves, or a detach copies, each named as the Patch list and the rigging views
+ * name it (`subnet:universe` for a universe, a key for a patch).
+ */
+export interface VenueRigRows {
+  universes: string[]
+  patches: string[]
+  riggings: string[]
+  regions: string[]
+  elements: string[]
+  groups: string[]
+  viewpoints: string[]
+}
+
+/** The parts of a show's rig *Extract a venue* can move; all of them by default (venue plan §3.5). */
+export type ExtractKind = 'UNIVERSES' | 'PATCHES' | 'RIGGINGS' | 'REGIONS' | 'ELEMENTS' | 'SEATING' | 'GROUPS' | 'VIEWPOINTS'
+
+/** `POST /projects/{id}/venue/extract` — what an extract did, or with `dryRun` would do. */
+export interface ExtractVenueResult {
+  dryRun: boolean
+  /** The new venue; null on a dry run, which keeps nothing. */
+  venueId?: number | null
+  venueUuid: string
+  name: string
+  version: number
+  moved: VenueRigRows
+  /** Preset seating copied into the venue and kept by the show (D6). */
+  copiedPresetSeating: string[]
+  relinked: Record<string, number>
+  overridesMoved: number
+  imagesCopied: number
+}
+
+/** `POST /projects/{id}/detach` — what a detach did, or with `dryRun` would do (venue plan D9, session 7). */
+export interface DetachResult {
+  dryRun: boolean
+  projectId: number
+  venueId: number
+  venueName: string
+  /** The version the show was pinned to, and is flattened at. */
+  version: number
+  installed?: number | null
+  /** How far behind the pin was: the venue's later changes do not come with it. */
+  behind?: VenueBehind
+  copied: VenueRigRows
+  /** `key: facet, facet` for each venue patch whose overrides were written in. */
+  overridesApplied: string[]
+  hidesDropped: number
+  relinked: Record<string, number>
+  dropped?: UpdateItem[]
+  machineOverridesCopied: number
+  imagesCopied: number
+}
+
+/** A seating block: a venue's preset, or a show's own seating. */
+export interface SeatingBlock {
+  uuid: string
+  name: string
+  seats: number
+  /** A show's copy that keeps a preset's uuid: it reads as that preset. */
+  fromPreset?: boolean
+}
+
+/**
+ * `GET /projects/{id}/seating/presets` (venue plan D6, session 7): the Preset seating a venue offers at
+ * its installed version, or a show at its pinned one, and a show's own seating as it stands.
+ */
+export interface SeatingPresets {
+  venueId?: number | null
+  venueName?: string | null
+  /** Null for a venue with nothing published. */
+  version?: number | null
+  publishedAt?: string | null
+  note?: string | null
+  presets?: SeatingBlock[]
+  current?: SeatingBlock[]
+}
+
+/** What *Replace from preset* did. */
+export interface ReplaceSeatingResult {
+  seating: SeatingBlock
+  removed: string[]
+  viewsReseated: number
+  viewsWithoutSeat?: string[]
+  sceneryMoved?: number
+  scenerySwept?: number
+}
