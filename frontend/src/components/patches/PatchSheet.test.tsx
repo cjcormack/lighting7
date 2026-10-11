@@ -64,6 +64,7 @@ import libraryJson from '../../../../src/main/resources/lanterns/library.json'
 function patch(id: number, name: string, startChannel: number, channelCount = 6, universe = 1): FixturePatch {
   return {
     id,
+    uuid: `uuid-${id}`,
     key: name.toLowerCase().replace(/\s+/g, '-'),
     displayName: name,
     fixtureTypeKey: 'par-hex',
@@ -221,6 +222,38 @@ describe('PatchSheet', () => {
     fireEvent.click(row('PAR 1').querySelector('[data-first-column]')!, { metaKey: true })
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(onEditPatch).toHaveBeenCalledTimes(2)
+  })
+
+  it('marks a venue draft change on its row, red-amber when it changes output (venue plan session 2)', () => {
+    const marked = rows.map((r) =>
+      r.patch.id === 2
+        ? { ...r, draft: { kind: 'PATCH' as const, table: 'fixturePatches', uuid: 'uuid-2', name: 'PAR 2', change: 'CHANGED' as const, output: true, facets: ['ADDRESS' as const], fields: [{ field: 'address', from: '1-090', to: '1-100' }] } }
+        : r.patch.id === 3
+          ? { ...r, draft: { kind: 'PATCH' as const, table: 'fixturePatches', uuid: 'uuid-3', name: 'PAR 3', change: 'CHANGED' as const, output: false, facets: ['POSITION' as const], fields: [{ field: 'stageX', from: '1', to: '2' }] } }
+          : r,
+    )
+    draw({ rows: marked, visibleColumns: ['draft', 'address'] })
+    // The whole marker rides the title, so a narrow column clips nothing a hover cannot read.
+    const address = within(row('PAR 2')).getByText('Address · 1-090 → 1-100').closest('[title]')
+    expect(address).toHaveAttribute('title', 'Address · 1-090 → 1-100 — changes output')
+    expect(within(row('PAR 3')).getByText('Position').closest('[title]')).toHaveAttribute('title', 'Position — drawing only')
+    expect(within(row('PAR 1')).queryByTitle(/changes output|drawing only/)).toBeNull()
+  })
+
+  it('edits nothing when read-only — an operator looking at a venue (venue plan D3)', () => {
+    const onEditPatch = vi.fn()
+    draw({ onEditPatch, readOnly: true })
+    expect(screen.queryByRole('button', { name: 'Edit PAR 2' })).toBeNull()
+    // The name is a read-out, not the rename's trigger, and a cell is inert.
+    expect(screen.getByText('PAR 3').closest('button')).toBeNull()
+    fireEvent.click(addressCell('PAR 1'))
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(onEditPatch).not.toHaveBeenCalled()
+    expect(updatePatch).not.toHaveBeenCalled()
+    // A selected row offers Locate and Highlight, never Unpatch.
+    fireEvent.click(row('PAR 2').querySelector('[data-first-column]')!)
+    expect(screen.getByRole('button', { name: /Locate/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Unpatch/ })).toBeNull()
   })
 
   it('lands a Set over N addresses consecutively by footprint from the typed one', async () => {

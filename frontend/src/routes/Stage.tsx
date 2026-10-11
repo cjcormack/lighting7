@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useViewedProject } from '../ProjectSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useVenueMode } from '../store/venues'
 import { useUpdatePatchMutation, usePatchListQuery, useVisiblePatchListQuery } from '../store/patches'
 import {
   useUpdateStageRegionMutation,
@@ -393,7 +394,9 @@ export function Stage() {
 
   // Editing works in every view now — only the tablet+ width gate remains, since
   // the gizmos and side panels need the room.
-  const showEditToggle = isTabletOrLarger
+  // An operator looks at a venue; only an admin changes one (venue plan D3), so no Edit.
+  const venueMode = useVenueMode(projectId)
+  const showEditToggle = isTabletOrLarger && !(venueMode.isVenue && !venueMode.canEdit)
   const editingActive = editMode && isTabletOrLarger
 
   // A clicked piece's popover (scenery-programmer plan D11) offers *Edit element…* where this window

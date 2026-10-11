@@ -27,6 +27,7 @@ function patch(overrides: Partial<FixturePatch> = {}): FixturePatch {
   const id = nextId++
   return {
     id,
+    uuid: `uuid-${id}`,
     key: `p${id}`,
     displayName: `P${id}`,
     fixtureTypeKey: "tk",

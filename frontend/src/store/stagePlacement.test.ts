@@ -29,6 +29,7 @@ import type { FixturePatch } from '@/api/patchApi'
 function patch(id: number, overrides: Partial<FixturePatch> = {}): FixturePatch {
   return {
     id,
+    uuid: `uuid-${id}`,
     key: `p${id}`,
     displayName: `P${id}`,
     fixtureTypeKey: 'tk',

@@ -19,8 +19,9 @@ rationale — and the decisions not to re-litigate — is in
 | All lighting control, all project content | yes | yes |
 | User accounts, password resets | yes | no |
 | Install settings (`PUT /api/rest/install`), cloud sync, GitHub OAuth | yes | no |
+| A venue: editing it, its History, diff, publish and discard | yes | no — it may open one, read-only |
 
-There are no per-project or per-fixture permissions. Enforcement is **compositional**: an
+There are no per-project or per-fixture permissions — with the one exception of a **venue**, below. Enforcement is **compositional**: an
 admin-only subtree is wrapped in `adminOnly {}` (`auth/AuthGate.kt`) at its mount point, so
 the requirement is declared by where a route sits in the tree and the router does the
 matching. Where only some methods are admin-only (`PUT /install`), the handler calls
@@ -65,6 +66,32 @@ mid-show. The fixture panel asks first, naming the unit and the command. On the 
 route — and MCP's `run_fixture_command` — is refused (403
 `REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`) unless an admin has turned on *Allow fixture
 commands over remote access*, off by default. REST, so the socket gains no operation.
+
+**Venue editing is admin territory** (venue plan D3, session 2). A venue is a project of kind
+`VENUE`, the hall's rig every show on it will share, so changing it is an admin's job, as publishing
+a version of it is. Two gates carry it:
+
+- **`/api/rest/venues/…`** — History, diff, publish and discard — is mounted inside `adminOnly {}`.
+- **A venue's own project routes** are guarded by role at the head of the `/projects/{id}/…` subtree
+  (`routes/projectWriteGuard.kt`): an operator's write is 403 `VENUE_ADMIN_ONLY`, unless it stores
+  nothing — `set-current` (opening the venue), the programmer's spread, aim and focus, arming and
+  firing, and fixture commands, which act on the rig as it stands. Reads are open to both roles, so
+  an operator can look at a venue. *Add venue* (`POST /projects` with `kind: VENUE`) calls
+  `requireAdmin()`. A **copy** into another project (`…/{looks|templates|scripts|cues}/{id}/copy`)
+  names its target in the body, so the target is judged too (`refusedCopyTarget`), and the FX
+  definitions, stored in the live project under a path that names none, are refused an operator on a
+  live venue (`refusedLiveVenueWrite`). The frontend withholds the draft, History and Publish from an
+  operator, makes the Patch list, the Stage view's Edit, Rigging, Regions and Project Settings
+  read-only, and says the venue is read-only; that is presentation, the routes are the gate.
+- **MCP** (`mcp/McpProtocol.kt`) holds an operator's tools to the same line on a live venue: the
+  tools that store something are refused, `aim_fixtures` with `saveAsTemplate` among them. Record and
+  Update are off in a venue for both roles (D11), and the Programmer's Update and *New template* are
+  withheld there.
+
+The socket stays role-blind (below) and needs nothing new for this: no rig row — a patch, a universe,
+a rigging, an element — is written over it. Its writes are the programmer's, park and the like,
+which act on the live show whatever its kind. A **venue version** refuses every write to everyone
+(409 `VENUE_VERSION_READ_ONLY`): it is what was published.
 
 WebSocket messages are **not** role-scoped in v1: any authenticated user can send any
 socket message. Deliberate, not an oversight — see `FU-AUTH-WS-PER-MESSAGE` in

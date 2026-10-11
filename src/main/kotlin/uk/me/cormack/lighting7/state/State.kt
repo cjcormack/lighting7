@@ -438,6 +438,11 @@ class State(val config: ApplicationConfig) {
      */
     val syncLogger: SyncLogger by lazy { SyncLogger(this) }
 
+    /** A venue's versions: publish, history, diff and discard (venue plan session 2). */
+    val venueVersions: uk.me.cormack.lighting7.venue.VenueVersions by lazy {
+        uk.me.cormack.lighting7.venue.VenueVersions(this)
+    }
+
     /**
      * Cloud-sync engine. Shared by route handlers and [autoSyncScheduler] so a single
      * per-project mutex serialises manual `Sync now` clicks against periodic auto-sync

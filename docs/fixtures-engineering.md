@@ -1127,6 +1127,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `show/Fixtures.kt` | Registry and transaction wrapper |
 | `models/RigScope.kt` | The rig scope: every project-scoped rig read (§"The rig scope") |
 | `models/VenueLinks.kt` | Every foreign key into a venue-ownable table, and its re-point |
+| `venue/VenueVersions.kt`, `venue/VenueDiff.kt` | A venue's versions and the output/drawing diff (§"Venue versions") |
 
 ## Existing Fixture Implementations
 
@@ -1670,7 +1671,7 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 | `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. `paint` (below). |
 | `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's), `drawFrom` (`STAGE_LEFT · STAGE_RIGHT`, a `DRAW` drape's: a one-way traveller stacking at that side, its local +X end being stage left; absent is a bi-parting pair meeting in the middle), `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`; absent is velour), `paint` (below). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
-| `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`. |
+| `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`, `block` (`FIXED · PRESET`, absent `PRESET`: whose a venue's block is, venue plan D6 — a show's own seating ignores it). |
 | `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`, `travelS` (a flown piece's). |
 
 Every kind may carry `states`, the base values session 8's scenery tracks from: `visible` on any,
@@ -1966,3 +1967,92 @@ exercises every link.
 fails, naming the column, on a foreign key into a venue-ownable table with no entry — as
 `SyncCoverageTest` does for sync. Adding a `reference` to a patch, rigging, universe, element, region,
 viewpoint or group means adding its `VenueLinks` entry and a row in the re-point test's show.
+
+## Venue versions
+
+A **venue** is a project of kind `VENUE` (venue plan D1): a hall's rig, which shows will share from
+session 3. Its own rows are its **draft**. Publishing (`POST /venues/{id}/publish`, admin only)
+freezes the draft as the next **version** — `venue/VenueVersions.kt`, venue plan P2.
+
+**A version is a frozen project.** `sync/KeptUuidCopy.kt` exports the venue with `ProjectExporter`,
+gives the archive a fresh project uuid, and imports it with `ProjectImporter` as a project of kind
+`VENUE_VERSION`: every record keeps its uuid, so a version and its draft are the same records in two
+projects (record uuids are not unique across projects — §"The rig scope"). Its `venue_versions` row
+(`number`, `note`, `published_at`, `published_by`, `snapshot_project_id`, unique on venue and number)
+is written inside the import's own transaction, so a version is never half there. The row is
+machine-local (`SyncCoverageTest`): session 4 rebuilds it from the venue repo's tags. A snapshot's
+project name is `venue-version:<its uuid>` — `projects.name` is unique, and no one sees it: History
+names a version by its venue and number. It was the test helper `importWithKeptRecordUuids`, which
+now calls the production mechanism.
+
+A snapshot is **never listed** (`GET /projects`, MCP's `list_projects`, the project switcher, the
+startup fallback in `ProjectManager.initialize`), **never current** (`ProjectManager.switchProject`
+refuses one, and so does MCP's `switch_project`), and **refuses every write**: the guard at the head
+of the `/projects/{id}/…` subtree (`routes/projectWriteGuard.kt`) answers any request but `GET`,
+`HEAD` and `OPTIONS` to one with 409 `VENUE_VERSION_READ_ONLY` — every `withProject` route, and the
+few that resolve their project another way (a project's `PUT` and `DELETE`, `set-current`, clone,
+export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts|cues}/{id}/copy`),
+so the four copy routes judge the target by the same rule (`refusedCopyTarget`). Its reads answer, so a client draws a removed patch from the installed version's patch list.
+Deleting a venue deletes its versions with it. Sync is refused for both kinds until session 4 (409
+`SYNC_VENUE_PENDING` on the whole per-project sync subtree, and the auto-sync tick skips them).
+
+**What a snapshot carries, and what it does not.** Exactly what an import carries:
+
+- **Scene images and prompt-book PDFs: its own copy.** The export puts the images the draft's cloths
+  name into the archive and the import hydrates them into the snapshot's own store,
+  `<appDataDir>/scene-images/{snapshot uuid}/`. A version must not depend on the draft's store, which
+  prunes an image no draft element has named for a week (at project load — and a snapshot never
+  loads, so its own copy is never pruned). The cost is a copy of each painted cloth per version;
+  `FU-VENUE-VERSION-PRUNE` is where that is paid back.
+- **Machine overrides: none.** A universe's controller IP (and every other `machine_overrides` row) is
+  keyed by project id and record uuid, and stays with the **venue** project's id. A version keeps
+  every record uuid, so session 3 resolves a venue record's override against the venue's id (P4) and
+  a universe's address is the same in every version; copying them per snapshot would let two
+  versions disagree about where a node is. Discarding the draft keeps them for the same reason.
+
+**Discard** (`DELETE /venues/{id}/draft`) runs the other way: the installed version is exported,
+remapped to the venue's own project uuid and written over the venue with
+`ProjectImporter.replaceFromWorkingTree` (the sync pull's path), which keeps the project row and so
+every machine-local row keyed by it. The venue's name and description are its own, not versioned, and
+stay. A live venue reloads.
+
+### The diff rule: output or drawing
+
+`venue/VenueDiff.kt` compares two states of a venue — two versions, or a version and the draft — by
+exporting each (`ProjectExporter.export(…, blobs = false)`; a snapshot's is read once and cached) and
+matching records by uuid, field by field. It reads **every table the export carries**, so whatever a
+publish would freeze and a discard would undo is counted: the rig — universes, patches and their
+extra placements, groups, riggings, regions, scene elements, viewpoints, and the stage's size from
+`project.json` — is classified and named, and any other table a venue project holds (a Look or a
+parked channel made through the API, since the views that make them are hidden in a venue) is
+`OTHER`, drawing only, named by its table. The one table left out is the **speed masters** every
+project is made with: an empty venue holds them before anything is drawn. A row's `sortOrder` alone
+is not a change; a controller IP is machine-local, never exported, and never one either.
+
+**Its cost.** A History read and a diff against the draft export the draft on every request (a
+version's export is cached), on the single pooled connection, and the client refetches both on any
+rig edit. Measured on this desk's cloud container: a venue of 300 patches, 8 groups and 12 riggings
+exports and compares in about 100 ms (220 the first time), the History read and the draft diff alike (2026-10-11). If venues grow ten times
+larger than that, cache the draft's records by a revision the rig writes bump rather than exporting
+per read.
+
+Each change is classified the way a show's update will be (venue plan §3.1, D7):
+
+| Changes output | Drawing only |
+|---|---|
+| a universe added or removed, or re-addressed — its `subnet`, `universe` or `controllerType` | everything else: a patch's position, focus, media, name, key or head number |
+| a patch added or removed | groups and their members, riggings, regions, scene elements, viewpoints |
+| a patch re-addressed — its universe or start channel, read as `1-005` through each side's universes | the stage's size |
+| a patch re-typed — its `fixtureTypeKey`, which names the mode | |
+
+A patch change also names its **facets** (§3.2's Address, Position, Focus, Media, plus Type, Identity
+and Other), which is what the Patch list's Draft column says (`Media · L201 → L202`). A renumbered
+universe is an output change on the universe and on every patch on it, each of which really has a new
+address. Session 6's hold and Update will read the same classification, so what Publish says will
+reach a show is what the show will see.
+
+**Files.** `models/venueVersions.kt` (the index), `sync/KeptUuidCopy.kt` (the copy),
+`venue/VenueVersions.kt` (publish, history, diff, discard), `venue/VenueDiff.kt` (the rule),
+`routes/venues.kt` (the admin routes), `routes/projectWriteGuard.kt` (the guards).
+`VenueVersionsTest` pins a snapshot to its draft record for record and the guards; `VenueDiffTest`
+pins the rule over each kind of change.

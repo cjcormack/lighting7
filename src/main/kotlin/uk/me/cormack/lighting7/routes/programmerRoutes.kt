@@ -121,6 +121,7 @@ internal data class ProgrammerRecordResponse(
 )
 
 internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
+    if (refusedRecordInVenue(state)) return
     val request = call.receive<ProgrammerRecordRequest>()
 
     val mode = parseEnumOrNull<RecordMode>(request.mode) ?: return call.respond(
@@ -367,6 +368,7 @@ internal data class ProgrammerUpdateResponse(
 )
 
 internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
+    if (refusedRecordInVenue(state)) return
     val request = try {
         call.receive<ProgrammerUpdateRequest>()
     } catch (_: Exception) {

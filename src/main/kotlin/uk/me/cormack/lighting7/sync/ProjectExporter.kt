@@ -127,6 +127,12 @@ class ProjectExporter(private val state: State) {
         projectId: Int,
         targetDir: Path,
         knownInstalls: Map<String, String> = emptyMap(),
+        /**
+         * Copy the referenced prompt-book PDFs and scene images into the folder too. Only a reader
+         * of the records alone passes false — the venue diff (`venue/VenueDiff.kt`), which exports
+         * on every read and has no use for up to a hundred megabytes of bytes it never looks at.
+         */
+        blobs: Boolean = true,
     ): Result {
         val liveKeys = mutableSetOf<RecordKey>()
         var reconcileProjectUuid: UUID? = null
@@ -636,7 +642,7 @@ class ProjectExporter(private val state: State) {
         // Copy the referenced script PDF(s) into `promptScripts/{hash}.pdf` (raw bytes)
         // and remove orphaned ones — outside the transaction so the copy never blocks the
         // DB writer. PDFs are not records; they ride the repo as content-addressed blobs.
-        reconcileProjectUuid?.let {
+        reconcileProjectUuid?.takeIf { blobs }?.let {
             PromptScriptRepoSync.reconcileTree(state, it, referencedScriptHashes, targetDir)
             // And the referenced scene images into `sceneImages/{hash}.{png|jpg}`, the same way.
             SceneImageRepoSync.reconcileTree(state, it, referencedImageHashes, targetDir)

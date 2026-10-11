@@ -23,7 +23,8 @@ vi.mock('@/hooks/useMediaQuery', () => ({
 // this file, so a shared helper would be read before it exists.
 vi.mock('./connection', () => ({ ConnectionStatus: () => <div data-testid="connection" /> }))
 vi.mock('./components/ProgrammerIndicator', () => ({ ProgrammerIndicator: () => null }))
-vi.mock('./ProjectSwitcher', () => ({ default: () => <div data-testid="project-switcher" /> }))
+vi.mock('./ProjectSwitcher', () => ({ default: () => <div data-testid="project-switcher" />, useViewedProject: () => undefined }))
+vi.mock('./components/venue/VenueBand', () => ({ VenueBand: () => <div data-testid="venue-band" /> }))
 vi.mock('./components/auth/UserMenu', () => ({ UserMenu: () => null }))
 vi.mock('./components/FixtureOverviewPanel', () => ({ FixtureOverviewPanel: () => <div data-testid="panel-fixtures" /> }))
 vi.mock('./components/positions/PositionsPanel', () => ({ PositionsPanel: () => <div data-testid="panel-stage" /> }))

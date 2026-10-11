@@ -21,6 +21,7 @@ import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
 import { EditGroupSheet } from "@/components/patches/EditGroupSheet"
 import {
+  DraftMarker,
   PATCH_COLUMN_LABELS,
   PATCH_COLUMN_ORDER,
   PatchSheet,
@@ -28,7 +29,9 @@ import {
   type PatchColumnKey,
   type PatchSheetRow,
 } from "@/components/patches/PatchSheet"
-import { universeFill } from "@/lib/patchAddress"
+import { formatPatchAddress, universeFill } from "@/lib/patchAddress"
+import { useVenueDiffQuery, useVenueHistory, useVenueMode } from "../store/venues"
+import type { VenueChange } from "../api/venueApi"
 import type { FixturePatch, UniverseConfig } from "../api/patchApi"
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
@@ -113,6 +116,8 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   groups: true,
   stage: true,
   role: true,
+  // Never in the Columns menu: the route appends it in venue mode only.
+  draft: true,
 }
 
 /**
@@ -152,6 +157,21 @@ function PatchListContent({
   }, [searchParams, setSearchParams])
 
   const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId)
+  const draft = useVenueDraftPatches(projectId)
+  // An operator looks at a venue; only an admin changes one (venue plan D3).
+  const venueMode = useVenueMode(projectId)
+  const readOnly = venueMode.isVenue && !venueMode.canEdit
+  const draftFilter: 'all' | 'changed' = draft.enabled && searchParams.get('draft') === 'changed' ? 'changed' : 'all'
+  const setDraftFilter = (next: 'all' | 'changed') =>
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'changed') params.set('draft', 'changed')
+        else params.delete('draft')
+        return params
+      },
+      { replace: true },
+    )
   const { data: universeConfigs } = useUniverseConfigListQuery(projectId)
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
@@ -162,13 +182,25 @@ function PatchListContent({
     () => [...new Set((patches ?? []).map((p) => p.universe))].sort((a, b) => a - b),
     [patches],
   )
-  const rows = useMemo(
-    () => buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter, lanterns),
-    [patches, riggings, fixtureTypes, universeFilter, filter, lanterns],
+  const rows = useMemo(() => {
+    const built = buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter, lanterns)
+    if (!draft.enabled) return built
+    const marked = built.map((row) => ({ ...row, draft: draft.byUuid.get(row.patch.uuid) ?? null }))
+    return draftFilter === 'changed' ? marked.filter((row) => row.draft != null) : marked
+  }, [patches, riggings, fixtureTypes, universeFilter, filter, lanterns, draft.enabled, draft.byUuid, draftFilter])
+  // The heads the draft removed are not the draft's rows: they are drawn from the installed version.
+  const removedRows = useMemo(
+    () => filterPatches(draft.removed, universeFilter, filter),
+    [draft.removed, universeFilter, filter],
   )
+  // The Draft marker leads the value columns rather than trailing them as the board draws it: the
+  // real sheet has twice the board's columns, and a marker scrolled out of sight says nothing.
   const visibleColumns = useMemo(
-    () => PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
-    [columnVisibility],
+    () => [
+      ...(draft.enabled ? (['draft'] as const) : []),
+      ...PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
+    ],
+    [columnVisibility, draft.enabled],
   )
   const onEditPatch = useCallback((id: number) => setEditingPatchId(id), [])
   const onEditGroup = useCallback((id: number, name: string) => setEditingGroup({ id, name }), [])
@@ -207,6 +239,7 @@ function PatchListContent({
                   config={config}
                   projectId={projectId}
                   fill={universeFill(heads, config.universe)}
+                  readOnly={readOnly}
                 />
               ))}
             </>
@@ -249,6 +282,21 @@ function PatchListContent({
                 U{u}
               </ToggleGroupItem>
             ))}
+          </ToggleGroup>
+        )}
+        {/* A venue's draft filter (venue plan session 2): a URL parameter, like the universe toggle. */}
+        {draft.enabled && (
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={draftFilter}
+            onValueChange={(v) => {
+              if (v === 'all' || v === 'changed') setDraftFilter(v)
+            }}
+            aria-label="Draft"
+          >
+            <ToggleGroupItem value="all">All</ToggleGroupItem>
+            <ToggleGroupItem value="changed">Changed in draft</ToggleGroupItem>
           </ToggleGroup>
         )}
         <div className="relative min-w-0 max-w-[340px] flex-[999_1_0%]">
@@ -294,19 +342,26 @@ function PatchListContent({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
-          <Plus className="size-4" />
-          <span className="hidden sm:inline">Patch</span>
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setAddFixtureOpen(true)} size="sm" className="gap-1.5 shrink-0">
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Patch</span>
+          </Button>
+        )}
       </SheetPage.Row>
 
       {patchesLoading ? (
         <SheetPage.Empty loading />
-      ) : totalPatches === 0 ? (
-        <SheetPage.Empty>No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.</SheetPage.Empty>
+      ) : totalPatches === 0 && removedRows.length === 0 ? (
+        <SheetPage.Empty>
+          {readOnly ? 'No fixtures patched in this venue yet.' : <>No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.</>}
+        </SheetPage.Empty>
+      ) : rows.length === 0 && removedRows.length === 0 ? (
+        <SheetPage.Empty>{draftFilter === 'changed' ? 'Nothing patched has changed in the draft.' : 'No fixtures match your filter.'}</SheetPage.Empty>
       ) : rows.length === 0 ? (
-        <SheetPage.Empty>No fixtures match your filter.</SheetPage.Empty>
+        <RemovedInDraft patches={removedRows} />
       ) : (
+        <>
         <PatchSheet
           projectId={projectId}
           rows={rows}
@@ -317,7 +372,10 @@ function PatchListContent({
           onEditPatch={onEditPatch}
           onEditGroup={onEditGroup}
           onCountsChange={setSelectedCount}
+          readOnly={readOnly}
         />
+        <RemovedInDraft patches={removedRows} />
+        </>
       )}
 
       {/* The footer: the counts, and how full the rig is. */}
@@ -357,9 +415,94 @@ function PatchListContent({
   )
 }
 
+// ─── A venue's draft ──────────────────────────────────────────────────
+
+const NO_CHANGES = new Map<string, VenueChange>()
+const NO_PATCHES: FixturePatch[] = []
+
+/**
+ * What a venue's draft changed on its patch, for an admin in venue mode (venue plan session 2): each
+ * draft head's change by uuid, and the heads it removed — read from the installed version's frozen
+ * project, since the draft no longer holds them. `enabled` is false for a show, for an operator (who
+ * sees no draft), and until History has answered.
+ */
+function useVenueDraftPatches(projectId: number) {
+  const { canEdit } = useVenueMode(projectId)
+  const { data: history } = useVenueHistory(projectId)
+  const enabled = canEdit && history != null
+  const { data: diff } = useVenueDiffQuery(
+    { venueId: projectId, from: history?.installed ?? 0, to: 'draft' },
+    { skip: !enabled },
+  )
+  const patchChanges = useMemo(
+    () => [...(diff?.output ?? []), ...(diff?.drawing ?? [])].filter((c) => c.kind === 'PATCH' && c.uuid),
+    [diff],
+  )
+  const removedUuids = useMemo(
+    () => new Set(patchChanges.filter((c) => c.change === 'REMOVED').map((c) => c.uuid!)),
+    [patchChanges],
+  )
+  const installedId = history?.versions[0]?.snapshotProjectId ?? 0
+  const { data: installedPatches } = usePatchListQuery(installedId, {
+    skip: !enabled || installedId === 0 || removedUuids.size === 0,
+  })
+  const byUuid = useMemo(
+    () => (enabled ? new Map(patchChanges.filter((c) => c.change !== 'REMOVED').map((c) => [c.uuid!, c])) : NO_CHANGES),
+    [enabled, patchChanges],
+  )
+  const removed = useMemo(
+    () => (enabled && installedPatches ? installedPatches.filter((p) => removedUuids.has(p.uuid)) : NO_PATCHES),
+    [enabled, installedPatches, removedUuids],
+  )
+  return { enabled, byUuid, removed }
+}
+
+const REMOVED_CHANGE: VenueChange = {
+  kind: 'PATCH',
+  table: 'fixturePatches',
+  name: '',
+  change: 'REMOVED',
+  output: true,
+}
+
+/**
+ * The heads the draft removed, struck through under the sheet: they are no longer the venue's rows,
+ * so nothing here edits them — Discard draft brings them back.
+ */
+function RemovedInDraft({ patches }: { patches: readonly FixturePatch[] }) {
+  if (patches.length === 0) return null
+  return (
+    <section aria-label="Removed in the draft" className="border-t">
+      <p className="px-3 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Removed in the draft</p>
+      <ul>
+        {patches.map((p) => (
+          <li key={p.uuid} className="flex h-9 items-center gap-3 border-b px-3 text-sm text-muted-foreground">
+            <span className="w-[208px] truncate font-medium line-through">{p.displayName}</span>
+            <span className="w-16 font-mono text-xs line-through">{formatPatchAddress(p.universe, p.startChannel)}</span>
+            <span className="min-w-0 flex-1 truncate line-through">{[p.manufacturer, p.model].filter(Boolean).join(' ') || p.fixtureTypeKey}</span>
+            <span className="hidden truncate font-mono text-xs line-through sm:inline">{p.key}</span>
+            <DraftMarker change={REMOVED_CHANGE} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 // ─── Universe chips ───────────────────────────────────────────────────
 
-function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; projectId: number; fill: number }) {
+function UniverseChip({
+  config,
+  projectId,
+  fill,
+  readOnly = false,
+}: {
+  config: UniverseConfig
+  projectId: number
+  fill: number
+  /** A venue an operator is looking at: the chip reads out and does not open its editor. */
+  readOnly?: boolean
+}) {
   const [editing, setEditing] = useState(false)
   const [address, setAddress] = useState(config.address ?? '')
   const [intervalMs, setIntervalMs] = useState(String(config.refreshIntervalMs))
@@ -409,9 +552,9 @@ function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; pro
   const handleUseDefault = () => void save({ address, resetRefreshInterval: true })
 
   return (
-    <Popover open={editing} onOpenChange={setEditing}>
+    <Popover open={editing && !readOnly} onOpenChange={(open) => setEditing(open && !readOnly)}>
       <PopoverTrigger asChild>
-        <button className={CHIP_CLASS}>
+        <button className={CHIP_CLASS} disabled={readOnly}>
           <span className="font-mono font-medium">U{config.universe}</span>
           {config.address ? (
             <span className="text-muted-foreground">{config.address}</span>
@@ -438,7 +581,7 @@ function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; pro
           {config.refreshIntervalOverridden && (
             <span className="text-muted-foreground font-mono">· {config.refreshIntervalMs}ms</span>
           )}
-          <Pencil className="size-2.5 text-muted-foreground/50" />
+          {!readOnly && <Pencil className="size-2.5 text-muted-foreground/50" />}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-3" align="start">
@@ -510,6 +653,24 @@ function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; pro
 
 // ─── Data transformation ──────────────────────────────────────────────
 
+/** The universe toggle and the text filter, over patches — the sheet's rows and the removed heads alike. */
+function filterPatches(
+  patches: readonly FixturePatch[],
+  universeFilter: 'all' | number,
+  filter: string,
+): FixturePatch[] {
+  const needle = filter.trim().toLowerCase()
+  return patches
+    .filter((p) => universeFilter === 'all' || p.universe === universeFilter)
+    .filter((p) => {
+      if (needle === '') return true
+      const address = `${p.universe}-${String(p.startChannel).padStart(3, '0')}`
+      const head = p.headNumber == null ? null : String(p.headNumber)
+      return [p.displayName, p.key, head, p.manufacturer, p.model, p.modeName, address]
+        .some((field) => field?.toLowerCase().includes(needle))
+    })
+}
+
 function buildPatchRows(
   patches: FixturePatch[] | undefined,
   riggings: { uuid: string; name: string; kind?: string | null }[] | undefined,
@@ -527,17 +688,8 @@ function buildPatchRows(
     riggingKinds.set(r.uuid, r.kind ?? null)
   }
   const typeByKey = new Map((fixtureTypes ?? []).map((t) => [t.typeKey, t]))
-  const needle = filter.trim().toLowerCase()
 
-  const rows: PatchSheetRow[] = patches
-    .filter((p) => universeFilter === 'all' || p.universe === universeFilter)
-    .filter((p) => {
-      if (needle === '') return true
-      const address = `${p.universe}-${String(p.startChannel).padStart(3, '0')}`
-      const head = p.headNumber == null ? null : String(p.headNumber)
-      return [p.displayName, p.key, head, p.manufacturer, p.model, p.modeName, address]
-        .some((field) => field?.toLowerCase().includes(needle))
-    })
+  const rows: PatchSheetRow[] = filterPatches(patches, universeFilter, filter)
     .map((p) => {
       const type = typeByKey.get(p.fixtureTypeKey)
       const acceptsLantern = type?.acceptsLantern === true

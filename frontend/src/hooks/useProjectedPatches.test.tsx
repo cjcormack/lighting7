@@ -35,6 +35,7 @@ function placement(overrides: Partial<PatchPlacement>): PatchPlacement {
 function patch(overrides: Partial<FixturePatch>): FixturePatch {
   return {
     id: 1,
+    uuid: 'uuid-p',
     key: 'p',
     displayName: 'P',
     fixtureTypeKey: 'generic-dimmer',

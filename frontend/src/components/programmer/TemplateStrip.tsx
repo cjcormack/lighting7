@@ -14,6 +14,7 @@ import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent
 import { stripTemplates } from '@/lib/templateRecents'
 import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
+import { useVenueMode } from '@/store/venues'
 import { TemplatePicker } from './TemplatePicker'
 import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
 import { usePressFamilies } from '@/store/selection'
@@ -107,6 +108,7 @@ export function TemplateStrip({
   targetEmitters?: readonly string[]
 }) {
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
+  const { isVenue } = useVenueMode(projectId)
   const [newOpen, setNewOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -300,6 +302,9 @@ export function TemplateStrip({
             dead conditional whose `title` no longer explains the state it guards is worse than no
             conditional. `press`'s guard is the one that stays — it is the only one a future host
             rendering this component differently could still reach. */}
+        {/* Not in a venue: a template is recorded from the programmer, and Record is off there (venue
+            plan D11; the desk refuses one with `VENUE_RECORD_OFF`). */}
+        {!isVenue && (
         <Button
           variant="outline"
           size="sm"
@@ -315,6 +320,7 @@ export function TemplateStrip({
               from somewhere without moving a control. The word is ~30 and the title says it. */}
           <span className={PHONE_FOLDED_CLASS}>New</span>
         </Button>
+        )}
       </>
     )
 

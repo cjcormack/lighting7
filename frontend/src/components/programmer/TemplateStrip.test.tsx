@@ -62,6 +62,8 @@ const pressFamilies = vi.hoisted(() => ({ current: null as AttributeFamily[] | n
 vi.mock('@/store/selection', () => ({ usePressFamilies: () => pressFamilies.current }))
 
 const newSheetProps = vi.fn()
+const venue = { isVenue: false }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
 vi.mock('./NewTemplateFromSelectionSheet', () => ({
   NewTemplateFromSelectionSheet: (props: { open: boolean }) => {
     newSheetProps(props)
@@ -153,6 +155,7 @@ const BREATHE = template({
 })
 
 beforeEach(() => {
+  venue.isVenue = false
   applyTemplate.mockClear()
   toggleTemplate.mockClear()
   pressFamilies.current = null
@@ -178,6 +181,15 @@ function chipNames(): (string | null)[] {
 }
 
 describe('TemplateStrip', () => {
+  it('offers no New template in a venue, where Record is off (venue plan D11)', () => {
+    render(strip(COLOUR_CELL))
+    expect(screen.getByRole('button', { name: 'New template' })).toBeTruthy()
+    cleanup()
+    venue.isVenue = true
+    render(strip(COLOUR_CELL))
+    expect(screen.queryByRole('button', { name: 'New template' })).toBeNull()
+  })
+
   it('offers only the families the selected cells name', () => {
     render(strip(COLOUR_CELL))
     expect(screen.getByText('Amber Key')).toBeInTheDocument()

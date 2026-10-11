@@ -76,6 +76,8 @@ fun Application.configureRouting(state: State) {
                     // they carry the desk's git identity and remotes. The per-project sync and
                     // project import/export subtrees declare it at their own mount points.
                     adminOnly {
+                        // A venue's history, diff, publish and discard (venue plan session 2, D3).
+                        routeApiRestVenues(state)
                         routeApiRestUsers(state)
                         routeApiRestCloudSync(state)
                         routeApiOAuthGitHub(state)

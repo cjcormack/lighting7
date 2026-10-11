@@ -2,6 +2,8 @@ import { useNavigate, useParams } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useProjectListQuery } from '@/store/projects'
+import { VenueTag } from '@/components/venue/VenueTag'
 
 interface BreadcrumbsProps {
   projectName: string
@@ -38,6 +40,9 @@ interface BreadcrumbsProps {
 export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurrentPageClick, collapsedLabel }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
+  // A venue says so on every view of it (venue plan session 2): the tag beside its name.
+  const { data: projects } = useProjectListQuery()
+  const isVenue = projects?.find((p) => String(p.id) === projectId)?.kind === 'VENUE'
 
   return (
     <>
@@ -64,6 +69,7 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
       {!currentPage ? (
         <span className="font-medium flex items-center gap-2 min-w-0">
           <span className="truncate">{projectName}</span>
+          {isVenue && <VenueTag className="shrink-0" />}
           <Badge variant={isActive ? "default" : "outline"} className="text-xs">
             {isActive ? "active" : "inactive"}
           </Badge>
@@ -75,6 +81,7 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
             className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2 min-w-0 focus-visible:outline-offset-[-2px]"
           >
             <span className="truncate">{projectName}</span>
+            {isVenue && <VenueTag className="shrink-0" />}
             <Badge variant={isActive ? "default" : "outline"} className="text-xs">
               {isActive ? "active" : "inactive"}
             </Badge>

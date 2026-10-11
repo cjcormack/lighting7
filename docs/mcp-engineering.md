@@ -445,6 +445,17 @@ base orientation disagrees with how its rigging carries it — 180 on a ledge is
 under it, 0 on a bar stands on top of it, read through roll as the view reads it and silent for a
 head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 
+### Tools on a live venue
+
+When the live project is a venue (venue plan session 2), `McpProtocol.venueToolRefusal` holds the
+tools to the REST routes' rules, since a tool writes the live project with no route in between:
+`record_cue` and `update_from_programmer` are refused for everyone — Record and Update are off in a
+venue (D11) — and an **operator's** stored write is refused, as `VENUE_ADMIN_ONLY` refuses it over
+REST (D3): the tools in `VENUE_STORED_WRITE_TOOLS` (patching, the scene, the stage, Looks, cues,
+templates, park) and `aim_fixtures` when it is told to `saveAsTemplate`. Tools that act on the rig as
+it stands — apply, GO, aim, tempo — and the reads pass. A venue version is never live, so it needs
+no rule: `list_projects` leaves versions out and `switch_project` answers one as not found.
+
 ### `render_view`: Claude seeing the model
 
 Stage-view plan session 4 (D4). `set_scene` lets a model build the hall from a photo; this lets it

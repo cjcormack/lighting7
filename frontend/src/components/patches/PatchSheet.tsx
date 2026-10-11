@@ -46,6 +46,8 @@ import { EMPTY_LANTERNS, lanternFieldLabel, type LanternIndex } from '@/lib/lant
 import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { FixturePatch } from '@/api/patchApi'
+import type { VenueChange } from '@/api/venueApi'
+import { draftMarker } from '@/lib/venue'
 
 export type PatchColumnKey =
   | 'head'
@@ -61,6 +63,8 @@ export type PatchColumnKey =
   | 'groups'
   | 'stage'
   | 'role'
+  /** A venue's draft marker (venue plan session 2) — appended by the route in venue mode, never in the Columns menu. */
+  | 'draft'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   head: 'Head',
@@ -76,6 +80,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   groups: 'Groups',
   stage: 'Stage',
   role: 'Role',
+  draft: 'Draft',
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
@@ -110,6 +115,8 @@ export interface PatchSheetRow extends SheetRow {
   lanternIsDefault?: boolean
   /** A DMX type's declared body, for the Lantern column's read-out — *mover · spot*. */
   bodyLabel?: string | null
+  /** In a venue, what the draft changed on this head since the installed version (the Draft column). */
+  draft?: VenueChange | null
 }
 
 export function patchRowId(patchId: number): string {
@@ -195,6 +202,7 @@ export function PatchSheet({
   onEditPatch,
   onEditGroup,
   onCountsChange,
+  readOnly = false,
 }: {
   projectId: number
   /** The rows to draw, already filtered by universe and text, in address order. */
@@ -209,6 +217,12 @@ export function PatchSheet({
   onEditGroup: (groupId: number, name: string) => void
   /** How many rows are selected, for the footer the route draws. */
   onCountsChange?: (selected: number) => void
+  /**
+   * Nothing edits: no cell takes a value, the name does not rename and no row opens its editor — a
+   * venue an operator is looking at (venue plan D3). The desk refuses the write either way
+   * (`VENUE_ADMIN_ONLY`); this keeps the sheet from offering one.
+   */
+  readOnly?: boolean
 }) {
   const [updatePatch] = useUpdatePatchMutation()
   const [setHeadNumbers] = useSetHeadNumbersMutation()
@@ -694,8 +708,8 @@ export function PatchSheet({
               <Badge
                 key={g.id}
                 variant="secondary"
-                className="shrink-0 cursor-pointer px-1.5 py-0 text-[10px] hover:bg-accent"
-                onClick={(e) => {
+                className={cn('shrink-0 px-1.5 py-0 text-[10px]', !readOnly && 'cursor-pointer hover:bg-accent')}
+                onClick={readOnly ? undefined : (e) => {
                   e.stopPropagation()
                   onEditGroup(g.id, g.name)
                 }}
@@ -742,6 +756,16 @@ export function PatchSheet({
         },
         clearRefusal: 'A head is either a lighting fixture or infrastructure — pick one',
       },
+      {
+        // A read-out: what the venue's draft changed on this head (venue plan session 2,
+        // `Venue.dc.html` callout 2) — red-amber when it changes output.
+        key: 'draft',
+        label: 'Draft',
+        width: 'minmax(200px,1fr)',
+        gutter: false,
+        value: (row) => (row.draft ? draftMarker(row.draft) : undefined),
+        display: (row) => (row.draft ? <DraftMarker change={row.draft} /> : null),
+      },
     ]
     return visibleColumns.map((key) => all.find((c) => c.key === key)!).filter(Boolean)
   }, [
@@ -759,6 +783,7 @@ export function PatchSheet({
     onEditGroup,
     overlaps,
     put,
+    readOnly,
     renumber,
     visibleColumns,
   ])
@@ -774,11 +799,12 @@ export function PatchSheet({
   const sheet = useSheet<PatchSheetRow, PatchColumnKey>({
     rows,
     columns,
-    permission: { entry: true, clear: true },
+    permission: { entry: !readOnly, clear: !readOnly },
+    cellDisabled: readOnly ? () => true : undefined,
     copy,
     noun: 'fixture',
     rowName: patchRowName,
-    onOpenRow: openRow,
+    onOpenRow: readOnly ? undefined : openRow,
   })
   const { selectedRows, cellCount, cellSelection } = sheet
   const selectedCount = selectedRows.length
@@ -860,17 +886,19 @@ export function PatchSheet({
           </TooltipTrigger>
           <TooltipContent>Hold: full intensity on the selection, restored on release</TooltipContent>
         </Tooltip>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          disabled={unpatching}
-          onClick={unpatchSelection}
-          title="Remove the selected fixtures from the rig"
-        >
-          <Trash2 className="size-3.5" />
-          <span className={WORD_CLASS}>Unpatch</span>
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            disabled={unpatching}
+            onClick={unpatchSelection}
+            title="Remove the selected fixtures from the rig"
+          >
+            <Trash2 className="size-3.5" />
+            <span className={WORD_CLASS}>Unpatch</span>
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
           <X className="size-3.5" />
           <span className="hidden sm:inline">Deselect</span>
@@ -900,7 +928,14 @@ export function PatchSheet({
         firstColumn={{
           label: 'Fixture',
           width: '220px',
-          render: (row, selected) => (
+          render: (row, selected) => readOnly ? (
+            <>
+              <span className={cn('mx-1 min-w-0 flex-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}>
+                {row.patch.displayName}
+              </span>
+              <PatchVisibilityIcon patch={row.patch} />
+            </>
+          ) : (
             <>
               {/* **A double click renames the head — in the same popover every value cell opens.**
                   A single click on this column is the row selection and a press on it starts the
@@ -932,7 +967,7 @@ export function PatchSheet({
               <PatchVisibilityIcon patch={row.patch} />
             </>
           ),
-          onOpen: openRow,
+          onOpen: readOnly ? undefined : openRow,
           openLabel: (row) => `Edit ${row.patch.displayName}`,
         }}
       />
@@ -987,4 +1022,25 @@ function PatchVisibilityIcon({ patch }: { patch: FixturePatch }) {
   }
   if (patch.stageHidden) return <EyeOff className={className} role="img" aria-label="Hidden from Stage view" />
   return null
+}
+
+/**
+ * A venue head's draft change as a pill (venue plan session 2): `Added`, `Removed`, or the facet that
+ * changed — red-amber when the change reaches output, neutral when it is drawing only.
+ */
+export function DraftMarker({ change, className }: { change: VenueChange; className?: string }) {
+  return (
+    <span
+      className={cn(
+        'mx-1.5 inline-flex h-5 max-w-full items-center truncate rounded-full border px-2 text-[11px] font-medium',
+        change.output
+          ? 'border-orange-500/50 bg-orange-500/10 text-orange-700 dark:text-orange-300'
+          : 'border-border bg-muted/50 text-foreground',
+        className,
+      )}
+      title={`${draftMarker(change)} — ${change.output ? 'changes output' : 'drawing only'}`}
+    >
+      <span className="truncate">{draftMarker(change)}</span>
+    </span>
+  )
 }

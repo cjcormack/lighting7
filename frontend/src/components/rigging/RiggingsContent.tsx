@@ -14,12 +14,16 @@ import { useRiggingListQuery } from "@/store/riggings"
 import { EditRiggingSheet } from "./EditRiggingSheet"
 import type { RiggingDto } from "@/api/riggingApi"
 import { bySortOrder, formatTriple, formatRotation } from "@/lib/utils"
+import { useVenueMode } from "@/store/venues"
 
 type Editing = RiggingDto | "new" | null
 
 export function RiggingsContent({ projectId }: { projectId: number }) {
   const { data: riggings, isLoading } = useRiggingListQuery(projectId)
   const [editing, setEditing] = useState<Editing>(null)
+  // An operator looks at a venue; only an admin changes one (venue plan D3).
+  const { isVenue, canEdit } = useVenueMode(projectId)
+  const readOnly = isVenue && !canEdit
 
   const sortedRiggings = useMemo(
     () => (riggings ? [...riggings].sort(bySortOrder) : []),
@@ -38,10 +42,12 @@ export function RiggingsContent({ projectId }: { projectId: number }) {
             Trusses, bars, booms, pipes and stands that fixtures hang from. Used by patches to anchor 3D placement.
           </p>
         </div>
+{!readOnly && (
         <Button onClick={() => setEditing("new")} size="sm" className="gap-1.5 shrink-0">
           <Plus className="size-4" />
           <span className="hidden sm:inline">Add rigging</span>
         </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -67,8 +73,8 @@ export function RiggingsContent({ projectId }: { projectId: number }) {
             {sortedRiggings.map((r) => (
               <TableRow
                 key={r.id}
-                className="cursor-pointer hover:bg-accent/50"
-                onClick={() => setEditing(r)}
+                className={readOnly ? undefined : "cursor-pointer hover:bg-accent/50"}
+                onClick={readOnly ? undefined : () => setEditing(r)}
               >
                 <TableCell className="font-medium">{r.name}</TableCell>
                 <TableCell className="hidden sm:table-cell font-mono tabular-nums text-xs text-muted-foreground">

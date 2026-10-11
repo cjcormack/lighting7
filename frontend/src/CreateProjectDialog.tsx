@@ -3,6 +3,7 @@ import {
   Sheet,
   SheetBody,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -16,12 +17,19 @@ import { useCreateProjectMutation } from "./store/projects"
 interface CreateProjectDialogProps {
   open: boolean
   setOpen: Dispatch<SetStateAction<boolean>>
+  /**
+   * `VENUE` is *Add venue* (venue plan session 2): the same sheet making an empty venue, whose rows
+   * become its draft. A show by default.
+   */
+  kind?: "SHOW" | "VENUE"
 }
 
 export default function CreateProjectDialog({
   open,
   setOpen,
+  kind = "SHOW",
 }: CreateProjectDialogProps) {
+  const isVenue = kind === "VENUE"
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [createProject, { isLoading }] = useCreateProjectMutation()
@@ -39,6 +47,7 @@ export default function CreateProjectDialog({
       await createProject({
         name,
         description: description || undefined,
+        ...(isVenue ? { kind } : {}),
       }).unwrap()
     } catch {
       return
@@ -52,11 +61,17 @@ export default function CreateProjectDialog({
     <Sheet open={open} onOpenChange={open => !open && handleClose()}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Create New Project</SheetTitle>
+          <SheetTitle>{isVenue ? "Add Venue" : "Create New Project"}</SheetTitle>
+          {isVenue && (
+            <SheetDescription>
+              A venue holds a hall&apos;s rig: its patch, universes, bars, room and seating. Edit it
+              as a draft, and publish a version when it is as hung.
+            </SheetDescription>
+          )}
         </SheetHeader>
         <SheetBody>
           <div className="space-y-2">
-            <Label htmlFor="project-name">Project Name *</Label>
+            <Label htmlFor="project-name">{isVenue ? "Venue Name *" : "Project Name *"}</Label>
             <Input
               id="project-name"
               value={name}
@@ -79,7 +94,7 @@ export default function CreateProjectDialog({
             Cancel
           </Button>
           <Button onClick={handleCreate} disabled={!isValid || isLoading}>
-            {isLoading ? "Creating..." : "Create"}
+            {isLoading ? "Creating..." : isVenue ? "Add venue" : "Create"}
           </Button>
         </SheetFooter>
       </SheetContent>

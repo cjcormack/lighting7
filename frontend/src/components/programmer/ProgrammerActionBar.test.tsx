@@ -33,6 +33,9 @@ vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: [{ id: 2, name: 'Act 1', cues: [] }] }),
 }))
 
+const venue = { isVenue: false }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
+
 const sheets = {
   openRecord: vi.fn(),
   openRecordLook: vi.fn(),
@@ -63,6 +66,7 @@ afterEach(() => {
   effects = []
   desk.connected = true
   heldScenery = 0
+  venue.isVenue = false
   resetProgrammerFadeStore()
 })
 
@@ -75,6 +79,19 @@ const CUE: IncludedTarget = {
 }
 
 describe('ProgrammerActionBar', () => {
+  it('turns Record off in a venue, where the programmer is for testing and focus', () => {
+    // Venue plan D11: the Programmer works in a venue, but nothing records into one.
+    summary = { blind: false, entryCount: 3, lastIncluded: null }
+    venue.isVenue = true
+    render(<ProgrammerActionBar projectId={1} />)
+    const record = screen.getByRole('button', { name: 'Record' })
+    expect(record).toBeDisabled()
+    expect(record).toHaveAttribute('title', 'Record is off in a venue')
+    expect(screen.getByRole('button', { name: 'Record destination' })).toBeDisabled()
+    // Include and Clear are not records, so they stay.
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled()
+  })
+
   it('carries the three zone labels on the controls they introduced', async () => {
     // The zones were the fix for seven identical outline buttons in one row. Session 1 of the space
     // plan deletes the *labels* — a 9px word above every control is 20px of a 900px screen, on a

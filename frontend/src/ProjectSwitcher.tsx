@@ -14,6 +14,7 @@ import { mostSpecificActiveId } from './lib/navMatch'
 import { useProjectListQuery } from "./store/projects"
 import { useOAuthReauthState } from "./store/oauthGithub"
 import { useNavItems, filterNavItems, useIsNavAdmin } from "./navigation"
+import { VenueTag } from "./components/venue/VenueTag"
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
@@ -43,7 +44,9 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   const viewedProject = useViewedProject()
   const activeProject = projects?.find((p) => p.isCurrent)
   const isViewingActiveProject = viewedProject?.id === activeProject?.id
-  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
+  // A venue's rail is its own: the show's views go, the Programmer stays (venue plan §4).
+  const isVenue = viewedProject?.kind === "VENUE"
+  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin, isVenue)
   // Operators never see the Sync entries at all (they're adminOnly), and the hook reports
   // nothing wrong for them regardless — so this is only ever a dot on a row they can act on.
   const needsAttention = (id: string) => reauthRequired && SYNC_NAV_IDS.has(id)
@@ -116,6 +119,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
         >
           <FolderOpen className="size-4 text-muted-foreground shrink-0" />
           <span className="font-semibold truncate">{viewedProject.name}</span>
+          {isVenue && <VenueTag className="flex-shrink-0" />}
           {!isViewingActiveProject && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0 ml-auto">
               Inactive

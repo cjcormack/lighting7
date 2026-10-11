@@ -162,9 +162,11 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const viewedProject = useViewedProject()
   const isViewingActiveProject = viewedProject?.id === currentProject?.id
   const windowCommands = useWindowCommands(viewedProject?.id ?? null)
-  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin)
+  // A venue's palette drops the show's views, as its rail does (venue plan §4).
+  const isVenue = viewedProject?.kind === "VENUE"
+  const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin, isVenue)
   const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
-  const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject)
+  const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject, true, isVenue)
 
   const activePage = pages[pages.length - 1] ?? "root"
 

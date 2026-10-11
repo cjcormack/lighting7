@@ -124,6 +124,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Ready | Stage | fired 2026-10-10 (the panto); planned in [`venue-plan.md`](venue-plan.md) |
+| [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -2463,6 +2464,20 @@ element, and what a clone of a project that references one carries.
 **Fired 2026-10-10**: the panto is a second show in the hall. Designed in
 [`venue-design/`](venue-design/INDEX.md) and planned in [`venue-plan.md`](venue-plan.md); this
 section becomes a Completed row when the plan's last session lands.
+
+### `FU-VENUE-VERSION-PRUNE`
+
+**Every venue version is kept, forever** · Trigger · venue plan §8 (session 2), 2026-10-11
+
+Publishing freezes the draft as a whole project of kind `VENUE_VERSION` (venue plan P2): every rig
+row again, and its own copy of the scene images and prompt-book PDFs its cloths name, under its own
+uuid (`docs/fixtures-engineering.md` §"Venue versions"). Nothing removes one but deleting the venue.
+**Trigger**: about fifty versions of one venue, or a desk whose database or `scene-images/` grows by
+versions nobody opens. **Then**: prune the snapshots no show pins and that are not the installed
+version — never one a show is pinned to (the boards' callout 5), so this waits on session 3's pins —
+through the project delete's own row walk and `deleteProjectFiles`, keeping the `venue_versions` row
+(number, note, date) so History still lists what was published; a pruned version cannot be compared.
+Session 4's venue repo keeps every tagged version anyway, so a pruned one can be pulled back.
 
 ### `FU-STAGE-INDEPENDENT-HEADS`
 

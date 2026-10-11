@@ -234,6 +234,22 @@ Stage view reads them (`frontend/src/lib/travel.ts`); the desk sends every value
 speeds are estimates (`FU-MANUAL-S8-TRAVEL`); movers' vector speed channels are deliberately not
 modelled. See `docs/fixtures-engineering.md` §"Travel and timing channels".
 
+### Venues
+A **venue** is a project of kind `VENUE` (`projects.kind`: `SHOW | VENUE | VENUE_VERSION`, default
+`SHOW`) holding a hall's rig — its patch, universes, riggings, regions, scene and viewpoints (venue
+plan, `docs/plans/venue-plan.md`). Its own rows are its **draft**; publishing freezes the draft as
+the next **version**, a project of kind `VENUE_VERSION` made by `sync/KeptUuidCopy.kt` (export → a
+fresh project uuid → import, every record uuid kept) and indexed by the machine-local
+`venue_versions` (`venue/VenueVersions.kt`). A version is never listed (REST, MCP's `list_projects`,
+the switcher), never current, and refuses every write: `routes/projectWriteGuard.kt` sits at the head
+of the whole `/projects/{id}/…` subtree, so every route under it — `withProject`'s and the rest —
+answers a snapshot's write 409 `VENUE_VERSION_READ_ONLY`, and an operator's stored write to a venue
+403 `VENUE_ADMIN_ONLY` (opening one and the runtime gestures pass). Record is off in a venue
+(`VENUE_RECORD_OFF`, REST and MCP); a venue does not sync until session 4 (409 `SYNC_VENUE_PENDING`).
+What separates a version from the draft is `venue/VenueDiff.kt`, classified **changes output** or
+**drawing only** — `docs/fixtures-engineering.md` §"Venue versions". Shows on a venue (the pin, the
+show layer) are sessions 3 onward; today every show is standalone and behaves as before.
+
 ### Property System
 Properties provide a unified interface for fixture and group control:
 
@@ -427,6 +443,14 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `PUT /api/rest/fx/{id}` - Edit a running effect in place (id and phase kept); one parse with the `updateFx` frame (`applyEffectUpdate`), 400 `FX_UPDATE_REFUSED` / 404 `FX_NOT_FOUND`
 - `POST /api/rest/fx/{id}/reset` - Re-apply a programmer template layer's **current** effect to the instance it spawned, id and phase kept, and re-key it so the next recook keeps it (fixture-fx-sheets plan W5); 409 `FX_NOT_FROM_TEMPLATE` / `FX_TEMPLATE_GONE`. See `docs/fx-engineering.md` §"Programmer suppression and the priority band"
 - `GET /api/rest/fx/library` - Available effect types
+
+### Venue Endpoints
+All four are **admin only** (mounted in `adminOnly`; venue plan §3.5, D3), REST only — no WS operation:
+- `GET /api/rest/venues/{id}/versions` - History: every version newest first (`number`, `note`, `publishedAt`, `publishedBy`, `snapshotProjectId`), `installed`, and the draft's `{changes, outputChanges}` against it
+- `GET /api/rest/venues/{id}/versions/{from}/diff/{to}` - What changed, `{output: [...], drawing: [...]}`; each side a version number, `0` the empty venue before v1, or `draft`. 404 `VENUE_VERSION_UNKNOWN`, 400 `VENUE_VERSION_INVALID`
+- `POST /api/rest/venues/{id}/publish` `{note}` - Freeze the draft as the next version; 400 `VENUE_NOTE_REQUIRED` / `VENUE_NOTE_TOO_LONG` (500 characters), 409 `VENUE_DRAFT_EMPTY`. Fires `projectDetailsChanged`
+- `DELETE /api/rest/venues/{id}/draft` - Discard the draft: the venue's rows become the installed version's again, uuids and all (name and description stay); 409 `VENUE_NOTHING_PUBLISHED`. A live venue reloads
+- A show's id on any of them is 409 `NOT_A_VENUE`. *Add venue* is `POST /projects` `{kind: "VENUE"}` (admin); `ProjectDto` carries `kind`, and `FixturePatchDto` its `uuid`. Deleting a venue deletes its versions
 
 ### Library Endpoints
 - `GET /api/rest/gels` - The gel library (fixture optics plan D7), the desk's resource `gels.json` served whole: `{code, name, color, brand, estimate?}` per gel. A unit's fitted gel names one by code; see `docs/fixtures-engineering.md` §"Fitted media"

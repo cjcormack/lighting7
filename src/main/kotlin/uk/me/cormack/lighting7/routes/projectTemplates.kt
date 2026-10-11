@@ -503,6 +503,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<CopyTemplateResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val request = call.receive<CopyTemplateRequest>()
+            if (refusedCopyTarget(state, request.targetProjectId)) return@withProject
             val result = transaction(state.database) {
                 val source = DaoTemplate.findById(resource.templateId)
                     ?: return@transaction CopyTemplateOutcome.NotFound(TEMPLATE_NOT_FOUND)

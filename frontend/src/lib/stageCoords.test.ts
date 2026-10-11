@@ -26,6 +26,7 @@ const APPROX = 1e-9
 function basePatch(overrides: Partial<FixturePatch> = {}): FixturePatch {
   return {
     id: 1,
+    uuid: 'uuid-p',
     key: "p1",
     displayName: "P1",
     fixtureTypeKey: "tk",

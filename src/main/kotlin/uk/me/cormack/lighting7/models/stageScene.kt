@@ -192,7 +192,17 @@ data class SeatingParams(
     val chair: ChairStyle = ChairStyle.THEATRE,
     val frameColour: String? = null,
     override val states: ElementStates? = null,
+    /**
+     * Whose this block is when it is a venue's (venue plan D6): `FIXED` (the balcony) is the
+     * venue's, in every show with its seat views; `PRESET` (a stalls layout) is copied into a show.
+     * Absent means `PRESET`. Meaningful in a venue only; a show's own seating ignores it.
+     */
+    val block: SeatingBlock? = null,
 ) : ElementParams
+
+/** A seating block's ownership in a venue ([SeatingParams.block]). */
+@Serializable
+enum class SeatingBlock { FIXED, PRESET }
 
 @Serializable
 data class ObjectParams(
@@ -539,6 +549,7 @@ fun parseElementParams(
             val rake = r.number("rakeM", -1.0, 1.0) ?: 0.0
             val chair = r.enum<ChairStyle>("chair") ?: ChairStyle.THEATRE
             val frameColour = normaliseFinishColour(r.string("frameColour"), "$where.frameColour", problems)
+            val block = r.enum<SeatingBlock>("block")
             if (first.length != 1 || first[0] !in 'A'..'Z') {
                 problems += "$where.firstRow must be one letter, A–Z"
             } else if (rows != null && first[0] + (rows - 1) > 'Z') {
@@ -557,7 +568,7 @@ fun parseElementParams(
             }.orEmpty().sortedBy { it.afterSeat }
             if (aisles.size != aisles.distinctBy { it.afterSeat }.size) problems += "$where.aisles has two aisles after the same seat"
             if (rows != null && perRow != null && rowPitch != null && seatPitch != null) {
-                SeatingParams(rows, perRow, rowPitch, seatPitch, first, rake, aisles, chair, frameColour)
+                SeatingParams(rows, perRow, rowPitch, seatPitch, first, rake, aisles, chair, frameColour, block = block)
             } else {
                 null
             }

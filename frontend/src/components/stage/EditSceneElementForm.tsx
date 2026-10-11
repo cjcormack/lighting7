@@ -22,6 +22,7 @@ import { MovesWithList } from '@/components/scenery/MovesWithList'
 import type { MovesWithEntry } from '@/lib/scenery'
 import { useDeleteStageElementMutation, useUpdateStageElementMutation } from '@/store/stageElements'
 import { useStageRegionListQuery } from '@/store/stageRegions'
+import { useVenueMode } from '@/store/venues'
 import type { StageElementDto } from '@/api/stageElementApi'
 import { formatError } from '@/lib/formatError'
 import { parseNullableNumber } from '@/lib/utils'
@@ -97,6 +98,16 @@ const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
 const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
 const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
 
+/**
+ * A venue's seating block (venue plan D6): Fixed is the venue's, in every show with its seat views;
+ * Preset (absent) is a layout copied into a show. Offered in a venue only.
+ */
+const SEATING_BLOCKS = ['PRESET', 'FIXED'] as const
+const SEATING_BLOCK_LABELS: Record<string, string> = {
+  PRESET: 'Preset — copied into a show',
+  FIXED: 'Fixed — the venue’s, in every show',
+}
+
 /** What a drape's Depth means (scrim plan §4): the pleats', and only velour has them (D2). */
 export const DRAPE_DEPTH_HINT = 'The depth of the pleats. Only velour folds; every other fabric hangs flat.'
 
@@ -141,6 +152,7 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
     const [updateElement, { isLoading: isUpdating }] = useUpdateStageElementMutation()
     const [deleteElement, { isLoading: isDeleting }] = useDeleteStageElementMutation()
     const { data: regions } = useStageRegionListQuery(projectId, { skip: element.kind !== 'PLATFORM' })
+    const { isVenue } = useVenueMode(projectId)
     const paintable = element.kind === 'DRAPE' || element.kind === 'FLAT'
     const { data: imageList, isSuccess: imagesLoaded } = useSceneImageListQuery(projectId, { skip: !paintable })
     const images = useMemo(() => new Map<string, SceneImageInfo>((imageList ?? []).map((i) => [i.hash, i])), [imageList])
@@ -195,7 +207,7 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
           p(['railHeightM', 'railEdge', 'regionUuid'])
           break
         case 'SEATING': {
-          p(['rows', 'seatsPerRow', 'rowPitchM', 'seatPitchM', 'firstRow', 'rakeM', 'chair', 'frameColour', 'aisles'])
+          p(['rows', 'seatsPerRow', 'rowPitchM', 'seatPitchM', 'firstRow', 'rakeM', 'chair', 'frameColour', 'aisles', 'block'])
           const aisles = Array.isArray(params.aisles) ? params.aisles : []
           aisles.forEach((_, i) => p([`aisles[${i}]`, `aisles[${i}].afterSeat`, `aisles[${i}].widthM`]))
           break
@@ -551,6 +563,17 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
                     options={CHAIR_STYLES}
                   />
                 </Field>
+                {isVenue && (
+                  <Field id="element-block" label="Block" errors={filed.at('params.block')}>
+                    <NativeSelect
+                      id="element-block"
+                      value={str(params.block).toUpperCase() || 'PRESET'}
+                      onChange={(v) => setParam('block', v === 'PRESET' ? null : v)}
+                      options={SEATING_BLOCKS}
+                      labels={SEATING_BLOCK_LABELS}
+                    />
+                  </Field>
+                )}
                 <Field id="element-frameColour" label="Frame colour" errors={filed.at('params.frameColour')}>
                   <ColourInput
                     id="element-frameColour"

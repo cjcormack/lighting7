@@ -7,9 +7,11 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.neq
 import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.sync.SceneImageRepoSync
 import org.slf4j.LoggerFactory
@@ -65,8 +67,9 @@ class ProjectManager(
      */
     fun initialize(): Show {
         val project = transaction(database) {
+            // A venue version is never current (venue plan P2), so it is never the fallback either.
             DaoProject.find { DaoProjects.isCurrent eq true }.firstOrNull()
-                ?: DaoProject.all().firstOrNull()?.also { it.isCurrent = true }
+                ?: DaoProject.find { DaoProjects.kind neq ProjectKind.VENUE_VERSION }.firstOrNull()?.also { it.isCurrent = true }
                 ?: DaoProject.new {
                     name = "Default"
                     description = null
@@ -87,6 +90,12 @@ class ProjectManager(
             DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project with ID $projectId not found")
         }
+        // A version is frozen and never loaded: its rig is read through its venue's history. The
+        // routes' write guard refuses `set-current` first; this keeps MCP's `switch_project` and every
+        // other caller to the same rule.
+        if (newProject.kind == ProjectKind.VENUE_VERSION) {
+            throw IllegalStateException("A venue version cannot be made current")
+        }
 
         val previousProjectId = _currentProject?.id?.value
 
@@ -100,6 +109,13 @@ class ProjectManager(
             DaoProjects.update({ DaoProjects.isCurrent eq true }) {
                 it[isCurrent] = false
             }
+            // A statement, not `newProject.isCurrent = true`: reloading the project that is already
+            // current (a venue's discard, a sync pull) hands in an entity whose cached flag is already
+            // true, so the setter saw no change and wrote nothing — leaving no project current.
+            DaoProjects.update({ DaoProjects.id eq projectId }) {
+                it[isCurrent] = true
+            }
+            // And the entity, which `currentProject` answers with until the next switch.
             newProject.isCurrent = true
         }
 

@@ -23,6 +23,7 @@ import { ImmersiveToggle } from './ImmersiveToggle'
 import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ArmedChip } from './effects/ArmedChip'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
+import { useVenueMode } from '@/store/venues'
 
 const PAGE_LABEL: Record<ShowView, string> = {
   programmer: 'Programmer',
@@ -115,6 +116,7 @@ export function ShowHeader({
   const connected = useIsDeskConnected()
   const isDesktop = useMediaQuery(MD_BREAKPOINT)
   const openDrawer = useOpenMobileDrawer()
+  const { isVenue } = useVenueMode(projectId)
 
   const handleConfirmStop = async () => {
     setStopping(true)
@@ -192,7 +194,8 @@ export function ShowHeader({
         <SaveStatusIndicator />
         {actions}
         <ImmersiveToggle immersive={immersive} />
-        <ViewSwitcher current={view} projectId={projectId} />
+        {/* A venue has one live view, the Programmer (venue plan §4), so no switcher. */}
+        {!isVenue && <ViewSwitcher current={view} projectId={projectId} />}
         {isShowActive ? (
           <Tooltip>
             <TooltipTrigger asChild>

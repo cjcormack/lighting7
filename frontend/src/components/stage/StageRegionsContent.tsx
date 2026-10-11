@@ -14,12 +14,16 @@ import { useStageRegionListQuery } from "@/store/stageRegions"
 import { EditStageRegionSheet } from "./EditStageRegionSheet"
 import type { StageRegionDto } from "@/api/stageRegionApi"
 import { bySortOrder, formatTriple } from "@/lib/utils"
+import { useVenueMode } from "@/store/venues"
 
 type Editing = StageRegionDto | "new" | null
 
 export function StageRegionsContent({ projectId }: { projectId: number }) {
   const { data: regions, isLoading } = useStageRegionListQuery(projectId)
   const [editing, setEditing] = useState<Editing>(null)
+  // An operator looks at a venue; only an admin changes one (venue plan D3).
+  const { isVenue, canEdit } = useVenueMode(projectId)
+  const readOnly = isVenue && !canEdit
 
   const sortedRegions = useMemo(
     () => (regions ? [...regions].sort(bySortOrder) : []),
@@ -39,10 +43,12 @@ export function StageRegionsContent({ projectId }: { projectId: number }) {
             scripts and the 3D view.
           </p>
         </div>
+{!readOnly && (
         <Button onClick={() => setEditing("new")} size="sm" className="gap-1.5 shrink-0">
           <Plus className="size-4" />
           <span className="hidden sm:inline">Add region</span>
         </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -68,8 +74,8 @@ export function StageRegionsContent({ projectId }: { projectId: number }) {
             {sortedRegions.map((r) => (
               <TableRow
                 key={r.id}
-                className="cursor-pointer hover:bg-accent/50"
-                onClick={() => setEditing(r)}
+                className={readOnly ? undefined : "cursor-pointer hover:bg-accent/50"}
+                onClick={readOnly ? undefined : () => setEditing(r)}
               >
                 <TableCell className="font-medium">{r.name}</TableCell>
                 <TableCell className="hidden sm:table-cell font-mono tabular-nums text-xs text-muted-foreground">

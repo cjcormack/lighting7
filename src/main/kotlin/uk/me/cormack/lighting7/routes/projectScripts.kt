@@ -202,6 +202,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
         }
 
         val request = call.receive<CopyScriptRequest>()
+        if (refusedCopyTarget(state, request.targetProjectId)) return@post
 
         var copyTargetProject: DaoProject? = null
         val result = transaction(state.database) {
