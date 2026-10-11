@@ -1,4 +1,5 @@
 import type { VenueChange, VenueFacet, VenueHistory } from '../api/venueApi'
+import type { ProjectVenue, VenueSummary } from '../api/projectApi'
 
 /**
  * Venue mode's words (venue plan §3.1, session 2; the boards in lighting7
@@ -159,4 +160,45 @@ export function publishedDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/**
+ * A show card's venue badge (`Projects.dc.html`'s callout 2): the venue and the version the show is
+ * pinned to, and — when a newer version is published — what that means for it. `drawing`: a newer
+ * version exists whose changes reach the show as drawing only, or not at all (amber, *v5 available*);
+ * `output`: the newer version changes output, so the show opens held (red-amber, *v5 · re-patched*).
+ * A venue this desk does not hold reads as its uuid's start.
+ */
+export function venueBadge(venue: ProjectVenue): {
+  label: string
+  tone: 'current' | 'drawing' | 'output'
+  newer: string | null
+} {
+  const name = venue.name ?? `Venue ${venue.uuid.slice(0, 8)}`
+  const label = `${name} · v${venue.version}`
+  const installed = venue.installed ?? null
+  if (installed == null || installed <= venue.version) return { label, tone: 'current', newer: null }
+  if (venue.behind === 'OUTPUT') return { label, tone: 'output', newer: `v${installed} · re-patched` }
+  return { label, tone: 'drawing', newer: `v${installed} available` }
+}
+
+/**
+ * A venue card's two lines (`Projects.dc.html`'s Venues row): what its installed version holds —
+ * `50 house fixtures · 4 universes · 6 riggings · fixed balcony` — and its shows —
+ * `3 shows · 2 behind`, `no shows yet`.
+ */
+export function venueSummaryLines(summary: VenueSummary): { rig: string; shows: string } {
+  const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
+  const parts = [
+    plural(summary.patches ?? 0, 'house fixture'),
+    plural(summary.universes ?? 0, 'universe'),
+    plural(summary.riggings ?? 0, 'rigging'),
+    ...(summary.fixedSeating ?? []).map((name) => `fixed ${name.toLowerCase()}`),
+  ]
+  const shows = summary.shows ?? 0
+  const behind = summary.behind ?? 0
+  return {
+    rig: parts.join(' · '),
+    shows: shows === 0 ? 'no shows yet' : behind > 0 ? `${plural(shows, 'show')} · ${behind} behind` : plural(shows, 'show'),
+  }
 }

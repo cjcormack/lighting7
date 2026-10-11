@@ -64,6 +64,18 @@ class RigBriefing(private val state: State) {
                     "`(drifted)` marks one the venue has changed since. " +
                     "`owner=show` is this show's own. Keys and names are one namespace across both.",
             )
+            // A show held behind its venue (session 6) composes and draws but sends zero: without this a
+            // model reads every apply_cue as working while the rig stays dark.
+            val hold = state.venueHold.status.value
+            if (hold.held && hold.projectId == state.projectManager.currentProject.id.value) {
+                sb.appendLine()
+                sb.appendLine(
+                    "**Output is held.** This show is on v${hold.pinned} and ${o.venueName} v${hold.installed} changes its " +
+                        "patch, so every controller sends zero: cues, looks and the programmer still compose and draw, but " +
+                        "nothing reaches the rig until the operator updates the show to v${hold.installed} or runs it " +
+                        "against v${hold.pinned} (the venue banner's *Review update* and *Run against*).",
+                )
+            }
             sb.appendLine()
         }
         fun ownerLabel(set: (Ownership) -> Set<String>, name: String): String =

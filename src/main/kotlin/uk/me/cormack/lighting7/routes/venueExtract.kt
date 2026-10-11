@@ -21,8 +21,7 @@ import uk.me.cormack.lighting7.venue.VenueExtract.ExtractKind
  * parts (`UNIVERSES | PATCHES | RIGGINGS | REGIONS | ELEMENTS | SEATING | GROUPS | VIEWPOINTS`),
  * absent for all of them; `dryRun` answers what the move would do and keeps nothing. A live show
  * reloads onto its pinned rig — the same fixtures at the same addresses. REST only, no socket
- * operation; the Projects page's *Extract a venue…* is session 7's, so until then this is reached
- * from the API (or Swagger at `/openapi`).
+ * operation; the Projects page's *Extract a venue…* sheet reads its dry run as the preview (session 7).
  */
 internal fun Route.routeApiRestVenueExtract(state: State) {
     post<ProjectVenueExtractResource> { resource ->

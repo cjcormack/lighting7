@@ -123,7 +123,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-PROJECTION`](#fu-stage-projection) | Trigger | Stage | a show with projection: a projector's image must land on a cloth in the Stage view |
 | [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
-| [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Ready | Stage | fired 2026-10-10 (the panto); planned in [`venue-plan.md`](venue-plan.md) |
+| [`FU-VENUE-TOURING`](#fu-venue-touring) | Trigger | Venue | a show plays a second venue |
 | [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
 | [`FU-VENUE-DRAFT-SYNC`](#fu-venue-draft-sync) | Trigger | Venue | two admins edit one venue on two desks |
 | [`FU-VENUE-ELEMENT-OVERRIDES`](#fu-venue-element-overrides) | Trigger | Venue | a show needs to change a venue rigging or element rather than hide it |
@@ -2460,18 +2460,20 @@ fill. **Trigger**: a venue or a fixture the parametric kinds cannot draw. **Then
 the GLB (the prompt-book PDF store is the precedent) and a sync story for it — a portable table can't
 carry a binary in canonical JSON. Author meshes ourselves: GDTF-Share's cannot be redistributed.
 
-### `FU-STAGE-VENUE-SHARED`
+### `FU-VENUE-TOURING`
 
-**The venue lives inside each project** · Trigger · stage-view plan §8 (D3), 2026-10-01
+**A show cannot move to another venue** · Trigger · venue plan §8 (session 7), 2026-10-11
 
-`VENUE` and `SET` are layers of one project's scene document, so a second show in the same hall
-copies the room. **Trigger**: a second show plays the Commemoration Hall. **Then**: a Venue entity
-projects reference, with its own sync identity; decide whether a project may override a venue
-element, and what a clone of a project that references one carries.
-
-**Fired 2026-10-10**: the panto is a second show in the hall. Designed in
-[`venue-design/`](venue-design/INDEX.md) and planned in [`venue-plan.md`](venue-plan.md); this
-section becomes a Completed row when the plan's last session lands.
+A show sits on one venue at a pinned version (venue plan D2), and the only way off it is *Detach*
+(D9; `docs/fixtures-engineering.md` §"Detach"), which flattens the venue's rig into the show's own
+rows — the archive, and the rare show that leaves its hall with its rig. A show that **tours** — the
+same production in a second hall with its own house patch — has no tool: its cues, Looks and
+templates name fixtures by key, and the second hall's keys are not the first's. **Trigger**: a show
+plays a second venue. **Then**: *Move to venue…*, a re-pin onto another venue's installed version with
+a **key mapping** (each fixture and group key the show's content names, mapped to one of the new
+venue's or left dark) reviewed as Update's is — the rolled-back run, `deadReferences` for what maps to
+nothing, P8's decisions for an overlap with the show's own patches — and the show's hides and
+overrides of the old venue's records dropped, since they name records the new venue does not have.
 
 ### `FU-VENUE-VERSION-PRUNE`
 
@@ -2747,6 +2749,11 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-STAGE-VENUE-SHARED` — a venue is a project of its own (`kind = VENUE`) with published versions,
+  and a show sits on one at a pinned version: the rig scope, venue mode and Publish, shows on a venue
+  with hides and Extract, the venue repo, facet overrides, the hold and Update, and the Projects page
+  with Create's stalls preset, *Replace from preset* and Detach — venue plan sessions 1–7, whose
+  done-markers in [`venue-plan.md`](venue-plan.md) cite the commits.
 - `FU-LOOK-COLOUR-WHEEL-ROW` — the six colour-wheel properties named `colour` (MAC 250, Easymove
   XL 60 Spot, both Fusion 100 Spot MkII modes, both Slender Beam Bar heads) are `colourWheel`, so
   the RGB alias no longer rewrites their rows away; `FixturePropertyNameAliasTest` forbids an alias

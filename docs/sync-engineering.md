@@ -335,6 +335,16 @@ is kept. The clone is a show on the same version, loading the
 same rig. The archive carries `kind`, so the importer takes it from there (a venue's clone is still a
 venue with no versions). `VENUE_CLONE_PENDING` is gone.
 
+**A detached show is a standalone show** (venue plan session 7, `docs/fixtures-engineering.md`
+§"Detach"), and needs no `formatVersion` change. Detach writes the venue's rig into the show's own
+rows, uuids kept, and clears its pin, so the next export is the v24 layout of a standalone show: no
+`venueUuid` / `venueVersion` / `venueRepo` in `project.json`, no `showHides/` or `showOverrides/`, the
+venue's records among the show's own. A peer still pinned pulls it as any change: `mergeProjectPin`
+takes the remote's pin (none) when its own is the merge base's, `replaceFromWorkingTree` writes the
+show's rows and the empty pin and sweeps its hides and overrides, and the importer seeds no maps from
+a snapshot because the archive names none. A desk that never had the venue imports it as any
+standalone show (`VenueRepoSyncTest`). The venue's repo is not touched.
+
 **What a loaded show does with a missing snapshot.** Every way in refuses one, and a venue a show
 pins refuses delete, so it takes a hand-edited database. Then `RigScope` still answers the show's own
 rows (its lists and writes work), but nothing loads it: `ProjectManager.switchProject` refuses it with

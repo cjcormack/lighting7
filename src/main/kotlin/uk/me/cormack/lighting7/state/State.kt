@@ -459,6 +459,11 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.venue.VenueExtract(this)
     }
 
+    /** *Detach* a show from its venue (venue plan session 7): `venue/VenueDetach.kt`. */
+    val venueDetach: uk.me.cormack.lighting7.venue.VenueDetach by lazy {
+        uk.me.cormack.lighting7.venue.VenueDetach(this)
+    }
+
     /**
      * Cloud-sync engine. Shared by route handlers and [autoSyncScheduler] so a single
      * per-project mutex serialises manual `Sync now` clicks against periodic auto-sync

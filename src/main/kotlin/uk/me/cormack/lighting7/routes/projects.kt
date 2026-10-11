@@ -23,6 +23,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.adminOnly
 import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.venue.SeatingPresets
 import uk.me.cormack.lighting7.venue.ShowBehind
 import uk.me.cormack.lighting7.venue.VenueBehind
 import uk.me.cormack.lighting7.venue.VenueException
@@ -161,6 +162,13 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Only a show sits on a venue", VenueVersions.CODE_NOT_A_VENUE))
                 return@routingPost
             }
+            if (request.seatingPresetUuid != null && request.venueId == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("A seating preset is a venue's: choose the venue too", SeatingPresets.CODE_PRESET_UNKNOWN),
+                )
+                return@routingPost
+            }
             val stageError = validateStageDimensions(
                 request.stageWidthM,
                 request.stageDepthM,
@@ -180,7 +188,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                             VenueVersions.CODE_NOTHING_PUBLISHED,
                             "${venue.name} has no published version yet: publish it before a show can sit on it",
                         )
-                    venue.uuid to installed.number
+                    venue to installed.number
                 }
                 val newProject = DaoProject.new {
                     name = request.name
@@ -192,10 +200,14 @@ internal fun Route.routeApiRestProjects(state: State) {
                         stageHeightM = request.stageHeightM
                     }
                     kind = request.kind
-                    venueUuid = pin?.first
+                    venueUuid = pin?.first?.uuid
                     venueVersion = pin?.second
                 }
                 ensureDefaultSpeedMasters(newProject)
+                // The stalls (venue plan D6, session 7): a copy of the preset the operator chose, the show's own.
+                if (pin != null && request.seatingPresetUuid != null) {
+                    SeatingPresets.copyOnCreate(newProject, pin.first, request.seatingPresetUuid)
+                }
 
                 newProject.toDetailDto(state)
             }
@@ -260,7 +272,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                         throw VenueException.conflict(
                             CODE_VENUE_IN_USE,
                             "${project.name} is the venue of ${shows.joinToString { "'$it'" }}: " +
-                                "delete those shows first (detaching a show from its venue comes in a later release)",
+                                "detach or delete those shows first",
                         )
                     }
                 }
@@ -339,6 +351,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestBuskPress(state)
         routeApiRestVenueExtract(state)
         routeApiRestVenueUpdate(state)
+        routeApiRestVenueDetach(state)
         // Before the patch routes, so `patches/hidden` is matched as itself.
         routeApiRestShowHides(state)
         routeApiRestPatchFacets(state)
@@ -431,6 +444,27 @@ data class ProjectListDto(
     val kind: ProjectKind = ProjectKind.SHOW,
     /** The venue a show sits on (venue plan session 3); absent for a standalone show and a venue. */
     val venue: ProjectVenueDto? = null,
+    /** A venue's card (venue plan session 7): its installed version and what it holds; absent for a show. */
+    val venueSummary: VenueSummaryDto? = null,
+)
+
+/**
+ * A venue's card on the Projects page (`Projects.dc.html`'s Venues row): the installed version and
+ * when it was published, what that version holds, and the shows on the venue — how many, and how
+ * many are behind it. [version] is null before v1, and the counts are then the draft's.
+ */
+@Serializable
+data class VenueSummaryDto(
+    val version: Int? = null,
+    val publishedAt: String? = null,
+    val patches: Int = 0,
+    val universes: Int = 0,
+    val riggings: Int = 0,
+    /** Fixed seating blocks (the balcony), by name. */
+    val fixedSeating: List<String> = emptyList(),
+    val shows: Int = 0,
+    /** Shows pinned to an older version than [version]. */
+    val behind: Int = 0,
 )
 
 /**
@@ -486,6 +520,11 @@ data class CreateProjectRequest(
      * the venue's installed version, and the stage size is the venue's. Null is a standalone show.
      */
     val venueId: Int? = null,
+    /**
+     * A Preset seating block of that version, by uuid (venue plan D6, session 7): copied into the new
+     * show as its own stalls. Null seats nothing; 400 `SEATING_PRESET_UNKNOWN` for one the version lacks.
+     */
+    val seatingPresetUuid: String? = null,
 )
 
 @Serializable
@@ -528,7 +567,27 @@ private fun DaoProject.toListDto(state: State) = ProjectListDto(
     isCurrent = isCurrent,
     kind = kind,
     venue = venueDto(state),
+    venueSummary = venueSummaryDto(),
 )
+
+/** A venue's card, or null for anything else. Counts read the installed version (the draft before v1). Inside a transaction. */
+internal fun DaoProject.venueSummaryDto(): VenueSummaryDto? {
+    if (kind != ProjectKind.VENUE) return null
+    val installed = VenueVersions.versionsOf(id.value).firstOrNull()
+    val rig = RigScope.of(installed?.snapshotProject?.id ?: id)
+    val shows = showsOnVenue(this)
+    return VenueSummaryDto(
+        version = installed?.number,
+        publishedAt = installed?.publishedAt?.toIsoUtc(),
+        patches = rig.patches().count().toInt(),
+        universes = rig.universeConfigs().count().toInt(),
+        riggings = rig.riggings().count().toInt(),
+        fixedSeating = rig.stageElements(DaoStageElements.kind eq StageElementKind.SEATING.name)
+            .filter { VenueLayer.isFixedSeating(it.params) }.map { it.name },
+        shows = shows.size,
+        behind = installed?.let { v -> shows.count { (it.venueVersion ?: v.number) < v.number } } ?: 0,
+    )
+}
 
 /** The stage size is the rig's: a show on a venue reads the venue's (venue plan §3.2). */
 internal fun DaoProject.toDetailDto(state: State): ProjectDetailDto {

@@ -1960,8 +1960,8 @@ placement's patch and rigging, a group member's group and patch, a busk rig tile
 a cue event's patch, and the cue, stack and Look scenery rows' element. Each entry names how its row
 belongs to a project (its own `project_id`, or its parent's) and can **re-point** one project's links
 from the rows of one project to the same-uuid rows of another, reporting any uuid the target project
-lacks and leaving that row as it was. Extract (session 3) and Update (session 6) re-point through it,
-and Detach (session 7) will, rather than turning the links into uuid columns, which would be a
+lacks and leaving that row as it was. Extract (session 3), Update (session 6) and Detach (session 7)
+re-point through it, rather than turning the links into uuid columns, which would be a
 non-additive change to eight tables with no migrations (venue plan P3); `VenueLinksRepointTest`
 exercises every link.
 
@@ -2161,9 +2161,12 @@ venue's paint.
 **Projects.** `POST /projects {venueId}` pins a new show to the venue's installed version (409
 `VENUE_NOTHING_PUBLISHED` before v1; `NOT_A_VENUE` for any other project); its stage size is the
 venue's, so the request's is not stored. `ProjectDto` carries `venue: {uuid, id, name, version,
-installed, behind}` (`behind` below, §"Behind, the hold and Update"). **A venue a show pins cannot be deleted** (409
+installed, behind, drawingChanges}` (`behind` below, §"Behind, the hold and Update"); the list's
+venue rows carry `venueSummary: {version, publishedAt, patches, universes, riggings, fixedSeating,
+shows, behind}`, the Projects page's venue card. **A venue a show pins cannot be deleted** (409
 `VENUE_IN_USE`, naming the shows): a show's rows link into its version's rows by id, and the venue's
-delete takes its versions; Detach (session 7) is the way off. History answers `shows` — every show
+delete takes its versions; Detach (§"Detach") is the way off. A new show may also take a copy of
+one of the version's Preset seating blocks (`seatingPresetUuid`, §"Seating presets"). History answers `shows` — every show
 on the venue with its version — which the Publish sheet and History name.
 
 ### Facet overrides
@@ -2357,7 +2360,86 @@ scope's uuids before and after, on `RichProjectFixture`).
   and leaves the database and both stores as they were.
 - A live show reloads (`switchProject`), onto the same rig.
 
-The UI is session 7's (*Extract a venue…* on the Projects page); until then it is the API or Swagger.
+The Projects page's *Extract a venue from a project…* (the Venues row) and a standalone show's
+*Extract a venue…* (its card's menu) open a sheet whose preview **is the dry run**, read again as the
+name, the show or the parts change (session 7).
+
+### Detach
+
+`POST /projects/{id}/detach {dryRun?}` — both roles — flattens a show on a venue into a standalone
+show (venue plan D9, session 7; `venue/VenueDetach.kt`): the archive, and the rare show that leaves
+its hall. Moving a show to another venue by its keys is `FU-VENUE-TOURING`, not this. It is Extract's
+mirror, and `VenueDetachTest` checks it the way `ShowsOnVenueTest` checks Extract: the loaded rig —
+every channel's fixture and property, every group's members — and the scope's uuids are the same
+before and after, on `seedShowOnVenue`, whose three overrides must come over applied.
+
+- **What is copied** is the effective rig at the **pinned** version, less what the show owns: every
+  universe, and every patch (with its placements), rigging, region, scene element, group and viewpoint
+  of the snapshot the show does not hide. A patch is written with `RigScope.effective`'s fields and a
+  placement with `effectivePlacements`' — the overrides **applied**, never the snapshot row's, and a
+  dormant override contributing nothing, as it does to the load. A venue group comes over with its
+  members as the rig sees them. **Preset seating is left out** (the show already seats its own copy,
+  which the rig reads in its place); Fixed seating comes over with its seat views.
+- **Uuids are kept.** Everything the show holds that names a venue record names it by uuid — a seat
+  view's seating, a platform's region, a scenery row once re-pointed, a peer's importer maps — so the
+  copy is the same record under the show, as Extract's move is the other way. uuid columns are not
+  unique; the venue's draft and versions keep theirs. The tables' own unique names cannot clash
+  (§"Shows on a venue"'s one namespace), and a row that came in by a door that never checked is
+  refused by name (409 `VENUE_DETACH_BLOCKED`) rather than as a constraint error.
+- **Machine overrides are copied, never moved** (P4): a venue record's resolve against the venue's id,
+  which the venue and every other show on it still use, so each `machine_overrides` row of the venue
+  keyed by a copied uuid is copied to the show's id — the universe address resolves for the show, and
+  still for the venue. The scene images a copied element is painted with are copied from the version's
+  store (else the venue's) into the show's.
+- **Links** are re-pointed link by link through `VenueLinks.ALL`, from the snapshot onto the show's
+  row of the same uuid. One that finds none named a record the show hides — only a show group's member
+  can, since a hide is refused while anything else uses its record — and goes, as Update drops a link
+  to a removed record; the answer lists it. Nothing may be left pointing into a snapshot (checked).
+- **Then** the show's hides and overrides are deleted, and the pin, `venue_repo` and the stage size —
+  read from the version until now — are written onto the show.
+- **A show that is behind detaches at its pin** — what it runs — not at the installed version: an
+  update has decisions only Update can ask. The answer carries `behind` and `installed`, and the
+  confirm says the hall's later changes stay behind. A live show reloads, which lifts a hold: a
+  standalone show is never behind.
+- **Who.** Either role: a detach changes only the show — its own rows and its pin — like Update, a hide
+  and a facet override, and an operator may already delete a show. The venue (`VENUE_ADMIN_ONLY` for an
+  operator) and a version (`VENUE_VERSION_READ_ONLY`) are refused by the write guard; an admin's on a
+  venue, or a standalone show, is 409 `NOT_A_VENUE_SHOW`; a pin this desk lacks is `VENUE_MISSING`.
+- **One transaction, and the dry run is the same run rolled back** — the confirm's preview. The images
+  are the step outside it: a dry run copies none (it counts them), and a real run that fails removes
+  the ones it copied (`SceneImageStore.delete`).
+- **Sync.** A detached show exports as a standalone show — no pin in `project.json`, no `showHides/`
+  or `showOverrides/` — and needs no `formatVersion` change: a peer's pull replaces its rows and clears
+  its pin through the importer that already does (`mergeProjectPin` takes the remote's when the local
+  pin is the base's), and a desk with no copy of the venue imports it as any standalone show
+  (`VenueRepoSyncTest`).
+
+### Seating presets
+
+A venue's **Preset** seating (D6) is a stalls layout a show **copies**, never references: *Create*
+copies one, and *Replace from preset* swaps the show's for a fresh copy (`venue/SeatingPresets.kt`).
+
+- `GET /projects/{id}/seating/presets` answers a venue's presets at its **installed** version (what
+  Create offers) or a show's at its **pinned** one, with the version, its date and note, and — for a
+  show — its own seating, each block marked `fromPreset` when it keeps a preset's uuid. 409
+  `NOT_A_VENUE` for a standalone show. Both roles.
+- `POST /projects` `{…, venueId, seatingPresetUuid}` copies that preset into the new show in the same
+  transaction (400 `SEATING_PRESET_UNKNOWN` for one the version lacks, or without a `venueId`).
+- **The copy is the show's own row with no `block`** (a show's seating ignores it), every other stored
+  field the version froze, and the **preset's uuid kept**, as Extract's copy keeps it: a venue seat view
+  sitting in that preset finds the show's copy, and the copy reads as that preset.
+- `POST /projects/{id}/seating/from-preset {elementUuid, force?}` replaces **every** seating block the
+  show owns. The show's seat views in them move to the copy; one whose seat the copy lacks (a seat id
+  names the same row and number) is 409 `STAGE_ELEMENT_IN_USE` naming it, and `force` goes ahead and
+  leaves it without a seat — the element delete's and reshape's rule. A venue's seat view is the
+  venue's and is not moved. Scenery naming the stalls follows the copy when the show had one block;
+  with several, each owner might hold a row for each, so they are swept, as an element delete sweeps
+  them. Both roles, a stored show write. Project Settings' Stage tab carries it for a show on a venue.
+- **Names.** A Preset is out of the show's rig, so another of the show's own elements may hold its name;
+  a copy that would take it — on Create or a replace — is 409 `SEATING_PRESET_NAME_TAKEN`, named, not a
+  constraint error. A replace steps the show's old blocks aside first, so they never clash, and a re-copy
+  of the **same** preset keeps this machine's *Full detail* for it: the override is keyed by the uuid the
+  copy keeps.
 
 **Sync, export and clone** (session 4, `docs/sync-engineering.md` §"Version 24"). A show's archive
 holds its **own rows only**, its hides (`showHides/{uuid}.json`) and its pin in `project.json`
@@ -2373,14 +2455,16 @@ pins refuses delete) is refused by the switch with `VENUE_MISSING`, and if it is
 starts it loads **no rig** — no fixture, no controller — so the desk comes up outputting nothing and
 can switch away (`venue/VenuePins.kt`, `DbFixtureLoader`).
 
-**Not yet, and where.** The Projects page, Create's preset seating and Detach, session 7. Facet
-overrides shipped in session 5 (§"Facet overrides"); a show that is behind, the hold and Update in
-session 6 (§"Behind, the hold and Update").
+**Where it shipped.** Facet overrides in session 5 (§"Facet overrides"); a show that is behind, the
+hold and Update in session 6 (§"Behind, the hold and Update"); the Projects page, Create's stalls
+preset, *Replace from preset* and Detach in session 7 (§"Detach", §"Seating presets"). Moving a show to
+another venue is `FU-VENUE-TOURING`.
 
 **Files.** `models/RigScope.kt` (the effective rig, `VenueLayer`), `models/showHides.kt`,
 `venue/ShowHides.kt`, `venue/VenueRigGuard.kt` (`VENUE_OWNED`, the key namespace),
 `venue/VenueExtract.kt`, `venue/VenuePins.kt` (`VENUE_MISSING`, the repo hint), `venue/ShowBehind.kt`,
-`venue/VenueUpdate.kt`, `state/VenueHoldService.kt`, `dmx/OutputHold.kt`,
-`routes/showHides.kt`, `routes/venueExtract.kt`. `ShowsOnVenueTest` and `McpVenueToolsTest` pin it;
+`venue/VenueUpdate.kt`, `venue/VenueDetach.kt`, `venue/SeatingPresets.kt`, `state/VenueHoldService.kt`,
+`dmx/OutputHold.kt`, `routes/showHides.kt`, `routes/venueExtract.kt`, `routes/venueDetach.kt`.
+`ShowsOnVenueTest`, `VenueDetachTest`, `SeatingPresetTest` and `McpVenueToolsTest` pin it;
 `ProjectRoundTripTest` and `VenueRepoSyncTest` the sync.
 

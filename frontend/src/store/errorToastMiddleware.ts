@@ -42,6 +42,11 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // the banner's *Hold output* toasts its own.
   'updateVenue', // src/components/venue/VenueUpdateSheet.tsx
   'runVenueAgainst', // src/components/venue/RunAgainstDialog.tsx, src/components/venue/VenueBehindBanner.tsx
+  // Venue plan session 7: Extract's sheet and Detach's confirm draw a refusal (and their dry run's)
+  // beside the preview they read; *Replace from preset* asks about stranded seat views inline.
+  'extractVenue', // src/components/venue/ExtractVenueSheet.tsx
+  'detachVenue', // src/components/venue/DetachVenueDialog.tsx
+  'replaceSeatingFromPreset', // src/components/venue/SeatingPresetCard.tsx
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

@@ -243,6 +243,20 @@ class SceneImageStore(val root: Path) {
     }
 
     /**
+     * Remove one image and its derived copies from [projectUuid]'s store — a copy an operation made and
+     * then rolled back (Detach), never an image an element may still name.
+     */
+    fun delete(projectUuid: String, hash: String) {
+        if (!SCENE_IMAGE_HASH.matches(hash)) return
+        SceneImageFormat.entries.forEach { Files.deleteIfExists(path(projectUuid, hash, it)) }
+        val derived = derivedDir(projectUuid)
+        if (!Files.isDirectory(derived)) return
+        Files.list(derived).use { it.toList() }
+            .filter { it.fileName.toString().startsWith("$hash-") }
+            .forEach { Files.deleteIfExists(it) }
+    }
+
+    /**
      * Copy [src] — an original from a repo or an export folder — into the store as [hash] when it
      * is not already there, after checking the bytes are what the name says (a PNG or a JPEG whose
      * SHA-256 is [hash]) and an image the store would take from an upload (it decodes, at most
