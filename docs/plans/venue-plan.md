@@ -1,6 +1,7 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — session 1 shipped, as `6e51c5c` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — session 1 shipped, as `6e51c5c` (2026-10-11); session 2 built as
+> `d93e174`, in review as PR #105 (not merged).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -218,6 +219,27 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   classification over each kind of change; operators refused.
 - **Docs:** CLAUDE.md (a venue, and the routes), `desk-accounts.md` (admin-only), the diff rule in
   `fixtures-engineering.md`.
+- **As built, in review** (`d93e174`, PR #105 — the done-marker waits for the merge). What session
+  3 onward inherits that the bullets above do not say:
+  - **The write guard is not in `withProject`.** It sits at the head of the whole `/projects/{id}/…`
+    subtree (`routes/projectWriteGuard.kt`), so routes that resolve their project another way are
+    covered too; the copy routes judge their body's target (`refusedCopyTarget`) and the FX
+    definitions, written to the live project, judge it (`refusedLiveVenueWrite`). An operator's
+    stored write to a venue is 403 `VENUE_ADMIN_ONLY`; opening one and runtime gestures pass.
+  - **The snapshot** is `sync/KeptUuidCopy.kt` (the test helper now calls it). It carries its own
+    scene images and prompt PDFs under its own uuid, and **no** machine overrides: they stay keyed
+    by the venue's id, which is what P4 resolves a venue record's override against in session 3.
+  - **The diff counts every exported table** but the default speed masters — the rig classified and
+    named, anything else `OTHER`, drawing only — so nothing a publish freezes goes uncounted. It
+    exports the draft per read: ~100 ms at 300 patches, measured; cache by a rig revision if venues
+    grow ten times larger.
+  - **Operators' read-only view** covers the Patch list, the Stage view's Edit, Rigging, Regions and
+    Project Settings; Record, Update and *New template* are off in a venue for everyone. A hidden
+    view's URL still renders — only the rail hides it.
+  - **The Patch list's Draft column leads** the value columns (the board draws it last); History and
+    Publish name no shows until session 3's pin exists.
+  - **Fixed on the way:** `ProjectManager.switchProject` left no project current when it reloaded
+    the live one (discard does; so did sync's pull).
 
 ### Session 3 — shows on a venue (backend + Patch list)
 
