@@ -10,9 +10,9 @@ import uk.me.cormack.lighting7.models.RigScope
  *
  * - **A venue's row is the venue's.** A write through a show that names one by id — a `PUT`, a
  *   `DELETE`, a placement, a membership — is refused with 409 [CODE_VENUE_OWNED], not a 404: the
- *   row is in the show's rig, it is just not the show's to change. Hiding is the one change a show
- *   makes to a venue row this session (`PUT …/hidden`); per-facet overrides of a venue patch are
- *   session 5's.
+ *   row is in the show's rig, it is just not the show's to change. A show makes two changes to a
+ *   venue row: it hides one (`PUT …/hidden`), and it overrides a venue patch's facets — address,
+ *   position, focus, media — through their own route (`PUT …/facets/{facet}`, `ShowOverrides`).
  * - **Keys are one namespace.** A show's own record may not take the key — or, for every kind the rig
  *   checks a clash for, the name or head number — of a venue record in its rig: 409
  *   [CODE_KEY_TAKEN_BY_VENUE]. A hidden venue record is not in the rig, so a show may reuse its key
@@ -35,9 +35,9 @@ object VenueRigGuard {
         return VenueException.conflict(
             CODE_VENUE_OWNED,
             "$what is $whose, so this show cannot change it. A show can hide a venue record " +
-                "(PUT …/hidden); changing a venue fixture's address, position, focus or media in a " +
-                "show comes with facet overrides (venue plan session 5). To change it for every show, " +
-                "edit the venue and publish.",
+                "(PUT …/hidden), and make a venue fixture's address, position, focus or media its own with a " +
+                "facet override (PUT …/patches/{id}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}); its name, key, type " +
+                "and head are the venue's. To change it for every show, edit the venue and publish.",
         )
     }
 

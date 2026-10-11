@@ -6,14 +6,12 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.select
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatch
-import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
@@ -192,13 +190,14 @@ object ShowHides {
         // The venue's own rows that are still in the show's rig and need it.
         when (kind) {
             HideKind.RIGGING -> {
-                val hung = rig.patches(DaoFixturePatches.rigging eq row.id).filter { it.project.id == snapshotId }.map { it.key }
-                val lanterns = DaoFixturePatchPlacements.select(DaoFixturePatchPlacements.fixturePatch)
-                    .where { DaoFixturePatchPlacements.rigging eq row.id }
-                    .map { it[DaoFixturePatchPlacements.fixturePatch] }
-                val lanternKeys = if (lanterns.isEmpty()) emptyList()
-                else rig.patches(DaoFixturePatches.id inList lanterns).filter { it.project.id == snapshotId }.map { it.key }
-                (hung + lanternKeys).distinct().takeIf { it.isNotEmpty() }?.let { holders += "fixtures hang on it (${it.joinToString()})" }
+                // Where the rig hangs the venue's visible units — a Position override (session 5) moving
+                // one onto this rigging or off it included — the patch's own placement or an extra one.
+                val units = rig.patches(DaoFixturePatches.project eq snapshotId).toList()
+                val placements = rig.effectivePlacementsByPatch(units)
+                val hung = rig.effective(units).filter { p ->
+                    p.rigging?.id?.value == row.id || placements[p.id.value].orEmpty().any { it.rigging?.id?.value == row.id }
+                }.map { it.key }
+                hung.takeIf { it.isNotEmpty() }?.let { holders += "fixtures hang on it (${it.joinToString()})" }
             }
             HideKind.ELEMENT -> {
                 val views = rig.stageViewpoints(DaoStageViewpoints.seatElementUuid eq row.uuid).map { it.name }
@@ -239,7 +238,8 @@ object ShowHides {
      * through different universe rows.
      */
     private fun channelsTakenBy(rig: RigScope, patchId: Int): String? {
-        val patch = DaoFixturePatch.findById(patchId) ?: return null
+        // Where it would come back to: an Address override it carries comes back with it.
+        val patch = DaoFixturePatch.findById(patchId)?.let(rig::effective) ?: return null
         val subnet = patch.universeConfig.subnet
         val universe = patch.universeConfig.universe
         val first = patch.startChannel

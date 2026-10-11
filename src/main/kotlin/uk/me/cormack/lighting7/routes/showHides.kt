@@ -23,8 +23,9 @@ import uk.me.cormack.lighting7.venue.ShowHides
 import java.util.UUID
 
 /**
- * A show's hides of its venue's records (venue plan §3.5, session 3) — the one change a show makes
- * to a venue row until facet overrides (session 5). `venue/ShowHides.kt` holds the rules.
+ * A show's hides of its venue's records (venue plan §3.5, session 3) — one of the two changes a show
+ * makes to a venue row, beside a patch's facet overrides (session 5, `routes/patchFacets.kt`).
+ * `venue/ShowHides.kt` holds the rules.
  *
  * - `PUT /projects/{id}/patches/{pid}/hidden` `{hidden}` — hide a venue patch in this show, or bring
  *   it back. `pid` is the patch's id in the pinned version, as the Patch list and

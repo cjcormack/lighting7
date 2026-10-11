@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.util.UUID
 
@@ -172,11 +173,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
 
                 // Check for channel overlap — against the rig, so a venue unit this show hides
-                // frees its channels for the show's own (hide a house unit and patch your own).
+                // frees its channels for the show's own (hide a house unit and patch your own), and
+                // a venue unit an Address override moved is where the show put it (session 5).
                 val rig = RigScope.of(project)
-                val overlap = rig.patches(
-                    DaoFixturePatches.universeConfig eq universeConfig.id
-                ).firstOrNull { existing ->
+                val overlap = rig.effective(rig.patches().toList()).filter {
+                    it.universeConfig.id == universeConfig.id
+                }.firstOrNull { existing ->
                     val existingType = FixtureTypeRegistry.allTypes.find { it.typeKey == existing.fixtureTypeKey }
                     val existingChannelCount = existingType?.channelCount ?: 1
                     val existingEnd = existing.startChannel + existingChannelCount - 1
@@ -1026,6 +1028,14 @@ data class FixturePatchDto(
      * can only be hidden (`PUT …/hidden`).
      */
     val owner: RigOwner = RigOwner.SHOW,
+    /** The universe the patch sits on (as the rig sees it), by uuid — what an Address facet names. */
+    val universeConfigUuid: String? = null,
+    /**
+     * A venue patch's facets this show overrides (venue plan session 5), each with the show's value, the
+     * venue's current one and whether the venue drifted under it. Empty for every other patch, and for a
+     * venue patch the show takes whole. The fields above are already the overridden ones.
+     */
+    val facets: List<ShowOverrides.FacetStateDto> = emptyList(),
 )
 
 @Serializable
@@ -1143,7 +1153,9 @@ internal fun DaoFixturePatch.toDto(
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .filter { rig.ownerOf(it.group.project.id) != null && !rig.isHidden(HideKind.GROUP, it.group.uuid) }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
-    val f = focus
+    // The patch as the rig sees it: a venue patch's facet overrides laid over its row (session 5).
+    val e = rig.effective(this)
+    val f = e.focus
     return FixturePatchDto(
         id = id.value,
         uuid = uuid.toString(),
@@ -1151,26 +1163,26 @@ internal fun DaoFixturePatch.toDto(
         displayName = displayName,
         headNumber = headNumber,
         fixtureTypeKey = fixtureTypeKey,
-        startChannel = startChannel,
+        startChannel = e.startChannel,
         channelCount = typeInfo?.channelCount,
         manufacturer = typeInfo?.manufacturer,
         model = typeInfo?.model,
         modeName = typeInfo?.modeName,
-        universe = universeConfig.universe,
-        subnet = universeConfig.subnet,
+        universe = e.universeConfig.universe,
+        subnet = e.universeConfig.subnet,
         sortOrder = sortOrder,
         groups = groupRefs,
-        stageX = stageX,
-        stageY = stageY,
-        stageZ = stageZ,
-        baseYawDeg = baseYawDeg,
-        basePitchDeg = basePitchDeg,
-        baseRollDeg = baseRollDeg,
-        riggingUuid = rigging?.uuid?.toString(),
-        beamAngleDeg = beamAngleDeg,
-        gelCode = gelCode,
-        kindOverride = kindOverride,
-        lengthM = lengthM,
+        stageX = e.stageX,
+        stageY = e.stageY,
+        stageZ = e.stageZ,
+        baseYawDeg = e.baseYawDeg,
+        basePitchDeg = e.basePitchDeg,
+        baseRollDeg = e.baseRollDeg,
+        riggingUuid = e.rigging?.uuid?.toString(),
+        beamAngleDeg = e.beamAngleDeg,
+        gelCode = e.gelCode,
+        kindOverride = e.kindOverride,
+        lengthM = e.lengthM,
         stageHidden = stageHidden,
         infrastructure = infrastructure,
         lanternType = f.lanternType,
@@ -1180,9 +1192,11 @@ internal fun DaoFixturePatch.toDto(
         gateRotationDeg = f.gateRotationDeg,
         iris = f.iris,
         focusSoftness = f.focusSoftness,
-        media = fittedMedia,
-        extraPlacements = placements.map { it.toDto() },
+        media = e.fittedMedia,
+        extraPlacements = rig.effectivePlacements(this, placements).map { it.toDto() },
         owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
+        universeConfigUuid = e.universeConfig.uuid.toString(),
+        facets = ShowOverrides.statesOf(rig, this, placements),
     )
 }
 

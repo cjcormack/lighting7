@@ -1,23 +1,30 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { EyeOff, Landmark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SheetBody, SheetFooter, SheetHeader } from '@/components/ui/sheet'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { useProjectQuery } from '@/store/projects'
-import { useSetPatchHiddenMutation } from '@/store/patches'
+import { useSetPatchHiddenMutation, useUniverseConfigListQuery } from '@/store/patches'
+import { useFixtureTypeListQuery } from '@/store/fixtures'
+import { useRiggingListQuery } from '@/store/riggings'
+import { useLanternIndex } from '@/hooks/useLanternIndex'
+import { useGelIndex } from '@/hooks/useGelIndex'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { formatPatchAddress } from '@/lib/patchAddress'
-import type { FixturePatch } from '@/api/patchApi'
+import { PATCH_FACETS, type FixturePatch } from '@/api/patchApi'
+import { VenueFacetCard, type FacetCardContext } from './VenueFacetCard'
 
 /**
- * A **venue's** fixture opened from a show (venue plan session 3, `Show.dc.html`'s Edit Fixture
- * sheet): its identity — name, key, type, head — read-only, because it is the venue's; what the show
- * can do with it, which is hide it; and a way into the venue to change it for every show. Per-facet
- * overrides (Address · Position · Focus · Media) are session 5's, so this panel says so rather than
- * offering fields the desk would refuse with `VENUE_OWNED`.
+ * A **venue's** fixture opened from a show (venue plan sessions 3 and 5, `Show.dc.html`'s Edit
+ * Fixture sheet): its identity — name, key, type, head — read-only, because it is the venue's, with a
+ * way into the venue to change it for every show; its four **facets** — Address · Position · Focus ·
+ * Media — each with a *Venue | This show* switch (`VenueFacetCard`), which makes that facet this
+ * show's own; and *Hide in this show*.
  *
  * Mounted in place of `EditPatchForm` wherever a patch opens — the Patch list's sheet and the Stage
- * view's editor panel — so neither host offers a form for a row it cannot write.
+ * view's editor panel — so neither host offers a form for a row it cannot write. The Stage view's drag
+ * of a venue patch is still refused (`VENUE_OWNED`): a Position override is a decision taken here,
+ * whole, not a side effect of a drag.
  */
 export function VenuePatchPanel({
   patch,
@@ -30,6 +37,26 @@ export function VenuePatchPanel({
 }) {
   const { data: project } = useProjectQuery(projectId)
   const venue = project?.venue ?? null
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const { data: universes } = useUniverseConfigListQuery(projectId)
+  const { data: riggings } = useRiggingListQuery(projectId)
+  const lanterns = useLanternIndex()
+  const gels = useGelIndex()
+  const ctx = useMemo<FacetCardContext>(
+    () => ({
+      projectId,
+      fixtureType: fixtureTypes?.find((t) => t.typeKey === patch.fixtureTypeKey),
+      universes: universes ?? [],
+      lanterns,
+      gels,
+      names: {
+        universeOf: (uuid) => universes?.find((u) => u.uuid === uuid)?.universe,
+        riggingName: (uuid) => riggings?.find((r) => r.uuid === uuid)?.name,
+        lanternName: (id) => lanterns.byId.get(id)?.name,
+      },
+    }),
+    [projectId, fixtureTypes, patch.fixtureTypeKey, universes, riggings, lanterns, gels],
+  )
   const [setHidden, { isLoading }] = useSetPatchHiddenMutation()
   const type = [patch.manufacturer, patch.model].filter(Boolean).join(' ') || patch.fixtureTypeKey
   const hide = () => {
@@ -70,15 +97,16 @@ export function VenuePatchPanel({
               {type}
               {patch.headNumber != null && <span className="text-muted-foreground"> · head {patch.headNumber}</span>}
             </dd>
-            <dt className="text-muted-foreground">Address</dt>
-            <dd className="font-mono text-xs leading-5">{formatPatchAddress(patch.universe, patch.startChannel)}</dd>
           </dl>
           <p className="text-xs text-muted-foreground">
-            The venue&rsquo;s. A show can hide this fixture, not rename or retype it. Changing its address,
-            position, focus or media for this show alone comes with per-facet overrides in a later
-            release; to change it for every show, edit the venue and publish.
+            The venue&rsquo;s. A show can hide this fixture, not rename or retype it. Its address, position,
+            focus and media can each be this show&rsquo;s own below; to change it for every show, edit the
+            venue and publish.
           </p>
         </section>
+        {PATCH_FACETS.map((facet) => (
+          <VenueFacetCard key={facet} facet={facet} patch={patch} ctx={ctx} />
+        ))}
       </SheetBody>
       <SheetFooter className="flex-row justify-between">
         <Button variant="outline" onClick={hide} disabled={isLoading} title="Leave this fixture out of this show's rig — Hidden brings it back">

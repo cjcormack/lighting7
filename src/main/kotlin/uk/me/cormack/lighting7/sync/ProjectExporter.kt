@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import kotlinx.serialization.KSerializer
@@ -13,8 +14,13 @@ import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.DaoShowOverride
+import uk.me.cormack.lighting7.models.DaoShowOverrides
+import uk.me.cormack.lighting7.models.decodeFacet
+import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.venue.VenuePins
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.cueSceneryOf
@@ -84,6 +90,7 @@ import java.util.UUID
  * /project.json                  -- v24: `kind`, and a show's pin (`venueUuid`, `venueVersion`, `venueRepo`)
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
+ * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json
  * /cuePropertyAssignments/{uuid}.json
@@ -115,6 +122,8 @@ import java.util.UUID
  * ```
  */
 class ProjectExporter(private val state: State) {
+
+    private val logger = LoggerFactory.getLogger(ProjectExporter::class.java)
 
     /**
      * `liveKeys` is every record the exporter wrote as a live record (i.e. not a
@@ -199,6 +208,28 @@ class ProjectExporter(private val state: State) {
                 ShowHideJson.serializer(), { it.uuid }, liveKeys,
             ) { h ->
                 ShowHideJson(uuid = h.uuid.toString(), recordKind = h.recordKind, recordUuid = h.recordUuid.toString())
+            }
+
+            // v24, session 5: a show's facet overrides of venue patches. The value and base travel as the
+            // facet's fields; a row whose stored text no longer parses is left out rather than written
+            // as something another desk would refuse.
+            count += writeAll(
+                targetDir, "showOverrides",
+                DaoShowOverride.find { DaoShowOverrides.project eq project.id }.toList()
+                    .filter { o ->
+                        (decodeFacet(o.facet, o.value) != null && decodeFacet(o.facet, o.base) != null).also { ok ->
+                            if (!ok) logger.warn("Export: override {} ({} of {}) does not parse as its facet; leaving it out", o.uuid, o.facet, o.recordUuid)
+                        }
+                    },
+                ShowOverrideJson.serializer(), { it.uuid }, liveKeys,
+            ) { o ->
+                ShowOverrideJson(
+                    uuid = o.uuid.toString(),
+                    recordUuid = o.recordUuid.toString(),
+                    facet = o.facet,
+                    value = facetElement(decodeFacet(o.facet, o.value)!!),
+                    base = facetElement(decodeFacet(o.facet, o.base)!!),
+                )
             }
 
             count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->

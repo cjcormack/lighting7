@@ -199,9 +199,10 @@ internal fun aimPlacements(state: State, project: DaoProject, keys: Collection<S
         val poses = rig.riggings().associate { r ->
             r.id.value to RiggingPose(r.positionX, r.positionY, r.positionZ, r.yawDeg, r.pitchDeg, r.rollDeg)
         }
-        rig.patches(DaoFixturePatches.key inList keys)
+        // Where each head is as the rig sees it: a venue patch's Position override is where it hangs.
+        rig.effective(rig.patches(DaoFixturePatches.key inList keys))
             .associate { p ->
-                val riggingId = p.readValues.getOrNull(DaoFixturePatches.rigging)?.value
+                val riggingId = p.rigging?.id?.value
                 p.key to AimPlacement(
                     worldPosition(p.stageX, p.stageY, p.stageZ, riggingId?.let { poses[it] }),
                     p.baseYawDeg,

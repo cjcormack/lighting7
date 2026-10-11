@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
@@ -152,6 +153,8 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                     deleteCueEventsForPatches(listOf(patch.id))
                     patch.delete()
                 }
+                // A venue patch the show put on this universe goes back to the venue's address.
+                ShowOverrides.sweepUniverse(project.id, config.uuid)
                 config.delete()
                 sweptTiles
             }
@@ -199,6 +202,8 @@ data class UniverseConfigDto(
     val patchCount: Int,
     /** Whose the universe is in this project's rig (venue plan session 3): `SHOW` or `VENUE`. */
     val owner: RigOwner = RigOwner.SHOW,
+    /** The universe's identity, as an Address facet override names it (venue plan session 5). */
+    val uuid: String? = null,
 )
 
 @Serializable
@@ -231,7 +236,8 @@ private fun DaoUniverseConfig.toDto(rig: RigScope): UniverseConfigDto {
         address = Overrides.resolveUniverseAddress(overrideProject, uuid),
         refreshIntervalMs = overriddenInterval ?: ArtNetController.DEFAULT_REFRESH_INTERVAL_MS,
         refreshIntervalOverridden = overriddenInterval != null,
-        patchCount = rig.patches(DaoFixturePatches.universeConfig eq id).count().toInt(),
+        patchCount = rig.patchCountOn(id),
         owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
+        uuid = uuid.toString(),
     )
 }

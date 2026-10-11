@@ -1924,9 +1924,9 @@ rig.own.riggings().maxOfOrNull { it.sortOrder }   // the next sort order for a r
 every method is the query its callers used to write — `RigScopeEquivalenceTest` pins each to that
 query across `RichProjectFixture` and a second copy of it that keeps every record uuid. For a show
 **on a venue** (venue plan session 3) it is its own rows plus the pinned version's, less its hides
-and the version's Preset seating (facet overrides, session 5, will apply here too) — and that
-changed in one place, `RigScope`, not at the ~80 sites that read the rig. §"Shows on a venue" below
-has the rules.
+and the version's Preset seating, with the show's **facet overrides** laid over the version's patches
+(session 5, `RigScope.effective`) — and that changed in one place, `RigScope`, not at the ~80 sites
+that read the rig. §"Shows on a venue" below has the rules, and §"Facet overrides" the overlay.
 
 **Effective and own.** The scope is the **effective** rig: what is loaded, drawn, listed, linked to,
 and checked for a clash (a patch key, a head number, a rigging, region, element, viewpoint or group
@@ -2092,7 +2092,8 @@ write, a sort order and an export are still the show's.
 **Hides** (`show_hides`: project, `record_kind` — `PATCH | RIGGING | ELEMENT | REGION | GROUP |
 VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own, exported as
 `showHides/{uuid}.json` from `formatVersion` 24)
-are the one change a show makes to a venue's row this session (`venue/ShowHides.kt`). A uuid is a
+are one of the two changes a show makes to a venue's row (`venue/ShowHides.kt`); the other is a
+patch's facet overrides (§"Facet overrides"). A uuid is a
 record's identity across versions, so a hide outlives an Update to a version that still holds it.
 Only a venue record hides (409 `NOT_A_VENUE_RECORD` for a standalone show or a show's own row — delete
 that instead), and **nothing the rig still uses hides** (409 `VENUE_HIDE_IN_USE`, naming what holds
@@ -2120,7 +2121,8 @@ one and another show's included, before).
 404), and a **write** only for the show's own: a write through a show to the venue's row is 409
 `VENUE_OWNED`, not a 404 — the row is in the rig, it is not the show's to change
 (`VenueRigGuard.ownForWrite`, thrown inside the write's transaction; `VenueException` is mapped in
-`plugins/ErrorHandling.kt`). That is the patch PUT, DELETE and bulk placements (atomic: the whole
+`plugins/ErrorHandling.kt`); its message names the facet route, which is how a show changes a venue
+patch's address, position, focus or media for itself (§"Facet overrides"). That is the patch PUT, DELETE and bulk placements (atomic: the whole
 request; non-atomic: that entry), the rigging, region, element, viewpoint and group PUT and DELETE,
 the universe DELETE and a controller-type change, and the project's stage size. Three writes are
 deliberately not refused, each because it does not change the venue's row:
@@ -2161,6 +2163,92 @@ installed}` (`behind` is session 6's). **A venue a show pins cannot be deleted**
 `VENUE_IN_USE`, naming the shows): a show's rows link into its version's rows by id, and the venue's
 delete takes its versions; Detach (session 7) is the way off. History answers `shows` — every show
 on the venue with its version — which the Publish sheet and History name.
+
+### Facet overrides
+
+A show can make four parts of a venue patch its own (venue plan session 5, D4, D5): its **facets**.
+Each is **whole** — every field it covers, the patch's and each extra placement's — because shutters
+without the position they were cut against mean nothing; a patch's **identity** (name, key, type,
+head number) and its placements' count, order and labels stay the venue's.
+
+| Facet | Fields |
+|---|---|
+| `ADDRESS` | `universeConfigUuid`, `startChannel` |
+| `POSITION` | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
+| `FOCUS` | `lanternType`, `beamAngleDeg`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, and each placement's |
+| `MEDIA` | `gelCode`, `media`, and each placement's |
+
+**Stored** as `show_overrides` (`models/showOverrides.kt`): `project_id`, `record_uuid` (the venue
+patch — a uuid is its identity across versions, as a hide's is), `facet`, `value` and `base`, both
+the facet's fields as compact canonical JSON (`models/patchFacets.kt`: keys sorted, nulls and
+defaults omitted, compared decoded), and a uuid of its own; unique on project, record and facet.
+**Placements are carried by the venue placement's uuid** — `placements: [{placementUuid, …fields}]`
+— never by position: an entry naming a placement the pinned version lacks contributes nothing, and a
+placement the value does not name keeps the venue's fields, which is also how a placement a later
+version adds arrives. Universes and riggings are named by uuid, as every link is; an override may put
+a unit on the show's own universe or rigging or on the venue's. A Focus override's lantern derives
+the patch's kind exactly as a patch write does (`kindUnderLantern`, `resolvePatchFocus`'s rule).
+
+**The rig scope applies them** (§3.3's *patch = S's patch with each facet's fields replaced*):
+`RigScope.effective(patch)` answers an `EffectivePatch` — the row with each overridden facet laid
+over it — and `effectivePlacements` its placements likewise; only a row of the pinned snapshot takes
+one, so a venue, a version and a standalone show read their rows unchanged. Every reader of a facet
+field reads through it: the loader (an Address override is where the fixture is built and outputs; a
+Media override is the patch metadata it carries), the patch DTO the Patch list and the Stage view
+draw, the patch create's overlap check, a universe's patch count, aim and focus, the hides' checks,
+and `describe_rig` / `get_patch` / `patch_fixtures`. **An override that names a universe or rigging
+the rig no longer has is dormant**: it contributes nothing and the venue's whole facet stands (the
+DTO's facet state says `dormant`), rather than half a facet.
+
+**The hide interaction: dormant, kept.** Hiding a patch with overrides keeps them, dormant — a hidden
+patch is out of the rig — and they come back with it (unhiding checks its channels where its Address
+override puts it). A hidden patch takes no override write but a revert — a new one or an edit is 409
+`FACET_PATCH_HIDDEN`, since the unit is not in the rig to see the change on — and its overrides can
+still be reverted. A venue rigging a Position override hangs a unit on is in use and
+refuses its hide (`VENUE_HIDE_IN_USE`, naming the unit); one an override moved every unit off can be
+hidden. A show's own rigging delete detaches an override hung on it, offsets kept (as it detaches a
+patch); a show's own universe delete reverts an Address override onto it, so the unit takes the
+venue's address again.
+
+**The route** — `PUT /projects/{id}/patches/{pid}/facets/{facet}` `{value | null}`
+(`routes/patchFacets.kt`, `venue/ShowOverrides.kt`). `value` overrides the facet, whole, and a new
+override records **`base`**: the pinned version's value of the facet at that moment. `null` reverts
+it to the venue's. The value is checked like the patch write it stands for, **every problem at once**
+(400 `FACET_INVALID`; a field outside the facet is one): Address a universe of the effective rig — by
+`universeConfigUuid`, or by `universe` (and `subnet`) number, stored as the uuid — and a start channel
+the type fits from; Position the stage ranges, a rigging of the rig and a length only on a type that
+takes one; Focus the lantern library and the type's focus rules (a type with no lantern takes none);
+Media the type's loadable settings; a placement entry must name one of the patch's, and a placement
+the Focus value does not name that inherits the override's lantern must still fit it (its venue zoom
+is not cleared, as a patch write would: name it). **An address
+overlap is a decision** (P8): allowed, and answered in `warnings`, as the Patch list rings one; a key
+clash cannot arise, since a facet never touches a key. Refused: a show's own patch, a standalone
+show's and a venue's own — 409 `NOT_A_VENUE_RECORD` (edit the patch); a version —
+`VENUE_VERSION_READ_ONLY` from the write guard; an unknown facet — 400 `FACET_UNKNOWN`. It is a stored
+show write like a patch edit, so **an operator may make one** (the write guard still refuses an
+operator's write to a venue). An Address or Media write to the live show reloads the rig. Answers
+`{patch, changed, warnings}`.
+
+**Drift** is the pinned version's current value of a facet differing from the override's `base`: the
+venue changed something the show had overridden. Only an Update moves a pin (session 6), so today a
+re-pin makes it. **Editing an override keeps its base**, so the drift stays drawn until the show
+answers it: ***Keep mine*** — `POST …/facets/{facet}/keep-mine`, the override stays and `base` becomes
+the venue's current value (409 `FACET_NOT_OVERRIDDEN` with none) — or ***Take venue's***, which is a
+revert (`{value: null}`). `FixturePatchDto.facets` lists a venue patch's overridden facets, each
+`{facet, value, venue, drifted, base?, dormant}` (`base` only when drifted), the patch's own fields
+already the overridden ones; `universeConfigUuid` beside them names the universe an Address facet
+does. **The drift read is `ShowOverrides.drift(project, snapshotId?)`** — every override against the
+pinned version, or against any version's snapshot, each `{recordUuid, patchKey, facet, value, base,
+current, missing, dormant}` with `drifted` (`dormant` judged against the pinned version only) — which is what session 6's Update review calls with the target
+version's snapshot (`missing` is an override whose patch that version lacks).
+
+**Not a drag.** The Stage editor's drag of a venue patch is still `VENUE_OWNED` (the bulk placement
+route): a Position override is a decision taken whole, in the fixture sheet's *This show*, with a base
+recorded — not the side effect of a drag. The fixture sheet (`VenuePatchPanel`, the Patch list's and
+the Stage editor's) draws a *Venue | This show* switch per facet, the drift note with *Keep mine* and
+*Take venue's*, and the Patch list's *This show* column four chips, lit where overridden and amber
+where drifted. A venue rigging, element, region, group or viewpoint is still only hidden
+(`FU-VENUE-ELEMENT-OVERRIDES`).
 
 ### Extract
 
@@ -2216,9 +2304,9 @@ pins refuses delete) is refused by the switch with `VENUE_MISSING`, and if it is
 starts it loads **no rig** — no fixture, no controller — so the desk comes up outputting nothing and
 can switch away (`venue/VenuePins.kt`, `DbFixtureLoader`).
 
-**Not yet, and where.** Facet overrides are session 5 (`showOverrides/` is reserved in the archive:
-a v24 desk refuses one rather than dropping it); a show that is behind its venue, the hold and Update,
-session 6; the Projects page, Create's preset seating and Detach, session 7.
+**Not yet, and where.** A show that is behind its venue, the hold and Update, session 6; the Projects
+page, Create's preset seating and Detach, session 7. Facet overrides shipped in session 5
+(§"Facet overrides").
 
 **Files.** `models/RigScope.kt` (the effective rig, `VenueLayer`), `models/showHides.kt`,
 `venue/ShowHides.kt`, `venue/VenueRigGuard.kt` (`VENUE_OWNED`, the key namespace),

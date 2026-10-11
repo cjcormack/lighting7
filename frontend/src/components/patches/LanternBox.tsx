@@ -25,7 +25,8 @@ interface LanternBoxProps {
   focus: LanternFocus
   onFocusChange: (next: LanternFocus) => void
   gelCode: string | null
-  onGelChange: (next: string | null) => void
+  /** Absent draws no gel picker — a venue patch's Focus facet in a show, where the gel is Media's. */
+  onGelChange?: (next: string | null) => void
   beamAngleDeg: number | null
   onBeamAngleChange: (next: number | null) => void
   /** The fixture's other lanterns — the pair switch's other entries. */
@@ -100,7 +101,7 @@ export function LanternBox({
           {lantern.zoom ? `zoom ${fmt(lantern.zoom.minDeg)}–${fmt(lantern.zoom.maxDeg)}°` : 'zoom · fixed'}
         </p>
       )}
-      <GelPickerField id={`${idPrefix}-gel`} value={gelCode} onChange={onGelChange} />
+      {onGelChange && <GelPickerField id={`${idPrefix}-gel`} value={gelCode} onChange={onGelChange} />}
       <BeamAngleField id={`${idPrefix}-beam`} value={beamAngleDeg} onChange={onBeamAngleChange} />
       <p className="text-xs text-muted-foreground">
         A beam angle set here overrides the lantern&apos;s field; leave it blank to draw the lantern.

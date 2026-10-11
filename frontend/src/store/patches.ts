@@ -10,6 +10,9 @@ import type {
   PatchGroup,
   PatchGroupDetail,
   UpdatePatchGroupRequest,
+  FacetValue,
+  FacetWriteResponse,
+  PatchFacet,
 } from "../api/patchApi"
 
 /**
@@ -181,6 +184,28 @@ export const patchesApi = restApi.injectEndpoints({
       invalidatesTags: ['Patch', 'Fixture', 'UniverseConfig'],
     }),
 
+    /**
+     * Make a venue patch's facet this show's own, or take the venue's back with `value: null` — which is
+     * also *Take venue's* on a drifted facet (`PUT …/patches/{pid}/facets/{facet}`, venue plan session 5).
+     */
+    setPatchFacet: build.mutation<FacetWriteResponse, { projectId: number; patchId: number; facet: PatchFacet; value: FacetValue | null }>({
+      query: ({ projectId, patchId, facet, value }) => ({
+        url: `projects/${projectId}/patches/${patchId}/facets/${facet}`,
+        method: 'PUT',
+        body: { value },
+      }),
+      invalidatesTags: ['Patch', 'Fixture', 'UniverseConfig'],
+    }),
+
+    /** *Keep mine*: the override stays, and the venue's change under it is answered (`POST …/keep-mine`). */
+    keepPatchFacet: build.mutation<FacetWriteResponse, { projectId: number; patchId: number; facet: PatchFacet }>({
+      query: ({ projectId, patchId, facet }) => ({
+        url: `projects/${projectId}/patches/${patchId}/facets/${facet}/keep-mine`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Patch'],
+    }),
+
     // List universe configs for a project
     universeConfigList: build.query<UniverseConfig[], number>({
       query: (projectId) => `projects/${projectId}/universe-configs`,
@@ -239,6 +264,8 @@ export const {
   useDeletePatchMutation,
   useHiddenPatchListQuery,
   useSetPatchHiddenMutation,
+  useSetPatchFacetMutation,
+  useKeepPatchFacetMutation,
   useUniverseConfigListQuery,
   useUpdateUniverseConfigMutation,
   usePatchGroupListQuery,

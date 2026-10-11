@@ -48,6 +48,7 @@ import { firstColumnCellProps, listNames, skippedNote, type SheetColumn, type Sh
 import { isVenueOwned, type FixturePatch } from '@/api/patchApi'
 import type { VenueChange } from '@/api/venueApi'
 import { draftMarker } from '@/lib/venue'
+import { FACET_LABEL, facetChips } from '@/lib/patchFacets'
 
 export type PatchColumnKey =
   | 'head'
@@ -67,6 +68,8 @@ export type PatchColumnKey =
   | 'draft'
   /** Whose the head is in a show on a venue (session 3) — led by the route there, never in the Columns menu. */
   | 'source'
+  /** A venue head's facet chips in a show (session 5) — closed by the route there, never in the Columns menu. */
+  | 'facets'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   head: 'Head',
@@ -84,6 +87,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   role: 'Role',
   draft: 'Draft',
   source: 'Source',
+  facets: 'This show',
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
@@ -781,12 +785,23 @@ export function PatchSheet({
         value: (row) => (isVenueOwned(row.patch) ? 'VENUE' : 'SHOW'),
         display: (row) => <SourceMark venue={isVenueOwned(row.patch)} />,
       },
+      {
+        // A read-out: which of a venue head's four facets this show makes its own (venue plan
+        // session 5, `Show.dc.html`'s *This show* column) — lit when overridden, amber when the
+        // venue has changed one under the override. Set from the fixture sheet.
+        key: 'facets',
+        label: 'This show',
+        width: '248px',
+        gutter: false,
+        value: (row) => (isVenueOwned(row.patch) ? facetChips(row.patch).map((c) => c.state).join(',') : undefined),
+        display: (row) => (isVenueOwned(row.patch) ? <FacetChips patch={row.patch} /> : null),
+      },
     ]
-    // **A venue's head is the venue's, every column of it** (venue plan session 3): the desk refuses
-    // a write to one through a show (`VENUE_OWNED`) until facet overrides (session 5). So in a rig
-    // holding any, each editable column draws a venue head's cell inert and drops it from a commit,
-    // naming it on the editor's read-out, as the kit drops a row with nothing to set. A standalone
-    // show's columns are untouched.
+    // **A venue's head is the venue's in every column** (venue plan session 3): the desk refuses a
+    // patch write to one through a show (`VENUE_OWNED`); what a show can make its own — a facet, whole
+    // (session 5) — is set from the fixture sheet, never a cell. So in a rig holding any, each editable
+    // column draws a venue head's cell inert and drops it from a commit, naming it on the editor's
+    // read-out, as the kit drops a row with nothing to set. A standalone show's columns are untouched.
     const locked = hasVenueRows ? all.map(lockVenueRows) : all
     return visibleColumns.map((key) => locked.find((c) => c.key === key)!).filter(Boolean)
   }, [
@@ -1105,6 +1120,39 @@ export function DraftMarker({ change, className }: { change: VenueChange; classN
 }
 
 // ─── A show on a venue (venue plan session 3) ─────────────────────────
+
+/**
+ * A venue head's four facet chips — Address · Position · Focus · Media — lit where this show
+ * overrides the facet and amber where the venue changed it under the override (drift).
+ */
+export function FacetChips({ patch }: { patch: FixturePatch }) {
+  return (
+    <span className="mx-1.5 inline-flex items-center gap-1" data-facet-chips>
+      {facetChips(patch).map(({ facet, state }) => (
+        <span
+          key={facet}
+          data-facet={facet}
+          data-state={state}
+          className={cn(
+            'rounded px-1 py-px text-[10px] leading-4',
+            state === 'venue' && 'text-muted-foreground/60',
+            state === 'show' && 'bg-primary/15 font-medium text-primary',
+            state === 'drifted' && 'bg-amber-500/20 font-medium text-amber-700 dark:text-amber-300',
+          )}
+          title={
+            state === 'venue'
+              ? `${FACET_LABEL[facet]}: the venue's`
+              : state === 'drifted'
+                ? `${FACET_LABEL[facet]}: this show's — the venue changed it since`
+                : `${FACET_LABEL[facet]}: this show's`
+          }
+        >
+          {FACET_LABEL[facet]}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 /**
  * Whose a head is, as the Source column draws it — the hall for the venue's at the pinned version,

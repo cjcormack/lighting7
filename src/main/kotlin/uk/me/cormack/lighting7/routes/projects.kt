@@ -338,6 +338,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestVenueExtract(state)
         // Before the patch routes, so `patches/hidden` is matched as itself.
         routeApiRestShowHides(state)
+        routeApiRestPatchFacets(state)
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)
@@ -656,6 +657,8 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
 
     // A show's hides of its venue's records (venue plan session 3): keyed by uuid, FK to the project.
     DaoShowHide.find { DaoShowHides.project eq project.id }.forEach { it.delete() }
+    // And its facet overrides of venue patches (session 5), keyed the same way.
+    DaoShowOverride.find { DaoShowOverrides.project eq project.id }.forEach { it.delete() }
 
     // Machine-local field overrides (controller IPs). Same story as the sync rows:
     // no ON DELETE cascade, so any project the operator gave a controller IP — and

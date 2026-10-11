@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–4 shipped, as `a5f289b`, `d93e174`, `59b2263` and `39459ee` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–5 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee` and `45afbef` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -329,7 +329,7 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
   - **Departure:** delete and replace now sweep cue events and scenery through their owners, closing
     an orphan for cues that fire venue patches — found while wiring the replace.
 
-### Session 5 — facet overrides and drift (backend + fixture sheet)
+### Session 5 — facet overrides and drift (backend + fixture sheet) — done, `45afbef`
 
 - **`show_overrides`**: the facet route, `base` recorded at override time, and drift when the pinned
   venue's value differs from `base`.
@@ -338,6 +338,41 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
 - **Tests:** each facet's fields round-trip and nothing outside them moves; placements follow
   their facet; drift appears and clears.
 - **Docs:** `fixtures-engineering.md` §"Venues" (facets).
+- **As shipped** (PR #108). What session 6 onward inherits that the bullets above do not say:
+  - **The drift read is `ShowOverrides.drift(project, snapshotId?)`** (`venue/ShowOverrides.kt`): every
+    override against the pinned version, or against any version's snapshot — what Update's review
+    calls with the target version's — each `{recordUuid, patchKey, facet, value, base, current,
+    missing, dormant}` with `drifted` (current ≠ base). `missing` is an override whose patch that
+    version lacks; `dormant` is judged against the pinned version only. An override is keyed by the
+    patch's uuid, so it survives a re-pin as hides do, and a re-pinned show reads the patch under the
+    new version's id. **Update moves pins; nothing in session 5 rewrites a base** but *Keep mine*.
+  - **The overlay is `RigScope.effective` / `effectivePlacements`**, an `EffectivePatch` view over the
+    snapshot's row, not a write; every facet reader goes through it (loader, patch DTO, overlap checks,
+    universe counts, aim, focus, hides, `describe_rig`, `get_patch`, `patch_fixtures`). Session 6's hold
+    and *Run against* read the overridden address through the loader for free; Detach (session 7) must
+    write `effective`'s fields into the show's own rows.
+  - **Facet values are whole, placements by uuid** (`models/patchFacets.kt`): an unnamed placement keeps
+    the venue's fields (how a placement a later version adds arrives); a named one the version lacks
+    contributes nothing. An override naming a universe or rigging the rig lacks is **dormant** (the
+    venue's whole facet stands, the DTO says `dormant`) — Update's dead-reference list should name
+    those.
+  - **`base` is kept when an override is edited** (the plan said "recorded at override time"; editing
+    does not answer a drift). A hidden patch takes no override write but a revert
+    (`FACET_PATCH_HIDDEN`), its overrides dormant until it is shown.
+  - **Decisions the plan left open:** the route takes an Address universe by `universeConfigUuid` or by
+    number (stored as the uuid; `UniverseConfigDto` gained `uuid`); *Keep mine* is its own route
+    (`POST …/keep-mine`), *Take venue's* the `null` revert; operators may override (a stored show write,
+    as a patch edit); refusals reuse `NOT_A_VENUE_RECORD` and add `FACET_INVALID`, `FACET_UNKNOWN`,
+    `FACET_PATCH_HIDDEN`, `FACET_NOT_OVERRIDDEN`; the Stage editor's drag of a venue patch stays
+    `VENUE_OWNED` (a Position override is made whole in the sheet); no MCP setup tool writes a facet —
+    they refuse `VENUE_OWNED` naming the route, and `describe_rig` / `get_patch` name the overridden
+    facets.
+  - **Departures:** a show's own rigging delete (REST and `set_stage`) detaches an override hung on it
+    and a show's own universe delete reverts an Address override onto it; a venue rigging an override
+    hangs a unit on refuses its hide. The frontend's Position card edits the patch's own placement and
+    carries the extra placements unchanged (Focus and Media edit theirs). Sync: `showOverrides/` at v24
+    with no bump, so a session-4 desk refuses a show carrying overrides. `FU-VENUE-ELEMENT-OVERRIDES` is
+    recorded.
 
 ### Session 6 — a show that's behind (backend + frontend)
 

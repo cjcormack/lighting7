@@ -43,8 +43,14 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.DaoShowOverride
+import uk.me.cormack.lighting7.models.DaoShowOverrides
+import uk.me.cormack.lighting7.models.PatchFacet
+import uk.me.cormack.lighting7.models.decodeFacet
+import uk.me.cormack.lighting7.models.encodeFacet
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.venue.VenueException
 import uk.me.cormack.lighting7.venue.VenuePins
 import org.jetbrains.exposed.v1.core.eq
@@ -161,9 +167,10 @@ import uk.me.cormack.lighting7.models.asDuration
 // a busk tile — name venue records the archive lacks: [populateProject] seeds its uuid maps from the
 // pinned snapshot first, and a pin whose snapshot this desk lacks is refused (`VENUE_MISSING`).
 // SUPPORTED moved for v4's reason — a v23 reader would import a pinned show as a standalone one and
-// fail on its first venue link, or write the pin and hides away. `showOverrides/` is reserved for venue
-// plan session 5: this reader refuses an archive holding one ([RESERVED_FOLDERS]), so that session can
-// add it at v24. MIN stays at 5: every key defaults, and a v23 archive imports unchanged.
+// fail on its first venue link, or write the pin and hides away. `showOverrides/` was reserved by the
+// first v24 reader ([RESERVED_FOLDERS], which refused an archive holding one) and is read since venue
+// plan session 5, still at v24: a show's facet overrides of venue patches. MIN stays at 5: every key
+// defaults, and a v23 archive imports unchanged.
 //
 // v23 added the scene's painted cloths (scrim plan P2): `DrapeParams.fabric` and the drape's and the
 // flat's `paint`, inside the element's params, and a top-level `sceneImages/{sha256}.{png|jpg}`
@@ -230,12 +237,14 @@ class ImportError(
 }
 
 /**
- * Folders a later session's archive may hold that this reader cannot apply, refused by name rather
- * than by `formatVersion` (so the session that fills one needs no bump): `showOverrides/` is a show's
- * facet overrides of venue patches, venue plan session 5. Dropping one would load a different rig — an
- * overridden address — so an archive holding any file in it is refused as too new.
+ * Folders a later archive may hold that this reader cannot apply, refused by name rather than by
+ * `formatVersion` (so the session that fills one needs no bump). Empty today: `showOverrides/` was
+ * reserved here by venue plan session 4 and is read since session 5 ([ProjectImporter]'s
+ * `importShowOverrides`) — which is why a session-4 desk refuses a show carrying overrides (422 on
+ * import, `FORMAT_TOO_NEW` before a pull) rather than loading a different rig. Kept for the next folder
+ * that needs the same treatment.
  */
-internal val RESERVED_FOLDERS = listOf("showOverrides")
+internal val RESERVED_FOLDERS = emptyList<String>()
 
 class ProjectImporter(private val state: State) {
 
@@ -447,6 +456,7 @@ class ProjectImporter(private val state: State) {
             project.scripts.forEach { it.delete() }
             project.controlSurfaceBindings.forEach { it.delete() }
             DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
+            DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq project.id }
 
             project.name = projectJson.name
             project.description = projectJson.description
@@ -545,6 +555,7 @@ class ProjectImporter(private val state: State) {
         // passes below judge rows through the rig scope.
         val venue = VenueSeed.of(project)
         importShowHides(sourceDir, project)
+        importShowOverrides(sourceDir, project)
         // Elements first (v20): a Look's, a stack's and a cue's scenery name one, and an element
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
@@ -611,6 +622,42 @@ class ProjectImporter(private val state: State) {
                 }
             } else {
                 logger.warn("Import: hide {} names {} {} a second time; dropping it", h.uuid, h.recordKind, h.recordUuid)
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * v24 (venue plan session 5): a show's facet overrides, stored as the archive has them, each value
+     * and base normalised through the facet's shape. One naming a patch the pinned version lacks is kept
+     * — it overrides nothing, and an Update to a version that has the patch again honours it — as a hide
+     * is; one an archive repeats for a patch and facet (a merge that kept both sides) is kept once.
+     */
+    private fun importShowOverrides(dir: Path, project: DaoProject) {
+        val seen = HashSet<Pair<UUID, PatchFacet>>()
+        readDir(dir.resolve("showOverrides")) { json ->
+            val o = canonicalDecode(ShowOverrideJson.serializer(), json)
+            val uuid = runCatching { UUID.fromString(o.uuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("A show override's uuid is not a uuid: ${o.uuid}")
+            val recordUuid = runCatching { UUID.fromString(o.recordUuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("Show override ${o.uuid} names no patch uuid: ${o.recordUuid}")
+            val value = decodeFacet(o.facet, o.value)
+                ?: throw ImportError.invalidArchive("Show override ${o.uuid}'s value is not a ${o.facet} facet")
+            val base = decodeFacet(o.facet, o.base)
+                ?: throw ImportError.invalidArchive("Show override ${o.uuid}'s base is not a ${o.facet} facet")
+            if (project.kind != ProjectKind.SHOW || project.venueUuid == null) {
+                logger.warn("Import: override {} in a project on no venue; dropping it", o.uuid)
+            } else if (seen.add(recordUuid to o.facet)) {
+                DaoShowOverride.new {
+                    this.project = project
+                    this.recordUuid = recordUuid
+                    facet = o.facet
+                    this.value = encodeFacet(value)
+                    this.base = encodeFacet(base)
+                    this.uuid = uuid
+                }
+            } else {
+                logger.warn("Import: override {} names {} of {} a second time; dropping it", o.uuid, o.facet, o.recordUuid)
             }
             uuid to Unit
         }

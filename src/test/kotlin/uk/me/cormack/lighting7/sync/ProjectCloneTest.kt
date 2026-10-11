@@ -21,6 +21,13 @@ import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
+import uk.me.cormack.lighting7.models.DaoShowOverride
+import uk.me.cormack.lighting7.models.DaoShowOverrides
+import uk.me.cormack.lighting7.models.PatchFacet
+import uk.me.cormack.lighting7.models.PositionFacet
+import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.decodeFacet
+import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
 import uk.me.cormack.lighting7.models.PlatformParams
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.readElementParams
@@ -401,6 +408,40 @@ class ProjectCloneTest {
             state.controlSurfaceBindingService.list(result.projectId).single { it.target is BindingTarget.FireCue }.health,
             "a cloned cue binding resolves healthy through its uuid",
         )
+    }
+
+    /**
+     * A show on a venue clones with its facet overrides (venue plan session 5): the whole graph again,
+     * each override a fresh identity naming the same venue patch, and a value that names the show's own
+     * rigging remapped to the clone's copy while one naming the venue's universe keeps it.
+     */
+    @Test
+    fun `clone of a show on a venue carries its facet overrides`() {
+        val f = seedShowOnVenue(state)
+        val result = ProjectCloner(state).clone(f.showId, "cloned-panto", description = null)
+
+        ProjectExporter(state).export(f.showId, exportDirA)
+        ProjectExporter(state).export(result.projectId, exportDirB)
+        val inverse = result.uuidMapping.entries.associate { (old, new) -> new to old }
+        ExportUuidRemapper.applyMapping(exportDirB, inverse)
+        assertExportsEqual(exportDirA, exportDirB, ignoreProjectIdentity = true)
+
+        transaction(state.database) {
+            val source = DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.associateBy { it.facet }
+            val cloned = DaoShowOverride.find { DaoShowOverrides.project eq result.projectId }.associateBy { it.facet }
+            assertEquals(source.keys, cloned.keys)
+            for ((facet, row) in cloned) {
+                assertNotEquals(source.getValue(facet).uuid, row.uuid, "$facet: a fresh identity")
+                assertEquals(f.overriddenUuid, row.recordUuid, "$facet: the same venue patch")
+            }
+            val boom = (decodeFacet(PatchFacet.POSITION, cloned.getValue(PatchFacet.POSITION).value) as PositionFacet).riggingUuid
+            assertEquals(result.uuidMapping.getValue(f.boomUuid).toString(), boom, "the show's own boom is the clone's copy")
+            assertEquals(source.getValue(PatchFacet.ADDRESS).value, cloned.getValue(PatchFacet.ADDRESS).value, "the venue's universe is kept")
+            val rig = RigScope.of(result.projectId)
+            val unit = rig.effective(rig.patches().first { it.uuid == f.overriddenUuid })
+            assertEquals(470, unit.startChannel)
+            assertEquals(result.uuidMapping.getValue(f.boomUuid), unit.rigging?.uuid)
+        }
     }
 
     @Test

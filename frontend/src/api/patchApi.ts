@@ -82,11 +82,89 @@ export interface FixturePatch extends LanternFocus {
   media?: FittedMedia | null;
   /**
    * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
-   * own, `VENUE` for its venue's at the pinned version. A venue row's every field is the venue's —
-   * the desk refuses a write to one through a show (`VENUE_OWNED`); a show can only hide it. Absent
-   * from a desk older than venues, which reads as `SHOW`.
+   * own, `VENUE` for its venue's at the pinned version. A venue row's identity is the venue's and the
+   * desk refuses a patch write to one through a show (`VENUE_OWNED`); a show can hide it, or make one
+   * of its four facets its own (`facets`, `PUT …/facets/{facet}`, session 5). Absent from a desk older
+   * than venues, which reads as `SHOW`.
    */
   owner?: RigOwner;
+  /** The universe the patch sits on, as the rig sees it — what an Address facet names. Absent from an
+   *  older desk. */
+  universeConfigUuid?: string;
+  /**
+   * A venue patch's facets this show overrides (venue plan session 5), each with the show's value, the
+   * venue's current value and whether the venue drifted under it. The fields above are already the
+   * overridden ones. Absent or empty for a show's own patch, a standalone show's, and a venue patch the
+   * show takes whole — and from a desk older than facet overrides.
+   */
+  facets?: PatchFacetState[];
+}
+
+/** The four parts of a venue patch a show can make its own (venue plan D4), each whole. */
+export type PatchFacet = 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA';
+
+export const PATCH_FACETS: readonly PatchFacet[] = ['ADDRESS', 'POSITION', 'FOCUS', 'MEDIA'];
+
+/**
+ * One overridden facet of a venue patch, as the desk reads it (`ShowOverrides.FacetStateDto`).
+ * `value` and `venue` are the facet's fields in `PUT …/facets/{facet}`'s shape (`lib/patchFacets.ts`).
+ */
+export interface PatchFacetState {
+  facet: PatchFacet;
+  /** The show's value. */
+  value: FacetValue;
+  /** The pinned version's value now. */
+  venue: FacetValue;
+  /** The venue changed this facet since the override was made (or last kept). */
+  drifted?: boolean;
+  /** The venue's value when the override was made; present only when drifted. */
+  base?: FacetValue;
+  /** The override names a universe or rigging the rig no longer has, so the venue's facet stands. */
+  dormant?: boolean;
+}
+
+/** A facet's fields. Placements are named by the venue placement's uuid, never added or removed. */
+export type FacetValue = AddressFacetValue | PositionFacetValue | FocusFacetValue | MediaFacetValue;
+
+export interface AddressFacetValue {
+  /** Stored by uuid; a write may name the universe by number instead (`universe`, `subnet`). */
+  universeConfigUuid?: string;
+  universe?: number;
+  subnet?: number;
+  startChannel: number;
+}
+
+export interface PositionFields {
+  riggingUuid?: string | null;
+  stageX?: number | null;
+  stageY?: number | null;
+  stageZ?: number | null;
+  baseYawDeg?: number | null;
+  basePitchDeg?: number | null;
+  baseRollDeg?: number | null;
+  lengthM?: number | null;
+}
+
+export interface PositionFacetValue extends PositionFields {
+  placements?: (PositionFields & { placementUuid: string })[];
+}
+
+export interface FocusFacetValue extends LanternFocus {
+  beamAngleDeg?: number | null;
+  placements?: (LanternFocus & { placementUuid: string })[];
+}
+
+export interface MediaFacetValue {
+  gelCode?: string | null;
+  media?: FittedMedia | null;
+  placements?: { placementUuid: string; media?: FittedMedia | null }[];
+}
+
+/** What a facet write answers: the patch as the rig now sees it, and an Address override's overlaps. */
+export interface FacetWriteResponse {
+  patch: FixturePatch;
+  changed: boolean;
+  warnings?: string[];
 }
 
 /** Whose a record of a show's rig is (venue plan §3.1). */
@@ -170,6 +248,9 @@ export interface UniverseConfig {
   patchCount: number;
   /** A venue's universe (venue plan session 3): its address is still set here, machine-local. */
   owner?: RigOwner;
+  /** The universe's identity — what an Address facet override names (venue plan session 5). Absent
+   *  from an older desk. */
+  uuid?: string;
 }
 
 export interface CreatePatchRequest {

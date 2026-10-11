@@ -4,7 +4,6 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
-import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.ParkSource
@@ -70,8 +69,9 @@ object DbFixtureLoader {
                     )
                 }
 
-            val patches = rig.patches()
-                .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
+            // Each patch as the rig sees it: a venue patch's Address and Media overrides (venue plan
+            // session 5) are what the fixture is built at and carries.
+            val patches = rig.effective(rig.patches().orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC))
                 .map {
                     PatchData(
                         key = it.key,
