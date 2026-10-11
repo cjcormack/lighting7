@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, EyeOff, Flashlight, Info, Plug, Trash2, X } from 'lucide-react'
+import { Crosshair, EyeOff, Flashlight, Info, Landmark, Plug, Ticket, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -22,7 +22,7 @@ import {
   type NumberedHead,
 } from '@/lib/headNumber'
 import { toast } from 'sonner'
-import { useDeletePatchMutation, useSetHeadNumbersMutation, useUpdatePatchMutation } from '@/store/patches'
+import { useDeletePatchMutation, useSetHeadNumbersMutation, useSetPatchHiddenMutation, useUpdatePatchMutation } from '@/store/patches'
 import { useFixtureListQuery, type Fixture } from '@/store/fixtures'
 import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from '@/store/locate'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -44,8 +44,8 @@ import { GelCell } from './GelCell'
 import { mountFor } from '@/components/stage3d/bodies/mount'
 import { EMPTY_LANTERNS, lanternFieldLabel, type LanternIndex } from '@/lib/lanterns'
 import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
-import type { FixturePatch } from '@/api/patchApi'
+import { firstColumnCellProps, listNames, skippedNote, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { isVenueOwned, type FixturePatch } from '@/api/patchApi'
 import type { VenueChange } from '@/api/venueApi'
 import { draftMarker } from '@/lib/venue'
 
@@ -65,6 +65,8 @@ export type PatchColumnKey =
   | 'role'
   /** A venue's draft marker (venue plan session 2) — appended by the route in venue mode, never in the Columns menu. */
   | 'draft'
+  /** Whose the head is in a show on a venue (session 3) — led by the route there, never in the Columns menu. */
+  | 'source'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   head: 'Head',
@@ -81,6 +83,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   stage: 'Stage',
   role: 'Role',
   draft: 'Draft',
+  source: 'Source',
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
@@ -232,6 +235,8 @@ export function PatchSheet({
   const [toggleLocate] = useToggleLocateMutation()
 
   const allHeads = useMemo(() => allPatches.map(headOf), [allPatches])
+  const hasVenueRows = useMemo(() => allPatches.some(isVenueOwned), [allPatches])
+  const [setPatchHidden] = useSetPatchHiddenMutation()
   const overlaps = useMemo(() => findOverlaps(allHeads), [allHeads])
   const allNumbered = useMemo(() => allPatches.map(numberedHead), [allPatches])
   const headClashes = useMemo(() => findHeadNumberClashes(allNumbered), [allNumbered])
@@ -766,13 +771,30 @@ export function PatchSheet({
         value: (row) => (row.draft ? draftMarker(row.draft) : undefined),
         display: (row) => (row.draft ? <DraftMarker change={row.draft} /> : null),
       },
+      {
+        // A read-out: whose the head is in a show on a venue (venue plan session 3, `Show.dc.html`
+        // callout 1) — the hall for the venue's, the ticket for the show's own.
+        key: 'source',
+        label: 'Source',
+        width: '112px',
+        gutter: false,
+        value: (row) => (isVenueOwned(row.patch) ? 'VENUE' : 'SHOW'),
+        display: (row) => <SourceMark venue={isVenueOwned(row.patch)} />,
+      },
     ]
-    return visibleColumns.map((key) => all.find((c) => c.key === key)!).filter(Boolean)
+    // **A venue's head is the venue's, every column of it** (venue plan session 3): the desk refuses
+    // a write to one through a show (`VENUE_OWNED`) until facet overrides (session 5). So in a rig
+    // holding any, each editable column draws a venue head's cell inert and drops it from a commit,
+    // naming it on the editor's read-out, as the kit drops a row with nothing to set. A standalone
+    // show's columns are untouched.
+    const locked = hasVenueRows ? all.map(lockVenueRows) : all
+    return visibleColumns.map((key) => locked.find((c) => c.key === key)!).filter(Boolean)
   }, [
     allHeads,
     allNumbered,
     allPatches,
     applyKeyWrites,
+    hasVenueRows,
     headClashes,
     headLanding,
     headSeed,
@@ -831,14 +853,35 @@ export function PatchSheet({
   )
   const highlight = useHighlight(highlightTargets)
   const [unpatching, setUnpatching] = useState(false)
+  // A venue's head is hidden in a show, never unpatched (venue plan session 3): Unpatch takes the
+  // show's own heads alone and says why when the selection holds the venue's.
+  const venueSelected = selectedRows.filter((row) => isVenueOwned(row.patch))
+  const ownSelected = selectedRows.filter((row) => !isVenueOwned(row.patch))
   const unpatchSelection = () => {
-    const n = selectedRows.length
-    if (n === 0) return
+    const n = ownSelected.length
+    if (n === 0 || venueSelected.length > 0) return
     if (!confirm(`Unpatch ${n} fixture${n === 1 ? '' : 's'}? This removes them from the rig.`)) return
     setUnpatching(true)
     Promise.all(
-      selectedRows.map((row) => deletePatch({ projectId, patchId: row.patch.id }).unwrap().catch(ignoreReportedError)),
+      ownSelected.map((row) => deletePatch({ projectId, patchId: row.patch.id }).unwrap().catch(ignoreReportedError)),
     ).finally(() => setUnpatching(false))
+    sheet.clearByLadder()
+  }
+  const [hiding, setHiding] = useState(false)
+  const hideSelection = () => {
+    if (venueSelected.length === 0) return
+    setHiding(true)
+    // One at a time: a hide the desk refuses (`VENUE_HIDE_IN_USE` — the cannon fires on a cue) is
+    // toasted by the middleware, and the rest still go.
+    void venueSelected
+      .reduce<Promise<unknown>>(
+        (chain, row) =>
+          chain.then(() =>
+            setPatchHidden({ projectId, patchId: row.patch.id, hidden: true }).unwrap().catch(ignoreReportedError),
+          ),
+        Promise.resolve(),
+      )
+      .finally(() => setHiding(false))
     sheet.clearByLadder()
   }
 
@@ -886,14 +929,30 @@ export function PatchSheet({
           </TooltipTrigger>
           <TooltipContent>Hold: full intensity on the selection, restored on release</TooltipContent>
         </Tooltip>
+        {!readOnly && venueSelected.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={hiding}
+            onClick={hideSelection}
+            title={`Hide the ${venueSelected.length} venue fixture${venueSelected.length === 1 ? '' : 's'} in this show — Hidden brings them back`}
+          >
+            <EyeOff className="size-3.5" />
+            <span className={WORD_CLASS}>Hide</span>
+          </Button>
+        )}
         {!readOnly && (
           <Button
             variant="outline"
             size="sm"
             className="text-destructive hover:text-destructive"
-            disabled={unpatching}
+            disabled={unpatching || ownSelected.length === 0 || venueSelected.length > 0}
             onClick={unpatchSelection}
-            title="Remove the selected fixtures from the rig"
+            title={
+              venueSelected.length > 0
+                ? "A venue's fixture is hidden in a show, not unpatched — deselect the venue's to unpatch your own"
+                : 'Remove the selected fixtures from the rig'
+            }
           >
             <Trash2 className="size-3.5" />
             <span className={WORD_CLASS}>Unpatch</span>
@@ -928,7 +987,7 @@ export function PatchSheet({
         firstColumn={{
           label: 'Fixture',
           width: '220px',
-          render: (row, selected) => readOnly ? (
+          render: (row, selected) => readOnly || isVenueOwned(row.patch) ? (
             <>
               <span className={cn('mx-1 min-w-0 flex-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}>
                 {row.patch.displayName}
@@ -1043,4 +1102,60 @@ export function DraftMarker({ change, className }: { change: VenueChange; classN
       <span className="truncate">{draftMarker(change)}</span>
     </span>
   )
+}
+
+// ─── A show on a venue (venue plan session 3) ─────────────────────────
+
+/**
+ * Whose a head is, as the Source column draws it — the hall for the venue's at the pinned version,
+ * the ticket for the show's own (`Show.dc.html` callout 1).
+ */
+export function SourceMark({ venue }: { venue: boolean }) {
+  const Icon = venue ? Landmark : Ticket
+  return (
+    <span
+      className={cn('mx-1.5 inline-flex items-center gap-1.5 text-xs', venue ? 'text-muted-foreground' : 'font-medium')}
+      title={venue ? "The venue's, at the version this show is pinned to" : "This show's own"}
+    >
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      {venue ? 'Venue' : 'This show'}
+    </span>
+  )
+}
+
+const noopCommit = () => {}
+
+/**
+ * [column] with a venue's heads made inert: drawn through the column's own cell, disabled, and
+ * dropped from every commit, Clear and Spread by the kit (a row whose `value` is undefined is never
+ * written), and named on the editor's read-out as the venue's.
+ */
+function lockVenueRows(column: SheetColumn<PatchSheetRow, PatchColumnKey>): SheetColumn<PatchSheetRow, PatchColumnKey> {
+  const cell = column.cell
+  if (cell == null) return column
+  return {
+    ...column,
+    value: (row) => (isVenueOwned(row.patch) ? undefined : column.value(row)),
+    display: (row) => {
+      if (!isVenueOwned(row.patch)) return column.display?.(row)
+      const value = column.value(row)
+      if (value === undefined) return null
+      return (
+        <div className="relative h-full min-w-0 flex-1 py-0.5 pr-[18px]" title="The venue's — hide it in this show, or change it in the venue">
+          {cell(row, firstColumnCellProps<unknown>({ value, label: column.label, noun: 'fixture', disabled: true, onCommit: noopCommit }))}
+        </div>
+      )
+    },
+    skipNote: (rows) => {
+      const venue = rows.filter((row) => isVenueOwned(row.patch))
+      const own = rows.filter((row) => !isVenueOwned(row.patch))
+      const parts: string[] = []
+      if (venue.length > 0) {
+        const names = listNames(venue.map(patchRowName), 'fixture')
+        parts.push(`${names} ${venue.length === 1 ? 'is' : 'are'} the venue's · skipped`)
+      }
+      if (own.length > 0) parts.push(column.skipNote?.(own) ?? skippedNote(own.map(patchRowName)))
+      return parts.join(' · ')
+    },
+  }
 }

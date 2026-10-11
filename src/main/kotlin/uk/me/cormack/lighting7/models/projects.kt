@@ -36,7 +36,24 @@ object DaoProjects: IntIdTable("projects") {
      * which carries it in `project.json` under `formatVersion` 24.
      */
     val kind = enumerationByName<ProjectKind>("kind", 16).default(ProjectKind.SHOW)
+    /**
+     * A show's **pin** (venue plan §3.1, D2): the venue it sits on, by the venue project's uuid, and
+     * the version it is pinned to. Both null for a standalone show, and always both null for a venue
+     * or a version. The rig scope reads the pinned snapshot's rows into the show's rig
+     * (`RigScope`). Not exported until session 4 (`formatVersion` 24): until then a pinned show
+     * refuses sync (`SYNC_VENUE_PENDING`) and clone (`VENUE_CLONE_PENDING`), so it cannot leave the
+     * desk without its rig.
+     */
+    val venueUuid = javaUUID("venue_uuid").nullable()
+    val venueVersion = integer("venue_version").nullable()
 }
+
+/**
+ * Whether this is a show **on a venue** (venue plan §3.1): one with a pin. Until venue plan session 4
+ * such a show cannot leave the desk — sync, export and clone are refused — because its archive would
+ * not carry the rig it sits on.
+ */
+val DaoProject.isVenueBound: Boolean get() = kind == ProjectKind.SHOW && venueUuid != null
 
 /** A project's kind (venue plan §3.1). See [DaoProjects.kind]. */
 enum class ProjectKind { SHOW, VENUE, VENUE_VERSION }
@@ -53,6 +70,8 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var stageHeightM by DaoProjects.stageHeightM
     var uuid by DaoProjects.uuid
     var kind by DaoProjects.kind
+    var venueUuid by DaoProjects.venueUuid
+    var venueVersion by DaoProjects.venueVersion
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val looks by DaoLook referrersOn DaoLooks.project

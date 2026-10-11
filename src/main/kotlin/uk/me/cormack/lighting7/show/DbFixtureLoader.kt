@@ -47,9 +47,12 @@ object DbFixtureLoader {
             val configs = rig.universeConfigs()
                 .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
                 .map {
-                    val address = Overrides.resolveUniverseAddress(project.id.value, it.uuid)
+                    // A venue's universe resolves its machine-local address against the venue's id
+                    // (venue plan P4), so a node is where it is in the draft, every version and every show.
+                    val overrideProject = rig.overrideProjectId(it.project.id)
+                    val address = Overrides.resolveUniverseAddress(overrideProject, it.uuid)
                     val refreshIntervalMs =
-                        Overrides.resolveUniverseRefreshIntervalMs(project.id.value, it.uuid)
+                        Overrides.resolveUniverseRefreshIntervalMs(overrideProject, it.uuid)
                             ?: ArtNetController.DEFAULT_REFRESH_INTERVAL_MS
                     UniverseConfigData(
                         it.id.value, it.subnet, it.universe, it.controllerType, address, refreshIntervalMs,

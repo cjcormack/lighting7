@@ -5,10 +5,11 @@ import { EditPatchForm, type EditPatchFormHandle } from '@/components/patches/Ed
 import { EditStageRegionForm, type EditStageRegionFormHandle } from '@/components/stage/EditStageRegionForm'
 import { EditRiggingForm, type EditRiggingFormHandle } from '@/components/rigging/EditRiggingForm'
 import { EditSceneElementForm, type EditSceneElementFormHandle } from '@/components/stage/EditSceneElementForm'
-import type { FixturePatch } from '@/api/patchApi'
+import { isVenueOwned, type FixturePatch } from '@/api/patchApi'
 import type { StageRegionDto } from '@/api/stageRegionApi'
 import type { RiggingDto } from '@/api/riggingApi'
 import type { StageElementDto } from '@/api/stageElementApi'
+import { VenuePatchPanel } from '@/components/patches/VenuePatchPanel'
 
 export type StageEditorTarget =
   | { kind: 'patch'; patch: FixturePatch }
@@ -50,7 +51,10 @@ export function StageEditorPanel({
       >
         <ChevronRight className="size-4" />
       </button>
-      {target.kind === 'patch' && (
+      {target.kind === 'patch' && isVenueOwned(target.patch) && (
+        <VenuePatchPanel key={`patch-${target.patch.id}`} patch={target.patch} projectId={projectId} onClose={onDismiss} />
+      )}
+      {target.kind === 'patch' && !isVenueOwned(target.patch) && (
         <EditPatchForm
           autoFocusName={false}
           ref={patchRef}

@@ -18,9 +18,11 @@ import type { FixturePatch } from '@/api/patchApi'
  */
 const updatePatch = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setHeadNumbers = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const setPatchHidden = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/patches', () => ({
   useUpdatePatchMutation: () => [updatePatch],
   useSetHeadNumbersMutation: () => [setHeadNumbers],
+  useSetPatchHiddenMutation: () => [setPatchHidden],
   useDeletePatchMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
 }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
@@ -150,6 +152,7 @@ afterEach(() => {
   updatePatch.mockClear()
   updatePatch.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
   setHeadNumbers.mockClear()
+  setPatchHidden.mockClear()
 })
 
 /**
@@ -254,6 +257,53 @@ describe('PatchSheet', () => {
     fireEvent.click(row('PAR 2').querySelector('[data-first-column]')!)
     expect(screen.getByRole('button', { name: /Locate/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Unpatch/ })).toBeNull()
+  })
+
+  describe('a show on a venue (venue plan session 3)', () => {
+    // PAR 2 is the venue's, at the pinned version; the rest are the show's own.
+    const VENUE_RIG = RIG.map((p) => (p.id === 2 ? { ...p, owner: 'VENUE' as const } : { ...p, owner: 'SHOW' as const }))
+    const venueRows: PatchSheetRow[] = rows.map((r) => ({ ...r, patch: VENUE_RIG.find((p) => p.id === r.patch.id)! }))
+    const drawVenue = (over: Partial<React.ComponentProps<typeof PatchSheet>> = {}) =>
+      draw({ rows: venueRows, allPatches: VENUE_RIG, ...over })
+
+    it('says whose each head is in the Source column', () => {
+      drawVenue({ visibleColumns: ['source', 'address'] })
+      expect(within(row('PAR 2')).getByText('Venue')).toBeInTheDocument()
+      expect(within(row('PAR 1')).getByText('This show')).toBeInTheDocument()
+    })
+
+    it("drops a venue head from a Set and names it — the desk refuses a write to one (VENUE_OWNED)", async () => {
+      drawVenue()
+      dragAddresses(0, 1)
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const field = await screen.findByLabelText('Start channel')
+      expect(screen.getByText(/PAR 2 is the venue's · skipped/)).toBeInTheDocument()
+      fireEvent.change(field, { target: { value: '7' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      expect(updatePatch).toHaveBeenCalledTimes(1)
+      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, startChannel: 7 })
+    })
+
+    it("draws a venue head's identity read-only: no rename, no live cell", () => {
+      drawVenue()
+      // The name is plain text, not the rename's trigger; the address is drawn but inert.
+      expect(screen.getByText('PAR 2').closest('button')).toBeNull()
+      expect(addressCell('PAR 2')).toBeDisabled()
+      expect(screen.getByText('PAR 1').closest('button')).not.toBeNull()
+    })
+
+    it('hides a selected venue head, and will not unpatch one', async () => {
+      drawVenue()
+      fireEvent.click(row('PAR 2').querySelector('[data-first-column]')!)
+      expect(screen.getByRole('button', { name: /Unpatch/ })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: /Hide/ }))
+      await act(async () => {})
+      expect(setPatchHidden).toHaveBeenCalledWith({ projectId: 1, patchId: 2, hidden: true })
+      // The show's own head offers Unpatch and no Hide.
+      fireEvent.click(row('PAR 1').querySelector('[data-first-column]')!)
+      expect(screen.getByRole('button', { name: /Unpatch/ })).not.toBeDisabled()
+      expect(screen.queryByRole('button', { name: /^Hide/ })).toBeNull()
+    })
   })
 
   it('lands a Set over N addresses consecutively by footprint from the typed one', async () => {

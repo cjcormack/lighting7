@@ -1920,12 +1920,13 @@ rig.placementsByPatch(patches); rig.members(group)
 rig.own.riggings().maxOfOrNull { it.sortOrder }   // the next sort order for a row this project adds
 ```
 
-**Why.** Today a project's rig is exactly its own rows, so every method is the query its callers
-used to write — `RigScopeEquivalenceTest` pins each to that query across `RichProjectFixture` and a
-second copy of it that keeps every record uuid. It stops being true when a show sits on a venue
-(venue plan session 3): its rig is then its own rows plus the pinned version's, less its hides and
-the version's Preset seating, with facet overrides applied. That has to change in one place, not at
-the ~80 sites that read the rig.
+**Why.** For a standalone show, a venue and a version the rig is exactly the project's own rows, so
+every method is the query its callers used to write — `RigScopeEquivalenceTest` pins each to that
+query across `RichProjectFixture` and a second copy of it that keeps every record uuid. For a show
+**on a venue** (venue plan session 3) it is its own rows plus the pinned version's, less its hides
+and the version's Preset seating (facet overrides, session 5, will apply here too) — and that
+changed in one place, `RigScope`, not at the ~80 sites that read the rig. §"Shows on a venue" below
+has the rules.
 
 **Effective and own.** The scope is the **effective** rig: what is loaded, drawn, listed, linked to,
 and checked for a clash (a patch key, a head number, a rigging, region, element, viewpoint or group
@@ -1935,17 +1936,17 @@ delete, the next `sortOrder` of a row it adds, and what its own sync export carr
 venue's row in place — so a find-or-create, a delete by name and an update by key or id read `own`,
 while the clash checks around them read the effective rig. One find is effective on purpose: the
 **universe** a new patch lands on (the patch route, `patch_fixtures`), since a show may patch a fixture
-onto a venue's universe; a missing one is still created as the project's own. In session 1 the two
-views are the same rows; the distinction is recorded at each call site now so session 3 changes only
-the scope.
+onto a venue's universe; a missing one is still created as the project's own. Without a pin the two
+views are the same rows; the distinction was recorded at each call site in session 1 so that session
+3 changed only the scope.
 
 **What stays outside it, and why.** Three kinds of rig access do not go through the scope, and are
 always the project's own rows: sync export and import, project clone (which is export → import) and
 project delete walk the project's own collections (`project.fixturePatches` and the like), because a
 show's repo, copy or deletion is of what it owns; and a route that takes a record's id (the
-patch, element, viewpoint and group routes, among others) looks it up with `findById` and checks the
-row is this project's. Session 3 has to keep the first own, and decide per route whether a venue
-row may be addressed by id.
+patch, element, viewpoint and group routes, among others) looks it up by id and asks the scope whose
+it is — a read answers any row of the effective rig, a write only the project's own (§"Shows on a
+venue": `VENUE_OWNED`).
 
 **No uuid lookup is global.** A record uuid is not unique across projects — an import keeps them,
 and a venue's versions will share them — so a lookup by uuid goes through the scope too
@@ -1960,8 +1961,8 @@ belongs to a project (its own `project_id`, or its parent's) and can **re-point*
 from the rows of one project to the same-uuid rows of another, reporting any uuid the target project
 lacks and leaving that row as it was. Venue Update, Extract and Detach will re-point through it
 rather than turning the links into uuid columns, which would be a non-additive change to eight tables
-with no migrations (venue plan P3). Nothing calls it in production yet; `VenueLinksRepointTest`
-exercises every link.
+with no migrations (venue plan P3). Extract (session 3) is its first production caller;
+`VenueLinksRepointTest` exercises every link.
 
 `VenueLinksCoverageTest` reads every table in `ALL_TABLES` through Exposed's foreign-key metadata and
 fails, naming the column, on a foreign key into a venue-ownable table with no entry — as
@@ -1970,8 +1971,8 @@ viewpoint or group means adding its `VenueLinks` entry and a row in the re-point
 
 ## Venue versions
 
-A **venue** is a project of kind `VENUE` (venue plan D1): a hall's rig, which shows will share from
-session 3. Its own rows are its **draft**. Publishing (`POST /venues/{id}/publish`, admin only)
+A **venue** is a project of kind `VENUE` (venue plan D1): a hall's rig, which the shows on it share
+(§"Shows on a venue"). Its own rows are its **draft**. Publishing (`POST /venues/{id}/publish`, admin only)
 freezes the draft as the next **version** — `venue/VenueVersions.kt`, venue plan P2.
 
 **A version is a frozen project.** `sync/KeptUuidCopy.kt` exports the venue with `ProjectExporter`,
@@ -1993,7 +1994,8 @@ of the `/projects/{id}/…` subtree (`routes/projectWriteGuard.kt`) answers any 
 few that resolve their project another way (a project's `PUT` and `DELETE`, `set-current`, clone,
 export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts|cues}/{id}/copy`),
 so the four copy routes judge the target by the same rule (`refusedCopyTarget`). Its reads answer, so a client draws a removed patch from the installed version's patch list.
-Deleting a venue deletes its versions with it. Sync is refused for both kinds until session 4 (409
+Deleting a venue deletes its versions with it, and is refused 409 `VENUE_IN_USE` while a show pins
+it. Sync is refused for both kinds until session 4 (409
 `SYNC_VENUE_PENDING` on the whole per-project sync subtree, and the auto-sync tick skips them).
 
 **What a snapshot carries, and what it does not.** Exactly what an import carries:
@@ -2056,3 +2058,143 @@ reach a show is what the show will see.
 `routes/venues.kt` (the admin routes), `routes/projectWriteGuard.kt` (the guards).
 `VenueVersionsTest` pins a snapshot to its draft record for record and the guards; `VenueDiffTest`
 pins the rule over each kind of change.
+
+## Shows on a venue
+
+A show **on a venue** (venue plan session 3, D1, D2, D5) pins a venue and a version —
+`projects.venue_uuid` + `.venue_version`, both null for a standalone show — and its rig is the
+venue's at that version plus the show's own layer. `models/RigScope.kt` resolves the pin to the
+version's snapshot project (`VenueLayer.resolve`, once per scope, inside the caller's transaction)
+and every method reads:
+
+```
+rows(kind) = the show's own rows(kind)
+           ∪ the snapshot's rows(kind) − the show's hides(kind) − (kind = ELEMENT ? the snapshot's Preset seating : ∅)
+members(group) = group.members − the hidden patches
+```
+
+A pin whose snapshot this desk does not hold resolves to nothing, and the rig is the show's own
+rows. `RigScope.own` is never widened: a write, a sort order and an export are still the show's.
+
+**Hides** (`show_hides`: project, `record_kind` — `PATCH | RIGGING | ELEMENT | REGION | GROUP |
+VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own for session 4's export)
+are the one change a show makes to a venue's row this session (`venue/ShowHides.kt`). A uuid is a
+record's identity across versions, so a hide outlives an Update to a version that still holds it.
+Only a venue record hides (409 `NOT_A_VENUE_RECORD` for a standalone show or a show's own row — delete
+that instead), and **nothing the rig still uses hides** (409 `VENUE_HIDE_IN_USE`, naming what holds
+it): a show row that links to it by id — read through `VenueLinks`, so a busk rig tile, a cue event,
+a scenery change, a show patch or lantern hung on the rigging — and, from the venue's side, a rigging
+a visible venue fixture or lantern hangs on and seating a visible seat view sits in. A show group's
+membership of a hidden patch is the one exception: `RigScope.members` filters it out, and it is back
+when the patch is. Rows that name a hidden patch by **key** — cue, Look and template rows — stay, and
+read as *Missing fixture* as any dead key does. The routes are `PUT /projects/{id}/patches/{pid}/hidden
+{hidden}` (the Patch list's), `GET …/patches/hidden` (the hidden ones as Patch list rows), and for all
+six kinds `GET /projects/{id}/hides` and `PUT /projects/{id}/hides/{KIND}/{uuid} {hidden}`.
+
+**Keys are one namespace.** A show's own record may not take the key — or, wherever the rig checks a
+clash today, the name (rigging, region, element, viewpoint, group) or head number — of a visible
+venue record: 409 `KEY_TAKEN_BY_VENUE` (`venue/VenueRigGuard.kt`; one code for every identity, the
+message naming which). The clash checks already read the effective rig, so the rule is the code they
+answer with. A hidden venue record is not in the rig, so its key and its channels are free — *to
+replace a house unit, hide it and patch your own* — and bringing it back while the show's own holds
+the key, the head number or any of its channels is 409 `KEY_TAKEN_BY_SHOW`. The patch route's channel-overlap check reads the rig too, so a
+hidden head's channels are free for the show's own unit (it read every row on the universe, a hidden
+one and another show's included, before).
+
+**Writes to a venue's rows are refused by name.** Every route that takes a rig row by id answers a
+**read** for any row of the effective rig (by a scoped id query, so a hidden row or another show's is
+404), and a **write** only for the show's own: a write through a show to the venue's row is 409
+`VENUE_OWNED`, not a 404 — the row is in the rig, it is not the show's to change
+(`VenueRigGuard.ownForWrite`, thrown inside the write's transaction; `VenueException` is mapped in
+`plugins/ErrorHandling.kt`). That is the patch PUT, DELETE and bulk placements (atomic: the whole
+request; non-atomic: that entry), the rigging, region, element, viewpoint and group PUT and DELETE,
+the universe DELETE and a controller-type change, and the project's stage size. Three writes are
+deliberately not refused, each because it does not change the venue's row:
+
+- **A show group's membership** of a venue patch (D12): a patch PUT carrying only `addToGroup` /
+  `removeFromGroupId` goes ahead on a venue patch — into a group the show owns; a venue group's name
+  is refused (`findOrCreateGroup`), since a venue group never holds a show's patch.
+- **A universe's address and transmit interval**: machine-local, keyed by the **venue** project's id
+  (P4), so setting them through a show sets them for the venue and every show on it — which is what a
+  node's IP on this desk is. Its controller type is the venue's.
+- **An element's *Full detail*** (`PUT …/display-detail`): this machine's switch, keyed by the venue's
+  id for a venue element.
+
+A show's reads by id and the live gestures act on the whole rig — a fixture command or a fire on a
+venue patch, a busk rig tile naming a venue group or patch, *Moves with* on a venue element. The MCP
+setup tools refuse the same writes (`docs/mcp-engineering.md` §"Tools on a show on a venue").
+
+**Groups (D12).** A show group may hold venue patches; a venue group holds the venue's alone — the
+venue is published from its own rows, so nothing a show does can put its patch in one. `PatchGroupDto`
+and `FixturePatchDto` carry `owner` (`SHOW | VENUE`), and a patch's `groups` list only the groups of
+the rig it was read in (a snapshot patch is in every show's groups that hold it).
+
+**Seating, stage bounds and overrides.** A **Fixed** seating block (`SeatingParams.block`, the
+balcony) loads into a show from the version, with its seat views; a **Preset** block (absent is
+Preset) never does — a show seats its own copy (D6). The stage's size is the version's columns
+(`RigScope.stageBounds`: `ProjectDetailDto`, `describe_rig`, `get_patch`), and a show on a venue
+refuses a write to it. A machine override of a venue record resolves against the **venue** project's
+id (`RigScope.overrideProjectId`, P4) — the loader's universe address and interval, the universe
+DTO, an element's *Full detail* — so a universe's address is the same in the draft, every version
+and every show; a snapshot read directly resolves against its venue too. Scene images: a show reads
+its own store, then the pinned version's (`sceneImageStoresOf`), where the version's import put the
+venue's paint.
+
+**Projects.** `POST /projects {venueId}` pins a new show to the venue's installed version (409
+`VENUE_NOTHING_PUBLISHED` before v1; `NOT_A_VENUE` for any other project); its stage size is the
+venue's, so the request's is not stored. `ProjectDto` carries `venue: {uuid, id, name, version,
+installed}` (`behind` is session 6's). **A venue a show pins cannot be deleted** (409
+`VENUE_IN_USE`, naming the shows): a show's rows link into its version's rows by id, and the venue's
+delete takes its versions; Detach (session 7) is the way off. History answers `shows` — every show
+on the venue with its version — which the Publish sheet and History name.
+
+### Extract
+
+`POST /projects/{id}/venue/extract {name, include?, dryRun?}` — admin only — moves a show's room and
+house rig into a new venue, publishes v1 and pins the show to it (`venue/VenueExtract.kt`), so the
+show loads **the same fixtures at the same addresses**, now through its pin (`ShowsOnVenueTest`
+compares the loaded rig — every channel's fixture and property, every group's members — and the
+scope's uuids before and after, on `RichProjectFixture`).
+
+- **What moves** — `include`, absent for all: `UNIVERSES`, `PATCHES` (with their placements),
+  `RIGGINGS`, `REGIONS`, `ELEMENTS` (every `VENUE`-layer element but seating), `SEATING`, `GROUPS`,
+  `VIEWPOINTS` (camera views; a seat view moves with its Fixed seating). Each row changes project,
+  uuid kept. The parts are checked against each other first (400 `VENUE_EXTRACT_INCOMPLETE`, every
+  problem named, nothing moved): a patch on a universe or hung on a rigging that stays, a group
+  holding a patch that stays, a platform decking a region that stays. A show already on a venue is
+  409 `VENUE_EXTRACT_REFUSED`; nothing to move, 409 `VENUE_EXTRACT_EMPTY`.
+- **Seating per block (D6).** Fixed seating moves. Preset seating is **copied** into the venue with
+  its uuid and **stays the show's**: a preset is the venue's to offer, and a show seats its own copy
+  (the scope leaves the version's out, so the effective rig has it once).
+- **Machine overrides follow their records**: every `machine_overrides` row of the show keyed by a
+  moved record's uuid — a universe's address and interval, an element's *Full detail* — moves to the
+  venue's id, which is what a venue record resolves against. Nothing is copied, so the show keeps no
+  stale twin.
+- **Scene images**: the images a moved or copied element is painted with are copied from the show's
+  store into the venue's (`hydrate`); publishing v1 copies them on into the version's own store, which
+  is where the show reads them from now. The show's copies are left for its prune.
+- **Links** are re-pointed after v1 exists: `VenueLinks.repointAll(show, venue, v1)` moves every link
+  the show's remaining rows hold into the moved rows — busk rig tiles, cue events, scenery, a show
+  group's members when `GROUPS` was left out — onto v1's row of the same uuid. A link that finds
+  none fails the extract.
+- **One transaction.** The move, the venue, v1 — `KeptUuidCopy`'s export and import, whose own
+  `transaction` blocks join the outer one, Exposed's default without nested transactions — and the
+  pin commit together or not at all. File IO is outside it: the images copied into the venue's store
+  and hydrated into v1's (and v1's prompt-book PDFs) are written as it runs and removed, best effort,
+  when it rolls back. **A dry run is the same run rolled back**, so it answers exactly what the move
+  would do — the rows, the copied seating, the links per `table.column`, the overrides and images —
+  and leaves the database and both stores as they were.
+- A live show reloads (`switchProject`), onto the same rig.
+
+The UI is session 7's (*Extract a venue…* on the Projects page); until then it is the API or Swagger.
+
+**Not yet, and where.** A show's pin and hides do not export (session 4: `formatVersion` 24), so a
+show on a venue refuses sync, export and clone (`docs/sync-engineering.md` §"Venues: not synced
+yet"). Facet overrides are session 5; a show that is behind its venue, the hold and Update, session
+6; the Projects page, Create's preset seating and Detach, session 7.
+
+**Files.** `models/RigScope.kt` (the effective rig, `VenueLayer`), `models/showHides.kt`,
+`venue/ShowHides.kt`, `venue/VenueRigGuard.kt` (`VENUE_OWNED`, the key namespace),
+`venue/VenueExtract.kt`, `routes/showHides.kt`, `routes/venueExtract.kt`. `ShowsOnVenueTest` and
+`McpVenueToolsTest` pin it.
+

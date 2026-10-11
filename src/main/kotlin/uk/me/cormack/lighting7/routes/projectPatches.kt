@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.util.UUID
 
 internal fun Route.routeApiRestProjectPatches(state: State) {
@@ -44,7 +45,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
                     .toList()
                 val placementsByPatch = rig.placementsByPatch(rows)
-                rows.map { it.toDto(placementsByPatch[it.id.value].orEmpty()) }
+                rows.map { it.toDto(placementsByPatch[it.id.value].orEmpty(), rig) }
             }
             call.respond(patches)
         }
@@ -54,9 +55,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     get<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                val patch = DaoFixturePatch.findById(resource.patchId) ?: return@transaction null
-                if (patch.project.id != project.id) return@transaction null
-                patch.toDto()
+                val rig = RigScope.of(project)
+                val patch = rig.patches(DaoFixturePatches.id eq resource.patchId).firstOrNull() ?: return@transaction null
+                patch.toDto(rig = rig)
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Patch not found"))
@@ -170,10 +171,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.address = request.address
                 }
 
-                // Check for channel overlap
-                val overlap = DaoFixturePatch.find {
+                // Check for channel overlap — against the rig, so a venue unit this show hides
+                // frees its channels for the show's own (hide a house unit and patch your own).
+                val rig = RigScope.of(project)
+                val overlap = rig.patches(
                     DaoFixturePatches.universeConfig eq universeConfig.id
-                }.firstOrNull { existing ->
+                ).firstOrNull { existing ->
                     val existingType = FixtureTypeRegistry.allTypes.find { it.typeKey == existing.fixtureTypeKey }
                     val existingChannelCount = existingType?.channelCount ?: 1
                     val existingEnd = existing.startChannel + existingChannelCount - 1
@@ -185,13 +188,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     )
                 }
 
-                // Check key uniqueness
-                val existingKey = RigScope.of(project).patches(DaoFixturePatches.key eq request.key).firstOrNull()
+                // Check key uniqueness — one namespace with the venue (venue plan §3.3)
+                val existingKey = rig.patches(DaoFixturePatches.key eq request.key).firstOrNull()
                 if (existingKey != null) {
+                    VenueRigGuard.refuseIfVenue(rig, existingKey.project.id, "Key '${request.key}'")
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Duplicate key: ${request.key}")
                 }
                 request.headNumber?.let { n ->
                     headNumberHolder(project, n, exceptPatchId = null)?.let {
+                        VenueRigGuard.refuseIfVenue(rig, it.project.id, "Head number $n")
                         return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(n, it))
                     }
                 }
@@ -231,7 +236,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     assignPatchToGroup(patch, group)
                 }
 
-                Pair<FixturePatchDto?, String?>(patch.toDto(), null)
+                Pair<FixturePatchDto?, String?>(patch.toDto(rig = rig), null)
             }
 
             val (patchDto, error) = result
@@ -320,12 +325,18 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             // Set when the refusal is the request's fault rather than a conflict with stored state.
             var refusedAsBadRequest = false
             val result = transaction(state.database) {
-                val patch = DaoFixturePatch.findById(resource.patchId)
+                val rig = RigScope.of(project)
+                val found = DaoFixturePatch.findById(resource.patchId)?.takeIf { rig.ownerOf(it.project.id) != null }
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
-
-                if (patch.project.id != project.id) {
-                    return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
+                // A venue patch in a show: its group membership is the show group's to change (D12), so
+                // a body naming only `addToGroup` / `removeFromGroupId` goes ahead; anything else
+                // changes the venue's row and is refused.
+                if (rig.ownerOf(found.project.id) == RigOwner.VENUE &&
+                    (body.keys.any { it !in PATCH_MEMBERSHIP_KEYS } || rig.isHidden(HideKind.PATCH, found.uuid))
+                ) {
+                    throw VenueRigGuard.venueOwned(rig, "Patch '${found.key}'")
                 }
+                val patch = found
 
                 // A length on a fixed-length type, the patch's own or a segment's. Checked here, where
                 // the patch's type is known, and before the first write below for the rigging's reason.
@@ -363,6 +374,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 // write below for the rigging's reason — a normal return commits.
                 if (headNumber != null) {
                     headNumberHolder(project, headNumber, exceptPatchId = patch.id.value)?.let {
+                        VenueRigGuard.refuseIfVenue(rig, it.project.id, "Head number $headNumber")
                         return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(headNumber, it))
                     }
                 }
@@ -378,8 +390,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 body["displayName"].nullableString()?.let { patch.displayName = it }
                 if ("headNumber" in body) patch.headNumber = headNumber
                 body["key"].nullableString()?.let { newKey ->
-                    val existing = RigScope.of(project).patches(DaoFixturePatches.key eq newKey).firstOrNull()
+                    val existing = rig.patches(DaoFixturePatches.key eq newKey).firstOrNull()
                     if (existing != null && existing.id != patch.id) {
+                        VenueRigGuard.refuseIfVenue(rig, existing.project.id, "Key '$newKey'")
                         return@transaction Pair<FixturePatchDto?, String?>(null, "Key '$newKey' already exists")
                     }
                     // A cell tile on the busk rig stores an element key that embeds this key, and
@@ -436,6 +449,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
 
                 body["removeFromGroupId"].nullableInt()?.let { groupId ->
+                    // Only a group this project owns gives up a member: a venue group's are the venue's.
+                    VenueRigGuard.ownForWrite(rig, DaoFixtureGroup.findById(groupId), { it.project.id }, { "Group '${it.name}'" })
+                        ?: return@let
                     DaoFixtureGroupMember.find {
                         (DaoFixtureGroupMembers.fixturePatch eq patch.id) and
                             (DaoFixtureGroupMembers.group eq groupId)
@@ -457,7 +473,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                 }
 
-                Pair<FixturePatchDto?, String?>(patch.toDto(), null)
+                Pair<FixturePatchDto?, String?>(patch.toDto(rig = rig), null)
             }
 
             val (patchDto, error) = result
@@ -630,7 +646,14 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val outcome = transaction(state.database) {
                 // One query for every patch, indexed by id — not findById in a loop.
                 val ids = prepared.map { it.first }
-                val byId = RigScope.of(project).own.patches(DaoFixturePatches.id inList ids).associateBy { it.id.value }
+                val rig = RigScope.of(project)
+                val byId = rig.own.patches(DaoFixturePatches.id inList ids).associateBy { it.id.value }
+                // A venue patch in the batch is the venue's (`VENUE_OWNED`): the whole request when
+                // atomic, that entry otherwise — as an unknown id is.
+                val venueOwned = rig.patches(DaoFixturePatches.id inList ids)
+                    .filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }
+                    .associate { it.id.value to VenueRigGuard.venueOwned(rig, "Patch '${it.key}'") }
+                if (request.atomic) venueOwned.values.firstOrNull()?.let { throw it }
 
                 // Resolve each DISTINCT rigging once; resolveRiggingForProject does a
                 // find() per call, and a 40-fixture hang would repeat it 40 times. That
@@ -662,7 +685,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 for ((patchId, entry) in prepared) {
                     val target = byId[patchId]
                     if (target == null) {
-                        fatal.add(BulkPlacementFailure(patchId, "Patch not found in this project"))
+                        fatal.add(BulkPlacementFailure(patchId, venueOwned[patchId]?.message ?: "Patch not found in this project"))
                         continue
                     }
                     val setsLength = entry["lengthM"].nullableDouble() != null ||
@@ -795,7 +818,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val updated = written.map { patch ->
                     val placements = placementsByPatch[patch.id.value].orEmpty()
                     placements.mapNotNullTo(warnings) { it.offTheEndWarning(patch.key) }
-                    patch.toDto(placements)
+                    patch.toDto(placements, rig)
                 }
                 BulkOutcome(updated, null, failures.toList(), warnings)
             }
@@ -833,8 +856,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     delete<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val patch = DaoFixturePatch.findById(resource.patchId) ?: return@transaction null
-                if (patch.project.id != project.id) return@transaction null
+                val patch = VenueRigGuard.ownForWrite(
+                    RigScope.of(project), DaoFixturePatch.findById(resource.patchId), { it.project.id }, { "Patch '${it.key}'" },
+                ) ?: return@transaction null
 
                 // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
                 // FK has no cascade (`DaoBuskRigTiles`).
@@ -995,6 +1019,13 @@ data class FixturePatchDto(
      * One fixture to control, several to draw. In order; empty for almost every patch.
      */
     val extraPlacements: List<PatchPlacementDto> = emptyList(),
+    /**
+     * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
+     * own, `VENUE` for its venue's at the pinned version. A venue row's identity — name, key, type,
+     * head — is the venue's, and every write to it through a show is refused with `VENUE_OWNED`; it
+     * can only be hidden (`PUT …/hidden`).
+     */
+    val owner: RigOwner = RigOwner.SHOW,
 )
 
 @Serializable
@@ -1098,12 +1129,19 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
 internal val PUT_KEYS_WITHOUT_REBUILD: Set<String> = METADATA_ONLY_PUT_KEYS + "infrastructure"
 
 // Helpers
-/** [placements] are the patch's extra placements; pass them when a caller has batch-loaded them. */
-private fun DaoFixturePatch.toDto(
+/**
+ * [placements] are the patch's extra placements; pass them when a caller has batch-loaded them.
+ * [rig] is the rig the patch is read in: it names the groups that rig holds it in — a venue patch is
+ * in the venue's groups and in every show's that holds it, and each rig sees only its own — and
+ * whose the patch is.
+ */
+internal fun DaoFixturePatch.toDto(
     placements: List<DaoFixturePatchPlacement> = extraPlacementsOf(this),
+    rig: RigScope = RigScope.of(project.id),
 ): FixturePatchDto {
     val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
+        .filter { rig.ownerOf(it.group.project.id) != null && !rig.isHidden(HideKind.GROUP, it.group.uuid) }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
     val f = focus
     return FixturePatchDto(
@@ -1144,6 +1182,7 @@ private fun DaoFixturePatch.toDto(
         focusSoftness = f.focusSoftness,
         media = fittedMedia,
         extraPlacements = placements.map { it.toDto() },
+        owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
     )
 }
 
@@ -1229,6 +1268,12 @@ internal fun headNumberTaken(number: Int, holder: DaoFixturePatch): String =
     "Head number $number is already '${holder.displayName}' (${holder.key})"
 
 /**
+ * The patch PUT keys that change a show group's membership, not the patch (venue plan D12): the only
+ * keys a show's PUT may carry for a venue patch.
+ */
+internal val PATCH_MEMBERSHIP_KEYS = setOf("addToGroup", "removeFromGroupId")
+
+/**
  * The bulk route's head-number check: every entry in [assigned] (patch id → its new number, null
  * clearing) whose number another head of [project] will hold once the batch lands. The rig "as it
  * will stand" is every patch's stored number, overridden by each assignment not in [rejected].
@@ -1243,7 +1288,8 @@ internal fun headNumberClashes(
     assigned: Map<Int, Int?>,
     rejected: Set<Int>,
 ): List<BulkPlacementFailure> {
-    val stored = RigScope.of(project).patches().toList()
+    val rig = RigScope.of(project)
+    val stored = rig.patches().toList()
     val byId = stored.associateBy { it.id.value }
     val failed = mutableMapOf<Int, String>()
     while (true) {
@@ -1259,7 +1305,8 @@ internal fun headNumberClashes(
             for (id in ids) {
                 if (id !in assigned || id in refused) continue
                 val other = byId.getValue(ids.first { it != id })
-                failed[id] = headNumberTaken(number, other)
+                failed[id] = VenueRigGuard.takenByVenue(rig, other.project.id, "Head number $number")?.message
+                    ?: headNumberTaken(number, other)
                 changed = true
             }
         }
@@ -1294,7 +1341,13 @@ internal fun normaliseKindOverride(raw: String?): String? {
  * Find or create a fixture group by name within a project.
  */
 private fun findOrCreateGroup(project: DaoProject, groupName: String): DaoFixtureGroup {
-    return RigScope.of(project).own.groups(DaoFixtureGroups.name eq groupName).firstOrNull() ?: DaoFixtureGroup.new {
+    val rig = RigScope.of(project)
+    rig.own.groups(DaoFixtureGroups.name eq groupName).firstOrNull()?.let { return it }
+    // A venue group of that name holds venue patches only (D12), and its name is taken.
+    rig.groups(DaoFixtureGroups.name eq groupName).firstOrNull()?.let {
+        throw VenueRigGuard.venueOwned(rig, "Group '$groupName'")
+    }
+    return DaoFixtureGroup.new {
         this.project = project
         this.name = groupName
     }

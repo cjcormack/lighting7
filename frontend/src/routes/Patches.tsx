@@ -10,8 +10,18 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Columns3, Layers, Plus, Pencil, Check, Search } from "lucide-react"
-import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
+import { Columns3, Eye, EyeOff, Layers, Plus, Pencil, Check, Search } from "lucide-react"
+import {
+  useHiddenPatchListQuery,
+  usePatchListQuery,
+  useSetPatchHiddenMutation,
+  useUniverseConfigListQuery,
+  useUpdateUniverseConfigMutation,
+  usePatchGroupListQuery,
+} from "../store/patches"
+import { ignoreReportedError } from "../store/errorToastMiddleware"
+import { VenueChip } from "@/components/venue/VenueChip"
+import type { ProjectVenue } from "../api/projectApi"
 import { useRiggingListQuery } from "../store/riggings"
 import { resolveFixtureKind, useFixtureTypeListQuery, type FixtureTypeInfo } from "../store/fixtures"
 import { useLanternIndex } from "../hooks/useLanternIndex"
@@ -32,7 +42,7 @@ import {
 import { formatPatchAddress, universeFill } from "@/lib/patchAddress"
 import { useVenueDiffQuery, useVenueHistory, useVenueMode } from "../store/venues"
 import type { VenueChange } from "../api/venueApi"
-import type { FixturePatch, UniverseConfig } from "../api/patchApi"
+import { isVenueOwned, type FixturePatch, type UniverseConfig } from "../api/patchApi"
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   MAX_REFRESH_INTERVAL_MS,
@@ -89,7 +99,7 @@ export function ProjectPatches() {
     )
   }
 
-  return <PatchListContent projectId={projectIdNum} projectName={project.name} />
+  return <PatchListContent projectId={projectIdNum} projectName={project.name} venue={project.venue ?? null} />
 }
 
 // ─── Content ──────────────────────────────────────────────────────────
@@ -118,6 +128,8 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   role: true,
   // Never in the Columns menu: the route appends it in venue mode only.
   draft: true,
+  // Nor this: the route leads with it in a show on a venue only (venue plan session 3).
+  source: true,
 }
 
 /**
@@ -130,9 +142,12 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
 function PatchListContent({
   projectId,
   projectName,
+  venue,
 }: {
   projectId: number
   projectName: string
+  /** The venue this show sits on (venue plan session 3), or null for a standalone show and a venue. */
+  venue: ProjectVenue | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [addFixtureOpen, setAddFixtureOpen] = useState(false)
@@ -157,6 +172,21 @@ function PatchListContent({
   }, [searchParams, setSearchParams])
 
   const { data: patches, isLoading: patchesLoading } = usePatchListQuery(projectId)
+  // A show on a venue (venue plan session 3): whose each head is, filtered by a URL parameter like
+  // the draft filter, and the venue's heads this show hides, offered back.
+  const onVenue = venue != null
+  const sourceFilter: SourceFilter = onVenue ? parseSourceFilter(searchParams.get('source')) : 'all'
+  const setSourceFilter = (next: SourceFilter) =>
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'all') params.delete('source')
+        else params.set('source', next)
+        return params
+      },
+      { replace: true },
+    )
+  const { data: hiddenPatches } = useHiddenPatchListQuery(projectId, { skip: !onVenue })
   const draft = useVenueDraftPatches(projectId)
   // An operator looks at a venue; only an admin changes one (venue plan D3).
   const venueMode = useVenueMode(projectId)
@@ -183,11 +213,22 @@ function PatchListContent({
     [patches],
   )
   const rows = useMemo(() => {
-    const built = buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter, lanterns)
+    const all = buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter, lanterns)
+    const built =
+      sourceFilter === 'hidden' ? [] :
+      sourceFilter === 'venue' ? all.filter((row) => isVenueOwned(row.patch)) :
+      sourceFilter === 'show' ? all.filter((row) => !isVenueOwned(row.patch)) :
+      all
     if (!draft.enabled) return built
     const marked = built.map((row) => ({ ...row, draft: draft.byUuid.get(row.patch.uuid) ?? null }))
     return draftFilter === 'changed' ? marked.filter((row) => row.draft != null) : marked
-  }, [patches, riggings, fixtureTypes, universeFilter, filter, lanterns, draft.enabled, draft.byUuid, draftFilter])
+  }, [patches, riggings, fixtureTypes, universeFilter, filter, lanterns, draft.enabled, draft.byUuid, draftFilter, sourceFilter])
+  const hiddenRows = useMemo(
+    () => (sourceFilter === 'all' || sourceFilter === 'hidden' || sourceFilter === 'venue'
+      ? filterPatches(hiddenPatches ?? NO_PATCHES, universeFilter, filter)
+      : NO_PATCHES),
+    [hiddenPatches, sourceFilter, universeFilter, filter],
+  )
   // The heads the draft removed are not the draft's rows: they are drawn from the installed version.
   const removedRows = useMemo(
     () => filterPatches(draft.removed, universeFilter, filter),
@@ -198,9 +239,11 @@ function PatchListContent({
   const visibleColumns = useMemo(
     () => [
       ...(draft.enabled ? (['draft'] as const) : []),
+      // Whose each head is leads the value columns in a show on a venue, as the board draws it.
+      ...(onVenue ? (['source'] as const) : []),
       ...PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
     ],
-    [columnVisibility, draft.enabled],
+    [columnVisibility, draft.enabled, onVenue],
   )
   const onEditPatch = useCallback((id: number) => setEditingPatchId(id), [])
   const onEditGroup = useCallback((id: number, name: string) => setEditingGroup({ id, name }), [])
@@ -221,6 +264,12 @@ function PatchListContent({
     <SheetPage>
       <SheetPage.Header>
         <Breadcrumbs projectName={projectName} currentPage="Patch List" />
+        {venue && (
+          <>
+            <div className="flex-1" />
+            <VenueChip venue={venue} />
+          </>
+        )}
       </SheetPage.Header>
 
       {/* The chips: universes with a fill bar each, then the groups (which fold behind row B's
@@ -282,6 +331,25 @@ function PatchListContent({
                 U{u}
               </ToggleGroupItem>
             ))}
+          </ToggleGroup>
+        )}
+        {/* Whose each head is, in a show on a venue (venue plan session 3): a URL parameter. */}
+        {onVenue && (
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={sourceFilter}
+            onValueChange={(v) => {
+              if (isSourceFilter(v)) setSourceFilter(v)
+            }}
+            aria-label="Source"
+          >
+            <ToggleGroupItem value="all">All</ToggleGroupItem>
+            <ToggleGroupItem value="venue">Venue</ToggleGroupItem>
+            <ToggleGroupItem value="show">This show</ToggleGroupItem>
+            <ToggleGroupItem value="hidden">
+              Hidden{hiddenPatches && hiddenPatches.length > 0 ? ` · ${hiddenPatches.length}` : ''}
+            </ToggleGroupItem>
           </ToggleGroup>
         )}
         {/* A venue's draft filter (venue plan session 2): a URL parameter, like the universe toggle. */}
@@ -352,14 +420,23 @@ function PatchListContent({
 
       {patchesLoading ? (
         <SheetPage.Empty loading />
-      ) : totalPatches === 0 && removedRows.length === 0 ? (
+      ) : totalPatches === 0 && removedRows.length === 0 && hiddenRows.length === 0 ? (
         <SheetPage.Empty>
           {readOnly ? 'No fixtures patched in this venue yet.' : <>No fixtures patched yet. Click &ldquo;Patch&rdquo; to get started.</>}
         </SheetPage.Empty>
-      ) : rows.length === 0 && removedRows.length === 0 ? (
-        <SheetPage.Empty>{draftFilter === 'changed' ? 'Nothing patched has changed in the draft.' : 'No fixtures match your filter.'}</SheetPage.Empty>
+      ) : rows.length === 0 && removedRows.length === 0 && hiddenRows.length === 0 ? (
+        <SheetPage.Empty>
+          {draftFilter === 'changed'
+            ? 'Nothing patched has changed in the draft.'
+            : sourceFilter === 'hidden'
+              ? 'This show hides none of the venue’s fixtures.'
+              : 'No fixtures match your filter.'}
+        </SheetPage.Empty>
       ) : rows.length === 0 ? (
-        <RemovedInDraft patches={removedRows} />
+        <>
+          <RemovedInDraft patches={removedRows} />
+          <HiddenInShow projectId={projectId} patches={hiddenRows} />
+        </>
       ) : (
         <>
         <PatchSheet
@@ -375,6 +452,7 @@ function PatchListContent({
           readOnly={readOnly}
         />
         <RemovedInDraft patches={removedRows} />
+        <HiddenInShow projectId={projectId} patches={hiddenRows} />
         </>
       )}
 
@@ -482,6 +560,58 @@ function RemovedInDraft({ patches }: { patches: readonly FixturePatch[] }) {
             <span className="min-w-0 flex-1 truncate line-through">{[p.manufacturer, p.model].filter(Boolean).join(' ') || p.fixtureTypeKey}</span>
             <span className="hidden truncate font-mono text-xs line-through sm:inline">{p.key}</span>
             <DraftMarker change={REMOVED_CHANGE} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// ─── A show on a venue ────────────────────────────────────────────────
+
+/** The Patch list's source filter in a show on a venue — `?source=`, absent for All. */
+type SourceFilter = 'all' | 'venue' | 'show' | 'hidden'
+
+function isSourceFilter(value: string): value is SourceFilter {
+  return value === 'all' || value === 'venue' || value === 'show' || value === 'hidden'
+}
+
+function parseSourceFilter(raw: string | null): SourceFilter {
+  return raw != null && isSourceFilter(raw) ? raw : 'all'
+}
+
+/**
+ * The venue's heads this show hides (venue plan session 3, `Show.dc.html` callout 4): under the
+ * sheet, dimmed, each with **Show in this show** — the way a hidden house unit comes back. Rows in
+ * cues and Looks that name a hidden head stay, marked *Missing fixture* as today.
+ */
+function HiddenInShow({ projectId, patches }: { projectId: number; patches: readonly FixturePatch[] }) {
+  const [setHidden, { isLoading }] = useSetPatchHiddenMutation()
+  if (patches.length === 0) return null
+  return (
+    <section aria-label="Hidden in this show" className="border-t">
+      <p className="px-3 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Hidden in this show</p>
+      <ul>
+        {patches.map((p) => (
+          <li key={p.uuid} className="flex h-9 items-center gap-3 border-b px-3 text-sm text-muted-foreground">
+            <EyeOff className="size-3.5 shrink-0" aria-hidden />
+            <span className="w-[192px] truncate font-medium">{p.displayName}</span>
+            <span className="w-16 font-mono text-xs">{formatPatchAddress(p.universe, p.startChannel)}</span>
+            <span className="min-w-0 flex-1 truncate">{[p.manufacturer, p.model].filter(Boolean).join(' ') || p.fixtureTypeKey}</span>
+            <span className="hidden truncate font-mono text-xs sm:inline">{p.key}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={isLoading}
+              onClick={() => {
+                // A refusal (`KEY_TAKEN_BY_SHOW`: the show's own head took its key) is toasted.
+                setHidden({ projectId, patchId: p.id, hidden: false }).unwrap().catch(ignoreReportedError)
+              }}
+            >
+              <Eye className="size-3.5" />
+              <span className="hidden sm:inline">Show in this show</span>
+            </Button>
           </li>
         ))}
       </ul>

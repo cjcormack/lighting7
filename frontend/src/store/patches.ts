@@ -162,6 +162,25 @@ export const patchesApi = restApi.injectEndpoints({
       invalidatesTags: ['Patch', 'Fixture'],
     }),
 
+    /**
+     * The venue patches this show hides (venue plan session 3), as Patch list rows (`owner: VENUE`).
+     * Empty for a standalone show.
+     */
+    hiddenPatchList: build.query<FixturePatch[], number>({
+      query: (projectId) => `projects/${projectId}/patches/hidden`,
+      providesTags: ['Patch'],
+    }),
+
+    /** Hide a venue patch in this show, or bring it back (`PUT …/patches/{pid}/hidden`). */
+    setPatchHidden: build.mutation<{ hidden: boolean; changed: boolean }, { projectId: number; patchId: number; hidden: boolean }>({
+      query: ({ projectId, patchId, hidden }) => ({
+        url: `projects/${projectId}/patches/${patchId}/hidden`,
+        method: 'PUT',
+        body: { hidden },
+      }),
+      invalidatesTags: ['Patch', 'Fixture', 'UniverseConfig'],
+    }),
+
     // List universe configs for a project
     universeConfigList: build.query<UniverseConfig[], number>({
       query: (projectId) => `projects/${projectId}/universe-configs`,
@@ -218,6 +237,8 @@ export const {
   useUpdatePatchMutation,
   useSetHeadNumbersMutation,
   useDeletePatchMutation,
+  useHiddenPatchListQuery,
+  useSetPatchHiddenMutation,
   useUniverseConfigListQuery,
   useUpdateUniverseConfigMutation,
   usePatchGroupListQuery,

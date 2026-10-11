@@ -143,7 +143,23 @@ export function ProjectSyncContent({ projectId }: { projectId: number }) {
   // A venue does not sync until venue plan session 4 (P6): every route here answers it 409
   // `SYNC_VENUE_PENDING`, so the tab says so rather than waiting on a config that never comes.
   const { data: projects } = useProjectListQuery()
-  if (projects?.find((p) => p.id === projectId)?.kind === "VENUE") {
+  const project = projects?.find((p) => p.id === projectId)
+  if (project?.venue) {
+    // A show pinned to a venue does not sync either until session 4 (`SYNC_VENUE_PENDING`): its
+    // rig is the venue's, and a repo without it would not load anywhere else.
+    return (
+      <div className="p-4 max-w-4xl">
+        <Card className="p-4 space-y-1">
+          <h2 className="text-sm font-semibold">A show on a venue does not sync yet</h2>
+          <p className="text-sm text-muted-foreground">
+            Its rig is {project.venue.name ?? "the venue"}&rsquo;s, which does not sync yet either. Until
+            venues sync, a show on one stays on this desk, and it cannot be exported or cloned.
+          </p>
+        </Card>
+      </div>
+    )
+  }
+  if (project?.kind === "VENUE") {
     return (
       <div className="p-4 max-w-4xl">
         <Card className="p-4 space-y-1">

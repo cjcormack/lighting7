@@ -11,12 +11,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.mcp.requireEffectsAccess
 import uk.me.cormack.lighting7.models.CueEventDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.cueEventPatchesOf
 import uk.me.cormack.lighting7.models.cueEventsOf
 import uk.me.cormack.lighting7.models.parseCueEventList
@@ -118,7 +120,7 @@ internal fun Route.routeApiRestProjectEffects(state: State) {
 }
 
 private fun patchKeyOf(state: State, projectId: Int, patchId: Int): String? = transaction(state.database) {
-    DaoFixturePatch.findById(patchId)?.takeIf { it.project.id.value == projectId }?.key
+    RigScope.of(projectId).patches(DaoFixturePatches.id eq patchId).firstOrNull()?.key
 }
 
 @Resource("/{projectId}/effects")

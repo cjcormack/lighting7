@@ -5,7 +5,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { EditPatchForm, type EditPatchFormHandle } from './EditPatchForm'
-import type { FixturePatch } from '@/api/patchApi'
+import { isVenueOwned, type FixturePatch } from '@/api/patchApi'
+import { VenuePatchPanel } from './VenuePatchPanel'
 
 export type EditPatchSheetHandle = EditPatchFormHandle
 
@@ -26,14 +27,19 @@ export const EditPatchSheet = forwardRef<EditPatchSheetHandle, EditPatchSheetPro
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col sm:max-w-md gap-0">
         <SheetTitle className="sr-only">Edit Fixture</SheetTitle>
-        <EditPatchForm
-          ref={ref}
-          key={patch.id}
-          patch={patch}
-          projectId={projectId}
-          existingPatches={existingPatches}
-          onClose={() => onOpenChange(false)}
-        />
+        {/* A venue's fixture in a show is read-only here and can only be hidden (venue plan session 3). */}
+        {isVenueOwned(patch) ? (
+          <VenuePatchPanel key={patch.id} patch={patch} projectId={projectId} onClose={() => onOpenChange(false)} />
+        ) : (
+          <EditPatchForm
+            ref={ref}
+            key={patch.id}
+            patch={patch}
+            projectId={projectId}
+            existingPatches={existingPatches}
+            onClose={() => onOpenChange(false)}
+          />
+        )}
       </SheetContent>
     </Sheet>
   )

@@ -32,6 +32,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
@@ -60,6 +61,8 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.time.Duration
 import java.util.UUID
 
@@ -109,6 +112,16 @@ class SetupTools(
         }
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
+    } catch (e: VenueException) {
+        // A venue rule (venue plan session 3), refused with its code as the REST route refuses it.
+        ToolExecutionResult(
+            success = false,
+            description = e.message ?: e.code,
+            result = buildJsonObject {
+                put("error", e.message ?: e.code)
+                put("code", e.code)
+            }.toString(),
+        )
     } catch (e: Exception) {
         failure("Error executing $name: ${e.message ?: e::class.simpleName}")
     }
@@ -276,17 +289,36 @@ class SetupTools(
             val groupsByKey = mutableMapOf<String, MutableList<String>>()
             membersByGroup.forEach { (group, keys) -> keys.forEach { groupsByKey.getOrPut(it) { mutableListOf() }.add(group) } }
 
+            // A show on a venue (venue plan session 3): every record says whose it is, and the stage's
+            // size is the venue's.
+            val venue = rig.venue
+            fun JsonObjectBuilder.putOwner(rowProject: EntityID<Int>) {
+                if (venue != null) put("owner", if (rig.ownerOf(rowProject) == RigOwner.VENUE) "venue" else "show")
+            }
+            val bounds = rig.stageBounds()
             buildJsonObject {
                 put("project", project.name)
+                venue?.let {
+                    putJsonObject("venue") {
+                        put("name", it.venueName)
+                        put("version", it.version)
+                        put(
+                            "note",
+                            "Records with owner=venue are the venue's: this show cannot change them (VENUE_OWNED), only hide them; " +
+                                "per-show overrides of a venue fixture's address, position, focus or media come in a later release.",
+                        )
+                    }
+                }
                 putJsonObject("stage") {
-                    putOptional("widthM", project.stageWidthM)
-                    putOptional("depthM", project.stageDepthM)
-                    putOptional("heightM", project.stageHeightM)
+                    putOptional("widthM", bounds.widthM)
+                    putOptional("depthM", bounds.depthM)
+                    putOptional("heightM", bounds.heightM)
                 }
                 putJsonArray("regions") {
                     regions.forEach { r ->
                         addJsonObject {
                             put("name", r.name)
+                            putOwner(r.project.id)
                             putOptional("centerX", r.centerX); putOptional("centerY", r.centerY); putOptional("centerZ", r.centerZ)
                             putOptional("widthM", r.widthM); putOptional("depthM", r.depthM); putOptional("heightM", r.heightM)
                             putOptional("yawDeg", r.yawDeg)
@@ -297,6 +329,7 @@ class SetupTools(
                     riggings.forEach { r ->
                         addJsonObject {
                             put("name", r.name)
+                            putOwner(r.project.id)
                             r.kind?.let { put("kind", it) }
                             putOptional("x", r.positionX); putOptional("y", r.positionY); putOptional("z", r.positionZ)
                             putOptional("yawDeg", r.yawDeg); putOptional("pitchDeg", r.pitchDeg); putOptional("rollDeg", r.rollDeg)
@@ -309,6 +342,7 @@ class SetupTools(
                         addJsonObject {
                             put("universe", u.universe)
                             put("subnet", u.subnet)
+                            putOwner(u.project.id)
                             put("controllerType", u.controllerType)
                             put("fixtureCount", patches.count { it.universeConfig.id.value == u.id.value })
                         }
@@ -321,6 +355,7 @@ class SetupTools(
                         addJsonObject {
                             put("key", p.key)
                             put("name", p.displayName)
+                            putOwner(p.project.id)
                             p.headNumber?.let { put("headNumber", it) }
                             put("fixtureTypeKey", p.fixtureTypeKey)
                             universe?.let { put("universe", it.universe) }
@@ -404,20 +439,29 @@ class SetupTools(
         data class Existing(
             val id: Int, val key: String, val universe: Int, val start: Int, val end: Int, val headNumber: Int?,
             val focus: LanternFocus, val kindOverride: String?, val typeKey: String,
+            /** The patch is the venue's (venue plan session 3): in the rig, not this show's to change. */
+            val venue: Boolean,
         )
 
-        val (existing, riggingIds) = transaction(state.database) {
-            val rig = RigScope.of(project)
+        // The scope comes back resolved (its venue read inside the transaction) for the refusals' words.
+        val (lists, venueScope) = transaction(state.database) {
+            val rig = RigScope.of(project).also { it.venue }
             val universes = rig.universeConfigs()
                 .associate { it.id.value to it.universe }
-            rig.patches().map { p ->
-                val count = FixtureTypeRegistry.channelCountForTypeKey(p.fixtureTypeKey) ?: 1
-                Existing(
-                    p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel,
-                    p.startChannel + count - 1, p.headNumber, p.focus, p.kindOverride, p.fixtureTypeKey,
-                )
-            } to riggingIdsByName(project)
+            Triple(
+                rig.patches().map { p ->
+                    val count = FixtureTypeRegistry.channelCountForTypeKey(p.fixtureTypeKey) ?: 1
+                    Existing(
+                        p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel,
+                        p.startChannel + count - 1, p.headNumber, p.focus, p.kindOverride, p.fixtureTypeKey,
+                        venue = rig.ownerOf(p.project.id) == RigOwner.VENUE,
+                    )
+                },
+                riggingIdsByName(project),
+                rig.groups().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.name }.toSet(),
+            ) to rig
         }
+        val (existing, riggingIds, venueGroups) = lists
         val existingByKey = existing.associateBy { it.key }
 
         val problems = mutableListOf<String>()
@@ -455,6 +499,14 @@ class SetupTools(
             val groups = (row["groups"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
                 ?.filter { it.isNotEmpty() }?.distinct().orEmpty()
             groups.filter { it.length > 100 }.forEach { rowProblems += "group name '$it' is longer than 100 characters" }
+            // A venue's patch is the venue's (hide it in this show to patch your own under its key),
+            // and a venue's group never holds a show's fixture (D12).
+            if (existingByKey[key]?.venue == true) {
+                rowProblems += VenueRigGuard.ownedProblem(venueScope, "Patch '$key'")
+            }
+            groups.filter { it in venueGroups }.forEach {
+                rowProblems += VenueRigGuard.ownedProblem(venueScope, "Group '$it'")
+            }
             val placement = parsePlacement(row, riggingIds, rowProblems)
             if (placement.setsLength && FixtureTypeRegistry.typeInfoForKey(typeKey) != null) {
                 fixedLengthRefusal(typeKey)?.let { rowProblems += it }
@@ -478,7 +530,7 @@ class SetupTools(
             } else null
 
             if (rowProblems.isNotEmpty()) {
-                problems += rowProblems.map { "$where: $it" }
+                problems += rowProblems.map { if (VenueRigGuard.codeOf(listOf(it)) != null) it else "$where: $it" }
             } else {
                 parsed += PatchRow(
                     index, key, name, typeKey, universe!!, start!!, end!!, groups, placement, infrastructure, headNumber,
@@ -520,7 +572,14 @@ class SetupTools(
             numberByKey.entries.filter { it.value != null }.groupBy({ it.value!! }, { it.key })
                 .filterValues { it.size > 1 }.toSortedMap()
                 .forEach { (number, keys) ->
-                    problems += "head number $number is on ${keys.joinToString(" and ") { labelByKey.getValue(it) }}"
+                    val clash = "head number $number is on ${keys.joinToString(" and ") { labelByKey.getValue(it) }}"
+                    // A venue patch's number is the venue's, as REST says it (KEY_TAKEN_BY_VENUE).
+                    problems += if (keys.any { existingByKey[it]?.venue == true }) {
+                        "${VenueRigGuard.CODE_KEY_TAKEN_BY_VENUE}: $clash — keys and head numbers are one namespace " +
+                            "across a show and its venue; to replace a venue fixture, hide it in this show and add your own"
+                    } else {
+                        clash
+                    }
                 }
         }
         if (problems.isNotEmpty()) return rejected(problems)
@@ -638,9 +697,13 @@ class SetupTools(
         val problems = mutableListOf<String>()
         val force = optionalBoolean(input, "force", problems) == true
         val project = state.projectManager.currentProject
-        val groups = transaction(state.database) {
-            RigScope.of(project).own.groups()
-                .associate { it.name to (it.id.value to it.members.count()) }
+        val (groups, venueGroups, scope) = transaction(state.database) {
+            val rig = RigScope.of(project)
+            Triple(
+                rig.own.groups().associate { it.name to (it.id.value to it.members.count()) },
+                rig.groups().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.name }.toSet(),
+                rig,
+            )
         }
 
         val wanted = mutableListOf<Int>()
@@ -649,6 +712,10 @@ class SetupTools(
             val name = (element as? JsonPrimitive)?.takeIf { it.isString }?.content
             if (name == null) {
                 problems += "names[$index] is not a string"
+                return@forEachIndexed
+            }
+            if (name in venueGroups) {
+                problems += VenueRigGuard.ownedProblem(scope, "Group '$name'")
                 return@forEachIndexed
             }
             val (groupId, members) = groups[name] ?: run {
@@ -926,11 +993,15 @@ class SetupTools(
         if (rows.isEmpty()) return failure("'placements' is empty")
         val project = state.projectManager.currentProject
         data class Stored(val id: Int, val typeKey: String, val focus: LanternFocus, val kindOverride: String?)
-        val (patches, riggingIds) = transaction(state.database) {
-            RigScope.of(project).own.patches()
-                .associate { it.key to Stored(it.id.value, it.fixtureTypeKey, it.focus, it.kindOverride) } to
-                riggingIdsByName(project)
+        val (lists, venueScope) = transaction(state.database) {
+            val rig = RigScope.of(project).also { it.venue }
+            Triple(
+                rig.own.patches().associate { it.key to Stored(it.id.value, it.fixtureTypeKey, it.focus, it.kindOverride) },
+                riggingIdsByName(project),
+                rig.patches().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.key }.toSet(),
+            ) to rig
         }
+        val (patches, riggingIds, venueKeys) = lists
 
         val problems = mutableListOf<String>()
         val parsed = mutableListOf<Triple<Int, Placement, PatchFocusWrite>>()
@@ -940,6 +1011,11 @@ class SetupTools(
             val key = row.string("key")?.trim().orEmpty()
             val rowProblems = mutableListOf<String>()
             val stored = patches[key]
+            if (key in venueKeys) {
+                // Re-hanging a venue fixture in a show is a Position facet override, session 5's.
+                problems += VenueRigGuard.ownedProblem(venueScope, "Patch '$key'")
+                return@forEachIndexed
+            }
             if (stored == null) rowProblems += "no patched fixture has key '$key'"
             if (!seen.add(key)) rowProblems += "key '$key' is listed twice"
             val placement = parsePlacement(row, riggingIds, rowProblems)
@@ -1027,8 +1103,17 @@ class SetupTools(
 
         val (knownRegions, knownRiggings) = transaction(state.database) {
             // What a remove may name: the rows this project owns, not the whole rig.
-            val own = RigScope.of(project).own
-            own.stageRegions().map { it.name }.toSet() to own.riggings().map { it.name }.toSet()
+            val rig = RigScope.of(project)
+            val own = rig.own
+            // A show on a venue: the venue's stage, regions and riggings are the venue's (session 3).
+            val venueRegions = rig.stageRegions().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.name }.toSet()
+            val venueRiggings = rig.riggings().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.name }.toSet()
+            if (stage != null && DaoProject[project.id].isVenueBound) problems += VenueRigGuard.ownedProblem(rig, "The stage's size")
+            (regions.map { it.first } + removeRegions).filter { it in venueRegions }.distinct()
+                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage region '$it'") }
+            (riggings.map { it.first } + removeRiggings).filter { it in venueRiggings }.distinct()
+                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Rigging '$it'") }
+            own.stageRegions().map { it.name }.toSet() + venueRegions to own.riggings().map { it.name }.toSet() + venueRiggings
         }
         removeRegions.filter { it !in knownRegions }.forEach { problems += "removeRegions: no region named '$it'" }
         removeRiggings.filter { it !in knownRiggings }.forEach { problems += "removeRiggings: no rigging named '$it'" }
@@ -1526,6 +1611,7 @@ class SetupTools(
             description = "Nothing was written: ${problems.size} problem(s)",
             result = buildJsonObject {
                 put("error", "Nothing was written: fix these ${problems.size} problem(s) and send the request again")
+                VenueRigGuard.codeOf(problems)?.let { put("code", it) }
                 putJsonArray("problems") { shown.forEach { add(it) } }
                 if (problems.size > shown.size) put("moreProblems", problems.size - shown.size)
             }.toString(),

@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.routes.ErrorResponse
+import uk.me.cormack.lighting7.venue.VenueException
 
 private val logger = LoggerFactory.getLogger("error-handling")
 
@@ -124,6 +125,13 @@ fun Application.configureErrorHandling() {
         exception<RemoteCommandsDisabledException> { call, cause ->
             logger.warn("Refused remote command request on {}", call.request.local.uri)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Fixture commands are turned off for remote access", "REMOTE_COMMANDS_DISABLED"))
+        }
+        // A venue rule (venue plan): a write through a show to a venue's row (`VENUE_OWNED`), a key
+        // the venue holds (`KEY_TAKEN_BY_VENUE`), a refused Extract. Thrown from inside a write's
+        // transaction so it rolls back whole; expected, so WARN, with the rule's own status and code.
+        exception<VenueException> { call, cause ->
+            logger.warn("Refused by a venue rule on {}: {}", call.request.local.uri, cause.message)
+            call.respond(cause.status, ErrorResponse(cause.message ?: "Refused", cause.code))
         }
         exception<PasswordPolicyException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Password rejected"))

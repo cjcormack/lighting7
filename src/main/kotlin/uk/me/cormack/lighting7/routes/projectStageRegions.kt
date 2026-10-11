@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageRegions
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectStageRegions(state: State) {
     get<ProjectStageRegionsResource> { resource ->
@@ -38,9 +39,7 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
     get<ProjectStageRegionResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                val region = DaoStageRegion.findById(resource.regionId) ?: return@transaction null
-                if (region.project.id != project.id) return@transaction null
-                region.toDto()
+                RigScope.of(project).stageRegions(DaoStageRegions.id eq resource.regionId).firstOrNull()?.toDto()
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Stage region not found"))
@@ -73,8 +72,10 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
             }
 
             val result = transaction(state.database) {
-                val existing = RigScope.of(project).stageRegions(DaoStageRegions.name eq trimmedName).firstOrNull()
+                val rig = RigScope.of(project)
+                val existing = rig.stageRegions(DaoStageRegions.name eq trimmedName).firstOrNull()
                 if (existing != null) {
+                    VenueRigGuard.refuseIfVenue(rig, existing.project.id, "Stage region name '$trimmedName'")
                     return@transaction Pair<StageRegionDto?, String?>(null, "Stage region '$trimmedName' already exists")
                 }
                 val maxSortOrder = RigScope.of(project).own.stageRegions()
@@ -121,19 +122,19 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
             }
 
             val result = transaction(state.database) {
-                val region = DaoStageRegion.findById(resource.regionId)
-                    ?: return@transaction Pair<StageRegionDto?, String?>(null, "Stage region not found")
-                if (region.project.id != project.id) {
-                    return@transaction Pair<StageRegionDto?, String?>(null, "Stage region not found")
-                }
+                val rig = RigScope.of(project)
+                val region = VenueRigGuard.ownForWrite(
+                    rig, DaoStageRegion.findById(resource.regionId), { it.project.id }, { "Stage region '${it.name}'" },
+                ) ?: return@transaction Pair<StageRegionDto?, String?>(null, "Stage region not found")
 
                 body["name"].nullableString()?.let { newName ->
                     val trimmed = newName.trim()
                     if (trimmed.isEmpty()) {
                         return@transaction Pair<StageRegionDto?, String?>(null, "Stage region name must not be blank")
                     }
-                    val collision = RigScope.of(project).stageRegions(DaoStageRegions.name eq trimmed).firstOrNull()
+                    val collision = rig.stageRegions(DaoStageRegions.name eq trimmed).firstOrNull()
                     if (collision != null && collision.id != region.id) {
+                        VenueRigGuard.refuseIfVenue(rig, collision.project.id, "Stage region name '$trimmed'")
                         return@transaction Pair<StageRegionDto?, String?>(null, "Stage region '$trimmed' already exists")
                     }
                     region.name = trimmed
@@ -164,8 +165,9 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             // null: not found; else how many platforms lost their link to it.
             val unlinked = transaction(state.database) {
-                val region = DaoStageRegion.findById(resource.regionId) ?: return@transaction null
-                if (region.project.id != project.id) return@transaction null
+                val region = VenueRigGuard.ownForWrite(
+                    RigScope.of(project), DaoStageRegion.findById(resource.regionId), { it.project.id }, { "Stage region '${it.name}'" },
+                ) ?: return@transaction null
                 val count = unlinkRegionFromPlatforms(project, region.uuid)
                 region.delete()
                 count

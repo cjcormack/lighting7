@@ -1,6 +1,6 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–2 shipped, as `a5f289b` and `d93e174` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: APPROVED — sessions 1–3 shipped, as `a5f289b`, `d93e174` and `59b2263` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
@@ -66,7 +66,10 @@ The plan adds its own:
 
 - **P1 — Seven sessions, one PR each,** in §5's order, per CLAUDE.md §"Git workflow". Each ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and its
-  done-marker here: a one-line row with the merge SHA.
+  done-marker here — added inside the session's own PR, as its last plan commit once the code is
+  committed and the PR open, citing the session's change commit(s), never the merge commit (merges
+  are merge commits, so a branch's SHAs survive into `main`). A later fix to the session's code
+  updates the marker to cite it too; pushed history is never rewritten to keep the marker last.
 - **P2 — A version is a frozen project.** Publishing exports the venue's draft with
   `ProjectExporter` and imports it with `ProjectImporter` into a new project of kind `VENUE_VERSION`:
   a fresh project uuid, every record uuid kept. Snapshots never appear in project lists and refuse
@@ -195,7 +198,8 @@ Templates, Speed Masters, Show, Prompt Book and Busk, and keeps the Programmer w
 ## 5. Implementation — seven sessions
 
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
-engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
+engineering-doc paragraphs written, and its done-marker here, inside its own PR: its heading ends
+"— done," with the session's change commit(s), never the merge commit (P1).
 
 ### Session 1 — the rig scope and the link registry (backend) — done, `a5f289b`
 
@@ -239,7 +243,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   - **Fixed on the way:** `ProjectManager.switchProject` left no project current when it reloaded
     the live one (discard does; so did sync's pull).
 
-### Session 3 — shows on a venue (backend + Patch list)
+### Session 3 — shows on a venue (backend + Patch list) — done, `59b2263`
 
 - **The pin, hides and additions** through `RigScope`, with the key rule and D12's group rule. Fixed
   seating loads into a show and Preset seating doesn't. Stage bounds come from the venue.
@@ -251,6 +255,38 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   rows and the project then loads the same fixtures at the same addresses; the universe address
   override survives Extract.
 - **Docs:** `fixtures-engineering.md` §"Venues", `mcp-engineering.md`.
+- **As shipped** (PR #106). What session 4 onward inherits that the bullets above do not say:
+  - **`show_hides` and the pin are stored but not exported.** `SyncCoverageTest` lists
+    `show_hides` as `Excluded` naming session 4, which wires both through `ProjectExporter` /
+    `ProjectImporter` at `formatVersion` 24. Until then a pinned show refuses the whole sync
+    subtree and export (`SYNC_VENUE_PENDING`, auto-sync skips it) and clone (409
+    `VENUE_CLONE_PENDING`), so nothing carries it off the desk without its rig. A venue a show pins
+    refuses delete (409 `VENUE_IN_USE`).
+  - **The rule lives in `RigScope` and `venue/VenueRigGuard.kt`.** `VenueLayer` resolves pin → venue
+    by uuid → `venue_versions` → snapshot; a pin whose snapshot is not on the desk falls back to the
+    show's own rows silently (session 4's `VENUE_MISSING`). `KEY_TAKEN_BY_VENUE` covers names and
+    head numbers as well as keys, wherever the rig checks a clash; unhiding is `KEY_TAKEN_BY_SHOW`
+    while the show's own holds the key, head number or any of the patch's channels.
+  - **Writes to venue rows are `VENUE_OWNED`, with four deliberate exceptions**, each keyed by the
+    venue's id: a universe's address and interval (P4's machine override, set through a show), an
+    element's *Full detail*, and group membership into the show's own group (`addToGroup`,
+    `removeFromGroupId`). Hiding is the only other change; facets are session 5.
+  - **Hides take all six kinds on the backend** — `PUT …/patches/{pid}/hidden` plus a generic
+    `PUT …/hides/{KIND}/{uuid}` — and refuse a record the show still uses (409
+    `VENUE_HIDE_IN_USE`: a `VenueLinks` link from the show's own rows, a visible fixture on a
+    rigging, a seat view in a seating). A show group's membership of a hidden patch is filtered, not
+    refused. A platform's `regionUuid` is not checked: a dangling one reads as none.
+  - **Extract** copies Preset seating into the venue (uuid kept) rather than leaving it behind,
+    re-keys the moved rows' machine overrides to the venue's id, copies their scene images into the
+    venue's store (the show's copies are left for the 7-day prune) and refuses to finish with a link
+    left dangling. One database transaction; the file copies are the step outside it, removed on
+    rollback. `dryRun` is the run rolled back. No UI until session 7: the §9 check reaches it through
+    `/openapi` or curl on a clone of project 9.
+  - **Frontend went a little past the Patch list:** Publish and History name the shows on a venue
+    (`VenueShowsList`), the Stage card and the Sync tab say a pinned show's stage and sync are the
+    venue's, and the venue fixture sheet (`VenuePatchPanel`) is also the Stage editor's for a venue
+    patch. Rigging, Regions and the Scene editors are **not** read-only for venue rows — their DTOs
+    carry no `owner` yet — so a write there is refused by name and toasted.
 
 ### Session 4 — sync (backend)
 

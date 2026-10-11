@@ -12,6 +12,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoVenueVersion
 import uk.me.cormack.lighting7.models.DaoVenueVersions
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -55,9 +56,9 @@ class VenueVersions(private val state: State) {
 
     /** Every version, newest first, with the draft's change count against the installed one. */
     fun history(venueId: Int): VenueHistoryDto {
-        val (name, versions) = transaction(state.database) {
+        val (name, versions, shows) = transaction(state.database) {
             val venue = requireVenue(venueId)
-            venue.name to versionsOf(venueId).map { it.toDto() }
+            Triple(venue.name, versionsOf(venueId).map { it.toDto() }, showsOf(venue))
         }
         val draft = draftDiff(venueId, versions.firstOrNull())
         return VenueHistoryDto(
@@ -66,6 +67,7 @@ class VenueVersions(private val state: State) {
             installed = versions.firstOrNull()?.number,
             draft = VenueDraftDto(changes = draft.size, outputChanges = draft.output.size),
             versions = versions,
+            shows = shows,
         )
     }
 
@@ -217,6 +219,12 @@ class VenueVersions(private val state: State) {
         fun snapshotName(snapshotUuid: UUID): String = "$SNAPSHOT_NAME_PREFIX$snapshotUuid"
         const val SNAPSHOT_NAME_PREFIX = "venue-version:"
 
+        /** The shows pinned to [venue], by name, each with its version. Inside a transaction. */
+        fun showsOf(venue: DaoProject): List<VenueShowDto> =
+            DaoProject.find { (DaoProjects.venueUuid eq venue.uuid) and (DaoProjects.kind eq ProjectKind.SHOW) }
+                .map { VenueShowDto(id = it.id.value, name = it.name, version = it.venueVersion ?: 0) }
+                .sortedBy { it.name }
+
         /** [venueId]'s versions, newest first. Inside a transaction. */
         fun versionsOf(venueId: Int): List<DaoVenueVersion> =
             DaoVenueVersion.find { DaoVenueVersions.venueProject eq venueId }
@@ -278,7 +286,16 @@ data class VenueHistoryDto(
     val draft: VenueDraftDto,
     /** Newest first. */
     val versions: List<VenueVersionDto>,
+    /**
+     * The shows on this venue (venue plan session 3), by name, each with the version it is pinned
+     * to: what History and the Publish sheet name as the shows a publish reaches.
+     */
+    val shows: List<VenueShowDto> = emptyList(),
 )
+
+/** A show on a venue, and the version it is pinned to. */
+@Serializable
+data class VenueShowDto(val id: Int, val name: String, val version: Int)
 
 /** [from] → [to]: version numbers, 0 the empty venue, null the draft. */
 @Serializable

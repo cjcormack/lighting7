@@ -443,6 +443,11 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.venue.VenueVersions(this)
     }
 
+    /** *Extract a venue* (venue plan session 3): `venue/VenueExtract.kt`. */
+    val venueExtract: uk.me.cormack.lighting7.venue.VenueExtract by lazy {
+        uk.me.cormack.lighting7.venue.VenueExtract(this)
+    }
+
     /**
      * Cloud-sync engine. Shared by route handlers and [autoSyncScheduler] so a single
      * per-project mutex serialises manual `Sync now` clicks against periodic auto-sync

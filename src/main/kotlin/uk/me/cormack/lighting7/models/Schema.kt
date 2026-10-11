@@ -48,4 +48,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoEffectTubeStates,
     // Machine-local: this desk's index of venue snapshots (venue plan session 2), after the projects.
     DaoVenueVersions,
+    // A show's hides of venue records (venue plan session 3); keyed by record uuid, no FK into the rig.
+    DaoShowHides,
 )

@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.auth.routingNormalisedPath
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.UserRole
+import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.state.State
 
 /** A write to a venue version, which is frozen (venue plan P2). */
@@ -109,21 +110,34 @@ internal suspend fun RoutingContext.refusedRecordInVenue(state: State): Boolean 
 internal const val CODE_SYNC_VENUE_PENDING = "SYNC_VENUE_PENDING"
 
 /**
- * Wrap the per-project cloud-sync subtree so a venue, or a venue version, is refused with 409
- * [CODE_SYNC_VENUE_PENDING] on every route in it, reads included (venue plan P6): until a venue
- * syncs as its own repo (session 4), no repo may be attached to one and no auto-sync may push one.
- * The reads go too because `GET …/sync/config` creates the config row it answers with.
+ * Wrap the per-project cloud-sync subtree so a venue, a venue version or a show **on a venue** is
+ * refused with 409 [CODE_SYNC_VENUE_PENDING] on every route in it, reads included (venue plan P6):
+ * until a venue syncs as its own repo and a show's archive carries its pin (session 4), no repo may
+ * be attached to one and no auto-sync may push one — a show's repo without the rig it sits on. The
+ * reads go too because `GET …/sync/config` creates the config row it answers with. The manual export
+ * (`POST /projects/{id}/export`) refuses a show on a venue for the same reason
+ * ([refusedVenueBoundExport]).
  */
 @Suppress("DEPRECATION")
 internal fun Route.refuseVenueSync(state: State, build: Route.() -> Unit): Route = transparentChild("venueSync") {
     intercept(ApplicationCallPipeline.Plugins) {
         val segments = routingNormalisedPath(call.request.path()).split('/').filter { it.isNotEmpty() }
         val idSegment = segments.getOrNull(segments.indexOf("projects") + 1) ?: return@intercept
-        val kind = transaction(state.database) { state.resolveProject(idSegment)?.kind } ?: return@intercept
-        if (kind == ProjectKind.SHOW) return@intercept
+        val project = transaction(state.database) {
+            state.resolveProject(idSegment)?.let { it.kind to it.isVenueBound }
+        } ?: return@intercept
+        val (kind, venueBound) = project
+        if (kind == ProjectKind.SHOW && !venueBound) return@intercept
         call.respond(
             HttpStatusCode.Conflict,
-            ErrorResponse("A venue does not sync yet: venues sync as their own repo in a later release", CODE_SYNC_VENUE_PENDING),
+            ErrorResponse(
+                if (kind == ProjectKind.SHOW) {
+                    "A show on a venue does not sync yet: its repo carries its venue in a later release"
+                } else {
+                    "A venue does not sync yet: venues sync as their own repo in a later release"
+                },
+                CODE_SYNC_VENUE_PENDING,
+            ),
         )
         finish()
     }
@@ -162,5 +176,20 @@ internal suspend fun RoutingContext.refusedLiveVenueWrite(state: State): Boolean
         rest = emptyList(),
     ) ?: return false
     call.respond(refusal.first, refusal.second)
+    return true
+}
+
+/**
+ * Refuse the manual export of a show on a venue with 409 [CODE_SYNC_VENUE_PENDING] (venue plan P6):
+ * its archive would hold the show's own rows and none of the rig it sits on. Returns true when it
+ * answered.
+ */
+internal suspend fun RoutingContext.refusedVenueBoundExport(state: State, projectId: Int): Boolean {
+    val bound = transaction(state.database) { DaoProject.findById(projectId)?.isVenueBound } ?: return false
+    if (!bound) return false
+    call.respond(
+        HttpStatusCode.Conflict,
+        ErrorResponse("A show on a venue cannot be exported yet: its archive carries its venue in a later release", CODE_SYNC_VENUE_PENDING),
+    )
     return true
 }

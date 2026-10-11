@@ -26,6 +26,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
 import uk.me.cormack.lighting7.sync.canonicalDecode
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 import kotlinx.serialization.builtins.serializer
 import java.util.UUID
 
@@ -65,7 +66,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
     get<ProjectStageElementResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }?.toDetailDto(project)
+                RigScope.of(project).stageElements(DaoStageElements.id eq resource.elementId).firstOrNull()?.toDetailDto(project)
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(STAGE_ELEMENT_NOT_FOUND))
@@ -90,7 +91,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             val body = call.receive<JsonObject>()
             val outcome = transaction(state.database) {
-                val element = DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }
+                val element = ownElementForWrite(project, resource.elementId)
                     ?: return@transaction ElementWrite.NotFound
                 writeStageElement(state, project, element, body, resource.force)
             }
@@ -103,7 +104,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             var swept = 0
             val outcome = transaction(state.database) {
-                val element = DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }
+                val element = ownElementForWrite(project, resource.elementId)
                     ?: return@transaction ElementWrite.NotFound
                 val views = seatViewsOf(project, element.uuid)
                 if (views.isNotEmpty() && !resource.force) return@transaction ElementWrite.InUse(views)
@@ -139,7 +140,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
     get<ProjectStageViewpointResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
-                DaoStageViewpoint.findById(resource.viewpointId)?.takeIf { it.project.id == project.id }?.toDto()
+                RigScope.of(project).stageViewpoints(DaoStageViewpoints.id eq resource.viewpointId).firstOrNull()?.toDto()
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(STAGE_VIEWPOINT_NOT_FOUND))
@@ -162,7 +163,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
         withProject(state, resource.parent.projectId) { project ->
             val body = call.receive<JsonObject>()
             val outcome = transaction(state.database) {
-                val viewpoint = DaoStageViewpoint.findById(resource.viewpointId)?.takeIf { it.project.id == project.id }
+                val viewpoint = ownViewpointForWrite(project, resource.viewpointId)
                     ?: return@transaction ViewpointWrite.NotFound
                 writeStageViewpoint(project, viewpoint, body)
             }
@@ -174,7 +175,7 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
     delete<ProjectStageViewpointResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val viewpoint = DaoStageViewpoint.findById(resource.viewpointId)?.takeIf { it.project.id == project.id }
+                val viewpoint = ownViewpointForWrite(project, resource.viewpointId)
                     ?: return@transaction false
                 viewpoint.delete()
                 true
@@ -440,8 +441,12 @@ private fun writeStageElement(
     )
     if (parsed == null) return ElementWrite.Invalid(problems)
 
-    val collision = RigScope.of(project).stageElements(DaoStageElements.name eq fields.name).firstOrNull()
-    if (collision != null && collision.id != element?.id) return ElementWrite.NameTaken(fields.name)
+    val rig = RigScope.of(project)
+    val collision = rig.stageElements(DaoStageElements.name eq fields.name).firstOrNull()
+    if (collision != null && collision.id != element?.id) {
+        VenueRigGuard.refuseIfVenue(rig, collision.project.id, "Stage element name '${fields.name}'")
+        return ElementWrite.NameTaken(fields.name)
+    }
 
     if (element != null && !force) {
         val broken = seatViewsBrokenBy(project, element.uuid, seatingOf(start, stored), seatingOf(fields, parsed))
@@ -567,8 +572,12 @@ private fun writeStageViewpoint(project: DaoProject, viewpoint: DaoStageViewpoin
     validateStageViewpoint(fields, { seating[it] }, "", problems, storedSeat)
     if (problems.isNotEmpty()) return ViewpointWrite.Invalid(problems)
 
-    val collision = RigScope.of(project).stageViewpoints(DaoStageViewpoints.name eq fields.name).firstOrNull()
-    if (collision != null && collision.id != viewpoint?.id) return ViewpointWrite.NameTaken(fields.name)
+    val rig = RigScope.of(project)
+    val collision = rig.stageViewpoints(DaoStageViewpoints.name eq fields.name).firstOrNull()
+    if (collision != null && collision.id != viewpoint?.id) {
+        VenueRigGuard.refuseIfVenue(rig, collision.project.id, "Stage viewpoint name '${fields.name}'")
+        return ViewpointWrite.NameTaken(fields.name)
+    }
 
     val row = viewpoint ?: DaoStageViewpoint.new {
         this.project = project
@@ -656,21 +665,41 @@ internal const val STAGE_ELEMENTS_OVERRIDE_TABLE = "stage_elements"
 internal const val FIELD_DISPLAY_DETAIL = "displayDetail"
 internal const val DISPLAY_DETAIL_FULL = "4096"
 
-/** The uuids of [project]'s elements this machine shows at full detail, in one read. */
-internal fun fullDetailUuidsOf(project: DaoProject): Set<UUID> =
-    DaoMachineOverride.find {
-        (DaoMachineOverrides.project eq project.id) and
-            (DaoMachineOverrides.targetTable eq STAGE_ELEMENTS_OVERRIDE_TABLE) and
-            (DaoMachineOverrides.fieldName eq FIELD_DISPLAY_DETAIL)
-    }.filter { row ->
-        runCatching { canonicalDecode(String.serializer(), row.valueJson) }.getOrNull() == DISPLAY_DETAIL_FULL
-    }.map { it.recordUuid }
-        .toSet()
+/**
+ * The uuids of [project]'s rig's elements this machine shows at full detail, in one read per owner:
+ * the show's own switches, and a venue element's under the venue's id (venue plan P4).
+ */
+internal fun fullDetailUuidsOf(project: DaoProject): Set<UUID> {
+    val owners = listOfNotNull(project.id, RigScope.of(project).venue?.venueProjectId)
+    return owners.flatMap { owner ->
+        DaoMachineOverride.find {
+            (DaoMachineOverrides.project eq owner) and
+                (DaoMachineOverrides.targetTable eq STAGE_ELEMENTS_OVERRIDE_TABLE) and
+                (DaoMachineOverrides.fieldName eq FIELD_DISPLAY_DETAIL)
+        }.filter { row ->
+            runCatching { canonicalDecode(String.serializer(), row.valueJson) }.getOrNull() == DISPLAY_DETAIL_FULL
+        }.map { it.recordUuid }
+    }.toSet()
+}
 
-/** One element's DTO with its machine-local switch read for it. */
+/** One element's DTO with its machine-local switch read for it, under its owner's id (P4). */
 internal fun DaoStageElement.toDetailDto(project: DaoProject) = toDto(
-    fullDetail = Overrides.getString(project.id.value, STAGE_ELEMENTS_OVERRIDE_TABLE, uuid, FIELD_DISPLAY_DETAIL) == DISPLAY_DETAIL_FULL,
+    fullDetail = Overrides.getString(
+        RigScope.of(project).overrideProjectId(this.project.id), STAGE_ELEMENTS_OVERRIDE_TABLE, uuid, FIELD_DISPLAY_DETAIL,
+    ) == DISPLAY_DETAIL_FULL,
 )
+
+/** [project]'s own element [elementId] for a write: `VENUE_OWNED` for a venue's, null when not in its rig. */
+internal fun ownElementForWrite(project: DaoProject, elementId: Int): DaoStageElement? =
+    VenueRigGuard.ownForWrite(
+        RigScope.of(project), DaoStageElement.findById(elementId), { it.project.id }, { "Stage element '${it.name}'" },
+    )
+
+/** [project]'s own viewpoint [viewpointId] for a write: `VENUE_OWNED` for a venue's, null when not in its rig. */
+internal fun ownViewpointForWrite(project: DaoProject, viewpointId: Int): DaoStageViewpoint? =
+    VenueRigGuard.ownForWrite(
+        RigScope.of(project), DaoStageViewpoint.findById(viewpointId), { it.project.id }, { "Stage viewpoint '${it.name}'" },
+    )
 
 internal fun DaoStageElement.toDto(fullDetail: Boolean = false) = StageElementDto(
     id = id.value,

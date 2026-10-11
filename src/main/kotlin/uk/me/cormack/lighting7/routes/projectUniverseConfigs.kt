@@ -19,15 +19,17 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
+import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
     // GET /{projectId}/universe-configs - List universe configs
     get<ProjectUniverseConfigsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val configs = transaction(state.database) {
-                RigScope.of(project).universeConfigs()
+                val rig = RigScope.of(project)
+                rig.universeConfigs()
                     .orderBy(DaoUniverseConfigs.universe to SortOrder.ASC)
-                    .map { it.toDto(project.id.value) }
+                    .map { it.toDto(rig) }
             }
             call.respond(configs)
         }
@@ -55,24 +57,35 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             }
 
             val result = transaction(state.database) {
-                val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction null
-                if (config.project.id != project.id) return@transaction null
+                val rig = RigScope.of(project)
+                val config = DaoUniverseConfig.findById(resource.configId)
+                    ?.takeIf { rig.ownerOf(it.project.id) != null } ?: return@transaction null
+                // A venue's universe: its controller type is the venue's (a stored field), but its
+                // address and transmit interval are machine-local, keyed by the venue's id (P4) — so
+                // setting them through a show sets them for the venue and every show on it, which is
+                // what a node's IP on this desk is.
+                if (rig.ownerOf(config.project.id) == RigOwner.VENUE &&
+                    request.controllerType != null && request.controllerType != config.controllerType
+                ) {
+                    throw VenueRigGuard.venueOwned(rig, "Universe ${config.universe}'s controller type")
+                }
+                val overrideProject = rig.overrideProjectId(config.project.id)
 
-                val addressBefore = Overrides.resolveUniverseAddress(project.id.value, config.uuid)
+                val addressBefore = Overrides.resolveUniverseAddress(overrideProject, config.uuid)
                 val controllerTypeBefore = config.controllerType
 
                 // Address is machine-local — written through `Overrides`; the legacy `address`
                 // column on DaoUniverseConfigs is retained but unused.
                 request.address?.let {
-                    Overrides.setUniverseAddress(project.id.value, config.uuid, it.ifBlank { null })
+                    Overrides.setUniverseAddress(overrideProject, config.uuid, it.ifBlank { null })
                 }
-                request.controllerType?.let { config.controllerType = it }
+                request.controllerType?.let { if (it != config.controllerType) config.controllerType = it }
 
                 if (request.resetRefreshInterval) {
-                    Overrides.setUniverseRefreshIntervalMs(project.id.value, config.uuid, null)
+                    Overrides.setUniverseRefreshIntervalMs(overrideProject, config.uuid, null)
                 } else {
                     requestedInterval?.let {
-                        Overrides.setUniverseRefreshIntervalMs(project.id.value, config.uuid, it)
+                        Overrides.setUniverseRefreshIntervalMs(overrideProject, config.uuid, it)
                     }
                 }
 
@@ -81,10 +94,10 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                 // frame. Compared resolved-before against resolved-after because the UI
                 // sends `address` on every save, so a naive "was it present in the request"
                 // check would rebuild the whole rig on an interval-only edit.
-                val rebuildNeeded = Overrides.resolveUniverseAddress(project.id.value, config.uuid) != addressBefore ||
+                val rebuildNeeded = Overrides.resolveUniverseAddress(overrideProject, config.uuid) != addressBefore ||
                     config.controllerType != controllerTypeBefore
 
-                Triple(config.toDto(project.id.value), rebuildNeeded, Universe(config.subnet, config.universe))
+                Triple(config.toDto(rig), rebuildNeeded, Universe(config.subnet, config.universe))
             }
 
             if (result == null) {
@@ -116,8 +129,10 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
     delete<ProjectUniverseConfigResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction null
-                if (config.project.id != project.id) return@transaction null
+                val rig = RigScope.of(project)
+                val config = VenueRigGuard.ownForWrite(
+                    rig, DaoUniverseConfig.findById(resource.configId), { it.project.id }, { "Universe ${it.universe}" },
+                ) ?: return@transaction null
 
                 // Drop every machine-local override for this universe before the row goes
                 // away — overrides FK to the project, not the universe row, so they'd
@@ -182,6 +197,8 @@ data class UniverseConfigDto(
      */
     val refreshIntervalOverridden: Boolean,
     val patchCount: Int,
+    /** Whose the universe is in this project's rig (venue plan session 3): `SHOW` or `VENUE`. */
+    val owner: RigOwner = RigOwner.SHOW,
 )
 
 @Serializable
@@ -202,16 +219,19 @@ data class UpdateUniverseConfigRequest(
 )
 
 // Helpers
-private fun DaoUniverseConfig.toDto(projectId: Int): UniverseConfigDto {
-    val overriddenInterval = Overrides.resolveUniverseRefreshIntervalMs(projectId, uuid)
+/** As [rig] sees it: its overrides keyed by the owning project (P4), its patches the rig's on it. */
+private fun DaoUniverseConfig.toDto(rig: RigScope): UniverseConfigDto {
+    val overrideProject = rig.overrideProjectId(project.id)
+    val overriddenInterval = Overrides.resolveUniverseRefreshIntervalMs(overrideProject, uuid)
     return UniverseConfigDto(
         id = id.value,
         subnet = subnet,
         universe = universe,
         controllerType = controllerType,
-        address = Overrides.resolveUniverseAddress(projectId, uuid),
+        address = Overrides.resolveUniverseAddress(overrideProject, uuid),
         refreshIntervalMs = overriddenInterval ?: ArtNetController.DEFAULT_REFRESH_INTERVAL_MS,
         refreshIntervalOverridden = overriddenInterval != null,
-        patchCount = fixturePatches.count().toInt(),
+        patchCount = rig.patches(DaoFixturePatches.universeConfig eq id).count().toInt(),
+        owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
     )
 }

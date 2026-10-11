@@ -13,11 +13,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { EditorLabel } from '@/components/editor/EditorLabel'
 import { usePublishVenueMutation, useVenueDiffQuery } from '@/store/venues'
 import type { VenueHistory } from '@/api/venueApi'
 import { VenueChangeList } from './VenueChangeList'
 import { DiscardDraftDialog } from './DiscardDraftDialog'
+import { VenueShowsList } from './VenueShowsList'
 
 /** The most a note may say; the desk's `VENUE_VERSION_NOTE_MAX`. */
 const NOTE_MAX = 500
@@ -25,8 +25,8 @@ const NOTE_MAX = 500
 /**
  * *Publish vN* (venue plan D3, P2; `Venue.dc.html`'s sheet): the note, the draft's changes split
  * into **changes output** and **drawing only**, and the shows on the venue. Publishing freezes the
- * draft as the next version — immutable — and the draft starts empty again. No show is on a venue
- * until session 3, so the shows section says so.
+ * draft as the next version — immutable — and the draft starts empty again. The shows section names
+ * every show pinned to the venue (session 3); a publish changes none of them.
  */
 export function PublishVenueSheet({
   open,
@@ -97,13 +97,7 @@ export function PublishVenueSheet({
             ) : (
               <p className="text-sm text-muted-foreground">{isFetching ? 'Reading the draft…' : ''}</p>
             )}
-            <section className="space-y-1.5" aria-label="Shows on this venue">
-              <div className="flex items-center gap-1.5">
-                <EditorLabel>Shows on this venue</EditorLabel>
-                <span className="rounded bg-muted px-1.5 text-[10px] font-semibold tabular-nums">0</span>
-              </div>
-              <p className="text-sm text-muted-foreground">No show is on this venue yet, so publishing changes no show.</p>
-            </section>
+            <VenueShowsList shows={history.shows ?? []} next={next} />
           </SheetBody>
           <SheetFooter className="flex-row justify-between">
             <Button

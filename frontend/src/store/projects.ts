@@ -100,7 +100,8 @@ export const projectsApi = restApi.injectEndpoints({
           method: 'POST',
           body,
         }),
-        invalidatesTags: ['ProjectList'],
+        // `Venue` too: a show created on a venue joins that venue's History list of shows.
+        invalidatesTags: ['ProjectList', 'Venue'],
       }),
 
       // Update project
@@ -123,7 +124,8 @@ export const projectsApi = restApi.injectEndpoints({
           url: `projects/${id}`,
           method: 'DELETE',
         }),
-        invalidatesTags: ['ProjectList'],
+        // `Venue` too: a deleted show leaves its venue's History list of shows.
+        invalidatesTags: ['ProjectList', 'Venue'],
       }),
 
       // Switch to project

@@ -9,6 +9,20 @@ import { ScriptType } from "../store/scripts";
  */
 export type ProjectKind = 'SHOW' | 'VENUE' | 'VENUE_VERSION';
 
+/**
+ * The venue a show sits on (venue plan session 3): the venue by uuid — and its project id on this
+ * desk, which *Open venue* goes to — its name, the version the show is pinned to and the venue's
+ * installed (latest published) version. `id`, `name` and `installed` are absent when the venue is
+ * not on this desk. Absent altogether for a standalone show and a venue.
+ */
+export interface ProjectVenue {
+  uuid: string;
+  id?: number | null;
+  name?: string | null;
+  version: number;
+  installed?: number | null;
+}
+
 // Project summary for list views
 export interface ProjectSummary {
   id: number;
@@ -17,6 +31,7 @@ export interface ProjectSummary {
   isCurrent: boolean;
   /** Absent from a desk older than venues, which has only shows. */
   kind?: ProjectKind;
+  venue?: ProjectVenue | null;
 }
 
 // Full project details for editing/viewing
@@ -34,6 +49,8 @@ export interface ProjectDetail {
   stageDepthM: number | null;
   stageHeightM: number | null;
   kind?: ProjectKind;
+  /** The venue a show sits on; its stage size above is the venue's. */
+  venue?: ProjectVenue | null;
 }
 
 // For creating a new project
@@ -42,6 +59,8 @@ export interface CreateProjectRequest {
   description?: string;
   /** `VENUE` is *Add venue*, an admin's; a show by default. */
   kind?: 'SHOW' | 'VENUE';
+  /** A new show on this venue (venue plan session 3), pinned to its installed version. */
+  venueId?: number;
 }
 
 // For updating a project

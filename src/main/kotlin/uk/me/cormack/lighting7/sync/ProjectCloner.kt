@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.state.State
 import java.nio.file.Files
 import java.util.UUID
@@ -68,6 +69,11 @@ class ProjectCloner(private val state: State) {
             // first, so this is the belt to that braces.
             if (source.kind == ProjectKind.VENUE_VERSION) {
                 throw ImportError.conflict("A venue version cannot be cloned")
+            }
+            // A show on a venue keeps its pin in a clone from venue plan session 4; the route refuses
+            // it first (`VENUE_CLONE_PENDING`), and this keeps a pin-less copy from ever being made.
+            if (source.isVenueBound) {
+                throw ImportError.conflict("A show on a venue cannot be cloned yet")
             }
             // The importer checks the name too, but failing here skips a full export of a
             // project that could never land.
