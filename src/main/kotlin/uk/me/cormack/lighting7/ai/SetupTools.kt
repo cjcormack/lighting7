@@ -38,6 +38,7 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
+import uk.me.cormack.lighting7.routes.listedProjects
 import uk.me.cormack.lighting7.routes.PlacementInput
 import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.clearStaleInheritedZooms
@@ -116,12 +117,14 @@ class SetupTools(
 
     private fun listProjects(): ToolExecutionResult {
         val projects = transaction(state.database) {
-            DaoProject.all().orderBy(DaoProjects.name to SortOrder.ASC).map { p ->
+            // A venue version is never listed (venue plan P2): it is frozen, and reached through its venue.
+            listedProjects().orderBy(DaoProjects.name to SortOrder.ASC).map { p ->
                 buildJsonObject {
                     put("id", p.id.value)
                     put("name", p.name)
                     p.description?.let { put("description", it) }
                     put("isCurrent", p.isCurrent)
+                    if (p.kind != ProjectKind.SHOW) put("kind", p.kind.name)
                 }
             }
         }
@@ -173,8 +176,10 @@ class SetupTools(
 
     private suspend fun switchProject(input: JsonObject): ToolExecutionResult {
         val projectId = input.int("projectId") ?: return failure("Missing 'projectId'")
-        val name = transaction(state.database) { DaoProject.findById(projectId)?.name }
-            ?: return failure("Project not found: $projectId")
+        val name = transaction(state.database) {
+            // A venue version answers as absent, as it is absent from list_projects.
+            DaoProject.findById(projectId)?.takeIf { it.kind != ProjectKind.VENUE_VERSION }?.name
+        } ?: return failure("Project not found: $projectId")
         if (state.projectManager.currentProject.id.value == projectId) {
             return success("'$name' is already the current project", buildJsonObject {
                 put("projectId", projectId)

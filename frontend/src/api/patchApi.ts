@@ -12,6 +12,8 @@ import type { FittedMedia } from "../lib/fittedMedia";
  */
 export interface FixturePatch extends LanternFocus {
   id: number;
+  /** The record's identity across a venue's versions — what a draft change names (`lib/venue.ts`). */
+  uuid: string;
   key: string;
   displayName: string;
   /** The operator's number for this head — a ChamSys head number, another desk's fixture or

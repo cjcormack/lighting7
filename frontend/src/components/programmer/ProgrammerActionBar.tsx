@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { ChevronDown, Circle, Download, Eraser, EyeOff, Layers, Plus, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useVenueMode } from '@/store/venues'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import {
   DropdownMenu,
@@ -143,6 +144,10 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // not: it is how you *fill* the programmer. Held scenery is content: Record writes it into a cue
   // or a Look (scenery-programmer plan D7), and a Look of only the moon is a busk pad that flies it.
   const hasContent = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
+  // A venue's programmer is for testing and focus: Record is off there (venue plan D11), and the
+  // desk refuses one with `VENUE_RECORD_OFF` whatever this shows.
+  const { isVenue } = useVenueMode(projectId)
+  const canRecord = hasContent && !isVenue
 
   const cueId = includedCueId(target)
   const includedCue = target?.kind === 'CUE' ? includedTargetParts(target) : null
@@ -250,9 +255,9 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
       <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md">
         <Button
           size="sm"
-          disabled={!hasContent}
+          disabled={!canRecord}
           onClick={() => sheets.openRecord()}
-          title="Save"
+          title={isVenue ? 'Record is off in a venue' : 'Save'}
           aria-label="Record"
           className="rounded-none px-3 font-semibold"
         >
@@ -263,7 +268,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
-              disabled={!hasContent}
+              disabled={!canRecord}
               aria-label="Record destination"
               className="rounded-none border-l border-primary-foreground/25 px-1.5"
             >

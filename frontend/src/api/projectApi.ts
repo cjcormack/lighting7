@@ -2,12 +2,21 @@ import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import { ScriptType } from "../store/scripts";
 
+/**
+ * What a project is (venue plan §3.1): a show, or a venue whose own rows are its draft. A
+ * `VENUE_VERSION` is a frozen snapshot of one published version — never listed, never current,
+ * read only through its venue's History. See `lib/venue.ts`.
+ */
+export type ProjectKind = 'SHOW' | 'VENUE' | 'VENUE_VERSION';
+
 // Project summary for list views
 export interface ProjectSummary {
   id: number;
   name: string;
   description: string | null;
   isCurrent: boolean;
+  /** Absent from a desk older than venues, which has only shows. */
+  kind?: ProjectKind;
 }
 
 // Full project details for editing/viewing
@@ -24,12 +33,15 @@ export interface ProjectDetail {
   stageWidthM: number | null;
   stageDepthM: number | null;
   stageHeightM: number | null;
+  kind?: ProjectKind;
 }
 
 // For creating a new project
 export interface CreateProjectRequest {
   name: string;
   description?: string;
+  /** `VENUE` is *Add venue*, an admin's; a show by default. */
+  kind?: 'SHOW' | 'VENUE';
 }
 
 // For updating a project

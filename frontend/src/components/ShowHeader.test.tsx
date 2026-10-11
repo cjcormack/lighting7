@@ -7,6 +7,11 @@ vi.mock('./SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 vi.mock('./effects/ArmedChip', () => ({ ArmedChip: () => null }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
+const venue = { isVenue: false }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
+vi.mock('@/store/projects', () => ({
+  useProjectListQuery: () => ({ data: [{ id: 1, name: 'Hamlet', isCurrent: true, kind: venue.isVenue ? 'VENUE' : 'SHOW' }] }),
+}))
 const media = { desktop: true }
 vi.mock('@/hooks/useMediaQuery', () => ({
   useMediaQuery: () => media.desktop,
@@ -46,6 +51,7 @@ const VIEWS: ShowView[] = ['programmer', 'show', 'prompt-book', 'busk']
 beforeEach(() => {
   desk.connected = true
   media.desktop = true
+  venue.isVenue = false
 })
 
 afterEach(() => {
@@ -55,6 +61,17 @@ afterEach(() => {
 })
 
 describe('ShowHeader', () => {
+  it('drops the view switcher in a venue, whose one live view is the Programmer', () => {
+    // Venue plan §4: Show, Prompt Book and Busk are a show's, so a switcher would offer nothing.
+    draw({ view: 'programmer' })
+    expect(screen.getByRole('link', { name: /Busk/ })).toBeTruthy()
+    cleanup()
+    venue.isVenue = true
+    draw({ view: 'programmer' })
+    expect(screen.queryByRole('link', { name: /Busk/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Prompt Book/ })).toBeNull()
+  })
+
   it('washes amber when a running show is unlocked', () => {
     const { container } = draw({ unlockedWarning: true })
     expect(root(container)).toContain('bg-amber-400/15')

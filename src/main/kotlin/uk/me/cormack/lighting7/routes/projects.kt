@@ -17,9 +17,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.adminOnly
+import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.venue.VenueVersions
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.ImportError
@@ -101,10 +104,14 @@ internal suspend inline fun RoutingContext.withCurrentProject(
 
 internal fun Route.routeApiRestProjects(state: State) {
     route("/projects") {
-        // GET / - List all projects
+        // Venue versions refuse every write, and venues every stored write by an operator.
+        installProjectWriteGuard(state)
+
+        // GET / - List all projects. A venue version is never listed: it is reached through its
+        // venue's history (`/venues/{id}/versions`), never picked.
         routingGet {
             val projects = transaction(state.database) {
-                DaoProject.all().orderBy(DaoProjects.name to SortOrder.ASC).map { it.toListDto() }
+                listedProjects().orderBy(DaoProjects.name to SortOrder.ASC).map { it.toListDto() }
             }
             call.respond(projects)
         }
@@ -132,6 +139,19 @@ internal fun Route.routeApiRestProjects(state: State) {
         // POST / - Create new project
         routingPost {
             val request = call.receive<CreateProjectRequest>()
+            // *Add venue* (venue plan session 2): a venue is an admin's, and a version is only ever
+            // made by publishing one.
+            when (request.kind) {
+                ProjectKind.SHOW -> Unit
+                ProjectKind.VENUE -> call.requireAdmin()
+                ProjectKind.VENUE_VERSION -> {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("A venue version is made by publishing its venue", CODE_VENUE_VERSION_READ_ONLY),
+                    )
+                    return@routingPost
+                }
+            }
             val stageError = validateStageDimensions(
                 request.stageWidthM,
                 request.stageDepthM,
@@ -149,6 +169,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     stageWidthM = request.stageWidthM
                     stageDepthM = request.stageDepthM
                     stageHeightM = request.stageHeightM
+                    kind = request.kind
                 }
                 ensureDefaultSpeedMasters(newProject)
 
@@ -190,9 +211,10 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
         }
 
-        // DELETE /{id} - Delete project
+        // DELETE /{id} - Delete project. A venue takes its versions with it (they are its own
+        // history); a version itself is refused by the write guard.
         delete<ProjectIdResource> { resource ->
-            var deletedProjectUuid: String? = null
+            var deletedUuids: List<String> = emptyList()
             val result = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction DeleteResult.NOT_FOUND
@@ -200,112 +222,25 @@ internal fun Route.routeApiRestProjects(state: State) {
                 if (project.isCurrent) {
                     return@transaction DeleteResult.IS_CURRENT
                 }
-                deletedProjectUuid = project.uuid.toString()
-
-                // Clear the show playhead before tearing down the stacks it may point at.
-                project.activeStackId = null
-
-                // Prompt book(s) before cues — anchors reference cue rows. Iterate every
-                // row for the project (not just project.promptBook) so a pre-collapse
-                // project with leftover extra books is fully cleaned before its cues go,
-                // avoiding orphaned anchors pointing at deleted cue rows.
-                DaoPromptBook.find { DaoPromptBooks.project eq project.id }.forEach { book ->
-                    DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.promptBook eq book.id }
-                    DaoPromptBookAnnotations.deleteWhere { DaoPromptBookAnnotations.promptBook eq book.id }
-                    book.delete()
+                val snapshots = if (project.kind == ProjectKind.VENUE) {
+                    VenueVersions.versionsOf(project.id.value).map { version ->
+                        val snapshot = version.snapshotProject
+                        version.delete()
+                        snapshot
+                    }
+                } else {
+                    emptyList()
                 }
-
-                // Delete associated records in FK-safe order. Busk pages first: a pad is a plain
-                // FK onto a template, Look or cue with no cascade (`DaoBuskPads`), swept by hand.
-                project.buskPages.forEach { deleteBuskPage(it) }
-                // And the rig, for the same reason: a tile is a plain FK onto a group or a patch.
-                deleteBuskRig(project)
-                // Every scenery change names one of the project's elements, so this sweeps all
-                // three tables before the cues, stacks and Looks that own them go.
-                deleteSceneryForElements(project.stageElements.map { it.id })
-                // Cue events name a cue and a patch, both going below: through the patches, so all go.
-                deleteCueEventsForPatches(project.fixturePatches.map { it.id })
-                project.cues.forEach { cue ->
-                    deleteCueChildren(cue)
-                    cue.delete()
-                }
-                project.cueStacks.forEach { it.delete() }
-                project.cueSlots.forEach { it.delete() }
-                // Preset property assignments before their presets: the FK has no ON DELETE
-                // cascade, so PostgreSQL rejects the preset delete while assignments remain.
-                // Mirrors ProjectImporter.replaceFromWorkingTree, which already does this.
-                // Looks after cues: deleteCueChildren drops each cue's layers, so nothing points
-                // at a look by the time it goes. No DB-level cascade — SQLite doesn't enforce one
-                // without a per-connection pragma.
-                project.looks.forEach { look ->
-                    look.rows.forEach { it.delete() }
-                    look.effects.forEach { it.delete() }
-                    look.delete()
-                }
-                // Templates after cues: deleteCueChildren already dropped any layer pointing at
-                // one. No DB-level cascade on `templates.project_id`, so an un-deleted template
-                // blocks project.delete() outright.
-                project.templates.forEach { template ->
-                    template.rows.forEach { it.delete() }
-                    template.effects.forEach { it.delete() }
-                    template.delete()
-                }
-                project.fixtureGroups.forEach { group ->
-                    group.members.forEach { it.delete() }
-                    group.delete()
-                }
-                project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
-                project.riggings.forEach { it.delete() }
-                project.stageRegions.forEach { it.delete() }
-                project.stageViewpoints.forEach { it.delete() }
-                project.stageElements.forEach { it.delete() }
-                project.universeConfigs.forEach { it.delete() }
-                project.parkedChannels.forEach { it.delete() }
-                project.fxDefinitions.forEach { it.delete() }
-                project.scripts.forEach { it.delete() }
-                project.controlSurfaceBindings.forEach { it.delete() }
-
-                // Cloud-sync rows. These FKs have no ON DELETE cascade, so PostgreSQL
-                // would reject `project.delete()` for any project that ever had a
-                // sync_configs row (GET /sync/config auto-creates one). Delete children
-                // before parents: session conflicts → sessions, then the project-keyed
-                // tables. The on-disk working tree is removed after the commit below.
-                DaoSyncSession.find { DaoSyncSessions.project eq project.id }.forEach { session ->
-                    session.conflicts.forEach { it.delete() }
-                    session.delete()
-                }
-                DaoSyncState.find { DaoSyncStates.project eq project.id }.forEach { it.delete() }
-                DaoSyncLogEntry.find { DaoSyncLogEntries.project eq project.id }.forEach { it.delete() }
-                DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq project.id }.forEach { it.delete() }
-                DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.forEach { it.delete() }
-
-                // Machine-local field overrides (controller IPs). Same story as the sync rows:
-                // no ON DELETE cascade, so any project the operator gave a controller IP — and
-                // every clone, which inherits them — would otherwise be undeletable.
-                DaoMachineOverride.find { DaoMachineOverrides.project eq project.id }.forEach { it.delete() }
-
-                state.controlSurfaceBindingService.invalidate(project.id.value)
-                // No preview to clear here any more. The Look editor's live preview used to be a
-                // per-project slot in a map, so deleting a project had to evict its entry; it is now
-                // a single layer on the live show's programmer, and the current project cannot be
-                // deleted (IS_CURRENT above). Cross-project interference is impossible by
-                // construction rather than by cleanup.
-                project.delete()
+                deletedUuids = (listOf(project) + snapshots).map { it.uuid.toString() }
+                snapshots.forEach { deleteProjectRows(state, it) }
+                deleteProjectRows(state, project)
 
                 DeleteResult.SUCCESS
             }
 
             when (result) {
                 DeleteResult.SUCCESS -> {
-                    // Content-addressed PDF store for this project is now unreachable.
-                    deletedProjectUuid?.let { uuid ->
-                        runCatching { state.promptScriptStoreRoot.resolve(uuid).toFile().deleteRecursively() }
-                        // And its scene images, originals and derived copies alike.
-                        runCatching { state.sceneImages.deleteProject(uuid) }
-                        // Cloud-sync working tree (`<root>/{uuid}/repo`) — remove the whole
-                        // per-project dir so a delete doesn't leave an orphaned git repo behind.
-                        runCatching { state.syncWorkingTreeRoot.resolve(uuid).toFile().deleteRecursively() }
-                    }
+                    deletedUuids.forEach { deleteProjectFiles(state, it) }
                     call.respond(HttpStatusCode.NoContent)
                 }
                 DeleteResult.NOT_FOUND -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))
@@ -376,7 +311,8 @@ internal fun Route.routeApiRestProjects(state: State) {
         // place where an authenticated caller reaches outside the app's own data directory.
         adminOnly {
             routeApiRestProjectExport(state)
-            routeApiRestProjectCloudSync(state)
+            // A venue's sync waits for venue plan session 4 (P6).
+            refuseVenueSync(state) { routeApiRestProjectCloudSync(state) }
         }
 
         // POST /{id}/clone - Clone a project, whole graph. Runs through the cloud-sync
@@ -440,6 +376,8 @@ data class ProjectListDto(
     val name: String,
     val description: String?,
     val isCurrent: Boolean,
+    /** `SHOW` or `VENUE` — a list never holds a `VENUE_VERSION`. */
+    val kind: ProjectKind = ProjectKind.SHOW,
 )
 
 @Serializable
@@ -456,6 +394,8 @@ data class ProjectDetailDto(
     val stageWidthM: Double? = null,
     val stageDepthM: Double? = null,
     val stageHeightM: Double? = null,
+    /** What the project is (venue plan §3.1); a `VENUE_VERSION` is read through its venue's history. */
+    val kind: ProjectKind = ProjectKind.SHOW,
 )
 
 @Serializable
@@ -465,6 +405,8 @@ data class CreateProjectRequest(
     val stageWidthM: Double? = null,
     val stageDepthM: Double? = null,
     val stageHeightM: Double? = null,
+    /** `VENUE` is *Add venue*, an admin's; `VENUE_VERSION` is refused. */
+    val kind: ProjectKind = ProjectKind.SHOW,
 )
 
 @Serializable
@@ -505,6 +447,7 @@ private fun DaoProject.toListDto() = ProjectListDto(
     name = name,
     description = description,
     isCurrent = isCurrent,
+    kind = kind,
 )
 
 private fun DaoProject.toDetailDto() = ProjectDetailDto(
@@ -519,7 +462,119 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
     stageWidthM = stageWidthM,
     stageDepthM = stageDepthM,
     stageHeightM = stageHeightM,
+    kind = kind,
 )
+
+/**
+ * Delete [project] and every row it owns, children before parents (no FK here cascades). Inside a
+ * transaction; the files a project keeps outside the database are [deleteProjectFiles]'s, after the
+ * commit. Shared by a project's delete and its venue's, which takes its versions with it.
+ */
+internal fun deleteProjectRows(state: State, project: DaoProject) {
+    // Clear the show playhead before tearing down the stacks it may point at.
+    project.activeStackId = null
+
+    // Prompt book(s) before cues — anchors reference cue rows. Iterate every
+    // row for the project (not just project.promptBook) so a pre-collapse
+    // project with leftover extra books is fully cleaned before its cues go,
+    // avoiding orphaned anchors pointing at deleted cue rows.
+    DaoPromptBook.find { DaoPromptBooks.project eq project.id }.forEach { book ->
+        DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.promptBook eq book.id }
+        DaoPromptBookAnnotations.deleteWhere { DaoPromptBookAnnotations.promptBook eq book.id }
+        book.delete()
+    }
+
+    // Delete associated records in FK-safe order. Busk pages first: a pad is a plain
+    // FK onto a template, Look or cue with no cascade (`DaoBuskPads`), swept by hand.
+    project.buskPages.forEach { deleteBuskPage(it) }
+    // And the rig, for the same reason: a tile is a plain FK onto a group or a patch.
+    deleteBuskRig(project)
+    // Every scenery change names one of the project's elements, so this sweeps all
+    // three tables before the cues, stacks and Looks that own them go.
+    deleteSceneryForElements(project.stageElements.map { it.id })
+    // Cue events name a cue and a patch, both going below: through the patches, so all go.
+    deleteCueEventsForPatches(project.fixturePatches.map { it.id })
+    project.cues.forEach { cue ->
+        deleteCueChildren(cue)
+        cue.delete()
+    }
+    project.cueStacks.forEach { it.delete() }
+    project.cueSlots.forEach { it.delete() }
+    // Preset property assignments before their presets: the FK has no ON DELETE
+    // cascade, so PostgreSQL rejects the preset delete while assignments remain.
+    // Mirrors ProjectImporter.replaceFromWorkingTree, which already does this.
+    // Looks after cues: deleteCueChildren drops each cue's layers, so nothing points
+    // at a look by the time it goes. No DB-level cascade — SQLite doesn't enforce one
+    // without a per-connection pragma.
+    project.looks.forEach { look ->
+        look.rows.forEach { it.delete() }
+        look.effects.forEach { it.delete() }
+        look.delete()
+    }
+    // Templates after cues: deleteCueChildren already dropped any layer pointing at
+    // one. No DB-level cascade on `templates.project_id`, so an un-deleted template
+    // blocks project.delete() outright.
+    project.templates.forEach { template ->
+        template.rows.forEach { it.delete() }
+        template.effects.forEach { it.delete() }
+        template.delete()
+    }
+    project.fixtureGroups.forEach { group ->
+        group.members.forEach { it.delete() }
+        group.delete()
+    }
+    project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
+    project.riggings.forEach { it.delete() }
+    project.stageRegions.forEach { it.delete() }
+    project.stageViewpoints.forEach { it.delete() }
+    project.stageElements.forEach { it.delete() }
+    project.universeConfigs.forEach { it.delete() }
+    project.parkedChannels.forEach { it.delete() }
+    project.fxDefinitions.forEach { it.delete() }
+    project.scripts.forEach { it.delete() }
+    project.controlSurfaceBindings.forEach { it.delete() }
+
+    // Cloud-sync rows. These FKs have no ON DELETE cascade, so PostgreSQL
+    // would reject `project.delete()` for any project that ever had a
+    // sync_configs row (GET /sync/config auto-creates one). Delete children
+    // before parents: session conflicts → sessions, then the project-keyed
+    // tables. The on-disk working tree is removed after the commit below.
+    DaoSyncSession.find { DaoSyncSessions.project eq project.id }.forEach { session ->
+        session.conflicts.forEach { it.delete() }
+        session.delete()
+    }
+    DaoSyncState.find { DaoSyncStates.project eq project.id }.forEach { it.delete() }
+    DaoSyncLogEntry.find { DaoSyncLogEntries.project eq project.id }.forEach { it.delete() }
+    DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq project.id }.forEach { it.delete() }
+    DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.forEach { it.delete() }
+
+    // Machine-local field overrides (controller IPs). Same story as the sync rows:
+    // no ON DELETE cascade, so any project the operator gave a controller IP — and
+    // every clone, which inherits them — would otherwise be undeletable.
+    DaoMachineOverride.find { DaoMachineOverrides.project eq project.id }.forEach { it.delete() }
+
+    state.controlSurfaceBindingService.invalidate(project.id.value)
+    // No preview to clear here any more. The Look editor's live preview used to be a
+    // per-project slot in a map, so deleting a project had to evict its entry; it is now
+    // a single layer on the live show's programmer, and the current project cannot be
+    // deleted (the route's IS_CURRENT). Cross-project interference is impossible by
+    // construction rather than by cleanup.
+    project.delete()
+}
+
+/** Remove the files [projectUuid] kept outside the database, best-effort, once its rows are gone. */
+internal fun deleteProjectFiles(state: State, projectUuid: String) {
+    // Content-addressed PDF store for this project is now unreachable.
+    runCatching { state.promptScriptStoreRoot.resolve(projectUuid).toFile().deleteRecursively() }
+    // And its scene images, originals and derived copies alike.
+    runCatching { state.sceneImages.deleteProject(projectUuid) }
+    // Cloud-sync working tree (`<root>/{uuid}/repo`) — remove the whole
+    // per-project dir so a delete doesn't leave an orphaned git repo behind.
+    runCatching { state.syncWorkingTreeRoot.resolve(projectUuid).toFile().deleteRecursively() }
+}
+
+/** Every project a list shows: all but the venue versions, which are reached through their venue. */
+internal fun listedProjects() = DaoProject.find { DaoProjects.kind neq ProjectKind.VENUE_VERSION }
 
 /**
  * Range-check the project's stage dimensions. Returns the first error message, or null

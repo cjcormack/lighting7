@@ -349,6 +349,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
 
         val request = call.receive<CopyCueRequest>()
+        if (refusedCopyTarget(state, request.targetProjectId)) return@post
 
         val result = transaction(state.database) {
             val sourceCue = DaoCue.findById(resource.cueId)

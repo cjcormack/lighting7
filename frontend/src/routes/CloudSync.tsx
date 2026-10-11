@@ -140,6 +140,26 @@ export function CloudSyncHubRedirect() {
  * and synced states.
  */
 export function ProjectSyncContent({ projectId }: { projectId: number }) {
+  // A venue does not sync until venue plan session 4 (P6): every route here answers it 409
+  // `SYNC_VENUE_PENDING`, so the tab says so rather than waiting on a config that never comes.
+  const { data: projects } = useProjectListQuery()
+  if (projects?.find((p) => p.id === projectId)?.kind === "VENUE") {
+    return (
+      <div className="p-4 max-w-4xl">
+        <Card className="p-4 space-y-1">
+          <h2 className="text-sm font-semibold">A venue does not sync yet</h2>
+          <p className="text-sm text-muted-foreground">
+            Venues will sync as their own repository, one tagged commit per published version. Until
+            then a venue and its versions stay on this desk.
+          </p>
+        </Card>
+      </div>
+    )
+  }
+  return <ProjectSyncPanels projectId={projectId} />
+}
+
+function ProjectSyncPanels({ projectId }: { projectId: number }) {
   const dispatch = useDispatch()
   const { data: config, isLoading } = useCloudSyncConfigQuery(projectId)
 

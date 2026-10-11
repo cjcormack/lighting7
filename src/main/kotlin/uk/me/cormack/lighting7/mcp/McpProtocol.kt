@@ -25,6 +25,9 @@ import uk.me.cormack.lighting7.ai.ToolDef
 import uk.me.cormack.lighting7.ai.ToolImage
 import uk.me.cormack.lighting7.ai.readOnlySetupToolNames
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
+import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.UserRole
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.update.BuildInfo
 
@@ -169,6 +172,8 @@ class McpProtocol(private val state: State) {
             }
         }
 
+        venueToolRefusal(name, arguments, user)?.let { return toolResult(it, isError = true) }
+
         // MCP is always remote: a fixture command is held to Remote access's "allow fixture commands"
         // (fixture optics plan session 7), as the REST route's `requireCommandsAccess` holds a remote call.
         if (name == RUN_FIXTURE_COMMAND && !state.remoteAccess.allowRemoteCommands) {
@@ -178,6 +183,26 @@ class McpProtocol(private val state: State) {
         val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments)
         else tools.executeTool(name, arguments)
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
+    }
+
+    /**
+     * Why [name] may not run on the live project when it is a venue, or null (venue plan D3, D11) —
+     * the tools' copy of the REST routes' rules, since a tool writes the live project with no route
+     * in between. Record and Update are off in a venue for everyone; any other stored write is an
+     * admin's. A venue version is never live, so it needs no rule here.
+     */
+    private fun venueToolRefusal(name: String, arguments: JsonObject, user: AuthenticatedUser): String? {
+        val kind = transaction(state.database) { state.projectManager.currentProject.kind }
+        if (kind != ProjectKind.VENUE) return null
+        // `aim_fixtures` acts on the rig as it stands, unless it is told to keep the aims as a template.
+        val storesTemplate = name == "aim_fixtures" &&
+            (arguments["saveAsTemplate"] as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
+        return when {
+            name in VENUE_RECORD_TOOLS -> "Record is off in a venue: the programmer here is for testing and focus."
+            (name in VENUE_STORED_WRITE_TOOLS || storesTemplate) && user.role != UserRole.ADMIN ->
+                "Only an admin can change a venue."
+            else -> null
+        }
     }
 
     /**
@@ -221,6 +246,20 @@ class McpProtocol(private val state: State) {
         val SUPPORTED_VERSIONS = listOf("2025-06-18", "2025-03-26", "2024-11-05")
 
         private val READ_ONLY_TOOLS = setOf(DESCRIBE_RIG, "get_current_state") + readOnlySetupToolNames
+
+        /** The programmer's Record and Update, off in a venue (venue plan D11). */
+        private val VENUE_RECORD_TOOLS = setOf("record_cue", "update_from_programmer")
+
+        /**
+         * The tools that store something in the live project — an operator's are refused on a venue
+         * (D3). The rest act on the rig as it stands (apply, GO, aim, tempo) or only read.
+         */
+        private val VENUE_STORED_WRITE_TOOLS = setOf(
+            "create_look", "create_speed_master", "park_channel", "unpark_channel", "create_cue",
+            "create_cue_stack", "add_cue_to_stack", "create_template", "set_cue_events", "set_scenery",
+            "patch_fixtures", "delete_groups", "set_stage", "set_scene", "upload_scene_image",
+            "place_fixtures", "build_cue_stack", "mark_up_prompt_book",
+        )
 
         /**
          * How the show-setup tools fit together. They are driven from documents the operator

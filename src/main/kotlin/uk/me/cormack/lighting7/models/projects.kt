@@ -28,7 +28,18 @@ object DaoProjects: IntIdTable("projects") {
     val stageDepthM = double("stage_depth_m").nullable()
     val stageHeightM = double("stage_height_m").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
+    /**
+     * What this project is (venue plan D1, P2): a show — every project before venues — a venue, whose
+     * own rows are its **draft**, or a frozen snapshot of one venue version. A `VENUE_VERSION` is
+     * never listed, never current and refuses every write (`routes/projects.kt`'s guard); its index
+     * is `venue_versions`. Not exported yet: venues do not sync until session 4 (`SYNC_VENUE_PENDING`),
+     * which carries it in `project.json` under `formatVersion` 24.
+     */
+    val kind = enumerationByName<ProjectKind>("kind", 16).default(ProjectKind.SHOW)
 }
+
+/** A project's kind (venue plan §3.1). See [DaoProjects.kind]. */
+enum class ProjectKind { SHOW, VENUE, VENUE_VERSION }
 
 class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoProject>(DaoProjects)
@@ -41,6 +52,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var stageDepthM by DaoProjects.stageDepthM
     var stageHeightM by DaoProjects.stageHeightM
     var uuid by DaoProjects.uuid
+    var kind by DaoProjects.kind
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val looks by DaoLook referrersOn DaoLooks.project

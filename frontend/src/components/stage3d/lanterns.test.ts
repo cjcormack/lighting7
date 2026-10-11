@@ -4,6 +4,7 @@ import { lanternsFor, patchAtPlacement } from './lanterns'
 
 const base = {
   id: 7,
+  uuid: 'uuid-pair',
   key: 'pair',
   displayName: 'Pair',
   fixtureTypeKey: 'generic-dimmer',

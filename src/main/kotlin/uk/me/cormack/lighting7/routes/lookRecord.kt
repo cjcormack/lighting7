@@ -329,6 +329,7 @@ internal data class ProgrammerRecordLookResponse(
  * the natural editing gesture rather than a separate concept.
  */
 internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
+    if (refusedRecordInVenue(state)) return
     val request = call.receive<ProgrammerRecordLookRequest>()
     val mode = parseEnumOrNull<RecordMode>(request.mode) ?: return call.respond(
         HttpStatusCode.BadRequest, ErrorResponse("Unknown record mode '${request.mode}'"),

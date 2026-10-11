@@ -118,6 +118,22 @@ describe("navItems registry", () => {
   })
 })
 
+describe("venue mode's rail", () => {
+  it("hides exactly the show's views in a venue, and keeps the Programmer (venue plan §4)", () => {
+    const shown = filterNavItems(navItems, true, true, true).map((i) => i.id)
+    const all = filterNavItems(navItems, true, true).map((i) => i.id)
+    // Scripts, FX Library, Looks, Templates, Speed Masters, Show, Prompt Book and Busk.
+    expect(all.filter((id) => !shown.includes(id)).sort()).toEqual(
+      ["fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
+    )
+    for (const kept of ["patches", "fixtures", "groups", "programmer", "stage-view", "channels", "project-settings", "stage", "rigging"]) {
+      expect(shown).toContain(kept)
+    }
+    // ⌘K's per-family template links go with the Templates row.
+    expect(filterNavItems(templateFamilyNavItems, true, true, true)).toEqual([])
+  })
+})
+
 describe("admin-only navigation", () => {
   // Every entry whose destination is behind the backend's admin gate
   // (ADMIN_ONLY_PREFIXES / the per-project sync subtree in lighting7's auth/AuthGate.kt).

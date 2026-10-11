@@ -93,6 +93,7 @@ internal fun Route.routeApiRestTemplateRecord(state: State) {
 }
 
 private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, projectId: String) {
+    if (refusedRecordInVenue(state)) return
     val request = call.receive<TemplateFromProgrammerRequest>()
     val name = request.name.trim()
     if (name.isEmpty()) {

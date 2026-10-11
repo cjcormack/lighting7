@@ -24,6 +24,8 @@ vi.mock('@/store/stageRegions', () => ({
   useStageRegionListQuery: () => ({ data: [{ uuid: 'r-1', name: 'Main stage' }] }),
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+const venue = { isVenue: false }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
 const upload = vi.fn()
 const setDisplayDetail = vi.fn()
 /** What `GET scene-images` answers: the images this machine holds. */
@@ -76,6 +78,7 @@ beforeEach(() => {
   setDisplayDetail.mockReset()
   imageList.current = []
   sceneryRead.current = { cues: [], sets: [], looks: [] }
+  venue.isVenue = false
 })
 afterEach(cleanup)
 
@@ -198,6 +201,30 @@ describe('EditSceneElementForm (stage-view plan session 5)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     const problem = await screen.findByText("(12) must be before the row's last seat (12)")
     expect(problem.closest('[data-aisle="0"]')).not.toBeNull()
+  })
+
+  it('a venue’s seating says whose its block is; a show’s does not ask (venue plan D6)', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve(element()) })
+    const balcony = element({
+      kind: 'SEATING',
+      name: 'Balcony',
+      widthM: 0,
+      depthM: 0,
+      heightM: 0,
+      params: { rows: 3, seatsPerRow: 20, rowPitchM: 0.9, seatPitchM: 0.5 },
+    })
+    render(<EditSceneElementForm element={balcony} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByLabelText('Block')).toBeNull()
+    cleanup()
+
+    venue.isVenue = true
+    render(<EditSceneElementForm element={balcony} projectId={3} onClose={() => {}} />)
+    // Absent is a Preset: a layout copied into a show.
+    expect((screen.getByLabelText('Block') as HTMLSelectElement).value).toBe('PRESET')
+    fireEvent.change(screen.getByLabelText('Block'), { target: { value: 'FIXED' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]![0].params).toMatchObject({ block: 'FIXED', rows: 3 })
   })
 
   it('adds each aisle at a free gap nearest the middle, and none where a row has no gap', () => {

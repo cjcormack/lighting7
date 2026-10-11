@@ -929,6 +929,11 @@ private data class BulkOutcome(
 @Serializable
 data class FixturePatchDto(
     val id: Int,
+    /**
+     * The record's identity across a venue's versions (venue plan session 2): what the Patch list
+     * matches a draft change to, since an id is the row's in one project only.
+     */
+    val uuid: String,
     val key: String,
     val displayName: String,
     /** The operator's head number, unique in the project; null when unnumbered. */
@@ -1103,6 +1108,7 @@ private fun DaoFixturePatch.toDto(
     val f = focus
     return FixturePatchDto(
         id = id.value,
+        uuid = uuid.toString(),
         key = key,
         displayName = displayName,
         headNumber = headNumber,

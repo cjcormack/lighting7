@@ -72,6 +72,12 @@ export interface NavItem {
    * answer 403. Not a permission check — the backend is that.
    */
   adminOnly?: boolean
+  /**
+   * Hidden while the viewed project is a **venue** (venue plan §4): a venue holds a rig, so the
+   * views that author or run a show — Scripts, FX Library, Looks, Templates, Speed Masters, Show,
+   * Prompt Book and Busk — are not its. The Programmer stays, for testing and focus, with Record off.
+   */
+  hiddenInVenue?: boolean
 }
 
 /**
@@ -123,6 +129,7 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/scripts",
     group: "program",
+    hiddenInVenue: true,
   },
   {
     id: "fx-library",
@@ -132,6 +139,7 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/fx-library",
     group: "program",
+    hiddenInVenue: true,
   },
   {
     id: "looks",
@@ -147,6 +155,7 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/looks",
     group: "program",
+    hiddenInVenue: true,
   },
   {
     id: "templates",
@@ -164,6 +173,7 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/templates",
     group: "program",
+    hiddenInVenue: true,
   },
   {
     id: "speed-masters",
@@ -175,6 +185,7 @@ export const navItems: NavItem[] = [
     visibility: "always",
     pathMatch: "/speed-masters",
     group: "program",
+    hiddenInVenue: true,
   },
 
   // ── Live ────────────────────────────────────────────────────────────
@@ -210,6 +221,7 @@ export const navItems: NavItem[] = [
     visibility: "active-only",
     pathMatch: "/show",
     group: "live",
+    hiddenInVenue: true,
   },
   {
     id: "prompt-book",
@@ -219,6 +231,7 @@ export const navItems: NavItem[] = [
     visibility: "active-only",
     pathMatch: "/prompt-book",
     group: "live",
+    hiddenInVenue: true,
   },
   {
     // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
@@ -233,6 +246,7 @@ export const navItems: NavItem[] = [
     visibility: "active-only",
     pathMatch: "/busk",
     group: "live",
+    hiddenInVenue: true,
   },
 
   // ── Monitor ─────────────────────────────────────────────────────────
@@ -413,6 +427,7 @@ export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family)
   // the real array, which is why the array is module-scope rather than built inside the hook.
   pathMatch: "/templates",
   group: "program" as const,
+  hiddenInVenue: true,
 }))
 
 export function useTemplateFamilyNavItems(): NavItem[] {
@@ -441,9 +456,12 @@ export function filterNavItems(
   items: NavItem[],
   isViewingActiveProject: boolean,
   isAdmin: boolean = true,
+  /** The viewed project is a venue: its rail drops the show's views ([NavItem.hiddenInVenue]). */
+  isVenue: boolean = false,
 ): NavItem[] {
   return items.filter((item) => {
     if (item.adminOnly && !isAdmin) return false
+    if (item.hiddenInVenue && isVenue) return false
     if (item.visibility === "always") return true
     if (item.visibility === "active-only") return isViewingActiveProject
     if (item.visibility === "inactive-only") return !isViewingActiveProject

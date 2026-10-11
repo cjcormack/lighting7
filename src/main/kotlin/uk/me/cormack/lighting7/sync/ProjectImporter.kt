@@ -7,6 +7,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
 import uk.me.cormack.lighting7.models.DaoBuskPad
@@ -215,7 +216,22 @@ class ProjectImporter(private val state: State) {
      * [descriptionOverride] replaces the archive's description when non-null; null keeps the
      * archive's. Used by [ProjectCloner] so a clone can be re-described at creation time.
      */
-    fun import(sourceDir: Path, nameOverride: String?, descriptionOverride: String? = null): Result {
+    fun import(
+        sourceDir: Path,
+        nameOverride: String?,
+        descriptionOverride: String? = null,
+        /**
+         * The new project's kind. An archive carries none yet (venues sync from session 4), so every
+         * import is a show unless the caller says otherwise — a venue snapshot
+         * (`venue/VenueVersions.kt`) or a clone of a venue ([ProjectCloner]).
+         */
+        kind: ProjectKind = ProjectKind.SHOW,
+        /**
+         * Run inside the import's own transaction once every row has landed, so whatever the caller
+         * records about the new project (a venue version's index row) commits or rolls back with it.
+         */
+        inTransaction: (DaoProject) -> Unit = {},
+    ): Result {
         val (_, projectJson) = loadAndValidateArchive(sourceDir)
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
@@ -249,9 +265,11 @@ class ProjectImporter(private val state: State) {
                 stageDepthM = projectJson.stageDepthM
                 stageHeightM = projectJson.stageHeightM
                 uuid = targetUuid
+                this.kind = kind
             }
 
             populateProject(sourceDir, project)
+            inTransaction(project)
 
             Result(
                 projectId = project.id.value,

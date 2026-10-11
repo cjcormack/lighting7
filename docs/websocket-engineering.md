@@ -594,7 +594,7 @@ payload-free, since one project has one rig).
 | `stageRegionListChanged` | — | Stage-region CRUD |
 | `stageElementListChanged` | — | Scene-element CRUD (stage-view plan session 2), through REST or the `set_scene` MCP tool. The client invalidates `StageElement` |
 | `stageViewpointListChanged` | — | Saved-viewpoint CRUD, through REST or `set_scene`. The client invalidates `StageViewpoint`; a window sitting on a view that changed lands on it again only when it is picked again |
-| `projectDetailsChanged` | `projectId` | A project's own row changed — name, description or stage box — through `PUT /projects/{id}` or the `set_stage` MCP tool. The client invalidates its `Project` / `ProjectList` caches, which is what redraws the Stage view's box |
+| `projectDetailsChanged` | `projectId` | A project's own row changed — name, description or stage box — through `PUT /projects/{id}` or the `set_stage` MCP tool; or a venue's versions moved — `POST /venues/{id}/publish` or `DELETE /venues/{id}/draft` (venue plan session 2). The client invalidates its `Project` / `ProjectList` caches, which is what redraws the Stage view's box and refetches a venue's History, draft count and Patch list markers (`store/venues.ts` provides `Project`) |
 | `speedMasters.listChanged` | — | Speed-master CRUD only; live BPM rides `speedMasters.changed` |
 | `scriptListChanged` | — | A script was created, renamed, edited or deleted |
 | `fxDefinitionListChanged` | — | A user-defined effect was created, edited or deleted |

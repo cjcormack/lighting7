@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.models.DaoMachineOverride
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.state.State
 import java.nio.file.Files
 import java.util.UUID
@@ -60,15 +61,20 @@ class ProjectCloner(private val state: State) {
      *   source project, 409 for a name collision.
      */
     fun clone(sourceProjectId: Int, name: String, description: String?): Result {
-        val sourceName = transaction(state.database) {
+        val (sourceName, sourceKind) = transaction(state.database) {
             val source = DaoProject.findById(sourceProjectId)
                 ?: throw ImportError.notFound("Project not found: $sourceProjectId")
+            // A version is frozen and has no copy of its own; the routes' guard refuses the clone
+            // first, so this is the belt to that braces.
+            if (source.kind == ProjectKind.VENUE_VERSION) {
+                throw ImportError.conflict("A venue version cannot be cloned")
+            }
             // The importer checks the name too, but failing here skips a full export of a
             // project that could never land.
             if (DaoProject.find { DaoProjects.name eq name }.firstOrNull() != null) {
                 throw ImportError.conflict("A project named \"$name\" already exists. Provide a different name.")
             }
-            source.name
+            source.name to source.kind
         }
 
         val staging = Files.createTempDirectory("project-clone-")
@@ -79,6 +85,9 @@ class ProjectCloner(private val state: State) {
                 sourceDir = staging,
                 nameOverride = name,
                 descriptionOverride = description,
+                // The archive carries no kind yet, so a venue's clone is told it: a new venue with
+                // the source's draft as its own and no versions (they are this desk's index rows).
+                kind = sourceKind,
             )
 
             copyMachineOverrides(sourceProjectId, imported.projectId, mapping)

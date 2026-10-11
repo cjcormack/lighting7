@@ -25,6 +25,7 @@ let nextId = 1
 function patch(key: string, displayName: string, at: Partial<FixturePatch>): FixturePatch {
   return {
     id: nextId++,
+    uuid: `uuid-${key}`,
     key,
     displayName,
     fixtureTypeKey: 'generic-dimmer',

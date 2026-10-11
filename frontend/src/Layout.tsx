@@ -15,7 +15,8 @@ import { MobileDrawerContext } from "./components/mobileDrawerContext"
 
 import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
-import ProjectSwitcher from "./ProjectSwitcher"
+import ProjectSwitcher, { useViewedProject } from "./ProjectSwitcher"
+import { VenueBand } from "./components/venue/VenueBand"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { PositionsPanel } from "./components/positions/PositionsPanel"
@@ -88,6 +89,7 @@ export default function Layout() {
   // the row that stays and carries the way back (D11); below `md` it also draws the mobile
   // drawer's button (D10), through the opener provided below — the drawer itself is still here.
   const immersive = useImmersive() && isLiveViewPath(location.pathname)
+  const viewedProject = useViewedProject()
   const openMobileDrawer = useCallback(() => setMobileDrawerOpen(true), [])
 
   // This window's announce to the desk's windows registry, and the handler for the commands
@@ -282,6 +284,11 @@ export default function Layout() {
               a drag started in either must be able to land in the other. See DeskDndProvider. */}
           <DeskDndProvider>
             {!immersive && <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />}
+
+            {/* Venue mode's band (venue plan session 2): on every view of a venue, outside `<main>`
+                so a full-height live view shrinks to fit rather than scrolling by the band's height.
+                Not while immersive, with the rest of the chrome (D7). */}
+            {!immersive && <VenueBand projectId={viewedProject?.id} />}
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
                 column rather than above it so it doesn't shift the ShowBar or the panels;

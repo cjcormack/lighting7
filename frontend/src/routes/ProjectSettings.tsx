@@ -17,6 +17,7 @@ import { StageRegionsContent } from "@/components/stage/StageRegionsContent"
 import { RiggingsContent } from "@/components/rigging/RiggingsContent"
 import { ProjectSyncContent } from "./CloudSync"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
+import { useVenueMode } from "@/store/venues"
 
 // No `patches`: the patch list is a routed page again at `/projects/:id/patches` (CLAUDE.md
 // §List shell), and `App.tsx` redirects `/settings/patches` there.
@@ -36,6 +37,8 @@ export function ProjectSettings() {
   const navigate = useNavigate()
   const projectIdNum = Number(projectId)
   const { data: project, isLoading } = useProjectQuery(projectIdNum)
+  const venueMode = useVenueMode(projectIdNum)
+  const venueReadOnly = venueMode.isVenue && !venueMode.canEdit
 
   const activeTab: Tab = isTab(tab) ? tab : "general"
 
@@ -78,7 +81,10 @@ export function ProjectSettings() {
           </TabsList>
         </Tabs>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0">
+      {/* An operator looks at a venue; only an admin changes one (venue plan D3). A disabled
+          fieldset turns off every control in the tabs at once; the Rigging and Regions lists
+          also stop opening their editors. */}
+      <fieldset disabled={venueReadOnly} className="m-0 min-w-0 flex-1 overflow-y-auto min-h-0 border-0 p-0">
         {activeTab === "general" && (
           <GeneralTab projectId={projectIdNum} />
         )}
@@ -86,7 +92,7 @@ export function ProjectSettings() {
         {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
         {activeTab === "rigging" && <RiggingTab projectId={projectIdNum} />}
         {activeTab === "sync" && <ProjectSyncContent projectId={projectIdNum} />}
-      </div>
+      </fieldset>
     </div>
   )
 }

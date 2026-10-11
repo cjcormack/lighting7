@@ -5,6 +5,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
+import uk.me.cormack.lighting7.models.DaoVenueVersions
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueEvents
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
@@ -199,6 +200,9 @@ class SyncCoverageTest {
         DaoRemoteAccessSettingsTable to Disposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
         DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
         DaoEffectTubeStates to Disposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),
+        // Venue plan §3.2: this desk's index of its venue snapshots. Session 4 rebuilds it from the
+        // venue repo's tags; the version itself travels as a tagged commit, never as this row.
+        DaoVenueVersions to Disposition.MachineLocal("this desk's index of venue versions; rebuilt from the venue repo's tags"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
     )

@@ -2137,6 +2137,19 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
    `encodeDefaults = false` (i.e. it's a required field with no default),
    that's a `formatVersion` bump — see "Format versioning".
 
+## Venues: not synced yet
+
+Venue plan session 2 adds venues (`projects.kind = VENUE`) and their frozen versions
+(`VENUE_VERSION`), but a venue syncs as its own repo only from session 4 (§3.4, `formatVersion` 24).
+Until then **sync is refused for both** (P6): the per-project sync subtree answers 409
+`SYNC_VENUE_PENDING` for a venue or a version, reads included (`GET …/sync/config` creates the config
+row it answers with), and `AutoSyncScheduler` treats one as disabled. So no repo is ever attached to a
+venue, and an auto-sync cannot push a show repo without its rig. Nothing about a show changes: every
+project is a `SHOW` unless made otherwise, and `kind` is not exported yet (a clone of a venue is told
+it by `ProjectCloner`). `venue_versions` is `MachineLocal` in `SyncCoverageTest`; session 4 rebuilds
+it from the venue repo's tags. `SeatingParams.block` rides a seating's `params` object, which every
+version since 18 already carries, so it needs no bump.
+
 ## How to add a new table
 
 1. Add the `IntIdTable` / DAO pair in `models/`, with a `uuid` column if it's

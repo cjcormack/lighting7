@@ -306,6 +306,7 @@ function makePatches(
     const tiltBase = 30 + (floorIdx % 5) * 8
     patches.push({
       id: id++,
+      uuid: `harness-patch-uuid-${id}`,
       key: `harness-patch-${id}`,
       displayName: `H${id - 1}`,
       fixtureTypeKey: HARNESS_TYPE_KEY,
@@ -343,6 +344,7 @@ function makePatch(
 ): FixturePatch {
   return {
     id,
+    uuid: `harness-patch-uuid-${id}`,
     key: `harness-patch-${id}`,
     displayName: `H${id}`,
     fixtureTypeKey: HARNESS_TYPE_KEY,
@@ -441,6 +443,7 @@ function buildFocusHarness(stageD: number): HarnessData {
     })
     return {
       id: i + 1,
+      uuid: `harness-patch-uuid-${head.key}`,
       key: head.key,
       displayName: `Focus ${head.focusM} m`,
       fixtureTypeKey: FOCUS_TYPE_KEY,
@@ -557,6 +560,7 @@ function buildDrapeHarness(): HarnessData {
   }
   const spot: FixturePatch = {
     id: 1,
+    uuid: 'harness-patch-uuid-drape',
     key: DRAPE_PATCH_KEY,
     displayName: 'Drape spot',
     fixtureTypeKey: DRAPE_TYPE_KEY,
@@ -779,6 +783,7 @@ function buildMaterialHarness(mode: MaterialHarness): HarnessData {
   }
   const patches: FixturePatch[] = spots.map((spot, i) => ({
     id: i + 1,
+    uuid: `harness-patch-uuid-${spot.key}`,
     key: spot.key,
     displayName: spot.key,
     fixtureTypeKey: MATERIAL_TYPE_KEY,
@@ -1013,6 +1018,7 @@ function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessDa
     })
     return {
       id: i + 1,
+      uuid: `harness-patch-uuid-${spot.key}`,
       key: spot.key,
       displayName: spot.key,
       fixtureTypeKey: CLOTH_TYPE_KEY,

@@ -16,7 +16,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Cloud, CloudDownload, MoreVertical, PlusCircle, Upload, XCircle } from "lucide-react"
+import { Cloud, CloudDownload, Landmark, MoreVertical, PlusCircle, Upload, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
@@ -36,9 +36,11 @@ import CloneProjectDialog from "../CloneProjectDialog"
 import ExportProjectDialog from "../ExportProjectDialog"
 import ImportProjectDialog from "../ImportProjectDialog"
 import { AddRemoteProjectDialog } from "../components/cloudSync/ImportFromRemoteDialog"
+import { VenueTag } from "../components/venue/VenueTag"
 
 export default function Projects() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [addVenueOpen, setAddVenueOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addRemoteOpen, setAddRemoteOpen] = useState(false)
   // Skipped for operators: `/api/rest/oauth/` is admin-gated, so their refetch can only 403 —
@@ -66,6 +68,13 @@ export default function Projects() {
       <CreateProjectDialog
         open={createDialogOpen}
         setOpen={setCreateDialogOpen}
+      />
+      {/* *Add venue* (venue plan session 2): an empty venue, an admin's. Extracting one from a
+          show's rig is session 3. */}
+      <CreateProjectDialog
+        open={addVenueOpen}
+        setOpen={setAddVenueOpen}
+        kind="VENUE"
       />
       <ImportProjectDialog
         open={importDialogOpen}
@@ -98,6 +107,12 @@ export default function Projects() {
                   Connect GitHub in Install Settings &rsaquo; Sync to add a remote project.
                 </TooltipContent>
               </Tooltip>
+            )}
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setAddVenueOpen(true)}>
+                <Landmark className="size-4" />
+                Add venue
+              </Button>
             )}
             <Button onClick={() => setCreateDialogOpen(true)}>
               <PlusCircle className="size-4" />
@@ -156,6 +171,9 @@ function ProjectCard({
   const [exportOpen, setExportOpen] = useState(false)
   const navigate = useNavigate()
   const isAdmin = useIsNavAdmin()
+  const isVenue = project.kind === "VENUE"
+  // A venue is an admin's to change (venue plan D3): an operator may open one, nothing more.
+  const canChange = !isVenue || isAdmin
 
   const { data: currentProject } = useCurrentProjectQuery()
 
@@ -230,7 +248,10 @@ function ProjectCard({
         <CardHeader className="p-0 px-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <CardTitle className="text-lg">{project.name}</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <span className="truncate">{project.name}</span>
+                {isVenue && <VenueTag className="shrink-0" />}
+              </CardTitle>
               <p className="text-sm text-muted-foreground">
                 {project.description || "\u00A0"}
               </p>
@@ -247,28 +268,37 @@ function ProjectCard({
                     Activate
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/scripts`)}>
-                  Scripts
-                </DropdownMenuItem>
+                {/* A venue has no scripts: its rail hides them (venue plan §4). */}
+                {!isVenue && (
+                  <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/scripts`)}>
+                    Scripts
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/settings`)}>
                   Configure
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCloneOpen(true)}>
-                  Clone
-                </DropdownMenuItem>
+                {canChange && (
+                  <DropdownMenuItem onClick={() => setCloneOpen(true)}>
+                    Clone
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem onClick={() => setExportOpen(true)}>
                     Export
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                  disabled={project.isCurrent}
-                >
-                  Delete
-                </DropdownMenuItem>
+                {canChange && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setDeleteOpen(true)}
+                      disabled={project.isCurrent}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

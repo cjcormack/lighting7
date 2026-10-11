@@ -287,6 +287,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
     post<CopyLookResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val request = call.receive<CopyLookRequest>()
+            if (refusedCopyTarget(state, request.targetProjectId)) return@withProject
             val result = transaction(state.database) {
                 val source = DaoLook.findById(resource.lookId) ?: return@transaction null
                 if (source.project.id != project.id) return@transaction null

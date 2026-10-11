@@ -11,6 +11,7 @@ import { includedCueId } from '@/lib/includedTarget'
 import { useProgrammerSummaryQuery } from '@/store/programmer'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { useVenueMode } from '@/store/venues'
 import { useLookListQuery } from '@/store/looks'
 import { useIncludeBaseline } from './useIncludeBaseline'
 
@@ -160,6 +161,7 @@ export function ProgrammerSourceStrip({
   const { data: summary } = useProgrammerSummaryQuery()
   const { data: activeEffects } = useActiveEffectsQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  const { isVenue } = useVenueMode(projectId)
   const dirty = useIncludeBaseline()
 
   const target = summary?.lastIncluded ?? null
@@ -341,7 +343,9 @@ export function ProgrammerSourceStrip({
             <Button
               size="sm"
               className="h-7 @max-[600px]:w-7 @max-[600px]:px-0"
-              disabled={inSync}
+              // Update writes the source back, and in a venue Record and Update are off (venue plan
+              // D11; the desk answers `VENUE_RECORD_OFF`).
+              disabled={inSync || isVenue}
               onClick={onUpdate}
               // The full label whatever the width: below `@[800px]` the cue number is dropped from
               // the *visible* text and this is the only thing still carrying it.

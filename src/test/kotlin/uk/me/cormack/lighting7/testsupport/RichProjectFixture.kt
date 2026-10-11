@@ -30,6 +30,7 @@ import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.PlatformParams
 import uk.me.cormack.lighting7.models.SeatingParams
 import uk.me.cormack.lighting7.models.SeatingAisle
+import uk.me.cormack.lighting7.models.SeatingBlock
 import uk.me.cormack.lighting7.models.ChairStyle
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
@@ -199,6 +200,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             SeatingParams(
                 rows = 8, seatsPerRow = 10, rowPitchM = 0.95, seatPitchM = 0.52, firstRow = "B", rakeM = 0.1,
                 aisles = listOf(SeatingAisle(afterSeat = 5, widthM = 1.1)), chair = ChairStyle.BANQUET, frameColour = "#c9a44c",
+                // Not the default (absent = PRESET): a venue's Fixed block, venue plan D6.
+                block = SeatingBlock.FIXED,
             ),
         )
         hidden = true

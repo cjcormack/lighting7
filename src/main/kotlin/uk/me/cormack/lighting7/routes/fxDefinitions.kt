@@ -60,6 +60,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // POST /fx/definitions - Create a new FX definition
     post<FxDefinitionsResource> {
+        // An FX definition is stored in the live project; on a live venue that is an admin's write.
+        if (refusedLiveVenueWrite(state)) return@post
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
@@ -115,6 +117,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // PUT /fx/definitions/{id} - Update a definition
     put<FxDefinitionResource> { resource ->
+        // An FX definition is stored in the live project; on a live venue that is an admin's write.
+        if (refusedLiveVenueWrite(state)) return@put
         val request = call.receive<UpdateFxDefinitionRequest>()
 
         // Validate the *merged* declaration in its own read, before the mutating transaction
@@ -187,6 +191,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // DELETE /fx/definitions/{id} - Delete a definition
     delete<FxDefinitionResource> { resource ->
+        // An FX definition is stored in the live project; on a live venue that is an admin's write.
+        if (refusedLiveVenueWrite(state)) return@delete
         val deleted = transaction(state.database) {
             val def = state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?: return@transaction false

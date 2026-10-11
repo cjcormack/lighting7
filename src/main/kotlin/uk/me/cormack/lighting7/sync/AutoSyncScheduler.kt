@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
@@ -198,6 +199,9 @@ class AutoSyncScheduler(
     private suspend fun classifyTick(projectId: Int): TickResult {
         val decision = transaction(state.database) {
             val project = DaoProject.findById(projectId) ?: return@transaction TickDecision.ProjectGone
+            // A venue and its versions do not sync until venue plan session 4 (P6,
+            // `SYNC_VENUE_PENDING`); the routes refuse attaching a repo, and this keeps a tick off one.
+            if (project.kind != ProjectKind.SHOW) return@transaction TickDecision.Disabled
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
             if (cfg?.autoSyncEnabled != true || cfg.repoUrl.isNullOrBlank()) return@transaction TickDecision.Disabled
             val install = DaoInstall.all().firstOrNull() ?: return@transaction TickDecision.Disabled

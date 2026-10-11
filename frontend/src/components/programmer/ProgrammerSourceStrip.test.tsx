@@ -15,6 +15,8 @@ vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
 vi.mock('./useIncludeBaseline', () => ({ useIncludeBaseline: () => dirty }))
+const venue = { isVenue: false }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
 
 import { ProgrammerSourceStrip } from './ProgrammerSourceStrip'
 
@@ -156,6 +158,19 @@ describe('ProgrammerSourceStrip', () => {
     draw()
     expect(screen.getByText('No source').className).toContain('@[410px]:block')
     expect(screen.getByText('No source').className).toContain('hidden')
+  })
+
+  it('turns Update off in a venue, where Record and Update are (venue plan D11)', () => {
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+    dirty = 3
+    stacks = [STACK]
+    venue.isVenue = true
+    try {
+      draw()
+      expect(screen.getByRole('button', { name: 'Update Q4' })).toBeDisabled()
+    } finally {
+      venue.isVenue = false
+    }
   })
 
   it('names the cue, its stack and its position, and labels Update with it', () => {
