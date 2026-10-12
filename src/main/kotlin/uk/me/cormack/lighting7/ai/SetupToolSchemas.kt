@@ -335,13 +335,13 @@ private val pointSchema = objectSchema(required = listOf("x", "y", "z")) {
 
 private val sceneElementSchema = objectSchema(required = listOf("name")) {
     prop("name", "string", "Unique name: 'Hall', 'Proscenium', 'Stalls', 'SR wall', 'Sofa'. An existing name updates that element — fields you send overwrite, fields you omit keep.")
-    enumProp("kind", StageElementKind.entries.map { it.name }, "Required for a new element. ROOM: an inward-facing shell. PROSCENIUM: a wall with an opening. FLAT: a panel with doors and windows. DRAPE: soft goods. PLATFORM: a deck, rostrum or balcony. SEATING: rows of seats (viewpoints sit in them). OBJECT: furniture, plants, signs, a flown piece.")
+    enumProp("kind", StageElementKind.entries.map { it.name }, "Required for a new element. ROOM: an inward-facing shell. PROSCENIUM: a wall with an opening. FLAT: a panel with doors and windows. DRAPE: soft goods. PLATFORM: a deck, rostrum or balcony. SEATING: rows of seats (viewpoints sit in them). OBJECT: furniture, plants, signs, a flown piece — or, with shape MODEL, any shape built from parts.")
     enumProp("layer", StageElementLayer.entries.map { it.name }, "VENUE outlives a production (the hall, the proscenium, the seating); SET is this show's. Default VENUE.")
     prop("x", "number", "Metres. The element's origin: the centre of its footprint (for SEATING, the centre of the first row).")
     prop("y", "number", "Metres.")
     prop("z", "number", "Metres. The element's base — except a PLATFORM, whose z is its top surface (the deck hangs down from it), as a region's centerZ is. A hall floor below a raised stage is negative.")
     prop("yawDeg", "number", "Rotation about Z at the origin, −360–360; +yaw turns anticlockwise seen from above (0 = square to the audience).")
-    prop("widthM", "number", "Size along the element's own x. Every kind but SEATING needs all three sizes; SEATING's comes from its rows and seats.")
+    prop("widthM", "number", "Size along the element's own x. Every kind but SEATING needs all three sizes; SEATING's comes from its rows and seats. A MODEL OBJECT is fitted to its three sizes; a row that sends its parts and leaves a size out takes that size from the parts (get_scene's modelSize).")
     prop("depthM", "number", "Size along its own y.")
     prop("heightM", "number", "Size along z. A PLATFORM's thickness below its top.")
     put("finish", objectSchema {
@@ -360,13 +360,34 @@ private val sceneElementSchema = objectSchema(required = listOf("name")) {
                 "DRAPE: {role: LEG|BORDER|TABS|CYC|BACKCLOTH, operation: DEAD|DRAW|FLY, travelS, drawFrom: STAGE_LEFT|STAGE_RIGHT (a DRAW drape that travels one way, stacking at that side when open; omit for a bi-parting pair meeting in the middle), fabric: CANVAS|MUSLIN|SHARKSTOOTH|BOBBINET (omit for velour, the only fabric that pleats; canvas is the flat painted cloth, muslin translucent, the two nets scrims), paint: {front, back} (image hashes from upload_scene_image, front the downstage side)}. A flown gauze is BACKCLOTH + FLY + SHARKSTOOTH; a traveller scrim TABS + DRAW. " +
                 "PLATFORM: {railHeightM and railEdge together, region: a stage region's name when the platform is that region's deck}. " +
                 "SEATING: {rows (≤26), seatsPerRow, rowPitchM, seatPitchM, firstRow ('A'), rakeM (rise per row), aisles: [{afterSeat, widthM}] (a gap in every row, seats keep their numbers), chair: THEATRE|BANQUET, frameColour, block: FIXED|PRESET (a venue's seating only: FIXED is the venue's own, in every show with its seat views; PRESET, the default, a layout a show copies)} — rows run away from the stage (−y), seat 1 at the stage-right end, the row centred on x. THEATRE (the default) is a fixed auditorium seat; BANQUET a stacking banquet chair (padded seat, round-topped back, metal frame — gold unless frameColour says otherwise; finish colour is the upholstery), about 0.45 m wide, so a seatPitchM of 0.5 sets them nearly touching. " +
-                "OBJECT: {shape: BOX|CYLINDER|SHADE|DISC, flies, travelS}. " +
+                "OBJECT: {shape: BOX|CYLINDER|SHADE|DISC|MODEL, flies, travelS, parts (MODEL only)}. $MODEL_PARTS_NOTE " +
                 "Any kind: states: {visible}, a DRAW drape's {open: 0–1}, a flown piece's {trimM}. " +
                 "travelS (0.1–600, a DRAW or FLY drape's, or a flown OBJECT's only): seconds for the piece's whole travel — closed to drawn, in (its z) to out (its trimM). Every move not on a cue's own clock (a Look pressed, a stack stopping, move_scenery) runs at it, scaled by how far it goes; unset, those moves snap.",
         )
     })
     prop("hidden", "boolean", "Stored but not drawn.")
+    prop(
+        "modelFrom", "string",
+        "Copy another element's model: the named OBJECT's MODEL parts, and its size and finish wherever this row leaves them out — so {name: 'Tree 4', x: 2, y: 5, modelFrom: 'Tree 1'} is another tree. " +
+            "params may still add flies, travelS or states, but not parts. The source is the scene as it stands at this row: a stored element, or one an earlier row of this call sets. A copy is independent: changing the source later does not change it.",
+    )
 }
+
+/**
+ * How a `MODEL` object's parts are written, for `set_scene`'s params description: the vocabulary of
+ * `models/sceneModel.kt`, which validates every key named here.
+ */
+private const val MODEL_PARTS_NOTE =
+    "MODEL builds a shape from parts — set pieces a primitive cannot draw (an arch, a tree, a column, a cut-out, a statue, a fireplace): " +
+        "parts: [{shape, x, y, z, yawDeg, pitchDeg, rollDeg, name, colour, pattern, emissive, texture, shadow, …the shape's sizes}], 1–200 of them, in the model's own frame (x across towards stage left, y upstage, z up; metres recommended, within ±100). " +
+        "BOX {widthM, depthM, heightM}, SPHERE {widthM, depthM?, heightM?} (an ellipsoid; depth and height default to width) and CYLINDER {widthM (base diameter), heightM, topWidthM? (0 a cone)} are centred on x/y/z; " +
+        "EXTRUDE {outline: [[x, z], …] (≥3 points, a polygon in the part's x–z plane, relative to x/z), holes?: [[[x, z], …], …], depthM (thickness along y, centred on y)} is a cut-out or an arch; " +
+        "LATHE {profile: [[radius, z], …] (≥2 points, relative to x/y/z), segments? (3–96, default 32)} revolves a profile about the part's z axis — a column, an urn, a lamp base, a bottle. " +
+        "Turns apply about the part's point: roll (about y; + leans the top towards stage left), then pitch (about x; + leans it downstage), then yaw (about z; + anticlockwise from above). At most 4000 outline and profile points per model. " +
+        "colour (#rrggbb) defaults to the element's finish colour. texture: {image: a hash from upload_scene_image, mode: STRETCH (the default: the whole image on every face) | TILE, tileM (TILE: one repeat's size in the model's units, default 1)} — " +
+        "transparent pixels cut holes in the surface, but the part still casts a whole shadow. shadow: false draws a part without a shadow box — use it for small details, since every shadowing part is a box each light tests. " +
+        "The whole model is fitted to the element's box: its footprint centred on the element's x/y and its lowest point at its z, scaled to widthM × depthM × heightM. " +
+        "Every part's shadow is the box round it, so a model casts a blocky shadow. To place copies of a model, use modelFrom."
 
 private val sceneViewpointSchema = objectSchema(required = listOf("name")) {
     prop("name", "string", "Unique name as the operator would say it: 'Balcony · desk', 'Row F centre', 'Centre stage'. An existing name updates that viewpoint.")
@@ -421,7 +442,7 @@ internal val setSceneTool = ToolDef(
 internal val uploadSceneImageTool = ToolDef(
     name = "upload_scene_image",
     description = "Store an image to paint on a cloth — a backcloth, a frontcloth, a gauze, a cut cloth, a flat — and answer its hash, width, height and whether it has transparent pixels. " +
-        "Then name the hash in set_scene: a DRAPE's or a FLAT's params.paint {front, back}. The image stretches over the face, so size the element to the image's aspect; transparent pixels cut holes. " +
+        "Then name the hash in set_scene: a DRAPE's or a FLAT's params.paint {front, back}, or a MODEL part's texture.image. On a cloth the image stretches over the face, so size the element to the image's aspect; transparent pixels cut holes. " +
         "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk). Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it. " +
         "Images are stored per project: the hash paints that project's elements only (a show on a venue also sees the venue's own images). copy_to_project carries an element's images with it.",
     inputSchema = objectSchema(required = listOf("mediaType", "base64")) {

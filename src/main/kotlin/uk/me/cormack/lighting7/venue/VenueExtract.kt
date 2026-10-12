@@ -33,7 +33,7 @@ import uk.me.cormack.lighting7.models.ensureDefaultSpeedMasters
 import uk.me.cormack.lighting7.models.extraPlacementsOf
 import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.models.nowUtc
-import uk.me.cormack.lighting7.models.paintHashesOf
+import uk.me.cormack.lighting7.models.sceneImageHashesOf
 import uk.me.cormack.lighting7.models.readElementParams
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.KeptUuidCopy
@@ -171,7 +171,7 @@ class VenueExtract(private val state: State) {
         val overrides = DaoMachineOverride.find { DaoMachineOverrides.project eq show.id }
             .filter { it.recordUuid in movedUuids }
         overrides.forEach { it.project = venue }
-        val hashes = (plan.elements + plan.presetSeating).flatMap { paintHashesOf(it.params) }.toSortedSet()
+        val hashes = (plan.elements + plan.presetSeating).flatMap { sceneImageHashesOf(it.params) }.toSortedSet()
         val images = hashes.count { hash ->
             val src = state.sceneImages.original(show.uuid.toString(), hash)?.first ?: return@count false
             state.sceneImages.hydrate(venueUuid.toString(), hash, src)

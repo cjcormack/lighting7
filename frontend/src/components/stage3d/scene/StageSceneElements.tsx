@@ -4,13 +4,19 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
+  ExtrudeGeometry,
   Float32BufferAttribute,
   CylinderGeometry,
   InstancedMesh,
+  LatheGeometry,
   MathUtils,
   Matrix4,
+  Path,
   PlaneGeometry,
   Quaternion,
+  Shape,
+  SphereGeometry,
+  Vector2,
   Vector3,
 } from 'three'
 import type { StageElementDto } from '../../../api/stageElementApi'
@@ -38,6 +44,8 @@ import {
   finishLobes,
   type ElementBuild,
   type PartGeometry,
+  type PartTexture,
+  type PartTransform,
   type PartUv,
   type ScenePart,
 } from './sceneParts'
@@ -119,11 +127,135 @@ const PLEAT_SEGMENTS = 10
  * where each vertex lands on the element's images, and which face it is on
  * ([PAINT_FACE_ATTRIBUTE]): a cloth's one sheet is the downstage face, its back drawn by facing; a
  * box's downstage and upstage faces are painted and its edges are not.
+ *
+ * A model part ([options]) may carry a [PartTexture] — uvs on every face by its mode, every face
+ * painted with the front image ([textureUvs]) — and a [PartTransform], its turn and its fit's scale,
+ * baked into the vertices (and the normals, by their own matrix) after the uvs, so a tile is the
+ * model's own size and a scaled part's normals stay true.
  */
-export function partGeometry(geometry: PartGeometry, uv?: PartUv): BufferGeometry {
+export function partGeometry(
+  geometry: PartGeometry,
+  uv?: PartUv,
+  options: { texture?: PartTexture; transform?: PartTransform } = {},
+): BufferGeometry {
   const g = shapeGeometry(geometry)
   if (uv != null) paintUvs(g, geometry, uv)
+  else if (options.texture != null) textureUvs(g, geometry, options.texture)
+  if (options.transform != null) g.applyMatrix4(threeTransform(options.transform))
   return g
+}
+
+/**
+ * [m], a map in the lighting frame (x across, y upstage, z up), as the same map in three's
+ * (x across, y up, z towards the house): `B · m · Bᵀ` with B taking lighting (x, y, z) to three's
+ * (x, z, −y).
+ */
+export function threeTransform(m: PartTransform): Matrix4 {
+  const [l0, l1, l2, l3, l4, l5, l6, l7, l8] = m
+  return new Matrix4().set(
+    l0, l2, -l1, 0,
+    l6, l8, -l7, 0,
+    -l3, -l5, l4, 0,
+    0, 0, 0, 1,
+  )
+}
+
+/**
+ * A model part's uvs for its [texture], in its own frame before any turn or scale, and every face
+ * painted with the front image. `STRETCH` keeps each shape's own uvs — the whole image on each of a
+ * box's faces, round a cylinder, a sphere or a lathe and across each cap — except an outline's,
+ * which is laid over its extent as seen from downstage (mirrored on its back, so it reads from
+ * behind). `TILE` measures them in the model's units, one repeat every `tileM`: a box's and an
+ * outline's faces by the plane they lie in, a round shape's along and around it.
+ */
+function textureUvs(g: BufferGeometry, geometry: PartGeometry, texture: PartTexture) {
+  const pos = g.attributes.position
+  const nor = g.attributes.normal
+  const uvAttr = g.attributes.uv
+  const uvs = new Float32Array(pos.count * 2)
+  const tile = texture.mode === 'TILE' ? texture.tileM : null
+  g.computeBoundingBox()
+  const box = g.boundingBox!
+  const bw = Math.max(1e-6, box.max.x - box.min.x)
+  const bh = Math.max(1e-6, box.max.y - box.min.y)
+  // The arc length up a lathe's profile, for a tiled lathe's v.
+  const profileLength =
+    geometry.shape === 'lathe'
+      ? geometry.profile.reduce((sum, p, i) => (i === 0 ? 0 : sum + Math.hypot(p[0] - geometry.profile[i - 1][0], p[1] - geometry.profile[i - 1][1])), 0)
+      : 0
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const y = pos.getY(i)
+    const z = pos.getZ(i)
+    const nx = nor.getX(i)
+    const ny = nor.getY(i)
+    const nz = nor.getZ(i)
+    let u = uvAttr != null ? uvAttr.getX(i) : 0
+    let v = uvAttr != null ? uvAttr.getY(i) : 0
+    switch (geometry.shape) {
+      case 'box':
+      case 'extrude': {
+        const planar = geometry.shape === 'extrude' || tile != null
+        if (!planar) break
+        // The plane the face lies in, by its normal's largest component.
+        const ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz)
+        let a: number, b: number
+        if (az >= ax && az >= ay) [a, b] = [nz >= 0 ? x : -x, y]
+        else if (ax >= ay) [a, b] = [nx >= 0 ? -z : z, y]
+        else [a, b] = [x, ny >= 0 ? -z : z]
+        if (tile != null) {
+          ;[u, v] = [a / tile, b / tile]
+        } else {
+          // An outline stretched: over its extent from downstage, mirrored on its back face.
+          const across = (x - box.min.x) / bw
+          ;[u, v] = [nz < -0.5 ? 1 - across : across, (y - box.min.y) / bh]
+        }
+        break
+      }
+      case 'cylinder': {
+        if (tile == null) break
+        if (Math.abs(ny) > 0.99) {
+          // A cap: its own uv is the unit disc, so the radius in metres.
+          const r = Math.max(geometry.rTop, geometry.rBottom)
+          ;[u, v] = [((u - 0.5) * 2 * r) / tile, ((v - 0.5) * 2 * r) / tile]
+        } else {
+          ;[u, v] = [(u * Math.PI * (geometry.rTop + geometry.rBottom)) / tile, (v * geometry.h) / tile]
+        }
+        break
+      }
+      case 'sphere':
+        if (tile != null) [u, v] = [(u * Math.PI * Math.max(geometry.w, geometry.d)) / tile, (v * Math.PI * geometry.h) / 2 / tile]
+        break
+      case 'lathe':
+        if (tile != null) {
+          const r = Math.max(...geometry.profile.map((p) => p[0]))
+          ;[u, v] = [(u * 2 * Math.PI * r) / tile, (v * profileLength) / tile]
+        }
+        break
+      default:
+        break
+    }
+    uvs[i * 2] = u
+    uvs[i * 2 + 1] = v
+  }
+  g.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+  g.setAttribute(PAINT_FACE_ATTRIBUTE, new Float32BufferAttribute(new Float32Array(pos.count).fill(1), 1))
+}
+
+/**
+ * A lathe's profile in the order three draws facing out: up its outer side, so the profile closed
+ * along the axis runs anticlockwise in (radius, z). A profile written top first is turned round
+ * rather than drawn inside out.
+ */
+export function outwardProfile(profile: readonly (readonly [number, number])[]): (readonly [number, number])[] {
+  const closed = [...profile, [0, profile[profile.length - 1][1]] as const, [0, profile[0][1]] as const]
+  let area = 0
+  for (let i = 0; i < closed.length; i++) {
+    const p = closed[i]
+    const q = closed[(i + 1) % closed.length]
+    area += p[0] * q[1] - q[0] * p[1]
+  }
+  return area < 0 ? [...profile].reverse() : [...profile]
 }
 
 /**
@@ -162,6 +294,23 @@ function shapeGeometry(geometry: PartGeometry): BufferGeometry {
       g.rotateX(Math.PI / 2)
       return g
     }
+    case 'sphere': {
+      // three's y is the lighting z (height), its z the lighting y (depth).
+      const g = new SphereGeometry(0.5, 32, 16)
+      g.scale(geometry.w, geometry.h, geometry.d)
+      return g
+    }
+    case 'extrude': {
+      // The outline's (x, z) is three's (x, y); extruded along three's z (towards the house), centred.
+      const shape = new Shape(geometry.outline.map(([x, z]) => new Vector2(x, z)))
+      for (const hole of geometry.holes) shape.holes.push(new Path(hole.map(([x, z]) => new Vector2(x, z))))
+      const g = new ExtrudeGeometry(shape, { depth: geometry.d, bevelEnabled: false })
+      g.translate(0, 0, -geometry.d / 2)
+      return g
+    }
+    case 'lathe':
+      // Revolved about three's y, which is the lighting z.
+      return new LatheGeometry(outwardProfile(geometry.profile).map(([r, z]) => new Vector2(r, z)), geometry.segments)
     case 'pleat': {
       const pleat = geometry.pleat
       const shift = pleatShift(geometry.w, geometry.anchor)
@@ -224,11 +373,14 @@ function ScenePartMesh({
 }) {
   const paint = part.finish.paint
   const uv = paint != null ? part.uv : undefined
-  const painted = uv != null
-  const key = geometryKey(part.geometry) + (uv != null ? JSON.stringify(uv) : '')
+  // A model part's texture is drawn as a front paint on every face, its uvs its own (`textureUvs`).
+  const texture = uv == null ? part.finish.texture : undefined
+  const painted = uv != null || texture != null
+  const transform = part.transform
+  const key = geometryKey(part.geometry) + JSON.stringify([uv ?? null, texture?.mode ?? null, texture?.tileM ?? null, transform ?? null])
   // Keyed on the shape's numbers, not the part object, which every build makes afresh.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `part.geometry` and `uv` serialised whole
-  const geometry = useMemo(() => partGeometry(part.geometry, uv), [key])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `part.geometry`, `uv`, the texture's mode and tile and `transform` serialised whole
+  const geometry = useMemo(() => partGeometry(part.geometry, uv, { texture, transform }), [key])
   useEffect(() => () => geometry.dispose(), [geometry])
   // The fold's pitch and wander alone key the material: a drawn half's width moves every frame of a
   // draw, and with it only its shift and — for cloth that hangs flat — its depth, both uniforms.
@@ -243,6 +395,7 @@ function ScenePartMesh({
     doubleSided: pleat != null || part.geometry.shape === 'sheet',
     pleat,
     painted,
+    tiled: texture?.mode === 'TILE',
     draw,
   })
   const shift = part.geometry.shape === 'pleat' ? pleatShift(part.geometry.w, part.geometry.anchor) : 0
@@ -266,7 +419,7 @@ function ScenePartMesh({
   }, [material, draw, netR, netGather, tau, invalidate])
   // The images, loaded once by the cache and bound when they arrive: a uniform write, so this asks
   // for the frame that shows it.
-  const front = usePaintTexture(painted ? projectId : null, paint?.front, variant)
+  const front = usePaintTexture(painted ? projectId : null, paint?.front ?? texture?.image, variant)
   const back = usePaintTexture(painted ? projectId : null, paint?.back, variant)
   useLayoutEffect(() => {
     if (!painted) return

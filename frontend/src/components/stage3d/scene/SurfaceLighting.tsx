@@ -96,10 +96,10 @@ export function useSurfaceLighting(): SurfaceLighting {
 export function useSurfaceMaterial(finish: PartFinish, options: SurfaceMaterialOptions = {}): ShaderMaterial {
   const { uniforms } = useSurfaceLighting()
   const { colour, pattern, emissive, lobes } = finish
-  const { doubleSided, opacity, fill, catchOnly, behind, pleat, painted, draw } = options
+  const { doubleSided, opacity, fill, catchOnly, behind, pleat, painted, tiled, draw } = options
   const material = useMemo(
-    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive, lobes }, { doubleSided, opacity, fill, catchOnly, behind, pleat, painted, draw }),
-    [uniforms, colour, pattern, emissive, lobes, doubleSided, opacity, fill, catchOnly, behind, pleat, painted, draw],
+    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive, lobes }, { doubleSided, opacity, fill, catchOnly, behind, pleat, painted, tiled, draw }),
+    [uniforms, colour, pattern, emissive, lobes, doubleSided, opacity, fill, catchOnly, behind, pleat, painted, tiled, draw],
   )
   useEffect(() => () => material.dispose(), [material])
   return material

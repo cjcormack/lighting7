@@ -119,6 +119,8 @@ internal class SceneSetupTools(private val state: State) {
         }
 
         var swept = 0
+        val borrowed = LinkedHashMap<String, java.nio.file.Path>()
+        var imagesCopied = 0
         // A venue element's row that says only `hidden`: this show hides it, or brings it back.
         val hides = mutableListOf<Triple<String, UUID, Boolean>>()
         val plan = transaction(state.database) {
@@ -167,16 +169,30 @@ internal class SceneSetupTools(private val state: State) {
                 planned[name] = Planned(element.uuid, element.toFields(), readElementParams(element.toFields().kind, element.params))
             }
             val written = mutableListOf<Planned>()
+            // Images a `modelFrom` copy names that another store this project reads holds — a venue's
+            // model in a show — copied into this project's own on write, as copy_to_project carries an
+            // element's images, so no element ever names an image its own store lacks.
+            val imageStores = sceneImageStoresOf(project).drop(1)
+            borrowed.clear()
             for ((name, entry) in rows) {
-                val (where, row) = entry
+                val where = entry.first
+                // `modelFrom` copies another element's model into this row before it is read.
+                val row = withModelFrom(entry.second, { planned[it]?.fields }, where, problems) ?: continue
+                if ("modelFrom" in entry.second) {
+                    for (hash in sceneImageHashesOf(row["params"] as? JsonObject ?: JsonObject(emptyMap()))) {
+                        if (state.sceneImages.exists(projectUuid, hash)) continue
+                        imageStores.firstNotNullOfOrNull { state.sceneImages.original(it, hash)?.first }?.let { borrowed[hash] = it }
+                    }
+                }
                 val existing = stored[name]
-                val fields = elementFields(row, existing?.toFields(), name, regionUuidByName, where, problems) ?: continue
+                val fields = elementFields(row, existing?.toFields(), name, regionUuidByName, where, problems)
+                    ?.let { withNaturalModelSize(it, row) } ?: continue
                 val storedRegion = (planned[name]?.params as? PlatformParams)?.regionUuid.takeIf { existing != null }
                 val params = validateStageElement(
                     fields, regionUuids, where, problems,
                     storedRegionUuid = storedRegion,
-                    imageStored = { state.sceneImages.exists(projectUuid, it) },
-                    storedPaint = existing?.let { paintHashesOf(it.params) }.orEmpty(),
+                    imageStored = { it in borrowed || state.sceneImages.exists(projectUuid, it) },
+                    storedPaint = existing?.let { sceneImageHashesOf(it.params) }.orEmpty(),
                 )
                 val p = Planned(existing?.uuid ?: UUID.randomUUID(), fields, params)
                 planned[name] = p
@@ -212,10 +228,12 @@ internal class SceneSetupTools(private val state: State) {
             }
             if (problems.isNotEmpty() || dryRun) return@transaction Triple(written.size, viewWrites.size, false)
 
+            imagesCopied = 0
+            for ((hash, src) in borrowed) if (state.sceneImages.hydrate(projectUuid, hash, src)) imagesCopied++
             var order = (ownElements.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (p in written) {
                 // What it painted before this write; a new element painted nothing.
-                val released = ownElements[p.fields.name]?.let { paintHashesOf(it.params) }.orEmpty()
+                val released = ownElements[p.fields.name]?.let { sceneImageHashesOf(it.params) }.orEmpty()
                 val element = ownElements[p.fields.name] ?: DaoStageElement.new {
                     this.project = project
                     name = p.fields.name
@@ -226,7 +244,7 @@ internal class SceneSetupTools(private val state: State) {
                 }
                 element.store(p.fields, p.params!!)
                 // Every image it names now, and every one it let go, starts the prune's week again.
-                state.sceneImages.touch(projectUuid, released + paintHashesOf(element.params))
+                state.sceneImages.touch(projectUuid, released + sceneImageHashesOf(element.params))
             }
             var viewOrder = (ownViews.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (fields in viewWrites) {
@@ -265,6 +283,7 @@ internal class SceneSetupTools(private val state: State) {
                 put("viewpointsSet", viewpointsSet)
                 put("elementsRemoved", removeElements.size)
                 put("viewpointsRemoved", removeViewpoints.size)
+                if (imagesCopied > 0) put("imagesCopied", imagesCopied)
                 if (hides.isNotEmpty()) {
                     putJsonArray("venueElementsHidden") { hides.filter { it.third }.forEach { add(it.first) } }
                     putJsonArray("venueElementsShown") { hides.filterNot { it.third }.forEach { add(it.first) } }
@@ -323,6 +342,7 @@ internal class SceneSetupTools(private val state: State) {
                     "Paint a DRAPE or a FLAT with it through set_scene: params.paint {front, back} names this hash. " +
                         "Size the cloth to the image's aspect (${info.width}:${info.height})" +
                         (if (info.hasAlpha) "; its transparent pixels cut holes in the cloth. " else ". ") +
+                        "Or texture a MODEL object's part with it: the part's texture.image names this hash. " +
                         "Images are stored per project: this hash paints elements of project ${project.id.value} only " +
                         "(a show on a venue also reads the venue's images, for the venue's cloths). Upload it again with " +
                         "another projectId to use it there — the same bytes give the same hash — or let copy_to_project carry it with the element.",
@@ -336,7 +356,10 @@ internal class SceneSetupTools(private val state: State) {
         // What each painted face's image is, read before the transaction: an image with no info
         // sidecar is decoded to answer, and that must never hold the one pooled connection.
         val (paintHashes, stores) = transaction(state.database) {
-            stageElementsOf(project).flatMap { paintHashesOf(it.params) }.toSet() to sceneImageStoresOf(project)
+            // Only a cloth's paint is reported with its size; a part's texture is not sized to.
+            stageElementsOf(project).flatMap { e ->
+                (storedParamsObject(e.params)["paint"] as? JsonObject)?.let { sceneImageHashesOf(JsonObject(mapOf("paint" to it))) }.orEmpty()
+            }.toSet() to sceneImageStoresOf(project)
         }
         // A venue's cloth is painted from the pinned version's store (venue plan session 3).
         val imageInfo = paintHashes.associateWith { hash -> stores.firstNotNullOfOrNull { state.sceneImages.info(it, hash) } }
@@ -410,6 +433,14 @@ internal class SceneSetupTools(private val state: State) {
                                         }
                                     }
                                 }
+                            }
+                        }
+                        // A model's size before it is fitted, so a copy can be drawn at its parts' scale.
+                        naturalModelSize(params)?.let { b ->
+                            putJsonObject("modelSize") {
+                                put("widthM", b.widthM)
+                                put("depthM", b.depthM)
+                                put("heightM", b.heightM)
                             }
                         }
                         seating[e.uuid]?.let { s ->
@@ -520,6 +551,71 @@ internal class SceneSetupTools(private val state: State) {
             emissive = emissive,
             params = params,
             hidden = if ("hidden" in row) row.bool("hidden") ?: false else start.hidden,
+        )
+    }
+
+    /**
+     * [row] with its `modelFrom` resolved, or [row] itself when it names none: the named element's
+     * `MODEL` parts laid into the row's `params` (which may add `flies`, `travelS` or `states`, but not
+     * parts of its own), and its size and finish wherever the row leaves them out — so a row of only
+     * `{name, x, y, modelFrom}` is another copy of the model. [scene] looks an element up in the scene as
+     * it stands at this row: the stored elements and every row this call has set before it. Null with a problem when the
+     * name is not a model there.
+     */
+    private fun withModelFrom(
+        row: JsonObject,
+        scene: (String) -> StageElementFields?,
+        where: String,
+        problems: MutableList<String>,
+    ): JsonObject? {
+        val from = row["modelFrom"] ?: return row
+        val sourceName = (from as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
+        val source = sourceName?.let(scene)
+        val parts = source?.params?.takeIf { source.kind == StageElementKind.OBJECT && naturalModelSize(it) != null }?.get("parts")
+        val sent = row["params"]?.takeIf { it !is JsonNull }
+        val sentParams = sent as? JsonObject
+        val problem = when {
+            sourceName == null -> "modelFrom must be an element's name"
+            source == null -> "modelFrom names no element '$sourceName' (one this call sets must be listed before the row that copies it)"
+            parts == null -> "modelFrom names '$sourceName', which is not an OBJECT with shape MODEL"
+            sent != null && sentParams == null -> "params must be an object"
+            sentParams?.containsKey("parts") == true -> "send parts or modelFrom, not both"
+            else -> null
+        }
+        if (problem != null || source == null || parts == null) {
+            problems += "$where: ${problem ?: "modelFrom could not be read"}"
+            return null
+        }
+        val params = JsonObject(sentParams.orEmpty() + mapOf("shape" to JsonPrimitive(ObjectShape.MODEL.name), "parts" to parts))
+        val copied = buildMap {
+            if ("kind" !in row) put("kind", JsonPrimitive(StageElementKind.OBJECT.name))
+            if ("widthM" !in row) put("widthM", JsonPrimitive(source.widthM))
+            if ("depthM" !in row) put("depthM", JsonPrimitive(source.depthM))
+            if ("heightM" !in row) put("heightM", JsonPrimitive(source.heightM))
+            if ("finish" !in row && (source.finishColour != null || source.finishPattern != null || source.emissive)) {
+                put("finish", buildJsonObject {
+                    source.finishColour?.let { put("colour", it) }
+                    source.finishPattern?.let { put("pattern", it.name) }
+                    if (source.emissive) put("emissive", true)
+                })
+            }
+        }
+        return JsonObject(row - "modelFrom" + copied + ("params" to params))
+    }
+
+    /**
+     * [fields] with a `MODEL`'s size taken from its parts ([naturalModelSize]) along every axis
+     * [row] leaves out, where [row] sends the parts — so a model written in metres is drawn at its
+     * size, and one given a size is fitted to it. A row that does not send `params` keeps the size
+     * the element has.
+     */
+    private fun withNaturalModelSize(fields: StageElementFields, row: JsonObject): StageElementFields {
+        if (fields.kind != StageElementKind.OBJECT || row["params"] !is JsonObject) return fields
+        val natural = naturalModelSize(fields.params) ?: return fields
+        return fields.copy(
+            widthM = if ("widthM" in row) fields.widthM else natural.widthM,
+            depthM = if ("depthM" in row) fields.depthM else natural.depthM,
+            heightM = if ("heightM" in row) fields.heightM else natural.heightM,
         )
     }
 
@@ -871,9 +967,9 @@ internal class SceneSetupTools(private val state: State) {
         /**
          * What `get_scene` answers beside a row's fields and `set_scene` ignores, so a row read back
          * can be corrected and resent as it stands: a seating's seat count, a seat view's resolved
-         * eye, a note that its seating has gone, a painted face's image size.
+         * eye, a note that its seating has gone, a painted face's image size, a model's own size.
          */
-        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner")
+        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner", "modelSize")
 
         /** Appended to a refusal of a venue element's row: what a show can do instead. */
         const val VENUE_ELEMENT_HINT =

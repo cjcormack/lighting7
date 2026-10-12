@@ -1,0 +1,207 @@
+{
+  "description": "Shared vector for a MODEL object's bounds: lighting7 models/sceneModel.kt modelBounds and the Stage view's builders/model.ts modelBounds must both answer these. Computed independently by matrix multiplication of Rz(yaw)\u00b7Rx(pitch)\u00b7Ry(roll).",
+  "cases": [
+    {
+      "name": "one box standing on its base",
+      "parts": [
+        {
+          "shape": "BOX",
+          "z": 1.5,
+          "widthM": 2,
+          "depthM": 1,
+          "heightM": 3
+        }
+      ],
+      "bounds": {
+        "minX": -1.0,
+        "minY": -0.5,
+        "minZ": 0.0,
+        "maxX": 1.0,
+        "maxY": 0.5,
+        "maxZ": 3.0
+      }
+    },
+    {
+      "name": "a box yawed a quarter turn",
+      "parts": [
+        {
+          "shape": "BOX",
+          "yawDeg": 90,
+          "widthM": 2,
+          "depthM": 1,
+          "heightM": 1
+        }
+      ],
+      "bounds": {
+        "minX": -0.5000000000000001,
+        "minY": -1.0,
+        "minZ": -0.5,
+        "maxX": 0.5000000000000001,
+        "maxY": 1.0,
+        "maxZ": 0.5
+      }
+    },
+    {
+      "name": "a cone pitched onto its side, off the origin",
+      "parts": [
+        {
+          "shape": "CYLINDER",
+          "x": 1,
+          "pitchDeg": 90,
+          "widthM": 1,
+          "topWidthM": 0,
+          "heightM": 2
+        }
+      ],
+      "bounds": {
+        "minX": 0.5,
+        "minY": -1.0,
+        "minZ": -0.5000000000000001,
+        "maxX": 1.5,
+        "maxY": 1.0,
+        "maxZ": 0.5000000000000001
+      }
+    },
+    {
+      "name": "an outline rolled a quarter turn",
+      "parts": [
+        {
+          "shape": "EXTRUDE",
+          "y": 1,
+          "rollDeg": 90,
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              1,
+              3
+            ]
+          ],
+          "depthM": 0.2
+        }
+      ],
+      "bounds": {
+        "minX": 0.0,
+        "minY": 0.9,
+        "minZ": -2.0,
+        "maxX": 3.0,
+        "maxY": 1.1,
+        "maxZ": 1.8369701987210297e-16
+      }
+    },
+    {
+      "name": "a lathe yawed 45 degrees",
+      "parts": [
+        {
+          "shape": "LATHE",
+          "yawDeg": 45,
+          "profile": [
+            [
+              0.5,
+              0
+            ],
+            [
+              0.2,
+              1
+            ],
+            [
+              0.4,
+              2
+            ]
+          ]
+        }
+      ],
+      "bounds": {
+        "minX": -0.7071067811865475,
+        "minY": -0.7071067811865475,
+        "minZ": 0.0,
+        "maxX": 0.7071067811865475,
+        "maxY": 0.7071067811865475,
+        "maxZ": 2.0
+      }
+    },
+    {
+      "name": "a sphere and a box, unioned",
+      "parts": [
+        {
+          "shape": "SPHERE",
+          "z": 0.5,
+          "widthM": 1
+        },
+        {
+          "shape": "BOX",
+          "x": 2,
+          "z": 0.25,
+          "widthM": 0.5,
+          "depthM": 0.5,
+          "heightM": 0.5
+        }
+      ],
+      "bounds": {
+        "minX": -0.5,
+        "minY": -0.5,
+        "minZ": 0.0,
+        "maxX": 2.25,
+        "maxY": 0.5,
+        "maxZ": 1.0
+      }
+    },
+    {
+      "name": "a box turned on all three axes: roll, then pitch, then yaw",
+      "parts": [
+        {
+          "shape": "BOX",
+          "x": 0.3,
+          "y": -0.2,
+          "z": 1,
+          "yawDeg": 30,
+          "pitchDeg": 20,
+          "rollDeg": 10,
+          "widthM": 1,
+          "depthM": 2,
+          "heightM": 3
+        }
+      ],
+      "bounds": {
+        "minX": -1.0596264491114564,
+        "minY": -1.5930279456448297,
+        "minZ": -0.8117329665064212,
+        "maxX": 1.6596264491114565,
+        "maxY": 1.1930279456448298,
+        "maxZ": 2.8117329665064212
+      }
+    },
+    {
+      "name": "a tall ellipsoid and a cylinder wider at the top",
+      "parts": [
+        {
+          "shape": "SPHERE",
+          "widthM": 0.4,
+          "depthM": 0.6,
+          "heightM": 1.8
+        },
+        {
+          "shape": "CYLINDER",
+          "z": 1.2,
+          "widthM": 0.2,
+          "topWidthM": 0.9,
+          "heightM": 0.4
+        }
+      ],
+      "bounds": {
+        "minX": -0.45,
+        "minY": -0.45,
+        "minZ": -0.9,
+        "maxX": 0.45,
+        "maxY": 0.45,
+        "maxZ": 1.4
+      }
+    }
+  ]
+}

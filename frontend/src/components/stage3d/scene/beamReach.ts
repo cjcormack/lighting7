@@ -1,7 +1,8 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { REACH_EPS_M } from './landing'
 import { sceneMasks, type MaskSampler } from './sceneMasks'
-import { elementBaseZ, partCollides, partTransmit, type ElementBuild, type Facing, type PartGeometry, type Transmit } from './sceneParts'
+import { elementBaseZ, partCollides, partTransmit, type ElementBuild, type Facing, type PartGeometry, type PartTransform, type Transmit } from './sceneParts'
+import { transformedBounds } from './builders/model'
 
 /**
  * **Axial beam reach** (stage-view plan session 3): the first surface on a beam's axis — where the
@@ -362,8 +363,15 @@ export const SHEET_HALF_M = 0.005
  * pleat, just deep enough to hold the cloth's folds (its `pleat`, `pleat.ts`'s [pleatShape]), and
  * never thinner than a flat sheet's.
  */
-export function partBox(geometry: PartGeometry): PartBox {
+export function partBox(geometry: PartGeometry, transform?: PartTransform): PartBox {
+  const own = ownPartBox(geometry)
+  return transform == null ? own : transformedPartBox(own, transform)
+}
+
+function ownPartBox(geometry: PartGeometry): PartBox {
   const b = shapeBox(geometry)
+  // A sphere's and a lathe's sides face up all the way down from their tops, as a cone's do.
+  if (geometry.shape === 'sphere' || geometry.shape === 'lathe') return { ...b, capSkin: geometry.shape === 'sphere' ? b.hz : 2 * b.hz }
   if (geometry.shape !== 'cylinder') return { ...b, capSkin: b.skin }
   // A straight cylinder's top is flat; a cone's sloped side faces up or down, so a beam landing on
   // its top lights it all the way down.
@@ -382,6 +390,20 @@ function shapeBox(geometry: PartGeometry): Omit<PartBox, 'capSkin'> {
     }
     case 'disc':
       return { ox: 0, oy: 0, oz: 0, hx: geometry.r, hy: geometry.d / 2, hz: geometry.r, skin: e }
+    case 'sphere':
+      return { ox: 0, oy: 0, oz: 0, hx: geometry.w / 2, hy: geometry.d / 2, hz: geometry.h / 2, skin: Math.max(geometry.w, geometry.d) / 2 }
+    case 'extrude': {
+      const xs = geometry.outline.map((p) => p[0])
+      const zs = geometry.outline.map((p) => p[1])
+      const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)]
+      return { ox: (x0 + x1) / 2, oy: 0, oz: (z0 + z1) / 2, hx: (x1 - x0) / 2, hy: geometry.d / 2, hz: (z1 - z0) / 2, skin: e }
+    }
+    case 'lathe': {
+      const r = Math.max(...geometry.profile.map((p) => p[0]))
+      const zs = geometry.profile.map((p) => p[1])
+      const [z0, z1] = [Math.min(...zs), Math.max(...zs)]
+      return { ox: 0, oy: 0, oz: (z0 + z1) / 2, hx: r, hy: r, hz: (z1 - z0) / 2, skin: r }
+    }
     case 'pleat': {
       const a = Math.max(geometry.pleat.amplitudeM, SHEET_HALF_M)
       return { ox: 0, oy: 0, oz: 0, hx: geometry.w / 2, hy: a, hz: geometry.h / 2, skin: 2 * a + e }
@@ -404,6 +426,30 @@ function shapeBox(geometry: PartGeometry): Omit<PartBox, 'capSkin'> {
           return { ox: t, oy: 0, oz: 0, hx: t, hy: geometry.w / 2, hz: geometry.h / 2, skin: e }
       }
   }
+}
+
+/**
+ * [b] mapped by a model part's [transform] about the part's origin: the box round its mapped
+ * corners. A scale alone scales the skins with it, the level faces' by the larger of the two level
+ * scales; a turn puts the drawn surface anywhere in the box round it, so the skins become the box's
+ * largest half-extent — a turned part never shadows itself, while still shadowing what is behind it.
+ */
+function transformedPartBox(b: PartBox, transform: PartTransform): PartBox {
+  const mapped = transformedBounds(
+    { minX: b.ox - b.hx, minY: b.oy - b.hy, minZ: b.oz - b.hz, maxX: b.ox + b.hx, maxY: b.oy + b.hy, maxZ: b.oz + b.hz },
+    transform,
+  )
+  const hx = (mapped.maxX - mapped.minX) / 2
+  const hy = (mapped.maxY - mapped.minY) / 2
+  const hz = (mapped.maxZ - mapped.minZ) / 2
+  const centre = { ox: (mapped.minX + mapped.maxX) / 2, oy: (mapped.minY + mapped.maxY) / 2, oz: (mapped.minZ + mapped.maxZ) / 2, hx, hy, hz }
+  const [m0, m1, m2, m3, m4, m5, m6, m7, m8] = transform
+  const turned = [m1, m2, m3, m5, m6, m7].some((v) => Math.abs(v) > 1e-9)
+  if (turned) {
+    const skin = Math.max(hx, hy, hz)
+    return { ...centre, skin, capSkin: skin }
+  }
+  return { ...centre, skin: b.skin * Math.max(Math.abs(m0), Math.abs(m4)), capSkin: b.capSkin * Math.abs(m8) }
 }
 
 /** A quad's outward normal in its element's lighting frame (x right, y upstage, z up). */
@@ -440,7 +486,7 @@ export function elementColliders(
   const baseZ = elementBaseZ(element)
   for (const part of build.parts) {
     if (!partCollides(part)) continue
-    const b = partBox(part.geometry)
+    const b = partBox(part.geometry, part.transform)
     // The part's centre in the element's lighting frame, turned by +yaw (anticlockwise from above).
     const lx = part.at.x + b.ox
     const ly = part.at.y + b.oy

@@ -520,3 +520,53 @@ describe('EditSceneElementForm — fabric and paint (scrim plan session 1)', () 
     expect(screen.queryByRole('alert', { name: /params\.paint/ })).toBeNull()
   })
 })
+
+describe('EditSceneElementForm — model objects', () => {
+  const box = element({ uuid: 'sofa', name: 'Sofa', kind: 'OBJECT', widthM: 2, depthM: 0.9, heightM: 0.8, params: { shape: 'BOX' } })
+
+  it('turns an object into a MODEL starting from one part filling its box, and back again without its parts', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve({}) })
+    render(<EditSceneElementForm element={box} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByLabelText(/^Parts/)).toBeNull()
+    fireEvent.change(screen.getByLabelText('Shape'), { target: { value: 'MODEL' } })
+    expect(screen.getByLabelText(/^Parts \(1 part, JSON\)/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0][0].params).toEqual({ shape: 'MODEL', parts: [{ shape: 'BOX', widthM: 1, depthM: 1, heightM: 1 }] })
+  })
+
+  it('edits the parts as JSON, holds Save while the text does not parse, and files the desk’s part problems under the box', async () => {
+    const tree = element({
+      uuid: 'tree', name: 'Tree', kind: 'OBJECT', widthM: 1, depthM: 1, heightM: 3,
+      params: { shape: 'MODEL', parts: [{ shape: 'CYLINDER', widthM: 0.2, heightM: 1, z: 0.5 }] },
+    })
+    update.mockReturnValue(refuse(400, 'params.parts[1] (LATHE).profile: every radius is 0, so there is nothing to revolve; widthM must be between 0.0 and 500.0 metres'))
+    render(<EditSceneElementForm element={tree} projectId={3} onClose={() => {}} />)
+    type(/^Parts/, '[{"shape": "CYLINDER", ')
+    expect(screen.getByText(/^Not JSON/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    const parts = [{ shape: 'CYLINDER', widthM: 0.2, heightM: 1, z: 0.5 }, { shape: 'LATHE', profile: [[0, 1], [0, 2]] }]
+    type(/^Parts/, JSON.stringify(parts))
+    expect(screen.getByLabelText(/^Parts \(2 parts, JSON\)/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0][0].params).toEqual({ shape: 'MODEL', parts })
+    // The part's problem in full under the box; the width's beside its own field.
+    expect(await screen.findByText('params.parts[1] (LATHE).profile: every radius is 0, so there is nothing to revolve')).toBeTruthy()
+    expect(screen.getByText('Must be between 0.0 and 500.0 metres')).toBeTruthy()
+  })
+
+  it('lets Save go again once a model with unparseable parts is turned into another shape and back', () => {
+    render(<EditSceneElementForm element={box} projectId={3} onClose={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Shape'), { target: { value: 'MODEL' } })
+    type(/^Parts/, '[{"shape": ')
+    const save = () => (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled
+    expect(save()).toBe(true)
+    fireEvent.change(screen.getByLabelText('Shape'), { target: { value: 'BOX' } })
+    expect(save()).toBe(false)
+    fireEvent.change(screen.getByLabelText('Shape'), { target: { value: 'MODEL' } })
+    expect(screen.getByLabelText(/^Parts \(1 part, JSON\)/)).toBeTruthy()
+    expect(save()).toBe(false)
+  })
+})
+

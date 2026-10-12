@@ -46,7 +46,7 @@ import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.VenueLayer
 import uk.me.cormack.lighting7.models.VenueLinks
 import uk.me.cormack.lighting7.models.extraPlacementsOf
-import uk.me.cormack.lighting7.models.paintHashesOf
+import uk.me.cormack.lighting7.models.sceneImageHashesOf
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -256,7 +256,7 @@ class VenueDetach(private val state: State) {
         val machineOverrides = copyMachineOverrides(layer.venueProjectId, show, copiedUuids)
 
         // The images the copied elements are painted with, from the version's store (else the venue's).
-        val hashes = elements.flatMap { paintHashesOf(it.params) }.toSortedSet()
+        val hashes = elements.flatMap { sceneImageHashesOf(it.params) }.toSortedSet()
         val held = state.sceneImages.storedHashes(showUuid)
         val missing = hashes.filter { it !in held }
         var images = 0

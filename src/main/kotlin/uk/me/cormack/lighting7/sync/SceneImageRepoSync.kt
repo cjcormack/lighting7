@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.sync
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.SCENE_IMAGE_HASH
-import uk.me.cormack.lighting7.models.paintHashesOf
+import uk.me.cormack.lighting7.models.sceneImageHashesOf
 import uk.me.cormack.lighting7.state.SceneImageFormat
 import uk.me.cormack.lighting7.state.State
 import java.nio.file.AtomicMoveNotSupportedException
@@ -33,7 +33,7 @@ object SceneImageRepoSync {
     /** Every hash [projectId]'s elements paint with. Must run inside a transaction. */
     fun referencedHashes(projectId: Int): Set<String> =
         RigScope.of(projectId).own.stageElements()
-            .flatMap { paintHashesOf(it.params) }
+            .flatMap { sceneImageHashesOf(it.params) }
             .toSet()
 
     /**

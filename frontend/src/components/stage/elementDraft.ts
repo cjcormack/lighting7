@@ -65,7 +65,7 @@ export function withState(params: Params, key: string, value: unknown): Params {
 }
 
 /**
- * [params] with [key] set, then with the states that key's new value takes away taken out too: a
+ * [params] with [key] set, then with what that key's new value takes away taken out too: a
  * drape that stops drawing loses its `open` and its `drawFrom`, a piece that stops flying its
  * `trimM`, and a piece that stops travelling at all — a drape neither DRAW nor FLY, an object that
  * no longer flies — its `travelS` (scenery-programmer plan D6). Their fields go from the form as the kind stops offering
@@ -75,6 +75,11 @@ export function withState(params: Params, key: string, value: unknown): Params {
  */
 export function withKindParam(kind: StageElementDto['kind'], params: Params, key: string, value: unknown): Params {
   let next = withParam(params, key, value)
+  // An object turned into a MODEL starts as one part filling its box — the shape it already drew —
+  // since the desk refuses a model with none; one turned back into a primitive drops its parts.
+  const model = kind === 'OBJECT' && typeof next.shape === 'string' && next.shape.toUpperCase() === 'MODEL'
+  if (model && !Array.isArray(next.parts)) next = withParam(next, 'parts', [{ ...MODEL_STARTER_PART }])
+  if (!model && 'parts' in next) next = withParam(next, 'parts', null)
   const operation = typeof next.operation === 'string' ? next.operation.toUpperCase() : ''
   const drawn = kind === 'DRAPE' && operation === 'DRAW'
   const flies = (kind === 'OBJECT' && next.flies === true) || (kind === 'DRAPE' && operation === 'FLY')
@@ -85,6 +90,9 @@ export function withKindParam(kind: StageElementDto['kind'], params: Params, key
   if (!drawn && !flies && 'travelS' in next) next = withParam(next, 'travelS', null)
   return next
 }
+
+/** The one part an object turned into a MODEL starts with: a box, fitted to the element's box. */
+export const MODEL_STARTER_PART = { shape: 'BOX', widthM: 1, depthM: 1, heightM: 1 } as const
 
 /** The pose and size fields left empty, which a save must not send: every one is required. */
 export function emptyNumbers(kind: StageElementDto['kind'], draft: Draft): Array<keyof Draft> {

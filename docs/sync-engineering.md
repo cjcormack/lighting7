@@ -117,7 +117,7 @@ promptBooks/{uuid}.json        # script reference by content hash (scriptHash)
 promptBookAnchors/{uuid}.json  # carries promptBookUuid + cueUuid; normalized region rects
 promptBookAnnotations/{uuid}.json  # carries promptBookUuid; note/strikethrough/freetext
 promptScripts/{sha256}.pdf     # the script PDF itself — binary blob, content-addressed (v4+)
-sceneImages/{sha256}.{png|jpg} # an image a cloth is painted with — binary blob, content-addressed (v23+)
+sceneImages/{sha256}.{png|jpg} # an image a cloth is painted with (v23+) or a model's part textured with (v25+) — binary blob, content-addressed
 ```
 
 ### Prompt books
@@ -212,7 +212,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 24`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 25`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -265,6 +265,19 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 25 — model textures
+
+Bumped when a scene image could texture a part of a `MODEL` object (`docs/fixtures-engineering.md`
+§"Model objects"). `SUPPORTED_FORMAT_VERSION = 25`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. The
+parts are keys of the object's `params` — `shape: MODEL` and `parts`, each part's `texture.image` a
+scene image's SHA-256 — which `StageElementJson` already carries whole, so no DTO changed and the keys
+alone would need no bump (§"A params key added later needs no bump"). The images do, for v23's reason
+one step on: `SceneImageRepoSync.referencedHashes` now reads part textures beside paint
+(`sceneImageHashesOf`), and a v24 install reconciles `sceneImages/` to the hashes **it** reads as
+referenced — paint only — so its next push would delete every model texture while its re-export kept
+the parts that name them. Emitting v25 makes such an install refuse the repo as too new instead. A
+model with no texture changes nothing else in the archive.
 
 ### Version 24 — venues and shows on them
 
@@ -390,8 +403,9 @@ The images follow the prompt-book PDFs' contract (§"Version 4") point for point
 [`SceneImageRepoSync`](../src/main/kotlin/uk/me/cormack/lighting7/sync/SceneImageRepoSync.kt):
 
 * **Only referenced images travel.** The referenced set is every hash a stage element's
-  `params.paint` names (`SceneImageRepoSync.referencedHashes`, read leniently with
-  `paintHashesOf`), so an upload whose element was never saved stays on the machine that made it
+  `params.paint` names, and since v25 every `params.parts[].texture.image`
+  (`SceneImageRepoSync.referencedHashes`, read leniently with `sceneImageHashesOf`), so an upload
+  whose element was never saved stays on the machine that made it
   until the store's prune takes it.
 * **store → tree** (`reconcileTree`) on every export and snapshot, and on the auto-merge path after
   the DB is merged: copies each referenced image the tree lacks, deletes every file whose hash is no
