@@ -325,7 +325,7 @@ class StageSceneTest {
             text,
         )
         assertEquals(drape, readElementParams(StageElementKind.DRAPE, text))
-        assertEquals(setOf(front, back), paintHashesOf(text))
+        assertEquals(setOf(front, back), sceneImageHashesOf(text))
 
         // Velour is the absence of a fabric: nothing is written for it.
         val (velour, _) = parsePainted(StageElementKind.DRAPE, """{"role":"LEG"}""")
@@ -405,8 +405,8 @@ class StageSceneTest {
 
     @Test
     fun `paint hashes are read leniently from a stored document`() {
-        assertEquals(setOf(front), paintHashesOf("""{"paint":{"front":"$front","back":"short"}}"""))
-        assertEquals(emptySet(), paintHashesOf("not json"))
-        assertEquals(emptySet(), paintHashesOf("""{"paint":"$front"}"""))
+        assertEquals(setOf(front), sceneImageHashesOf("""{"paint":{"front":"$front","back":"short"}}"""))
+        assertEquals(emptySet(), sceneImageHashesOf("not json"))
+        assertEquals(emptySet(), sceneImageHashesOf("""{"paint":"$front"}"""))
     }
 }

@@ -59,7 +59,8 @@ enum class DrapeFabric { CANVAS, MUSLIN, SHARKSTOOTH, BOBBINET }
 
 enum class OpeningKind { DOOR, WINDOW, FRENCH_WINDOW, ARCH }
 
-enum class ObjectShape { BOX, CYLINDER, SHADE, DISC }
+/** An object's shape: a primitive sized by the element's box, or a `MODEL` built from parts (`sceneModel.kt`). */
+enum class ObjectShape { BOX, CYLINDER, SHADE, DISC, MODEL }
 
 enum class StageViewpointKind { ORBIT, EYE, SEAT }
 
@@ -212,6 +213,8 @@ data class ObjectParams(
     override val states: ElementStates? = null,
     /** A flown piece's full travel, in seconds ([elementTravelS]); null snaps. */
     val travelS: Double? = null,
+    /** A `MODEL`'s parts (`sceneModel.kt`), fitted to the element's box; every other shape has none. */
+    val parts: List<ModelPart> = emptyList(),
 ) : ElementParams
 
 /** The fewest and most seconds a piece's full travel may take (scenery-programmer plan D6). */
@@ -305,12 +308,20 @@ fun normaliseFinishColour(value: String?, where: String, problems: MutableList<S
  * the first. A key the kind does not have is a problem too, since a misspelt one would otherwise
  * be dropped and the write still answer success.
  */
-private class ParamReader(
+internal class ParamReader(
     private val obj: JsonObject,
     private val where: String,
     val problems: MutableList<String>,
 ) {
     private val read = mutableSetOf<String>()
+
+    /** The keys this reader has looked at, for a second reader of the same object ([markRead]). */
+    val readKeys: Set<String> get() = read
+
+    /** Count [keys] as read: another reader of the same object has handled them. */
+    fun markRead(keys: Set<String>) {
+        read += keys
+    }
 
     private fun element(name: String): JsonElement? {
         read += name
@@ -441,20 +452,21 @@ private fun readPaint(r: ParamReader, where: String, imageStored: (String) -> Bo
 }
 
 /**
- * Every scene-image hash a stored params document names, read leniently — a document a later
- * writer shaped differently still gives up the hashes it holds, so the prune and the exporter never
- * drop an image an element still shows.
+ * Every scene-image hash a stored params document names — a cloth's or a flat's `paint`, and a
+ * model's part textures — read leniently: a document a later writer shaped differently still gives
+ * up the hashes it holds, so the prune and the exporter never drop an image an element still shows.
  */
-fun paintHashesOf(params: JsonObject): Set<String> {
-    val paint = params["paint"] as? JsonObject ?: return emptySet()
-    return listOf("front", "back").mapNotNull { side ->
-        (paint[side] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.lowercase()
+fun sceneImageHashesOf(params: JsonObject): Set<String> {
+    val paint = params["paint"] as? JsonObject
+    val painted = listOf("front", "back").mapNotNull { side ->
+        (paint?.get(side) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.lowercase()
             ?.takeIf { SCENE_IMAGE_HASH.matches(it) }
-    }.toSet()
+    }
+    return (painted + partTextureHashesOf(params["parts"] as? JsonArray)).toSet()
 }
 
-/** [paintHashesOf] over a stored column's text. */
-fun paintHashesOf(paramsText: String): Set<String> = paintHashesOf(storedParamsObject(paramsText))
+/** [sceneImageHashesOf] over a stored column's text. */
+fun sceneImageHashesOf(paramsText: String): Set<String> = sceneImageHashesOf(storedParamsObject(paramsText))
 
 /**
  * How far past its wall a fit may run and still fit: a tenth of a millimetre, well under anything
@@ -487,6 +499,10 @@ fun parseElementParams(
     val fabric = r.enum<DrapeFabric>("fabric")
     val paintSent = obj["paint"].let { it != null && it !is JsonNull }
     val paint = readPaint(r, where, imageStored)
+    val partsSent = obj["parts"].let { it != null && it !is JsonNull }
+    // Read for every kind, so one on another kind is refused by name below; parsed only for an object.
+    val partsArray = r.array("parts")
+    val parts = partsArray?.takeIf { kind == StageElementKind.OBJECT }?.let { readModelParts(it, "$where.parts", problems, imageStored) }
     val params: ElementParams? = when (kind) {
         StageElementKind.ROOM -> {
             val omit = r.array("omit")?.mapIndexedNotNull { i, e ->
@@ -575,7 +591,11 @@ fun parseElementParams(
         }
         StageElementKind.OBJECT -> {
             val shape = r.enum<ObjectShape>("shape") ?: ObjectShape.BOX
-            ObjectParams(shape, r.bool("flies") ?: false)
+            if (shape == ObjectShape.MODEL && !partsSent) problems += "$where.parts is required for a MODEL: [{shape: BOX | CYLINDER | SPHERE | EXTRUDE | LATHE, …}, …]"
+            if (partsSent && shape != ObjectShape.MODEL && problems.none { it.startsWith("$where.shape ") }) {
+                problems += "$where.parts is a MODEL's (an OBJECT with shape MODEL); this OBJECT's shape is $shape"
+            }
+            ObjectParams(shape, r.bool("flies") ?: false, parts = parts.orEmpty())
         }
     }
     val states = statesObj?.let {
@@ -607,6 +627,9 @@ fun parseElementParams(
     }
     if (paintSent && kind != StageElementKind.DRAPE && kind != StageElementKind.FLAT) {
         problems += "$where.paint is a drape's or a flat's (a DRAPE or a FLAT); this $kind takes none"
+    }
+    if (partsSent && kind != StageElementKind.OBJECT) {
+        problems += "$where.parts is a MODEL's (an OBJECT with shape MODEL); this $kind takes none"
     }
     if (problems.size > before || params == null) return null
     val kept = states?.takeIf { it.visible != null || it.open != null || it.trimM != null }

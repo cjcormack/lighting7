@@ -381,7 +381,7 @@ internal fun unlinkRegionFromPlatforms(project: DaoProject, regionUuid: UUID): I
  */
 internal fun forgetElement(state: State, project: DaoProject, element: DaoStageElement) {
     Overrides.setString(project.id.value, STAGE_ELEMENTS_OVERRIDE_TABLE, element.uuid, FIELD_DISPLAY_DETAIL, null)
-    state.sceneImages.touch(project.uuid.toString(), paintHashesOf(element.params))
+    state.sceneImages.touch(project.uuid.toString(), sceneImageHashesOf(element.params))
 }
 
 private fun writeStageElement(
@@ -431,7 +431,7 @@ private fun writeStageElement(
     )
     val stored = element?.let { readElementParams(start.kind, it.params) }
     val projectUuid = project.uuid.toString()
-    val storedPaint = element?.let { paintHashesOf(it.params) }.orEmpty()
+    val storedPaint = element?.let { sceneImageHashesOf(it.params) }.orEmpty()
     val parsed = validateStageElement(
         fields, regionUuidsOf(project), "", problems,
         storedRegionUuid = (stored as? PlatformParams)?.regionUuid,
@@ -463,7 +463,7 @@ private fun writeStageElement(
     target.store(fields, parsed)
     sortOrder?.let { target.sortOrder = it }
     // Both the images it names now and the ones it let go start the prune's week again.
-    state.sceneImages.touch(projectUuid, storedPaint + paintHashesOf(target.params))
+    state.sceneImages.touch(projectUuid, storedPaint + sceneImageHashesOf(target.params))
     return ElementWrite.Written(target.toDetailDto(project))
 }
 

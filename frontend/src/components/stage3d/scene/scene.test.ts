@@ -197,11 +197,24 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
       shape: 'pleat', w: 1.4, h: 4, pleat: gatherShape({ uuid: `gather-${fullness}` }, 'sr', fullness), anchor: 'left',
     })),
     ...FACINGS.map((facing): PartGeometry => ({ shape: 'quad', w: 2, h: 1.5, facing })),
+    // A model's own shapes: an ellipsoid, an arch cut from an outline, a lathed urn written top first.
+    { shape: 'sphere', w: 0.8, d: 0.5, h: 1.4 },
+    {
+      shape: 'extrude',
+      outline: [[-1, 0], [1, 0], [1, 2.4], [-1, 2.4]],
+      holes: [[[-0.6, 0], [0.6, 0], [0.6, 1.8], [0, 2.1], [-0.6, 1.8]]],
+      d: 0.3,
+    },
+    { shape: 'lathe', profile: [[0.3, 1.2], [0.4, 0.9], [0.15, 0.3], [0.25, 0]], segments: 24 },
   ]
   // The lighting-frame axes a beam lands on to light the part: every face of a solid, the broad
   // faces of a thin one. A beam landing on a cloth's or a disc's edge grazes along it, and the part
   // shadows itself past its first fold — session 3's boxes, not the skin, are what draw that.
-  const LIT_AXES: Record<PartGeometry['shape'], number[]> = { box: [0, 1, 2], cylinder: [0, 1, 2], disc: [1], pleat: [1], sheet: [1], quad: [] }
+  const LIT_AXES: Record<PartGeometry['shape'], number[]> = {
+    box: [0, 1, 2], cylinder: [0, 1, 2], disc: [1], pleat: [1], sheet: [1], quad: [],
+    // An outline's sides lie anywhere inside its box; its front and back are the box's faces.
+    sphere: [0, 1, 2], extrude: [1], lathe: [0, 1, 2],
+  }
   const QUAD_AXIS: Record<Facing, number> = { left: 0, right: 0, upstage: 1, downstage: 1, up: 2, down: 2 }
 
   for (const shape of SHAPES) {

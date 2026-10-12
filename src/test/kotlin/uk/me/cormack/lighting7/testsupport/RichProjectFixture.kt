@@ -37,6 +37,12 @@ import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.StageSide
 import uk.me.cormack.lighting7.models.StageViewpointKind
 import uk.me.cormack.lighting7.models.SurfacePattern
+import uk.me.cormack.lighting7.models.ModelPart
+import uk.me.cormack.lighting7.models.ObjectParams
+import uk.me.cormack.lighting7.models.ObjectShape
+import uk.me.cormack.lighting7.models.PartShape
+import uk.me.cormack.lighting7.models.PartTexture
+import uk.me.cormack.lighting7.models.PartTextureMode
 import uk.me.cormack.lighting7.models.encodeElementParams
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
@@ -93,14 +99,16 @@ const val RICH_PROJECT_NAME = "round-trip-rich"
 
 /**
  * The scene images the fixture paints with (scrim plan session 1), made in code: a PNG with alpha
- * (a cut cloth's front), a JPEG (its back) and an opaque PNG (the flat's). Media type and bytes,
- * in that order; [seedRichProject] stores each in the project's scene-image store.
+ * (a cut cloth's front), a JPEG (its back), an opaque PNG (the flat's) and a JPEG only a model's
+ * part is textured with, so an image no cloth names still has to travel. Media type and bytes, in
+ * that order; [seedRichProject] stores each in the project's scene-image store.
  */
 val RICH_PROJECT_SCENE_IMAGES: List<Pair<String, ByteArray>> by lazy {
     listOf(
         "image/png" to scenePng(96, 48, alpha = true, seed = 11),
         "image/jpeg" to sceneJpeg(96, 48, seed = 12),
         "image/png" to scenePng(40, 40, seed = 13),
+        "image/jpeg" to sceneJpeg(32, 32, seed = 14),
     )
 }
 
@@ -236,7 +244,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // v23: the painted cloths (scrim plan session 1). A muslin drape painted front (an image with
     // holes) and back (a JPEG), and a flat painted on its front, every key off its default; the
     // images go into the store as an upload would put them, so the exporter has bytes to copy.
-    val (cutFront, cutBack, flatFront) = RICH_PROJECT_SCENE_IMAGES.map { (type, bytes) ->
+    val (cutFront, cutBack, flatFront, stoneTexture) = RICH_PROJECT_SCENE_IMAGES.map { (type, bytes) ->
         state.sceneImages.store(project.uuid.toString(), bytes, type).hash
     }
     DaoStageElement.new {
@@ -270,6 +278,35 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             ),
         )
         sortOrder = 4
+    }
+    // A MODEL object: an arch cut from an outline over two lathed columns, one part textured with an
+    // image no cloth names, every optional part key off its default.
+    DaoStageElement.new {
+        this.project = project
+        name = "Garden arch"
+        kind = StageElementKind.OBJECT.name
+        layer = StageElementLayer.SET.name
+        positionX = 2.0; positionY = 4.0
+        widthM = 2.4; depthM = 0.4; heightM = 3.0
+        params = encodeElementParams(
+            StageElementKind.OBJECT,
+            ObjectParams(
+                shape = ObjectShape.MODEL,
+                parts = listOf(
+                    ModelPart(
+                        shape = PartShape.EXTRUDE, name = "Arch", z = 2.4, yawDeg = 0.5, pitchDeg = 1.0, rollDeg = 2.0,
+                        outline = listOf(listOf(-1.2, 0.0), listOf(1.2, 0.0), listOf(1.2, 0.6), listOf(-1.2, 0.6)),
+                        holes = listOf(listOf(listOf(-0.8, 0.0), listOf(0.8, 0.0), listOf(0.0, 0.4))),
+                        depthM = 0.3, colour = "#7a6a58", pattern = SurfacePattern.TILES,
+                        texture = PartTexture(stoneTexture, PartTextureMode.TILE, 0.25),
+                    ),
+                    ModelPart(shape = PartShape.LATHE, x = -1.0, profile = listOf(listOf(0.15, 0.0), listOf(0.1, 2.4)), segments = 16, shadow = false),
+                    ModelPart(shape = PartShape.CYLINDER, x = 1.0, z = 1.2, widthM = 0.3, topWidthM = 0.2, heightM = 2.4, emissive = true),
+                    ModelPart(shape = PartShape.SPHERE, x = 0.0, z = 3.0, widthM = 0.3, depthM = 0.2, heightM = 0.25),
+                ),
+            ),
+        )
+        sortOrder = 5
     }
     DaoStageViewpoint.new {
         this.project = project

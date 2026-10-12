@@ -40,6 +40,7 @@ import {
   type Draft,
   type Params,
 } from './elementDraft'
+import { ModelPartsField } from './ModelPartsField'
 import { OwnerEditor } from './OwnerEditor'
 import { PaintField } from './PaintField'
 import { useSceneImageListQuery, useSetElementDisplayDetailMutation } from '@/store/sceneImages'
@@ -95,7 +96,7 @@ const DRAPE_OPERATIONS = ['DEAD', 'DRAW', 'FLY'] as const
 const DRAW_SIDES = ['STAGE_LEFT', 'STAGE_RIGHT'] as const
 const DRAW_SIDE_LABELS: Record<string, string> = { STAGE_LEFT: 'Stage left only', STAGE_RIGHT: 'Stage right only' }
 const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
-const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
+const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC', 'MODEL'] as const
 const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
 
 /**
@@ -159,6 +160,8 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
     const [setDisplayDetail, { isLoading: isSettingDetail }] = useSetElementDisplayDetailMutation()
     // The switch writes at once, so it keeps its own state rather than the draft's; a refusal puts it back.
     const [fullDetail, setFullDetail] = useState(element.fullDetail === true)
+    // A model's parts box holds text that does not parse: Save waits until it does.
+    const [partsInvalid, setPartsInvalid] = useState(false)
 
     useImperativeHandle(ref, () => ({ setPosition: (next) => setDraft((prev) => ({ ...prev, ...next })) }), [])
 
@@ -218,9 +221,13 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
       }
       return new Set(paths)
     }, [kind, params.openings, params.aisles, drawn, flies])
-    const filed = fileProblems(problems, shown)
+    const model = kind === 'OBJECT' && str(params.shape).toUpperCase() === 'MODEL'
+    // A model's parts' problems name a part (`params.parts[2] (BOX).widthM …`), so all of them sit
+    // under the one box, in full.
+    const partsProblems = model ? problems.filter((p) => p.path?.startsWith('params.parts')).map((p) => p.message) : []
+    const filed = fileProblems(model ? problems.filter((p) => !p.path?.startsWith('params.parts')) : problems, shown)
     const isBusy = isUpdating || isDeleting
-    const isValid = draft.name.trim().length > 0
+    const isValid = draft.name.trim().length > 0 && !(model && partsInvalid)
 
     const handleSave = async (force = false) => {
       if (!isValid) return
@@ -624,6 +631,15 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
                 {paramSelect('shape', 'Shape', OBJECT_SHAPES)}
                 <Check id="element-flies" label="Flies" checked={params.flies === true} onChange={(v) => setParam('flies', v || null)} errors={filed.at('params.flies')} />
               </div>
+            )}
+            {model && (
+              <ModelPartsField
+                id="element-parts"
+                parts={params.parts}
+                errors={partsProblems}
+                onChange={(parts) => setParam('parts', parts)}
+                onInvalid={setPartsInvalid}
+              />
             )}
           </Section>
 

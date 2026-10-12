@@ -1603,8 +1603,8 @@ element's origin — its base, a platform's top, a flown piece's trim — and tu
 - **Seating**: no parts, only seats — `seatList` in `lib/stageSeats.ts`, the same seat maths the
   backend's `SeatingParams.seat` is mirrored from, so the seats drawn are exactly the seats a `SEAT`
   view can name. One `InstancedMesh` for the block; it raycasts only while a seat pick is armed.
-- **Object**: a box, cylinder, shade or disc by its `shape`. **Flown** pieces stand at `trimM`.
-  **Emissive** finishes glow at their colour.
+- **Object**: a box, cylinder, shade or disc by its `shape`, or its parts for a `MODEL` (§"Model
+  objects" below). **Flown** pieces stand at `trimM`. **Emissive** finishes glow at their colour.
 - **`hidden` and `states.visible: false`** build nothing, for every kind.
 
 **The View menu's Venue · Set · Seating layers** choose which elements a window draws — per window in
@@ -1624,6 +1624,46 @@ stage — but the far plane reaches the drawn venue's bounds (`orthoSection`'s `
 `sceneElementBounds`), so a room's back wall, a balcony and the upstage flats stay in the picture
 behind it. The plan section cuts the ceiling away by the same rule. Rooms face inward, so a section
 camera outside the hall sees in through the side it cuts.
+
+### Model objects
+
+**A `MODEL` object is its parts, fitted to its box** (`builders/model.ts`; the desk's vocabulary is
+lighting7 `docs/fixtures-engineering.md` §"Model objects"). Each part becomes a `ScenePart` of a
+shape the renderer already draws — `box`, `cylinder` — or one of three it gained for models:
+`sphere` (a `SphereGeometry` scaled to an ellipsoid), `extrude` (a `Shape` with its holes through
+`ExtrudeGeometry`, the outline's `(x, z)` as three's `(x, y)`, centred on y) and `lathe`
+(`LatheGeometry` about three's y, its profile turned round by `outwardProfile` when written top first,
+so it faces out on a single-sided material). `modelBounds` is the desk's sum to the last digit — the
+corners of each part's own box turned by `Rz(yaw) · Rx(pitch) · Ry(roll)` and unioned — and
+`src/test/resources/stage/modelBounds.fixture.json` pins both sides; the bounds are scaled to the
+element's `widthM × depthM × heightM`, footprint centred, lowest point on the base.
+
+**A part's turn and the fit's scale are one `PartTransform`**, a row-major 3×3 in the lighting frame
+(`S · R`), and `at` is where the part's own origin lands — not its box's centre, for an outline or a
+profile drawn off it. `partGeometry` **bakes** it into the vertices (`threeTransform`, `B · m · Bᵀ`
+from the lighting frame to three's) after the uvs, through `BufferGeometry.applyMatrix4`, which takes
+the normals by their own matrix: the surface shader takes a normal through `mat3(modelMatrix)`, so a
+non-uniform scale on the mesh would have bent them. The geometry is memoised on the shape, the uvs, the
+texture's mode and tile and the transform, serialised.
+
+**Shadows are boxes**, as for every other part: `partBox(geometry, transform)` maps the part's own box's
+corners and takes the box round them. A scale alone scales the skins with it; a turned part's skins
+become its box's largest half-extent, because its drawn surface can lie anywhere inside that box — it
+never shadows itself, and still shadows what is behind it. An outline's holes are drawn but still stop
+light (its box is whole), and `shadow: false` makes a part `light: 'none'`, drawn and nothing more, so
+small details need not spend colliders. `scene.test.ts`'s "holds what it draws" covers the three new
+shapes; `model.test.ts` the fit, the bounds vector and a turned part's collider holding its vertices.
+
+**A texture is a front paint on every face.** `PartFinish.texture` takes the `PAINT` path: the part's
+faces all carry `aPaintFace = 1` and their uvs (`textureUvs`), the image arrives through the same
+`usePaintTexture` cache as a cloth's (`variant` follows *Full detail* as a cloth's does), and alpha
+below half cuts a hole in the surface, not in the shadow. `STRETCH` keeps each shape's own uvs —
+the whole image on each box face, round a cylinder, sphere or lathe — except an outline's, laid over
+its extent from downstage and mirrored behind. `TILE` measures uvs in the model's units, one repeat
+every `tileM`: a box's and an outline's faces by the plane they lie in, round shapes along and around.
+Repetition is the shader's `PAINT_TILE` define, not the texture's wrap mode: the image object is shared
+with every cloth that names the same hash and stays clamped, and the fragment samples `fract(uv)` with
+`textureGrad` on the unwrapped uv's derivatives, so the wrap from 1 to 0 picks no blurry mip.
 
 ### Frame the selection (F)
 

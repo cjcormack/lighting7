@@ -1,5 +1,6 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
 import { boxPart, elementFinish, paramEnum, type ElementBuild, type ScenePart } from '../sceneParts'
+import { buildModel } from './model'
 
 /**
  * An `OBJECT` — furniture, a plant, a fireplace, an exit sign — by its `shape`, standing on its
@@ -10,6 +11,7 @@ import { boxPart, elementFinish, paramEnum, type ElementBuild, type ScenePart } 
  * - `SHADE`: a lamp shade — a cone cut off at a little over half its base width, [heightM] tall.
  * - `DISC`: a disc facing the house, [widthM] across and [depthM] thick, its bottom at the base —
  *   a moon, a clock face.
+ * - `MODEL`: its `parts`, fitted to its box (`model.ts`).
  *
  * A flown object (`flies`) stands at its `trimM` instead of its Z (the renderer's
  * [elementBaseZ]); an `emissive` one glows at its colour rather than taking light.
@@ -19,8 +21,9 @@ export function buildObject(element: StageElementDto): ElementBuild {
   const d = element.depthM
   const h = element.heightM
   if (!(w > 0 && d > 0 && h > 0)) return { parts: [], seats: [] }
-  const finish = elementFinish(element)
   const shape = paramEnum(element, 'shape') ?? 'BOX'
+  if (shape === 'MODEL') return buildModel(element)
+  const finish = elementFinish(element)
   let part: ScenePart | null
   switch (shape) {
     case 'CYLINDER':

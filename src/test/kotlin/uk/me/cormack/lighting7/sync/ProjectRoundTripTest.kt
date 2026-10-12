@@ -48,6 +48,7 @@ import uk.me.cormack.lighting7.sync.dto.StageElementJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
 import uk.me.cormack.lighting7.sync.dto.StageViewpointJson
 import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
@@ -58,6 +59,7 @@ import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNull
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
@@ -429,7 +431,12 @@ class ProjectRoundTripTest {
         val elements = Files.list(exportDirA.resolve("stageElements")).use { stream ->
             stream.toList().map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
         }.associateBy { it.name }
-        assertEquals(setOf("Stalls", "Thrust deck", "House tabs", "Day/night cloth", "Cottage flat"), elements.keys)
+        assertEquals(setOf("Stalls", "Thrust deck", "House tabs", "Day/night cloth", "Cottage flat", "Garden arch"), elements.keys)
+        // A MODEL object's parts travel inside its params, as every kind's params do: no version bump.
+        val arch = elements.getValue("Garden arch").params!!
+        assertEquals("MODEL", arch["shape"]!!.jsonPrimitive.content)
+        assertEquals(4, arch["parts"]!!.jsonArray.size)
+        assertEquals("TILE", arch["parts"]!!.jsonArray[0].jsonObject["texture"]!!.jsonObject["mode"]!!.jsonPrimitive.content)
         val stalls = elements.getValue("Stalls")
         assertEquals("SEATING" to "VENUE", stalls.kind to stalls.layer)
         assertEquals("B", stalls.params!!["firstRow"]!!.jsonPrimitive.content)
@@ -964,6 +971,11 @@ class ProjectRoundTripTest {
         Files.list(exportDirA.resolve("stageElements")).use { s -> s.toList() }.forEach { file ->
             val doc = Json.parseToJsonElement(Files.readString(file)).jsonObject
             val params = doc["params"] as? JsonObject ?: return@forEach
+            // A model is newer than v22 too: such an archive never held one.
+            if ((params["shape"] as? JsonPrimitive)?.content == "MODEL") {
+                Files.delete(file)
+                return@forEach
+            }
             val stripped = JsonObject(doc + ("params" to JsonObject(params - "fabric" - "paint")))
             Files.writeString(file, stripped.toString())
         }
@@ -994,7 +1006,8 @@ class ProjectRoundTripTest {
         val f = seedShowOnVenue(state)
         ProjectExporter(state).export(f.showId, exportDirA)
 
-        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 24"), "the writer stamps v24")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 24, "venues sync from v24")
+        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": $SUPPORTED_FORMAT_VERSION"), "the writer stamps the current version")
         val project = canonicalDecode(ProjectJson.serializer(), Files.readString(exportDirA.resolve("project.json")))
         val (venueUuid, snapshotUniverses) = transaction(state.database) {
             DaoProject[f.venueId].uuid to RigScope.of(f.showId).venue!!.let { v ->
@@ -1154,7 +1167,7 @@ class ProjectRoundTripTest {
             assertNull(project.venueUuid)
         }
         ProjectExporter(state).export(imported.projectId, exportDirB)
-        // Byte for byte but the version stamp, which this writer moves to 24.
+        // Byte for byte but the version stamp, which this writer moves to its own.
         Files.writeString(
             exportDirA.resolve("formatVersion.json"),
             Files.readString(exportDirB.resolve("formatVersion.json")),

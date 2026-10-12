@@ -137,7 +137,7 @@ class ShowsOnVenueTest : RouteIntegrationTest() {
             assertEquals(0, own.groups().count())
             assertEquals(0, own.stageViewpoints().count())
             val ownElements = own.stageElements().map { it.name }.toSet()
-            assertEquals(setOf("Thrust deck", "Day/night cloth", "Cottage flat", "Cabaret tables"), ownElements)
+            assertEquals(setOf("Thrust deck", "Day/night cloth", "Cottage flat", "Garden arch", "Cabaret tables"), ownElements)
             assertTrue(own.stageElements().all { it.layer == StageElementLayer.SET.name || it.kind == StageElementKind.SEATING.name })
 
             // The venue's draft holds what moved, and the Preset block's copy under the same uuid.

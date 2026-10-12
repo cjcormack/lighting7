@@ -421,7 +421,7 @@ internal class VenueSetupTools(private val state: State) {
                     JsonObject(params - "regionUuid")
                 }
             }
-            for (hash in paintHashesOf(e.params)) {
+            for (hash in sceneImageHashesOf(e.params)) {
                 val src = sourceStores.firstNotNullOfOrNull { state.sceneImages.original(it, hash)?.first }
                 if (src == null) {
                     report.unresolved("image $hash is missing on this machine", "element '${e.name}'")

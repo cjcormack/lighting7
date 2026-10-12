@@ -446,8 +446,18 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     float paintFace = vPaintFace * (gl_FrontFacing ? 1.0 : -1.0);
     // The images' rows are top first, and the upstage face sees the image from behind. Both are
     // sampled here, in uniform control flow, so their mipmaps' derivatives are defined.
+    #ifdef PAINT_TILE
+    // A tiled texture repeats by the fractional uv, its mip chosen from the unwrapped uv's own rate
+    // so the wrap from 1 back to 0 is not read as a jump across the whole image.
+    vec2 tileUv = vec2(vPaintUv.x, 1.0 - vPaintUv.y);
+    vec2 tileDx = dFdx(tileUv);
+    vec2 tileDy = dFdy(tileUv);
+    vec4 paintFront = textureGrad(uPaintFront, fract(tileUv), tileDx, tileDy);
+    vec4 paintBack = textureGrad(uPaintBack, fract(vec2(1.0 - tileUv.x, tileUv.y)), tileDx, tileDy);
+    #else
     vec4 paintFront = texture(uPaintFront, vec2(vPaintUv.x, 1.0 - vPaintUv.y));
     vec4 paintBack = texture(uPaintBack, vec2(1.0 - vPaintUv.x, 1.0 - vPaintUv.y));
+    #endif
     if (abs(paintFace) > 0.5) {
       // A hole in either image is a hole in the cloth, seen from either side (D5).
       if ((uPaintOn.x > 0.5 && paintFront.a < 0.5) || (uPaintOn.y > 0.5 && paintBack.a < 0.5)) discard;
@@ -715,6 +725,12 @@ export interface SurfaceMaterialOptions {
    */
   painted?: boolean
   /**
+   * A painted surface whose uvs run past 0…1 and repeat (`PAINT_TILE`): a model part's `TILE`
+   * texture. Sampled by the fractional uv with the unwrapped uv's derivatives, so the shared image
+   * keeps its own clamped wrapping for the cloths.
+   */
+  tiled?: boolean
+  /**
    * How the surface is seen through (scrim plan session 4, `seeThrough.ts`'s `SurfaceDraw`):
    * `scrim` is the `SCRIM` blend — transparent, premultiplied, no depth write, its net set by
    * [setScrimNet]; `translucent` adds `TRANSLUCENT`'s light from behind, its τ set by
@@ -749,6 +765,7 @@ export function makeSurfaceMaterial(
   // A catch surface is never painted; an emissive one shows its paint at its own colours.
   const painted = options.painted === true && options.catchOnly !== true
   if (painted) defines.PAINT = ''
+  if (painted && options.tiled === true) defines.PAINT_TILE = ''
   // A catch surface is never seen through. An emissive net is — it blends at its own colour — but an
   // emissive cloth draws its colour and no light, so it is never lit from behind.
   const draw = options.catchOnly === true ? 'opaque' : (options.draw ?? 'opaque')

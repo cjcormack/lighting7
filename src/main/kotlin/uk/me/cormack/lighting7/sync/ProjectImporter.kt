@@ -161,6 +161,12 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v25 let a scene image texture a model object's part (`ObjectParams.parts[].texture.image`), so the
+// `sceneImages/` folder holds images no cloth names. The params keys alone would need no bump; the
+// images do, for v4's reason: a v24 reader reconciles the folder to the hashes *it* reads as
+// referenced — a cloth's paint only — and its next push would delete every model texture while its
+// re-export kept the parts naming them. MIN stays at 5: every key defaults.
+//
 // v24 made venues sync (venue plan session 4): `project.json`'s `kind`, a show's pin (`venueUuid`,
 // `venueVersion`) and `venueRepo` hint, and `showHides/`. A show's archive holds only its own rows, so
 // its links into the venue — a patch on a venue universe, a group member, a cue event, a scenery change,
@@ -212,7 +218,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 24
+internal const val SUPPORTED_FORMAT_VERSION = 25
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**

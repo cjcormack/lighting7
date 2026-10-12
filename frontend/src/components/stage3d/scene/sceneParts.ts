@@ -32,6 +32,15 @@ export type PartGeometry =
   | { shape: 'cylinder'; rTop: number; rBottom: number; h: number }
   /** A disc facing downstage (a moon, a clock face): [r] radius, [d] thick along y. */
   | { shape: 'disc'; r: number; d: number }
+  /** An ellipsoid (a model's `SPHERE`): [w] along x, [d] along y, [h] along z. */
+  | { shape: 'sphere'; w: number; d: number; h: number }
+  /**
+   * A polygon in the part's x–z plane, extruded [d] along y and centred on y = 0 (a model's
+   * `EXTRUDE`): [outline] and each of [holes] as `[x, z]` pairs about the part's origin.
+   */
+  | { shape: 'extrude'; outline: readonly (readonly [number, number])[]; holes: readonly (readonly (readonly [number, number])[])[]; d: number }
+  /** A profile of `[radius, z]` pairs revolved about the part's z axis in [segments] sides (a model's `LATHE`). */
+  | { shape: 'lathe'; profile: readonly (readonly [number, number])[]; segments: number }
   /**
    * Soft goods: cloth [w] wide along x and [h] tall along z, pleated along x by [pleat] — measured
    * from its centre, or from its [anchor] edge — and seen from both sides.
@@ -59,12 +68,32 @@ export interface PartFinish {
    */
   paint?: ScenePaint
   /**
+   * A model part's texture: a stored image's SHA-256 as its albedo on every face, laid over the
+   * part's own uvs — the whole image on each face (`STRETCH`), or repeated every [tileM] of the
+   * model's units (`TILE`). A model part's only; a cloth's images are [paint].
+   */
+  texture?: PartTexture
+  /**
    * τ for a translucent cloth (scrim plan D6, `seeThrough.ts`): the share of light from behind that
    * lights its front, through both its paints. A muslin drape's only; absent, light behind a face
    * lights nothing on it.
    */
   translucent?: number
 }
+
+/** A model part's texture ([PartFinish.texture]). */
+export interface PartTexture {
+  image: string
+  mode: 'STRETCH' | 'TILE'
+  tileM: number
+}
+
+/**
+ * A linear map in the element's lighting frame, row-major — a model part's turn and the fit's scale
+ * (`builders/model.ts`). Applied to the part's geometry about its own origin, before [ScenePart.at]
+ * moves it.
+ */
+export type PartTransform = readonly [number, number, number, number, number, number, number, number, number]
 
 /**
  * Where a part's own x and z land on its element's images (scrim plan §3.5): x from −w/2 to w/2
@@ -120,6 +149,12 @@ export interface ScenePart {
   light: PartLight
   /** Where its faces land on the element's paint, for a part whose finish carries [PartFinish.paint]. */
   uv?: PartUv
+  /**
+   * A model part's turn and scale ([PartTransform]); absent is none. Its geometry is built about its
+   * own origin, mapped by this, and moved to [at] — so [at] is where the part's origin lands, not
+   * its box's centre, for an outline or a profile drawn off its origin.
+   */
+  transform?: PartTransform
 }
 
 /** Whether a part is a collider at all — solid or transmitting; a `none` part is drawn only. */

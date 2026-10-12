@@ -1673,7 +1673,7 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 | `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's), `drawFrom` (`STAGE_LEFT · STAGE_RIGHT`, a `DRAW` drape's: a one-way traveller stacking at that side, its local +X end being stage left; absent is a bi-parting pair meeting in the middle), `fabric` (`CANVAS · MUSLIN · SHARKSTOOTH · BOBBINET`; absent is velour), `paint` (below). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
 | `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`, `block` (`FIXED · PRESET`, absent `PRESET`: whose a venue's block is, venue plan D6 — a show's own seating ignores it). |
-| `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`, `travelS` (a flown piece's). |
+| `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC · MODEL`), `flies`, `travelS` (a flown piece's), `parts` (a `MODEL`'s, below). |
 
 Every kind may carry `states`, the base values session 8's scenery tracks from: `visible` on any,
 `open` (0–1) on a `DRAW` drape, `trimM` (replacing Z while set) on a flown piece.
@@ -1737,6 +1737,38 @@ toolkit and puts a Java icon in the Dock, and one full decode at a time (an 8192
 mtime is moved by every element write that names *or drops* it and by every load that finds it
 referenced — so an upload whose element was never saved does not pile up, and one taken off a cloth
 survives a week for an undo. A deleted project's store goes with it.
+
+**Model objects** (`models/sceneModel.kt`). An `OBJECT` whose `shape` is `MODEL` is built from
+`parts` — 1–200 of them, at most 4000 outline and profile points in all — each a `BOX {widthM, depthM,
+heightM}`, a `SPHERE {widthM, depthM?, heightM?}` (an ellipsoid, the two defaulting to its width), a
+`CYLINDER {widthM, heightM, topWidthM?}` (0 at the top a cone), an `EXTRUDE {outline, holes?, depthM}`
+(`[x, z]` polygons in the part's x–z plane, extruded along y) or a `LATHE {profile, segments?}` (`[radius,
+z]` pairs revolved about z, 3–96 sides, default 32). Every part takes `x`/`y`/`z` (a box, sphere or
+cylinder is centred there; an outline or profile is drawn about it), a turn — `rollDeg` about y, then
+`pitchDeg` about x, then `yawDeg` about z, `Rz · Rx · Ry` — and optionally `name`, `colour` (else the
+element's finish colour), `pattern`, `emissive`, `shadow: false` and a `texture {image, mode?, tileM?}`:
+a scene image's hash, checked against the store as paint is, `STRETCH` (default) putting the whole image
+on each face and `TILE` repeating it every `tileM` (0.01–100, default 1) of the model's units. The parts
+are in the model's own frame and units (within ±100); **the model is fitted to the element's box** — its
+bounds scaled to `widthM × depthM × heightM`, the footprint centred on the origin, the lowest point on
+the base — so one model is applied at any size. `modelBounds` is the union of each part's own box
+(`localBounds`) turned by its rotation, and the Stage view's `builders/model.ts` sums exactly the same:
+`src/test/resources/stage/modelBounds.fixture.json` pins both. A model flat along an axis is refused,
+since it cannot be fitted. `parts` on any other kind or shape is refused by name, and a `MODEL` without
+them is refused. Every part problem names its part (`params.parts[2] (LATHE).profile: …`), which the
+element form files under its one JSON box.
+
+`set_scene` adds two conveniences (`ai/SceneSetupTools.kt`): a row that sends a model's parts and
+leaves a size out takes that size from the parts' bounds (`naturalModelSize`), so parts written in
+metres are drawn at their size; and `modelFrom: "<element>"` copies a stored model, or one an earlier
+row of the call sets, into the row — its parts, and its size and finish where the row leaves them out.
+A copy is independent of its source. `get_scene` answers a model's `modelSize`, read-only.
+
+Nothing on the desk reads a part beyond that: the Stage view draws it (`frontend/docs/stage-vis-engineering.md`
+§"Model objects"). Each colliding part's shadow is the box round it, so a model's shadow is blocky
+and an outline's holes still stop light; `shadow: false` drops a small detail's box. A part's texture is
+a scene image like a cloth's paint — `sceneImageHashesOf` reads both, so the prune, sync (v25),
+`copy_to_project`, extract and detach all carry it.
 
 **Full detail** (D12) is per element and per machine: a `machine_overrides` row,
 `Overrides.setString(projectId, "stage_elements", elementUuid, "displayDetail", "4096")`, set by

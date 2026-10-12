@@ -32,6 +32,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v25: model textures. No DTO changes: a `MODEL` object's `parts` ride in `StageElementJson.params`,
+    // and a part's `texture.image` names a file in `sceneImages/`. The writer's number moves for v23's
+    // reason: a v24 reader reconciles that folder to the paint it reads as referenced, so its next push
+    // would delete every model texture. `minReader` stays at **5**: a v24 archive imports unchanged.
+    //
     // v24: venues sync (venue plan session 4, §3.4). `project.json` gains `kind` (absent = SHOW, so a
     // standalone show's is unchanged), a show's pin — `venueUuid`, `venueVersion` — and `venueRepo`, a
     // hint naming where its venue syncs; a show on a venue gains `showHides/{uuid}.json`, its hides of
@@ -213,7 +218,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 24,
+    val formatVersion: Int = 25,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )

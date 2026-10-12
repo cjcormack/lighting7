@@ -112,6 +112,7 @@ export function elementKindLabel(element: Pick<StageElementDto, 'kind' | 'params
     if (role) parts.push(role)
     if (operation && operation !== 'dead') parts.push(operation)
   } else if (element.kind === 'OBJECT') {
+    if (typeof element.params.shape === 'string' && element.params.shape.toUpperCase() === 'MODEL') parts.push('model')
     if (element.params.flies === true) parts.push('flown')
   }
   return parts.join(' · ')
