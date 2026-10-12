@@ -92,8 +92,8 @@ function effect(over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
   }
 }
 
-const STATIC_SETTING = effect({
-  name: 'StaticSetting',
+const SETTING_STEP = effect({
+  name: 'SettingStep',
   category: 'controls',
   compatibleProperties: ['setting'],
 })
@@ -172,7 +172,7 @@ describe('propertyNamesFor', () => {
 
 describe('compatibleEffectsFor', () => {
   it('offers a sentinel effect exactly when the target minted the sentinel', () => {
-    const library = [RAINBOW, STATIC_SETTING, SLIDER_LEVEL]
+    const library = [RAINBOW, SETTING_STEP, SLIDER_LEVEL]
     const goboHead: FxPropertyTarget = {
       type: 'fixture',
       fixture: fixture({ properties: [setting('gobo')] }),
@@ -183,7 +183,7 @@ describe('compatibleEffectsFor', () => {
     }
 
     expect(compatibleEffectsFor(library, propertyNamesFor([goboHead])).map((e) => e.name)).toEqual([
-      'StaticSetting',
+      'SettingStep',
     ])
     expect(compatibleEffectsFor(library, propertyNamesFor([dimmerOnly]))).toEqual([])
   })
@@ -195,11 +195,11 @@ describe('compatibleEffectsFor', () => {
 
 describe('effectsByCategory', () => {
   it('groups in library order and honours the exclusion list', () => {
-    const grouped = effectsByCategory([RAINBOW, STATIC_SETTING, SLIDER_LEVEL])
+    const grouped = effectsByCategory([RAINBOW, SETTING_STEP, SLIDER_LEVEL])
     expect(Object.keys(grouped)).toEqual(['colour', 'controls'])
-    expect(grouped.controls.map((e) => e.name)).toEqual(['StaticSetting', 'SliderLevel'])
+    expect(grouped.controls.map((e) => e.name)).toEqual(['SettingStep', 'SliderLevel'])
 
-    expect(Object.keys(effectsByCategory([RAINBOW, STATIC_SETTING], { exclude: ['controls'] }))).toEqual([
+    expect(Object.keys(effectsByCategory([RAINBOW, SETTING_STEP], { exclude: ['controls'] }))).toEqual([
       'colour',
     ])
   })
@@ -220,17 +220,17 @@ describe('resolveEffectProperty', () => {
   })
 
   it('spends the setting sentinel on the first setting property', () => {
-    expect(resolveEffectProperty(goboAndColourWheel, STATIC_SETTING)).toBe('gobo')
+    expect(resolveEffectProperty(goboAndColourWheel, SETTING_STEP)).toBe('gobo')
   })
 
   it('honours an explicit setting pick', () => {
     expect(
-      resolveEffectProperty(goboAndColourWheel, STATIC_SETTING, { setting: 'colourWheel' }),
+      resolveEffectProperty(goboAndColourWheel, SETTING_STEP, { setting: 'colourWheel' }),
     ).toBe('colourWheel')
   })
 
   it('falls back to the first when the explicit pick is not on this target', () => {
-    expect(resolveEffectProperty(goboAndColourWheel, STATIC_SETTING, { setting: 'prism' })).toBe(
+    expect(resolveEffectProperty(goboAndColourWheel, SETTING_STEP, { setting: 'prism' })).toBe(
       'gobo',
     )
   })
@@ -259,7 +259,7 @@ describe('resolveEffectProperty', () => {
       capabilities: ['dimmer'],
       members: [fixture({ properties: [] }), fixture({ key: 'spot-2', properties: [setting('gobo')] })],
     }
-    expect(resolveEffectProperty(target, STATIC_SETTING)).toBe('gobo')
+    expect(resolveEffectProperty(target, SETTING_STEP)).toBe('gobo')
   })
 })
 

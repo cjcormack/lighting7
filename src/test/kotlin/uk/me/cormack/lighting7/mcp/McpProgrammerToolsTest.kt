@@ -133,6 +133,54 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `set_programmer sets a colour with its emitters, pan and tilt in DMX, a wheel slot and a gobo`() {
+        val patched = runBlocking {
+            SetupTools(state, tools).executeTool(
+                "patch_fixtures",
+                Json.parseToJsonElement(
+                    """{"fixtures":[
+                        {"key":"hex-1","name":"Hex 1","fixtureTypeKey":"hex","universe":0,"startChannel":10},
+                        {"key":"mac-1","name":"MAC 1","fixtureTypeKey":"martin-mac-250-mode-4","universe":0,"startChannel":30}
+                    ]}""",
+                ).jsonObject,
+            )
+        }
+        assertTrue(patched.success, patched.result)
+        // Hex: R G B on 11-13, amber 14, white 15, UV 16. MAC: colour wheel 32, gobo 33, pan 37, tilt 39.
+        fun hex() = (11..16).map(::level)
+
+        val colour = ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"rgbColour","value":"#ff8000;w120;uv40"}]}""")
+        assertEquals("#ff8000;w120;uv40", colour["written"]!!.jsonArray.single().jsonObject["value"]!!.jsonPrimitive.content)
+        assertEquals(listOf(255, 128, 0, 0, 120, 40), hex())
+
+        // A colour carries its emitters, so a later one resets them; an emitter beside it in the same call wins.
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"amber","value":"dmx:90"},{"propertyName":"rgbColour","value":"#00ff00"}]}""")
+        assertEquals(listOf(0, 255, 0, 90, 0, 0), hex())
+
+        ok(
+            "set_programmer",
+            """{"targets":[{"type":"fixture","key":"mac-1"}],"values":[
+                {"propertyName":"pan","value":"dmx:10"},{"propertyName":"tilt","value":"pct:25"},
+                {"propertyName":"rgbColour","value":"#ff0000;w128"},{"propertyName":"gobo","value":"cone"}
+            ]}""",
+        )
+        assertEquals(listOf(10, 64), listOf(level(37), level(39)))
+        assertEquals(176, level(32), "a colour lands on the wheel's nearest slot, its white left out")
+        assertEquals(10, level(33))
+        assertEquals(
+            setOf(Triple("mac-1", "pan", "10"), Triple("mac-1", "tilt", "64"), Triple("mac-1", "colourWheel", "176"), Triple("mac-1", "gobo", "10")),
+            programmerEntries().filter { it.first == "mac-1" }.toSet(),
+        )
+
+        for (value in listOf("#ff0000;w300", "#ff0000;w1;w2", "#ff0000;sparkle", "#ff0000;policy=loud", "red;w10")) {
+            val refused = call("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"rgbColour","value":"$value"}]}""")
+            assertFalse(refused.success, value)
+            assertTrue("is not a value rgbColour takes" in refused.description, "$value → ${refused.description}")
+        }
+        assertEquals(listOf(0, 255, 0, 90, 0, 0), hex(), "a refused colour writes nothing")
+    }
+
+    @Test
     fun `a malformed or empty targets never widens to the whole programmer, and a null fade is no fade`() {
         patchRig()
         ok("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":"dimmer","value":"pct:50"}],"fadeSeconds":null}""")

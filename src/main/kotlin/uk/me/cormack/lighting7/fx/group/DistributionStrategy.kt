@@ -44,7 +44,7 @@ sealed interface DistributionStrategy {
      *
      * For asymmetric distributions (LINEAR, REVERSE), this equals groupSize.
      * For symmetric distributions (CENTER_OUT, SPLIT), this is fewer because
-     * multiple members share the same offset. Static effects use this for
+     * multiple members share the same offset. A step chase uses this for
      * window width: `1/distinctSlots` ensures no gaps in the chase.
      *
      * @param groupSize Total number of members in the group
@@ -206,7 +206,7 @@ sealed interface DistributionStrategy {
      * left edge to right edge and back.
      *
      * Uses LINEAR offsets combined with a triangle wave phase remap
-     * so that static effects sweep forward then backward.
+     * so that a windowed step chase sweeps forward then backward.
      */
     data object PING_PONG : DistributionStrategy {
         override val usesTrianglePhase: Boolean = true

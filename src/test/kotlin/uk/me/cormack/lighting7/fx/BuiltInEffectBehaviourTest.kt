@@ -260,15 +260,11 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `a static effect declares step timing by default`() {
-        assertTrue(
-            fx("StaticColour").defaultStepTiming,
-            "StaticColour drives one element per slot, so a new instance should step",
-        )
-        assertTrue(
-            !fx("SineWave").defaultStepTiming,
-            "SineWave's beat division is the whole cycle, so a new instance should not step",
-        )
+    fun `every built-in is continuous, so none steps by default`() {
+        // The step-chase built-ins were the static effects, removed because a fixed value is the
+        // fixture's own property. A new built-in that steps should say so here deliberately.
+        val stepping = registry.allRegistrations.filter { registry.createEffect(it.id, emptyMap()).defaultStepTiming }
+        assertEquals(emptyList(), stepping.map { it.id })
     }
 
     // --- Colour ---
@@ -385,73 +381,6 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `StaticColour always returns the same colour`() {
-        val effect = fx("StaticColour", "colour" to "#00ffff")
-        assertEquals(Color.CYAN, effect.calculate(0.0).colour())
-        assertEquals(Color.CYAN, effect.calculate(0.5).colour())
-        assertEquals(Color.CYAN, effect.calculate(1.0).colour())
-    }
-
-    @Test
-    fun `StaticColour preserves extended channels`() {
-        val output = fx("StaticColour", "colour" to "red;w128;a64;uv32").calculate(0.5).extColour()
-        assertEquals(Color.RED, output.color)
-        assertEquals(128u.toUByte(), output.white)
-        assertEquals(64u.toUByte(), output.amber)
-        assertEquals(32u.toUByte(), output.uv)
-    }
-
-    @Test
-    fun `StaticColour auto-windows for distribution`() {
-        val effect = fx("StaticColour", "colour" to "#ff0000")
-        // Member 0 of a 12-element LINEAR distribution; its window is [0, 1/12)
-        val context = EffectContext(
-            groupSize = 12, memberIndex = 0, distributionOffset = 0.0,
-            hasDistributionSpread = true, numDistinctSlots = 12,
-        )
-        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
-        assertEquals(Color.RED, effect.calculate(0.04, context).colour())
-        assertEquals(Color.BLACK, effect.calculate(0.1, context).colour())
-        assertEquals(Color.BLACK, effect.calculate(0.5, context).colour())
-        assertEquals(Color.BLACK, effect.calculate(0.99, context).colour())
-    }
-
-    @Test
-    fun `StaticColour with UNIFIED distribution always returns the colour`() {
-        val effect = fx("StaticColour", "colour" to "#ff0000")
-        val context = EffectContext(groupSize = 12, memberIndex = 5, hasDistributionSpread = false)
-        assertEquals(Color.RED, effect.calculate(0.0, context).colour())
-        assertEquals(Color.RED, effect.calculate(0.5, context).colour())
-        assertEquals(Color.RED, effect.calculate(0.99, context).colour())
-    }
-
-    @Test
-    fun `StaticColour chase fires elements in forward order`() {
-        val effect = fx("StaticColour", "colour" to "#ff0000")
-        val groupSize = 4
-
-        fun contextFor(idx: Int) = EffectContext(
-            groupSize = groupSize, memberIndex = idx,
-            distributionOffset = idx.toDouble() / groupSize,
-            hasDistributionSpread = true, numDistinctSlots = groupSize,
-        )
-
-        // The engine hands each member its own shifted phase; mirror that here.
-        fun shiftedPhase(basePhase: Double, idx: Int) =
-            (basePhase - idx.toDouble() / groupSize + 1.0) % 1.0
-
-        // At each base phase exactly one member's window is open, in index order.
-        val litBy = mapOf(0.1 to 0, 0.3 to 1, 0.6 to 2, 0.8 to 3)
-        for ((basePhase, expectedLit) in litBy) {
-            for (idx in 0 until groupSize) {
-                val actual = effect.calculate(shiftedPhase(basePhase, idx), contextFor(idx)).colour()
-                val expected = if (idx == expectedLit) Color.RED else Color.BLACK
-                assertEquals(expected, actual, "base phase $basePhase, member $idx")
-            }
-        }
-    }
-
-    @Test
     fun `ColourFlicker produces variation around the base colour`() {
         val effect = fx("ColourFlicker", "baseColour" to "#808080", "variation" to "50")
         val colours = mutableSetOf<Color>()
@@ -551,29 +480,6 @@ class BuiltInEffectBehaviourTest {
         )
         assertEquals(100.toUByte() to 50.toUByte(), effect.calculate(0.0).position())
         assertEquals(100.toUByte() to 200.toUByte(), effect.calculate(1.0).position())
-    }
-
-    @Test
-    fun `StaticPosition never changes`() {
-        val effect = fx("StaticPosition", "pan" to "100", "tilt" to "150")
-        assertEquals(100.toUByte() to 150.toUByte(), effect.calculate(0.0).position())
-        assertEquals(100.toUByte() to 150.toUByte(), effect.calculate(0.5).position())
-        assertEquals(100.toUByte() to 150.toUByte(), effect.calculate(1.0).position())
-    }
-
-    @Test
-    fun `StaticPosition auto-windows for distribution`() {
-        val effect = fx("StaticPosition", "pan" to "50", "tilt" to "200")
-        val context = EffectContext(
-            groupSize = 4, memberIndex = 0, distributionOffset = 0.0,
-            hasDistributionSpread = true, numDistinctSlots = 4,
-        )
-        assertEquals(50.toUByte() to 200.toUByte(), effect.calculate(0.0, context).position())
-        assertEquals(50.toUByte() to 200.toUByte(), effect.calculate(0.2, context).position())
-        // Outside the window a position effect parks at centre rather than at zero.
-        assertEquals(128.toUByte() to 128.toUByte(), effect.calculate(0.25, context).position())
-        assertEquals(128.toUByte() to 128.toUByte(), effect.calculate(0.5, context).position())
-        assertEquals(128.toUByte() to 128.toUByte(), effect.calculate(0.99, context).position())
     }
 
     @Test

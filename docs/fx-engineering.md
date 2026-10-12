@@ -246,7 +246,6 @@ Effects that produce RGB color values.
 | `ColourPulse` | Pulse between two | `colorA`, `colorB` |
 | `ColourFade` | Linear fade | `fromColor`, `toColor`, `pingPong` |
 | `ColourFlicker` | Random variation | `baseColor`, `variation` |
-| `StaticColour` | No animation | `color` |
 
 ### Position Effects (`FxOutput.Position`)
 
@@ -260,7 +259,6 @@ Effects that produce pan/tilt values for moving heads.
 | `PanSweep` | Horizontal sweep | `startPan`, `endPan`, `tilt` |
 | `TiltSweep` | Vertical sweep | `startTilt`, `endTilt`, `pan` |
 | `RandomPosition` | Random movement | `panCenter`, `tiltCenter`, `panRange`, `tiltRange` |
-| `StaticPosition` | No movement | `pan`, `tilt` |
 
 ### Stateful Effects (`StatefulEffect`)
 
@@ -852,11 +850,14 @@ Effects receive an `EffectContext` alongside the phase, providing distribution m
 
 `basePhase(shiftedPhase)` recovers the un-shifted clock phase: `(phase + distributionOffset) % 1.0`.
 
-### Static Effect Windowing
+### Step-Chase Windowing
 
-Static effects (StaticColour, StaticPosition) create chase patterns by only
-being "on" for a window of each cycle. The window width is `1 / numDistinctSlots`, which
-accounts for symmetric distributions where multiple members share an offset.
+There is no static effect: a fixed level, colour, position or setting is a value on the fixture's
+own property (the programmer, a Look, a cue), and StaticValue, StaticSetting, StaticColour and
+StaticPosition were removed for that reason. The windowing they used survives as a technique for a
+user effect that should read as a **step chase** — one member lit at a time — by only being "on"
+for a window of each cycle. The window width is `1 / numDistinctSlots`, which accounts for
+symmetric distributions where multiple members share an offset.
 
 For standard distributions (LINEAR, CENTER_OUT, etc.), a modular distance check determines
 which member is active:
@@ -895,9 +896,9 @@ This uses `distinctSlots` rather than `groupSize` so that symmetric distribution
 (CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot.
 
 **Default values**: Each effect type declares `defaultStepTiming` which is used when
-creating new `FxInstance`s. Static effects (StaticColour, StaticPosition)
-default to `true` (chase pattern), while continuous effects (SineWave, Pulse, etc.)
-default to `false` (full cycle). The value can be overridden per-instance via the API.
+creating new `FxInstance`s. A step chase (a user effect windowed as above) declares `true`;
+every built-in is a continuous effect (SineWave, Pulse, etc.) and defaults to `false` (full
+cycle). The value can be overridden per-instance via the API.
 
 ## Easing Curves
 
@@ -1084,7 +1085,7 @@ at the element level. It has no effect when members directly have the target pro
 | `POSITIONAL` | Based on normalized position | N |
 
 **Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
-than group members because symmetric pairs share the same offset. Static effects use
+than group members because symmetric pairs share the same offset. A windowed step chase uses
 `numDistinctSlots` for window width to ensure gap-free chases.
 
 **Strategy interface properties:**
@@ -1359,7 +1360,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (27 files) |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (24 files) |
 | `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
 | `fx/TemplateRegistry.kt` | Template snapshots cached by uuid — rows, or the one effect an effect template holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |

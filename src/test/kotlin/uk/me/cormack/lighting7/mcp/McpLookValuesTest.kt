@@ -98,6 +98,27 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a colour value keeps the emitter levels it names, where the head has them`() {
+        patchRig()
+        val created = call(
+            "create_look",
+            """{"name":"Warm","values":[
+                {"target":{"type":"group","key":"Wash"},"propertyName":"rgbColour","value":"#ffc080;policy=extract;w200;a30"},
+                {"target":{"type":"fixture","key":"mac-1"},"propertyName":"rgbColour","value":"#ff0000;uv50"}
+            ]}""",
+        )
+        assertTrue(created.success, created.result)
+        assertEquals(
+            listOf(
+                // EXTRACT moves the neutral into white; the named white then replaces it.
+                LookRowDto("group", "Wash", "rgbColour", "#7f4000;w200;a30"),
+                LookRowDto("fixture", "mac-1", "colourWheel", "176"),
+            ),
+            storedRows("Warm"),
+        )
+    }
+
+    @Test
     fun `a group whose members land differently becomes a row per head, and a head that cannot take it is reported`() {
         patchRig()
         val created = call(

@@ -22,7 +22,7 @@ class SpeedMasterUsageVocabularyTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 25, "fx/index.txt should list at least 25 effects, got ${index.size}")
+        assertTrue(index.size >= 24, "fx/index.txt should list at least 24 effects, got ${index.size}")
 
         return index.map { path ->
             val text = loader.getResource("fx/$path")!!.readText()

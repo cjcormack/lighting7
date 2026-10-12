@@ -329,7 +329,7 @@ class FxFileLoader(
                 // also made it greedy: it absorbs *any* indented line while a parameter is open, so
                 // an indented top-level key written after the parameter list (`  compatibleProperties:
                 // [dimmer]`) would be swallowed and the effect would register with no compatible
-                // properties and no error. None of the 27 shipped files do that, but this parser has
+                // properties and no error. None of the 24 shipped files do that, but this parser has
                 // just cost the built-ins their whole metadata once; an unrecognised key falls
                 // through to the top-level `when` instead.
                 if (currentParam != null &&

@@ -85,7 +85,7 @@ eagerly and does not stop it when collected, so each discarded `Show` leaked one
 
 - **Warm** (no code changed since the last run): ~55–60 s.
 - **Cold** (any rebuild): **~+55 s**. The compiled-script jar cache is keyed partly on a
-  fingerprint of the classpath, so editing any source file invalidates all 27 built-in FX jars
+  fingerprint of the classpath, so editing any source file invalidates all 24 built-in FX jars
   and they recompile from source. In a normal edit-test loop this is paid every time.
 
 The cost lands on whichever test class first builds a `Show` — today
@@ -232,7 +232,7 @@ quiet while the numbers stay plausible.
 The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
-registry's 27 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
+registry's 24 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every
