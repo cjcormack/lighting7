@@ -1257,6 +1257,7 @@ class State(val config: ApplicationConfig) {
             } else {
                 @Suppress("DEPRECATION")
                 SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
+                dropLegacyUuidIndexes()
             }
 
             // The two partial unique indexes below are raw SQL because Exposed cannot declare a

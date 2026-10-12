@@ -23,7 +23,8 @@ private val logger = LoggerFactory.getLogger("InstallBootstrap")
  *
  * They were removed on 2026-08-24. Every one had already run on the only database in existence
  * (the dev desk), verified before deletion: no legacy tables held unconverted rows, no legacy
- * indexes remained, and every source row had a counterpart at its destination. On any other
+ * indexes remained (wrongly — see `LegacyUuidIndexes.kt`), and every source row had a counterpart
+ * at its destination. On any other
  * database they were no-ops, because there are no other databases.
  *
  * **Recover them from git history if that changes.** The moment a second install exists — the
