@@ -293,7 +293,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"effectType":"StaticValue","fixtureKey":"vary","propertyName":"reset","beatDivision":1.0}""")
+            setBody("""{"effectType":"Pulse","fixtureKey":"vary","propertyName":"reset","beatDivision":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("fixture command" in effect.bodyAsText(), effect.bodyAsText())

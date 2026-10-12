@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 /**
@@ -22,6 +23,8 @@ import java.util.UUID
  * backwards: spawning is a domain operation, and the REST handlers are just one of its callers.
  */
 internal object EffectSpawner {
+    private val logger = LoggerFactory.getLogger(EffectSpawner::class.java)
+
     fun resolveTargetForCue(
         state: State,
         target: CueTargetDto,
@@ -149,5 +152,24 @@ internal object EffectSpawner {
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid
                 ?: speedMasterUuidOrNull(effectSpec.rateSpeedMasterUuid)
         }
+    }
+
+    /**
+     * [createEffectInstance], or null with a warn when the effect cannot be built — a stored row
+     * naming an effect no longer registered — so one dead effect is skipped rather than aborting
+     * the cue or include it is part of. [context] names the caller in the warn.
+     */
+    fun createEffectInstanceOrNull(
+        effectSpec: LookEffectSpec,
+        fxTarget: FxTarget,
+        state: State,
+        context: String,
+        overrideSpeedMasterUuid: UUID? = null,
+        overrideRateSpeedMasterUuid: UUID? = null,
+    ): FxInstance? = try {
+        createEffectInstance(effectSpec, fxTarget, state, overrideSpeedMasterUuid, overrideRateSpeedMasterUuid)
+    } catch (e: Exception) {
+        logger.warn("{}: effect '{}' cannot be created — skipping: {}", context, effectSpec.effectType, e.message)
+        null
     }
 }

@@ -81,14 +81,42 @@ private val lookEffectSchema = buildJsonObject {
     })
 }
 
+/** One static value of a Look: a fixture or group, a property, and what it is set to. */
+private val lookValueSchema = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("target", targetSchema)
+        put("propertyName", buildJsonObject {
+            put("type", "string")
+            put("description", "The property, as list_fixture_types (properties: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+        })
+        put("value", buildJsonObject {
+            put("type", "string")
+            put("description", "What it is set to: $LOOK_VALUE_GRAMMAR.")
+        })
+    })
+    put("required", buildJsonArray { add("target"); add("propertyName"); add("value") })
+}
+
 internal val createLookTool = ToolDef(
     name = "create_look",
-    description = "Create a new look (a named, reusable bundle of beat-synced effects and static values) and optionally apply it immediately to targets. Returns the look ID.",
+    description = "Create a look — a named, reusable bundle of static values, beat-synced effects and scenery — and optionally apply it now. " +
+            "'values' are the plain states (front wash at 70%, the cyc deep blue, the hazer's fan at 20%): each names its own fixture or group, " +
+            "and is resolved per head the way a template is, so 'pct:70' is 70% of each head's own range and a colour lands on a wheel head's nearest slot. " +
+            "A value a head cannot take skips that head and is reported; a value no head of its target can take refuses the call. " +
+            "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and property twice is refused. " +
+            "'effects' are deferred: they name no target and run on whatever applies the look. " +
+            "A look of values is pressed onto its own fixtures (apply_look with no targets) and layered in a cue with no layer targets. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("name", buildJsonObject { put("type", "string"); put("description", "Look name") })
+            put("name", buildJsonObject { put("type", "string"); put("description", "Look name, unique in the project") })
             put("description", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
+            put("values", buildJsonObject {
+                put("type", "array")
+                put("items", lookValueSchema)
+                put("description", "Static values, each on its own fixture or group. A group stays one row while its members agree on the value, so the look follows the group.")
+            })
             put("effects", buildJsonObject {
                 put("type", "array")
                 put("items", lookEffectSchema)
@@ -103,6 +131,10 @@ internal val createLookTool = ToolDef(
                 put("description", "Optional: immediately apply to these targets")
                 put("items", targetSchema)
             })
+            put("apply", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Apply it now, as apply_look would: onto applyToTargets when given, else onto the look's own fixtures. Defaults to true when applyToTargets is given.")
+            })
         })
         put("required", buildJsonArray { add("name") })
     }
@@ -110,7 +142,8 @@ internal val createLookTool = ToolDef(
 
 internal val applyLookTool = ToolDef(
     name = "apply_look",
-    description = "Apply an existing look to targets. If already active on all targets, it will be removed (toggle).",
+    description = "Apply an existing look in the programmer, or take it off again (a toggle: already on every target, it is removed). " +
+            "Omit targets to press it onto its own fixtures — the ones its values name; a look with effects needs targets for them to run on.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -118,13 +151,14 @@ internal val applyLookTool = ToolDef(
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)
+                put("description", "Where to apply it. Omit for the look's own fixtures.")
             })
             put("beatDivision", buildJsonObject {
                 put("type", "number")
                 put("description", "Optional beat division override for all effects")
             })
         })
-        put("required", buildJsonArray { add("lookId"); add("targets") })
+        put("required", buildJsonArray { add("lookId") })
     }
 )
 
@@ -392,6 +426,7 @@ internal val cueLayerSchema = buildJsonObject {
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
+            put("description", "What the layer applies the look to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects needs them.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
@@ -418,7 +453,7 @@ internal val cueLayerSchema = buildJsonObject {
             put("description", "How much of this layer to mix over what is beneath, 0..1. Default 1.")
         })
     })
-    put("required", buildJsonArray { add("lookId"); add("targets") })
+    put("required", buildJsonArray { add("lookId") })
 }
 
 /** One cue event in the tools' shape: a fixture by key, its trigger, an offset from GO. */
@@ -434,7 +469,7 @@ internal val cueEventItemSchema = buildJsonObject {
 
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look layers plus its own local values and ad-hoc effects. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
+    description = "Create a named cue as an ordered stack of look layers plus ad-hoc effects. Its static states come from the looks it layers: make them with create_look's values first. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

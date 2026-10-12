@@ -35,8 +35,8 @@ class FxScriptCompiler(
          *
          * A [FxScriptCompiler] is built per [uk.me.cormack.lighting7.show.Show], and a `Show` is
          * built per project switch — and, in the test suite, per test. A per-instance cache meant
-         * every one of those re-evaluated all 28 built-in `.fx.kts` effects: even with the
-         * on-disk jar cache warm, that is 28 jar loads, 28 classloaders and 28 script evaluations
+         * every one of those re-evaluated every built-in `.fx.kts` effect: even with the
+         * on-disk jar cache warm, that is a jar load, a classloader and a script evaluation each
          * (~70 ms) to arrive at lambdas byte-identical to the ones the previous `Show` had.
          *
          * Sharing them is safe because [CompiledFxScript] is immutable and its lambdas are

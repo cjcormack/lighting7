@@ -287,6 +287,26 @@ its hand-down; `park_channel` refuses a universe the show does not output, the s
 counting universes from 1 would otherwise make, and `unpark_channel` on an unparked address answers
 `wasParked: false` rather than an error.
 
+`create_look` authors a Look's **values** as well as its deferred effects and scenery (`ai/LookValues.kt`):
+`values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
+always is. The model states an intent — the template grammar (`pct:`, `#rrggbb`, `deg:`, `dmx:`,
+`on`/`off`), or a setting's option name for a gobo or a wheel slot — and each is resolved per head
+through `TemplateResolver`, the resolver a template press uses, into the literal a Look row stores;
+`pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the template vocabulary. A
+group stays one group row while its members agree on the literal, and becomes a row per head when they
+do not (a wheel head and an RGB head given one colour). A head that cannot take a value is reported
+under `skipped`; a value no head of its target can take, or the same target and property twice,
+refuses the call. A fixture's own value beats its group's in the cook, so a split group leaves a
+member the call names on its own alone. The rows then go through the
+REST write path (`validateLookRows`, `createLookChildren`), so a trigger or command name is refused as
+it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
+and a cue layer's targets are optional for the same reason. `list_fixture_types` with `properties: true`
+is where the model learns the names. A layer with no targets on a Look with effects is refused by
+`create_cue` and `build_cue_stack`, as `apply_look` refuses the same press. There is no static-value
+effect: `StaticValue` was removed once a Look could hold a value, and a stored effect naming a type the
+registry no longer has is skipped with a warn wherever a cue or Include spawns it
+(`EffectSpawner.createEffectInstanceOrNull`), not left to abort the GO.
+
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
 `dryRun` that answers each head's degrees and writes nothing, and a `saveAsTemplate` that also
@@ -340,7 +360,7 @@ prompt-book markup from a script and lighting notes.
 | `publish_venue` | `VenueVersions.publish` with a note, as `POST /venues/{id}/publish` calls it, then `venueHold.refreshCurrent()` so a live show the publish leaves behind runs on rather than blacking out. Answers the version and the venue's shows, and says each takes it only when the operator updates it — **no tool runs Update**, whose review and decisions are the operator's. Admin only |
 | `copy_to_project` | Show content between two projects, neither switched to (below) |
 | `delete_cue_stacks` | Stacks by id with all their cues — `deleteCueStackRows`, shared with the REST delete, so anchors, busk pads, scenery and events go as there. A running stack is refused rather than deactivated under the operator; `dryRun` answers what would go; `projectId` |
-| `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM`; a type hung with a lantern from the library (the generic dimmer) is marked `acceptsLantern`, and the tool schema lists the library's ids and each kind's default; a type with loadable settings (the Source Four Revolution) carries `loadable` — each loadable setting, what its slots `take` (`GEL` · `GOBO` · `GOBO_OR_GEL`) and each slot with its stock colour or gobo, the open hole left out |
+| `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM`; a type hung with a lantern from the library (the generic dimmer) is marked `acceptsLantern`, and the tool schema lists the library's ids and each kind's default; a type with loadable settings (the Source Four Revolution) carries `loadable` — each loadable setting, what its slots `take` (`GEL` · `GOBO` · `GOBO_OR_GEL`) and each slot with its stock colour or gobo, the open hole left out. `properties: true` adds each type's settable properties (name, kind, category, a setting's option names) and a multi-head type's `cellProperties` — the names `create_look`'s values take |
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |

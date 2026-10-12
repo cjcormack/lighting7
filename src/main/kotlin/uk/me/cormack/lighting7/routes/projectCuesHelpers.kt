@@ -757,11 +757,12 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = EffectSpawner.createEffectInstance(
+        val instance = EffectSpawner.createEffectInstanceOrNull(
             effectSpec, fxTarget, state = state,
+            context = "cue ${cueData.cueId}: layer on '${layer.source.name}'",
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-        )
+        ) ?: continue
         instance.source = layer.source
         instance.cueLayerId = layer.layerId
         instance.cueId = cueData.cueId
@@ -792,7 +793,9 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstanceOrNull(
+            adHocEffectSpec, fxTarget, state, "cue ${cueData.cueId}: ad-hoc effect on '${adHoc.targetKey}'",
+        ) ?: continue
         instance.cueId = cueData.cueId
         instance.priority = priority
         spawning += instance

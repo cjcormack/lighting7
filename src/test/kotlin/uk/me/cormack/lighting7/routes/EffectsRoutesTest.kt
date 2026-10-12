@@ -211,7 +211,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"effectType":"StaticValue","fixtureKey":"cannon","propertyName":"output1","beatDivision":1.0}""")
+            setBody("""{"effectType":"Pulse","fixtureKey":"cannon","propertyName":"output1","beatDivision":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("one-shot trigger" in effect.bodyAsText(), effect.bodyAsText())

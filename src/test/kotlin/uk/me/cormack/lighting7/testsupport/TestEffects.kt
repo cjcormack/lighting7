@@ -14,7 +14,7 @@ import kotlin.math.sin
 /**
  * Effect implementations for the engine tests and the FX benchmark.
  *
- * The desk's own effects are the 28 `.fx.kts` resources in `src/main/resources/fx/`, compiled at
+ * The desk's own effects are the 27 `.fx.kts` resources in `src/main/resources/fx/`, compiled at
  * startup into the [uk.me.cormack.lighting7.fx.FxRegistry]. Engine tests do not want those: they
  * need *an* effect that produces a known value so an assertion can be about the engine — target
  * expansion, blending, priority, provenance — and reaching them through the registry would make
@@ -53,7 +53,7 @@ data class SineSlider(
  * A constant slider value that auto-windows across a distributed group: a member emits [value]
  * only while the phase is inside its own slot, and 0 otherwise. That windowing is what makes a
  * "static" level read as a chase when spread over group members, and several engine tests depend
- * on it — hence `defaultStepTiming = true`, matching the built-in `StaticValue`.
+ * on it — hence `defaultStepTiming = true`, matching the built-in `StaticColour`.
  */
 data class WindowedSlider(
     val value: UByte = 255u,

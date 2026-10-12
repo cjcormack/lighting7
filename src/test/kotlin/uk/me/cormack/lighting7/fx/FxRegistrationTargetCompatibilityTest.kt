@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * seven.
  *
  * Cost: metadata only. It parses each `.fx.kts` frontmatter via [FxFileLoader.parseFxFile] and
- * never compiles a body — `FxRegistryTest` already pays for the full 28-effect compile, and a
+ * never compiles a body — `FxRegistryTest` already pays for the full 27-effect compile, and a
  * second one would be a minute of suite time for nothing.
  */
 class FxRegistrationTargetCompatibilityTest {

@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
  *
  * A compiler is built per [uk.me.cormack.lighting7.show.Show] — per project switch in the app,
  * and per test in the suite. When the cache lived on the instance, each new `Show` re-evaluated
- * all 28 built-in `.fx.kts` effects to arrive at identical lambdas; sharing it took ~70 ms off
+ * every built-in `.fx.kts` effect to arrive at identical lambdas; sharing it took ~70 ms off
  * every `Show` construction and ~15 s off the suite.
  *
  * The property that makes it safe — and that this test exists to keep — is that a

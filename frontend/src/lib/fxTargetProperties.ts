@@ -16,7 +16,7 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
  *
  * The sentinels are the subtle part and the reason this is worth sharing. The effect library
  * advertises `compatibleProperties` in fixture-agnostic terms, so a `StaticSetting` says it fits
- * `setting` and a `StaticValue` says it fits `slider` — names no fixture descriptor ever carries.
+ * `setting` and a user effect may say it fits `slider` — names no fixture descriptor ever carries.
  * A target therefore grows those two names *synthetically* when it has a property that answers to
  * one, and `resolveEffectProperty` turns the sentinel back into the real property name at apply
  * time. Get either half wrong and the effect is either never offered or applied to nothing.
@@ -62,7 +62,7 @@ export function isSettingProperty(p: { type: string }): boolean {
  *
  * Dimmer and UV are excluded because they are addressed by name everywhere — the library's dimmer
  * effects declare `dimmer`, the UV ones declare `uv` — so letting them answer to the generic
- * `slider` sentinel too would offer `StaticValue` a second route onto a channel that already has
+ * `slider` sentinel too would offer a `slider` effect a second route onto a channel that already has
  * its own.
  */
 export function isExtraSliderProperty(p: { type: string; category: string }): boolean {
