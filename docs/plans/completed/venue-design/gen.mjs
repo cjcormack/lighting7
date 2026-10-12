@@ -2,8 +2,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const OUT = new URL('.', import.meta.url).pathname
-// The Stage boards' stylesheet, lines 5–223 of ../stage-view-design/Stage.dc.html.
-const BASE = readFileSync(new URL('../stage-view-design/Stage.dc.html', import.meta.url), 'utf8').split('\n').slice(4, 223).join('\n')
+// The Stage boards' stylesheet, lines 5–223 of ../../stage-view-design/Stage.dc.html.
+const BASE = readFileSync(new URL('../../stage-view-design/Stage.dc.html', import.meta.url), 'utf8').split('\n').slice(4, 223).join('\n')
 
 const EXTRA = `
     /* ── additions for the venue boards ───────────────────────────────────── */
@@ -729,7 +729,7 @@ const combined = `<title>Venues and Shows</title>
   <nav aria-label="Boards">${SECTIONS.map(([id, , t]) => `<a href="#${id}">${t}</a>`).join('')}</nav>
   ${SECTIONS.map(([id, f, t, d]) => `<section id="${id}"><h2>${t}<small>${f}</small></h2><p>${d}</p>
     <div class="board" data-h="${boards[f].h}"><iframe title="${t}" height="${boards[f].h}" loading="lazy" srcdoc="${esc(boards[f].html)}"></iframe></div></section>`).join('\n  ')}
-  <footer>Generated from <code>docs/plans/venue-design/gen.mjs</code>. The board files in that folder are the authority; this page is a copy.</footer>
+  <footer>Generated from <code>docs/plans/completed/venue-design/gen.mjs</code>. The board files in that folder are the authority; this page is a copy.</footer>
 </div>
 <script>
   const fit = () => document.querySelectorAll('.board').forEach((b) => {

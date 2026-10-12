@@ -238,7 +238,7 @@ modelled. See `docs/fixtures-engineering.md` §"Travel and timing channels".
 ### Venues
 A **venue** is a project of kind `VENUE` (`projects.kind`: `SHOW | VENUE | VENUE_VERSION`, default
 `SHOW`) holding a hall's rig — its patch, universes, riggings, regions, scene and viewpoints (venue
-plan, `docs/plans/venue-plan.md`). Its own rows are its **draft**; publishing freezes the draft as
+plan, `docs/plans/completed/venue-plan.md`). Its own rows are its **draft**; publishing freezes the draft as
 the next **version**, a project of kind `VENUE_VERSION` made by `sync/KeptUuidCopy.kt` (export → a
 fresh project uuid → import, every record uuid kept) and indexed by the machine-local
 `venue_versions` (`venue/VenueVersions.kt`). A version is never listed (REST, MCP's `list_projects`,

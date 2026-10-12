@@ -268,7 +268,7 @@ column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchan
 
 ### Version 24 — venues and shows on them
 
-Bumped when venues began to sync (venue plan session 4, §3.4, D8, P7 — `docs/plans/venue-plan.md`).
+Bumped when venues began to sync (venue plan session 4, §3.4, D8, P7 — `docs/plans/completed/venue-plan.md`).
 `SUPPORTED_FORMAT_VERSION = 24`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, so a v24 install reads
 every earlier repo: every new key defaults, and a missing folder is no hides. The writer emits
 `formatVersion = 24`. What lands under the one number:

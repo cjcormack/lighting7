@@ -3,9 +3,9 @@ import type { ProjectVenue, VenueSummary } from '../api/projectApi'
 
 /**
  * Venue mode's words (venue plan §3.1, session 2; the boards in lighting7
- * `docs/plans/venue-design/Venue.dc.html`). A venue is a project of kind `VENUE`; its own rows are
- * the **draft**, and publishing freezes the draft as the next **version**. Pure, so the copy is
- * pinned by `venue.test.ts` rather than by a render.
+ * `docs/plans/completed/venue-design/Venue.dc.html`). A venue is a project of kind `VENUE`; its
+ * own rows are the **draft**, and publishing freezes the draft as the next **version**. Pure, so
+ * the copy is pinned by `venue.test.ts` rather than by a render.
  */
 
 export const FACET_LABELS: Record<VenueFacet, string> = {

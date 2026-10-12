@@ -2753,7 +2753,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   and a show sits on one at a pinned version: the rig scope, venue mode and Publish, shows on a venue
   with hides and Extract, the venue repo, facet overrides, the hold and Update, and the Projects page
   with Create's stalls preset, *Replace from preset* and Detach — venue plan sessions 1–7, whose
-  done-markers in [`venue-plan.md`](venue-plan.md) cite the commits.
+  done-markers in [`venue-plan.md`](completed/venue-plan.md) cite the commits.
 - `FU-LOOK-COLOUR-WHEEL-ROW` — the six colour-wheel properties named `colour` (MAC 250, Easymove
   XL 60 Spot, both Fusion 100 Spot MkII modes, both Slender Beam Bar heads) are `colourWheel`, so
   the RGB alias no longer rewrites their rows away; `FixturePropertyNameAliasTest` forbids an alias
