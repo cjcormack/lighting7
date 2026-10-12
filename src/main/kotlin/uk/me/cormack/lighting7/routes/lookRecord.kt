@@ -342,91 +342,131 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    if (mode == RecordMode.CREATE && request.name.isNullOrBlank()) {
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse("CREATE requires a name"))
-    }
-    if (mode != RecordMode.CREATE && request.lookId == null) {
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse("${mode.name} requires lookId"))
+    recordLookShapeProblem(mode, request.name, request.lookId)?.let {
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot record into project '${p.name}' — only the current project can be modified"
     }) { project ->
-        val resolved = transaction(state.database) { resolveLookTarget(project, mode, request) }
-        if (resolved.second != null) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.second!!))
-            return@withCurrentProject
-        }
-        val existing = resolved.first
-
-        // Expand the selection outside the transaction — it reads the patch, not the DB.
-        val scope = request.targets?.let { expandTargetsToFixtureKeys(state, it) }
-        if (request.targets != null && scope!!.isEmpty()) {
-            call.respond(
-                HttpStatusCode.BadRequest,
-                ErrorResponse("None of the requested targets resolve to a fixture"),
-            )
-            return@withCurrentProject
-        }
-
-        // `allowElements`: a Look has an element row, so a cell the operator edited is recorded as
-        // one rather than skipped — the only recording destination that may ask for this.
-        val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope, allowElements = true)
-        val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
-        val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
-        val elementParents = elementParentsOf(state.show.fixtures, collapsed)
-
-        // Resolved before the transaction, because it reads the engine rather than the DB — and
-        // resolved by id rather than re-derived, so a chase that started between the operator
-        // ticking it and pressing Record cannot be swept in.
-        val bandEffects = programmerBandEffectsById(state, request.effectIds)
-        val held = if (request.scenery) heldSceneryOf(state, project.id.value) else emptyMap()
-
-        val (outcome, scenery) = transaction(state.database) {
-            val look = existing ?: DaoLook.new {
-                this.project = project
-                this.name = request.name!!.trim()
-                this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-            }
-            val written = writeRecordingIntoLook(look, collapsed, mode, inRemit, elementParents)
-            writeLookEffects(look, bandEffects, mode)
-            written to writeHeldSceneryIntoLook(look, held, mode)
-        }
-
-        // Only once the rows are committed: the layer applying this Look starts running these the
-        // moment it is added, so removing them first would leave a gap, and removing them after a
-        // failed write would stop an effect the operator still has.
-        for (effect in bandEffects) state.show.fxEngine.removeEffect(effect.id)
-
-        // Re-resolve and republish: a re-record of a layered Look must move its consumers, exactly
-        // as an edit does.
-        val republish = republishForLookEdit(state, outcome.lookUuid)
-        state.show.fixtures.lookListChanged()
-
-        val details = transaction(state.database) {
-            DaoLook.findById(outcome.lookId)!!.toDetailsDto(state)
-        }
-        logger.info(
-            "record-look {} '{}': {} written, {} removed, {} group row(s), {} effect(s)",
-            mode, details.name, outcome.written, outcome.removed, collapsed.groupRows,
-            bandEffects.size,
+        val result = performProgrammerRecordLook(
+            state, project,
+            mode = mode,
+            source = source,
+            lookId = request.lookId,
+            name = request.name,
+            notes = request.notes,
+            mask = mask,
+            targets = request.targets,
+            effectIds = request.effectIds,
+            scenery = request.scenery,
         )
-        call.respond(
-            ProgrammerRecordLookResponse(
-                look = details,
-                created = existing == null,
-                rowsWritten = outcome.written,
-                rowsRemoved = outcome.removed,
-                groupRowsEmitted = collapsed.groupRows,
-                skipped = skips.map { it.toDto() },
-                effectsWritten = bandEffects.size,
-                programmerKeysRefreshed = republish.programmerKeysRefreshed,
-                cuesRepublished = republish.cuesRepublished,
-                sceneryWritten = scenery.written,
-                sceneryRemoved = scenery.removed,
-            )
-        )
+        when (result) {
+            is RecordLookCoreResult.Failure -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
+            is RecordLookCoreResult.Ok -> call.respond(result.response)
+        }
     }
+}
+
+internal sealed interface RecordLookCoreResult {
+    data class Ok(val response: ProgrammerRecordLookResponse) : RecordLookCoreResult
+    data class Failure(val message: String) : RecordLookCoreResult
+}
+
+/** What is wrong with a record-look request's shape, before anything is read or written. */
+internal fun recordLookShapeProblem(mode: RecordMode, name: String?, lookId: Int?): String? = when {
+    mode == RecordMode.CREATE && name.isNullOrBlank() -> "CREATE requires a name"
+    mode != RecordMode.CREATE && lookId == null -> "${mode.name} requires lookId"
+    else -> null
+}
+
+/**
+ * Record the programmer into a Look — creating one ([RecordMode.CREATE]) or writing into
+ * [lookId]. The REST route and the `record_look` tool both come through here, as Record into a cue
+ * comes through [performProgrammerRecord].
+ */
+internal fun performProgrammerRecordLook(
+    state: State,
+    project: DaoProject,
+    mode: RecordMode,
+    source: RecordSource,
+    lookId: Int?,
+    name: String?,
+    notes: String?,
+    mask: Set<PropertyMaskGroup>?,
+    targets: List<CueTargetDto>?,
+    effectIds: List<Long>,
+    scenery: Boolean,
+): RecordLookCoreResult {
+    recordLookShapeProblem(mode, name, lookId)?.let { return RecordLookCoreResult.Failure(it) }
+
+    val resolved = transaction(state.database) { resolveLookTarget(project, mode, name, lookId) }
+    resolved.second?.let { return RecordLookCoreResult.Failure(it) }
+    val existing = resolved.first
+
+    // Expand the selection outside the transaction — it reads the patch, not the DB.
+    val scope = targets?.let { expandTargetsToFixtureKeys(state, it) }
+    if (targets != null && scope!!.isEmpty()) {
+        return RecordLookCoreResult.Failure("None of the requested targets resolve to a fixture")
+    }
+
+    // `allowElements`: a Look has an element row, so a cell the operator edited is recorded as
+    // one rather than skipped — the only recording destination that may ask for this.
+    val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope, allowElements = true)
+    val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
+    val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
+    val elementParents = elementParentsOf(state.show.fixtures, collapsed)
+
+    // Resolved before the transaction, because it reads the engine rather than the DB — and
+    // resolved by id rather than re-derived, so a chase that started between the operator
+    // ticking it and pressing Record cannot be swept in.
+    val bandEffects = programmerBandEffectsById(state, effectIds)
+    val held = if (scenery) heldSceneryOf(state, project.id.value) else emptyMap()
+
+    val (outcome, sceneryOutcome) = transaction(state.database) {
+        val look = existing ?: DaoLook.new {
+            this.project = project
+            this.name = name!!.trim()
+            this.notes = notes?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        val written = writeRecordingIntoLook(look, collapsed, mode, inRemit, elementParents)
+        writeLookEffects(look, bandEffects, mode)
+        written to writeHeldSceneryIntoLook(look, held, mode)
+    }
+
+    // Only once the rows are committed: the layer applying this Look starts running these the
+    // moment it is added, so removing them first would leave a gap, and removing them after a
+    // failed write would stop an effect the operator still has.
+    for (effect in bandEffects) state.show.fxEngine.removeEffect(effect.id)
+
+    // Re-resolve and republish: a re-record of a layered Look must move its consumers, exactly
+    // as an edit does.
+    val republish = republishForLookEdit(state, outcome.lookUuid)
+    state.show.fixtures.lookListChanged()
+
+    val details = transaction(state.database) {
+        DaoLook.findById(outcome.lookId)!!.toDetailsDto(state)
+    }
+    logger.info(
+        "record-look {} '{}': {} written, {} removed, {} group row(s), {} effect(s)",
+        mode, details.name, outcome.written, outcome.removed, collapsed.groupRows,
+        bandEffects.size,
+    )
+    return RecordLookCoreResult.Ok(
+        ProgrammerRecordLookResponse(
+            look = details,
+            created = existing == null,
+            rowsWritten = outcome.written,
+            rowsRemoved = outcome.removed,
+            groupRowsEmitted = collapsed.groupRows,
+            skipped = skips.map { it.toDto() },
+            effectsWritten = bandEffects.size,
+            programmerKeysRefreshed = republish.programmerKeysRefreshed,
+            cuesRepublished = republish.cuesRepublished,
+            sceneryWritten = sceneryOutcome.written,
+            sceneryRemoved = sceneryOutcome.removed,
+        )
+    )
 }
 
 /**
@@ -515,16 +555,17 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
 private fun resolveLookTarget(
     project: DaoProject,
     mode: RecordMode,
-    request: ProgrammerRecordLookRequest,
+    requestedName: String?,
+    lookId: Int?,
 ): Pair<DaoLook?, String?> {
     if (mode == RecordMode.CREATE) {
-        val name = request.name!!.trim()
+        val name = requestedName!!.trim()
         val clash = DaoLook.find {
             (DaoLooks.project eq project.id) and (DaoLooks.name eq name)
         }.firstOrNull()
         return if (clash != null) null to "A look called '$name' already exists" else null to null
     }
-    val look = DaoLook.findById(request.lookId!!)?.takeIf { it.project.id == project.id }
+    val look = DaoLook.findById(lookId!!)?.takeIf { it.project.id == project.id }
         ?: return null to "Look not found"
     return look to null
 }

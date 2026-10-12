@@ -268,11 +268,11 @@ class McpProtocol(private val state: State) {
         ).associateWith { "projectId" } + ("copy_to_project" to "toProjectId")
 
         /** The programmer's Record and Update, off in a venue (venue plan D11). */
-        private val VENUE_RECORD_TOOLS = setOf("record_cue", "update_from_programmer")
+        private val VENUE_RECORD_TOOLS = setOf("record_cue", "record_look", "update_from_programmer")
 
         /**
          * The tools that store something in the live project — an operator's are refused on a venue
-         * (D3). The rest act on the rig as it stands (apply, GO, aim, tempo) or only read.
+         * (D3). The rest act on the rig as it stands (apply, GO, aim, tempo, the programmer) or only read.
          */
         private val VENUE_STORED_WRITE_TOOLS = setOf(
             "create_look", "create_speed_master", "park_channel", "unpark_channel", "create_cue",
