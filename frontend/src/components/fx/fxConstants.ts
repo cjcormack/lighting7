@@ -81,16 +81,12 @@ export const EFFECT_DESCRIPTIONS: Record<string, string> = {
   colourpulse: 'Pulse between two colours',
   colourfade: 'Crossfade between two colours',
   colourflicker: 'Random colour variation',
-  staticcolour: 'Fixed colour output',
   circle: 'Circular movement pattern',
   figure8: 'Figure-8 movement pattern',
   sweep: 'Sweep between two positions',
   pansweep: 'Horizontal pan back and forth',
   tiltsweep: 'Vertical tilt up and down',
   randomposition: 'Random position jumps',
-  staticposition: 'Fixed position output',
-  staticvalue: 'Fixed dimmer/slider level',
-  staticsetting: 'Fixed fixture setting',
 }
 
 export function getEffectDescription(effectName: string, libraryDescription?: string): string {

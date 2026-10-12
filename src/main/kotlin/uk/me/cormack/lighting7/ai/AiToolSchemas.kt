@@ -56,7 +56,7 @@ private val lookEffectSchema = buildJsonObject {
         })
         put("stepTiming", buildJsonObject {
             put("type", "boolean")
-            put("description", "When true, beat division controls per-step time (total cycle = beatDivision × steps). When false, beat division controls total cycle time. Defaults to true for static effects (chase), false for continuous effects.")
+            put("description", "When true, beat division controls per-step time (total cycle = beatDivision × steps). When false, beat division controls total cycle time. Defaults to the effect type's own setting: true for a step chase, false for a continuous effect (every built-in).")
         })
         put("elementFilter", buildJsonObject {
             put("type", "string")
@@ -1044,7 +1044,12 @@ private val fadeSecondsSchema = buildJsonObject {
 internal val setProgrammerTool = ToolDef(
     name = "set_programmer",
     description = "Set plain values in the programmer — the manual overlay above whatever is running, as the desk's " +
-            "faders and pickers set it. Every value goes to every head of every target; a group's heads are held " +
+            "faders and pickers set it: a level, a colour, a position, a gobo or any other property a fixture has. " +
+            "This is how a fixed state is set; there is no static effect. " +
+            "A colour sets a head's white, amber and UV with it (none unless the value names them or asks for " +
+            "';policy=extract' / ';policy=additive'), so give those in the colour ('#ff8000;w120') or as their own " +
+            "values in the same call, where they win over the colour's. " +
+            "Every value goes to every head of every target; a group's heads are held " +
             "as the group's, so record_cue and record_look write them back as one group row while they agree. " +
             "A value lands only on heads that can take it: the answer lists what was written and every head " +
             "skipped, with why; a value no selected head can take refuses the whole call. " +

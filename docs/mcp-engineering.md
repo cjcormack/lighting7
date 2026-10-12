@@ -302,10 +302,19 @@ REST write path (`validateLookRows`, `createLookChildren`), so a trigger or comm
 it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
 and a cue layer's targets are optional for the same reason. `list_fixture_types` with `properties: true`
 is where the model learns the names. A layer with no targets on a Look with effects is refused by
-`create_cue` and `build_cue_stack`, as `apply_look` refuses the same press. There is no static-value
-effect: `StaticValue` was removed once a Look could hold a value, and a stored effect naming a type the
-registry no longer has is skipped with a warn wherever a cue or Include spawns it
-(`EffectSpawner.createEffectInstanceOrNull`), not left to abort the GO.
+`create_cue` and `build_cue_stack`, as `apply_look` refuses the same press. There is no static
+effect: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
+`StaticPosition` once `set_programmer` could set any property, so a fixed state is always a value on the
+fixture's own property. A stored effect naming a type the registry no longer has is skipped with a warn
+wherever a cue or Include spawns it (`EffectSpawner.createEffectInstanceOrNull`), not left to abort the GO.
+A colour value may carry the head's own emitter levels as the desk's colour literal does —
+`#ff0000;w128;a64;uv32`, each token at most once, any other token refused rather than dropped — laid over
+the resolved mix only where the head bundles that emitter with its colour (`bundleWithColour`). A
+`;policy=extract|additive|rgbonly` token is the template grammar's white policy (`TemplateResolver.mixColour`),
+absent reading as `rgbonly`, so a colour with neither sets W/A/UV to zero; a named level wins over the
+policy's; pan and
+tilt take `pct:` / `dmx:` on their own, which is how a head with no annotated degree range is
+positioned.
 
 `update_look` edits a Look as the REST `PUT /looks/{id}` does: a new name (refused when another
 Look holds it) and notes, and each of `values`, `effects` and `scenery` given replaces that part
@@ -339,7 +348,10 @@ the code the desk's own gesture goes through, on the current project:
   head's `sourceGroup` from `groupHintsForTargets` — the template click's value arm — so Record
   collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
   write resolves to no channel, is in `skipped`; a value no selected head can take, an unknown target,
-  or a trigger or command name refuses the call before anything is written.
+  or a trigger or command name refuses the call before anything is written. A colour write carries the
+  head's bundled W/A/UV with it, so a later colour call resets an emitter an earlier call set — the
+  desk's colour picker does the same; within one call `writeProperties` stores emitter rows last, so a
+  `white` value beside an `rgbColour` one wins.
 - `clear_programmer` `{targets?, fadeSeconds?}` — none is `clearProgrammerCompletely` (the WS
   `programmer.clearAll`); targets are each `ProgrammerHandler.clearTarget` (the WS
   `programmer.clearTarget`, the grid's *Release*), all checked before any is cleared.

@@ -124,7 +124,7 @@ write disguises itself as a serialization regression.
 
 The suite takes ~1 minute warm, and ~55 s longer on the first run after any code
 change (editing a source file changes the classpath fingerprint, which invalidates
-the compiled-script jar cache and recompiles the 27 built-in FX effects). That cost
+the compiled-script jar cache and recompiles the 24 built-in FX effects). That cost
 lands on whichever class first builds a `Show` — currently
 `ParkSurvivesFixtureReloadTest`, a one-test class that therefore *looks* like the
 slowest thing in the suite. It is not slow; it is first. Before optimising anything
@@ -357,16 +357,20 @@ Effect interfaces:
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 - **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
-Built-in effect types — **all 27 live as `.fx.kts` resources** under
+Built-in effect types — **all 24 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in effect classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
 - **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, SquareWave, Strobe, Flicker, Breathe,
-  CandleFlicker, FluorescentFlicker, StaticSetting
-- **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade, ColourFlicker,
-  StaticColour
-- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition, StaticPosition
+  CandleFlicker, FluorescentFlicker
+- **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade, ColourFlicker
+- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
 - **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
+
+There is no static effect. A fixed level, colour, position or setting is a **value** on the
+fixture's own property — in the programmer, a Look or a cue — never an effect: StaticValue,
+StaticSetting, StaticColour and StaticPosition were removed for that reason. A stored effect naming
+one is skipped with a warn where a cue or Include spawns it (`EffectSpawner.createEffectInstanceOrNull`).
 
 A **template** may hold one effect instead of values — an *effect template*, the busking pad for a
 named effect. It is always generic (it names no target; the layer's targets are the fan-out), always

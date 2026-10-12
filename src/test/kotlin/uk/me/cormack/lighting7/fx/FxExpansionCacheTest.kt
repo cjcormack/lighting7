@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  * `Mode48Ch` is the fixture throughout because it is a [uk.me.cormack.lighting7.fixture.group.MultiElementFixture]
  * that deliberately does *not* implement `WithColour` itself — which is what pushes a group
  * colour effect down the element-expansion branch rather than the direct-member one.
- * [DistributionStrategy.UNIFIED] keeps `StaticColour` phase-independent, so "was this element
+ * [DistributionStrategy.UNIFIED] keeps [WindowedColour] phase-independent, so "was this element
  * painted?" is a clean yes/no read off the mock controller.
  */
 class FxExpansionCacheTest {

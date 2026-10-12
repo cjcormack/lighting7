@@ -6,7 +6,7 @@ import java.awt.Color
  * Context about the group/distribution environment an effect is being calculated within.
  *
  * This allows effects to adapt their behaviour based on how many elements they're
- * distributed across (e.g., static effects can auto-window to `1/groupSize`).
+ * distributed across (e.g., a step chase can auto-window to `1/groupSize`).
  *
  * @param groupSize Total number of elements being distributed across (1 for a single fixture)
  * @param memberIndex 0-based index of the current element within the group
@@ -17,7 +17,7 @@ import java.awt.Color
  * @param numDistinctSlots Number of unique offset positions in the distribution. Equals
  *        groupSize for asymmetric distributions (LINEAR, REVERSE, RANDOM), but fewer for
  *        symmetric ones (CENTER_OUT, SPLIT) where multiple members share an offset.
- *        Static effects use this for window width: `1/numDistinctSlots`.
+ *        A step chase uses this for window width: `1/numDistinctSlots`.
  * @param trianglePhase When true, the base phase should be remapped through a triangle wave
  *        before windowing, so the chase sweeps forward then backward (PING_PONG).
  */

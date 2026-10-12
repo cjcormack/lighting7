@@ -142,7 +142,7 @@ behind in the cycle and the visual sweep flows in the natural direction.
 
 **Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. This is exposed via
-`distinctSlots(groupSize)` and used by static effects for gap-free window sizing.
+`distinctSlots(groupSize)` and used by a windowed step chase for gap-free window sizing.
 
 **Strategy interface:**
 

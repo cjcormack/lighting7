@@ -45,15 +45,13 @@ export interface EffectSummaryData {
 const EFFECT_CATEGORY_MAP: Record<string, string> = {}
 
 // Build the map from known effect names
-const DIMMER_EFFECTS = ['sinewave', 'rampup', 'rampdown', 'triangle', 'pulse', 'squarewave', 'strobe', 'flicker', 'breathe', 'staticvalue']
-const COLOUR_EFFECTS = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourpulse', 'colourfade', 'colourflicker', 'staticcolour']
-const POSITION_EFFECTS = ['circle', 'figure8', 'sweep', 'pansweep', 'tiltsweep', 'randomposition', 'staticposition']
-const CONTROLS_EFFECTS = ['staticsetting']
+const DIMMER_EFFECTS = ['sinewave', 'rampup', 'rampdown', 'triangle', 'pulse', 'squarewave', 'strobe', 'flicker', 'breathe']
+const COLOUR_EFFECTS = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourpulse', 'colourfade', 'colourflicker']
+const POSITION_EFFECTS = ['circle', 'figure8', 'sweep', 'pansweep', 'tiltsweep', 'randomposition']
 
 for (const name of DIMMER_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'dimmer'
 for (const name of COLOUR_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'colour'
 for (const name of POSITION_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'position'
-for (const name of CONTROLS_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'controls'
 
 /** Look up category from the effect library, falling back to a static map. */
 export function lookupCategory(

@@ -15,8 +15,8 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
  * nothing tying the halves together.
  *
  * The sentinels are the subtle part and the reason this is worth sharing. The effect library
- * advertises `compatibleProperties` in fixture-agnostic terms, so a `StaticSetting` says it fits
- * `setting` and a user effect may say it fits `slider` — names no fixture descriptor ever carries.
+ * advertises `compatibleProperties` in fixture-agnostic terms, so a user effect may say it fits
+ * `setting` or `slider` — names no fixture descriptor ever carries.
  * A target therefore grows those two names *synthetically* when it has a property that answers to
  * one, and `resolveEffectProperty` turns the sentinel back into the real property name at apply
  * time. Get either half wrong and the effect is either never offered or applied to nothing.

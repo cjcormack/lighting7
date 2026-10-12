@@ -5,7 +5,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue
@@ -13,6 +15,7 @@ import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.WhitePolicy
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -46,7 +49,11 @@ internal data class LookValueSkip(val target: String, val propertyName: String, 
 /** What `values[].value` may say, for the schema and the refusals. */
 internal const val LOOK_VALUE_GRAMMAR =
     "'pct:0-100' for a level (dimmer, strobe, zoom, focus, iris, frost, or any other single channel — a fan, a pump), " +
-        "'#rrggbb' for rgbColour (a wheel head lands on its nearest slot), 'deg:<pan>,<tilt>' for position, " +
+        "'#rrggbb' for rgbColour (a wheel head lands on its nearest slot), optionally followed by ';w0-255', ';a0-255' " +
+        "and ';uv0-255' for the head's own white, amber and UV emitters (an emitter the head lacks is left out), " +
+        "or by ';policy=extract' (the hex's white moved into the white or amber emitter) or ';policy=additive' (driven " +
+        "alongside RGB) — without one, RGB alone; a named emitter level wins over the policy's, " +
+        "'deg:<pan>,<tilt>' for position, or pan and tilt each on its own with 'pct:' or 'dmx:', " +
         "'dmx:0-255' for a raw channel level (white, amber and uv, or any single channel), 'on' / 'off' for prism, " +
         "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' properties name it"
 
@@ -147,9 +154,13 @@ private fun row(ref: TargetRef, head: GroupableFixture?, propertyName: String, l
     }
 
 private sealed interface LookValue {
-    data class Intent(val intent: TemplateIntent) : LookValue
+    /** [emitters] is a colour's own white, amber and UV, laid over the mix where the head has them. */
+    data class Intent(val intent: TemplateIntent, val emitters: Emitters? = null) : LookValue
     data class Option(val name: String) : LookValue
 }
+
+/** The `;w` / `;a` / `;uv` levels a colour value named; null for one it did not. */
+private data class Emitters(val white: UByte?, val amber: UByte?, val uv: UByte?)
 
 /**
  * A hex only for a colour and `deg:` only for `position`, so [TemplateResolver]'s colour fallback
@@ -157,14 +168,63 @@ private sealed interface LookValue {
  */
 private fun parseLookValue(propertyName: String, raw: String): LookValue? {
     val vocabulary = TemplateProperty.ofOrNull(propertyName)
+    if (vocabulary == TemplateProperty.COLOUR) return parseColourValue(raw)
     val intent = parseTemplateIntent(raw)
     return when {
-        vocabulary == TemplateProperty.COLOUR -> (intent as? TemplateIntent.Colour)?.let { LookValue.Intent(it) }
         vocabulary == TemplateProperty.POSITION -> (intent as? TemplateIntent.Position)?.let { LookValue.Intent(it) }
         intent is TemplateIntent.Colour || intent is TemplateIntent.Position -> null
         intent != null -> LookValue.Intent(intent)
         else -> LookValue.Option(raw)
     }
+}
+
+/**
+ * `#rrggbb`, then any of `;policy=…`, `;w0-255`, `;a0-255`, `;uv0-255` — the template grammar's
+ * colour plus the emitter levels a colour literal carries, as the desk's own colour picker writes
+ * them. Each token at most once; anything else refuses the value rather than being dropped.
+ */
+private fun parseColourValue(raw: String): LookValue? {
+    val parts = raw.split(";").map { it.trim() }
+    var policy: String? = null
+    var white: UByte? = null
+    var amber: UByte? = null
+    var uv: UByte? = null
+    for (token in parts.drop(1)) {
+        val lower = token.lowercase()
+        fun level(prefix: String): UByte? = lower.removePrefix(prefix).toIntOrNull()?.takeIf { it in 0..255 }?.toUByte()
+        when {
+            lower.startsWith("policy=") -> {
+                if (policy != null) return null
+                policy = WhitePolicy.ofToken(lower.removePrefix("policy="))?.token ?: return null
+            }
+            lower.startsWith("uv") -> { if (uv != null) return null; uv = level("uv") ?: return null }
+            lower.startsWith("w") -> { if (white != null) return null; white = level("w") ?: return null }
+            lower.startsWith("a") -> { if (amber != null) return null; amber = level("a") ?: return null }
+            else -> return null
+        }
+    }
+    val hex = parts.first() + (policy?.let { ";policy=$it" } ?: "")
+    val intent = parseTemplateIntent(hex) as? TemplateIntent.Colour ?: return null
+    val emitters = if (white == null && amber == null && uv == null) null else Emitters(white, amber, uv)
+    return LookValue.Intent(intent, emitters)
+}
+
+/**
+ * [value] with [emitters] laid over it, each only where [head] bundles that emitter with its colour
+ * (`bundleWithColour`, the class catalogue's answer, as the colour write itself asks) — elsewhere a
+ * colour's W/A/UV reaches no channel, so it is left out rather than stored.
+ */
+private fun withEmitters(head: GroupableFixture, value: PropertyValue, emitters: Emitters?): PropertyValue {
+    if (emitters == null || value !is PropertyValue.Colour) return value
+    val bundled = FixturePropertyCatalogue.of(head::class).bundledByCategory
+    val mix = value.value
+    return PropertyValue.Colour(
+        mix.copy(
+            white = emitters.white?.takeIf { PropertyCategory.WHITE in bundled } ?: mix.white,
+            amber = emitters.amber?.takeIf { PropertyCategory.AMBER in bundled } ?: mix.amber,
+            uv = emitters.uv?.takeIf { PropertyCategory.UV in bundled } ?: mix.uv,
+        ),
+    )
 }
 
 private sealed interface HeadValue {
@@ -196,7 +256,7 @@ private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, propertyNa
             val resolution = TemplateResolver.resolve(head, propertyName, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
             val resolved = resolution.value
                 ?: return HeadValue.Missed((resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
-            HeadValue.Landed(resolution.propertyName, resolved)
+            HeadValue.Landed(resolution.propertyName, withEmitters(head, resolved, value.emitters))
         }
     }
 }
