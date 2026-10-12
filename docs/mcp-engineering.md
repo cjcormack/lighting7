@@ -329,6 +329,35 @@ layer naming a record the project lacks is refused by both tools (`layerSourcePr
 whatever it is pointed at) with no layer targets is refused as the busk pad refuses it with nothing
 selected. An effect missing a required field is refused by the field's name.
 
+**The programmer** (`ai/ProgrammerTools.kt`). Five tools write it the way the desk does, each through
+the code the desk's own gesture goes through, on the current project:
+
+- `set_programmer` `{targets, values: [{propertyName, value}], fadeSeconds?}` — plain values in
+  `create_look`'s grammar, resolved per head by `resolveProgrammerValues` (the same parse and
+  `TemplateResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
+  rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeProperties` batch with each
+  head's `sourceGroup` from `groupHintsForTargets` — the template click's value arm — so Record
+  collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
+  write resolves to no channel, is in `skipped`; a value no selected head can take, an unknown target,
+  or a trigger or command name refuses the call before anything is written.
+- `clear_programmer` `{targets?, fadeSeconds?}` — none is `clearProgrammerCompletely` (the WS
+  `programmer.clearAll`); targets are each `ProgrammerHandler.clearTarget` (the WS
+  `programmer.clearTarget`, the grid's *Release*), all checked before any is cleared.
+- `set_blind` `{blind, fadeSeconds?}` — the WS `programmer.setBlind` branch, call for call:
+  `programmer.setBlind`, `sceneryService.onBlindChanged`, `effectsService.onBlindChanged`.
+- `apply_template` `{templateId | templateName, targets?, mode?, mask?, fadeSeconds?}` — `LITERALS`
+  is `applyTemplateToProgrammer` (the chip's click), `LAYER` the toggle route's siblingless
+  `programmerLayerStack.toggle` (⌥click). A generic template with no targets is `TEMPLATE_NEEDS_SELECTION`;
+  a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a template
+  outside it (`TEMPLATE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
+  as the desk's doors do.
+- `record_look` — `performProgrammerRecordLook`, which `POST …/programmer/record-look` now calls too
+  (extracted from the route as Record into a cue's `performProgrammerRecord` was), with record_cue's
+  modes, source and mask, `effectIds` to move programmer effects into the Look, and the Look's rows in
+  the answer.
+
+Every fade on these is `fadeSeconds`, 0–600.
+
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
 `dryRun` that answers each head's degrees and writes nothing, and a `saveAsTemplate` that also
@@ -534,11 +563,12 @@ project-scoped tool names (`McpProtocol.PROJECT_SCOPED_TOOLS`: its `projectId`, 
 `toProjectId`; any other tool's stray `projectId` is not read, so it cannot steer the guard) —
 `McpProtocol.venueToolRefusal` holds the tools to the REST routes' rules, since a tool writes with
 no route in between. `extract_venue` and `publish_venue` are an admin's wherever they point. On a
-venue, `record_cue` and `update_from_programmer` are refused for everyone — Record and Update are off in a
+venue, `record_cue`, `record_look` and `update_from_programmer` are refused for everyone — Record and Update are off in a
 venue (D11) — and an **operator's** stored write is refused, as `VENUE_ADMIN_ONLY` refuses it over
 REST (D3): the tools in `VENUE_STORED_WRITE_TOOLS` (patching, the scene, the stage, Looks, cues,
 templates, park) and `aim_fixtures` when it is told to `saveAsTemplate`. Tools that act on the rig as
-it stands — apply, GO, aim, tempo — and the reads pass. A venue version needs no rule: it is never
+it stands — apply, GO, aim, tempo, and the programmer's set, clear, Blind and template apply — and the
+reads pass. A venue version needs no rule: it is never
 live, `list_projects` leaves versions out, and `switch_project` and every `projectId` answer one as
 not found.
 

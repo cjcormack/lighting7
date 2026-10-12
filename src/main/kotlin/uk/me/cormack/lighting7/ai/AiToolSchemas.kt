@@ -383,7 +383,7 @@ internal val getCurrentStateTool = ToolDef(
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
             "`cue_run` says what each running stack's next GO will fire; " +
-            "`programmer` is the manual overlay this surface itself writes through apply_look and move_scenery (its `scenery` lists the elements held); " +
+            "`programmer` is the manual overlay this surface writes through set_programmer, apply_template, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held); " +
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
@@ -1033,3 +1033,161 @@ internal const val RUN_FIXTURE_COMMAND = "run_fixture_command"
 /** What the tool answers when a caller may not run one. */
 internal const val FIXTURE_COMMANDS_REMOTE_REFUSAL =
     "run_fixture_command is not available: fixture commands are turned off for remote access. An admin can allow them in Install settings → Remote access."
+
+// ─── The programmer: set, clear, Blind, template apply, Record into a Look ──
+
+private val fadeSecondsSchema = buildJsonObject {
+    put("type", "number")
+    put("description", "Fade over this many seconds (0–600). Default 0, a snap.")
+}
+
+internal val setProgrammerTool = ToolDef(
+    name = "set_programmer",
+    description = "Set plain values in the programmer — the manual overlay above whatever is running, as the desk's " +
+            "faders and pickers set it. Every value goes to every head of every target; a group's heads are held " +
+            "as the group's, so record_cue and record_look write them back as one group row while they agree. " +
+            "A value lands only on heads that can take it: the answer lists what was written and every head " +
+            "skipped, with why; a value no selected head can take refuses the whole call. " +
+            "The values stay until clear_programmer — record_cue or record_look keeps them.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "The fixtures and groups to set.")
+            })
+            put("values", buildJsonObject {
+                put("type", "array")
+                put("items", buildJsonObject {
+                    put("type", "object")
+                    put("properties", buildJsonObject {
+                        put("propertyName", buildJsonObject {
+                            put("type", "string")
+                            put("description", "The property, as list_fixture_types (properties: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+                        })
+                        put("value", buildJsonObject {
+                            put("type", "string")
+                            put("description", "What it is set to: $LOOK_VALUE_GRAMMAR.")
+                        })
+                    })
+                    put("required", buildJsonArray { add("propertyName"); add("value") })
+                })
+            })
+            put("fadeSeconds", fadeSecondsSchema)
+        })
+        put("required", buildJsonArray { add("targets"); add("values") })
+    }
+)
+
+internal val clearProgrammerTool = ToolDef(
+    name = "clear_programmer",
+    description = "Clear the programmer, as the desk's Clear does. With no targets: every value, every Look and " +
+            "template layer, every programmer effect and the scenery it holds, so the stage falls back to what " +
+            "is running. With targets: everything the programmer holds on those fixtures (their heads included) " +
+            "and groups, and the effects on just them — an effect that also drives heads outside them is left " +
+            "running and named in `partial`. Layers are not taken off by targets; apply_look or apply_template " +
+            "pressed again takes one off.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "Clear only these. Omit to clear everything.")
+            })
+            put("fadeSeconds", fadeSecondsSchema)
+        })
+    }
+)
+
+internal val setBlindTool = ToolDef(
+    name = "set_blind",
+    description = "Turn Blind on or off. In Blind the programmer keeps everything it holds and every tool that " +
+            "writes it still works, but none of it reaches the stage — build a state, record it, then clear. " +
+            "Its scenery is staged rather than moved, and a cue's one-shot events are rehearsed, not fired. " +
+            "Turning Blind off puts the programmer back on stage. `programmer.blind` in get_current_state reads it.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("blind", buildJsonObject { put("type", "boolean") })
+            put("fadeSeconds", fadeSecondsSchema)
+        })
+        put("required", buildJsonArray { add("blind") })
+    }
+)
+
+internal val applyTemplateTool = ToolDef(
+    name = "apply_template",
+    description = "Apply a template (by templateId or templateName) onto targets, as the desk's template chips do. " +
+            "mode LITERALS (default) writes the values it resolves to into the programmer — later edits to the " +
+            "template do not move them — or, for an effect template, starts a copy of its effect per target. " +
+            "mode LAYER adds a programmer layer that tracks the template, and toggles: pressing again on the same " +
+            "targets takes it off (get_current_state's `programmer.layers`). A generic template takes its heads " +
+            "from targets and refuses with none (TEMPLATE_NEEDS_SELECTION); a per-fixture one lands on its own " +
+            "heads when targets are omitted. A mask refuses a template outside it (TEMPLATE_OUTSIDE_MASK).",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("templateId", buildJsonObject { put("type", "integer") })
+            put("templateName", buildJsonObject { put("type", "string") })
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+            })
+            put("mode", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("LITERALS"); add("LAYER") })
+                put("description", "Defaults to LITERALS.")
+            })
+            put("mask", maskSchema)
+            put("fadeSeconds", buildJsonObject {
+                put("type", "number")
+                put("description", "LITERALS only: fade the values in over this many seconds (0–600). Default the template's own fade.")
+            })
+        })
+    }
+)
+
+internal val recordLookTool = ToolDef(
+    name = "record_look",
+    description = "Record the programmer into a Look, as the desk's Record to Look does. CREATE makes a new Look " +
+            "named `name`; MERGE adds the recorded values to the Look `lookId`; UPDATE_EXISTING replaces its " +
+            "in-mask rows for the recorded heads; REMOVE deletes the rows the recording names. A group's heads " +
+            "that agree are recorded as one group row. Name targets — a Look recorded from the whole programmer " +
+            "takes every head it holds. Scenery the programmer holds is recorded too unless scenery is false. " +
+            "Effects are moved into the Look only by effectIds (get_current_state's `activeEffects`). Returns the Look's rows.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("mode", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("CREATE"); add("MERGE"); add("REMOVE"); add("UPDATE_EXISTING") })
+                put("description", "Defaults to CREATE.")
+            })
+            put("name", buildJsonObject { put("type", "string"); put("description", "The new Look's name (CREATE).") })
+            put("notes", buildJsonObject { put("type", "string"); put("description", "The new Look's notes (CREATE).") })
+            put("lookId", buildJsonObject { put("type", "integer"); put("description", "Required for every mode but CREATE.") })
+            put("source", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("TOUCHED"); add("ALL"); add("STAGE_SNAPSHOT") })
+                put("description", "TOUCHED (default) records what was edited this session; STAGE_SNAPSHOT records everything on stage.")
+            })
+            put("mask", maskSchema)
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "Record only these fixtures (groups are expanded). Omit to record the whole programmer.")
+            })
+            put("effectIds", buildJsonObject {
+                put("type", "array")
+                put("items", buildJsonObject { put("type", "integer") })
+                put("description", "Programmer effects to move into the Look; they stop running in the programmer and run through the Look instead.")
+            })
+            put("scenery", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Record the scenery the programmer holds as well. Default true.")
+            })
+        })
+    }
+)

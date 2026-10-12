@@ -52,6 +52,8 @@ internal const val LOOK_VALUE_GRAMMAR =
 
 private class Entry(val at: String, val ref: TargetRef, val propertyName: String, val raw: String, val value: LookValue)
 
+private class ParsedValue(val propertyName: String, val raw: String, val value: LookValue)
+
 internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLookValues {
     val problems = ArrayList<String>()
     val entries = items.mapIndexedNotNull { index, element -> parseEntry("values[$index]", element, problems) }
@@ -83,8 +85,8 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
         val landed = LinkedHashMap<GroupableFixture, Pair<String, String>>()
         val missed = ArrayList<LookValueSkip>()
         for (head in heads) {
-            when (val result = resolveOnHead(fixtures, head, entry)) {
-                is HeadValue.Landed -> landed[head] = result.propertyName to result.literal
+            when (val result = resolveOnHead(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+                is HeadValue.Landed -> landed[head] = result.propertyName to result.value.serialize()
                 is HeadValue.Missed -> missed += LookValueSkip(head.targetKey, entry.propertyName, result.reason)
             }
         }
@@ -120,6 +122,12 @@ private fun parseEntry(at: String, element: Any, problems: MutableList<String>):
         problems += "$at: target must be {type: 'fixture' | 'group', key}"
         return null
     }
+    val parsed = parseValue(at, obj, problems) ?: return null
+    return Entry(at, ref, parsed.propertyName, parsed.raw, parsed.value)
+}
+
+/** An entry's `propertyName` and `value`, checked against the grammar. */
+private fun parseValue(at: String, obj: JsonObject, problems: MutableList<String>): ParsedValue? {
     val propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         ?.let(::canonicalPropertyName)
         ?: run { problems += "$at: propertyName is required"; return null }
@@ -127,7 +135,7 @@ private fun parseEntry(at: String, element: Any, problems: MutableList<String>):
         ?: run { problems += "$at: value is required"; return null }
     val value = parseLookValue(propertyName, raw)
         ?: run { problems += "$at: '$raw' is not a value $propertyName takes — use $LOOK_VALUE_GRAMMAR"; return null }
-    return Entry(at, ref, propertyName, raw, value)
+    return ParsedValue(propertyName, raw, value)
 }
 
 /** A cell is stored as Record stores one: the parent as the target, the cell as `elementKey`. */
@@ -160,19 +168,18 @@ private fun parseLookValue(propertyName: String, raw: String): LookValue? {
 }
 
 private sealed interface HeadValue {
-    data class Landed(val propertyName: String, val literal: String) : HeadValue
+    data class Landed(val propertyName: String, val value: PropertyValue) : HeadValue
     data class Missed(val reason: String) : HeadValue
 }
 
-private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, entry: Entry): HeadValue {
-    val propertyName = entry.propertyName
+private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, propertyName: String, raw: String, value: LookValue): HeadValue {
     val backing = PropertyChannelWriter.resolveProperty(head, propertyName)?.value
     val setting = backing as? DmxFixtureSetting<*>
     // An option literally named On or Off is that option, not the first or last slot.
-    val named = setting?.sortedValues?.firstOrNull { it.name.equals(entry.raw, ignoreCase = true) }
-    if (named != null) return HeadValue.Landed(propertyName, PropertyValue.Setting(named.level).serialize())
+    val named = setting?.sortedValues?.firstOrNull { it.name.equals(raw, ignoreCase = true) }
+    if (named != null) return HeadValue.Landed(propertyName, PropertyValue.Setting(named.level))
 
-    return when (val value = entry.value) {
+    return when (value) {
         is LookValue.Option -> HeadValue.Missed(
             when {
                 backing == null -> "no $propertyName"
@@ -183,13 +190,89 @@ private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, entry: Ent
         is LookValue.Intent -> {
             val intent = value.intent
             if (intent is TemplateIntent.Level && setting != null) {
-                return HeadValue.Landed(propertyName, PropertyValue.Setting(intent.value.toUByte()).serialize())
+                return HeadValue.Landed(propertyName, PropertyValue.Setting(intent.value.toUByte()))
             }
             val owner = (head as? FixtureElement<*>)?.parentFixture ?: head as? Fixture
             val resolution = TemplateResolver.resolve(head, propertyName, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
             val resolved = resolution.value
                 ?: return HeadValue.Missed((resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
-            HeadValue.Landed(resolution.propertyName, resolved.serialize())
+            HeadValue.Landed(resolution.propertyName, resolved)
         }
     }
+}
+
+/**
+ * `set_programmer`'s values: the same grammar and per-head resolution as [resolveLookValues], but
+ * every value goes to every head of every target and comes back as the head's own value rather
+ * than as Look rows, for the programmer to hold.
+ */
+internal class ResolvedProgrammerValues(
+    val writes: List<ProgrammerValueWrite>,
+    /** Heads a value could not land on, while some head of the selection did. */
+    val skipped: List<LookValueSkip>,
+    /** Refusals; any one writes nothing. */
+    val problems: List<String>,
+)
+
+/** One head's value; [requestedName] is the name the caller used, [propertyName] the one it landed on. */
+internal class ProgrammerValueWrite(
+    val head: GroupableFixture,
+    val requestedName: String,
+    val propertyName: String,
+    val value: PropertyValue,
+)
+
+internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef>, items: JsonArray): ResolvedProgrammerValues {
+    val problems = ArrayList<String>()
+    if (targets.isEmpty()) problems += "targets must name at least one fixture or group"
+    if (items.isEmpty()) problems += "values must hold at least one {propertyName, value}"
+
+    val heads = LinkedHashMap<String, GroupableFixture>()
+    for (ref in targets) {
+        val found: List<GroupableFixture>? = when (ref) {
+            is TargetRef.Fixture -> runCatching { listOf(fixtures.untypedGroupableFixture(ref.key)) }.getOrNull()
+            is TargetRef.Group -> runCatching { fixtures.untypedGroup(ref.key).fixtures }.getOrNull()?.takeIf { it.isNotEmpty() }
+        }
+        if (found == null) {
+            problems += if (ref is TargetRef.Fixture) "no fixture '${ref.key}' is patched" else "no group '${ref.key}' with members"
+            continue
+        }
+        for (head in found) heads.putIfAbsent(head.targetKey, head)
+    }
+
+    val entries = items.mapIndexedNotNull { index, element ->
+        val at = "values[$index]"
+        val obj = element as? JsonObject ?: run { problems += "$at must be an object"; return@mapIndexedNotNull null }
+        parseValue(at, obj, problems)?.let { at to it }
+    }
+    val seen = HashMap<String, String>()
+    for ((at, parsed) in entries) {
+        seen.putIfAbsent(parsed.propertyName, at)?.let { first ->
+            problems += "$at: ${parsed.propertyName} is already set by $first"
+        }
+    }
+    if (problems.isNotEmpty()) return ResolvedProgrammerValues(emptyList(), emptyList(), problems)
+
+    val writes = ArrayList<ProgrammerValueWrite>()
+    val skipped = ArrayList<LookValueSkip>()
+    for ((at, entry) in entries) {
+        val missed = ArrayList<LookValueSkip>()
+        var landed = 0
+        for (head in heads.values) {
+            when (val result = resolveOnHead(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+                is HeadValue.Landed -> {
+                    writes += ProgrammerValueWrite(head, entry.propertyName, result.propertyName, result.value)
+                    landed++
+                }
+                is HeadValue.Missed -> missed += LookValueSkip(head.targetKey, entry.propertyName, result.reason)
+            }
+        }
+        if (landed == 0) {
+            problems += "$at: no selected head can take ${entry.propertyName} '${entry.raw}' — " +
+                missed.distinctBy { it.reason }.joinToString("; ") { "${it.target}: ${it.reason}" }
+        }
+        skipped += missed
+    }
+    if (problems.isNotEmpty()) return ResolvedProgrammerValues(emptyList(), emptyList(), problems)
+    return ResolvedProgrammerValues(writes, skipped, problems)
 }
