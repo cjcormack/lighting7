@@ -133,6 +133,9 @@ const PdfPage = memo(function PdfPage({
       width={width}
       renderTextLayer
       renderAnnotationLayer={false}
+      // The sheet behind it is the placeholder; react-pdf's "Loading page…" text would flash on
+      // every page a scroll passes over.
+      loading={null}
       onGetTextSuccess={(tc) => onHasText(index, (tc.items?.length ?? 0) >= MIN_TEXT_ITEMS)}
       onRenderTextLayerSuccess={() => onTextLayerRendered(index)}
     />
@@ -705,11 +708,21 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       }}
       className="relative flex-1 overflow-y-auto min-h-0 bg-muted/30"
     >
+      {/* `suspense={false}`, inherited by every `<Page>`: react-pdf 11 loads through Suspense by
+          default, and the nearest boundary above this pane is `Layout`'s, around the whole route.
+          A page mounting for the first time — every page a far jump lands among — suspends on its
+          `getPage`, and whenever React commits that fallback rather than waiting, the route is
+          hidden with `display: none` and this scroller comes back at the top: the book "resets to
+          page 1". It also rethrew a load failure to the route's error boundary after calling
+          `onDocumentError`, which unmounted this viewer before the missing/error cards could draw.
+          With it off, `loading` and `onLoadError` are honoured and a page loads inside its own
+          sheet. */}
       <Document
         file={fileUrl}
         onLoadSuccess={onDocumentLoad}
         onLoadError={onDocumentError}
         loading={spinner}
+        suspense={false}
       >
         <div className="flex flex-col items-center gap-4 px-6 py-6">
           {/* `Document` treats `onLoadSuccess` as fire-and-forget: it swaps this spinner in for
