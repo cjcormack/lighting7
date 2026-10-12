@@ -28,6 +28,10 @@ import uk.me.cormack.lighting7.routes.store
 import uk.me.cormack.lighting7.routes.toFields
 import uk.me.cormack.lighting7.state.SceneImageException
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.routes.venueDto
+import uk.me.cormack.lighting7.venue.ShowHides
+import uk.me.cormack.lighting7.venue.VenueBehind
+import uk.me.cormack.lighting7.venue.VenueVersions
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.util.UUID
 
@@ -53,8 +57,8 @@ internal const val MAX_SCENE_IMAGE_TOOL_BYTES = 16 * 1024 * 1024
  */
 internal class SceneSetupTools(private val state: State) {
 
-    fun setScene(input: JsonObject): ToolExecutionResult {
-        val project = state.projectManager.currentProject
+    fun setScene(input: JsonObject, target: ToolProject): ToolExecutionResult {
+        val project = target.project
         val problems = mutableListOf<String>()
 
         for ((name, isArray) in listOf("elements" to true, "viewpoints" to true, "templateParams" to false)) {
@@ -65,7 +69,7 @@ internal class SceneSetupTools(private val state: State) {
         }
         problems += unknownFields(
             input,
-            listOf("template", "templateParams", "elements", "viewpoints", "removeElements", "removeViewpoints", "dryRun"),
+            listOf("template", "templateParams", "elements", "viewpoints", "removeElements", "removeViewpoints", "dryRun", "projectId"),
             "set_scene",
         )
         val dryRun = input.bool("dryRun") ?: false
@@ -115,7 +119,11 @@ internal class SceneSetupTools(private val state: State) {
         }
 
         var swept = 0
+        // A venue element's row that says only `hidden`: this show hides it, or brings it back.
+        val hides = mutableListOf<Triple<String, UUID, Boolean>>()
         val plan = transaction(state.database) {
+            // Filled below; emptied first so a retried transaction does not list a hide twice.
+            hides.clear()
             // The rig as drawn, for validating the scene as it will stand; and the rows this project
             // owns, which are all a write may change, delete or number after (`RigScope.own`).
             val stored = stageElementsOf(project).associateBy { it.name }
@@ -133,8 +141,17 @@ internal class SceneSetupTools(private val state: State) {
             val rig = RigScope.of(project)
             val venueElements = stored.filterKeys { it !in ownElements }.keys
             val venueViews = storedViews.filterKeys { it !in ownViews }.keys
-            (rows.keys + removeElements).filter { it in venueElements }.distinct()
-                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage element '$it'") }
+            val hiddenVenueElements = hiddenVenueElementsOf(project)
+            for ((name, entry) in rows.toList()) {
+                val uuid = stored[name]?.uuid?.takeIf { name in venueElements } ?: hiddenVenueElements[name] ?: continue
+                val hidden = hideOnly(entry.second) ?: continue
+                rows.remove(name)
+                if (hidden && name in venueElements) ShowHides.hideRefusal(project, HideKind.ELEMENT, uuid)?.let { problems += "${entry.first}: $it" }
+                if (!hidden && name in ownElements) problems += "${entry.first}: this show has its own element named '$name', so the venue's cannot come back beside it"
+                hides += Triple(name, uuid, hidden)
+            }
+            (rows.keys + removeElements).filter { it in venueElements || it in hiddenVenueElements }.distinct()
+                .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage element '$it'") + VENUE_ELEMENT_HINT }
             (viewpointRows.map { it.second } + removeViewpoints).filter { it in venueViews }.distinct()
                 .forEach { problems += VenueRigGuard.ownedProblem(rig, "Stage viewpoint '$it'") }
             removeElements.filter { it !in ownElements && it !in venueElements }.forEach { problems += "removeElements: no element named '$it'" }
@@ -221,6 +238,7 @@ internal class SceneSetupTools(private val state: State) {
                 }
                 view.store(fields)
             }
+            for ((_, uuid, hidden) in hides) ShowHides.setHiddenByUuid(project, HideKind.ELEMENT, uuid, hidden)
             for (name in removeViewpoints) ownViews[name]?.delete()
             for (name in removeElements) {
                 val element = ownElements[name] ?: continue
@@ -233,19 +251,24 @@ internal class SceneSetupTools(private val state: State) {
         if (problems.isNotEmpty()) return rejected(problems)
         val (elementsSet, viewpointsSet, wrote) = plan
         if (wrote) {
-            if (elementsSet > 0 || removeElements.isNotEmpty()) state.show.fixtures.stageElementListChanged()
+            if (elementsSet > 0 || removeElements.isNotEmpty() || hides.isNotEmpty()) state.show.fixtures.stageElementListChanged()
             if (viewpointsSet > 0 || removeViewpoints.isNotEmpty()) state.show.fixtures.stageViewpointListChanged()
             if (swept > 0) sceneryOwnersChanged(state)
         }
         return success(
             "Scene ${if (dryRun) "checked" else "updated"}: $elementsSet element(s) and $viewpointsSet viewpoint(s) set, " +
-                "${removeElements.size} element(s) and ${removeViewpoints.size} viewpoint(s) removed",
+                "${removeElements.size} element(s) and ${removeViewpoints.size} viewpoint(s) removed" +
+                if (hides.isEmpty()) "" else ", ${hides.size} venue element(s) hidden or shown",
             buildJsonObject {
                 put("dryRun", dryRun)
                 put("elementsSet", elementsSet)
                 put("viewpointsSet", viewpointsSet)
                 put("elementsRemoved", removeElements.size)
                 put("viewpointsRemoved", removeViewpoints.size)
+                if (hides.isNotEmpty()) {
+                    putJsonArray("venueElementsHidden") { hides.filter { it.third }.forEach { add(it.first) } }
+                    putJsonArray("venueElementsShown") { hides.filterNot { it.third }.forEach { add(it.first) } }
+                }
                 if (template != null) {
                     putJsonArray("templateElements") { templateRows.forEach { add(it.first) } }
                 }
@@ -261,8 +284,8 @@ internal class SceneSetupTools(private val state: State) {
      * through the desk's own sheet). Stored data only, like `set_scene`, so no remote-access gate:
      * an image does nothing until an element names it.
      */
-    fun uploadSceneImage(input: JsonObject): ToolExecutionResult {
-        val problems = unknownFields(input, listOf("mediaType", "base64"), "upload_scene_image").toMutableList()
+    fun uploadSceneImage(input: JsonObject, target: ToolProject): ToolExecutionResult {
+        val problems = unknownFields(input, listOf("mediaType", "base64", "projectId"), "upload_scene_image").toMutableList()
         val mediaType = input.string("mediaType")?.trim()
         if (mediaType == null) problems += "mediaType is required: image/png or image/jpeg"
         // A pasted data URL is the same bytes behind a prefix.
@@ -279,7 +302,7 @@ internal class SceneSetupTools(private val state: State) {
         if (bytes.size > MAX_SCENE_IMAGE_TOOL_BYTES) {
             return rejected(listOf("the image is over ${MAX_SCENE_IMAGE_TOOL_BYTES / (1024 * 1024)} MB decoded; upload a larger one from the element's sheet on the desk"))
         }
-        val project = state.projectManager.currentProject
+        val project = target.project
         val info = try {
             state.sceneImages.store(project.uuid.toString(), bytes, mediaType)
         } catch (e: SceneImageException) {
@@ -293,18 +316,23 @@ internal class SceneSetupTools(private val state: State) {
                 put("height", info.height)
                 put("hasAlpha", info.hasAlpha)
                 put("mediaType", info.mediaType)
+                put("projectId", project.id.value)
+                put("scope", "project")
                 put(
                     "note",
                     "Paint a DRAPE or a FLAT with it through set_scene: params.paint {front, back} names this hash. " +
                         "Size the cloth to the image's aspect (${info.width}:${info.height})" +
-                        (if (info.hasAlpha) "; its transparent pixels cut holes in the cloth." else "."),
+                        (if (info.hasAlpha) "; its transparent pixels cut holes in the cloth. " else ". ") +
+                        "Images are stored per project: this hash paints elements of project ${project.id.value} only " +
+                        "(a show on a venue also reads the venue's images, for the venue's cloths). Upload it again with " +
+                        "another projectId to use it there — the same bytes give the same hash — or let copy_to_project carry it with the element.",
                 )
             },
         )
     }
 
-    fun getScene(): ToolExecutionResult {
-        val project = state.projectManager.currentProject
+    fun getScene(target: ToolProject): ToolExecutionResult {
+        val project = target.project
         // What each painted face's image is, read before the transaction: an image with no info
         // sidecar is decoded to answer, and that must never hold the one pooled connection.
         val (paintHashes, stores) = transaction(state.database) {
@@ -328,6 +356,12 @@ internal class SceneSetupTools(private val state: State) {
                 e.uuid to SeatingElement(f.name, ElementPose(f.positionX, f.positionY, f.positionZ, f.yawDeg), p)
             }.toMap()
             buildJsonObject {
+                putJsonObject("project") {
+                    put("id", project.id.value)
+                    put("name", DaoProject[project.id].name)
+                    if (!target.isCurrent) put("isCurrent", false)
+                }
+                putVenue(project, rig)
                 putJsonArray("elements") {
                     for (e in elements) add(buildJsonObject {
                         put("name", e.name)
@@ -729,6 +763,50 @@ internal class SceneSetupTools(private val state: State) {
 
     // ─── Helpers ────────────────────────────────────────────────────────
 
+    /**
+     * Which venue a show is on and whether it is behind it, and the venue elements it hides; or, for a
+     * venue, that these rows are its draft. Nothing for a standalone show.
+     */
+    private fun JsonObjectBuilder.putVenue(project: DaoProject, rig: RigScope) {
+        val row = DaoProject[project.id]
+        if (row.kind == ProjectKind.VENUE) {
+            putJsonObject("venue") {
+                put("isVenue", true)
+                VenueVersions.versionsOf(row.id.value).firstOrNull()?.let { put("installedVersion", it.number) }
+                put("note", "These are the venue's draft rows: shows read a published version, so a change reaches them once it is published and they update.")
+            }
+            return
+        }
+        val venue = row.venueDto(state) ?: return
+        putJsonObject("venue") {
+            venue.id?.let { put("id", it) }
+            put("name", venue.name ?: (rig.venue?.venueName ?: "(not on this desk)"))
+            put("version", venue.version)
+            venue.installed?.let { put("installed", it) }
+            put("behind", venue.behind.name)
+            val hidden = hiddenVenueElementsOf(project).keys.sorted()
+            if (hidden.isNotEmpty()) putJsonArray("hiddenElements") { hidden.forEach { add(it) } }
+            put(
+                "note",
+                "Rows with owner=venue are the venue's v${venue.version}. A show hides one for its run with a set_scene row " +
+                    "of only {name, hidden: true}; hiddenElements lists those, which {name, hidden: false} brings back. " +
+                    if (venue.behind == VenueBehind.NONE) "The show is on the venue's latest version."
+                    else "The venue has published v${venue.installed} since (${venue.behind.name.lowercase()} changes): the operator updates the show from the desk's Projects page.",
+            )
+        }
+    }
+
+    /** A row's `hidden` when that and `name` are all it says; null otherwise. */
+    private fun hideOnly(row: JsonObject): Boolean? {
+        if (row.keys != setOf("name", "hidden")) return null
+        return (row["hidden"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+    }
+
+    /** The venue elements this show hides, by name: absent from the scene, so a row can only reach them here. */
+    private fun hiddenVenueElementsOf(project: DaoProject): Map<String, UUID> =
+        ShowHides.list(project).filter { it.kind == HideKind.ELEMENT && it.name != null }
+            .associate { it.name!! to UUID.fromString(it.uuid) }
+
     private fun currentRegionNames(project: DaoProject): Set<String> = transaction(state.database) {
         RigScope.of(project).stageRegions().map { it.name }.toSet()
     }
@@ -795,7 +873,14 @@ internal class SceneSetupTools(private val state: State) {
          * can be corrected and resent as it stands: a seating's seat count, a seat view's resolved
          * eye, a note that its seating has gone, a painted face's image size.
          */
-        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages")
+        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner")
+
+        /** Appended to a refusal of a venue element's row: what a show can do instead. */
+        const val VENUE_ELEMENT_HINT =
+            " Through set_scene, a show can hide a venue element for its whole run — a row of only {name, hidden: true} " +
+                "(hidden: false brings it back). To move one for part of the show, give a cue stack a set (set_scenery stackId) " +
+                "or a cue scenery. To change the element for every show, set_scene with projectId = the venue's id edits the venue's " +
+                "draft, which an admin publishes on the desk as a new version for its shows to update to."
         val TEMPLATE_NUMBERS = listOf(
             "hallWidthM", "hallDepthM", "hallHeightM", "stageWidthM", "stageDepthM", "prosWidthM", "prosHeightM",
             "deckHeightM", "apronM", "stageHouseHeightM", "rows", "seatsPerRow", "rowPitchM", "seatPitchM",

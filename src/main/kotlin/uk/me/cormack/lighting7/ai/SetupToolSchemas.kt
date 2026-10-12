@@ -189,16 +189,21 @@ private val alsoAtSchema = objectSchema {
 
 internal val listProjectsTool = ToolDef(
     name = "list_projects",
-    description = "List the desk's projects (id, name, description, which one is current). A project is one show: its patch, stage, looks, cues and prompt book. Every other tool acts on the current project.",
+    description = "List the desk's projects (id, name, description, which one is current). A project is one show — its patch, stage, looks, cues and prompt book — or a VENUE (kind), a hall and its house rig that shows are built on. " +
+        "A show on a venue carries `venue`: which venue, the version it is built against, the venue's installed version, and `behind` (DRAWING or OUTPUT) when the venue has published changes the show has not taken. " +
+        "Tools act on the current project unless given a projectId.",
     inputSchema = objectSchema {},
 )
 
 internal val createProjectTool = ToolDef(
     name = "create_project",
-    description = "Create a new, empty project (a show). It is not current until switched to, and every other tool acts on the current project — so to build it, create it and then switch_project (or pass switchTo). Stage dimensions can also be set later with set_stage.",
+    description = "Create a new project (a show). Given venueId, the show is built on that venue: it reads the venue's room, scene, viewpoints and rig at the venue's installed version, and starts with no set, cues or prompt book of its own. " +
+        "It is not current until switched to; build it without switching by passing its projectId to the setup tools (or copy_to_project), and switch_project only when the desk is free. Stage dimensions can also be set later with set_stage.",
     inputSchema = objectSchema(required = listOf("name")) {
         prop("name", "string", "Project name, unique on the desk, at most 50 characters.")
         prop("description", "string", "Optional, at most 255 characters.")
+        prop("venueId", "integer", "Build the show on this venue (list_venues). The venue must have published a version. The stage size is then the venue's, so leave the stage fields out.")
+        prop("seatingPreset", "string", "With venueId: the name of one of the venue's seating presets (list_venues) to copy in as this show's own seating. Fixed seating comes with the venue regardless.")
         prop("stageWidthM", "number", "Stage width along x, metres.")
         prop("stageDepthM", "number", "Stage depth along y, metres.")
         prop("stageHeightM", "number", "Trim height along z, metres.")
@@ -224,10 +229,12 @@ internal val listFixtureTypesTool = ToolDef(
 
 internal val getPatchTool = ToolDef(
     name = "get_patch",
-    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
+    description = "A project's patch and stage as stored (the current one unless projectId names another): stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
         "Each placed fixture and `alsoAt` lantern also carries `world`: where it actually is on stage, in world coordinates — x/y/z are offsets along the rigging when `rigging` is set, and `world` composes them with the rigging's position and rotation. It is absent for one with no x or y, which the Stage view does not draw. " +
         "Read it before changing the patch or stage, and after, to check the result. " + COORDINATES,
-    inputSchema = objectSchema {},
+    inputSchema = objectSchema {
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
 )
 
 private val patchRowSchema = objectSchema(required = listOf("name", "fixtureTypeKey", "universe", "startChannel")) {
@@ -248,18 +255,19 @@ private val patchRowSchema = objectSchema(required = listOf("name", "fixtureType
 
 internal val patchFixturesTool = ToolDef(
     name = "patch_fixtures",
-    description = "Patch fixtures into the current project in one go — the tool for turning a patch list (a PDF or CSV exported from another console, or a paperwork plot) into the desk's patch. " +
+    description = "Patch fixtures into a project (the current one unless projectId names another) in one go — the tool for turning a patch list (a PDF or CSV exported from another console, or a paperwork plot) into the desk's patch. " +
         "The whole list is checked first — known types, addresses inside 1–512, no two fixtures overlapping on a universe, unique keys and head numbers, riggings that exist — and nothing is written if any row fails; the answer lists every problem, so fix them and send the list again. " +
         "Use dryRun first on a big list. Rows whose key is already patched are updated, so re-sending a corrected list is safe. New universes are created with no node address — the operator sets the Art-Net node IPs in the desk's universe settings. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("fixtures")) {
         arrayProp("fixtures", patchRowSchema)
         prop("dryRun", "boolean", "Validate and report what would change without writing anything. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
 internal val deleteGroupsTool = ToolDef(
     name = "delete_groups",
-    description = "Delete fixture groups from the current project by name — groups left over from an old patch, or ones patch_fixtures created under a wrong name. " +
+    description = "Delete fixture groups from a project (the current one unless projectId names another) by name — groups left over from an old patch, or ones patch_fixtures created under a wrong name. " +
         "The fixtures stay patched; they only leave the group. A group that still has members is refused unless force is set, so a typo cannot take apart a group that looks and cues address — check get_patch's `groups` first. " +
         "Everything is validated before anything is deleted.",
     inputSchema = objectSchema(required = listOf("names")) {
@@ -269,6 +277,7 @@ internal val deleteGroupsTool = ToolDef(
             put("description", "Group names exactly as get_patch lists them.")
         })
         prop("force", "boolean", "Also delete groups that still have members. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
@@ -297,7 +306,7 @@ private val riggingSchema = objectSchema(required = listOf("name")) {
 
 internal val setStageTool = ToolDef(
     name = "set_stage",
-    description = "Set up the Stage view of the current project from a ground plan, section, lighting plot or photo: the stage's bounding box, the playable regions (main stage, thrust, rostra, pit) and the riggings fixtures hang from (FOH bar, LX bars, trusses, booms, floor positions). " +
+    description = "Set up the Stage view of a project (the current one unless projectId names another) from a ground plan, section, lighting plot or photo: the stage's bounding box, the playable regions (main stage, thrust, rostra, pit) and the riggings fixtures hang from (FOH bar, LX bars, trusses, booms, floor positions). " +
         "Regions and riggings are upserted by name — fields you send overwrite, fields you omit keep their value — so it is safe to call repeatedly while refining. Everything is validated before anything is written. " +
         "Then hang fixtures on the riggings with place_fixtures (or the placement fields of patch_fixtures). " + COORDINATES,
     inputSchema = objectSchema {
@@ -314,6 +323,7 @@ internal val setStageTool = ToolDef(
             put("items", buildJsonObject { put("type", "string") })
             put("description", "Rigging names to delete. Fixtures hung on them are kept, but lose their rigging (their offsets become world coordinates).")
         })
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
@@ -375,7 +385,8 @@ internal val setSceneTool = ToolDef(
     description = "Model the venue and the set for the Stage view — the room, the proscenium, masking, platforms, seating, furniture — from photos, a ground plan or a video frame, and save viewpoints (a seat, the desk's position, an actor's eye line). " +
         "Elements and viewpoints are upserted by name, and everything is validated before anything is written. " +
         "Start a hall with template '$PROSCENIUM_HALL_TEMPLATE' and its templateParams, which expand into named elements (Hall, Stage house, Main stage, Proscenium, Stalls, Balcony) you then correct with elements rows of the same names; the Stage view draws them, and get_scene reads the document back. " +
-        "This is presentational: it changes no DMX output. Regions and riggings stay set_stage's. " + COORDINATES,
+        "This is presentational: it changes no DMX output. Regions and riggings stay set_stage's. " +
+        "In a show built on a venue, the venue's elements and viewpoints (owner=venue in get_scene) are read-only, but a row of only {name, hidden: true} hides a venue element for this show's whole run, and {name, hidden: false} brings it back. " + COORDINATES,
     inputSchema = objectSchema {
         enumProp("template", listOf(PROSCENIUM_HALL_TEMPLATE))
         put("templateParams", objectSchema {
@@ -403,6 +414,7 @@ internal val setSceneTool = ToolDef(
         put("removeElements", stringArray)
         put("removeViewpoints", stringArray)
         prop("dryRun", "boolean", "Validate and report without writing. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
@@ -410,17 +422,22 @@ internal val uploadSceneImageTool = ToolDef(
     name = "upload_scene_image",
     description = "Store an image to paint on a cloth — a backcloth, a frontcloth, a gauze, a cut cloth, a flat — and answer its hash, width, height and whether it has transparent pixels. " +
         "Then name the hash in set_scene: a DRAPE's or a FLAT's params.paint {front, back}. The image stretches over the face, so size the element to the image's aspect; transparent pixels cut holes. " +
-        "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk). Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it.",
+        "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk). Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it. " +
+        "Images are stored per project: the hash paints that project's elements only (a show on a venue also sees the venue's own images). copy_to_project carries an element's images with it.",
     inputSchema = objectSchema(required = listOf("mediaType", "base64")) {
         enumProp("mediaType", listOf("image/png", "image/jpeg"))
         prop("base64", "string", "The image file's bytes, base64-encoded (a data: URL's prefix is ignored).")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
 internal val getSceneTool = ToolDef(
     name = "get_scene",
-    description = "Read the current project's scene document: every venue and set element (in set_scene's shape, so a row can be corrected and sent back) and every saved viewpoint, a seat view with the eye it resolves to. " + COORDINATES,
-    inputSchema = objectSchema {},
+    description = "Read a project's scene document: every venue and set element (in set_scene's shape, so a row can be corrected and sent back) and every saved viewpoint, a seat view with the eye it resolves to. " +
+        "For a show on a venue it says which venue and version the show is built on, whether the venue has published changes since (behind), and which venue elements the show hides. " + COORDINATES,
+    inputSchema = objectSchema {
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
 )
 
 internal const val RENDER_DEFAULT_WIDTH = 1280
@@ -483,13 +500,16 @@ internal val placeFixturesTool = ToolDef(
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
 internal val getPromptBookTool = ToolDef(
     name = "get_prompt_book",
-    description = "The current project's prompt book: the script PDF's page count and cover pages, every cue anchored on it (with its stack and number) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
-    inputSchema = objectSchema {},
+    description = "A project's prompt book: the script PDF's page count and cover pages, every cue anchored on it (with its stack and number) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
+    inputSchema = objectSchema {
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
 )
 
 /** Where something sits on the script: one rectangle on one page of the PDF. */
@@ -531,6 +551,7 @@ internal val buildCueStackTool = ToolDef(
         prop("loop", "boolean", "New stack only: wrap to the first cue after the last. Default false.")
         arrayProp("scenery", sceneryItemSchema(forCue = false), "The stack's set: the states its elements hold while it is live, under its cues ('the Act 2 set appears with Act 2'). Replaces the stack's set when given.")
         arrayProp("cues", showCueSchema, "In running order.")
+        prop("projectId", "integer", "$PROJECT_ID_DESCRIPTION Cues built in a project that is not current cannot carry 'at': anchor them with mark_up_prompt_book once it is current.")
     },
 )
 
@@ -565,10 +586,93 @@ internal val markUpPromptBookTool = ToolDef(
     },
 )
 
+internal val listVenuesTool = ToolDef(
+    name = "list_venues",
+    description = "List the desk's venues — halls whose room, scene, viewpoints and (optionally) house rig shows are built on. Each answers its id, its installed (latest published) version and that version's note, what that version holds (elements, viewpoints, patches, riggings, groups, Fixed seating), whether it carries a rig, its seating presets, its unpublished draft changes, and every show built on it with the version each is on.",
+    inputSchema = objectSchema {},
+)
+
+internal val extractVenueTool = ToolDef(
+    name = "extract_venue",
+    description = "Turn the room and house rig of an existing show into a venue, publish it as v1, and put that show on it — in one step, all or nothing. " +
+        "Moved into the venue (each record keeps its identity, so nothing the show's cues and Looks name breaks): the VENUE-layer scene elements, Fixed seating, camera viewpoints and seat views in Fixed seating, and — unless include leaves them out — the universes, patch, riggings, regions and groups. " +
+        "The show keeps its SET-layer elements, cues, Looks, templates and prompt book, and draws and outputs exactly as before, now reading the room from the venue. Preset seating is copied into the venue and also stays the show's. " +
+        "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it, which stops its running cues and effects, so that needs reloadLiveShow.",
+    inputSchema = objectSchema(required = listOf("fromProjectId", "name")) {
+        prop("fromProjectId", "integer", "The show whose room and rig become the venue (list_projects). It must not already be on a venue.")
+        prop("name", "string", "The venue's name: unique on the desk, so not the show's own name. At most 50 characters.")
+        arrayProp(
+            "include",
+            buildJsonObject { put("type", "string"); put("enum", buildJsonArray { listOf("UNIVERSES", "PATCHES", "RIGGINGS", "REGIONS", "ELEMENTS", "SEATING", "GROUPS", "VIEWPOINTS").forEach { add(it) } }) },
+            "The parts to move; absent moves all of them. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
+        )
+        prop("dryRun", "boolean", "Answer what would move and keep nothing. Default false.")
+        prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, stopping running cues and effects. Only when the operator has said the desk is free.")
+    },
+)
+
+internal val publishVenueTool = ToolDef(
+    name = "publish_venue",
+    description = "Publish a venue's draft — its own rows, as edited with the setup tools and projectId = the venue's id — as its next version, with a note saying what changed. " +
+        "Shows built on the venue stay on the version they were built against until the operator updates each one on the desk, which reviews what changes for that show first; a show running now keeps running. Admin only.",
+    inputSchema = objectSchema(required = listOf("venueId", "note")) {
+        prop("venueId", "integer", "From list_venues.")
+        prop("note", "string", "What changed, as the version history will read it. At most 500 characters.")
+    },
+)
+
+internal val copyToProjectTool = ToolDef(
+    name = "copy_to_project",
+    description = "Copy show content from one project into another, without switching to either: scene elements by name, cue stacks by id with all their cues, and Looks by id. " +
+        "Everything is matched by name in the target: a cue's scenery finds the target's element of the same name (or one copied in the same call), a cue event its fixture by key, a cue layer's Look or template the target's of the same name — copied along when the target has none. " +
+        "Painted cloths bring their images. Copies get new ids and keep their names; a name the target already uses is refused. " +
+        "Anything that does not resolve in the target is listed in `unresolved` rather than guessed: rows naming a fixture or group the target lacks are kept (they read as missing), a scenery change, event or script trigger that cannot resolve is left out. Prompt-book anchors are not copied. " +
+        "All or nothing; run it with dryRun first. Stored data only — it changes no output.",
+    inputSchema = objectSchema(required = listOf("fromProjectId", "toProjectId")) {
+        prop("fromProjectId", "integer", "The project to copy from (list_projects).")
+        prop("toProjectId", "integer", "The project to copy into.")
+        put("sceneElements", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "string") })
+            put("description", "Element names, as get_scene lists them in the source.")
+        })
+        put("cueStacks", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+            put("description", "Cue stack ids in the source; each comes with its cues, its set and every cue's scenery and events.")
+        })
+        put("looks", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+            put("description", "Look ids in the source, beyond those the copied cues layer (which come anyway).")
+        })
+        prop("dryRun", "boolean", "Answer what would be copied and what would not resolve, and keep nothing. Default false.")
+    },
+)
+
+internal val deleteCueStacksTool = ToolDef(
+    name = "delete_cue_stacks",
+    description = "Delete cue stacks with all their cues, their scenery and events, and their prompt-book anchors. A running stack is refused: deactivate it first. " +
+        "Looks and templates the cues layered stay. Everything is checked before anything is deleted; use dryRun to see what would go.",
+    inputSchema = objectSchema(required = listOf("stackIds")) {
+        put("stackIds", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+        })
+        prop("dryRun", "boolean", "Answer what would be deleted and delete nothing. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
 internal val setupToolDefs: List<ToolDef> = listOf(
     listProjectsTool,
     createProjectTool,
     switchProjectTool,
+    listVenuesTool,
+    extractVenueTool,
+    publishVenueTool,
+    copyToProjectTool,
+    deleteCueStacksTool,
     listFixtureTypesTool,
     getPatchTool,
     patchFixturesTool,
@@ -587,6 +691,7 @@ internal val setupToolDefs: List<ToolDef> = listOf(
 internal val readOnlySetupToolNames: Set<String> =
     setOf(
         listProjectsTool.name,
+        listVenuesTool.name,
         listFixtureTypesTool.name,
         getPatchTool.name,
         getPromptBookTool.name,

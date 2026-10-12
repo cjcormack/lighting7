@@ -61,7 +61,12 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.routes.ProjectVenueDto
+import uk.me.cormack.lighting7.routes.venueDto
+import uk.me.cormack.lighting7.venue.SeatingPresets
 import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.VenueBehind
+import uk.me.cormack.lighting7.venue.VenueVersions
 import uk.me.cormack.lighting7.venue.ShowOverrides
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import java.time.Duration
@@ -88,31 +93,40 @@ class SetupTools(
     val toolDefs: List<ToolDef> = setupToolDefs
     private val scene = SceneSetupTools(state)
     private val render = RenderViewTool(state)
+    private val venues = VenueSetupTools(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
-    suspend fun executeTool(name: String, input: JsonObject): ToolExecutionResult = try {
+    /** Run [name]; [caller] is the signed-in user's display name, which signs what a tool publishes. */
+    suspend fun executeTool(name: String, input: JsonObject, caller: String? = null): ToolExecutionResult = try {
         when (name) {
             listProjectsTool.name -> listProjects()
             createProjectTool.name -> createProject(input)
             switchProjectTool.name -> switchProject(input)
+            listVenuesTool.name -> venues.listVenues()
+            extractVenueTool.name -> venues.extractVenue(input, caller)
+            publishVenueTool.name -> venues.publishVenue(input, caller)
+            copyToProjectTool.name -> venues.copyToProject(input)
+            deleteCueStacksTool.name -> venues.deleteCueStacks(input)
             listFixtureTypesTool.name -> listFixtureTypes(input)
-            getPatchTool.name -> getPatch()
-            patchFixturesTool.name -> patchFixtures(input)
-            deleteGroupsTool.name -> deleteGroups(input)
-            setStageTool.name -> setStage(input)
-            setSceneTool.name -> scene.setScene(input)
-            getSceneTool.name -> scene.getScene()
-            uploadSceneImageTool.name -> scene.uploadSceneImage(input)
+            getPatchTool.name -> getPatch(state.toolProject(input))
+            patchFixturesTool.name -> patchFixtures(input, state.toolProject(input))
+            deleteGroupsTool.name -> deleteGroups(input, state.toolProject(input))
+            setStageTool.name -> setStage(input, state.toolProject(input))
+            setSceneTool.name -> scene.setScene(input, state.toolProject(input))
+            getSceneTool.name -> scene.getScene(state.toolProject(input))
+            uploadSceneImageTool.name -> scene.uploadSceneImage(input, state.toolProject(input))
             renderViewTool.name -> render.renderView(input)
-            placeFixturesTool.name -> placeFixtures(input)
-            getPromptBookTool.name -> getPromptBook()
-            buildCueStackTool.name -> buildCueStack(input)
+            placeFixturesTool.name -> placeFixtures(input, state.toolProject(input))
+            getPromptBookTool.name -> getPromptBook(state.toolProject(input))
+            buildCueStackTool.name -> buildCueStack(input, state.toolProject(input))
             markUpPromptBookTool.name -> markUpPromptBook(input)
             else -> failure("Unknown tool: $name")
         }
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
+    } catch (e: ToolProjectException) {
+        failure(e.message ?: "No such project")
     } catch (e: VenueException) {
         // A venue rule (venue plan session 3), refused with its code as the REST route refuses it.
         ToolExecutionResult(
@@ -139,6 +153,10 @@ class SetupTools(
                     p.description?.let { put("description", it) }
                     put("isCurrent", p.isCurrent)
                     if (p.kind != ProjectKind.SHOW) put("kind", p.kind.name)
+                    p.venueDto(state)?.let { putVenue(it) }
+                    if (p.kind == ProjectKind.VENUE) {
+                        VenueVersions.versionsOf(p.id.value).firstOrNull()?.let { put("installedVersion", it.number) }
+                    }
                 }
             }
         }
@@ -153,39 +171,95 @@ class SetupTools(
         val width = input.double("stageWidthM")
         val depth = input.double("stageDepthM")
         val height = input.double("stageHeightM")
+        val venueId = input.int("venueId")
+        val seatingPreset = input.string("seatingPreset")?.trim()?.takeIf { it.isNotEmpty() }
         val problems = buildList {
             if (name.isEmpty()) add("name must not be blank")
             if (name.length > 50) add("name must be at most 50 characters")
             if ((description?.length ?: 0) > 255) add("description must be at most 255 characters")
-            addAll(malformedNumbers(input, listOf("stageWidthM", "stageDepthM", "stageHeightM"), "project"))
+            addAll(malformedNumbers(input, listOf("stageWidthM", "stageDepthM", "stageHeightM", "venueId"), "project"))
             validateStageDimensions(width, depth, height)?.let { add(it) }
+            if (venueId != null && listOf(width, depth, height).any { it != null }) {
+                add("a show on a venue takes the venue's stage size: leave stageWidthM, stageDepthM and stageHeightM out")
+            }
+            if (seatingPreset != null && venueId == null) add("seatingPreset is a venue's: give venueId too")
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
+        data class Created(val id: Int, val venue: String?, val version: Int?, val seating: String?)
         val created = transaction(state.database) {
             if (!DaoProject.find { DaoProjects.name eq name }.empty()) return@transaction null
+            // As POST /projects with venueId (venue plan session 3): pinned to the installed version.
+            val pin = venueId?.let { id ->
+                val venue = VenueVersions.requireVenue(id)
+                val installed = VenueVersions.versionsOf(id).firstOrNull()
+                    ?: throw VenueException.conflict(
+                        VenueVersions.CODE_NOTHING_PUBLISHED,
+                        "${venue.name} has no published version yet: publish it before a show can sit on it",
+                    )
+                venue to installed.number
+            }
+            val presetUuid = seatingPreset?.let { preset ->
+                val offered = SeatingPresets.list(pin!!.first).presets
+                (offered.firstOrNull { it.name == preset } ?: offered.firstOrNull { it.uuid == preset })?.uuid
+                    ?: throw VenueException.badRequest(
+                        SeatingPresets.CODE_PRESET_UNKNOWN,
+                        "${pin.first.name} v${pin.second} has no seating preset '$preset'" +
+                            if (offered.isEmpty()) " (it offers none)" else " (it offers: ${offered.joinToString { "'${it.name}'" }})",
+                    )
+            }
             val project = DaoProject.new {
                 this.name = name
                 this.description = description
                 isCurrent = false
-                stageWidthM = width
-                stageDepthM = depth
-                stageHeightM = height
+                if (pin == null) {
+                    stageWidthM = width
+                    stageDepthM = depth
+                    stageHeightM = height
+                }
+                venueUuid = pin?.first?.uuid
+                venueVersion = pin?.second
             }
             ensureDefaultSpeedMasters(project)
-            project.id.value
+            val seating = presetUuid?.let { SeatingPresets.copyOnCreate(project, pin!!.first, it).name }
+            Created(project.id.value, pin?.first?.name, pin?.second, seating)
         } ?: return failure("A project named '$name' already exists")
 
         val switched = input.boolean("switchTo") == true
-        if (switched) state.projectManager.switchProject(created)
+        if (switched) state.projectManager.switchProject(created.id)
         return success(
-            "Created project '$name' (id=$created)" + if (switched) " and made it current" else "",
+            "Created project '$name' (id=${created.id})" +
+                (created.venue?.let { " on $it v${created.version}" } ?: "") +
+                if (switched) " and made it current" else "",
             buildJsonObject {
-                put("projectId", created)
+                put("projectId", created.id)
                 put("name", name)
                 put("isCurrent", switched)
+                created.venue?.let {
+                    putJsonObject("venue") {
+                        put("name", it)
+                        put("version", created.version)
+                    }
+                    created.seating?.let { s -> put("seating", s) }
+                    put(
+                        "note",
+                        "The show reads the venue's rig and scene at v${created.version}; its own set, cues and prompt book " +
+                            "start empty. Build it with projectId=${created.id} on the setup tools, or copy_to_project.",
+                    )
+                }
             },
         )
+    }
+
+    /** A show's venue, as list_projects answers it. */
+    private fun JsonObjectBuilder.putVenue(v: ProjectVenueDto) {
+        putJsonObject("venue") {
+            v.id?.let { put("id", it) }
+            put("name", v.name ?: "(not on this desk)")
+            put("version", v.version)
+            v.installed?.let { put("installed", it) }
+            if (v.behind != VenueBehind.NONE) put("behind", v.behind.name)
+        }
     }
 
     private suspend fun switchProject(input: JsonObject): ToolExecutionResult {
@@ -260,8 +334,8 @@ class SetupTools(
         })
     }
 
-    private fun getPatch(): ToolExecutionResult {
-        val current = state.projectManager.currentProject
+    private fun getPatch(target: ToolProject): ToolExecutionResult {
+        val current = target.project
         val body = transaction(state.database) {
             // Re-read the row: `currentProject` is the entity loaded at the last project switch,
             // and its columns are that load's values — a set_stage since then would read stale.
@@ -460,11 +534,11 @@ class SetupTools(
         val typeChanged: Boolean,
     )
 
-    private fun patchFixtures(input: JsonObject): ToolExecutionResult {
+    private fun patchFixtures(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val rows = input["fixtures"] as? JsonArray ?: return failure("Missing 'fixtures'")
         if (rows.isEmpty()) return failure("'fixtures' is empty")
         val dryRun = input.boolean("dryRun") == true
-        val project = state.projectManager.currentProject
+        val project = target.project
 
         data class Existing(
             val id: Int, val key: String, val universe: Int, val start: Int, val end: Int, val headNumber: Int?,
@@ -709,7 +783,9 @@ class SetupTools(
             groupsByName.keys.filter { it !in groupsBefore }
         }
 
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+        if (target.isCurrent) {
+            DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+        }
         state.show.fixtures.patchListChanged()
 
         val result = buildJsonObject {
@@ -722,12 +798,12 @@ class SetupTools(
         return success("Patched ${toCreate.size} new and updated ${toUpdate.size} fixture(s)", result)
     }
 
-    private fun deleteGroups(input: JsonObject): ToolExecutionResult {
+    private fun deleteGroups(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val names = input["names"] as? JsonArray ?: return failure("Missing 'names'")
         if (names.isEmpty()) return failure("'names' is empty")
         val problems = mutableListOf<String>()
         val force = optionalBoolean(input, "force", problems) == true
-        val project = state.projectManager.currentProject
+        val project = target.project
         val (groups, venueGroups, scope) = transaction(state.database) {
             val rig = RigScope.of(project)
             Triple(
@@ -777,7 +853,9 @@ class SetupTools(
             tiles to members
         }
         if (sweptTiles > 0) state.show.fixtures.buskRigChanged()
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+        if (target.isCurrent) {
+            DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+        }
         state.show.fixtures.patchListChanged()
         return success(
             "Deleted ${wanted.size} group(s)",
@@ -1019,10 +1097,10 @@ class SetupTools(
         return out
     }
 
-    private fun placeFixtures(input: JsonObject): ToolExecutionResult {
+    private fun placeFixtures(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val rows = input["placements"] as? JsonArray ?: return failure("Missing 'placements'")
         if (rows.isEmpty()) return failure("'placements' is empty")
-        val project = state.projectManager.currentProject
+        val project = target.project
         data class Stored(val id: Int, val typeKey: String, val focus: LanternFocus, val kindOverride: String?)
         val (lists, venueScope) = transaction(state.database) {
             val rig = RigScope.of(project).also { it.venue }
@@ -1072,8 +1150,11 @@ class SetupTools(
         // fixture rebuild for — so the runtime rig is untouched. What the running show does cache
         // from these columns is the gel (`GET /fixtures` reads it) and the fitted media (the
         // template resolver's snap), refreshed here as both REST placement paths refresh them.
-        for ((key, metadata) in gels) {
-            state.show.fixtures.setPatchMetadata(key, metadata)
+        // The running rig's cache is the current project's; another project's keys may collide with it.
+        if (target.isCurrent) {
+            for ((key, metadata) in gels) {
+                state.show.fixtures.setPatchMetadata(key, metadata)
+            }
         }
         state.show.fixtures.patchListChanged()
         return success("Placed ${parsed.size} fixture(s)", buildJsonObject { put("placed", parsed.size) })
@@ -1081,8 +1162,8 @@ class SetupTools(
 
     // ─── Stage ──────────────────────────────────────────────────────────
 
-    private fun setStage(input: JsonObject): ToolExecutionResult {
-        val project = state.projectManager.currentProject
+    private fun setStage(input: JsonObject, target: ToolProject): ToolExecutionResult {
+        val project = target.project
         val problems = mutableListOf<String>()
 
         for ((name, shape) in listOf("stage" to "an object", "regions" to "an array", "riggings" to "an array")) {
@@ -1254,8 +1335,8 @@ class SetupTools(
             "upload a file: ask the operator to open $where and import the PDF, then call get_prompt_book again."
     }
 
-    private fun getPromptBook(): ToolExecutionResult {
-        val project = state.projectManager.currentProject
+    private fun getPromptBook(target: ToolProject): ToolExecutionResult {
+        val project = target.project
         val body = transaction(state.database) {
             val book = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()
                 ?: return@transaction null
@@ -1349,12 +1430,12 @@ class SetupTools(
         val events: List<CueEventWrite>,
     )
 
-    private fun buildCueStack(input: JsonObject): ToolExecutionResult {
+    private fun buildCueStack(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val cueRows = input["cues"] as? JsonArray ?: return failure("Missing 'cues'")
         if (cueRows.isEmpty()) return failure("'cues' is empty")
         val stackId = input.int("stackId")
         val stackName = input.string("stackName")?.trim()
-        val project = state.projectManager.currentProject
+        val project = target.project
         val problems = mutableListOf<String>()
 
         if (stackId == null && stackName.isNullOrEmpty()) problems += "give stackName for a new stack, or stackId to append to one"
@@ -1442,7 +1523,11 @@ class SetupTools(
                 parseToolCueEventList(it, context.patches, "events", rowProblems)
             }.orEmpty()
             val place = row["at"]?.let { at ->
-                if (context.pageCount == null) {
+                if (!target.isCurrent) {
+                    // As the Prompt Book routes: only the current project's book is edited.
+                    rowProblems += "'at' anchors the cue in the prompt book, which only the current project's can be marked up — leave 'at' out and anchor later with mark_up_prompt_book"
+                    null
+                } else if (context.pageCount == null) {
                     rowProblems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
                     null
                 } else parsePlace(at, context.pageCount, "at", rowProblems)

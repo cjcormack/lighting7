@@ -150,41 +150,11 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
-
-                // Deactivate if running, and clear the project playhead if it pointed here.
-                state.show.cueStackManager.deactivateStack(resource.stackId, state)
-                if (project.activeStackId == resource.stackId) {
-                    project.activeStackId = null
-                }
-
-                // Every cue belongs to a stack, so deleting a stack cascades its cues + children.
-                var removedAnchors = 0
-                val pageIds = mutableSetOf<Int>()
-                stack.cues.forEach { cue ->
-                    deleteCueChildren(cue)
-                    deleteCueScenery(cue.id)
-                    deleteCueEvents(cue.id)
-                    removedAnchors += deletePromptBookAnchorsForCue(cue)
-                    pageIds += deleteCueReferences(cue)
-                    // Same reason the single-cue delete does this: a deleted cue can't be
-                    // Updated into, and a surviving target leaves every client's programmer
-                    // indicator offering a cue that no longer exists.
-                    state.show.programmerStore.clearIncludeTargetForCue(cue.id.value)
-                    cue.delete()
-                }
-
-                deleteStackScenery(stack.id)
-                stack.delete()
-                removedAnchors to pageIds
+                deleteCueStackRows(state, project, stack)
             }
 
             if (result != null) {
-                val (removedAnchors, pageIds) = result
-                state.show.fixtures.cueStackListChanged()
-                state.show.fixtures.cueListChanged()
-                if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
-                if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
-                state.show.fixtures.cueSlotListChanged()
+                announceCueStacksDeleted(state, result)
                 call.respond(HttpStatusCode.NoContent)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
@@ -715,4 +685,51 @@ private fun DaoCueStack.toCueStackDetails(
         canDelete = isCurrentProject,
         scenery = stackSceneryOf(id).map { it.toDto() },
     )
+}
+
+/** What deleting cue stacks swept beyond the stacks: prompt-book anchors, and the busk pages that lost pads. */
+internal data class DeletedCueStackRows(val removedAnchors: Int, val pageIds: Set<Int>)
+
+/**
+ * Delete [stack] of [project] with its cues and everything they own. In the current project the stack
+ * is deactivated first; another project's never ran, and deactivating it would still disarm the desk
+ * and recompute the live scenery. The project's playhead is cleared if it pointed here. Inside the
+ * caller's transaction; [announceCueStacksDeleted] after it commits.
+ */
+internal fun deleteCueStackRows(state: State, project: DaoProject, stack: DaoCueStack): DeletedCueStackRows {
+    if (project.id == state.projectManager.currentProject.id) {
+        state.show.cueStackManager.deactivateStack(stack.id.value, state)
+    }
+    if (project.activeStackId == stack.id.value) {
+        project.activeStackId = null
+    }
+
+    // Every cue belongs to a stack, so deleting a stack cascades its cues + children.
+    var removedAnchors = 0
+    val pageIds = mutableSetOf<Int>()
+    stack.cues.forEach { cue ->
+        deleteCueChildren(cue)
+        deleteCueScenery(cue.id)
+        deleteCueEvents(cue.id)
+        removedAnchors += deletePromptBookAnchorsForCue(cue)
+        pageIds += deleteCueReferences(cue)
+        // Same reason the single-cue delete does this: a deleted cue can't be
+        // Updated into, and a surviving target leaves every client's programmer
+        // indicator offering a cue that no longer exists.
+        state.show.programmerStore.clearIncludeTargetForCue(cue.id.value)
+        cue.delete()
+    }
+
+    deleteStackScenery(stack.id)
+    stack.delete()
+    return DeletedCueStackRows(removedAnchors, pageIds)
+}
+
+/** The broadcasts a stack delete owes, once its transaction has committed. */
+internal fun announceCueStacksDeleted(state: State, deleted: DeletedCueStackRows) {
+    state.show.fixtures.cueStackListChanged()
+    state.show.fixtures.cueListChanged()
+    if (deleted.removedAnchors > 0) state.show.fixtures.promptBookChanged()
+    if (deleted.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(deleted.pageIds.toList())
+    state.show.fixtures.cueSlotListChanged()
 }
