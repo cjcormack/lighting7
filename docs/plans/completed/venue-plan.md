@@ -6,7 +6,7 @@
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
 > <https://claude.ai/artifact/LxMaLSktSQa73AkoXQzUvh> (the checked-in file is the authority).
 >
-> The plan and its design record moved to `completed/` together in the close-out (`SHA-PENDING`).
+> The plan and its design record moved to `completed/` together in the close-out (`a2eec6c`).
 > §8's follow-ups are in [`../followups.md`](../followups.md), with `FU-VENUE-UPDATE-BINDINGS` from
 > session 6 beside them and `FU-STAGE-VENUE-SHARED` in Completed. §9's desk checks are in
 > [`../manual-validation.md`](../manual-validation.md), one per session: `FU-MANUAL-VENUE-S1` and
