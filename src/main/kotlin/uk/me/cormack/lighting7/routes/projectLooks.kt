@@ -905,7 +905,7 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
 }
 
 /** Must be called inside a transaction. */
-private fun createLookChildren(
+internal fun createLookChildren(
     look: DaoLook,
     rows: List<LookRowDto>,
     effects: List<LookEffectDto>,

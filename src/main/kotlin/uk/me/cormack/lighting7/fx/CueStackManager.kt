@@ -205,11 +205,12 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = EffectSpawner.createEffectInstance(
+            val instance = EffectSpawner.createEffectInstanceOrNull(
                 effectSpec, fxTarget, state = state,
+                context = "cue ${cueData.cueId}: layer on '${layer.source.name}'",
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-            )
+            ) ?: continue
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             // The whole source, kind included: a template layer owns effects now (D5), and
@@ -247,7 +248,9 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
+            val instance = EffectSpawner.createEffectInstanceOrNull(
+                adHocEffectSpec, fxTarget, state, "cue ${cueData.cueId}: ad-hoc effect on '${adHoc.targetKey}'",
+            ) ?: continue
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             spawning += instance

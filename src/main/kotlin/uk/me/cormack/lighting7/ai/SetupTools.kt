@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.routes.placementFocusRefusal
 import uk.me.cormack.lighting7.routes.resolvePatchFocus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -37,6 +38,13 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
+import uk.me.cormack.lighting7.fixture.group.GroupPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupSettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.ColourPropertyDescriptor
+import uk.me.cormack.lighting7.routes.PositionPropertyDescriptor
+import uk.me.cormack.lighting7.routes.PropertyDescriptor
+import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
 import uk.me.cormack.lighting7.routes.listedProjects
@@ -285,6 +293,7 @@ class SetupTools(
 
     private fun listFixtureTypes(input: JsonObject): ToolExecutionResult {
         val query = input.string("query")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val withProperties = input["properties"]?.jsonPrimitive?.booleanOrNull == true
         val types = FixtureTypeRegistry.allTypes
             .filter { it.channelCount != null }
             .filter { t ->
@@ -328,10 +337,45 @@ class SetupTools(
                             }
                         }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
+                        if (withProperties) {
+                            putJsonArray("properties") { t.properties.forEach { addTypeProperty(it) } }
+                            t.elementGroupProperties?.takeIf { it.isNotEmpty() }?.let { cells ->
+                                putJsonArray("cellProperties") { cells.forEach { addCellProperty(it) } }
+                            }
+                        }
                     }
                 }
             }
         })
+    }
+
+    /**
+     * One settable property of a type, as a Look value names it. One-shot triggers and fixture
+     * commands are left out: no stored value may hold either.
+     */
+    private fun JsonArrayBuilder.addTypeProperty(property: PropertyDescriptor) {
+        val kind = when (property) {
+            is SliderPropertyDescriptor -> "slider"
+            is ColourPropertyDescriptor -> "colour"
+            is PositionPropertyDescriptor -> "position"
+            is SettingPropertyDescriptor -> "setting"
+            else -> return
+        }
+        addJsonObject {
+            put("name", property.name)
+            put("kind", kind)
+            put("category", property.category)
+            if (property is SettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
+        }
+    }
+
+    /** One property every cell (head) of a multi-head type has, for a value on a cell's own key. */
+    private fun JsonArrayBuilder.addCellProperty(property: GroupPropertyDescriptor) {
+        addJsonObject {
+            put("name", property.name)
+            put("category", property.category)
+            if (property is GroupSettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
+        }
     }
 
     private fun getPatch(target: ToolProject): ToolExecutionResult {
@@ -1502,6 +1546,7 @@ class SetupTools(
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
                     validateCueChildren(emptyList(), parsed)?.let { rowProblems += it }
+                    rowProblems += aiTools.untargetedEffectLayerProblems(parsed)
                     // `createCueChildren` drops a layer naming a record that no longer exists, by
                     // design for a deleted Look. Here it would be a typo answered with success, so
                     // it is refused before anything is written.

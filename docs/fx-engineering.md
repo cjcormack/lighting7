@@ -854,7 +854,7 @@ Effects receive an `EffectContext` alongside the phase, providing distribution m
 
 ### Static Effect Windowing
 
-Static effects (StaticColour, StaticValue, StaticPosition) create chase patterns by only
+Static effects (StaticColour, StaticPosition) create chase patterns by only
 being "on" for a window of each cycle. The window width is `1 / numDistinctSlots`, which
 accounts for symmetric distributions where multiple members share an offset.
 
@@ -895,7 +895,7 @@ This uses `distinctSlots` rather than `groupSize` so that symmetric distribution
 (CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot.
 
 **Default values**: Each effect type declares `defaultStepTiming` which is used when
-creating new `FxInstance`s. Static effects (StaticColour, StaticValue, StaticPosition)
+creating new `FxInstance`s. Static effects (StaticColour, StaticPosition)
 default to `true` (chase pattern), while continuous effects (SineWave, Pulse, etc.)
 default to `false` (full cycle). The value can be overridden per-instance via the API.
 
@@ -1359,7 +1359,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (27 files) |
 | `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
 | `fx/TemplateRegistry.kt` | Template snapshots cached by uuid — rows, or the one effect an effect template holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |

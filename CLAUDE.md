@@ -124,7 +124,7 @@ write disguises itself as a serialization regression.
 
 The suite takes ~1 minute warm, and ~55 s longer on the first run after any code
 change (editing a source file changes the classpath fingerprint, which invalidates
-the compiled-script jar cache and recompiles the 28 built-in FX effects). That cost
+the compiled-script jar cache and recompiles the 27 built-in FX effects). That cost
 lands on whichever class first builds a `Show` — currently
 `ParkSurvivesFixtureReloadTest`, a one-test class that therefore *looks* like the
 slowest thing in the suite. It is not slow; it is first. Before optimising anything
@@ -357,12 +357,12 @@ Effect interfaces:
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 - **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
-Built-in effect types — **all 28 live as `.fx.kts` resources** under
+Built-in effect types — **all 27 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in effect classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
 - **Dimmer**: SineWave, Pulse, RampUp/Down, Triangle, SquareWave, Strobe, Flicker, Breathe,
-  CandleFlicker, FluorescentFlicker, StaticValue, StaticSetting
+  CandleFlicker, FluorescentFlicker, StaticSetting
 - **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade, ColourFlicker,
   StaticColour
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition, StaticPosition

@@ -51,8 +51,8 @@ the full ~1.4 s. That is correct, and it is why it is among the slowest classes.
 
 `FxScriptCompiler`'s cache is on the **companion object**, not the instance. A compiler is
 built per `Show`, and a `Show` per project switch — per *test* in the suite. With a per-instance
-cache every new `Show` re-evaluated all 28 built-in `.fx.kts` effects: even with the on-disk jar
-cache warm, that is 28 jar loads, 28 classloaders and 28 evaluations to arrive at lambdas
+cache every new `Show` re-evaluated every built-in `.fx.kts` effect: even with the on-disk jar
+cache warm, that is a jar load, a classloader and an evaluation each to arrive at lambdas
 identical to the previous `Show`'s.
 
 Safe because `CompiledFxScript` is immutable and its lambdas are stateless — a STATEFUL
@@ -85,7 +85,7 @@ eagerly and does not stop it when collected, so each discarded `Show` leaked one
 
 - **Warm** (no code changed since the last run): ~55–60 s.
 - **Cold** (any rebuild): **~+55 s**. The compiled-script jar cache is keyed partly on a
-  fingerprint of the classpath, so editing any source file invalidates all 28 built-in FX jars
+  fingerprint of the classpath, so editing any source file invalidates all 27 built-in FX jars
   and they recompile from source. In a normal edit-test loop this is paid every time.
 
 The cost lands on whichever test class first builds a `Show` — today
@@ -232,7 +232,7 @@ quiet while the numbers stay plausible.
 The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
-registry's 28 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
+registry's 27 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every

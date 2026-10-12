@@ -260,34 +260,10 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `StaticValue auto-windows for distribution`() {
-        val effect = fx("StaticValue", "value" to "200")
-        // Member 0 of a 4-element LINEAR distribution; its window is [0, 1/4)
-        val context = EffectContext(
-            groupSize = 4, memberIndex = 0, distributionOffset = 0.0,
-            hasDistributionSpread = true, numDistinctSlots = 4,
-        )
-
-        assertEquals(200.toUByte(), effect.calculate(0.0, context).slider())
-        assertEquals(200.toUByte(), effect.calculate(0.2, context).slider())
-        assertEquals(0.toUByte(), effect.calculate(0.25, context).slider())
-        assertEquals(0.toUByte(), effect.calculate(0.5, context).slider())
-        assertEquals(0.toUByte(), effect.calculate(0.99, context).slider())
-    }
-
-    @Test
-    fun `StaticValue with no distribution ignores phase`() {
-        val effect = fx("StaticValue", "value" to "200")
-        assertEquals(200.toUByte(), effect.calculate(0.0).slider())
-        assertEquals(200.toUByte(), effect.calculate(0.5).slider())
-        assertEquals(200.toUByte(), effect.calculate(1.0).slider())
-    }
-
-    @Test
-    fun `StaticValue declares step timing by default`() {
+    fun `a static effect declares step timing by default`() {
         assertTrue(
-            fx("StaticValue").defaultStepTiming,
-            "StaticValue drives one element per slot, so a new instance should step",
+            fx("StaticColour").defaultStepTiming,
+            "StaticColour drives one element per slot, so a new instance should step",
         )
         assertTrue(
             !fx("SineWave").defaultStepTiming,

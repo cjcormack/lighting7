@@ -338,11 +338,12 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstance(
+        val instance = EffectSpawner.createEffectInstanceOrNull(
             effectSpec, fxTarget, state = state,
+            context = "cue $cueId: timed layer on '${layer.source.name}'",
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-        )
+        ) ?: return
         instance.source = layer.source
         instance.cueLayerId = layer.layerId
         instance.cueId = cueId
@@ -388,7 +389,9 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstanceOrNull(
+            adHocEffectSpec, fxTarget, state, "cue $cueId: timed ad-hoc effect on '${effect.targetKey}'",
+        ) ?: return
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 

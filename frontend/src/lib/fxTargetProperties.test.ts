@@ -97,8 +97,8 @@ const STATIC_SETTING = effect({
   category: 'controls',
   compatibleProperties: ['setting'],
 })
-const STATIC_VALUE = effect({
-  name: 'StaticValue',
+const SLIDER_LEVEL = effect({
+  name: 'SliderLevel',
   category: 'controls',
   compatibleProperties: ['slider'],
 })
@@ -172,7 +172,7 @@ describe('propertyNamesFor', () => {
 
 describe('compatibleEffectsFor', () => {
   it('offers a sentinel effect exactly when the target minted the sentinel', () => {
-    const library = [RAINBOW, STATIC_SETTING, STATIC_VALUE]
+    const library = [RAINBOW, STATIC_SETTING, SLIDER_LEVEL]
     const goboHead: FxPropertyTarget = {
       type: 'fixture',
       fixture: fixture({ properties: [setting('gobo')] }),
@@ -195,9 +195,9 @@ describe('compatibleEffectsFor', () => {
 
 describe('effectsByCategory', () => {
   it('groups in library order and honours the exclusion list', () => {
-    const grouped = effectsByCategory([RAINBOW, STATIC_SETTING, STATIC_VALUE])
+    const grouped = effectsByCategory([RAINBOW, STATIC_SETTING, SLIDER_LEVEL])
     expect(Object.keys(grouped)).toEqual(['colour', 'controls'])
-    expect(grouped.controls.map((e) => e.name)).toEqual(['StaticSetting', 'StaticValue'])
+    expect(grouped.controls.map((e) => e.name)).toEqual(['StaticSetting', 'SliderLevel'])
 
     expect(Object.keys(effectsByCategory([RAINBOW, STATIC_SETTING], { exclude: ['controls'] }))).toEqual([
       'colour',
@@ -242,7 +242,7 @@ describe('resolveEffectProperty', () => {
         properties: [slider('dimmer', 'dimmer'), slider('uv', 'uv'), slider('zoom', 'beam')],
       }),
     }
-    expect(resolveEffectProperty(target, STATIC_VALUE)).toBe('zoom')
+    expect(resolveEffectProperty(target, SLIDER_LEVEL)).toBe('zoom')
   })
 
   it('returns null when the effect fits nothing on the target', () => {

@@ -313,7 +313,9 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstance(effectSpec, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstanceOrNull(
+            effectSpec, fxTarget, state, "cue ${cueData.cueId}: included fx on '${target.key}'",
+        ) ?: return
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
         spawning += instance

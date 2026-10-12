@@ -13,6 +13,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.and
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.CueStackManager
@@ -118,11 +119,15 @@ class AiTools(private val state: State) {
     // ─── Tool Executors ────────────────────────────────────────────────────
 
     private fun executeCreateLook(input: JsonObject): ToolExecutionResult {
-        val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
+        val name = input["name"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return errorResult("Missing 'name'")
         val notes = input["description"]?.jsonPrimitive?.contentOrNull
         val effectsArray = input["effects"]?.jsonArray ?: JsonArray(emptyList())
+        val valuesArray = input["values"]?.jsonArray ?: JsonArray(emptyList())
         val sceneryArray = input["scenery"]?.jsonArray
-        if (effectsArray.isEmpty() && sceneryArray.isNullOrEmpty()) return errorResult("Give 'effects', 'scenery', or both")
+        if (effectsArray.isEmpty() && valuesArray.isEmpty() && sceneryArray.isNullOrEmpty()) {
+            return errorResult("Give 'values', 'effects', 'scenery', or any mix of them")
+        }
 
         val effects = effectsArray.map { parseLookEffect(it.jsonObject) }
         // A deferred effect lands on whatever applies the Look, so it may name no one-shot trigger
@@ -131,6 +136,16 @@ class AiTools(private val state: State) {
         TriggerIndex.EMPTY.check(effectRefs)
         // Nor a fixture command (fixture optics plan session 7).
         CommandIndex.EMPTY.check(effectRefs)
+
+        val applyTargets = input["applyToTargets"]?.jsonArray?.let(::parseTargets).orEmpty()
+        val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: applyTargets.isNotEmpty()
+        if (apply && applyTargets.isEmpty() && effects.isNotEmpty()) {
+            return errorResult("A look with effects needs applyToTargets to apply it on: its effects run on a selection")
+        }
+
+        val values = resolveLookValues(state.show.fixtures, valuesArray)
+        if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
+        validateLookRows(values.rows)?.let { return errorResult(it) }
 
         val project = state.projectManager.currentProject
         val scenery = sceneryArray?.let { items ->
@@ -142,110 +157,140 @@ class AiTools(private val state: State) {
             writes
         }.orEmpty()
         val look = transaction(state.database) {
+            if (!DaoLook.find { (DaoLooks.project eq project.id) and (DaoLooks.name eq name) }.empty()) {
+                return@transaction null
+            }
             val created = DaoLook.new {
                 this.name = name
                 this.notes = notes
                 this.project = project
             }
-            // Authored through the AI surface, so every effect is deferred: the tool describes the
-            // effects, and the targets come from whatever applies the look. (The tool authors no
-            // rows — a Look row would have to name a fixture, which the model has no business
-            // picking here.)
-            effects.forEachIndexed { index, effect ->
-                DaoLookEffect.new {
-                    this.look = created
-                    targetType = DEFERRED_TARGET_TYPE
-                    targetKey = ""
-                    effectType = effect.effectType
-                    category = effect.category
-                    propertyName = effect.propertyName
-                    beatDivision = effect.beatDivision
-                    blendMode = effect.blendMode
-                    distribution = effect.distribution
-                    phaseOffset = effect.phaseOffset
-                    elementMode = effect.elementMode
-                    elementFilter = effect.elementFilter
-                    stepTiming = effect.stepTiming
-                    parameters = effect.parameters
-                    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-                    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-                    sortOrder = index
-                }
-            }
+            // Every effect is deferred: the tool describes the effects, and the targets come from
+            // whatever applies the look. Values are bound rows, each naming its own fixture or group.
+            createLookChildren(
+                created,
+                values.rows,
+                effects.mapIndexed { index, effect ->
+                    LookEffectDto(
+                        targetType = DEFERRED_TARGET_TYPE,
+                        targetKey = "",
+                        effectType = effect.effectType,
+                        category = effect.category,
+                        propertyName = effect.propertyName,
+                        beatDivision = effect.beatDivision,
+                        blendMode = effect.blendMode,
+                        distribution = effect.distribution,
+                        phaseOffset = effect.phaseOffset,
+                        elementMode = effect.elementMode,
+                        elementFilter = effect.elementFilter,
+                        stepTiming = effect.stepTiming,
+                        parameters = effect.parameters,
+                        speedMasterUuid = effect.speedMasterUuid,
+                        rateSpeedMasterUuid = effect.rateSpeedMasterUuid,
+                        sortOrder = index,
+                    )
+                },
+            )
             replaceLookScenery(created, scenery)
             created
-        }
+        } ?: return errorResult("A look named '$name' already exists in this project")
         state.show.fixtures.lookListChanged()
 
         val lookId = look.id.value
 
-        // Optionally apply to targets
-        val targets = input["applyToTargets"]?.jsonArray
-        var appliedCount = 0
-        if (targets != null && targets.isNotEmpty()) {
-            val toggleTargets = targets.map { t ->
-                val obj = t.jsonObject
-                CueTargetDto(
-                    type = obj["type"]!!.jsonPrimitive.content,
-                    key = obj["key"]!!.jsonPrimitive.content,
-                )
-            }
-            val outcome = state.show.programmerLayerStack.toggle(
-                source = LayerSource.look(
-                    lookId,
-                    transaction(state.database) { look.uuid },
-                    name,
-                ),
-                targets = toggleTargets.map { CueTargetDto(it.type, it.key) },
-            )
-            appliedCount = outcome.effectCount
-        }
+        val press = if (apply) pressLook(lookId, applyTargets, beatDivision = null) else null
+        val pressed = press as? LookPress.Pressed
 
         return ToolExecutionResult(
             success = true,
-            description = "Created look '$name' (id=$lookId, ${effects.size} effects)" +
-                    if (appliedCount > 0) ", applied $appliedCount effects" else "",
+            description = "Created look '$name' (id=$lookId, ${values.rows.size} values, ${effects.size} effects)" +
+                (pressed?.let { ", ${it.action} it" } ?: "") +
+                ((press as? LookPress.Refused)?.let { ", not applied: ${it.message}" } ?: ""),
             result = buildJsonObject {
                 put("lookId", lookId)
                 put("name", name)
+                put("valueCount", values.rows.size)
                 put("effectCount", effects.size)
-                put("appliedEffectCount", appliedCount)
+                putJsonArray("values") {
+                    values.rows.forEach { row ->
+                        addJsonObject {
+                            put("target", buildJsonObject { put("type", row.targetType); put("key", row.targetKey) })
+                            row.elementKey?.let { put("elementKey", it) }
+                            put("propertyName", row.propertyName)
+                            put("value", row.value)
+                        }
+                    }
+                }
+                if (values.skipped.isNotEmpty()) {
+                    putJsonArray("skipped") {
+                        values.skipped.forEach { skip ->
+                            addJsonObject {
+                                put("fixture", skip.target)
+                                put("propertyName", skip.propertyName)
+                                put("reason", skip.reason)
+                            }
+                        }
+                    }
+                }
+                pressed?.let {
+                    put("action", it.action)
+                    put("appliedEffectCount", it.effectCount)
+                }
+                (press as? LookPress.Refused)?.let { put("notApplied", it.message) }
             }.toString()
         )
     }
 
     private fun executeApplyLook(input: JsonObject): ToolExecutionResult {
         val lookId = input["lookId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'lookId'")
-        val targetsArray = input["targets"]?.jsonArray ?: return errorResult("Missing 'targets'")
+        val targets = input["targets"]?.jsonArray?.let(::parseTargets).orEmpty()
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
 
-        val look = transaction(state.database) {
-            DaoLook.findById(lookId)?.let { it.uuid to it.name }
-        } ?: return errorResult("Look not found: $lookId")
-
-        val targets = targetsArray.map { t ->
-            val obj = t.jsonObject
-            CueTargetDto(
-                type = obj["type"]!!.jsonPrimitive.content,
-                key = obj["key"]!!.jsonPrimitive.content,
+        return when (val outcome = pressLook(lookId, targets, beatDivision)) {
+            is LookPress.Refused -> errorResult(outcome.message)
+            is LookPress.Pressed -> ToolExecutionResult(
+                success = true,
+                description = "${outcome.action} look $lookId (${outcome.effectCount} effects)",
+                result = buildJsonObject {
+                    put("action", outcome.action)
+                    put("effectCount", outcome.effectCount)
+                }.toString()
             )
         }
+    }
 
-        // Same programmer layer the busking pads add — so the AI and the pads toggle the *same*
-        // thing, rather than two mechanisms that each think they own the Look.
-        val result = state.show.programmerLayerStack.toggle(
-            source = LayerSource.look(lookId, look.first, look.second),
+    private sealed interface LookPress {
+        data class Pressed(val action: String, val effectCount: Int) : LookPress
+        data class Refused(val message: String) : LookPress
+    }
+
+    /**
+     * Toggle a Look as a programmer layer — the layer the busking pads add, so the AI and the pads
+     * toggle the *same* thing rather than two mechanisms that each think they own the Look. No
+     * targets means the Look's own fixtures, by the REST toggle's rule ([resolveLookToggleTargets]).
+     */
+    private fun pressLook(lookId: Int, requested: List<CueTargetDto>, beatDivision: Double?): LookPress {
+        val project = state.projectManager.currentProject
+        val look = transaction(state.database) {
+            DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.toggleSource(state.show.fixtures)
+        } ?: return LookPress.Refused("Look not found: $lookId")
+        val targets = when (val resolved = resolveLookToggleTargets(requested, look)) {
+            is LookTargetResolution.Refused -> return LookPress.Refused(resolved.message)
+            is LookTargetResolution.Targets -> resolved.targets
+        }
+        val outcome = state.show.programmerLayerStack.toggle(
+            source = look.source,
             targets = targets,
             beatDivisionOverride = beatDivision,
         )
+        return LookPress.Pressed(outcome.action, outcome.effectCount)
+    }
 
-        return ToolExecutionResult(
-            success = true,
-            description = "${result.action} ${result.effectCount} effects (look $lookId)",
-            result = buildJsonObject {
-                put("action", result.action)
-                put("effectCount", result.effectCount)
-            }.toString()
+    private fun parseTargets(array: JsonArray): List<CueTargetDto> = array.map { t ->
+        val obj = t.jsonObject
+        CueTargetDto(
+            type = obj["type"]!!.jsonPrimitive.content,
+            key = obj["key"]!!.jsonPrimitive.content,
         )
     }
 
@@ -924,6 +969,7 @@ class AiTools(private val state: State) {
         val adHocArray = input["adHocEffects"]?.jsonArray
 
         val layers = parseCueLayers(input["layers"]?.jsonArray)
+        untargetedEffectLayerProblems(layers).takeIf { it.isNotEmpty() }?.let { return errorResult(it.joinToString("; ")) }
         val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
 
         val project = state.projectManager.currentProject
@@ -986,13 +1032,7 @@ class AiTools(private val state: State) {
             val obj = layer.jsonObject
             CueLayerDto(
                 lookId = obj["lookId"]!!.jsonPrimitive.int,
-                targets = obj["targets"]!!.jsonArray.map { t ->
-                    val tObj = t.jsonObject
-                    CueTargetDto(
-                        type = tObj["type"]!!.jsonPrimitive.content,
-                        key = tObj["key"]!!.jsonPrimitive.content,
-                    )
-                },
+                targets = obj["targets"]?.jsonArray?.let(::parseTargets).orEmpty(),
                 // Declaration order is the stack order unless the caller says otherwise, so a tool
                 // call that lists layers bottom-to-top composes the way it reads.
                 sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
@@ -1005,6 +1045,24 @@ class AiTools(private val state: State) {
                 rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
             )
         } ?: emptyList()
+
+    /**
+     * A layer naming no targets lands its Look's values, but a deferred effect has nothing to run
+     * on — refused here, where apply_look refuses the same press, rather than left silent at GO.
+     */
+    internal fun untargetedEffectLayerProblems(layers: List<CueLayerDto>): List<String> {
+        val lookIds = layers.filter { it.targets.isEmpty() }.mapNotNull { it.lookId }.toSet()
+        if (lookIds.isEmpty()) return emptyList()
+        val needing = transaction(state.database) {
+            DaoLookEffect.find { (DaoLookEffects.look inList lookIds) and (DaoLookEffects.targetType eq DEFERRED_TARGET_TYPE) }
+                .mapTo(HashSet()) { it.look.id.value }
+        }
+        return layers.mapIndexedNotNull { index, layer ->
+            if (layer.targets.isEmpty() && layer.lookId in needing) {
+                "layers[$index]: look ${layer.lookId} has effects that run on the layer's targets — give targets"
+            } else null
+        }
+    }
 
     private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
@@ -1927,7 +1985,7 @@ class AiTools(private val state: State) {
     private fun errorResult(message: String) = ToolExecutionResult(
         success = false,
         description = message,
-        result = """{"error": "$message"}"""
+        result = buildJsonObject { put("error", message) }.toString(),
     )
 
 }
