@@ -636,6 +636,13 @@ internal data class LookDto(
      */
     val hasDeferredEffects: Boolean,
     val preview: List<String>,
+    /**
+     * The effects this Look runs, by type, in its own order and each once — the library's Preview
+     * says *Colour Cycle* rather than only that there are effects. `@EncodeDefault(ALWAYS)` for
+     * [scenery]'s reason; the client treats it as optional all the same.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val effectTypes: List<String> = emptyList(),
     /** How many cue layers reference this Look. Gates delete. */
     val layerCount: Int,
     /**
@@ -1107,6 +1114,7 @@ internal fun DaoLook.toSummaryDto(
             .sortedByDescending { it.value }
             .take(LOOK_PREVIEW_SIZE)
             .map { it.key },
+        effectTypes = effectList.sortedBy { it.sortOrder }.map { it.effectType }.distinct(),
         layerCount = resolvedUsage.layerCount,
         buskPageCount = resolvedUsage.buskPageCount,
         scenery = scenery ?: lookSceneryOf(id).map { it.toSummaryDto() },

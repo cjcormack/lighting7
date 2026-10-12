@@ -188,6 +188,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                   <p>
                     Updated “{result.lookResult.lookName}” — {result.lookResult.rowsWritten} row
                     {result.lookResult.rowsWritten === 1 ? '' : 's'} written
+                    {effectsClause(result.lookResult.effectsWritten)}
                     {sceneryClause(result.lookResult.sceneryWritten)}
                     {result.lookResult.cuesRepublished.length > 0
                       ? `, ${result.lookResult.cuesRepublished.length} live cue(s) moved with it`
@@ -308,6 +309,11 @@ function ChecklistRow({
       </span>
     </label>
   )
+}
+
+/** A Look's effects Update wrote back — Include runs them in the programmer, and an edit lands on them. */
+function effectsClause(written: number | undefined): string {
+  return written ? `, ${written} effect${written === 1 ? '' : 's'}` : ''
 }
 
 /** `, 1 scenery change` beside an Update's written count — nothing when no scenery moved. */

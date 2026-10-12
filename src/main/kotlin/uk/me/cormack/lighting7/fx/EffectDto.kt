@@ -70,6 +70,13 @@ data class EffectDto(
     val rateSpeedMasterUuid: String? = null,
     /** 1-based display index of that rate master. */
     val rateSpeedMasterIndex: Int = 1,
+    /**
+     * The Look whose effect Include ran here as this programmer-band effect — never [lookId], which
+     * a busk pad lights from, and an included effect is the programmer's to edit, not the Look's.
+     */
+    val includedLookId: Int? = null,
+    /** Whether an included Look effect has been changed since Include — what Update would write. */
+    val editedSinceInclude: Boolean = false,
 )
 
 /**
@@ -137,5 +144,7 @@ internal fun FxInstance.toEffectDto(
         speedMasterIndex = masterStates.getOrNull(speedMasterSlot)?.index ?: 1,
         rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
         rateSpeedMasterIndex = masterStates.getOrNull(rateMasterSlot)?.index ?: 1,
+        includedLookId = includedLookEffect?.lookId,
+        editedSinceInclude = includedLookEffect?.let { lookEffectSettings() != it.baseline } ?: false,
     )
 }

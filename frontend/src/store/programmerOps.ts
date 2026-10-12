@@ -290,6 +290,8 @@ export interface LookUpdateResult {
   lookId: number
   lookName: string
   rowsWritten: number
+  /** The Look's included effects changed since Include, written back onto them. Absent from an older desk. */
+  effectsWritten?: number
   /** Scenery rows written back into the Look. */
   sceneryWritten?: number
   /** What the re-resolve moved: the live consumers of the Look. */

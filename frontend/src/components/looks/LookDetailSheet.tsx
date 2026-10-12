@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Blinds, CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
+import { AudioWaveform, Blinds, CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import {
   Sheet,
@@ -20,9 +20,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { useLookQuery, useSaveLookMutation } from '@/store/looks'
+import { useEffectLibraryQuery } from '@/store/fixtureFx'
+import { EffectSummary } from '@/components/fx/EffectSummary'
+import { fromLookEffect } from '@/components/fx/effectSummaryTypes'
 import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
-import type { LookSummary } from '@/api/looksApi'
+import { DEFERRED_TARGET_TYPE, type LookSummary } from '@/api/looksApi'
 import { useLookDelete } from './useLookDelete'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetLookSceneryMutation } from '@/store/scenery'
@@ -49,14 +52,10 @@ export interface LookDetailSheetProps {
  * they light is exactly the abstraction the programmer redesign exists to remove. Name and notes are
  * metadata and are editable here.
  *
- * The deferred half of the library gets the opposite treatment (`LookEditor`, a full value grid
- * against a synthetic fixture), and the reason is the targeting mode rather than taste: a deferred
- * row has no head to edit it on.
- *
- * **Update-back is not available yet.** Include stages the Look's literals so they can be seen and
- * busked from, but the write-back path still targets the retired palette tables, so the programmer's
- * Update is disabled for a Look target rather than allowed to write rows nothing reads. That lands
- * with the record rewrite.
+ * The same holds for its **effects**: they are listed here, read-only, so a Look that only runs
+ * effects says what it runs, and they are changed the way values are — Include runs them in the
+ * programmer (an effect the Look leaves to whatever applies it runs on the desk selection), the
+ * effect editor changes them there, and Update writes the change back onto the effect it came from.
  */
 export function LookDetailSheet({
   open,
@@ -86,6 +85,8 @@ export function LookDetailSheet({
     onDeleted: () => onOpenChange(false),
   })
   const { include, isLoading: isIncluding } = useInclude(projectId)
+  // For each effect's parameter labels and colour swatches; only while the sheet is open.
+  const { data: library } = useEffectLibraryQuery(undefined, { skip: !open })
 
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -114,9 +115,12 @@ export function LookDetailSheet({
       { targetKey: string; values: { property: string; value: string }[] }
     >()
     for (const row of detail?.rows ?? []) {
-      const bucket = byTarget.get(row.targetKey) ?? { targetKey: row.targetKey, values: [] }
+      // A cell's row under the cell's own key: a colour held per zone reads as one line per zone
+      // rather than three unlabelled chips under the fixture.
+      const key = row.elementKey ?? row.targetKey
+      const bucket = byTarget.get(key) ?? { targetKey: key, values: [] }
       bucket.values.push({ property: row.propertyName, value: row.value })
-      byTarget.set(row.targetKey, bucket)
+      byTarget.set(key, bucket)
     }
     return [...byTarget.values()]
   }, [detail])
@@ -129,6 +133,8 @@ export function LookDetailSheet({
   // snapshot taken when the library row was clicked.
   const layerCount = detail?.layerCount ?? look.layerCount
   const families = detail?.families ?? look.families
+  const effects = detail?.effects ?? []
+  const effectCount = detail?.effects.length ?? look.effectCount
 
   const save = async () => {
     if (name.trim() === '') return
@@ -157,8 +163,9 @@ export function LookDetailSheet({
         <SheetHeader>
           <SheetTitle>{look.name}</SheetTitle>
           <SheetDescription>
-            {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'} · used by {layerCount} cue
-            layer{layerCount === 1 ? '' : 's'}
+            {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
+            {effectCount > 0 ? ` · ${effectCount} effect${effectCount === 1 ? '' : 's'}` : ''} · used by{' '}
+            {layerCount} cue layer{layerCount === 1 ? '' : 's'}
           </SheetDescription>
         </SheetHeader>
 
@@ -202,9 +209,10 @@ export function LookDetailSheet({
           )}
 
           <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-            To see what this look holds on the rig, <strong>Include</strong> it into the programmer
-            and edit the fixtures on stage. Writing those edits back into the look is not available
-            yet — that arrives with the record rewrite. Every cue layering it will move with it.
+            To change what this look holds, <strong>Include</strong> it into the programmer, edit
+            its values and effects on stage, then <strong>Update</strong> — only what you changed is
+            written back, and every cue layering it moves with it. An effect marked{' '}
+            <em>on the layer&apos;s targets</em> runs on the desk selection while included.
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -238,7 +246,7 @@ export function LookDetailSheet({
             {isFetching && !detail ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : rowsByTarget.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No rows.</p>
+              <p className="text-sm text-muted-foreground">No values.</p>
             ) : (
               <div className="divide-y rounded-md border">
                 {rowsByTarget.map((bucket) => (
@@ -255,6 +263,34 @@ export function LookDetailSheet({
                       ))}
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* The Look's effects, as stored — read-only, like the values above. */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <AudioWaveform className="size-3.5" />
+              Effects
+            </Label>
+            {isFetching && !detail ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : effects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No effects.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {effects.map((effect, index) => (
+                  <EffectSummary
+                    key={`${effect.effectType}-${effect.targetKey}-${index}`}
+                    effect={fromLookEffect(effect, library)}
+                    target={
+                      effect.targetType === DEFERRED_TARGET_TYPE
+                        ? undefined
+                        : { type: effect.targetType, key: effect.targetKey }
+                    }
+                    badge={effect.targetType === DEFERRED_TARGET_TYPE ? "on the layer's targets" : undefined}
+                  />
                 ))}
               </div>
             )}

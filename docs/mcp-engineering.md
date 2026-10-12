@@ -297,7 +297,15 @@ group stays one group row while its members agree on the literal, and becomes a 
 do not (a wheel head and an RGB head given one colour). A head that cannot take a value is reported
 under `skipped`; a value no head of its target can take, or the same target and property twice,
 refuses the call. A fixture's own value beats its group's in the cook, so a split group leaves a
-member the call names on its own alone. The rows then go through the
+member the call names on its own alone. **A multi-head fixture's cells are targets too**, each by its
+own key (`shehds-1.zone-2`), stored as a cell row (the parent as the target, the cell as
+`elementKey`); a value the fixture cannot take itself but its cells can — the 24-channel Shehds' colour,
+which lives only on its three zones — lands on **every cell**, one cell row each (the cook never fans
+a fixture or group row out to cells), and a cell named on its own keeps its own value
+(`resolveOnHeadOrCells` in `ai/LookValues.kt`; `set_programmer` resolves the same way). That was the
+gap a model hit: the Shehds' fixture-level colour was refused and nothing said a cell had a key, so
+`describe_rig` now lists each multi-head fixture's cells (`cells=3 (…zone-1 … …zone-3)`) and the
+target and `create_look` descriptions say how to name one. The rows then go through the
 REST write path (`validateLookRows`, `createLookChildren`), so a trigger or command name is refused as
 it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
 and a cue layer's targets are optional for the same reason. `list_fixture_types` with `properties: true`
@@ -465,7 +473,10 @@ visible?, open?, trimM?}]`. **Recording it** (scenery-programmer plan session 3)
 piece the cue would not show anyway, a row the cue already has replaced — answering `sceneryWritten`,
 `sceneryRemoved` and `sceneryAlreadyTracked`; `include_into_programmer` holds a cue's or Look's own
 scenery rows in the programmer (`sceneryIncluded`), a cue row's transition kept, and
-`update_from_programmer` with no targets writes them back (`sceneryWritten`). Their descriptions say
+`update_from_programmer` with no targets writes them back (`sceneryWritten`). It runs a Look's
+**effects** in the programmer as well (`fxSpawned`; a deferred one on its `targets`, else the desk
+selection), and `update_from_programmer` writes an operator's edit back onto the effect it came from
+(`effectsWritten`) — `docs/lighting-composition-model.md` §"Record / Include / Update". Their descriptions say
 so, and that neither the mask nor `targets` narrows scenery. **It needs no remote-access gate**, unlike arming, firing and fixture
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
 motor, nothing in a room the model cannot see.

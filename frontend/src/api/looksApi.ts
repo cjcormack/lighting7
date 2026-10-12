@@ -34,7 +34,7 @@ export interface LookRow {
   propertyName: string
   value: string
   fadeDurationMs?: number | null
-  /** Element-local suffix of a multi-element fixture's element key. Null = the whole fixture. */
+  /** The cell this row is on, by its own full key (`shehds-1.zone-2`). Null = the whole fixture. */
   elementKey?: string | null
   sortOrder?: number
   /** Resolved server-side on read; ignored on write — the server never trusts client health. */
@@ -108,6 +108,8 @@ export interface LookSummary {
   hasDeferredEffects: boolean
   /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
   preview: string[]
+  /** The effects it runs, by type, each once in the Look's order. Absent from an older desk. */
+  effectTypes?: string[]
   /**
    * How many cue layers reference this Look. Gates delete.
    *

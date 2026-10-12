@@ -154,6 +154,70 @@ data class ProgrammerFxOrigin(
 }
 
 /**
+ * Which of a Look's stored effects an Include-spawned programmer-band instance realises, so Update
+ * can write the operator's edits back onto that effect (`updateIncludedLook`) rather than beside it.
+ *
+ * [lookEffectId] is the `DaoLookEffect` row. [deferred] says the stored effect names no target of
+ * its own: Include ran it on the selection, and Update must leave it deferred — what the operator
+ * edited is how the effect runs, not where.
+ */
+data class IncludedLookEffect(
+    val lookId: Int,
+    val lookEffectId: Int,
+    val deferred: Boolean,
+    /**
+     * The instance's [LookEffectSettings] as Include spawned it — Update's "changed since Include"
+     * baseline, the INCLUDE slot's job for a value. Compared against the instance rather than the
+     * stored row because a running effect reports its whole parameter set, defaults filled in, so
+     * a row that leaves a default unsaid would always read as edited.
+     */
+    val baseline: LookEffectSettings,
+)
+
+/**
+ * How an effect runs, as a Look stores it — everything a `DaoLookEffect` row holds but where it
+ * runs (target and property) and in what order. One mapping from a running instance, shared by
+ * Record into a Look and by Update's write-back of an included effect, so the two cannot store an
+ * effect two ways.
+ */
+data class LookEffectSettings(
+    val effectType: String,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val phaseOffset: Double,
+    val elementMode: String?,
+    val elementFilter: String?,
+    val stepTiming: Boolean?,
+    val parameters: Map<String, String>,
+    val speedMasterUuid: java.util.UUID?,
+    val rateSpeedMasterUuid: java.util.UUID?,
+)
+
+/**
+ * This instance's [LookEffectSettings]. Element mode is a group effect's alone, and an element
+ * filter or step timing is stored only where it differs from the default, so a row says what the
+ * operator chose rather than what the effect would do anyway.
+ */
+fun FxInstance.lookEffectSettings(): LookEffectSettings {
+    // One dynamics snapshot — the fields must agree with each other.
+    val dyn = dynamics
+    return LookEffectSettings(
+        effectType = effectTypeId,
+        beatDivision = timing.beatDivision,
+        blendMode = blendMode.name,
+        distribution = dyn.distributionStrategy.javaClass.simpleName,
+        phaseOffset = dyn.phaseOffset,
+        elementMode = if (isGroupEffect) dyn.elementMode.name else null,
+        elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
+        stepTiming = if (dyn.stepTiming != effect.defaultStepTiming) dyn.stepTiming else null,
+        parameters = effect.parameters,
+        speedMasterUuid = speedMasterUuid,
+        rateSpeedMasterUuid = rateSpeedMasterUuid,
+    )
+}
+
+/**
  * The identity of one programmer-layer effect instance: which layer spawned it, which of the
  * Look's stored effects it realises, and on which target.
  *
@@ -386,6 +450,13 @@ class FxInstance internal constructor(
      * from stops. Cleared for free by `removeProgrammerBandEffects()`.
      */
     var programmerOrigin: ProgrammerFxOrigin? = null
+
+    /**
+     * [programmerOrigin]'s counterpart for a Look: set when Include spawned this instance into the
+     * programmer band from one of a Look's effects, so Update writes the edit back onto it. A band
+     * effect like any other — Clear takes it, and nothing about the Look reads it.
+     */
+    var includedLookEffect: IncludedLookEffect? = null
 
     /**
      * The operator's own busked effect: in the programmer priority band, and belonging to

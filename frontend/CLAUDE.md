@@ -856,7 +856,9 @@ value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `Edito
 **A Look row is always bound** — `validateLookRows` refuses `deferred` — and a Look is always
 *recorded*, from the programmer or by promoting a selection, which is why `/looks` has no New
 button and one editor (`LookDetailSheet`, read-only about values on purpose; read its doc comment
-before adding a value grid). A Look **effect** may still be deferred, and
+before adding a value grid; it lists the Look's effects read-only too, and Include runs them in the
+programmer — a deferred one on the desk selection — for Update to write an edit back onto). A Look
+**effect** may still be deferred, and
 `LookSummary.hasDeferredEffects` is what says so: that is what makes a Look eligible for a busking
 pad, since a pad supplies the targets on the press.
 
@@ -3384,7 +3386,12 @@ Notes · Cue layers · Busk pages — **Scenery** a read-out since the scenery-p
 (D10): a `Blinds` glyph and a summary such as *Moon in · Sofa shown* off `LookSummary.scenery`
 (`describeLookScenery`, `summariseSceneryState` in `lib/scenery.ts`; a flown piece's in and out named
 from the scene's element list, metres until it loads), blank for a Look with none, and *Scenery only*
-in Contents for a Look that lights nothing. Its 120px floor puts the sheet past the 1180×820 iPad
+in Contents for a Look that lights nothing. **Preview is one line that never wraps**
+(`LookPreviewStrip` in `lookValueChips.tsx`): the chips that fit, `+N` for the rest (every value on
+the cell's hover), then the effects glyph; a Look of effects alone names them off
+`LookSummary.effectTypes` rather than showing a bare glyph. What fits is measured off an invisible copy
+of every chip (`previewChipsThatFit`, pure in `previewFit.ts`) and re-measured on resize — the
+`flex-wrap` it replaced put a Look's second and third lines of chips over the rows around it. The Scenery column's 120px floor puts the sheet past the 1180×820 iPad
 frame's ~940 with the sidebar open, so there it scrolls sideways under the sticky name, as the plan's
 §4 has it; **the Templates sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
 Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the route under family dividers

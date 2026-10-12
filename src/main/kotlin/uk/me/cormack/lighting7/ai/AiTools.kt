@@ -1763,6 +1763,8 @@ class AiTools(private val state: State) {
             lookId = input["lookId"]?.jsonPrimitive?.intOrNull,
             mask = mask,
             fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull ?: 0L,
+            includeFx = input["includeFx"]?.jsonPrimitive?.booleanOrNull ?: true,
+            targets = input["targets"]?.jsonArray?.let(::parseTargets),
         )
 
         return when (result) {
@@ -1786,12 +1788,13 @@ class AiTools(private val state: State) {
             is IncludeCoreResult.Look -> ToolExecutionResult(
                 success = true,
                 description = "Included look '${result.lookName}' — ${result.outcome.entriesWritten} " +
-                    "value(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
+                    "value(s), ${result.outcome.fxSpawned} effect(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
                 result = buildJsonObject {
                     put("kind", "LOOK")
                     put("lookId", result.lookId)
                     put("name", result.lookName)
                     put("entriesWritten", result.outcome.entriesWritten)
+                    put("fxSpawned", result.outcome.fxSpawned)
                     put("sceneryIncluded", result.sceneryIncluded)
                     putStrings("fixtureKeys", result.outcome.fixtureKeys)
                     putSkips(result.outcome.skipped)
@@ -1845,14 +1848,15 @@ class AiTools(private val state: State) {
             )
             is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
                 success = true,
-                description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s) and " +
-                    "${result.result.sceneryWritten} scenery change(s) written",
+                description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s), " +
+                    "${result.result.effectsWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written",
                 result = buildJsonObject {
                     put("mode", "A")
-                    put("applied", result.result.rowsWritten + result.result.sceneryWritten > 0)
+                    put("applied", result.result.rowsWritten + result.result.effectsWritten + result.result.sceneryWritten > 0)
                     put("lookId", result.result.lookId)
                     put("lookName", result.result.lookName)
                     put("rowsWritten", result.result.rowsWritten)
+                    put("effectsWritten", result.result.effectsWritten)
                     put("sceneryWritten", result.result.sceneryWritten)
                     putSkips(result.skipped)
                 }.toString()

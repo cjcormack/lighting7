@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.TemplateIntent
@@ -92,9 +93,11 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
         val landed = LinkedHashMap<GroupableFixture, Pair<String, String>>()
         val missed = ArrayList<LookValueSkip>()
         for (head in heads) {
-            when (val result = resolveOnHead(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
-                is HeadValue.Landed -> landed[head] = result.propertyName to result.value.serialize()
-                is HeadValue.Missed -> missed += LookValueSkip(head.targetKey, entry.propertyName, result.reason)
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+                when (result) {
+                    is HeadValue.Landed -> landed[cell] = result.propertyName to result.value.serialize()
+                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.propertyName, result.reason)
+                }
             }
         }
         if (landed.isEmpty()) {
@@ -105,18 +108,33 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
         skipped += missed
 
         val distinct = landed.values.toSet()
-        if (distinct.size == 1) {
+        // A value that landed on a fixture's cells rather than on the fixture is one row per cell:
+        // the cook never fans a fixture or group row out to cells, so a single row would reach none.
+        val onCells = landed.keys.any { it !in heads }
+        if (distinct.size == 1 && !onCells) {
             val (resolvedName, literal) = distinct.single()
             val head = if (entry.ref is TargetRef.Fixture) landed.keys.single() else null
             rows += row(entry.ref, head, resolvedName, literal, rows.size)
         } else {
             for ((head, resolved) in landed) {
-                if ((head.targetKey to entry.propertyName) in namedOnFixture) continue
+                if (shadowedByOwnValue(entry, head, namedOnFixture)) continue
                 rows += row(TargetRef.Fixture(head.targetKey), head, resolved.first, resolved.second, rows.size)
             }
         }
     }
     return ResolvedLookValues(rows, skipped, problems)
+}
+
+/**
+ * Whether a per-head row [entry] would write for [head] is one another value names more closely —
+ * a fixture's own value over its group's, a cell's own over its fixture's (or group's) — and so
+ * must not be written beside it.
+ */
+private fun shadowedByOwnValue(entry: Entry, head: GroupableFixture, namedOnFixture: Set<Pair<String, String>>): Boolean {
+    val property = entry.propertyName
+    if (head.targetKey != entry.ref.key && (head.targetKey to property) in namedOnFixture) return true
+    val parent = (head as? FixtureElement<*>)?.parentFixture?.key
+    return entry.ref is TargetRef.Group && parent != null && (parent to property) in namedOnFixture
 }
 
 private fun parseEntry(at: String, element: Any, problems: MutableList<String>): Entry? {
@@ -227,6 +245,26 @@ private fun withEmitters(head: GroupableFixture, value: PropertyValue, emitters:
     )
 }
 
+/**
+ * [head]'s value — or, where [head] is a multi-head fixture that cannot take it itself, each of its
+ * cells'. The 24-channel Shehds has no colour of its own (its three zones each have one), so
+ * `rgbColour` on the fixture lands on every zone, as a selection of the whole fixture does in the
+ * programmer. A parent that takes the value keeps it; a fixture none of whose cells can take it
+ * reports its own miss.
+ */
+private fun resolveOnHeadOrCells(
+    fixtures: Fixtures,
+    head: GroupableFixture,
+    propertyName: String,
+    raw: String,
+    value: LookValue,
+): List<Pair<GroupableFixture, HeadValue>> {
+    val own = resolveOnHead(fixtures, head, propertyName, raw, value)
+    if (own is HeadValue.Landed || head !is MultiElementFixture<*> || head.elements.isEmpty()) return listOf(head to own)
+    val cells = head.elements.map { cell -> cell to resolveOnHead(fixtures, cell, propertyName, raw, value) }
+    return if (cells.any { it.second is HeadValue.Landed }) cells else listOf(head to own)
+}
+
 private sealed interface HeadValue {
     data class Landed(val propertyName: String, val value: PropertyValue) : HeadValue
     data class Missed(val reason: String) : HeadValue
@@ -319,12 +357,14 @@ internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef
         val missed = ArrayList<LookValueSkip>()
         var landed = 0
         for (head in heads.values) {
-            when (val result = resolveOnHead(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
-                is HeadValue.Landed -> {
-                    writes += ProgrammerValueWrite(head, entry.propertyName, result.propertyName, result.value)
-                    landed++
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+                when (result) {
+                    is HeadValue.Landed -> {
+                        writes += ProgrammerValueWrite(cell, entry.propertyName, result.propertyName, result.value)
+                        landed++
+                    }
+                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.propertyName, result.reason)
                 }
-                is HeadValue.Missed -> missed += LookValueSkip(head.targetKey, entry.propertyName, result.reason)
             }
         }
         if (landed == 0) {

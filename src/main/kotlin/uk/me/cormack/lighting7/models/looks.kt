@@ -166,9 +166,10 @@ object DaoLookRows : IntIdTable("look_rows") {
     val fadeDuration = duration("fade_duration").nullable()
 
     /**
-     * Element-local suffix of a multi-element fixture's element key (`"head-0"`, `"element-1"`) —
-     * everything after the parent fixture's key and the dot. Null = the whole fixture. Carried
-     * over from `DaoFxPresetPropertyAssignments.elementKey` unchanged.
+     * The cell of a multi-element fixture this row is on, by the cell's **full** element key
+     * (`"shehds-1.zone-2"`), [targetKey] being its parent. Null = the whole fixture. Every writer
+     * (Record, `create_look`'s values) stores the full key and every reader resolves it through
+     * `Fixtures.untypedGroupableFixture`.
      */
     val elementKey = varchar("element_key", 255).nullable()
     val sortOrder = integer("sort_order").default(0)

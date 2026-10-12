@@ -843,6 +843,7 @@ class FxEngine(
                 cueLayerId = existing.cueLayerId
                 programmerLayerEffectKey = existing.programmerLayerEffectKey
                 programmerOrigin = existing.programmerOrigin
+                includedLookEffect = existing.includedLookEffect
                 cueId = existing.cueId
                 cueStackId = existing.cueStackId
                 priority = existing.priority
@@ -1927,6 +1928,14 @@ class FxEngine(
         }
         return false
     }
+
+    /**
+     * Report every effect again, for a change to what an instance reports that was made outside the
+     * engine's own mutators — Update re-baselining an included Look effect
+     * ([FxInstance.includedLookEffect]), which moves its `editedSinceInclude`. Without it the
+     * clients' active-effect lists keep the old answer until something unrelated changes an effect.
+     */
+    fun republishEffectStates() = emitStateUpdate()
 
     private fun emitStateUpdate() {
         // Deliberately does NOT touch [effectListEpoch]: this is a broadcaster, and the

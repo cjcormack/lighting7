@@ -12,10 +12,11 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
-import uk.me.cormack.lighting7.fx.ElementFilter
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
+import uk.me.cormack.lighting7.fx.LookEffectSettings
+import uk.me.cormack.lighting7.fx.lookEffectSettings
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -517,32 +518,88 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
     if (effects.isEmpty()) return
     var nextSort = (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
     for (effect in effects) {
-        // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
-        val dyn = effect.dynamics
         DaoLookEffect.new {
             this.look = look
             targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
             targetKey = effect.target.targetKey
-            effectType = effect.effectTypeId
             category = categoryFromPropertyName(effect.target.propertyName)
             propertyName = effect.target.propertyName
-            beatDivision = effect.timing.beatDivision
-            blendMode = effect.blendMode.name
-            distribution = dyn.distributionStrategy.javaClass.simpleName
-            phaseOffset = dyn.phaseOffset
-            elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null
-            elementFilter = if (dyn.elementFilter != ElementFilter.ALL) {
-                dyn.elementFilter.name
-            } else null
-            stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) {
-                dyn.stepTiming
-            } else null
-            parameters = effect.effect.parameters
-            speedMasterUuid = effect.speedMasterUuid
-            rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+            takeSettings(effect.lookEffectSettings())
             sortOrder = nextSort++
         }
     }
+}
+
+/** [settings] onto this row — everything but where the effect runs and its place in the Look. */
+private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
+    effectType = settings.effectType
+    beatDivision = settings.beatDivision
+    blendMode = settings.blendMode
+    distribution = settings.distribution
+    phaseOffset = settings.phaseOffset
+    elementMode = settings.elementMode
+    elementFilter = settings.elementFilter
+    stepTiming = settings.stepTiming
+    parameters = settings.parameters
+    speedMasterUuid = settings.speedMasterUuid
+    rateSpeedMasterUuid = settings.rateSpeedMasterUuid
+}
+
+/**
+ * [edited]'s changes from [baseline] onto this row, and nothing else: a field the operator did not
+ * move keeps what the row says. That matters beyond tidiness — an included instance reports some
+ * fields by where it runs (element mode only on a group effect, an element filter or step timing
+ * only where it differs from the default), so a deferred effect stored with an element mode for the
+ * groups it is pressed onto, included onto fixtures, reads `elementMode = null` on both sides; copying
+ * the whole settings would null the stored mode on a parameter-only edit. Parameters merge the same
+ * way, key by key — unless the effect's type changed, when they are the new type's.
+ */
+private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: LookEffectSettings) {
+    if (edited.effectType != baseline.effectType) {
+        effectType = edited.effectType
+        parameters = edited.parameters
+    } else if (edited.parameters != baseline.parameters) {
+        parameters = parameters + edited.parameters.filter { (key, value) -> baseline.parameters[key] != value }
+    }
+    if (edited.beatDivision != baseline.beatDivision) beatDivision = edited.beatDivision
+    if (edited.blendMode != baseline.blendMode) blendMode = edited.blendMode
+    if (edited.distribution != baseline.distribution) distribution = edited.distribution
+    if (edited.phaseOffset != baseline.phaseOffset) phaseOffset = edited.phaseOffset
+    if (edited.elementMode != baseline.elementMode) elementMode = edited.elementMode
+    if (edited.elementFilter != baseline.elementFilter) elementFilter = edited.elementFilter
+    if (edited.stepTiming != baseline.stepTiming) stepTiming = edited.stepTiming
+    if (edited.speedMasterUuid != baseline.speedMasterUuid) speedMasterUuid = edited.speedMasterUuid
+    if (edited.rateSpeedMasterUuid != baseline.rateSpeedMasterUuid) rateSpeedMasterUuid = edited.rateSpeedMasterUuid
+}
+
+/**
+ * Write back the Look effects Include ran in the programmer that the operator has changed since —
+ * Update's effect half, the same "only what changed" rule its value half keeps, against the
+ * settings each instance was spawned with ([uk.me.cormack.lighting7.fx.IncludedLookEffect.baseline]),
+ * and field by field ([takeChanges]).
+ *
+ * The edit lands **on the effect it came from**: a bound effect takes the instance's changes and
+ * keeps its target; a deferred one, which Include ran on the selection, stays deferred — what was
+ * edited is how it runs, not where. A deferred effect runs once per selected target, so where
+ * several of its instances were changed the first is taken. An effect the operator stopped is left
+ * in the Look (Update never deletes — that is Record's Replace or REMOVE), and so is one whose row
+ * went since the Include.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun writeIncludedEffectsBack(look: DaoLook, instances: List<FxInstance>): Int {
+    val stored = look.effects.associateBy { it.id.value }
+    var written = 0
+    for ((lookEffectId, realising) in instances.groupBy { it.includedLookEffect!!.lookEffectId }) {
+        val row = stored[lookEffectId] ?: continue
+        val changed = realising.firstNotNullOfOrNull { instance ->
+            val baseline = instance.includedLookEffect!!.baseline
+            instance.lookEffectSettings().takeIf { it != baseline }?.let { baseline to it }
+        } ?: continue
+        row.takeChanges(changed.first, changed.second)
+        written++
+    }
+    return written
 }
 
 /**
@@ -570,6 +627,21 @@ private fun resolveLookTarget(
     return look to null
 }
 
+/**
+ * The running programmer-band effects Include spawned from [lookId]'s effects, under [mask] — the
+ * family of the property each drives, as Include masked it.
+ */
+private fun includedLookEffectsOf(state: State, lookId: Int, mask: Set<PropertyMaskGroup>?): List<FxInstance> =
+    state.show.fxEngine.getActiveEffects().filter { effect ->
+        if (effect.includedLookEffect?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority)) {
+            return@filter false
+        }
+        if (mask == null) return@filter true
+        val reference = state.show.fxEngine.fixtureKeysCoveredBy(effect).firstOrNull()
+            ?.let { runCatching { state.show.fixtures.untypedGroupableFixture(it) }.getOrNull() }
+        maskAllows(mask, reference?.let { maskGroupForProperty(it, effect.target.propertyName) })
+    }
+
 // ─── Mode A Update, where the include target is a Look ──────────────────
 
 /**
@@ -591,6 +663,8 @@ internal fun updateIncludedLook(
     project: DaoProject,
     includeTarget: IncludedTarget,
     mask: Set<PropertyMaskGroup>?,
+    /** Write back the Look's included effects the operator changed, as a cue Update writes its FX. */
+    includeFx: Boolean = true,
 ): UpdateCoreResult {
     val lookId = includeTarget.lookId!!
     val located = transaction(state.database) {
@@ -614,21 +688,34 @@ internal fun updateIncludedLook(
     // The held scenery goes back too (scenery-programmer plan D8): every held state, as a Look takes
     // it, merged over the Look's own rows so a piece the operator never held keeps its row.
     val held = heldSceneryOf(state, project.id.value)
+    // The Look's own effects as Include ran them, under the same mask as the values.
+    val includedEffects = if (includeFx) includedLookEffectsOf(state, lookId, mask) else emptyList()
 
-    val (outcome, scenery) = transaction(state.database) {
+    val (outcome, scenery, effectsWritten) = transaction(state.database) {
         val look = DaoLook.findById(lookId)!!
         // MERGE never deletes, so the remit predicate is never consulted; passing "nothing is in
         // remit" states that rather than leaving a live predicate a later edit could start reading.
-        writeRecordingIntoLook(look, collapsed, RecordMode.MERGE, { false }, elementParents) to
-            writeHeldSceneryIntoLook(look, held, RecordMode.MERGE)
+        Triple(
+            writeRecordingIntoLook(look, collapsed, RecordMode.MERGE, { false }, elementParents),
+            writeHeldSceneryIntoLook(look, held, RecordMode.MERGE),
+            writeIncludedEffectsBack(look, includedEffects),
+        )
     }
+    // What was written is the new baseline: a second Update writes nothing it already wrote.
+    for (instance in includedEffects) {
+        val origin = instance.includedLookEffect ?: continue
+        instance.includedLookEffect = origin.copy(baseline = instance.lookEffectSettings())
+    }
+    // The rebaseline moved what each reports as `editedSinceInclude`; say so, or the source strip
+    // keeps offering an Update that has nothing left to write.
+    if (includedEffects.isNotEmpty()) state.show.fxEngine.republishEffectStates()
     state.programmerScenery.rebaseline(project.id.value, written = true)
     val republish = republishForLookEdit(state, outcome.lookUuid)
     state.show.fixtures.lookListChanged()
 
     logger.info(
-        "update-look '{}': {} row{} written, {} programmer key(s) refreshed, {} cue(s) republished",
-        located, outcome.written, if (outcome.written == 1) "" else "s",
+        "update-look '{}': {} row{} and {} effect(s) written, {} programmer key(s) refreshed, {} cue(s) republished",
+        located, outcome.written, if (outcome.written == 1) "" else "s", effectsWritten,
         republish.programmerKeysRefreshed, republish.cuesRepublished.size,
     )
     return UpdateCoreResult.LookUpdated(
@@ -636,6 +723,7 @@ internal fun updateIncludedLook(
             lookId = lookId,
             lookName = located,
             rowsWritten = outcome.written,
+            effectsWritten = effectsWritten,
             sceneryWritten = scenery.written,
             programmerKeysRefreshed = republish.programmerKeysRefreshed,
             cuesRepublished = republish.cuesRepublished,

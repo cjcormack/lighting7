@@ -22,6 +22,32 @@ private val targetSchema = buildJsonObject {
     put("required", buildJsonArray { add("type"); add("key") })
 }
 
+/**
+ * [targetSchema] for a static value — a Look's or a cue's values and `set_programmer`'s targets, the
+ * paths that resolve a cell by its own key and fan a value only the cells have out to them
+ * (`ai/LookValues.kt`). Kept off the shared schema: not every tool taking a target reaches a cell
+ * (`aim_fixtures` skips one, `clear_effects` matches a fixture's own effects), so the hint would be
+ * a promise those break.
+ */
+private val valueTargetSchema = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("type", buildJsonObject {
+            put("type", "string")
+            put("enum", buildJsonArray { add("group"); add("fixture") })
+        })
+        put("key", buildJsonObject {
+            put("type", "string")
+            put(
+                "description",
+                "A fixture's or group's key — or, with type 'fixture', one cell (head) of a multi-head fixture by its own key, " +
+                    "as describe_rig lists its cells (e.g. 'shehds-1.zone-2').",
+            )
+        })
+    })
+    put("required", buildJsonArray { add("type"); add("key") })
+}
+
 private val lookEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -85,7 +111,7 @@ private val lookEffectSchema = buildJsonObject {
 internal val lookValueSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        put("target", targetSchema)
+        put("target", valueTargetSchema)
         put("propertyName", buildJsonObject {
             put("type", "string")
             put("description", "The property, as list_fixture_types (properties: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
@@ -105,6 +131,9 @@ internal val createLookTool = ToolDef(
             "and is resolved per head the way a template is, so 'pct:70' is 70% of each head's own range and a colour lands on a wheel head's nearest slot. " +
             "A value a head cannot take skips that head and is reported; a value no head of its target can take refuses the call. " +
             "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and property twice is refused. " +
+            "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
+            "(the colour of a fixture whose colour is per zone — list_fixture_types' cellProperties) set on the fixture or a group of them lands on every cell, " +
+            "and a cell's own value beats it. " +
             "'effects' are deferred: they name no target and run on whatever applies the look. " +
             "A look of values is pressed onto its own fixtures (apply_look with no targets) and layered in a cue with no layer targets. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
@@ -770,13 +799,26 @@ internal val includeIntoProgrammerTool = ToolDef(
             "follow-up is: include, change what you want, then update_from_programmer with no targets, which " +
             "writes back only what changed and leaves everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
-            "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery.",
+            "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery. " +
+            "A look's effects run in the programmer too, where the operator can change them in the desk's effect editor, " +
+            "and update_from_programmer writes those changes back onto the look's effects (to change them yourself, " +
+            "update_look's effects); an effect the look leaves to whatever applies it runs on 'targets', or on the desk's " +
+            "selection when they are omitted, and stays untargeted in the look.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("cueId", buildJsonObject { put("type", "integer") })
             put("lookId", buildJsonObject { put("type", "integer") })
             put("mask", maskSchema)
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "What a look's untargeted effects run on while included. Omit for the desk's selection.")
+            })
+            put("includeFx", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Run a look's effects in the programmer too. Default true.")
+            })
             put("fadeMs", buildJsonObject {
                 put("type", "integer")
                 put("description", "Fade the staged values in over this many milliseconds. Default 0 (snap).")
@@ -1059,7 +1101,7 @@ internal val setProgrammerTool = ToolDef(
         put("properties", buildJsonObject {
             put("targets", buildJsonObject {
                 put("type", "array")
-                put("items", targetSchema)
+                put("items", valueTargetSchema)
                 put("description", "The fixtures and groups to set.")
             })
             put("values", buildJsonObject {

@@ -198,6 +198,13 @@ internal fun performProgrammerInclude(
     lookId: Int?,
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
+    /** Run a Look's effects in the programmer band too, so Update can write them back. */
+    includeFx: Boolean = true,
+    /**
+     * What a Look's deferred effects run on — the selection being included onto. Null takes the
+     * desk's selection, the one a busk press would land on.
+     */
+    targets: List<CueTargetDto>? = null,
 ): IncludeCoreResult {
     includeShapeProblem(cueId, lookId)?.let { return IncludeCoreResult.Failure(it) }
 
@@ -208,7 +215,11 @@ internal fun performProgrammerInclude(
                 ?.let { it.name to it.uuid }
         } ?: return IncludeCoreResult.Failure("Look not found in current project", notFound = true)
         val (lookName, lookUuid) = look
-        val outcome = includeLookIntoProgrammer(state, lookId, lookUuid, mask, fadeMs)
+        val outcome = includeLookIntoProgrammer(
+            state, lookId, lookUuid, mask, fadeMs,
+            includeFx = includeFx,
+            deferredTargets = targets ?: state.deskSelection.state.value.targets,
+        )
         val rows = transaction(state.database) { DaoLook.findById(lookId)?.let(::lookSceneryForInclude).orEmpty() }
         val sceneryIncluded = state.programmerScenery.include(project.id.value, rows, fadeMs)
         // A Look Include always moves the include target, so the baseline moves with it.
@@ -303,7 +314,7 @@ internal fun performProgrammerUpdate(
     // Mode B stays cue-only on purpose: its premise is "which cue am I sitting on top of",
     // answered from the Layer 4 winner map, and there is no equivalent to derive for a Look.
     if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.LOOK) {
-        return updateIncludedLook(state, project, includeTarget, mask)
+        return updateIncludedLook(state, project, includeTarget, mask, includeFx)
     }
 
     val cueIds = targets ?: listOf(includeTarget!!.cueId!!)

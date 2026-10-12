@@ -35,6 +35,23 @@ class RigBriefing(private val state: State) {
     }
 
     /**
+     * `, cells=3 (`shehds-1.zone-1` … `shehds-1.zone-3`)` for a multi-head fixture: a cell is a
+     * target of its own, by its own key, and a property only its cells have (the 24-channel Shehds'
+     * colour) is set on every cell by naming the fixture. The first and last key, not every one — a
+     * pixel bar has dozens, and their numbering is the rule the middle follows.
+     */
+    private fun cellLabel(fixture: uk.me.cormack.lighting7.fixture.Fixture): String {
+        val cells = (fixture as? uk.me.cormack.lighting7.fixture.group.MultiElementFixture<*>)?.elements
+        if (cells.isNullOrEmpty()) return ""
+        val keys = if (cells.size <= 2) {
+            cells.joinToString(", ") { "`${it.elementKey}`" }
+        } else {
+            "`${cells.first().elementKey}` … `${cells.last().elementKey}`"
+        }
+        return ", cells=${cells.size} ($keys)"
+    }
+
+    /**
      * `, commands=reset (Reset, 5.0 s),lampOn (Lamp on, 5.0 s)` for a fixture with fixture commands
      * (fixture optics plan session 7) — what `run_fixture_command` names.
      */
@@ -106,6 +123,7 @@ class RigBriefing(private val state: State) {
                     (lanterns[fixture.key]?.let { ", $it" } ?: "") +
                     (media[fixture.key]?.let { ", $it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
+                    cellLabel(fixture) +
                     triggerLabel(fixture) +
                     commandLabel(fixture) +
                     ownerLabel({ it.patches }, fixture.key) +
