@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
+import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.StageViewpointKind
@@ -519,9 +520,62 @@ private val placementSchema = objectSchema(required = listOf("key")) {
 internal val placeFixturesTool = ToolDef(
     name = "place_fixtures",
     description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel — and for a generic dimmer its lantern and how it is focused (shutters, gate, iris, focus, zoom). Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
-        "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " + COORDINATES,
+        "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " +
+        "On a show on a venue, a venue fixture (owner=venue in get_patch) is placed through this show's facet overrides: its rigging and x/y/z/yaw/pitch/roll/length are its Position, " +
+        "its lantern, focus fields and beamAngleDeg its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
+        "and only the fields sent change. Its kind and stageHidden are the venue's; its `alsoAt` is the venue's lanterns, one entry each in get_patch's order, each changing only the fields it sends. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
+private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) {
+    prop("key", "string", "A venue fixture's key (owner=venue in get_patch, or one listed under venue.hiddenFixtures).")
+    put("facets", buildJsonObject {
+        put("type", "object")
+        put(
+            "description",
+            "Facet → SHOW | VENUE | KEEP_MINE, for any of ADDRESS, POSITION, FOCUS, MEDIA — the fixture sheet's Venue | This show switch. " +
+                "SHOW makes the facet this show's own, starting from the venue's value (nothing drawn or sent changes until you edit it; one already this show's keeps its value). " +
+                "VENUE drops this show's value and takes the venue's again — also the answer to a drifted facet you do not want to keep. " +
+                "KEEP_MINE answers a drifted facet (the venue changed it since this show took it) by keeping this show's value.",
+        )
+        put("properties", buildJsonObject {
+            PatchFacet.entries.forEach { f -> enumProp(f.name, listOf("SHOW", "VENUE", "KEEP_MINE")) }
+        })
+    })
+    put("address", buildJsonObject {
+        put("type", "object")
+        put(
+            "description",
+            "Re-address the fixture in this show only — an Address override (implies facets.ADDRESS = SHOW). This changes DMX output. " +
+                "An overlap with another unit is allowed and answered as a warning.",
+        )
+        put("properties", buildJsonObject {
+            prop("universe", "integer", "A universe of this show's rig (get_patch lists them).")
+            prop("subnet", "integer", "Default 0.")
+            prop("startChannel", "integer", "1–512; the whole fixture must fit in the universe.")
+        })
+        put("required", buildJsonArray { add("universe"); add("startChannel") })
+    })
+    prop(
+        "hidden", "boolean",
+        "true hides the venue fixture in this show (it leaves the show's rig, its channels free for the show's own units; refused while something in the show still uses it); " +
+            "false brings a hidden one back. A hidden fixture keeps its overrides, dormant, and takes no new ones.",
+    )
+}
+
+internal val overrideVenueFixturesTool = ToolDef(
+    name = "override_venue_fixtures",
+    description = "On a show on a venue, change how this show takes the venue's fixtures — the fixture sheet's Venue | This show switches, Keep mine and Hide in this show. " +
+        "A venue fixture has four facets — Address, Position, Focus, Media — each the venue's until the show makes it its own; its name, key, type, head and kind stay the venue's. " +
+        "Make a facet this show's here, then edit Position, Focus and Media with place_fixtures (an Address is set here, with `address`). " +
+        "get_patch lists each venue fixture's `overrides` (a `drifted` one the venue has changed since) and the hidden ones. " +
+        "Every row is checked first and nothing is written if any fails; dryRun answers what would change. To change a fixture for every show, edit the venue itself and publish_venue.",
+    inputSchema = objectSchema(required = listOf("fixtures")) {
+        arrayProp("fixtures", venueFixtureOverrideSchema)
+        prop("dryRun", "boolean", "Check and answer what would change, writing nothing. Default false.")
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
@@ -705,6 +759,7 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     uploadSceneImageTool,
     renderViewTool,
     placeFixturesTool,
+    overrideVenueFixturesTool,
     getPromptBookTool,
     buildCueStackTool,
     markUpPromptBookTool,

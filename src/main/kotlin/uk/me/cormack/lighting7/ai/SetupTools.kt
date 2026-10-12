@@ -35,6 +35,7 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
@@ -102,6 +103,7 @@ class SetupTools(
     private val scene = SceneSetupTools(state)
     private val render = RenderViewTool(state)
     private val venues = VenueSetupTools(state)
+    private val venueFixtures = VenueFixtureTools(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
@@ -126,6 +128,7 @@ class SetupTools(
             uploadSceneImageTool.name -> scene.uploadSceneImage(input, state.toolProject(input))
             renderViewTool.name -> render.renderView(input)
             placeFixturesTool.name -> placeFixtures(input, state.toolProject(input))
+            overrideVenueFixturesTool.name -> venueFixtures.overrideVenueFixtures(input, state.toolProject(input))
             getPromptBookTool.name -> getPromptBook(state.toolProject(input))
             buildCueStackTool.name -> buildCueStack(input, state.toolProject(input))
             markUpPromptBookTool.name -> markUpPromptBook(input)
@@ -427,12 +430,19 @@ class SetupTools(
                         put(
                             "note",
                             "Records with owner=venue are the venue's: the setup tools refuse a write to one (VENUE_OWNED). A show " +
-                                "can hide one, or make a venue fixture's address, position, focus or media its own — a facet override, " +
-                                "PUT /api/rest/projects/{id}/patches/{patchId}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}, or the fixture " +
-                                "sheet's Venue | This show switch. A fixture's `overrides` lists those facets; its fields are already " +
-                                "the overridden ones (but for a `dormant` one, which names a universe or rigging the rig lacks, so the " +
-                                "venue's stands), and `drifted` marks a facet the venue has changed since.",
+                                "can make a venue fixture's address, position, focus or media its own, or hide it, with " +
+                                "override_venue_fixtures; place_fixtures then edits the position, focus and media this show owns. " +
+                                "A fixture's `overrides` lists those facets; its fields are already the overridden ones (but for a " +
+                                "`dormant` one, which names a universe or rigging the rig lacks, so the venue's stands), and `drifted` " +
+                                "marks a facet the venue has changed since (answer it with KEEP_MINE or VENUE). `hiddenFixtures` are " +
+                                "the venue's fixtures this show hides.",
                         )
+                        val hidden = hiddenVenuePatches(rig)
+                        if (hidden.isNotEmpty()) {
+                            putJsonArray("hiddenFixtures") {
+                                hidden.forEach { p -> addJsonObject { put("key", p.key); put("name", p.displayName) } }
+                            }
+                        }
                         // A show held behind its venue (session 6) composes and draws but sends zero:
                         // without this a model reads every apply_cue as working while the rig stays dark.
                         val hold = state.venueHold.status.value
@@ -651,7 +661,7 @@ class SetupTools(
             // A venue's patch is the venue's (hide it in this show to patch your own under its key),
             // and a venue's group never holds a show's fixture (D12).
             if (existingByKey[key]?.venue == true) {
-                rowProblems += VenueRigGuard.ownedProblem(venueScope, "Patch '$key'")
+                rowProblems += VenueRigGuard.ownedProblem(venueScope, "Patch '$key'", VenueRigGuard.VENUE_FIXTURE_HINT)
             }
             groups.filter { it in venueGroups }.forEach {
                 rowProblems += VenueRigGuard.ownedProblem(venueScope, "Group '$it'")
@@ -915,6 +925,15 @@ class SetupTools(
         (DaoUniverseConfigs.subnet eq 0) and (DaoUniverseConfigs.universe eq universe)
     ).firstOrNull()
 
+    /** The venue's patches [rig] hides, in the venue's order; empty off a venue. Inside a transaction. */
+    private fun hiddenVenuePatches(rig: RigScope): List<DaoFixturePatch> {
+        val venue = rig.venue ?: return emptyList()
+        val uuids = venue.hides[HideKind.PATCH].orEmpty()
+        if (uuids.isEmpty()) return emptyList()
+        return DaoFixturePatch.find { (DaoFixturePatches.project eq venue.snapshotId) and (DaoFixturePatches.uuid inList uuids) }
+            .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC).toList()
+    }
+
     private fun riggingIdsByName(project: DaoProject): Map<String, Int> =
         RigScope.of(project).riggings().associate { it.name to it.id.value }
 
@@ -1146,18 +1165,19 @@ class SetupTools(
         if (rows.isEmpty()) return failure("'placements' is empty")
         val project = target.project
         data class Stored(val id: Int, val typeKey: String, val focus: LanternFocus, val kindOverride: String?)
-        val (lists, venueScope) = transaction(state.database) {
-            val rig = RigScope.of(project).also { it.venue }
+        val (lists, hiddenVenueKeys) = transaction(state.database) {
+            val rig = RigScope.of(project)
             Triple(
                 rig.own.patches().associate { it.key to Stored(it.id.value, it.fixtureTypeKey, it.focus, it.kindOverride) },
                 riggingIdsByName(project),
                 rig.patches().filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }.map { it.key }.toSet(),
-            ) to rig
+            ) to hiddenVenuePatches(rig).map { it.key }.toSet()
         }
         val (patches, riggingIds, venueKeys) = lists
 
         val problems = mutableListOf<String>()
         val parsed = mutableListOf<Triple<Int, Placement, PatchFocusWrite>>()
+        val venueRows = mutableListOf<Triple<Int, String, JsonObject>>()
         val seen = mutableSetOf<String>()
         rows.forEachIndexed { index, element ->
             val row = element as? JsonObject ?: run { problems += "placements[$index]: not an object"; return@forEachIndexed }
@@ -1165,11 +1185,18 @@ class SetupTools(
             val rowProblems = mutableListOf<String>()
             val stored = patches[key]
             if (key in venueKeys) {
-                // Re-hanging a venue fixture in a show is a Position facet override, session 5's.
-                problems += VenueRigGuard.ownedProblem(venueScope, "Patch '$key'")
+                // A venue fixture is placed through this show's facet overrides, resolved below.
+                if (!seen.add(key)) problems += "placements[$index] ('$key'): key '$key' is listed twice"
+                else venueRows += Triple(index, key, row)
                 return@forEachIndexed
             }
-            if (stored == null) rowProblems += "no patched fixture has key '$key'"
+            if (stored == null) {
+                rowProblems += if (key in hiddenVenueKeys) {
+                    "'$key' is the venue's and hidden in this show: bring it back with override_venue_fixtures (hidden: false) first"
+                } else {
+                    "no patched fixture has key '$key'"
+                }
+            }
             if (!seen.add(key)) rowProblems += "key '$key' is listed twice"
             val placement = parsePlacement(row, riggingIds, rowProblems)
             if (placement.setsLength && stored != null) fixedLengthRefusal(stored.typeKey)?.let { rowProblems += it }
@@ -1179,9 +1206,19 @@ class SetupTools(
             if (rowProblems.isEmpty()) parsed += Triple(stored!!.id, placement, focusWrite!!)
             else problems += rowProblems.map { "placements[$index] ('$key'): $it" }
         }
+        val venuePlacements = if (venueRows.isEmpty()) emptyList() else transaction(state.database) {
+            val show = DaoProject[project.id]
+            venueRows.mapNotNull { (index, key, row) ->
+                venueFixtures.resolvePlacement(show, key, row, "placements[$index] ('$key')", problems)
+            }
+        }
         if (problems.isNotEmpty()) return rejected(problems)
 
         val gels = transaction(state.database) {
+            val show = DaoProject[project.id]
+            for (v in venuePlacements) {
+                for (value in v.values) ShowOverrides.put(show, ShowOverrides.target(show, v.patchId), value.facet, value)
+            }
             parsed.map { (patchId, placement, focusWrite) ->
                 val patch = DaoFixturePatch.findById(patchId)!!
                 placement.applyTo(patch, focusWrite)
@@ -1199,9 +1236,17 @@ class SetupTools(
             for ((key, metadata) in gels) {
                 state.show.fixtures.setPatchMetadata(key, metadata)
             }
+            // A venue fixture's media is its facet's, which the loader lays over the venue's row.
+            if (venuePlacements.any { it.reloads }) {
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+            }
         }
         state.show.fixtures.patchListChanged()
-        return success("Placed ${parsed.size} fixture(s)", buildJsonObject { put("placed", parsed.size) })
+        val placed = parsed.size + venuePlacements.size
+        return success("Placed $placed fixture(s)", buildJsonObject {
+            put("placed", placed)
+            if (venuePlacements.isNotEmpty()) putJsonArray("venueFixtures") { venuePlacements.forEach { add(it.key) } }
+        })
     }
 
     // ─── Stage ──────────────────────────────────────────────────────────

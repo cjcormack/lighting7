@@ -398,7 +398,8 @@ prompt-book markup from a script and lighting notes.
 | `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, a painted element's `paintImages` (each face's `{width, height, hasAlpha}`, or *missing on this machine*), a model's `modelSize` (its parts' bounds, before the fit), and the built-in viewpoints. The read-only extras (`seats`, `seatedEye`, `note`, `paintImages`, `owner`, `modelSize`) are ignored when a row is resent. It names the `project`; a show on a venue gets `venue: {id, name, version, installed, behind, hiddenElements?, note}` (`venueDto`, the Projects list's own read), a venue that its rows are its draft. Read-only |
 | `upload_scene_image` | An image to paint on a cloth (scrim plan D11): `{mediaType: image/png \| image/jpeg, base64}` (a pasted `data:` URL's prefix is ignored) into the current project's scene-image store (or `projectId`'s), answering what the REST upload answers — `hash`, `width`, `height`, `hasAlpha`, `mediaType`, plus `projectId` and `scope: "project"`: the store is per project, and the note says so and that `copy_to_project` carries an element's images — through the same `SceneImageStore.store`, so it refuses what the route refuses (the type, a body that is not what it says, more than 8192 px a side read from the header first). Capped at **16 MB decoded**, below the route's 25: the base64 length is checked before anything is decoded, and a bigger image goes in through the element's sheet on the desk. Then `set_scene` names the hash in a `DRAPE`'s or `FLAT`'s `params.paint {front, back}`, with a drape's `fabric`, or in a `MODEL` part's `texture.image`; the schema's DRAPE, FLAT and MODEL lines say so. Stored data only, so **no remote-access gate**, as `set_scene` has none: an image does nothing until an element names it, and an unnamed one is pruned after a week. No fetch by URL (D11) |
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`; `workLights` `true` to lift the dark and check geometry (default `false`, the room as lit). Read-only. `ai/RenderViewTool.kt` |
-| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set |
+| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set. On a show on a venue, a venue fixture's row writes through the facets the show owns (§"Tools on a show on a venue") |
+| `override_venue_fixtures` | A show's venue fixtures by key: each facet `SHOW` / `VENUE` / `KEEP_MINE`, an `address` override, and `hidden`; `dryRun`. The fixture sheet's switches (§"Tools on a show on a venue") |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
@@ -504,7 +505,7 @@ head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 ### Another project than the live one
 
 The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
-`patch_fixtures`, `delete_groups`, `set_stage`, `place_fixtures`, `set_scene`, `get_scene`,
+`patch_fixtures`, `delete_groups`, `set_stage`, `place_fixtures`, `override_venue_fixtures`, `set_scene`, `get_scene`,
 `upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, and the
 show-running `set_scenery` — so a show can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
@@ -555,24 +556,49 @@ not found.
 When the live project is a show **on a venue** (venue plan session 3), its rig is its own rows plus
 the pinned version's (`RigScope`), and the venue's records are the venue's. The setup tools refuse a
 write to one, every problem at once and before anything is written, with `VENUE_OWNED`: the problem
-line leads with the code, the result carries `"code": "VENUE_OWNED"`, and the message names the two
-changes a show can make — hiding (the operator's, on the Patch list or `PUT …/hidden`) and a facet
-override, naming its route (`PUT …/patches/{id}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}`). **No setup
-tool writes a facet** (session 5's decision): an override is a per-show decision taken whole, with a
-base recorded for drift, which the operator makes in the fixture sheet's *This show* or through the
-REST route; the tools keep refusing with `VENUE_OWNED` and say where it is done. The writes it covers,
-by tool:
+line leads with the code, the result carries `"code": "VENUE_OWNED"`, and the message
+(`VenueRigGuard.ownedProblem`, which names tools where the REST refusal names routes) says to edit
+the venue to change it for every show; on a fixture it also names the two changes a show can make —
+hide it, or make a facet its own — and the tool for both (`VENUE_FIXTURE_HINT`).
+The writes it covers, by tool:
 
 - `patch_fixtures` — a row whose key is a venue patch's (upsert by key would change the venue's
   row; hide it and patch your own under the key), and a `groups` entry naming a venue group (a
   venue's group never holds a show's fixture, D12);
-- `place_fixtures` — a venue patch's key (re-hanging one per show is a Position facet override);
+- `place_fixtures` — a venue patch's `kind` or `stageHidden`, and any field of a facet the show
+  does not own (below);
 - `delete_groups` — a venue group;
 - `set_stage` — the stage's size (the venue's), and a region or rigging set or removed by a venue
   record's name;
 - `set_scene` — an element or viewpoint set or removed by a venue record's name, the
   `proscenium-hall` template's rows included — except a row of only `{name, hidden}`, which hides a
   venue element for the show's run or brings it back (the table above).
+
+**`override_venue_fixtures`** (`ai/VenueFixtureTools.kt`) is the fixture sheet's *Venue | This show*
+switch, *Keep mine* and *Hide in this show*, per venue fixture by key — a hidden one included, so it
+can come back. `facets: {FOCUS: SHOW}` makes a facet the show's **whole**, its first value the
+venue's (`venueFacetOf`), so turning it on changes nothing drawn or sent and the override's base is
+recorded for drift exactly as the sheet's switch records it; one already the show's keeps its value.
+`VENUE` drops the override (also *Take venue's* on a drifted one), `KEEP_MINE` answers drift.
+`address: {universe, subnet?, startChannel}` re-addresses the unit in this show (it implies
+`ADDRESS: SHOW`), checked by the facet route's own `parseFacet`, an overlap answered in `warnings`
+(P8). `hidden` goes through `ShowHides`, so `VENUE_HIDE_IN_USE` names what still holds it. A row
+lands in the order the sheet allows — shown again, then its facets, then hidden — and the whole call
+is one transaction, rolled back on any problem or for a `dryRun`, which still answers each fixture's
+resulting `overrides`. An Address, Media or hide change reloads the live rig, as the REST routes do.
+
+**`place_fixtures` then edits what the show owns.** A row naming a venue fixture is split by facet —
+rigging and the offsets, angles and length are Position; the lantern, its focus fields and
+`beamAngleDeg` are Focus; `gelCode` and `media` are Media — and each facet it touches must already
+be the show's (else `VENUE_OWNED`, naming the `override_venue_fixtures` call that would make it so).
+The sent fields are laid over the show's stored value, so a row changes only what it sends, and the
+merged value goes through `parseFacet`, so a tool write is refused for exactly what the sheet's save
+would be. A Focus write that sends no zoom drops a stored zoom its lantern cannot take — the
+patch's and each lantern's — because the facet is checked whole and one stale zoom would otherwise
+refuse every edit. `alsoAt` addresses the venue's lanterns in `get_patch`'s order, one entry each
+(`{}` leaves one alone): a lantern's count and label are the venue's identity, so a show cannot add,
+remove or relabel one, and each entry changes only the fields it sends — unlike an own fixture's
+`alsoAt`, which replaces the list.
 
 A show's own records are written as before, and a hidden venue record is not in the rig, so its key
 or name is free. **`describe_rig` says whose each record is**: a *Venue* section naming the venue
@@ -584,8 +610,8 @@ section, and `get_patch` a `venue.held` sentence (session 7): the show composes 
 controller sends zero, so without it a model reads `apply_cue` as working while the rig stays dark.
 Every field either tool shows is the effective one — a fixture's address, position, lantern and media
 as the show's overrides leave them. `get_patch` carries `venue: {name, version, note}`, `owner` on
-every fixture, universe, rigging and region, and `overrides: [{facet, drifted?, dormant?}]` on an overridden
-venue fixture, and
+every fixture, universe, rigging and region, `overrides: [{facet, drifted?, dormant?}]` on an overridden
+venue fixture, `venue.hiddenFixtures: [{key, name}]` for the venue fixtures the show hides, and
 `get_scene` `owner` on every element and viewpoint; the stage size both answer is the venue's. A
 standalone show's answers are unchanged. `VenueException` is caught in `SetupTools.executeTool` and
 answered with its code, so a rule thrown below a tool reaches the model as the same refusal REST

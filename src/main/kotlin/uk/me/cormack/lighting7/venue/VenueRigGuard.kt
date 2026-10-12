@@ -70,10 +70,21 @@ object VenueRigGuard {
 
     /**
      * [venueOwned] as one problem line for a surface that lists every problem at once (MCP's setup
-     * tools), led by its code so a model can key on it.
+     * tools), led by its code so a model can key on it. It names tools rather than routes: [hint] says
+     * what a show can do instead for this kind of record — [VENUE_FIXTURE_HINT] for a fixture.
      */
-    fun ownedProblem(scope: RigScope, what: String): String =
-        "$CODE_VENUE_OWNED: ${venueOwned(scope, what).message}"
+    fun ownedProblem(scope: RigScope, what: String, hint: String = ""): String {
+        val venue = scope.venue
+        val whose = if (venue == null) "the venue's" else "the venue's (${venue.venueName} v${venue.version})"
+        return "$CODE_VENUE_OWNED: $what is $whose, so this show cannot change it.$hint To change it for every show, " +
+            "edit the venue (projectId = the venue's id) and publish_venue."
+    }
+
+    /** [ownedProblem]'s hint for a venue fixture: what a show may change about one, and with which tool. */
+    const val VENUE_FIXTURE_HINT =
+        " A show can make a venue fixture's address, position, focus or media its own, or hide it, with " +
+            "override_venue_fixtures (place_fixtures then edits the position, focus and media it owns); its name, " +
+            "key, type, head and kind are the venue's."
 
     /** The code a list of problems carries when any is a venue rule's, for the tool's `code` field. */
     fun codeOf(problems: List<String>): String? =
