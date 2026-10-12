@@ -15,6 +15,12 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-S7`](#fu-manual-venue-s7) | the panto is created from the Projects page on the hall with the stalls preset, and a detached copy of a show outputs exactly what it did on the venue | Venue S7, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) | a show behind its venue on output opens held — the rig at zero, park included, while the Stage view draws — *Run against* drives the old patch with the cannon's channels idle, and Update clears the hold — on a trial venue, since it publishes | Venue S6, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S5`](#fu-manual-venue-s5) | a show re-hangs a mover and re-gels a unit as its own, touching neither the venue's draft nor any other show, and the venue's later change to the same facet shows as drift — on a trial venue, since it publishes | Venue S5, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S4`](#fu-manual-venue-s4) | project 9 is extracted into the Commemoration Hall for real, the hall's repo carries `v1`, `v2` as tags, and a cloud session imports the venue and then the show | Venue S4, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) | Extract on a clone of project 9 outputs the same channels on the same nodes as project 9, and a show's hide and key rules hold on the hall's rig | Venue S3, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S1`](#fu-manual-venue-s1) | project 9 loads, patches, focuses and syncs as it did before the rig scope — the check to run before anything is extracted | Venue S1, 2026-10-11 |
 | [`FU-MANUAL-SCRIM-ESTIMATES`](#fu-manual-scrim-estimates) | the scrim plan's estimates read right on the desk's own GPU — the nets' thread share, the threads' wrap and glow and muslin's τ, judged by eye on SwiftShader and kept — and a far-side seat flags a gauze where the centre seat does not | Scrim S6, 2026-10-10 |
 | [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update template, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
@@ -78,6 +84,235 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-S7`
+
+**What it proves**: *a second show in the hall starts from the Projects page, and a show can leave
+its venue without its output moving* — venue plan session 7 (`174e5a1`): the Venues row, Create's
+venue picker and stalls preset (D6), *Replace from preset*, and Detach (D9), which writes the
+effective rig at the pin into the show's own rows with every uuid kept.
+
+**Why it is here**: the plan's §9 check for session 7
+([`venue-plan.md`](completed/venue-plan.md) §9). PR #110 drove the API and the UI with Playwright
+against a seeded desk at 1280 px and 390 px, and `VenueDetachTest` loads a detached show and finds
+the same fixtures; the hall's own stalls and a detached show's light on the rig are the desk's. Run
+it after [`FU-MANUAL-VENUE-S4`](#fu-manual-venue-s4), on the real hall.
+
+**Test**, on the desk, signed in as an admin, after the real extraction:
+
+1. **The Projects page.** The Venues row carries the Commemoration Hall's card (its installed
+   version, patches, universes, the shows on it); project 9's card wears the venue badge.
+2. **Create the panto.** *Create Project*, venue *Commemoration Hall* (the picker names the installed
+   version), stalls preset the hall's stalls layout. Open it: the Stage view draws the hall's rig,
+   the Fixed balcony and the panto's own copy of the stalls; Project Settings › Stage lists that copy
+   as the show's.
+3. **Replace from preset.** Save a seat view in the panto's stalls, then *Replace from preset* on
+   Project Settings › Stage: the stalls are a fresh copy and the seat view still sits in it.
+4. **Detach a copy.** Clone project 9 and choose *Detach from venue…* on the clone's card (the
+   confirm says how far behind it is, if it is). Make the clone current: on the DMX sheet and the nodes, every
+   channel it drives is the channel project 9 drives, at the same level, for the same cue — a GO
+   through the first few cues of a stack is enough. The Patch list shows every fixture as *This
+   show*, the venue chip is gone, and the hall's History still lists project 9 but not the clone.
+5. **Clean up.** Make project 9 current again (a card's *Delete* is disabled on the current
+   project), then delete the clone and, if wanted, the panto.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+20 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-S6`
+
+**What it proves**: *a show the hall has moved on from cannot drive the new patch by accident* —
+venue plan session 6 (`c7fe1e7`): behind is judged per show, a show behind on output opens held
+(`dmx/OutputHold.kt`, every controller sending zero **above park**), *Run against* lifts the hold for
+this desk run with the installed version's trigger and command channels kept idle, and Update moves
+the pin and clears the hold.
+
+**Why it is here**: the plan's §9 check for session 6
+([`venue-plan.md`](completed/venue-plan.md) §9). PR #109 drove the held banner → *Run against* →
+review → Update in Chromium, and `OutputHoldTest` / `VenueHoldTest` assert zeros on the wire with a
+park set and the reserved trigger channel idle — but a real node's output and the Twin Shot's channels
+are the rig's.
+
+**It runs on a trial venue, never the Commemoration Hall.** Its re-patch is a published version, and
+versions are permanent: on the real hall it would leave project 9 opening held, and with the hall's
+repo attached push the test as a tag. So it uses the trial [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3)
+step 1 makes — a standalone copy of project 9 (before the real extraction a clone, after it a clone
+taken through *Detach from venue…*) extracted into *Trial hall*, with no repo attached — and one trial
+serves this check and [`FU-MANUAL-VENUE-S5`](#fu-manual-venue-s5) run back to back.
+
+**Test**, on the desk as an admin, with that trial in place, the DMX sheet open and **no tubes loaded
+in the cannon**:
+
+1. **Publish a re-patch.** In *Trial hall*'s draft, re-address one dimmer and the Twin Shot, and
+   publish. History's diff names both as output changes.
+2. **Open the older show.** Make the trial copy of project 9 current: it opens held. The banner says
+   so, the header chip reads *Blind · venue*, and every channel on every node reads zero — park one
+   channel at full: it stays at zero on the wire. The Stage view still draws the show, and a GO moves the drawing but
+   not the rig. Arm and fire are refused (`VENUE_HOLD`).
+3. **Run against.** *Run against vN…* lists the moved addresses; confirm. The rig plays the show on its
+   **old** patch (the dimmer at its old address), and the cannon's channels at the installed
+   version's addresses stay idle on the DMX sheet whatever a cue does; arm and fire are still refused.
+4. **Update.** *Review update* on the banner (or *Update venue to vN…* on the show's card): the
+   review lists the re-addressed dimmer under the hall's changes. Update: the hold is gone, the
+   dimmer answers at its new address, and the card's version matches the installed one.
+5. **Clean up.** Make project 9 current (a card's *Delete* is disabled on the current project), then
+   delete the trial's shows and *Trial hall* — it refuses with `VENUE_IN_USE` while a show pins it.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+20 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-S5`
+
+**What it proves**: *a show makes a venue patch's facets its own without touching the hall* — venue
+plan session 5 (`45afbef`): Address, Position, Focus and Media overrides (`show_overrides`), each
+whole, laid over the pinned version by `RigScope.effective`, with drift when the hall later moves
+the same facet.
+
+**Why it is here**: the plan's §9 check for session 5
+([`venue-plan.md`](completed/venue-plan.md) §9). PR #108 checked the facet cards, the chips and
+*Keep mine* / *Take venue's* in headless Chromium on a seeded desk; that the venue's draft and every
+other show on it stay untouched is the desk's. One correction to §9's wording: drift needs the venue
+to change a facet the **show** overrides, so the panto's re-gel and the venue's must be on the same
+unit's Media (step 4), not the venue re-gelling the mover the panto only moved.
+
+**It runs on a trial venue, never the Commemoration Hall**, for
+[`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6)'s reason: step 4 publishes a version, and versions are
+permanent. The panto's own facets on the real hall are show work, not this check.
+
+**Test**, on the desk as an admin:
+
+1. **The trial.** [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) step 1's trial — a standalone copy of
+   project 9 extracted into *Trial hall*, no repo attached — plus *Create Project* on *Trial hall*,
+   named *Trial panto*. One trial serves this check and S6.
+2. **Position.** In *Trial panto*, open a mover's sheet and switch Position to *This show*; hang it on
+   a boom. The Patch list's chip lights. *Trial hall*'s draft count is unchanged, and the trial copy of
+   project 9 still draws the mover where it was.
+3. **Media.** In *Trial panto*, switch a generic's Media to *This show* and fit a different gel.
+4. **Drift.** In *Trial hall*'s draft, re-gel that generic differently and publish. Open *Trial
+   panto*: it is behind on drawing only (a banner, output live). *Review update* on the banner (or
+   *Update venue to vN…* on its card), then Update: the generic's Media chip is amber with the drift
+   note. *Keep mine* clears the note and the panto's gel stays; *Revert to venue* then puts the
+   hall's gel back and the chip goes out.
+5. **Clean up**, unless S6 follows: as [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) step 5.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+20 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-S4`
+
+**What it proves**: *the Commemoration Hall leaves project 9 and travels as its own repo* — venue plan
+session 4 (`39459ee`): `formatVersion` 24, the venue repo of tagged versions (`sync/VenueRepoSync.kt`),
+`VENUE_MISSING` for a show whose pinned version a desk lacks, and `scripts/cloud-session.sh`
+importing venue repos before the shows that pin them.
+
+**Why it is here**: the plan's §9 check for session 4 ([`venue-plan.md`](completed/venue-plan.md) §9,
+§6's P6). PR #107's live check published v1–v3 through a **bare** repo on a container desk: a second
+desk's v4 made Publish answer `VENUE_VERSION_TAKEN`, a pull-only desk refused Publish, and
+`VENUE_MISSING` answered for an absent version and for an absent venue. The hall's real GitHub repo,
+the real extraction and a cloud session importing them are open. PR #107's description
+carries the step-by-step runbook this follows. Run it after
+[`FU-MANUAL-VENUE-S1`](#fu-manual-venue-s1) and [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3).
+
+**Test**, on the desk, as an admin:
+
+1. **Before extracting.** Every desk that syncs project 9 runs this build (it will push v24 archives,
+   which a v23 desk refuses). Make the balcony seating Fixed — the element form offers *Block* only in
+   a venue, so set `params.block` to `FIXED` through `set_scene` or the element `PUT`; the stalls stay
+   Preset. Make [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data)'s data fixes now if they are
+   still open: after the extract they are venue edits, made in the draft and published.
+2. **Extract.** *Extract a venue…* from project 9's menu, named *Commemoration Hall*; read the dry
+   run's list, then extract. Project 9's card wears the badge; its output is unchanged on the nodes
+   (as in [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) step 2).
+3. **The repo.** Create the hall's repo (e.g. `cjcormack/lighting7-commemoration-hall`), attach it on
+   the venue's Sync tab and *Sync now*: GitHub shows tag `v1` and `venueVersion.json`. Make a small
+   drawing change in the draft and publish v2: the repo gains `v2: <note>` and tag `v2`. Sync project
+   9 as usual; its `project.json` names `venueUuid`, `venueVersion` and the repo.
+4. **A cloud session.** Start one with both repos attached and run `scripts/cloud-session.sh` with the
+   show's repo named first and the hall's second: the script imports the hall first, then project 9,
+   and project 9 loads the hall's rig at its pin. Importing the show alone on a fresh desk answers
+   `VENUE_MISSING`, naming the hall and its repo.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+45 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-S3`
+
+**What it proves**: *Extract moves the hall's rig into a venue without moving a single channel* —
+venue plan session 3 (`59b2263`): `venue/VenueExtract.kt` moves the rig with every uuid kept, publishes
+v1 and pins the show; the effective rig is the show's own rows plus the pinned version's, less its
+hides; keys and names are one namespace.
+
+**Why it is here**: the plan's §9 check for session 3 ([`venue-plan.md`](completed/venue-plan.md) §9,
+P6: on a clone first). PR #106 extracted a seeded show into a *Commemoration Hall* in Chromium and with
+curl — the hide and its return, `KEY_TAKEN_BY_VENUE` and `VENUE_OWNED` were seen there — and its
+test compares the loaded rig before and after Extract; output on the real nodes from project 9's rig
+is the desk's. Session 7 added the UI, so this no longer needs `/openapi`. Run it before
+[`FU-MANUAL-VENUE-S4`](#fu-manual-venue-s4)'s real extraction.
+
+**Test**, on the desk, as an admin (project 9 is *The Commemoration Hall* — see
+[`FU-MANUAL-VENUE-S1`](#fu-manual-venue-s1)):
+
+1. **Extract a clone.** Clone project 9; on the clone's card, *Extract a venue…* named *Trial hall*.
+   Read the dry run (universes, patches, riggings, the seating it moves or copies), then extract.
+2. **Same output.** With project 9 current, note every channel on every node for its base look and two
+   or three cues; switch to the clone and GO the same cues: the same channels, at the same levels, on
+   the same nodes.
+3. **Hide.** In the clone's Patch list, open a venue dimmer's sheet and press *Hide in this show*: it
+   leaves the rig and the Stage view; *Show in this show*, on its row in the hidden list under the
+   Patch list, brings it back.
+4. **Key clash.** Patch a fixture of the clone's own on a venue universe; give it a venue fixture's
+   key: refused (`KEY_TAKEN_BY_VENUE`). Hide that venue fixture and the key is allowed.
+5. **Clean up**, unless [`FU-MANUAL-VENUE-S5`](#fu-manual-venue-s5) or
+   [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) follows on this trial. Make project 9 current (a
+   card's *Delete* is disabled on the current project), delete the clone, then the trial venue
+   (refused with `VENUE_IN_USE` while the clone pins it).
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+30 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-S1`
+
+**What it proves**: *the rig scope changed nothing for a standalone show* — venue plan session 1
+(`a5f289b`) moved every project-scoped rig query (78 sites) behind `RigScope` and registered the
+twelve links into venue-ownable tables in `VenueLinks`, as a pure refactor.
+
+**Why it is here**: the plan's §9 check for session 1 ([`venue-plan.md`](completed/venue-plan.md) §9).
+`RigScopeEquivalenceTest` proves the queries equal across `RichProjectFixture`; project 9 itself was
+never run. Run it **before** [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) and
+[`FU-MANUAL-VENUE-S4`](#fu-manual-venue-s4), while project 9 is still standalone.
+
+The plan and its design record call the hall project 9 (*The Commemoration Hall*); several optics
+entries below run "in project 15". Go by the name on the desk.
+
+**Test**, on the desk with project 9 current:
+
+1. **Loads.** The Patch list, the Stage view and `describe_rig` list every fixture, rigging, region and
+   seating block they did; the nodes carry the same base look.
+2. **Patches.** Add a fixture, move one to another rigging, delete the one added: each lands where it
+   says, and a clashing key or head number is refused as before.
+3. **Focuses.** *Aim at point* and *Focus here* on a Revolution behave as before.
+4. **Syncs.** *Sync now* on project 9 pushes and pulls cleanly, with no changes it did not make.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+15 minutes.
 
 ---
 
@@ -2360,3 +2595,4 @@ file's git history if one is ever needed again.
 | `FU-MANUAL-MIDI-COLOUR-AXES` | 2026-09-07 | run by the user on the restarted desk the day it was staged, X-Touch over the Freedom Par Hex in project 6, and reported passing; the fine trim's end-of-travel flip (one colour reading as fine 0 or 127) is the documented limit, in `PropertyChannelResolver`'s KDoc |
 | `FU-MANUAL-DESK-SPACE` | 2026-09-10 | checks 1–4 pass in Safari/WebKit on a desk and a real iPhone — the rail overlays and remembers its width, the two apply gestures work and selection reads white against blue ownership, and the landscape phone shows six whole fixture rows (first fixture `y` 175.5 in WebKit against 169 in Chromium). Check 3's touch gestures and check 5's Blind both fail: the marquee has no touch story, ⌥-press has no touch equivalent, and Blind must be togglable on the programmer. Check 3's GO half has no subject — session 5 left this view with no `ShowBar`. None of §7's four follow-ups was asked for. Per-check results in `completed/programmer-space-plan.md` §6; the seventeen findings are in `completed/programmer-desk-findings.md` |
 | `FU-MANUAL-DESK-FINDINGS` | 2026-09-11 | marked manually tested by the operator rather than staged as a check of its own. Covers the whole of [`completed/programmer-desk-findings.md`](completed/programmer-desk-findings.md) — the touch group on a real phone (a finger pans, a held one marquees, the template chip's hold tracks, the bar folds to its chips — `10b0c7c`), Blind as the programmer action bar's control with the three barred views reporting it (`a46fe1e`), the summoned speed-master panel (`80714da`), the two cell editors (`ec70f32`), the rail's sheet (`86a18fa`), one Record (`3ebaa8e`), the multi-head template cell (`813eb54`, `10b4d90`) and the two truncation fixes (`7b33420`, `fe36ee6`). There is no per-check record: the finding entries in that document are the account of what each change was, and the one successor is `FU-LOOK-ELEMENT-ROWS` |
+| `FU-MANUAL-VENUE-S2` | 2026-10-11 | venue plan session 2's §9 check (`d93e174`), run whole in PR #105's review on a cloud desk (`scripts/cloud-session.sh`), in Chromium as an admin and as an operator: *Add venue* made an empty venue; patching into it and publishing v1 and v2 listed both in History, and Compare named the change; an operator saw the venue read-only, with no draft count, History or Publish. It needs no rig, so it was not re-run at the desk |

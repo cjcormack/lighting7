@@ -2,8 +2,9 @@ import type { VenueHoldState } from '../api/venueHoldApi'
 import type { ProjectVenue } from '../api/projectApi'
 
 /**
- * A show that is behind its venue, in words (venue plan §3.1, P5, D7, session 6; the board is lighting7
- * `docs/plans/venue-design/Update.dc.html`). Pure, so the copy is pinned by `venueHold.test.ts`.
+ * A show that is behind its venue, in words (venue plan §3.1, P5, D7, session 6; the board is
+ * lighting7 `docs/plans/completed/venue-design/Update.dc.html`). Pure, so the copy is pinned by
+ * `venueHold.test.ts`.
  *
  * - **held** — the live show is behind on output: every controller sends zero, the chip says *Blind ·
  *   venue*, and the banner offers *Review update* and *Run against vN…*.

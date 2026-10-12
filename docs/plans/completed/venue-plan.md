@@ -1,10 +1,16 @@
 # Venues and shows — a versioned venue under each show
 
-> **Document status: APPROVED — sessions 1–7 shipped, as `a5f289b`, `d93e174`, `59b2263`, `39459ee`, `45afbef`, `c7fe1e7` and `174e5a1` (2026-10-11).** Scope agreed with Chris, 2026-10-10, over three
+> **Document status: COMPLETE, 2026-10-12 — all seven sessions shipped (`a5f289b`, `d93e174`, `59b2263`, `39459ee`, `45afbef`, `c7fe1e7`, `174e5a1`).** Scope agreed with Chris, 2026-10-10, over three
 > rounds of questions (the answers are in §10 and in the design record). The boards and the
 > survey are in [`venue-design/INDEX.md`](venue-design/INDEX.md). A one-page copy for human readers
 > is [`venue-design/venue.html`](venue-design/venue.html), with a live copy at
 > <https://claude.ai/artifact/LxMaLSktSQa73AkoXQzUvh> (the checked-in file is the authority).
+>
+> The plan and its design record moved to `completed/` together in the close-out (`a2eec6c`).
+> §8's follow-ups are in [`../followups.md`](../followups.md), with `FU-VENUE-UPDATE-BINDINGS` from
+> session 6 beside them and `FU-STAGE-VENUE-SHARED` in Completed. §9's desk checks are in
+> [`../manual-validation.md`](../manual-validation.md), one per session: `FU-MANUAL-VENUE-S1` and
+> `-S3` to `-S7` outstanding, and `-S2` validated in PR #105's review.
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins on
 > behaviour and the boards on layout and copy. It disagrees once, on purpose: P3 replaces the
@@ -499,7 +505,7 @@ engineering-doc paragraphs written, and its done-marker here, inside its own PR:
 
 ## 8. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-VENUE-TOURING`: a show moving venue by mapping its keys, gated on a show playing a second
   venue (session 7).
