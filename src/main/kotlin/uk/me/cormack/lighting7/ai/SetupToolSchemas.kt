@@ -551,7 +551,8 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
     prop("fadeCurve", "string", "LINEAR (default), SINE_IN_OUT, CUBIC_IN_OUT, … — an EasingCurve name.")
     prop("followSeconds", "number", "Auto-follow: the stack fires the next cue this many seconds after this one fires.")
     prop("marker", "boolean", "A section divider ('Act 1', 'Interval') rather than a cue: name is its label; GO skips it.")
-    arrayProp("layers", cueLayerSchema, "Looks this cue applies, with their targets — the same shape as create_cue's layers.")
+    arrayProp("layers", cueLayerSchema, "Looks or templates this cue applies, with their targets — the same shape as create_cue's layers.")
+    arrayProp("values", lookValueSchema, "The cue's own values, in create_look's values shape — $CUE_VALUES_NOTE Current project only: they are resolved against the live rig.")
     arrayProp("scenery", sceneryItemSchema(forCue = true), "Scene elements this cue moves on GO — the same shape as create_cue's scenery. $SCENERY_TRACKS_NOTE")
     arrayProp("events", cueEventItemSchema, "One-shot triggers this cue fires after GO — the same shape as create_cue's events. $CUE_EVENTS_NOTE")
     put("at", buildJsonObject {
@@ -565,7 +566,7 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
 internal val buildCueStackTool = ToolDef(
     name = "build_cue_stack",
     description = "Create a cue stack for a show — or append to one — with its cues in running order, from a prompt book and the designer's lighting notes. Each cue carries its number, name, notes, fade and follow times, optional look layers, and optionally the place in the prompt book it is called on. " +
-        "Cues can be created before their looks exist: put the intended state in notes, then program them later (record_cue with UPDATE_EXISTING, or create_cue-style layers). " +
+        "Cues can be created before their looks exist: put the intended state in notes, then program them later (record_cue with UPDATE_EXISTING, or create_cue-style layers and values). " +
         "Everything is validated before anything is written, and a numbered cue cannot be added twice, so a retry after an error is safe. Returns the new cue ids.",
     inputSchema = objectSchema(required = listOf("cues")) {
         prop("stackName", "string", "Name for a new stack (e.g. 'Act 1', or the show's name). Required unless stackId is given.")
@@ -573,7 +574,7 @@ internal val buildCueStackTool = ToolDef(
         prop("loop", "boolean", "New stack only: wrap to the first cue after the last. Default false.")
         arrayProp("scenery", sceneryItemSchema(forCue = false), "The stack's set: the states its elements hold while it is live, under its cues ('the Act 2 set appears with Act 2'). Replaces the stack's set when given.")
         arrayProp("cues", showCueSchema, "In running order.")
-        prop("projectId", "integer", "$PROJECT_ID_DESCRIPTION Cues built in a project that is not current cannot carry 'at': anchor them with mark_up_prompt_book once it is current.")
+        prop("projectId", "integer", "$PROJECT_ID_DESCRIPTION Cues built in a project that is not current cannot carry 'at' or 'values': anchor them with mark_up_prompt_book, and give values, once it is current.")
     },
 )
 

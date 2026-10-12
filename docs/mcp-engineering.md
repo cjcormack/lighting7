@@ -307,6 +307,28 @@ effect: `StaticValue` was removed once a Look could hold a value, and a stored e
 registry no longer has is skipped with a warn wherever a cue or Include spawns it
 (`EffectSpawner.createEffectInstanceOrNull`), not left to abort the GO.
 
+`update_look` edits a Look as the REST `PUT /looks/{id}` does: a new name (refused when another
+Look holds it) and notes, and each of `values`, `effects` and `scenery` given replaces that part
+whole while one left out is kept — the same resolve and checks as `create_look`, every part checked
+before anything is written. A values or effects change goes through `republishForLookEdit`, so every
+live cue layering the Look moves without a re-fire; a rename, notes or scenery fire
+`lookListChanged`, which the library and the live scenery read. Effects given to a Look that a cue
+layers with no targets are stored, as REST stores them, and each such cue is named under `warnings`:
+`create_cue` would refuse that layer now. `delete_look` is the REST delete
+itself (`performLookDelete`): refused with `LOOK_IN_USE` and the cues that layer it unless `force`,
+which deletes those layers, and the Look's busk pads, cue slots, scenery, programmer layers and
+include target go with it.
+
+A cue's **own values** — `create_cue`'s and each `build_cue_stack` cue's `values` — take
+`create_look`'s grammar and resolve the same way, stored as the cue's property assignments (a cell by
+its own key, as Record stores one). They beat every layer of the cue whatever its order. They are
+resolved against the loaded rig, so `build_cue_stack` refuses them in a project that is not current,
+as it refuses `at`. A cue **layer** names a Look or, with `templateId`, a template — exactly one. A
+layer naming a record the project lacks is refused by both tools (`layerSourceProblems`), where
+`createCueChildren` would drop it silently; a generic template (an effect template, or rows for
+whatever it is pointed at) with no layer targets is refused as the busk pad refuses it with nothing
+selected. An effect missing a required field is refused by the field's name.
+
 **The programmer** (`ai/ProgrammerTools.kt`). Five tools write it the way the desk does, each through
 the code the desk's own gesture goes through, on the current project:
 
@@ -400,7 +422,7 @@ prompt-book markup from a script and lighting notes.
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`; `workLights` `true` to lift the dark and check geometry (default `false`, the room as lit). Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
-| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or template layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
 
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
@@ -515,7 +537,7 @@ metadata cache **only for the current project** — loading another project's pa
 rig would replace the running show's fixtures. The broadcasts fire as REST fires them, whichever
 project changed. Two stay current-only by the REST routes' own rule: the prompt book
 (`mark_up_prompt_book` takes no `projectId`, and `build_cue_stack` refuses `at` in a project that is
-not current), and everything that drives output — looks, cues, the programmer, `render_view` — with
+not current — and a cue's `values`, which resolve against the loaded rig), and everything that drives output — looks, cues, the programmer, `render_view` — with
 `describe_rig`, which reads the loaded rig; `get_patch` is its reader for another project.
 
 **`copy_to_project`** (`VenueSetupTools.copyToProject`) copies scene elements by name, cue stacks by
