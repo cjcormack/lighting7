@@ -602,8 +602,8 @@ payload-free, since one project has one rig).
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
 | `templateListChanged` | — | A template was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
-| `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
-| `cueListChanged` | — | Cue CRUD |
+| `cuesRecomposed` | `cueIds` | A Look/template **contents** edit, or a forced Look delete that took their layers, changed what these cues compose to |
+| `cueListChanged` | — | Cue CRUD; also fired (with `cueStackListChanged`) when a forced Look delete took cue layers |
 | `cueStackListChanged` | — | Cue-stack CRUD, a stack's set, and any cue scenery write or element delete that swept scenery — the stack list carries every cue's own changes (`cues[].scenery`, scenery-programmer plan D13/D14) |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
 | `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a template / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
@@ -644,6 +644,9 @@ fired for a contents edit, because a client treats them as "drop every cached ex
 retune would be an invalidation storm. A retune does still change what the cues layering that record
 compose to, so it gets its own frame naming them — a handful of ids, at save cadence, refreshing
 exactly those reads.
+
+A forced Look delete fires it too, naming every cue whose layer the delete took (`republishForLookDelete`,
+the same body), alongside `cueListChanged` and `cueStackListChanged` because a layer count moved.
 
 Its ids are **every cue layering the edited record**, which is deliberately wider than the
 `cuesRepublished` field on the REST responses (`lookRepublish.kt`, `programmerRoutes.kt`,

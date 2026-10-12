@@ -71,6 +71,30 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
     )
 
 /**
+ * The *Delete anyway* counterpart: [lookUuid] is gone, and with it the cue layers that named it, so
+ * every cue in [layeringCueIds] — the cues those layers belonged to, collected in the delete's own
+ * transaction — composes differently now. Without this a live cue keeps transmitting the deleted
+ * Look's values until it is re-fired. Its *rows* only, as for an edit: effects the cue spawned from
+ * the Look at GO run until the cue stops, which is what an edit to a Look's effects does too.
+ *
+ * The same body as an edit, because it is the same event as far as a cue is concerned: its layer
+ * stack changed under it. Only the referencing query differs — the FK it searches no longer exists,
+ * so the delete hands over the set it already found. Call it *after* the programmer has released
+ * its layers naming the Look, so step 2 finds nothing to recook and the programmer is already right
+ * when the cue rows republish under it.
+ */
+internal fun republishForLookDelete(state: State, lookUuid: UUID, layeringCueIds: Set<Int>): LookRepublishOutcome =
+    republishForSourceEdit(
+        state,
+        lookUuid,
+        kind = "look",
+        verb = "deleted",
+        invalidate = { state.show.lookRegistry.invalidate(lookUuid) },
+        referencing = { activeCueIds -> layeringCueIds intersect activeCueIds },
+        allReferencing = { layeringCueIds },
+    )
+
+/**
  * The template counterpart, and the reason this body is shared rather than copied: retuning a
  * template has to move every cue layering it *and* the programmer's own stack, by exactly the same
  * four-step order, or the flicker step 2 exists to prevent comes back on one of the two paths.
@@ -98,6 +122,8 @@ private fun republishForSourceEdit(
     state: State,
     sourceUuid: UUID,
     kind: String,
+    /** What happened to the record, for the log line: an edit, or a forced delete. */
+    verb: String = "edited",
     invalidate: () -> Unit,
     referencing: (Set<Int>) -> Set<Int>,
     allReferencing: () -> Set<Int>,
@@ -181,9 +207,9 @@ private fun republishForSourceEdit(
     if (affected.isNotEmpty()) state.show.fixtures.cuesRecomposed(affected.toList())
 
     logger.info(
-        "{} {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished, " +
+        "{} {} {}: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished, " +
             "{} cue(s) announced stale",
-        kind, sourceUuid, programmerKeys.size, republished.size, scanned.size, affected.size,
+        kind, sourceUuid, verb, programmerKeys.size, republished.size, scanned.size, affected.size,
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = programmerKeys.size,

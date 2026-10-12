@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.UserRole
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.seedVenueReadyShow
 import java.util.UUID
@@ -170,6 +171,64 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
             assertTrue(DaoCueLayer.find { DaoCueLayers.cue eq cueId }.empty(), "the cue's layer went with it")
         }
         refused("delete_look", """{"lookId":$lookId}""", "Look not found")
+    }
+
+    @Test
+    fun `a forced delete_look takes the look off a live cue and announces the cues it changed`() {
+        patchRig()
+        val lookId = look("FOH 1", foh1("dmx:200"))
+        val otherId = look("FOH 2", """{"target":{"type":"fixture","key":"foh-2"},"propertyName":"dimmer","value":"dmx:120"}""")
+        val live = cue("""{"name":"Q1","layers":[{"lookId":$lookId},{"lookId":$otherId}]}""")
+        val dark = cue("""{"name":"Q2","layers":[{"lookId":$lookId}]}""")
+        val unrelated = cue("""{"name":"Q3","layers":[{"lookId":$otherId}]}""")
+        ok("apply_cue", """{"cueId":$live}""")
+        assertEquals(200, level(70))
+        assertEquals(120, level(71))
+
+        val recomposed = mutableListOf<List<Int>>()
+        var cueLists = 0
+        var stackLists = 0
+        val listener = object : FixturesChangeListener {
+            override fun cuesRecomposed(cueIds: List<Int>) { recomposed += cueIds }
+            override fun cueListChanged() { cueLists++ }
+            override fun cueStackListChanged() { stackLists++ }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            ok("delete_look", """{"lookId":$lookId,"force":true}""")
+            assertEquals(0, level(70), "the live cue no longer transmits the deleted look, without a re-fire")
+            assertEquals(120, level(71), "the live cue's other layer stays on stage")
+            assertEquals(setOf(live, dark), recomposed.single().toSet(), "live and dark cues that layered it")
+            assertTrue(unrelated !in recomposed.single())
+            assertTrue(cueLists > 0, "a cue lost a layer, so the cue list is announced")
+            assertTrue(stackLists > 0, "and so is the stack list, which carries each cue's layer count")
+
+            recomposed.clear()
+            cueLists = 0
+            stackLists = 0
+            ok("delete_look", """{"lookId":${look("Unused", foh1("dmx:10"))},"force":true}""")
+            assertTrue(recomposed.isEmpty(), "a look no cue layers recomposes nothing")
+            assertEquals(0, cueLists, "and changes no cue")
+            assertEquals(0, stackLists)
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+    }
+
+    @Test
+    fun `a forced delete_look empties a live cue it was the only layer of, and the cue still runs`() {
+        patchRig()
+        val lookId = look("FOH 1", foh1("dmx:200"))
+        val cueId = cue("""{"name":"Q1","layers":[{"lookId":$lookId}]}""")
+        ok("apply_cue", """{"cueId":$cueId}""")
+        assertEquals(200, level(70))
+
+        ok("delete_look", """{"lookId":$lookId,"force":true}""")
+        assertEquals(0, level(70), "the cue's only layer went, so it asserts nothing")
+
+        ok("apply_cue", """{"cueId":$cueId}""")
+        assertEquals(0, level(70), "re-firing the emptied cue lands nothing")
+        ok("stop_cue", """{"cueId":$cueId}""")
     }
 
     @Test
