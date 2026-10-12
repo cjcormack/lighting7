@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 
 /**
  * Venue plan session 3 over MCP: on a show on a venue the setup tools refuse every write to a venue
- * record with `VENUE_OWNED` — naming hiding and the facet route (session 5) as what a show can do —
+ * record with `VENUE_OWNED` — naming `override_venue_fixtures` as what a show can do instead —
  * while the show's own records stay writable; `describe_rig` and `get_patch` say whose each is.
  */
 class McpVenueToolsTest : RouteIntegrationTest() {
@@ -48,21 +48,22 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         }
     }
 
-    private fun assertVenueOwned(result: ToolExecutionResult) {
+    /** A refusal of a venue fixture also names the tool that overrides or hides one; any other record's does not. */
+    private fun assertVenueOwned(result: ToolExecutionResult, fixture: Boolean = false) {
         assertFalse(result.success, result.result)
         val json = result.json()
         assertEquals(VenueRigGuard.CODE_VENUE_OWNED, json["code"]?.jsonPrimitive?.content, result.result)
-        val text = result.result
-        assertTrue("hide" in text, "the refusal names hiding: $text")
-        assertTrue("/facets/" in text, "and names the facet route: $text")
+        assertTrue("publish_venue" in result.result, "the refusal names how the venue changes for every show: ${result.result}")
+        assertEquals(fixture, "override_venue_fixtures" in result.result, result.result)
     }
 
     @Test
     fun `the setup tools refuse every write to a venue record`() {
         liveShowOnVenue()
-        assertVenueOwned(call("patch_fixtures", """{"fixtures":[{"key":"hex-1","name":"Mine","fixtureTypeKey":"hex","universe":0,"startChannel":10}]}"""))
+        assertVenueOwned(call("patch_fixtures", """{"fixtures":[{"key":"hex-1","name":"Mine","fixtureTypeKey":"hex","universe":0,"startChannel":10}]}"""), fixture = true)
         assertVenueOwned(call("patch_fixtures", """{"fixtures":[{"key":"spot-9","name":"Spot","fixtureTypeKey":"uv","universe":2,"startChannel":1,"groups":["front-wash"]}]}"""))
-        assertVenueOwned(call("place_fixtures", """{"placements":[{"key":"hex-1","x":1.0}]}"""))
+        // Placing one needs its Position to be this show's first (McpVenueFixtureOverridesTest).
+        assertVenueOwned(call("place_fixtures", """{"placements":[{"key":"hex-1","x":1.0}]}"""), fixture = true)
         assertVenueOwned(call("delete_groups", """{"names":["front-wash"],"force":true}"""))
         assertVenueOwned(call("set_stage", """{"riggings":[{"name":"FOH Truss","y":-3.0}]}"""))
         assertVenueOwned(call("set_stage", """{"stage":{"widthM":4.0}}"""))

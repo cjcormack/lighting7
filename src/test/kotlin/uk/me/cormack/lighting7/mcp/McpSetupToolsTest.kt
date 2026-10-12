@@ -67,8 +67,8 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         val names = protocol.toolDefs.map { it.name }
         for (tool in listOf(
             "list_projects", "create_project", "switch_project", "list_fixture_types", "get_patch",
-            "patch_fixtures", "delete_groups", "set_stage", "place_fixtures", "get_prompt_book", "build_cue_stack",
-            "mark_up_prompt_book",
+            "patch_fixtures", "delete_groups", "set_stage", "place_fixtures", "override_venue_fixtures", "get_prompt_book",
+            "build_cue_stack", "mark_up_prompt_book",
         )) {
             assertTrue(tool in names, "$tool is offered")
         }

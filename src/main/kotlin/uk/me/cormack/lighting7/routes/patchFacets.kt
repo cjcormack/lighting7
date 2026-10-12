@@ -137,7 +137,7 @@ private fun announceFacetChange(state: State, projectId: Int, facet: PatchFacet,
  * (a show's universe and the version's may be different rows): an overlap is a decision, never refused
  * (venue plan P8), and the Patch list rings it as it rings any other.
  */
-private fun addressOverlaps(target: ShowOverrides.Target): List<String> {
+internal fun addressOverlaps(target: ShowOverrides.Target): List<String> {
     val rig = RigScope.of(target.rig.projectId)
     val all = rig.effective(rig.patches().toList())
     val self = all.firstOrNull { it.id == target.patch.id } ?: return emptyList()
