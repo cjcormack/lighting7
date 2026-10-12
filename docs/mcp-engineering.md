@@ -316,8 +316,9 @@ live cue layering the Look moves without a re-fire; a rename, notes or scenery f
 layers with no targets are stored, as REST stores them, and each such cue is named under `warnings`:
 `create_cue` would refuse that layer now. `delete_look` is the REST delete
 itself (`performLookDelete`): refused with `LOOK_IN_USE` and the cues that layer it unless `force`,
-which deletes those layers, and the Look's busk pads, cue slots, scenery, programmer layers and
-include target go with it.
+which deletes those layers — rebuilding a live cue that held one, so the Look's values leave the
+stage without a re-fire (effects the cue spawned from it run until the cue stops) — and the Look's busk pads, cue slots, scenery, programmer layers and include
+target go with it.
 
 A cue's **own values** — `create_cue`'s and each `build_cue_stack` cue's `values` — take
 `create_look`'s grammar and resolve the same way, stored as the cue's property assignments (a cell by

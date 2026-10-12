@@ -34,8 +34,9 @@ export function startLooksBridge() {
     // `Cue` for a related reason: creating, copying or deleting a Look changes what every cue
     // layering it composes to, and `projectCueCooked` — the read behind the read-only cue grid —
     // is tagged `Cue`. Affordable on the same CRUD-cadence grounds, and load-bearing on the delete
-    // path, which fires this signal without republishing. A Look *retune* is the other half and
-    // does not come through here: it rides the keyed `cuesRecomposed` frame instead.
+    // path, which fires only this signal unless it took cue layers (then `cuesRecomposed` too).
+    // A Look *retune* is the other half and does not come through here: it rides the keyed
+    // `cuesRecomposed` frame instead.
     //
     // `CueList` alongside it, the pairing every cue-affecting write in this repo uses: a cue's
     // entry in that list carries `layers[].source.name`, so a Look renamed elsewhere leaves the

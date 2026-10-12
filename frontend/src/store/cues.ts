@@ -61,7 +61,8 @@ export const cuesApi = restApi.injectEndpoints({
      * - **Another client's Look or template CRUD** — `lookListChanged` / `templateListChanged`
      *   carry `Cue` through the two bridges in `looks.ts` / `templates.ts`. Load-bearing on the
      *   delete path in particular: deleting a Look changes what every cue layering it composes to,
-     *   and that route fires the list signal without republishing.
+     *   and a delete that took no cue layers fires only the list signal. One that took some also
+     *   republishes and fires `cuesRecomposed`, `cueListChanged` and `cueStackListChanged`.
      * - **Another client's Look or template *retune*** — the `cuesRecomposed` frame, which names
      *   the affected cue ids. The CRUD signals deliberately don't fire for a contents edit (they
      *   drop every cached expansion, and a colour retune would be a storm), so this is its own

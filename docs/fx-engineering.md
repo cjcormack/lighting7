@@ -1504,7 +1504,12 @@ table. At apply time these are converted directly to `FxInstance`s tagged with t
 A Look cannot be deleted if any cue layer references it via `cue_layers` — a plain indexed FK query,
 where the named-palette era could only scan opaque `value` text. The Look detail API includes `layerCount`
 and the referencing cue names; the delete returns 409 with code `LOOK_IN_USE`, and `?force=true`
-deletes the layers with it.
+deletes the layers with it. A forced delete that took layers rebuilds the live cues that held them
+the way a Look edit does (`republishForLookDelete`, the same body as `republishForLookEdit` given the
+cue ids the delete collected before the rows went), so the Look's values leave the stage without a
+re-fire — its rows, as for an edit: effects the cue spawned from the Look at GO run until the cue
+stops; it announces those cues, live and dark, through `cuesRecomposed`, and fires `cueListChanged`
+and `cueStackListChanged`, whose layer counts moved.
 
 ### From-State Capture
 

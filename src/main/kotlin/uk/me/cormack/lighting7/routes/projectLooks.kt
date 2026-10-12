@@ -724,8 +724,18 @@ private sealed interface LookWriteOutcome {
 internal sealed interface LookDeleteOutcome {
     data object NotFound : LookDeleteOutcome
     data class InUse(val usage: LookUsage) : LookDeleteOutcome
-    /** The busk pages that lost a pad and whether any slot went, so the handler can say so. */
-    data class Deleted(val uuid: UUID, val name: String, val pageIds: Set<Int>, val slotsRemoved: Boolean) : LookDeleteOutcome
+    /**
+     * The busk pages that lost a pad and whether any slot went, so the handler can say so, and the
+     * cues whose layers a forced delete took with it — collected before the rows went, because
+     * afterwards nothing names the Look to find them by.
+     */
+    data class Deleted(
+        val uuid: UUID,
+        val name: String,
+        val pageIds: Set<Int>,
+        val slotsRemoved: Boolean,
+        val layeredCueIds: Set<Int>,
+    ) : LookDeleteOutcome
 }
 
 /**
@@ -744,7 +754,14 @@ internal fun performLookDelete(state: State, project: DaoProject, lookId: Int, f
         val name = look.name
         // No DB-level ON DELETE CASCADE — SQLite doesn't enforce cascades without a
         // per-connection pragma, so children go first, explicitly.
-        if (force) look.let { l -> DaoCueLayer.find { DaoCueLayers.look eq l.id }.forEach { it.delete() } }
+        val layeredCueIds = if (force) {
+            val layers = DaoCueLayer.find { DaoCueLayers.look eq look.id }.toList()
+            val cueIds = layers.map { it.cue.id.value }.toSet()
+            layers.forEach { it.delete() }
+            cueIds
+        } else {
+            emptySet()
+        }
         look.rows.forEach { it.delete() }
         look.effects.forEach { it.delete() }
         // Its busk pads and cue slots go with it, unconditionally — a place on a page or
@@ -753,7 +770,7 @@ internal fun performLookDelete(state: State, project: DaoProject, lookId: Int, f
         val slots = DaoCueSlots.deleteWhere { DaoCueSlots.look eq look.id }
         deleteLookScenery(look.id)
         look.delete()
-        LookDeleteOutcome.Deleted(uuid, name, pageIds, slots > 0)
+        LookDeleteOutcome.Deleted(uuid, name, pageIds, slots > 0, layeredCueIds)
     }
     if (outcome is LookDeleteOutcome.Deleted) {
         // Release the programmer layers naming it, as the template delete does. The
@@ -764,6 +781,16 @@ internal fun performLookDelete(state: State, project: DaoProject, lookId: Int, f
         // Keep the operator's include indicator honest — the same reason
         // `clearIncludeTargetForCue` is called on a cue delete.
         state.show.programmerStore.clearIncludeTargetForLook(lookId)
+        if (outcome.layeredCueIds.isNotEmpty()) {
+            // *Delete anyway* took cue layers with it. A live cue that layered the Look would
+            // otherwise keep transmitting its values until re-fired, so rebuild its rows the way a
+            // Look edit does (effects it spawned from the Look run until the cue stops, as for an edit) — after the release above, so the programmer is already right when
+            // the cue rows republish under it. Dark ones are announced through `cuesRecomposed`.
+            republishForLookDelete(state, outcome.uuid, outcome.layeredCueIds)
+            // A layer is part of the cue: its count, the cue table and the Prompt Book read it.
+            state.show.fixtures.cueListChanged()
+            state.show.fixtures.cueStackListChanged()
+        }
         state.show.fixtures.lookListChanged()
         if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
         if (outcome.slotsRemoved) state.show.fixtures.cueSlotListChanged()
