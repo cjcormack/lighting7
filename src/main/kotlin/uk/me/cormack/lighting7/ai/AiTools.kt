@@ -1055,27 +1055,31 @@ class AiTools(private val state: State) {
         val stackId = input["stackId"]?.jsonPrimitive?.intOrNull
         val lookId = input["lookId"]?.jsonPrimitive?.intOrNull
         if (listOfNotNull(cueId, stackId, lookId).size != 1) return errorResult("Give exactly one of cueId, stackId, lookId")
-        val project = state.projectManager.currentProject
+        val project = try {
+            state.toolProject(input).project
+        } catch (e: ToolProjectException) {
+            return errorResult(e.message ?: "No such project")
+        }
         val problems = mutableListOf<String>()
         val written = transaction(state.database) {
             val elements = sceneryElementsOf(project)
             when {
                 cueId != null -> {
                     val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
-                        ?: run { problems += "no cue $cueId in this project"; return@transaction null }
+                        ?: run { problems += "no cue $cueId in project ${project.id.value}"; return@transaction null }
                     if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never live, so it has no scenery"; return@transaction null }
                     val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.CUE, "scenery", problems)
                     if (problems.isNotEmpty()) null else { replaceCueScenery(cue, writes); "cue '${cue.name}'" to writes.size }
                 }
                 stackId != null -> {
                     val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id && it.type == CueStackType.STACK.name }
-                        ?: run { problems += "no cue stack $stackId in this project"; return@transaction null }
+                        ?: run { problems += "no cue stack $stackId in project ${project.id.value}"; return@transaction null }
                     val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.STACK, "scenery", problems)
                     if (problems.isNotEmpty()) null else { replaceStackScenery(stack, writes); "stack '${stack.name}'" to writes.size }
                 }
                 else -> {
                     val look = DaoLook.findById(lookId!!)?.takeIf { it.project.id == project.id }
-                        ?: run { problems += "no Look $lookId in this project"; return@transaction null }
+                        ?: run { problems += "no Look $lookId in project ${project.id.value}"; return@transaction null }
                     val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.LOOK, "scenery", problems)
                     if (problems.isNotEmpty()) null else { replaceLookScenery(look, writes); "Look '${look.name}'" to writes.size }
                 }
@@ -1206,7 +1210,7 @@ class AiTools(private val state: State) {
         val problems = mutableListOf<String>()
         val written = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
-                ?: run { problems += "no cue $cueId in this project"; return@transaction null }
+                ?: run { problems += "no cue $cueId in project ${project.id.value}"; return@transaction null }
             if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never gone to, so it fires nothing"; return@transaction null }
             val writes = parseToolCueEventList(items, cueEventPatchesOf(project), "events", problems)
             if (problems.isNotEmpty()) null else { replaceCueEvents(cue, writes); cue.name to writes.size }

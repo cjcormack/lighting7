@@ -860,6 +860,7 @@ internal val setSceneryTool = ToolDef(
             put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue whose scenery to set. Give exactly one of cueId, stackId, lookId.") })
             put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack whose set to set.") })
             put("lookId", buildJsonObject { put("type", "integer"); put("description", "The Look whose scenery to set.") })
+            put("projectId", buildJsonObject { put("type", "integer"); put("description", PROJECT_ID_DESCRIPTION) })
             put("scenery", buildJsonObject {
                 put("type", "array")
                 put("items", sceneryItemSchema(forCue = true))

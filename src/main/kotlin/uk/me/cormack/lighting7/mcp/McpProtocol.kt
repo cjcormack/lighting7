@@ -12,6 +12,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -25,6 +26,7 @@ import uk.me.cormack.lighting7.ai.ToolDef
 import uk.me.cormack.lighting7.ai.ToolImage
 import uk.me.cormack.lighting7.ai.readOnlySetupToolNames
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
+import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.UserRole
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -180,19 +182,25 @@ class McpProtocol(private val state: State) {
             return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
 
-        val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments)
+        val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName)
         else tools.executeTool(name, arguments)
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
     }
 
     /**
-     * Why [name] may not run on the live project when it is a venue, or null (venue plan D3, D11) —
-     * the tools' copy of the REST routes' rules, since a tool writes the live project with no route
-     * in between. Record and Update are off in a venue for everyone; any other stored write is an
-     * admin's. A venue version is never live, so it needs no rule here.
+     * Why [name] may not run on the project it writes when that is a venue, or null (venue plan D3,
+     * D11) — the tools' copy of the REST routes' rules, since a tool writes with no route in between.
+     * The project is the one a project-scoped tool names, else the live one. Record and Update are off
+     * in a venue for everyone; any other stored write is an admin's, and so are making and publishing
+     * a venue. A venue version is refused by the tools themselves, as absent.
      */
     private fun venueToolRefusal(name: String, arguments: JsonObject, user: AuthenticatedUser): String? {
-        val kind = transaction(state.database) { state.projectManager.currentProject.kind }
+        if (name in VENUE_ADMIN_TOOLS && user.role != UserRole.ADMIN) return "Only an admin can make or publish a venue."
+        val field = PROJECT_SCOPED_TOOLS[name]
+        val named = field?.let { (arguments[it] as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull }
+        val kind = transaction(state.database) {
+            if (named != null) DaoProject.findById(named)?.kind else state.projectManager.currentProject.kind
+        }
         if (kind != ProjectKind.VENUE) return null
         // `aim_fixtures` acts on the rig as it stands, unless it is told to keep the aims as a template.
         val storesTemplate = name == "aim_fixtures" &&
@@ -247,6 +255,18 @@ class McpProtocol(private val state: State) {
 
         private val READ_ONLY_TOOLS = setOf(DESCRIBE_RIG, "get_current_state") + readOnlySetupToolNames
 
+        /** Making and publishing a venue (venue plan D3): an admin's, as their REST routes are. */
+        private val VENUE_ADMIN_TOOLS = setOf("extract_venue", "publish_venue")
+
+        /**
+         * The tools that act on the project an argument names rather than the live one, by that
+         * argument. Any other tool's `projectId` is not read, so it cannot steer the guard.
+         */
+        private val PROJECT_SCOPED_TOOLS: Map<String, String> = listOf(
+            "get_patch", "patch_fixtures", "delete_groups", "set_stage", "set_scene", "get_scene", "upload_scene_image",
+            "place_fixtures", "get_prompt_book", "build_cue_stack", "delete_cue_stacks", "set_scenery",
+        ).associateWith { "projectId" } + ("copy_to_project" to "toProjectId")
+
         /** The programmer's Record and Update, off in a venue (venue plan D11). */
         private val VENUE_RECORD_TOOLS = setOf("record_cue", "update_from_programmer")
 
@@ -258,7 +278,7 @@ class McpProtocol(private val state: State) {
             "create_look", "create_speed_master", "park_channel", "unpark_channel", "create_cue",
             "create_cue_stack", "add_cue_to_stack", "create_template", "set_cue_events", "set_scenery",
             "patch_fixtures", "delete_groups", "set_stage", "set_scene", "upload_scene_image",
-            "place_fixtures", "build_cue_stack", "mark_up_prompt_book",
+            "place_fixtures", "build_cue_stack", "mark_up_prompt_book", "copy_to_project", "delete_cue_stacks",
         )
 
         /**
@@ -269,7 +289,8 @@ class McpProtocol(private val state: State) {
         private val SETUP_GUIDE = """
             ## Setting up a show from documents
             The operator may attach another console's patch export, a lighting plot, photos of the rig, a script and lighting notes. Read them yourself and pass the tools structured data; the one tool that takes a file is upload_scene_image, an image to paint on a cloth.
-            - Every tool acts on the current project. For a new show: create_project, then switch_project — which stops the live output, so confirm first unless the operator asked for it.
+            - Tools act on the current project. The setup tools that read or store data also take a projectId, to work on a project that is not current without switching; switch_project stops the live output, so confirm first unless the operator asked for it. Tools that drive output (looks, cues, the programmer, render_view) and describe_rig stay on the current project.
+            - Venues: a venue is a hall — room, masking, seating, viewpoints and optionally the house rig — that shows are built on (list_venues). extract_venue turns an existing show's room and rig into one and puts that show on it; create_project with venueId starts a new show on it, holding only its own set, cues and prompt book. A show on a venue sees the venue's records read-only (owner=venue) but can hide a venue element for its run (set_scene). To change the venue for every show, edit it with projectId = the venue's id and publish_venue; each show takes the new version when the operator updates it on the desk. copy_to_project moves set pieces, cue stacks and Looks between projects by name; delete_cue_stacks removes stacks.
             - Patch: list_fixture_types to match each fixture to a typeKey (conventional lanterns are 'generic-dimmer'), then patch_fixtures with the whole list, using dryRun first. Report fixtures with no matching type rather than guessing. Put fixtures in groups by position and role; groups are what looks and cues address. delete_groups removes groups an old patch left behind.
             - Stage: set_stage for the stage size, regions and riggings (named as the plot names them), then place_fixtures to hang fixtures on them. get_patch shows the result. A long body (a lightstrip, a bar) stands on end with rollDeg 90. aim_fixtures points moving heads at a stage coordinate (a region's centre at head height, a mark on the plot) through the programmer, which the operator clears — so keep an aim with record_cue, or pass saveAsTemplate to save it as a position template.
             - Venue: set_scene models the room, the proscenium, the seating and the set, so the Stage view shows the real hall. Start from template 'proscenium-hall' with the hall's numbers read off a plan or a photo, correct the named elements it makes, add set pieces, then get_scene to check. Save the views the operator will want — the desk's position, a seat — as viewpoints. render_view draws a viewpoint as a PNG (a desk window must be open), so you can compare the model with the operator's photo from the same place and correct it. A rigging the units stand on (a balcony front) is kind LEDGE. A painted cloth — a backcloth, a frontcloth, a cut cloth — is an image: upload_scene_image, then a DRAPE (or a FLAT) whose params.paint names its hash, sized to the image's aspect; a gauze is a DRAPE with fabric SHARKSTOOTH or BOBBINET.

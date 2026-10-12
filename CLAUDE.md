@@ -820,7 +820,9 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   the agent downloaded on first enable, never bundled: ngrok's licence) or one the operator runs,
   named by `mcp.publicUrl`. The desk is its own OAuth server; grants are machine-local and die with
   the user's sessions. The tools are the show-running tools (`ai/AiTools.kt` — no script tool),
-  `describe_rig` and the show-setup tools (`ai/SetupTools.kt`: projects, patch, stage and
+  `describe_rig` and the show-setup tools (`ai/SetupTools.kt`: projects, venues — list, extract,
+  publish, a show on one — and copying between projects (`ai/VenueSetupTools.kt`), the stored-data
+  ones taking a `projectId` so a show is built without switching to it; patch, stage and
   rigging, the scene — its cloths' fabric and paint, and `upload_scene_image`, the one tool that
   takes file bytes, a PNG or JPEG of at most 16 MB with no remote-access gate — cue stacks and
   prompt-book markup, built from documents the model reads — and

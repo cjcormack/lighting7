@@ -317,14 +317,16 @@ fixture: a model cannot see the head swing or the stage go dark. Its refusals ca
 (`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `VENUE_HOLD`, `COMMAND_UNKNOWN`). A row naming a command as a
 property is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
 
-Tools act on the desk's **current** project. Before the show is warm a call
-answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup
-readers below (`list_projects`, `list_fixture_types`, `get_patch`, `get_prompt_book`, `get_scene`)
-and `render_view` carry `readOnlyHint`.
+Tools act on the desk's **current** project, except where they take a `projectId` (§"Another
+project than the live one" below). Before the show is warm a call
+answers `isError` with "still starting". `describe_rig`, `get_current_state` and the six setup
+readers below (`list_projects`, `list_venues`, `list_fixture_types`, `get_patch`, `get_prompt_book`,
+`get_scene`) and `render_view` carry `readOnlyHint`.
 
 ### Show-setup tools
 
-`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds sixteen tools that **build** a show
+`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`; the venue and cross-project ones in
+`ai/VenueSetupTools.kt`) adds twenty-one tools that **build** a show
 rather than run one — and one, `render_view`, that looks at the result — for four jobs: a project and patch from another console's patch export, the
 Stage view (stage, regions, riggings, fixture placement) from plots or photos, the venue and set
 around it (the scene document) from photos or a video frame, and the show's cue stacks and
@@ -332,15 +334,20 @@ prompt-book markup from a script and lighting notes.
 
 | Tool | Does |
 |------|------|
-| `list_projects` / `create_project` / `switch_project` | Projects. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description; a show whose pinned venue version is not on the desk is refused with `"code": "VENUE_MISSING"` (venue plan session 4), as the set-current route refuses it |
+| `list_projects` / `create_project` / `switch_project` | Projects. `list_projects` carries a show's `venue` (`id`, `name`, pinned `version`, `installed`, `behind` when not `NONE`) and a venue's `installedVersion`. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; with `venueId` it is the REST create's show on a venue — pinned to the installed version (`VENUE_NOTHING_PUBLISHED` before v1), the stage size the venue's (stage fields refused beside it) — and `seatingPreset` names one of that version's Preset seating blocks by name, copied in through `SeatingPresets.copyOnCreate` (`SEATING_PRESET_UNKNOWN` names what it offers). `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description; a show whose pinned venue version is not on the desk is refused with `"code": "VENUE_MISSING"` (venue plan session 4), as the set-current route refuses it |
+| `list_venues` | Every venue: its installed version and note, what that version holds (elements, viewpoints, patches, universes, riggings, groups, Fixed seating — the draft's before v1), `hasRig`, its seating presets, `unpublishedChanges` (the draft against the installed version, `VenueVersions.draftChanges`, read outside the listing's transaction since it exports) and every show on it with its pinned version and `behind`. Read-only, both roles — the Projects page's venue cards are anyone's |
+| `extract_venue` | `VenueExtract.extract`, as `POST …/venue/extract` calls it: `{fromProjectId, name, include?, dryRun?}`, `publishedBy` the caller's display name. **Admin only** (`McpProtocol.VENUE_ADMIN_TOOLS`). Extracting the **current** project reloads it — the route switches to it again — so the tool refuses that unless `reloadLiveShow: true`, the description saying when that is safe; a dry run never needs it |
+| `publish_venue` | `VenueVersions.publish` with a note, as `POST /venues/{id}/publish` calls it, then `venueHold.refreshCurrent()` so a live show the publish leaves behind runs on rather than blacking out. Answers the version and the venue's shows, and says each takes it only when the operator updates it — **no tool runs Update**, whose review and decisions are the operator's. Admin only |
+| `copy_to_project` | Show content between two projects, neither switched to (below) |
+| `delete_cue_stacks` | Stacks by id with all their cues — `deleteCueStackRows`, shared with the REST delete, so anchors, busk pads, scenery and events go as there. A running stack is refused rather than deactivated under the operator; `dryRun` answers what would go; `projectId` |
 | `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM`; a type hung with a lantern from the library (the generic dimmer) is marked `acceptsLantern`, and the tool schema lists the library's ids and each kind's default; a type with loadable settings (the Source Four Revolution) carries `loadable` — each loadable setting, what its slots `take` (`GEL` · `GOBO` · `GOBO_OR_GEL`) and each slot with its stock colour or gobo, the open hole left out |
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
-| `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things |
-| `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, a painted element's `paintImages` (each face's `{width, height, hasAlpha}`, or *missing on this machine*), and the built-in viewpoints. The read-only extras (`seats`, `seatedEye`, `note`, `paintImages`) are ignored when a row is resent. Read-only |
-| `upload_scene_image` | An image to paint on a cloth (scrim plan D11): `{mediaType: image/png \| image/jpeg, base64}` (a pasted `data:` URL's prefix is ignored) into the current project's scene-image store, answering what the REST upload answers — `hash`, `width`, `height`, `hasAlpha`, `mediaType` — through the same `SceneImageStore.store`, so it refuses what the route refuses (the type, a body that is not what it says, more than 8192 px a side read from the header first). Capped at **16 MB decoded**, below the route's 25: the base64 length is checked before anything is decoded, and a bigger image goes in through the element's sheet on the desk. Then `set_scene` names the hash in a `DRAPE`'s or `FLAT`'s `params.paint {front, back}`, with a drape's `fabric`; the schema's DRAPE and FLAT lines say both. Stored data only, so **no remote-access gate**, as `set_scene` has none: an image does nothing until an element names it, and an unnamed one is pruned after a week. No fetch by URL (D11) |
+| `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. In a show on a venue a row of exactly `{name, hidden}` naming a venue element is a **hide** (`ShowHides.setHiddenByUuid`, `HideKind.ELEMENT`) — `true` hides it for the show's run, `false` brings back one the show hides — checked first with `ShowHides.hideRefusal`, so `VENUE_HIDE_IN_USE`'s holders are listed with every other problem; any other row naming a venue element is `VENUE_OWNED`, with a hint naming the hide row, a stack set for a part-show move, and the venue's draft for a change for every show. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things |
+| `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, a painted element's `paintImages` (each face's `{width, height, hasAlpha}`, or *missing on this machine*), and the built-in viewpoints. The read-only extras (`seats`, `seatedEye`, `note`, `paintImages`, `owner`) are ignored when a row is resent. It names the `project`; a show on a venue gets `venue: {id, name, version, installed, behind, hiddenElements?, note}` (`venueDto`, the Projects list's own read), a venue that its rows are its draft. Read-only |
+| `upload_scene_image` | An image to paint on a cloth (scrim plan D11): `{mediaType: image/png \| image/jpeg, base64}` (a pasted `data:` URL's prefix is ignored) into the current project's scene-image store (or `projectId`'s), answering what the REST upload answers — `hash`, `width`, `height`, `hasAlpha`, `mediaType`, plus `projectId` and `scope: "project"`: the store is per project, and the note says so and that `copy_to_project` carries an element's images — through the same `SceneImageStore.store`, so it refuses what the route refuses (the type, a body that is not what it says, more than 8192 px a side read from the header first). Capped at **16 MB decoded**, below the route's 25: the base64 length is checked before anything is decoded, and a bigger image goes in through the element's sheet on the desk. Then `set_scene` names the hash in a `DRAPE`'s or `FLAT`'s `params.paint {front, back}`, with a drape's `fabric`; the schema's DRAPE and FLAT lines say both. Stored data only, so **no remote-access gate**, as `set_scene` has none: an image does nothing until an element names it, and an unnamed one is pruned after a week. No fetch by URL (D11) |
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`; `workLights` `true` to lift the dark and check geometry (default `false`, the room as lit). Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
@@ -445,16 +452,53 @@ base orientation disagrees with how its rigging carries it — 180 on a ledge is
 under it, 0 on a bar stands on top of it, read through roll as the view reads it and silent for a
 head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 
+### Another project than the live one
+
+The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
+`patch_fixtures`, `delete_groups`, `set_stage`, `place_fixtures`, `set_scene`, `get_scene`,
+`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, and the
+show-running `set_scenery` — so a show can be prepared while another runs, as the REST routes'
+`withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
+current project; a venue version, or an id that names nothing, answers *Project not found*) and
+says whether the project is current, which each tool asks before touching the running show: the
+patch writers reload the live rig (`DbFixtureLoader.loadFixtures`) and `place_fixtures` refreshes its
+metadata cache **only for the current project** — loading another project's patch into the live
+rig would replace the running show's fixtures. The broadcasts fire as REST fires them, whichever
+project changed. Two stay current-only by the REST routes' own rule: the prompt book
+(`mark_up_prompt_book` takes no `projectId`, and `build_cue_stack` refuses `at` in a project that is
+not current), and everything that drives output — looks, cues, the programmer, `render_view` — with
+`describe_rig`, which reads the loaded rig; `get_patch` is its reader for another project.
+
+**`copy_to_project`** (`VenueSetupTools.copyToProject`) copies scene elements by name, cue stacks by
+id with their cues, and Looks by id from one project into another, in one transaction that a
+`dryRun` rolls back. Copies are new records with fresh uuids, keeping their names; a name the target
+already uses (an element in its scene, a hidden venue element included; a Look; a stack) is refused
+with every clash at once. Everything is re-resolved **by name in the target**: a scenery change
+finds the target's element of that name — its own, the venue version's row, or one copied in the
+same call — a cue event its patch by key and type, a script trigger its script by name, a speed
+master by index, a platform's region by name; a cue layer's Look or template is the target's of
+that name (`looksLinked`) or is copied along. What cannot resolve is listed in `unresolved` rather
+than guessed: rows naming a fixture or group the target lacks are kept, reading as missing, as a
+venue Update's dead references do; a scenery change, event or trigger that cannot resolve is left
+out; prompt-book anchors are never copied. Painted elements bring their images into the target's
+store (`SceneImageStore.hydrate`), on a real run only. The copier is hand-written rather than an
+export/import subset because the importer only ever populates a whole project; when a portable
+column is added to a cue, Look, template, stack or element, add it here too.
+
 ### Tools on a live venue
 
-When the live project is a venue (venue plan session 2), `McpProtocol.venueToolRefusal` holds the
-tools to the REST routes' rules, since a tool writes the live project with no route in between:
-`record_cue` and `update_from_programmer` are refused for everyone — Record and Update are off in a
+When the project a tool writes is a venue (venue plan session 2) — the live one, or the one a
+project-scoped tool names (`McpProtocol.PROJECT_SCOPED_TOOLS`: its `projectId`, `copy_to_project`'s
+`toProjectId`; any other tool's stray `projectId` is not read, so it cannot steer the guard) —
+`McpProtocol.venueToolRefusal` holds the tools to the REST routes' rules, since a tool writes with
+no route in between. `extract_venue` and `publish_venue` are an admin's wherever they point. On a
+venue, `record_cue` and `update_from_programmer` are refused for everyone — Record and Update are off in a
 venue (D11) — and an **operator's** stored write is refused, as `VENUE_ADMIN_ONLY` refuses it over
 REST (D3): the tools in `VENUE_STORED_WRITE_TOOLS` (patching, the scene, the stage, Looks, cues,
 templates, park) and `aim_fixtures` when it is told to `saveAsTemplate`. Tools that act on the rig as
-it stands — apply, GO, aim, tempo — and the reads pass. A venue version is never live, so it needs
-no rule: `list_projects` leaves versions out and `switch_project` answers one as not found.
+it stands — apply, GO, aim, tempo — and the reads pass. A venue version needs no rule: it is never
+live, `list_projects` leaves versions out, and `switch_project` and every `projectId` answer one as
+not found.
 
 ### Tools on a show on a venue
 
@@ -477,7 +521,8 @@ by tool:
 - `set_stage` — the stage's size (the venue's), and a region or rigging set or removed by a venue
   record's name;
 - `set_scene` — an element or viewpoint set or removed by a venue record's name, the
-  `proscenium-hall` template's rows included.
+  `proscenium-hall` template's rows included — except a row of only `{name, hidden}`, which hides a
+  venue element for the show's run or brings it back (the table above).
 
 A show's own records are written as before, and a hidden venue record is not in the rig, so its key
 or name is free. **`describe_rig` says whose each record is**: a *Venue* section naming the venue
@@ -578,7 +623,7 @@ renders (the frontend draws without `requestAnimationFrame`), but a machine asle
 The window's half — a lazily loaded render host in the app shell, the Stage view's own scene on a
 detached canvas — is `frontend/docs/stage-vis-engineering.md` §"Rendering for `render_view`".
 
-Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
+Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; the venue split (extract, a show on the venue, `copy_to_project`, a hide, `delete_cue_stacks`, `publish_venue`, `projectId` on a project that is not current, and the guards) in `McpVenueSplitToolsTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
 
 ## Tests
 
