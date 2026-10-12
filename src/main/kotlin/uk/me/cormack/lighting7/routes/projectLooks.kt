@@ -52,6 +52,7 @@ import uk.me.cormack.lighting7.models.lookSceneryOf
 import uk.me.cormack.lighting7.models.storedParamsObject
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -231,28 +232,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
     // DELETE /projects/{id}/looks/{lookId}?force=true
     delete<ProjectLookResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
-            val outcome = transaction(state.database) {
-                val look = DaoLook.findById(resource.lookId) ?: return@transaction LookDeleteOutcome.NotFound
-                if (look.project.id != project.id) return@transaction LookDeleteOutcome.NotFound
-                val usage = lookUsage(look.id.value)
-                if (usage.total > 0 && !resource.force) {
-                    return@transaction LookDeleteOutcome.InUse(usage)
-                }
-                val uuid = look.uuid
-                // No DB-level ON DELETE CASCADE — SQLite doesn't enforce cascades without a
-                // per-connection pragma, so children go first, explicitly.
-                if (resource.force) look.let { l -> DaoCueLayer.find { DaoCueLayers.look eq l.id }.forEach { it.delete() } }
-                look.rows.forEach { it.delete() }
-                look.effects.forEach { it.delete() }
-                // Its busk pads and cue slots go with it, unconditionally — a place on a page or
-                // a tile is an enrichment, not a use the guard above counts (busk-layout plan D3).
-                val pageIds = deleteBuskPadsReferencing(lookId = look.id.value)
-                val slots = DaoCueSlots.deleteWhere { DaoCueSlots.look eq look.id }
-                deleteLookScenery(look.id)
-                look.delete()
-                LookDeleteOutcome.Deleted(uuid, pageIds, slots > 0)
-            }
-            when (outcome) {
+            when (val outcome = performLookDelete(state, project, resource.lookId, resource.force)) {
                 is LookDeleteOutcome.NotFound ->
                     call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
                 is LookDeleteOutcome.InUse -> call.respond(
@@ -265,20 +245,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         cueNames = outcome.usage.cueNames,
                     ),
                 )
-                is LookDeleteOutcome.Deleted -> {
-                    // Release the programmer layers naming it, as the template delete does. The
-                    // guard above counts cue layers only, so a Look lit from a busk pad or a slot
-                    // deletes without `force` — and its layer would otherwise sit on the stack under
-                    // a record that no longer exists, asserting nothing, with no pad left to press.
-                    state.show.programmerLayerStack.release(setOf(outcome.uuid))
-                    // Keep the operator's include indicator honest — the same reason
-                    // `clearIncludeTargetForCue` is called on a cue delete.
-                    state.show.programmerStore.clearIncludeTargetForLook(resource.lookId)
-                    state.show.fixtures.lookListChanged()
-                    if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
-                    if (outcome.slotsRemoved) state.show.fixtures.cueSlotListChanged()
-                    call.respond(HttpStatusCode.NoContent)
-                }
+                is LookDeleteOutcome.Deleted -> call.respond(HttpStatusCode.NoContent)
             }
         }
     }
@@ -754,11 +721,54 @@ private sealed interface LookWriteOutcome {
     ) : LookWriteOutcome
 }
 
-private sealed interface LookDeleteOutcome {
+internal sealed interface LookDeleteOutcome {
     data object NotFound : LookDeleteOutcome
     data class InUse(val usage: LookUsage) : LookDeleteOutcome
     /** The busk pages that lost a pad and whether any slot went, so the handler can say so. */
-    data class Deleted(val uuid: UUID, val pageIds: Set<Int>, val slotsRemoved: Boolean) : LookDeleteOutcome
+    data class Deleted(val uuid: UUID, val name: String, val pageIds: Set<Int>, val slotsRemoved: Boolean) : LookDeleteOutcome
+}
+
+/**
+ * Delete a Look of [project], refused while a cue layers it unless [force] — which deletes those
+ * layers too. The REST delete and the MCP `delete_look`.
+ */
+internal fun performLookDelete(state: State, project: DaoProject, lookId: Int, force: Boolean): LookDeleteOutcome {
+    val outcome = transaction(state.database) {
+        val look = DaoLook.findById(lookId) ?: return@transaction LookDeleteOutcome.NotFound
+        if (look.project.id != project.id) return@transaction LookDeleteOutcome.NotFound
+        val usage = lookUsage(look.id.value)
+        if (usage.total > 0 && !force) {
+            return@transaction LookDeleteOutcome.InUse(usage)
+        }
+        val uuid = look.uuid
+        val name = look.name
+        // No DB-level ON DELETE CASCADE — SQLite doesn't enforce cascades without a
+        // per-connection pragma, so children go first, explicitly.
+        if (force) look.let { l -> DaoCueLayer.find { DaoCueLayers.look eq l.id }.forEach { it.delete() } }
+        look.rows.forEach { it.delete() }
+        look.effects.forEach { it.delete() }
+        // Its busk pads and cue slots go with it, unconditionally — a place on a page or
+        // a tile is an enrichment, not a use the guard above counts (busk-layout plan D3).
+        val pageIds = deleteBuskPadsReferencing(lookId = look.id.value)
+        val slots = DaoCueSlots.deleteWhere { DaoCueSlots.look eq look.id }
+        deleteLookScenery(look.id)
+        look.delete()
+        LookDeleteOutcome.Deleted(uuid, name, pageIds, slots > 0)
+    }
+    if (outcome is LookDeleteOutcome.Deleted) {
+        // Release the programmer layers naming it, as the template delete does. The
+        // guard above counts cue layers only, so a Look lit from a busk pad or a slot
+        // deletes without `force` — and its layer would otherwise sit on the stack under
+        // a record that no longer exists, asserting nothing, with no pad left to press.
+        state.show.programmerLayerStack.release(setOf(outcome.uuid))
+        // Keep the operator's include indicator honest — the same reason
+        // `clearIncludeTargetForCue` is called on a cue delete.
+        state.show.programmerStore.clearIncludeTargetForLook(lookId)
+        state.show.fixtures.lookListChanged()
+        if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
+        if (outcome.slotsRemoved) state.show.fixtures.cueSlotListChanged()
+    }
+    return outcome
 }
 
 private sealed interface CopyLookOutcome {

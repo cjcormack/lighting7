@@ -81,8 +81,8 @@ private val lookEffectSchema = buildJsonObject {
     })
 }
 
-/** One static value of a Look: a fixture or group, a property, and what it is set to. */
-private val lookValueSchema = buildJsonObject {
+/** One static value of a Look or a cue: a fixture or group, a property, and what it is set to. */
+internal val lookValueSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
         put("target", targetSchema)
@@ -137,6 +137,57 @@ internal val createLookTool = ToolDef(
             })
         })
         put("required", buildJsonArray { add("name") })
+    }
+)
+
+internal val updateLookTool = ToolDef(
+    name = "update_look",
+    description = "Change an existing look: rename it, rewrite its notes, or replace its values, effects or scenery. " +
+            "Each list given replaces that whole part of the look, in create_look's shape ([] empties it); a part left out is kept as it is. " +
+            "Every cue layering the look moves with it, live ones included, without being re-fired. Everything is checked before anything is written.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("lookId", buildJsonObject { put("type", "integer") })
+            put("name", buildJsonObject { put("type", "string"); put("description", "New name, unique in the project") })
+            put("description", buildJsonObject {
+                put("type", buildJsonArray { add("string"); add("null") })
+                put("description", "New notes; null clears them")
+            })
+            put("values", buildJsonObject {
+                put("type", "array")
+                put("items", lookValueSchema)
+                put("description", "The look's static values, replacing all of them — create_look's values.")
+            })
+            put("effects", buildJsonObject {
+                put("type", "array")
+                put("items", lookEffectSchema)
+                put("description", "The look's effects, replacing all of them. Deferred, as create_look's are.")
+            })
+            put("scenery", buildJsonObject {
+                put("type", "array")
+                put("items", sceneryItemSchema(forCue = false))
+                put("description", "The look's scenery, replacing all of it — create_look's scenery.")
+            })
+        })
+        put("required", buildJsonArray { add("lookId") })
+    }
+)
+
+internal val deleteLookTool = ToolDef(
+    name = "delete_look",
+    description = "Delete a look. Refused while a cue layers it — the answer names those cues — unless force is set, which deletes those layers too. " +
+            "Its busk pads, cue slots and scenery go with it, and it is taken out of the programmer.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("lookId", buildJsonObject { put("type", "integer") })
+            put("force", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Delete it even though cues layer it, removing those layers. Default false.")
+            })
+        })
+        put("required", buildJsonArray { add("lookId") })
     }
 )
 
@@ -419,14 +470,26 @@ private val adHocEffectSchema = buildJsonObject {
     })
 }
 
+/** What a cue's own `values` are, for create_cue and build_cue_stack. */
+internal const val CUE_VALUES_NOTE =
+    "the cue's own values beat every layer of the cue, whatever its order; a value no look carries, or a touch on top of one. " +
+        "Resolved per head as create_look's are."
+
 internal val cueLayerSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        put("lookId", buildJsonObject { put("type", "integer") })
+        put("lookId", buildJsonObject {
+            put("type", "integer")
+            put("description", "The look this layer applies. Give exactly one of lookId and templateId.")
+        })
+        put("templateId", buildJsonObject {
+            put("type", "integer")
+            put("description", "The template this layer applies instead of a look (create_template's id). A generic template — an effect, or values for whatever it is pointed at — needs targets; one naming its own fixtures does not.")
+        })
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies the look to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects needs them.")
+            put("description", "What the layer applies the look or template to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects, or a generic template, needs them.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
@@ -453,7 +516,6 @@ internal val cueLayerSchema = buildJsonObject {
             put("description", "How much of this layer to mix over what is beneath, 0..1. Default 1.")
         })
     })
-    put("required", buildJsonArray { add("lookId") })
 }
 
 /** One cue event in the tools' shape: a fixture by key, its trigger, an offset from GO. */
@@ -469,7 +531,7 @@ internal val cueEventItemSchema = buildJsonObject {
 
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look layers plus ad-hoc effects. Its static states come from the looks it layers: make them with create_look's values first. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
+    description = "Create a named cue as an ordered stack of look and template layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -477,7 +539,12 @@ internal val createCueTool = ToolDef(
             put("layers", buildJsonObject {
                 put("type", "array")
                 put("items", cueLayerSchema)
-                put("description", "Looks to layer, with their targets, in sortOrder. Looks are read fresh at apply time, so editing one moves every cue that layers it.")
+                put("description", "Looks or templates to layer, with their targets, in sortOrder. They are read fresh at apply time, so editing one moves every cue that layers it.")
+            })
+            put("values", buildJsonObject {
+                put("type", "array")
+                put("items", lookValueSchema)
+                put("description", "The cue's own values, in create_look's values shape: $CUE_VALUES_NOTE")
             })
             put("adHocEffects", buildJsonObject {
                 put("type", "array")

@@ -1469,6 +1469,7 @@ class SetupTools(
         val follow: Duration?,
         val marker: Boolean,
         val layers: List<CueLayerDto>,
+        val values: ResolvedLookValues?,
         val place: PromptBookRectDto?,
         val scenery: List<SceneryWrite>,
         val events: List<CueEventWrite>,
@@ -1489,13 +1490,11 @@ class SetupTools(
             val stackError: String?,
             val takenNumbers: Set<String>,
             val pageCount: Int?,
-            val lookIds: Set<Int>,
             val elements: Map<UUID, SceneryElementInfo>,
             val patches: Map<Int, CueEventPatchInfo>,
         )
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
-            val lookIds = DaoLook.find { DaoLooks.project eq project.id }.map { it.id.value }.toSet()
             val elements = sceneryElementsOf(project)
             val patches = cueEventPatchesOf(project)
             if (stackId != null) {
@@ -1506,13 +1505,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.cues?.filter { it.cueType == CueType.STANDARD.name }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, lookIds, elements, patches)
+                Context(error, numbers, pageCount, elements, patches)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds, elements, patches)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches)
             }
         }
         context.stackError?.let { problems += it }
@@ -1546,19 +1545,27 @@ class SetupTools(
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
                     validateCueChildren(emptyList(), parsed)?.let { rowProblems += it }
+                    rowProblems += aiTools.layerSourceProblems(project, parsed)
                     rowProblems += aiTools.untargetedEffectLayerProblems(parsed)
-                    // `createCueChildren` drops a layer naming a record that no longer exists, by
-                    // design for a deleted Look. Here it would be a typo answered with success, so
-                    // it is refused before anything is written.
-                    parsed.mapNotNull { it.lookId }.filter { it !in context.lookIds }.distinct().forEach {
-                        rowProblems += "layers: no look $it in this project (see describe_rig)"
-                    }
                 }
             } catch (e: Exception) {
                 rowProblems += "layers: ${e.message ?: "malformed"}"
                 emptyList()
             }
             if (marker && layers.isNotEmpty()) rowProblems += "a marker cannot carry layers"
+            val values = row["values"]?.takeIf { it !is JsonNull }?.let { raw ->
+                when {
+                    raw !is JsonArray -> { rowProblems += "values must be an array"; null }
+                    marker -> { rowProblems += "a marker cannot carry values: it is never live"; null }
+                    // Resolved per head against the live rig, which only the current project has.
+                    !target.isCurrent -> {
+                        rowProblems += "values are resolved against the live rig, which only the current project has — " +
+                            "leave them out, or switch_project first"
+                        null
+                    }
+                    else -> resolveLookValues(state.show.fixtures, raw).also { rowProblems += it.problems }
+                }
+            }
             val scenery = (row["scenery"] as? JsonArray)?.let {
                 if (marker) rowProblems += "a marker cannot carry scenery: it is never live"
                 parseToolSceneryList(it, context.elements, SceneryOwnerKind.CUE, "scenery", rowProblems)
@@ -1580,11 +1587,12 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place, scenery, events)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
-        data class Built(val stackId: Int, val stackName: String, val cues: List<Triple<Int, String?, String>>, val anchors: Int)
+        data class BuiltCue(val id: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>)
+        data class Built(val stackId: Int, val stackName: String, val cues: List<BuiltCue>, val anchors: Int)
         val built = transaction(state.database) {
             val stack = stackId?.let { DaoCueStack.findById(it)!! } ?: DaoCueStack.new {
                 name = stackName!!
@@ -1608,7 +1616,7 @@ class SetupTools(
                     autoAdvance = spec.follow != null
                     autoAdvanceDelay = spec.follow
                 }
-                createCueChildren(cue, emptyList(), layers = spec.layers)
+                createCueChildren(cue, emptyList(), spec.values?.asCueAssignments().orEmpty(), layers = spec.layers)
                 replaceCueScenery(cue, spec.scenery)
                 replaceCueEvents(cue, spec.events)
                 cue to spec
@@ -1631,7 +1639,11 @@ class SetupTools(
                 }
                 anchors++
             }
-            Built(stack.id.value, stack.name, created.map { (cue, _) -> Triple(cue.id.value, cue.cueNumber, cue.name) }, anchors)
+            Built(
+                stack.id.value, stack.name,
+                created.map { (cue, spec) -> BuiltCue(cue.id.value, cue.cueNumber, cue.name, spec.values?.skipped.orEmpty()) },
+                anchors,
+            )
         }
         state.show.fixtures.cueListChanged()
         state.show.fixtures.cueStackListChanged()
@@ -1645,11 +1657,12 @@ class SetupTools(
                 put("stackName", built.stackName)
                 put("anchorsCreated", built.anchors)
                 putJsonArray("cues") {
-                    built.cues.forEach { (id, number, name) ->
+                    built.cues.forEach { cue ->
                         addJsonObject {
-                            put("cueId", id)
-                            number?.let { put("number", it) }
-                            put("name", name)
+                            put("cueId", cue.id)
+                            cue.number?.let { put("number", it) }
+                            put("name", cue.name)
+                            with(aiTools) { putValueSkips(cue.skipped) }
                         }
                     }
                 }

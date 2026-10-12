@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
+import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
@@ -30,6 +31,15 @@ internal class ResolvedLookValues(
     /** Refusals; any one writes nothing. */
     val problems: List<String>,
 )
+
+/**
+ * The same rows as a cue's own values (`create_cue` / `build_cue_stack`), which address a cell by
+ * its own key, as Record writes one.
+ */
+internal fun ResolvedLookValues.asCueAssignments(): List<CuePropertyAssignmentDto> =
+    rows.mapIndexed { index, row ->
+        CuePropertyAssignmentDto(row.targetType, row.elementKey ?: row.targetKey, row.propertyName, row.value, sortOrder = index)
+    }
 
 internal data class LookValueSkip(val target: String, val propertyName: String, val reason: String)
 

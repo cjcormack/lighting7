@@ -353,7 +353,8 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 ## MCP tools
 
 Three tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
-- `create_cue` — Create a named cue with Look layers and ad-hoc effects
+- `create_cue` — Create a named cue with layers (a Look, or a template by `templateId`), its own
+  `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
 
