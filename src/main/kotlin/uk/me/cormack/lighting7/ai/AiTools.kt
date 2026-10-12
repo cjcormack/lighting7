@@ -36,6 +36,8 @@ import uk.me.cormack.lighting7.state.State
  */
 class AiTools(private val state: State) {
 
+    private val programmer = ProgrammerTools(state)
+
     val toolDefs: List<ToolDef> = listOf(
         createLookTool,
         applyLookTool,
@@ -59,6 +61,11 @@ class AiTools(private val state: State) {
         recordCueTool,
         includeIntoProgrammerTool,
         updateFromProgrammerTool,
+        setProgrammerTool,
+        clearProgrammerTool,
+        setBlindTool,
+        applyTemplateTool,
+        recordLookTool,
         createTemplateTool,
         setSceneryTool,
         moveSceneryTool,
@@ -94,6 +101,11 @@ class AiTools(private val state: State) {
                 "record_cue" -> executeRecordCue(input)
                 "include_into_programmer" -> executeInclude(input)
                 "update_from_programmer" -> executeUpdate(input)
+                "set_programmer" -> programmer.setProgrammer(input)
+                "clear_programmer" -> programmer.clearProgrammer(input)
+                "set_blind" -> programmer.setBlind(input)
+                "apply_template" -> programmer.applyTemplate(input)
+                "record_look" -> programmer.recordLook(input)
                 "create_template" -> executeCreateTemplate(input)
                 "set_scenery" -> executeSetScenery(input)
                 "move_scenery" -> executeMoveScenery(input)
@@ -594,10 +606,10 @@ class AiTools(private val state: State) {
             }
 
             if ("programmer" in include) {
-                // The AI mutates the programmer itself — `apply_look` and `create_look`'s
-                // `applyToTargets` both go through `programmerLayerStack.toggle`, which *toggles*:
-                // without being able to read the stack back, a model asked to "add the wash" a
-                // second time takes it off stage instead.
+                // The AI mutates the programmer itself — and `apply_look`, `apply_template`'s LAYER
+                // mode and `create_look`'s `applyToTargets` go through `programmerLayerStack.toggle`,
+                // which *toggles*: without being able to read the stack back, a model asked to "add
+                // the wash" a second time takes it off stage instead.
                 val store = state.show.programmerStore
                 put("programmer", buildJsonObject {
                     put("blind", store.blind)

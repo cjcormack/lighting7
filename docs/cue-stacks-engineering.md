@@ -472,7 +472,7 @@ cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
 
 **Record, Include and Update** (scenery-programmer plan session 3, D7, D8;
 `routes/programmerSceneryRecord.kt`). Record (`POST /programmer/record`, `record-look`, the AI's
-`record_cue`) writes the programmer's held scenery into the owner's rows unless its request says
+`record_cue` and `record_look`) writes the programmer's held scenery into the owner's rows unless its request says
 `scenery: false`; no mask, source or fixture scope narrows it.
 
 - **Into a cue**, a held piece the cue has no row for is written only where it differs from what the
