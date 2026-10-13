@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -504,8 +505,11 @@ class FxEngine(
         // them (the reset sweep, the suppression rebuild, the transaction commit). Throwable
         // rather than Exception for the same reason those are — a script effect can raise an
         // Error — with cancellation rethrown so [stop] still stops the loop.
+        val beatPasses = DeskMetrics.global.fxTick(DeskMetrics.FxLoop.BEAT)
+        val wallClockPasses = DeskMetrics.global.fxTick(DeskMetrics.FxLoop.WALL_CLOCK)
         processingJob = scope.launch(Dispatchers.Default) {
             for (wake in speedMasters.wake) {
+                val passStart = System.nanoTime()
                 try {
                     processBeatTickSuspend(speedMasters.snapshotFrame())
                 } catch (e: CancellationException) {
@@ -513,6 +517,7 @@ class FxEngine(
                 } catch (t: Throwable) {
                     throttle.log("beat-pass", t) { "FX engine: beat pass failed" }
                 }
+                beatPasses.record(System.nanoTime() - passStart)
             }
         }
 
@@ -520,6 +525,7 @@ class FxEngine(
         wallClockJob = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(WALL_CLOCK_INTERVAL_MS)
+                val passStart = System.nanoTime()
                 try {
                     processWallClockTickSuspend()
                 } catch (e: CancellationException) {
@@ -527,6 +533,7 @@ class FxEngine(
                 } catch (t: Throwable) {
                     throttle.log("wall-clock-pass", t) { "FX engine: wall-clock pass failed" }
                 }
+                wallClockPasses.record(System.nanoTime() - passStart)
             }
         }
     }
@@ -661,6 +668,8 @@ class FxEngine(
      * Get all active effect instances.
      */
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
+
+    val activeEffectCount: Int get() = activeEffects.size
 
     /**
      * Report a batch of live effects. The only shape callers should use: [toEffectDto] needs a

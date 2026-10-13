@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import io.ktor.server.plugins.origin
 import uk.me.cormack.lighting7.auth.resolveSessionUser
 import uk.me.cormack.lighting7.mcp.isRemote
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.state.BootPhase
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
@@ -165,6 +166,7 @@ fun Application.configureSockets(state: State) {
             setupVenueSubscriptions(scope)
             setupStageRenderSubscriptions(scope)
 
+            DeskMetrics.global.wsClients.incrementAndGet()
             try {
                 for (frame in incoming) {
                     // Per-message guard: one bad frame (unknown universe, stale fixture key,
@@ -182,6 +184,7 @@ fun Application.configureSockets(state: State) {
                 }
             } finally {
                 connections -= thisConnection
+                DeskMetrics.global.wsClients.decrementAndGet()
                 scope.cancelAll()
                 scope.ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 scope.ownedLearnSessions.clear()

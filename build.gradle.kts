@@ -631,6 +631,9 @@ val jlinkModules = listOf(
     "jdk.crypto.ec",
     "jdk.unsupported",
     "jdk.zipfs",
+    // GC notifications, for the `jvm.gc.pause` metric: without it the GC beans emit none and
+    // `GarbageCollectionNotificationInfo` is missing (~0.2 MB).
+    "jdk.management",
     // Kept as a module, then filtered down to the locales we ship by `--include-locales` in
     // buildRuntime. Do not "optimise" this by deleting the module instead — see the comment there.
     "jdk.localedata",

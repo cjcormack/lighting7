@@ -1635,13 +1635,14 @@ small transitive tail — `java.xml.crypto` 0.66, `java.security.jgss` 0.55, `ja
 Candidate list: `java.base, java.compiler, java.datatransfer, java.desktop, java.instrument,
 java.logging, java.management, java.naming, java.net.http, java.prefs, java.scripting,
 java.security.sasl, java.sql, java.transaction.xa, java.xml, jdk.crypto.ec, jdk.localedata,
-jdk.unsupported, jdk.zipfs`.
+jdk.management, jdk.unsupported, jdk.zipfs`.
 
 Non-negotiable, with the API forcing each: **`java.desktop`** (AWT `SystemTray`,
 `javax.sound.midi`; drags `java.datatransfer` + `java.prefs`), **`java.sql`** (JDBC; drags
 `java.xml` + `java.logging`), **`java.management`** and **`java.naming`** (reached *reflectively*
 by Spring Boot and logback), **`java.net.http`** (the launcher's readiness probe and the update
-checker), **`jdk.crypto.ec`** (TLS to GitHub).
+checker), **`jdk.crypto.ec`** (TLS to GitHub), **`jdk.management`** (GC notifications, for the
+`jvm.gc.pause` metric — without it the GC beans emit none).
 
 Derive with `jdeps --multi-release 24 --ignore-missing-deps --print-module-deps` over
 `lighting7.jar` and `launcher.jar`, unioned with the baseline above. **jdeps output is a floor,
@@ -1656,8 +1657,9 @@ connection, MIDI enumeration, coremidi4j on Mac, and a keychain write via JNA. T
 a `NoClassDefFoundError` at the first use of one feature, which for a lighting desk can be
 mid-show.
 
-Note `jdk.charsets` (1.63 MB) and `jdk.management` are **already absent** — `java.se` never
-included them and the shipped desk works. Don't add them speculatively. And `jdk.localedata` stays
+Note `jdk.charsets` (1.63 MB) is **absent** — `java.se` never included it and the shipped desk
+works. Don't add it speculatively. (`jdk.management` was absent too until `jvm.gc.pause` needed it,
+for ~0.2 MB.) And `jdk.localedata` stays
 in the list: the shipped 10.5 MB saving is `--include-locales=en-GB,en-US`, a locale **filter**, not
 a module removal. `FormatData_en_GB` lives in `jdk.localedata` rather than `java.base`, so dropping
 the module silently switches every server-side `en_GB` date, number and currency to US forms —

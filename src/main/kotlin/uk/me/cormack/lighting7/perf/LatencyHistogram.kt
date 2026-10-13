@@ -24,6 +24,11 @@ class LatencyHistogram(val bucketCount: Int = 32) {
     private val countAtomic = AtomicLong(0)
     private val sumNanosAtomic = AtomicLong(0)
     private val maxNanosAtomic = AtomicLong(0)
+    private val windowMaxNanosAtomic = AtomicLong(0)
+    private val resetsAtomic = AtomicLong(0)
+
+    /** How many times [reset] has run, so a reader diffing buckets can tell a reset from slow growth. */
+    val resets: Long get() = resetsAtomic.get()
 
     val count: Long get() = countAtomic.get()
     val sumNanos: Long get() = sumNanosAtomic.get()
@@ -40,13 +45,24 @@ class LatencyHistogram(val bucketCount: Int = 32) {
         while (nanos > prev && !maxNanosAtomic.compareAndSet(prev, nanos)) {
             prev = maxNanosAtomic.get()
         }
+        var windowPrev = windowMaxNanosAtomic.get()
+        while (nanos > windowPrev && !windowMaxNanosAtomic.compareAndSet(windowPrev, nanos)) {
+            windowPrev = windowMaxNanosAtomic.get()
+        }
     }
+
+    /** Count in bucket [i], for a reader that diffs successive reads ([HistogramWindow]). */
+    fun bucketCount(i: Int): Long = buckets.get(i)
+
+    /** The peak since the previous call, then zero. [reset] leaves it alone: it is [HistogramWindow]'s. */
+    fun takeWindowMaxNanos(): Long = windowMaxNanosAtomic.getAndSet(0)
 
     fun reset() {
         for (i in 0 until bucketCount) buckets.set(i, 0)
         countAtomic.set(0)
         sumNanosAtomic.set(0)
         maxNanosAtomic.set(0)
+        resetsAtomic.incrementAndGet()
     }
 
     /**
@@ -94,13 +110,15 @@ class LatencyHistogram(val bucketCount: Int = 32) {
         )
     }
 
+    internal fun bucketLowerBound(i: Int): Long = if (i == 0) 0L else (1L shl i)
+
     private fun bucketIndex(nanos: Long): Int {
         if (nanos <= 1L) return 0
         val raw = 63 - java.lang.Long.numberOfLeadingZeros(nanos)
         return if (raw >= bucketCount) bucketCount - 1 else raw
     }
 
-    private fun bucketUpperBound(i: Int): Long = if (i >= 62) Long.MAX_VALUE else (1L shl (i + 1))
+    internal fun bucketUpperBound(i: Int): Long = if (i >= 62) Long.MAX_VALUE else (1L shl (i + 1))
 }
 
 @Serializable

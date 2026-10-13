@@ -350,7 +350,7 @@ class ProgrammerStore {
         }
         // Emitted outside the lock: a subscriber must never run while `layersLock` is held, or the
         // documented lock order (layersLock -> cueAssignmentsLock) stops being the only one.
-        if (changed) _layersFlow.tryEmit(result.first)
+        if (changed) synchronized(layersEmitLock) { _layersFlow.tryEmit(LayersChange(result.first, layersEmitted.incrementAndGet())) }
         return result
     }
 
@@ -377,14 +377,22 @@ class ProgrammerStore {
      * their input list unchanged (`move` to the index a layer already occupies). Identical *content*
      * still emits; the client compares its own signature before waking the pads.
      */
-    private val _layersFlow = MutableSharedFlow<List<ProgrammerLayer>>(
+    private val _layersFlow = MutableSharedFlow<LayersChange>(
         replay = 1,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
     /** Flow of full layer-stack snapshots for WebSocket broadcasting. */
-    val layersFlow: SharedFlow<List<ProgrammerLayer>> = _layersFlow.asSharedFlow()
+    val layersFlow: SharedFlow<LayersChange> = _layersFlow.asSharedFlow()
+
+    private val layersEmitted = AtomicLong(0)
+
+    // Numbering and emitting as one step, so emissions arrive in seq order and a gap means a drop.
+    private val layersEmitLock = Any()
+
+    /** One [layersFlow] emission: [seq] is one more than the previous, so a subscriber can see what DROP_OLDEST skipped. */
+    data class LayersChange(val layers: List<ProgrammerLayer>, val seq: Long)
 
     private val epochCounter = AtomicLong(0)
 

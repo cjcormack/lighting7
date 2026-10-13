@@ -1,6 +1,7 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.telemetry.TraceSampling
 import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -109,10 +110,13 @@ class CueStackManager(
         scope: CoroutineScope = GlobalScope,
         rejectMarkers: Boolean = false,
         fireEvents: Boolean = true,
-    ): ActivateResult = Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
-        span?.setData("cue.stack_id", stackId)
-        span?.setData("cue.id", cueId)
-        activate(state, stackId, cueId, scope, rejectMarkers, fireEvents)
+    ): ActivateResult {
+        val started = System.nanoTime()
+        return Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
+            span?.setData("cue.stack_id", stackId)
+            span?.setData("cue.id", cueId)
+            activate(state, stackId, cueId, scope, rejectMarkers, fireEvents)
+        }.also { DeskMetrics.global.cueGo.record((System.nanoTime() - started) / 1_000_000.0) }
     }
 
     private fun activate(

@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.select
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.time.Duration.Companion.nanoseconds
@@ -29,6 +30,7 @@ class ArtNetController(
      * tests, and anything built outside a show — is never held.
      */
     private val hold: OutputHold? = null,
+    metrics: DeskMetrics = DeskMetrics.global,
 ): DmxController {
     companion object {
         /** Default Art-Net frame interval: 40 Hz. */
@@ -50,6 +52,8 @@ class ArtNetController(
     }
 
     internal val fadeTickMs = 10
+
+    private val frameMetrics = metrics.artNet(universe)
 
     private val channelChangeChannels: Map<Int, Channel<ChannelUpdatePayload>>
 
@@ -280,6 +284,7 @@ class ArtNetController(
         var nextFrameNanos = System.nanoTime()
 
         while (currentCoroutineContext().isActive) {
+            frameMetrics.lateness.record(System.nanoTime() - nextFrameNanos)
             try {
                 // The first pass is the bootstrap frame, on the dedicated ArtNet thread so
                 // it has the same affinity as every subsequent transmit. `sendCurrentValues()`
@@ -313,6 +318,7 @@ class ArtNetController(
                 // after a long stall a naive `next += period` would dump thousands of
                 // frames onto the wire as fast as the socket accepted them.
                 nextFrameNanos = now + periodNanos
+                frameMetrics.overrun()
             }
             val sleepNanos = nextFrameNanos - System.nanoTime()
             if (sleepNanos > 0) delay(sleepNanos.nanoseconds)

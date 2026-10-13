@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.auth.runBreakGlassIfRequested
 import uk.me.cormack.lighting7.mcp.startPublicListener
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.perf.DeskMetrics
+import uk.me.cormack.lighting7.perf.MetricsReporter
 import uk.me.cormack.lighting7.plugins.InstallChangedOutMessage
 import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
@@ -117,15 +119,15 @@ fun Application.module() {
         // it on Default instead would starve the very fan-out it is waiting for.
         moduleWithState(state)
         state.autoSyncScheduler.start()
-        launch(Dispatchers.IO + (boot?.context ?: LiveSentryContext())) { runShowStartupGuarded(state, boot) }
+        launch(Dispatchers.IO + (boot?.context ?: LiveSentryContext())) { runShowStartupGuarded(state, startedAt, boot) }
     } else {
         // Legacy blocking order: fully initialise the show before accepting any connections, so
         // the server never serves traffic before the rig is live. Exceptions propagate and abort
         // server startup — the deliberate fail-fast contract of this mode.
         if (boot == null) {
-            runShowStartup(state)
+            runShowStartup(state, startedAt)
         } else {
-            boot.onThisThread { runCatching { runShowStartup(state, boot) }.onFailure(boot::finish).getOrThrow() }
+            boot.onThisThread { runCatching { runShowStartup(state, startedAt, boot) }.onFailure(boot::finish).getOrThrow() }
         }
         state.autoSyncScheduler.start()
         moduleWithState(state)
@@ -139,7 +141,7 @@ fun Application.module() {
  * server is already accepting connections, so surfacing the error to the loading UI beats a
  * half-open crash.
  */
-private fun Application.runShowStartup(state: State, boot: BootTrace? = null) {
+private fun Application.runShowStartup(state: State, startedAt: Instant, boot: BootTrace? = null) {
     state.bootProgress.update(BootPhase.SHOW_INIT, "Initializing show…", 5)
     // The Show constructor compiles the built-in FX effects, driving FX_COMPILE progress (10–55%).
     val show = Tracing.span(BootTrace.OP_PHASE, "show_init") { state.initializeShow() }
@@ -149,6 +151,7 @@ private fun Application.runShowStartup(state: State, boot: BootTrace? = null) {
     Tracing.span(BootTrace.OP_PHASE, "mdns") { registerMdns(state) }
     state.bootProgress.markReady()
     boot?.finish()
+    recordBoot(startedAt)
     // After markReady, never before: constructing the service reconciles the previous apply, and
     // the first network check is deliberately delayed further still — a desk mid-boot is
     // compiling FX scripts and loading its patch, and should not also be pulling on the network.
@@ -156,9 +159,9 @@ private fun Application.runShowStartup(state: State, boot: BootTrace? = null) {
     log.info("Show startup complete")
 }
 
-private fun Application.runShowStartupGuarded(state: State, boot: BootTrace?) {
+private fun Application.runShowStartupGuarded(state: State, startedAt: Instant, boot: BootTrace?) {
     try {
-        runShowStartup(state, boot)
+        runShowStartup(state, startedAt, boot)
     } catch (e: Throwable) {
         state.bootProgress.markFailed(e)
         log.error("Show startup failed", e)
@@ -166,9 +169,20 @@ private fun Application.runShowStartupGuarded(state: State, boot: BootTrace?) {
     }
 }
 
+/** `boot.duration`, cold when any script compiled since the process started rather than coming from a cache. */
+private fun recordBoot(startedAt: Instant) {
+    val metrics = DeskMetrics.global
+    val cache = if (metrics.compiledTotal > 0) DeskMetrics.BootCache.COLD else DeskMetrics.BootCache.WARM
+    metrics.boot(cache).record(java.time.Duration.between(startedAt, Instant.now()).toMillis() / 1000.0)
+}
+
 private fun Application.startSentry(state: State) {
     if (InstallKind.fromEnv() == InstallKind.DEV) DevCommit.resolve()?.let(state.telemetry::adoptDevCommit)
-    val sentry = SentryRuntime(state.telemetry, appDataDir().resolve("sentry"), installTags(state) ?: InstallTags("unknown", "unknown", false))
+    val metrics = MetricsReporter(
+        midi = { state.midiLatencyTracker },
+        activeEffects = { state.showOrNull?.fxEngine?.activeEffectCount },
+    )
+    val sentry = SentryRuntime(state.telemetry, appDataDir().resolve("sentry"), installTags(state) ?: InstallTags("unknown", "unknown", false), metrics)
     sentry.applyNow(state.telemetry.enabled)
     state.telemetry.onChange = sentry::apply
     monitor.subscribe(ApplicationStopping) { sentry.close() }

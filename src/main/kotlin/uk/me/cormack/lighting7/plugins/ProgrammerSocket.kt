@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.resolveLayerSource
 import uk.me.cormack.lighting7.models.sceneryStateObject
@@ -731,7 +732,10 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     // it, which is all the unicast reply from `handleProgrammer` covers. Without this, a mutation
     // that moved no value (a layer whose targets don't match its bound Look's rows asserts nothing)
     // pushed no `provenanceState` either, and other tabs kept a stale layer list indefinitely.
-    scope.subscribe(scope.state.show.programmerStore.layersFlow) { layers ->
+    val skippedLayers = SkippedFrames("programmer.layerState")
+    scope.subscribe(scope.state.show.programmerStore.layersFlow) { change ->
+        skippedLayers.saw(change.seq)
+        val layers = change.layers
         // Resolved from the emitted list rather than from the store, so the frame's `applied`
         // describes the very stack its `layers` carry even if another mutation has landed since.
         scope.send(ProgrammerLayerStateOutMessage(
@@ -739,11 +743,26 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
             scope.state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
         ))
     }
+    val skippedProvenance = SkippedFrames("provenanceState")
     scope.subscribe(scope.state.show.fxEngine.provenance.flow) { update ->
+        skippedProvenance.saw(update.seq)
         scope.send(buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision))
     }
     // The programmer's scenery: a StateFlow, so this is its connect snapshot as well as its broadcast.
     scope.subscribe(scope.state.programmerScenery.flow) { scope.send(it.toMessage()) }
+}
+
+/**
+ * One socket's view of a DROP_OLDEST flow whose emissions are numbered: a gap is frames the flow
+ * dropped while this socket was still sending an earlier one, counted as `ws.outbound.dropped`.
+ */
+private class SkippedFrames(private val type: String) {
+    private var last = 0L
+
+    fun saw(seq: Long) {
+        if (last > 0 && seq > last + 1) DeskMetrics.global.wsDropped(type, DeskMetrics.WsDrop.CONFLATED, seq - last - 1)
+        if (seq > last) last = seq
+    }
 }
 
 /**

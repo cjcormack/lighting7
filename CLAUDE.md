@@ -858,7 +858,7 @@ For deeper technical details, see the docs in `docs/`:
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery
 - [Windows Updates](docs/windows-updates.md) - The pinned MSI UpgradeCode, MSI version rules, `BuildInfo` in both jars, the GitHub release check, and the backend→launcher marker handshake that applies an update
-- [Observability](docs/observability-engineering.md) - Sentry: the install telemetry switch (`/install/telemetry`), what is sent and filtered, token scrubbing, why only `Application.module()` starts it, and tracing — where transactions start, the sampling tables (every inbound WS frame needs a row in `TraceSampling.WS_MESSAGES`), how to add a span and what is never traced
+- [Observability](docs/observability-engineering.md) - Sentry: the install telemetry switch (`/install/telemetry`), what is sent and filtered, token scrubbing, why only `Application.module()` starts it, and tracing — where transactions start, the sampling tables (every inbound WS frame needs a row in `TraceSampling.WS_MESSAGES`), how to add a span and what is never traced, and metrics — the 30 s reporter, each metric's source and attributes, and how to add one
 
 ## Windows updates — the load-bearing constants
 
