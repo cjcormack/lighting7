@@ -32,6 +32,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v26: lamps. `FixturePatchJson` gains `lampWatts` and `lampKelvin`: a lantern-hung patch's own
+    // lamp power and colour temperature, null — omitted — taking the lantern library's. A patch with
+    // neither exports byte-for-byte as at v25. The writer's number moves by the sharp-edge rule: a v25
+    // reader imports every lamp as its lantern's and its next wipe-then-export push writes them away
+    // for every peer. `minReader` stays at **5** — a missing lamp is the lantern's. See
+    // `docs/sync-engineering.md` §"Version 26 — lamps".
+    //
     // v25: model textures. No DTO changes: a `MODEL` object's `parts` ride in `StageElementJson.params`,
     // and a part's `texture.image` names a file in `sceneImages/`. The writer's number moves for v23's
     // reason: a v24 reader reconciles that folder to the paint it reads as referenced, so its next push
@@ -218,7 +225,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 25,
+    val formatVersion: Int = 26,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -534,6 +541,10 @@ data class FixturePatchJson(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** The lamp's power and colour temperature at full (v26); null is the lantern's. See
+     *  `docs/sync-engineering.md` §"Version 26 — lamps". */
+    val lampWatts: Int? = null,
+    val lampKelvin: Int? = null,
     /** The unit's fitted media (v22); null is the type's stock in every slot. See
      *  `docs/sync-engineering.md` §"Version 22 — fitted media". */
     val media: FittedMedia? = null,

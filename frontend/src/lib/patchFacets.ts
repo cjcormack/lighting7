@@ -87,6 +87,8 @@ export function facetValueOf(patch: FixturePatch, facet: PatchFacet): FacetValue
       return {
         ...focusFields(patch),
         beamAngleDeg: patch.beamAngleDeg,
+        lampWatts: patch.lampWatts ?? null,
+        lampKelvin: patch.lampKelvin ?? null,
         placements: placements.map((p) => ({ placementUuid: p.uuid, ...focusFields(p) })),
       }
     case 'MEDIA':
@@ -131,6 +133,8 @@ export function describeFacet(facet: PatchFacet, value: FacetValue, names: Facet
       const parts = [v.lanternType ? (names.lanternName?.(v.lanternType) ?? v.lanternType) : 'Default lantern']
       if (v.zoomDeg != null) parts.push(`zoom ${fmt(v.zoomDeg)}°`)
       if (v.beamAngleDeg != null) parts.push(`beam ${v.beamAngleDeg}°`)
+      if (v.lampWatts != null) parts.push(`${v.lampWatts} W`)
+      if (v.lampKelvin != null) parts.push(`${v.lampKelvin} K`)
       if (v.iris != null && v.iris < 1) parts.push(`iris ${Math.round(v.iris * 100)}%`)
       if (v.shutters?.some((b) => b.depth > 0)) parts.push('shuttered')
       return parts.join(' · ')

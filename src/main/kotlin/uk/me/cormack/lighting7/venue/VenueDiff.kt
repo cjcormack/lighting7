@@ -304,7 +304,7 @@ object VenueDiff {
         listOf("stageX", "stageY", "stageZ", "baseYawDeg", "basePitchDeg", "baseRollDeg", "lengthM")
             .forEach { put(it, VenueFacet.POSITION) }
         listOf(
-            "lanternType", "beamAngleDeg", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg",
+            "lanternType", "beamAngleDeg", "lampWatts", "lampKelvin", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg",
             "iris", "focusSoftness",
         ).forEach { put(it, VenueFacet.FOCUS) }
         listOf("gelCode", "media").forEach { put(it, VenueFacet.MEDIA) }

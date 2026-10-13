@@ -46,6 +46,22 @@
 /** The width of the edge's roll-off, in field units, at soft 0 and at soft 1. */
 export const MASK_EDGE_HARD = 0.03
 export const MASK_EDGE_SOFT = 0.55
+/**
+ * Past this softness the roll-off widens on to the whole field, so at 1 there is no flat middle and
+ * no edge at all — a bell from the centre out, as a house downlight throws. Every family at or below
+ * it (a flood's 0.95) draws as it did.
+ */
+export const MASK_EDGE_KNEE = 0.95
+
+/** The width of the edge's roll-off, in field units, at [soft] (0..1): the GLSL's `w`. */
+export function maskEdgeWidth(soft: number): number {
+  const s = Math.max(0, Math.min(1, soft))
+  return (
+    MASK_EDGE_HARD +
+    (MASK_EDGE_SOFT - MASK_EDGE_HARD) * s +
+    ((1 - MASK_EDGE_SOFT) * Math.max(0, s - MASK_EDGE_KNEE)) / (1 - MASK_EDGE_KNEE)
+  )
+}
 /** How much brighter a fully soft beam's middle is than its edge's shoulder. */
 export const MASK_SOFT_CENTRE = 0.35
 /** An iris's edge is this fraction of the field edge's roll-off. */
@@ -122,7 +138,8 @@ export const BEAM_MASK_GLSL = /* glsl */ `
   float beamMask(vec2 uv, float aspect, float iris, float soft, float blur, vec2 blades) {
     float s = clamp(soft, 0.0, 1.0);
     float r = aspect > 0.0 ? max(abs(uv.x), abs(uv.y)) : length(uv);
-    float w = mix(${f(MASK_EDGE_HARD)}, ${f(MASK_EDGE_SOFT)}, s);
+    float w = mix(${f(MASK_EDGE_HARD)}, ${f(MASK_EDGE_SOFT)}, s)
+      + ${f(1 - MASK_EDGE_SOFT)} * max(s - ${f(MASK_EDGE_KNEE)}, 0.0) / ${f(1 - MASK_EDGE_KNEE)};
     float h = min(max(blur, 0.0) * 0.5, ${f(FOCUS_SPREAD_MAX)});
     float m = 1.0 - smoothstep(1.0 - w - h, 1.0 + h, r);
     if (iris < 0.999) m *= 1.0 - smoothstep(iris - w * ${f(IRIS_EDGE)} - h, iris + 0.005 + h, r);
@@ -289,7 +306,7 @@ export function beamMask(
 ): number {
   const s = Math.max(0, Math.min(1, soft))
   const r = aspect > 0 ? Math.max(Math.abs(u), Math.abs(v)) : Math.hypot(u, v)
-  const w = MASK_EDGE_HARD + (MASK_EDGE_SOFT - MASK_EDGE_HARD) * s
+  const w = maskEdgeWidth(s)
   const h = Math.min(Math.max(blur, 0) * 0.5, FOCUS_SPREAD_MAX)
   let m = 1 - smoothstep(1 - w - h, 1 + h, r)
   if (iris < 0.999) m *= 1 - smoothstep(iris - w * IRIS_EDGE - h, iris + 0.005 + h, r)

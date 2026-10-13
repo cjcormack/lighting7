@@ -11,7 +11,9 @@ import {
   FOCUS_SPREAD_MAX,
   bladeLine,
   MASK_EDGE_HARD,
+  MASK_EDGE_KNEE,
   MASK_EDGE_SOFT,
+  maskEdgeWidth,
   MASK_SOFT_CENTRE,
   MAX_PACKED_BLADE_ANGLE_DEG,
   packBlade,
@@ -61,6 +63,7 @@ describe('the beam mask', () => {
   it('writes the GLSL from the same constants as the twin', () => {
     expect(BEAM_MASK_GLSL).toContain(MASK_EDGE_HARD.toFixed(4))
     expect(BEAM_MASK_GLSL).toContain(MASK_EDGE_SOFT.toFixed(4))
+    expect(BEAM_MASK_GLSL).toContain(MASK_EDGE_KNEE.toFixed(4))
     expect(BEAM_MASK_GLSL).toContain(MASK_SOFT_CENTRE.toFixed(4))
     expect(BEAM_MASK_GLSL).toContain(`${BLADE_DEPTH_STEPS}.0`)
     expect(BEAM_MASK_GLSL).toContain(`${BLADE_ANGLE_OFFSET}.0`)
@@ -294,11 +297,29 @@ function inwardMask(r: number, iris: number, soft: number): number {
     const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)))
     return t * t * (3 - 2 * t)
   }
-  const w = MASK_EDGE_HARD + (MASK_EDGE_SOFT - MASK_EDGE_HARD) * soft
+  const w = maskEdgeWidth(soft)
   let m = 1 - ss(1 - w, 1, r)
   if (iris < 0.999) m *= 1 - ss(iris - w * 0.6, iris + 0.005, r)
   return Math.max(0, m * (1 - MASK_SOFT_CENTRE * soft * Math.min(r * r, 1)))
 }
+
+describe('past the knee the edge widens on to the whole field', () => {
+  it('leaves every softness up to the knee where it was', () => {
+    for (const soft of [0, 0.5, 0.85, MASK_EDGE_KNEE]) {
+      expect(maskEdgeWidth(soft)).toBeCloseTo(MASK_EDGE_HARD + (MASK_EDGE_SOFT - MASK_EDGE_HARD) * soft, 12)
+    }
+  })
+
+  it('has no flat middle and no edge at softness 1: it falls away from the centre', () => {
+    expect(maskEdgeWidth(1)).toBeCloseTo(1, 12)
+    const samples = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1].map((r) => beamMask(r, 0, 0, 1, 1))
+    for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThan(samples[i - 1])
+    expect(beamMask(0.5, 0, 0, 1, 1)).toBeGreaterThan(0.4)
+    expect(beamMask(0.5, 0, 0, 1, 1)).toBeLessThan(0.55)
+    // The steepest step is no sharper than the bell's own, far from a rim.
+    expect(samples[3] - samples[4]).toBeLessThan(0.4)
+  })
+})
 
 describe('a defocused edge spreads both ways (stage-light plan D4)', () => {
   const BLURS = [0, 0.02, 0.1, 0.25, 0.4, 0.6, 1, 3, 30]

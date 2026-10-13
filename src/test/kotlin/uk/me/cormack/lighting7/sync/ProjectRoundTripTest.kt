@@ -299,11 +299,16 @@ class ProjectRoundTripTest {
         assertEquals(7.5, adv2.gateRotationDeg)
         assertEquals(0.8, adv2.iris)
         assertEquals(0.25, adv2.focusSoftness)
+        assertEquals(750, adv2.lampWatts)
+        assertEquals(3000, adv2.lampKelvin)
         val sr = adv2.extraPlacements.single()
         assertEquals("par64-cp62", sr.lanternType)
         assertEquals(45.0, sr.lampRotationDeg)
         assertEquals(0.9, sr.focusSoftness)
-        for (key in listOf("lanternType", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg", "iris", "focusSoftness")) {
+        for (key in listOf(
+            "lanternType", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg", "iris", "focusSoftness",
+            "lampWatts", "lampKelvin",
+        )) {
             assertTrue(
                 docs.filter { !it.contains("\"adv2-1\"") }.none { it.contains("\"$key\"") },
                 "a patch with no lantern must not carry $key",

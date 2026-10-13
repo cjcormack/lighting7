@@ -2,6 +2,11 @@ import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findGel, type GelIndex } from '@/lib/gels'
 import { useGelIndex } from '@/hooks/useGelIndex'
+import { useLanternIndex } from '@/hooks/useLanternIndex'
+import { lampHex, unitLamp } from '@/lib/lamp'
+import type { LanternIndex } from '@/lib/lanterns'
+import { resolveFixtureKind, type FixtureTypeInfo } from '@/store/fixtures'
+import type { FixturePatch } from '@/api/patchApi'
 import { DEFAULT_FIXTURE_COLOUR } from '@/components/fixtures/fixtureAppearance'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -43,6 +48,7 @@ export function MiniStage({
   )
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
   const gels = useGelIndex()
+  const lanterns = useLanternIndex()
 
   const groupTargetNames = useMemo(
     () => new Set(targets.filter((t) => t.type === 'group').map((t) => t.key)),
@@ -107,7 +113,7 @@ export function MiniStage({
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
         const showCone = !!fixtureType?.acceptsBeamAngle
         const beamDeg = patch.beamAngleDeg ?? 30
-        const colour = pickColour(gels, patch.gelCode, !!fixtureType?.acceptsGel)
+        const colour = pickColour(gels, lanterns, patch, fixtureType)
         return (
           <div
             key={placement ? `${patch.id}:${placement.uuid}` : patch.id}
@@ -128,18 +134,28 @@ export function MiniStage({
 }
 
 /**
- * The gel arm of `FixtureAppearanceSource`, minus its live-colour branches: this surface
+ * The lamp and gel arms of `FixtureAppearanceSource`, minus its live-colour branches: this surface
  * deliberately draws simulated cue targeting rather than the wire, so a fixture's own colour
  * properties are not consulted. The `acceptsGel` gate is the shared version's, though — a gel code
  * on a fixture whose type doesn't take gel is stale data, and honouring it here would tint a
- * colour-mixing LED that every other surface leaves at the default warm tungsten.
+ * colour-mixing LED that every other surface leaves at the default warm tungsten. A lantern's lamp
+ * is drawn at full, the level a lit cue target is shown at.
  */
-function pickColour(gels: GelIndex, gelCode: string | null, acceptsGel: boolean): string {
-  if (acceptsGel && gelCode) {
-    const gel = findGel(gels, gelCode)
-    if (gel) return gel.color
-  }
-  return DEFAULT_FIXTURE_COLOUR
+function pickColour(
+  gels: GelIndex,
+  lanterns: LanternIndex,
+  patch: FixturePatch,
+  fixtureType: FixtureTypeInfo | undefined,
+): string {
+  const gel = fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
+  const lamp = unitLamp(
+    patch,
+    fixtureType?.acceptsLantern === true,
+    resolveFixtureKind(patch.kindOverride, fixtureType?.kind),
+    lanterns,
+  )
+  if (lamp) return lampHex(lamp, 1, gel?.color ?? null)
+  return gel?.color ?? DEFAULT_FIXTURE_COLOUR
 }
 
 function SimulatedMarker({

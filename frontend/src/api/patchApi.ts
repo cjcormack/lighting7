@@ -57,6 +57,11 @@ export interface FixturePatch extends LanternFocus {
    *  read it through `lib/fixtureLength.ts`, which also ignores it on a fixed-length type. Optional
    *  because a desk that predates the field omits it. */
   lengthM?: number | null;
+  /** The lamp's power in watts, for a type hung with a lantern; null or absent is the lantern's
+   *  `watts`. One lamp for every lantern the patch drives — read it through `lib/lamp.ts`. */
+  lampWatts?: number | null;
+  /** The lamp's colour temperature at full, in kelvin; null or absent is the lantern's `kelvin`. */
+  lampKelvin?: number | null;
   /** Omit this patch from the Stage view (2D map and 3D scene). For real DMX
    *  that isn't a stage object — a dimmer driving hard power. Presentational
    *  only: the fixture still patches, outputs, and runs in cues and FX. */
@@ -151,6 +156,8 @@ export interface PositionFacetValue extends PositionFields {
 
 export interface FocusFacetValue extends LanternFocus {
   beamAngleDeg?: number | null;
+  lampWatts?: number | null;
+  lampKelvin?: number | null;
   placements?: (LanternFocus & { placementUuid: string })[];
 }
 
@@ -285,6 +292,9 @@ export interface CreatePatchRequest {
   gateRotationDeg?: number | null;
   iris?: number | null;
   focusSoftness?: number | null;
+  /** Only for a type that takes a lantern; see `FixturePatch.lampWatts`. */
+  lampWatts?: number | null;
+  lampKelvin?: number | null;
   /** Only for a type with loadable settings; see `FixturePatch.media`. */
   media?: FittedMedia | null;
 }
@@ -309,6 +319,9 @@ export interface UpdatePatchRequest extends LanternFocus {
   kindOverride?: string | null;
   /** Only for a type that takes one (`acceptsLength`); null returns to the type's default. */
   lengthM?: number | null;
+  /** Only for a type that takes a lantern; null returns to the lantern's lamp. */
+  lampWatts?: number | null;
+  lampKelvin?: number | null;
   stageHidden?: boolean;
   infrastructure?: boolean;
   /** The whole list, replacing the stored one; null or `[]` removes every extra placement. */

@@ -6,6 +6,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 13,
     "fieldDeg": 19,
     "lensDiameterM": 0.17,
@@ -30,6 +31,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 17,
     "fieldDeg": 26,
     "lensDiameterM": 0.17,
@@ -51,6 +53,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 25,
     "fieldDeg": 36,
     "lensDiameterM": 0.17,
@@ -72,6 +75,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 33,
     "fieldDeg": 50,
     "lensDiameterM": 0.17,
@@ -93,6 +97,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 15,
     "fieldDeg": 22,
     "zoom": {
@@ -118,6 +123,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 575,
+    "kelvin": 3200,
     "beamDeg": 24,
     "fieldDeg": 35,
     "zoom": {
@@ -143,6 +149,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 20,
     "fieldDeg": 30,
     "zoom": {
@@ -169,6 +176,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 500,
+    "kelvin": 3000,
     "beamDeg": 17,
     "fieldDeg": 30,
     "lensDiameterM": 0.1,
@@ -190,6 +198,7 @@
     "family": "PROFILE",
     "archetype": "boxProfile",
     "watts": 1200,
+    "kelvin": 3200,
     "beamDeg": 12,
     "fieldDeg": 18,
     "zoom": {
@@ -216,6 +225,7 @@
     "family": "PROFILE",
     "archetype": "boxProfile",
     "watts": 650,
+    "kelvin": 3200,
     "beamDeg": 16,
     "fieldDeg": 23,
     "zoom": {
@@ -242,6 +252,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 600,
+    "kelvin": 3200,
     "beamDeg": 24,
     "fieldDeg": 36,
     "zoom": {
@@ -267,6 +278,7 @@
     "family": "PROFILE",
     "archetype": "profile",
     "watts": 650,
+    "kelvin": 3200,
     "beamDeg": 18,
     "fieldDeg": 26,
     "zoom": {
@@ -292,6 +304,7 @@
     "family": "FRESNEL",
     "archetype": "fresnel",
     "watts": 1200,
+    "kelvin": 3200,
     "beamDeg": 30,
     "fieldDeg": 45,
     "zoom": {
@@ -320,6 +333,7 @@
     "family": "FRESNEL",
     "archetype": "fresnel",
     "watts": 1200,
+    "kelvin": 3200,
     "beamDeg": 30,
     "fieldDeg": 45,
     "zoom": {
@@ -344,6 +358,7 @@
     "family": "FRESNEL",
     "archetype": "fresnel",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 30,
     "fieldDeg": 48,
     "zoom": {
@@ -369,6 +384,7 @@
     "family": "FRESNEL",
     "archetype": "fresnel",
     "watts": 650,
+    "kelvin": 3200,
     "beamDeg": 26,
     "fieldDeg": 40,
     "zoom": {
@@ -394,6 +410,7 @@
     "family": "PC",
     "archetype": "fresnel",
     "watts": 650,
+    "kelvin": 3200,
     "beamDeg": 20,
     "fieldDeg": 34,
     "zoom": {
@@ -418,6 +435,7 @@
     "family": "PC",
     "archetype": "fresnel",
     "watts": 1200,
+    "kelvin": 3200,
     "beamDeg": 22,
     "fieldDeg": 35,
     "zoom": {
@@ -442,6 +460,7 @@
     "family": "PAR",
     "archetype": "par",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 12,
     "fieldDeg": 24,
     "oval": {
@@ -465,6 +484,7 @@
     "family": "PAR",
     "archetype": "par",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 14,
     "fieldDeg": 26,
     "oval": {
@@ -488,6 +508,7 @@
     "family": "PAR",
     "archetype": "par",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 28,
     "fieldDeg": 44,
     "oval": {
@@ -514,6 +535,7 @@
     "family": "PAR",
     "archetype": "par",
     "watts": 1000,
+    "kelvin": 3200,
     "beamDeg": 48,
     "fieldDeg": 71,
     "oval": {
@@ -537,6 +559,7 @@
     "family": "PAR",
     "archetype": "par",
     "watts": 50,
+    "kelvin": 3000,
     "beamDeg": 10,
     "fieldDeg": 18,
     "lensDiameterM": 0.056,
@@ -553,6 +576,7 @@
     "family": "FLOOD",
     "archetype": "flood",
     "watts": 500,
+    "kelvin": 3200,
     "beamDeg": 70,
     "fieldDeg": 100,
     "lensDiameterM": 0.2,
@@ -576,6 +600,7 @@
     "family": "CYC",
     "archetype": "flood",
     "watts": 1250,
+    "kelvin": 3200,
     "beamDeg": 80,
     "fieldDeg": 110,
     "lensDiameterM": 0.28,
@@ -595,8 +620,11 @@
     "maker": "Generic",
     "family": "DOWNLIGHT",
     "archetype": "downlight",
-    "beamDeg": 80,
-    "fieldDeg": 110,
+    "watts": 15,
+    "kelvin": 3000,
+    "lamp": "LED",
+    "beamDeg": 40,
+    "fieldDeg": 70,
     "lensDiameterM": 0.16,
     "lengthM": 0.16,
     "widthM": 0.2,
@@ -605,6 +633,6 @@
     "defaultFor": [
       "GENERIC"
     ],
-    "source": "Generic house downlight"
+    "source": "Generic LED house downlight: 15 W, about 1200 lm, 3000 K, 40° beam (estimate)"
   }
 ]

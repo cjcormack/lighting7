@@ -28,6 +28,11 @@ vi.mock('@/hooks/useGelIndex', async () => {
   const gels = (await import('../../../../src/main/resources/gels.json')).default
   return { useGelIndex: () => indexGels(gels) }
 })
+vi.mock('@/hooks/useLanternIndex', async () => {
+  const { indexLanterns } = await import('@/lib/lanterns')
+  const lanterns = (await import('../../../../src/main/resources/lanterns/library.json')).default
+  return { useLanternIndex: () => indexLanterns(lanterns as never) }
+})
 
 /** A ChannelSource over a fixed map, so a test can state the DMX frame it wants. */
 function sourceOf(values: Record<string, number>): ChannelSource {

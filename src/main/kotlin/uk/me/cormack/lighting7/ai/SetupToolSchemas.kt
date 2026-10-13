@@ -158,6 +158,8 @@ private fun JsonObjectBuilder.placementProps() {
     prop("rollDeg", "number", "Body roll, −180–180: tips the body sideways, lifting its own x (length) axis toward vertical; applied before pitch and yaw. A long body (a lightstrip, a bar) runs along its own x: pitch turns it about that length and yaw swings it round, so neither lifts it off level — roll 90 stands it on end (a strip running up a wall, a ring's upright side). For a moving head it lays the unit on its side; it is not a spin about the beam.")
     prop("beamAngleDeg", "integer", "Beam angle 2–120, for fixture types that accept one (profiles, generic dimmers).")
     prop("gelCode", "string", "Gel as the plot writes it, e.g. 'L201', 'R80'.")
+    prop("lampWatts", "integer", "The lamp's power in watts (1–10000), only for a fixture type hung with a lantern (generic-dimmer): how bright the Stage view draws it, with the lantern's lamp kind. Null takes the lantern's. One lamp for every lantern the fixture drives.")
+    prop("lampKelvin", "integer", "The lamp's colour temperature at full in kelvin (1000–10000), only for a fixture type hung with a lantern: 3200 is a theatre tungsten lamp, 2700–3000 a warm house lamp. A gel filters it, and a tungsten lamp warms as it is dimmed. Null takes the lantern's.")
     enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind. For a generic dimmer name its lanternType instead: the kind is derived from the lantern, and a different kind beside one is refused.")
     prop("lengthM", "number", "Installed length in metres along the unit's long axis (0.01–100), only for fixture types that take one (list_fixture_types marks them acceptsLength — a lightstrip, cut to its run). Refused for every other type; null returns to the type's default. A run laid round several sides (a ring round the stage edge) is one fixture: its own placement is one side, and each other side is an `alsoAt` entry with its own lengthM.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
@@ -522,7 +524,7 @@ internal val placeFixturesTool = ToolDef(
     description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel — and for a generic dimmer its lantern and how it is focused (shutters, gate, iris, focus, zoom). Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " +
         "On a show on a venue, a venue fixture (owner=venue in get_patch) is placed through this show's facet overrides: its rigging and x/y/z/yaw/pitch/roll/length are its Position, " +
-        "its lantern, focus fields and beamAngleDeg its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
+        "its lantern, focus fields, beamAngleDeg, lampWatts and lampKelvin its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
         "and only the fields sent change. Its kind and stageHidden are the venue's; its `alsoAt` is the venue's lanterns, one entry each in get_patch's order, each changing only the fields it sends. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)

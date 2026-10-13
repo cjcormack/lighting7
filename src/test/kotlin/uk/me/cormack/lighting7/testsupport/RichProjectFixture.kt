@@ -436,6 +436,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         gateRotationDeg = 7.5
         iris = 0.8
         focusSoftness = 0.25
+        // Its own lamp (v26): non-default, so a copier that lost either would show.
+        lampWatts = 750
+        lampKelvin = 3000
     }
     DaoFixturePatchPlacement.new {
         fixturePatch = profile

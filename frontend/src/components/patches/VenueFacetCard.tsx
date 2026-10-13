@@ -321,6 +321,9 @@ function FacetFields({
           gelCode={null}
           beamAngleDeg={v.beamAngleDeg ?? null}
           onBeamAngleChange={(beamAngleDeg) => onChange({ ...v, beamAngleDeg })}
+          lampWatts={v.lampWatts ?? null}
+          lampKelvin={v.lampKelvin ?? null}
+          onLampChange={(lamp) => onChange({ ...v, ...lamp })}
           placements={placements}
           onPlacementsChange={(next) =>
             onChange({ ...v, placements: next.map((p) => ({ placementUuid: p.uuid!, ...focusFields(p) })) })

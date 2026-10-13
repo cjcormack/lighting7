@@ -411,6 +411,8 @@ class ProjectExporter(private val state: State) {
                     gateRotationDeg = p.gateRotationDeg,
                     iris = p.iris,
                     focusSoftness = p.focusSoftness,
+                    lampWatts = p.lampWatts,
+                    lampKelvin = p.lampKelvin,
                     media = p.fittedMedia,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(

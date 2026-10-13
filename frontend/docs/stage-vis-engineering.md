@@ -242,11 +242,41 @@ the patch's cell list; since the side sheet, `SideSheetFold`'s selection colour 
 (`components/busking/SideSheetFold.tsx`), one leaf for the first selected head; and the Colour
 tab's **hidden leaf per selected head** (`components/busking/ColourSheet.tsx`), which renders
 nothing and only reports into `lib/liveAppearance.ts` so *Pick* can answer in Pads focus with the
-rig tiles folded away. The cues' `MiniStage` borrows only the dispatch's default colour and is not
-a reader. `FixtureModel` keeps its own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
+rig tiles folded away. The cues' `MiniStage` borrows only the dispatch's default colour and a
+lantern's lamp at full (`unitLamp`, `lampHex`), and is not a reader. `FixtureModel` keeps its own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
 store-driven re-renders drop beat-rate changes, so the 3D path writes straight to the scene from the
 channel callback. Three copies of the shape, two of the code; changing the dispatch means changing
 `fixtureAppearance.tsx` and `FixtureModel`'s `ColourSync` together.
+
+### A lantern's lamp: colour temperature, amber drift and output
+
+A unit hung with a lantern (a generic dimmer) is drawn by its **lamp** (`lib/lamp.ts`): the lantern's
+`watts`, `kelvin` and `lamp` kind from the library, the patch's own `lampWatts` / `lampKelvin` over
+them (lighting7 `docs/fixtures-engineering.md` §"Lamps"). `unitLamp` picks the lantern exactly as
+`bodyInputFor` does, and a placement drawn through `patchAtPlacement` keeps the patch's lamp and its
+own lantern. Both colour dispatches take it as an arm after the setting arm and before the gel arm —
+`LampAppearance` in `fixtureAppearance.tsx`, `LampBeamSync` in `FixtureModel` — and
+`colourDispatchParity.test.tsx` holds the two equal. A fixture that is not hung with a lantern is
+untouched: its gel or `DEFAULT_FIXTURE_COLOUR`.
+
+- **Colour.** The black body at the colour temperature (`kelvinToLinearRgb`, a cubic fit to the
+  Planckian locus), divided by the view's adapted white, `ADAPTED_WHITE_K` = 5000 K (an estimate:
+  against the display's D65 a 3200 K lamp is a deep peach; at 5000 K it is a warm cream, warmer than
+  the `#fff8d5` every colourless unit drew before).
+- **Amber drift.** A tungsten lamp's colour temperature falls with its level, T × level^0.12 (a
+  filament's T ∝ V^0.42 and its light ∝ V^3.4), so a profile at a tenth is about 2400 K. An LED's
+  holds. The colour is read at the dimmer's level on every apply, so it moves with the fade.
+- **Edge.** A house downlight has none: its family softness is 1, and past `MASK_EDGE_KNEE` (0.95)
+  `beamMask`'s roll-off widens on to the whole field, so its pool is a bell falling away from the
+  middle. Every family at or below the knee draws as it did.
+- **Gel.** A gel **filters** the lamp — the lamp's linear colour times the gel swatch's — rather than
+  replacing it, so a CTB on tungsten reads near daylight and a CTO goes deep amber.
+- **Output.** `lampOutput` is the lumens out of the lantern (watts × 11 lm/W tungsten — a lamp's
+  lumens less a profile's optics — or 80 lm/W LED, already a fitting's) over a 575 W tungsten
+  profile's, so a Source Four is 1, a 1 kW Par 64 1.74 and the 15 W LED downlight 0.19. The
+  beam director multiplies it into the beam's air and pool opacity **after the cull**, which stays on
+  the level, so a dim lamp at a low level still draws; the lens is never scaled. The 2D readouts show
+  colour and level only.
 
 ### Fitted media: where a beam's colour and gobo come from
 

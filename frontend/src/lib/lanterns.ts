@@ -8,6 +8,9 @@ import type { FixtureKind } from '../store/fixtures'
  * read agree, and are pinned by a node test.
  */
 
+/** What makes a lantern's light — mirrors the desk's `LampKind`. */
+export type LampKind = 'TUNGSTEN' | 'LED'
+
 export type LanternFamily = 'PROFILE' | 'FRESNEL' | 'PC' | 'PAR' | 'FLOOD' | 'CYC' | 'DOWNLIGHT'
 
 /** The archetypes a conventional is built as (a subset of `bodies/archetype.ts`'s `Archetype`). */
@@ -19,7 +22,12 @@ export interface Lantern {
   maker: string
   family: LanternFamily
   archetype: LanternArchetype
+  /** The lamp's power; with [lamp], how much light it gives (`lib/lamp.ts`). A patch may name its own. */
   watts?: number | null
+  /** The lamp's colour temperature at full, in kelvin. A patch may name its own. */
+  kelvin?: number | null
+  /** Absent is tungsten: an older desk sends none. */
+  lamp?: LampKind | null
   beamDeg?: number | null
   /** The field angle — on a lantern with a [zoom], the one drawn until a focus sets its own. */
   fieldDeg: number

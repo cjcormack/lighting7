@@ -13,6 +13,11 @@ vi.mock('@/hooks/useGelIndex', async () => {
   const gels = (await import('../../../../src/main/resources/gels.json')).default
   return { useGelIndex: () => indexGels(gels) }
 })
+vi.mock('@/hooks/useLanternIndex', async () => {
+  const { indexLanterns } = await import('@/lib/lanterns')
+  const lanterns = (await import('../../../../src/main/resources/lanterns/library.json')).default
+  return { useLanternIndex: () => indexLanterns(lanterns as never) }
+})
 vi.mock('@/hooks/useProjectedPatches', () => ({
   useProjectedPatches: () => ({ points: [], extraPoints: [] }),
 }))

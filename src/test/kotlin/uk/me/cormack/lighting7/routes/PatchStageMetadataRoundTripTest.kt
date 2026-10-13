@@ -418,6 +418,91 @@ class PatchStageMetadataRoundTripTest : RouteIntegrationTest() {
         )
     }
 
+    @Test
+    fun `a lantern's lamp round-trips, is range-checked and is refused on a type with no lantern`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val created = client.post("/api/rest/projects/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0, fixtureTypeKey = "generic-dimmer", key = "house-1", name = "House 1",
+                    startChannel = 1, lanternType = "downlight", lampWatts = 18, lampKelvin = 2700,
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+        val dto = created.body<FixturePatchDto>()
+        assertEquals(18, dto.lampWatts)
+        assertEquals(2700, dto.lampKelvin)
+
+        // PUT: one field set, the other cleared; an unrelated PUT leaves both alone.
+        val put = client.put("/api/rest/projects/$projectId/patches/${dto.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("lampWatts", JsonPrimitive(25)); put("lampKelvin", JsonNull) })
+        }
+        assertEquals(HttpStatusCode.OK, put.status, put.bodyAsText())
+        val afterPut = put.body<FixturePatchDto>()
+        assertEquals(25, afterPut.lampWatts)
+        assertNull(afterPut.lampKelvin)
+
+        // The bulk placement route takes them too, as metadata.
+        val bulk = client.put("/api/rest/projects/$projectId/patches/placements") {
+            contentType(ContentType.Application.Json)
+            setBody(BulkPlacementRequest(listOf(buildJsonObject {
+                put("patchId", JsonPrimitive(dto.id)); put("lampKelvin", JsonPrimitive(3000))
+            })))
+        }
+        assertEquals(HttpStatusCode.OK, bulk.status, bulk.bodyAsText())
+        val fetched = client.get("/api/rest/projects/$projectId/patches/${dto.id}").body<FixturePatchDto>()
+        assertEquals(25, fetched.lampWatts)
+        assertEquals(3000, fetched.lampKelvin)
+
+        for ((key, value) in listOf("lampWatts" to 0, "lampWatts" to 20000, "lampKelvin" to 900, "lampKelvin" to 12000)) {
+            val bad = client.put("/api/rest/projects/$projectId/patches/${dto.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put(key, JsonPrimitive(value)) })
+            }
+            assertEquals(HttpStatusCode.BadRequest, bad.status, "$key $value")
+            assertTrue(bad.bodyAsText().contains(key), "the refusal names $key")
+        }
+
+        // A DMX fixture is not hung with a lantern, so it has no lamp to set — but clearing is allowed.
+        val mover = client.post("/api/rest/projects/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0, fixtureTypeKey = "gear4music-orbit-70-13ch", key = "orbit-1", name = "Orbit 1",
+                    startChannel = 100, lampKelvin = 6000,
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, mover.status, mover.bodyAsText())
+        assertTrue(mover.bodyAsText().contains("hung with a lantern"))
+        val moverOk = client.post("/api/rest/projects/$projectId/patches") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePatchRequest(
+                    universe = 0, fixtureTypeKey = "gear4music-orbit-70-13ch", key = "orbit-1", name = "Orbit 1",
+                    startChannel = 100,
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, moverOk.status, moverOk.bodyAsText())
+        val moverId = moverOk.body<FixturePatchDto>().id
+        val moverPut = client.put("/api/rest/projects/$projectId/patches/$moverId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("lampWatts", JsonPrimitive(250)) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, moverPut.status)
+        val moverClear = client.put("/api/rest/projects/$projectId/patches/$moverId") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("lampWatts", JsonNull) })
+        }
+        assertEquals(HttpStatusCode.OK, moverClear.status, moverClear.bodyAsText())
+    }
+
     private suspend fun createRigging(
         client: io.ktor.client.HttpClient,
         name: String,

@@ -4,6 +4,7 @@ import {
   findDimmerProperty,
   findGroupColourSource,
   findStrobeProperties,
+  resolveFixtureKind,
   type ColourPropertyDescriptor,
   type Fixture,
   type FixtureTypeInfo,
@@ -15,6 +16,8 @@ import type { FixturePatch } from '../../api/patchApi'
 import { findGel } from '../../lib/gels'
 import { colourFilters, filterColour, fittedProperties } from '../../lib/fittedMedia'
 import { useGelIndex } from '../../hooks/useGelIndex'
+import { useLanternIndex } from '../../hooks/useLanternIndex'
+import { lampHex, unitLamp, type Lamp } from '../../lib/lamp'
 import {
   getChannelValue,
   subscribeToChannels,
@@ -58,7 +61,7 @@ export interface PixelSegment {
   intensity: number
 }
 
-/** The warm tungsten every surface falls back to for a colourless fixture. */
+/** The white every surface falls back to for a colourless fixture not hung with a lantern (a lantern draws its lamp, `lib/lamp.ts`). */
 export const DEFAULT_FIXTURE_COLOUR = '#fff8d5'
 
 /** Grey and barely lit — how every surface draws a patch with no matching fixture, so it reads
@@ -112,6 +115,16 @@ export function FixtureAppearanceSource({
   // colouring by it would contradict both other surfaces.
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
+  // A lantern's lamp (`lib/lamp.ts`): its colour temperature, its amber drift, a gel filtering it.
+  // The 3D scene's `LampBeamSync` is the other copy.
+  const lanterns = useLanternIndex()
+  const lamp = useMemo(
+    () =>
+      colourSource
+        ? null
+        : unitLamp(patch, fixtureType?.acceptsLantern === true, resolveFixtureKind(patch.kindOverride, fixtureType?.kind), lanterns),
+    [colourSource, patch, fixtureType, lanterns],
+  )
   // The unit's colour filters — a second colour wheel, a media frame's gel, a dichroic in a wheel
   // (`colourFilters`). The 3D scene's `filteredHex` is the other copy of this step.
   const filters = useMemo(
@@ -154,6 +167,14 @@ export function FixtureAppearanceSource({
       <SettingColourAppearance settingProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
         {emit}
       </SettingColourAppearance>
+    )
+  }
+
+  if (lamp) {
+    return (
+      <LampAppearance lamp={lamp} gelHex={gel?.color ?? null} dimmerProp={dimmerProp} filters={filters}>
+        {emit}
+      </LampAppearance>
     )
   }
 
@@ -341,6 +362,24 @@ function FixedColourAppearance({
   // dimmer alone is the level. A gel fixture with no dimmer reads full on by design — there is
   // no brightness signal to gate it on.
   const intensity = useNormalizedIntensity(dimmerProp)
+  return <Filtered hex={hex} filters={filters}>{(filtered) => children({ color: filtered, intensity })}</Filtered>
+}
+
+/** A lantern's lamp at its level: the drifted colour temperature, through its gel, then its filters. */
+function LampAppearance({
+  lamp,
+  gelHex,
+  dimmerProp,
+  filters = NO_FILTERS,
+  children,
+}: LeafProps & {
+  lamp: Lamp
+  gelHex: string | null
+  dimmerProp?: SliderPropertyDescriptor
+  filters?: readonly SettingPropertyDescriptor[]
+}) {
+  const intensity = useNormalizedIntensity(dimmerProp)
+  const hex = lampHex(lamp, intensity, gelHex)
   return <Filtered hex={hex} filters={filters}>{(filtered) => children({ color: filtered, intensity })}</Filtered>
 }
 
