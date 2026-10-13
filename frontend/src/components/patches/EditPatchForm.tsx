@@ -70,6 +70,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   })
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
+  const [lamp, setLamp] = useState({ lampWatts: patch.lampWatts ?? null, lampKelvin: patch.lampKelvin ?? null })
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
   // The lantern and its focus (stage-view plan session 7), for a type hung with one.
   const [focus, setFocus] = useState<Required<LanternFocus>>(() => focusFields(patch))
@@ -156,6 +157,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     (placement.baseRollDeg ?? null) !== (patch.baseRollDeg ?? null) ||
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode ||
+    lamp.lampWatts !== (patch.lampWatts ?? null) ||
+    lamp.lampKelvin !== (patch.lampKelvin ?? null) ||
     kindOverride !== patch.kindOverride ||
     lengthM !== (patch.lengthM ?? null) ||
     stageHidden !== patch.stageHidden ||
@@ -179,6 +182,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if ((placement.baseRollDeg ?? null) !== (patch.baseRollDeg ?? null)) body.baseRollDeg = placement.baseRollDeg ?? null
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
+    if (lamp.lampWatts !== (patch.lampWatts ?? null)) body.lampWatts = lamp.lampWatts
+    if (lamp.lampKelvin !== (patch.lampKelvin ?? null)) body.lampKelvin = lamp.lampKelvin
     // Beside a named lantern the desk derives the kind, and refuses another, so none is sent.
     if (!namedLantern && kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
     if (lengthM !== (patch.lengthM ?? null)) body.lengthM = lengthM
@@ -339,6 +344,9 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             onGelChange={setGelCode}
             beamAngleDeg={beamAngleDeg}
             onBeamAngleChange={setBeamAngleDeg}
+            lampWatts={lamp.lampWatts}
+            lampKelvin={lamp.lampKelvin}
+            onLampChange={setLamp}
             placements={extraPlacements}
             onPlacementsChange={setExtraPlacements}
           />

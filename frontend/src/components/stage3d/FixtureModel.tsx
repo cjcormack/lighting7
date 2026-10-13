@@ -44,8 +44,10 @@ import {
   findLedMacroProperty,
   findMovementMacroProperty,
   findShutterProperties,
+  resolveFixtureKind,
   type ShutterProperties,
 } from '../../store/fixtures'
+import { lampHex, lampOutput, unitLamp, type Lamp } from '../../lib/lamp'
 import {
   channelKey,
   getChannelValue,
@@ -713,6 +715,23 @@ export function FixtureModel({
     () => findDimmerProperty(unitProps),
     [unitProps],
   )
+  // A lantern's lamp (`lib/lamp.ts`): its colour — drifting warmer as it dims, filtered by its gel —
+  // and its output, which scales the beam and the pool against a 575 W profile's, never the lens.
+  const acceptsLantern = fixtureType?.acceptsLantern === true
+  const typeKind = fixtureType?.kind
+  const lamp = useMemo(
+    () =>
+      colourSource
+        ? null
+        : unitLamp(
+            { lampWatts: patch.lampWatts, lampKelvin: patch.lampKelvin, lanternType: patch.lanternType },
+            acceptsLantern,
+            resolveFixtureKind(patch.kindOverride, typeKind),
+            lanterns,
+          ),
+    [colourSource, patch.lampWatts, patch.lampKelvin, patch.lanternType, patch.kindOverride, acceptsLantern, typeKind, lanterns],
+  )
+  const output = lamp ? lampOutput(lamp) : 1
   // The strobe channels whose bands say what they do (fixture-optics plan D12): a level factor
   // beside the dimmer's, applied by the colour syncs below exactly as the 2D dispatch applies it.
   const strobeProps = useMemo(() => findStrobeProperties(unitProps), [unitProps])
@@ -940,6 +959,7 @@ export function FixtureModel({
     regionGeometry,
     colorStateRef,
     cellStateRef,
+    output,
   })
 
   useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies })
@@ -989,6 +1009,7 @@ export function FixtureModel({
           groupColour={groupColour}
           colourSource={colourSource}
           gel={gel}
+          lamp={lamp}
           filters={filterProps}
           dimmerProp={dimmerProp}
           strobes={strobeProps}
@@ -1151,6 +1172,8 @@ interface BeamDirectorOpts {
   regionGeometry: ReadonlyArray<RegionGeometry>
   colorStateRef: React.RefObject<ColorState>
   cellStateRef: React.RefObject<CellState | null>
+  /** A lantern's lamp output against a 575 W profile's (`lampOutput`); 1 for every other fixture. */
+  output: number
 }
 
 // 8-bit fine DMX channel divides one coarse step into 256 sub-steps.
@@ -1421,6 +1444,7 @@ function useBeamDirector({
   regionGeometry,
   colorStateRef,
   cellStateRef,
+  output,
 }: BeamDirectorOpts) {
   const source = useChannelSource()
   const sourceRef = useRef(source)
@@ -1693,8 +1717,10 @@ function useBeamDirector({
     const ledMacro = multi ? 0 : resolveMacroIndex(ledMacroProp, readChannel(channelSource, beamKeys.ledMacro))
     if (ledMacro > 0) animating = true
     let beamColor = colorState.color
-    let poolOpacity = colorState.poolOpacity
-    let coneOpacity = colorState.coneOpacity
+    // The lamp's output scales what lands and what shows in the air, after the cull: the cull is
+    // the level's, so a dim lamp at a low level still draws.
+    let poolOpacity = colorState.poolOpacity * output
+    let coneOpacity = colorState.coneOpacity * output
     if (ledMacro > 0) {
       evalLedMacro(ledMacro, elapsed, SCRATCH_LED_MACRO)
       SCRATCH_MACRO_COLOR.copy(colorState.color)
@@ -2164,6 +2190,7 @@ export function ColourSync({
   groupColour,
   colourSource,
   gel,
+  lamp = null,
   ...refs
 }: ColourSyncBaseProps & {
   /** False for a patch whose fixture record hasn't resolved (or never will). */
@@ -2175,6 +2202,8 @@ export function ColourSync({
     | { type: 'setting'; property: SettingPropertyDescriptor }
     | undefined
   gel: { color: string } | null
+  /** A lantern's lamp — drawn in place of the gel's colour, the gel filtering it. */
+  lamp?: Lamp | null
 }) {
   // First, and above the gel arm, exactly as FixtureAppearanceSource orders it: a patch with no
   // fixture record has no channels to read, and falling through to the warm-white default painted
@@ -2195,6 +2224,9 @@ export function ColourSync({
   }
   if (colourSource?.type === 'setting') {
     return <SettingColourBeamSync settingProp={colourSource.property} {...refs} />
+  }
+  if (lamp) {
+    return <LampBeamSync lamp={lamp} gelHex={gel?.color ?? null} {...refs} />
   }
   return <FixedColourBeamSync hex={gel?.color ?? DEFAULT_FIXTURE_COLOUR} {...refs} />
 }
@@ -2490,6 +2522,48 @@ function FixedColourBeamSync({
       applyColour(
         filteredHex(hex, filters, levels, timeS),
         liveDimmerFactor(dimmerProp, source) * liveStrobeFactor(strobes, source, timeS),
+        refs,
+      )
+      return filtersAnimate(filters, levels) || strobesAnimate(strobes, source) || travelState.moving
+    },
+    source,
+    ticker,
+  )
+  return null
+}
+
+// A lantern's lamp: [FixedColourBeamSync] with the colour read at the level — its amber drift — and
+// its gel filtering it (`lib/lamp.ts`). The 2D `LampAppearance` is the other copy.
+function LampBeamSync({
+  lamp,
+  gelHex,
+  dimmerProp,
+  filters = NO_FILTERS,
+  strobes = NO_STROBES,
+  ticker = STILL_COLOUR_TICKER,
+  travel,
+  ...refs
+}: ColourSyncBaseProps & { lamp: Lamp; gelHex: string | null }) {
+  const source = useChannelSource()
+  const [travelState] = useState(makeColourTravelState)
+  const channels = useMemo(
+    () => [
+      ...(dimmerProp ? [dimmerProp.channel] : []),
+      ...filters.map((f) => f.channel),
+      ...strobes.map((p) => p.channel),
+    ],
+    [dimmerProp, filters, strobes],
+  )
+  useLiveColour(
+    channels,
+    (inFrame) => {
+      const levelOf = beginColourApply(travelState, travel, source, channels, inFrame ? ticker.now() : null)
+      const levels = filterLevels(filters, levelOf)
+      const timeS = ticker.now()
+      const level = liveDimmerFactor(dimmerProp, source)
+      applyColour(
+        filteredHex(lampHex(lamp, level, gelHex), filters, levels, timeS),
+        level * liveStrobeFactor(strobes, source, timeS),
         refs,
       )
       return filtersAnimate(filters, levels) || strobesAnimate(strobes, source) || travelState.moving

@@ -22,6 +22,8 @@ import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.effectiveKind
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.lantern.lampKelvinError
+import uk.me.cormack.lighting7.fixture.lantern.lampWattsError
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.models.AddressFacet
 import uk.me.cormack.lighting7.models.DaoProject
@@ -332,10 +334,15 @@ private fun parsePosition(reader: FieldReader, target: ShowOverrides.Target, typ
 private val FOCUS_FIELDS = LanternFocus.KEYS.toSet()
 
 private fun parseFocus(reader: FieldReader, obj: JsonObject, target: ShowOverrides.Target, typeKey: String): FocusFacet {
-    reader.allow(FOCUS_FIELDS + "beamAngleDeg" + "placements")
+    reader.allow(FOCUS_FIELDS + "beamAngleDeg" + "lampWatts" + "lampKelvin" + "placements")
     val focus = LanternFocus.parse(obj).getOrElse { reader.problems += it.message.orEmpty(); LanternFocus() }
     val beam = reader.int("beamAngleDeg")
     if (beam != null && beam !in 2..120) reader.problems += "beamAngleDeg must be between 2 and 120"
+    val lampWatts = reader.int("lampWatts")
+    val lampKelvin = reader.int("lampKelvin")
+    lampWattsError(lampWatts)?.let { reader.problems += it }
+    lampKelvinError(lampKelvin)?.let { reader.problems += it }
+    if (lampWatts != null || lampKelvin != null) lamplessRefusal(typeKey)?.let { reader.problems += it }
     // The kind the facet leaves the patch with, as a write derives it, and the type's rules against it.
     val patch = target.patch
     val kind = effectiveKind(typeKey, kindUnderLantern(focus.lanternType, patch.lanternType, patch.kindOverride), focus.lanternType)
@@ -360,7 +367,7 @@ private fun parseFocus(reader: FieldReader, obj: JsonObject, target: ShowOverrid
         }
     }
     return FocusFacet(
-        focus.lanternType, beam, focus.zoomDeg, focus.lampRotationDeg, focus.shutters, focus.gateRotationDeg,
+        focus.lanternType, beam, lampWatts, lampKelvin, focus.zoomDeg, focus.lampRotationDeg, focus.shutters, focus.gateRotationDeg,
         focus.iris, focus.focusSoftness, placements,
     )
 }

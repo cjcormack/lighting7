@@ -24,6 +24,17 @@ enum class LanternFamily(val kind: FixtureKind) {
     DOWNLIGHT(FixtureKind.GENERIC),
 }
 
+/**
+ * What makes a lantern's light: how many lumens a watt buys, and whether its colour warms as it is
+ * dimmed (an incandescent filament's does — amber drift — an LED's holds). The Stage view reads it
+ * (`frontend/src/lib/lamp.ts`); the desk only stores and checks it.
+ */
+@Serializable
+enum class LampKind {
+    TUNGSTEN,
+    LED,
+}
+
 /** A lantern's field-angle range, where it has one: a zoom profile's, or a fresnel's spot–flood. */
 @Serializable
 data class LanternZoom(val minDeg: Double, val maxDeg: Double)
@@ -61,7 +72,11 @@ data class Lantern(
     val family: LanternFamily,
     /** The body the Stage view builds it as — a disc-lensed archetype for all but a flood. */
     val archetype: BodyArchetype,
-    val watts: Int? = null,
+    /** The lamp's power, and with [lamp] its light output; a patch may name its own (`lamp_watts`). */
+    val watts: Int,
+    /** The lamp's colour temperature at full; a patch may name its own (`lamp_kelvin`). */
+    val kelvin: Int,
+    val lamp: LampKind = LampKind.TUNGSTEN,
     val beamDeg: Double? = null,
     /** The field angle, and on a lantern with [zoom] the one drawn until a focus sets its own. */
     val fieldDeg: Double,
@@ -132,6 +147,8 @@ object LanternLibrary {
         if (!ID_PATTERN.matches(l.id)) add("$at: id must be lower-case letters, digits and dashes")
         if (l.name.isBlank()) add("$at: name is blank")
         if (l.fieldDeg !in 1.0..180.0) add("$at: fieldDeg ${l.fieldDeg} is outside 1–180")
+        if (l.watts !in MIN_LAMP_WATTS..MAX_LAMP_WATTS) add("$at: watts ${l.watts} is outside $MIN_LAMP_WATTS–$MAX_LAMP_WATTS")
+        if (l.kelvin !in MIN_LAMP_KELVIN..MAX_LAMP_KELVIN) add("$at: kelvin ${l.kelvin} is outside $MIN_LAMP_KELVIN–$MAX_LAMP_KELVIN")
         l.beamDeg?.let { if (it <= 0.0 || it > l.fieldDeg) add("$at: beamDeg $it must be within the field") }
         l.zoom?.let { z ->
             if (z.minDeg <= 0.0 || z.maxDeg > 180.0 || z.minDeg >= z.maxDeg) add("$at: zoom ${z.minDeg}–${z.maxDeg} is not a range")
@@ -169,3 +186,23 @@ object LanternLibrary {
         BodyArchetype.FLOOD, BodyArchetype.DOWNLIGHT,
     )
 }
+
+/** Bounds on a lamp's power, a library lantern's or a patch's own (`lamp_watts`). */
+const val MIN_LAMP_WATTS = 1
+const val MAX_LAMP_WATTS = 10000
+
+/** Bounds on a lamp's colour temperature at full: a candle to a cool daylight lamp. */
+const val MIN_LAMP_KELVIN = 1000
+const val MAX_LAMP_KELVIN = 10000
+
+/** Why [watts] is out of range, or null when it is in range (or null — the lantern's own). */
+fun lampWattsError(watts: Int?): String? =
+    if (watts != null && watts !in MIN_LAMP_WATTS..MAX_LAMP_WATTS) {
+        "lampWatts must be between $MIN_LAMP_WATTS and $MAX_LAMP_WATTS"
+    } else null
+
+/** Why [kelvin] is out of range, or null when it is in range (or null — the lantern's own). */
+fun lampKelvinError(kelvin: Int?): String? =
+    if (kelvin != null && kelvin !in MIN_LAMP_KELVIN..MAX_LAMP_KELVIN) {
+        "lampKelvin must be between $MIN_LAMP_KELVIN and $MAX_LAMP_KELVIN"
+    } else null

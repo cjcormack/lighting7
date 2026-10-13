@@ -1438,9 +1438,9 @@ lamps and a Par 16, a Coda flood, an Iris cyc and a house downlight. Each carrie
 maker, a **family** (`PROFILE · FRESNEL · PC · PAR · FLOOD · CYC · DOWNLIGHT`, whose kind the patch
 takes — a PC is a `FRESNEL`, a flood and a cyc a `WASH`, a downlight `GENERIC`), the static
 **archetype** it is drawn as, beam and field angles, a zoom range, a PAR lamp's **oval** (wide ×
-narrow, the wide being the field), the lens diameter, the frame size, its dimensions, its
-accessories (shutters *or* barn doors, an iris, a colour frame) and the kinds it is the **default
-for**. The seed is from datasheets as remembered, with each entry's `source` naming the sheet; the
+narrow, the wide being the field), its **lamp** (§"Lamps"), the lens diameter, the frame size, its
+dimensions, its accessories (shutters *or* barn doors, an iris, a colour frame) and the kinds it is
+the **default for**. The seed is from datasheets as remembered, with each entry's `source` naming the sheet; the
 hall's own list and a verification pass are `FU-LANTERN-LIBRARY-HALL` in the follow-ups.
 
 `parse` refuses a library that would draw wrong — an id not `[a-z0-9-]`, a field outside 1–180°, a
@@ -1484,6 +1484,30 @@ are in `METADATA_ONLY_PUT_KEYS`: `DbFixtureLoader` never reads them, so a focus 
 the rig. They round-trip through sync on `formatVersion` 19 (`docs/sync-engineering.md`
 §"Version 19 — lanterns and focus"). The frontend reads the library through `useLanternIndex` and
 draws the lantern, the cut and the oval — `frontend/docs/stage-vis-engineering.md` §"Fixture bodies".
+
+### Lamps
+
+Every library lantern carries a **lamp**: `watts`, `kelvin` (its colour temperature at full) and
+`lamp`, `TUNGSTEN` (the default when the key is left out) or `LED` — `LampKind` in
+`fixture/lantern/LanternLibrary.kt`. Theatre tungsten-halogen lanterns are 3200 K (the Patt 23 and
+the Par 16 birdie 3000 K); the house downlight is a 15 W, 3000 K LED with a 40° beam and a 70° field, drawn with no edge at all (`MASK_EDGE_KNEE` in the frontend's `beamMask.ts`).
+`parse` refuses a library entry whose watts fall outside 1–10000 or whose kelvin fall outside
+1000–10000.
+
+A patch hung with a lantern may name its own lamp: `fixture_patches.lamp_watts` and `.lamp_kelvin`,
+each null for the lantern's. They are the **patch's**, not a placement's — one lamp for every lantern a
+paired dimmer drives — and the write boundary refuses either on a type that takes no lantern
+(`lamplessRefusal` in `routes/projectPatches.kt`, beside `fixedLengthRefusal`; clearing is always
+allowed), out of range (`lampWattsError`, `lampKelvinError`) on `POST`/`PUT /patches`, the bulk
+placement route, a Focus facet write and the MCP tools. A type change to one with no lantern clears
+them with the focus. Both are in `METADATA_ONLY_PUT_KEYS`: the loader never reads them. A venue
+patch's lamp is part of its **Focus** facet (`FocusFacet.lampWatts` / `.lampKelvin`), and `VenueDiff`
+classes a change to it as drawing only. They sync on `formatVersion` 26 (`docs/sync-engineering.md`
+§"Version 26 — lamps").
+
+The desk only stores and checks a lamp; the Stage view draws it — its colour from the colour
+temperature, warming as a tungsten lamp dims, filtered by the gel, and its brightness from its watts
+and kind (`frontend/src/lib/lamp.ts`, `frontend/docs/stage-vis-engineering.md` §"A lantern's lamp").
 
 ### Fitted media
 

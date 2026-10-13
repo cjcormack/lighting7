@@ -278,7 +278,7 @@ internal class VenueFixtureTools(private val state: State) {
      * [row], a `place_fixtures` row naming the venue patch [key] in [project] — a show on a venue — as
      * the facet values it leaves the show holding, or null with every problem added to [problems]. Each
      * field lands in its facet (rigging and x/y/z/yaw/pitch/roll/length → Position, the lantern and its
-     * focus and beamAngleDeg → Focus, gelCode and media → Media), over the show's current value of
+     * focus, beamAngleDeg and the lamp → Focus, gelCode and media → Media), over the show's current value of
      * that facet; a facet the row touches must already be this show's. `alsoAt` addresses the venue's
      * own lanterns in order, one entry each, and an entry changes only the fields it sends. Inside a
      * transaction.
@@ -315,7 +315,7 @@ internal class VenueFixtureTools(private val state: State) {
             when (name) {
                 "rigging" -> rigging(value, "$where: rigging")?.let { field(PatchFacet.POSITION, "riggingUuid", it) }
                 in POSITION_NAMES -> field(PatchFacet.POSITION, POSITION_NAMES.getValue(name), value)
-                in LanternFocus.KEYS, "beamAngleDeg" -> field(PatchFacet.FOCUS, name, value)
+                in LanternFocus.KEYS, "beamAngleDeg", "lampWatts", "lampKelvin" -> field(PatchFacet.FOCUS, name, value)
                 "gelCode", "media" -> field(PatchFacet.MEDIA, name, value)
             }
         }

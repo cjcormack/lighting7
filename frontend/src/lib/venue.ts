@@ -45,6 +45,8 @@ const FIELD_WORDS: Record<string, string> = {
   gelCode: 'gel',
   zoomDeg: 'zoom',
   beamAngleDeg: 'beam',
+  lampWatts: 'lamp watts',
+  lampKelvin: 'lamp colour temperature',
   lanternType: 'lantern',
   fixtureTypeKey: 'type',
   displayName: 'name',

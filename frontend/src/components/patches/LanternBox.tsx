@@ -16,6 +16,9 @@ import { LanternPicker } from '@/components/lanterns/LanternPicker'
 import { FocusCard, type FocusUnit } from '@/components/lanterns/FocusCard'
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
+import { LampFields } from './LampFields'
+import { useGelIndex } from '@/hooks/useGelIndex'
+import { findGel } from '@/lib/gels'
 
 interface LanternBoxProps {
   idPrefix: string
@@ -29,6 +32,10 @@ interface LanternBoxProps {
   onGelChange?: (next: string | null) => void
   beamAngleDeg: number | null
   onBeamAngleChange: (next: number | null) => void
+  /** The patch's own lamp; null takes the lantern's. One lamp for every lantern the patch drives. */
+  lampWatts: number | null
+  lampKelvin: number | null
+  onLampChange: (next: { lampWatts: number | null; lampKelvin: number | null }) => void
   /** The fixture's other lanterns — the pair switch's other entries. */
   placements: readonly PatchPlacementInput[]
   onPlacementsChange: (next: PatchPlacementInput[]) => void
@@ -36,8 +43,8 @@ interface LanternBoxProps {
 
 /**
  * The **Lantern** box (stage-view plan session 7): which lantern from the library a conventional
- * dimmer is hung with, its beam and field, its zoom within the lantern's range, the gel in its
- * frame, an explicit beam-angle override, and its focus — the card the Stage view's Focus tab
+ * dimmer is hung with, its beam and field, its zoom within the lantern's range, its lamp, the gel in
+ * its frame, an explicit beam-angle override, and its focus — the card the Stage view's Focus tab
  * draws, over every lantern of the pair. It replaces *Beam & Gel* and *3D shape*: the lantern is
  * the shape, and the desk derives the fixture's kind from it.
  *
@@ -53,9 +60,14 @@ export function LanternBox({
   onGelChange,
   beamAngleDeg,
   onBeamAngleChange,
+  lampWatts,
+  lampKelvin,
+  onLampChange,
   placements,
   onPlacementsChange,
 }: LanternBoxProps) {
+  const gels = useGelIndex()
+  const gelHex = gelCode ? (findGel(gels, gelCode)?.color ?? null) : null
   const [focusing, setFocusing] = useState(false)
   const [active, setActive] = useState(0)
   const lantern = effectiveLantern(lanterns, focus.lanternType, kind)
@@ -101,6 +113,14 @@ export function LanternBox({
           {lantern.zoom ? `zoom ${fmt(lantern.zoom.minDeg)}–${fmt(lantern.zoom.maxDeg)}°` : 'zoom · fixed'}
         </p>
       )}
+      <LampFields
+        idPrefix={idPrefix}
+        lantern={lantern}
+        lampWatts={lampWatts}
+        lampKelvin={lampKelvin}
+        onChange={onLampChange}
+        gelHex={gelHex}
+      />
       {onGelChange && <GelPickerField id={`${idPrefix}-gel`} value={gelCode} onChange={onGelChange} />}
       <BeamAngleField id={`${idPrefix}-beam`} value={beamAngleDeg} onChange={onBeamAngleChange} />
       <p className="text-xs text-muted-foreground">

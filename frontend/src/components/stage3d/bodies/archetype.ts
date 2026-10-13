@@ -164,7 +164,8 @@ export const SOFTNESS: Readonly<Record<Archetype | `mover:${MoverHead}`, number>
   fresnel: 0.85,
   par: 0.7,
   flood: 0.95,
-  downlight: 0.9,
+  // No edge at all: a house downlight's light falls away from its middle (`MASK_EDGE_KNEE`).
+  downlight: 1,
   mover: 0.5,
   'mover:spot': 0.2,
   'mover:wash': 0.85,

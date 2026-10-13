@@ -206,6 +206,8 @@ class VenueDetach(private val state: State) {
             copy.lengthM = e.lengthM
             copy.focus = e.focus
             copy.beamAngleDeg = e.beamAngleDeg
+            copy.lampWatts = e.lampWatts
+            copy.lampKelvin = e.lampKelvin
             copy.kindOverride = e.kindOverride
             copy.gelCode = e.gelCode
             copy.fittedMedia = e.fittedMedia

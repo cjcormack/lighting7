@@ -26,6 +26,8 @@ import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.lantern.lampKelvinError
+import uk.me.cormack.lighting7.fixture.lantern.lampWattsError
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.*
@@ -104,6 +106,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 beamAngleDeg = request.beamAngleDeg,
                 lengthM = request.lengthM,
                 baseRollDeg = request.baseRollDeg,
+                lampWatts = request.lampWatts,
+                lampKelvin = request.lampKelvin,
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
@@ -111,6 +115,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             }
             if (request.lengthM != null) {
                 fixedLengthRefusal(typeInfo.typeKey)?.let {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+                    return@withProject
+                }
+            }
+            if (request.lampWatts != null || request.lampKelvin != null) {
+                lamplessRefusal(typeInfo.typeKey)?.let {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
                     return@withProject
                 }
@@ -226,6 +236,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.gelCode = normalisedGelCode
                     this.kindOverride = focusWrite.kindOverride
                     this.lengthM = request.lengthM
+                    this.lampWatts = request.lampWatts
+                    this.lampKelvin = request.lampKelvin
                     this.stageHidden = request.stageHidden
                     this.infrastructure = request.infrastructure
                 }
@@ -281,6 +293,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 beamAngleDeg = body["beamAngleDeg"].nullableInt(),
                 lengthM = body["lengthM"].nullableDouble(),
                 baseRollDeg = body["baseRollDeg"].nullableDouble(),
+                lampWatts = body["lampWatts"].nullableInt(),
+                lampKelvin = body["lampKelvin"].nullableInt(),
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
@@ -350,6 +364,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         return@transaction Pair<FixturePatchDto?, String?>(null, it)
                     }
                 }
+                if (body["lampWatts"].nullableInt() != null || body["lampKelvin"].nullableInt() != null) {
+                    lamplessRefusal(patch.fixtureTypeKey)?.let {
+                        refusedAsBadRequest = true
+                        return@transaction Pair<FixturePatchDto?, String?>(null, it)
+                    }
+                }
 
                 // The lantern, its focus and the kind it derives, as this write leaves them — and every
                 // placement's focus against them. The request's fault when refused, so a 400; before
@@ -413,6 +433,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("baseRollDeg" in body) patch.baseRollDeg = body["baseRollDeg"].nullableDouble()
                 if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
                 if ("lengthM" in body) patch.lengthM = body["lengthM"].nullableDouble()
+                if ("lampWatts" in body) patch.lampWatts = body["lampWatts"].nullableInt()
+                if ("lampKelvin" in body) patch.lampKelvin = body["lampKelvin"].nullableInt()
                 if ("riggingUuid" in body) {
                     val uuidStr = body["riggingUuid"].nullableString()
                     if (uuidStr == null) {
@@ -583,6 +605,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     beamAngleDeg = entry["beamAngleDeg"].nullableInt(),
                     lengthM = entry["lengthM"].nullableDouble(),
                     baseRollDeg = entry["baseRollDeg"].nullableDouble(),
+                    lampWatts = entry["lampWatts"].nullableInt(),
+                    lampKelvin = entry["lampKelvin"].nullableInt(),
                 )
                 if (stageError != null) {
                     if (request.atomic) {
@@ -699,6 +723,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                             continue
                         }
                     }
+                    if (entry["lampWatts"].nullableInt() != null || entry["lampKelvin"].nullableInt() != null) {
+                        val refusal = lamplessRefusal(target.fixtureTypeKey)
+                        if (refusal != null) {
+                            fatal.add(BulkPlacementFailure(patchId, refusal))
+                            continue
+                        }
+                    }
                     if ("riggingUuid" in entry) {
                         val uuidStr = entry["riggingUuid"].nullableString()
                         if (uuidStr != null && riggingByUuid[uuidStr] == null) {
@@ -775,6 +806,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("baseRollDeg" in entry) patch.baseRollDeg = entry["baseRollDeg"].nullableDouble()
                     if ("beamAngleDeg" in entry) patch.beamAngleDeg = entry["beamAngleDeg"].nullableInt()
                     if ("lengthM" in entry) patch.lengthM = entry["lengthM"].nullableDouble()
+                    if ("lampWatts" in entry) patch.lampWatts = entry["lampWatts"].nullableInt()
+                    if ("lampKelvin" in entry) patch.lampKelvin = entry["lampKelvin"].nullableInt()
                     if (patchId in headNumbersById) patch.headNumber = headNumbersById[patchId]
                     if ("gelCode" in entry) patch.gelCode = normaliseGelCode(entry["gelCode"].nullableString())
                     // Already resolved (and validated) in the pass above: the kind a lantern derives, too.
@@ -1018,6 +1051,10 @@ data class FixturePatchDto(
     val iris: Double? = null,
     /** Sharp 0 to soft 1; null is the lantern's own edge. */
     val focusSoftness: Double? = null,
+    /** The lamp's power, for a type hung with a lantern; null is the lantern's `watts`. */
+    val lampWatts: Int? = null,
+    /** The lamp's colour temperature at full; null is the lantern's `kelvin`. */
+    val lampKelvin: Int? = null,
     /**
      * The unit's **fitted media** (fixture optics plan D6): what is loaded in its loadable settings —
      * `{slots: {<property>: {<option>: {gel?, gobo?}}}}`, naming only the options that differ from
@@ -1088,6 +1125,9 @@ data class CreatePatchRequest(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** Only for a type that takes a lantern; see [FixturePatchDto.lampWatts]. */
+    val lampWatts: Int? = null,
+    val lampKelvin: Int? = null,
     /** Only for a type with loadable settings; see [FixturePatchDto.media]. Raw JSON so it is
      *  checked by the same parser as `PUT`'s, every problem at once. */
     val media: JsonElement? = null,
@@ -1135,6 +1175,9 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "gateRotationDeg",
     "iris",
     "focusSoftness",
+    // The lamp (its power and colour temperature) — drawn, never built from.
+    "lampWatts",
+    "lampKelvin",
 )
 
 /**
@@ -1201,6 +1244,8 @@ internal fun DaoFixturePatch.toDto(
         gateRotationDeg = f.gateRotationDeg,
         iris = f.iris,
         focusSoftness = f.focusSoftness,
+        lampWatts = e.lampWatts,
+        lampKelvin = e.lampKelvin,
         media = e.fittedMedia,
         extraPlacements = rig.effectivePlacements(this, placements).map { it.toDto() },
         owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
@@ -1236,6 +1281,8 @@ internal fun validateStageMetadata(
     beamAngleDeg: Int?,
     lengthM: Double? = null,
     baseRollDeg: Double? = null,
+    lampWatts: Int? = null,
+    lampKelvin: Int? = null,
 ): String? {
     checkStageCoord("stageX", stageX)?.let { return it }
     checkStageCoord("stageY", stageY)?.let { return it }
@@ -1249,7 +1296,20 @@ internal fun validateStageMetadata(
         return "beamAngleDeg must be between 2 and 120"
     }
     checkMetres("lengthM", lengthM, MIN_FIXTURE_LENGTH_M, MAX_FIXTURE_LENGTH_M)?.let { return it }
+    lampWattsError(lampWatts)?.let { return it }
+    lampKelvinError(lampKelvin)?.let { return it }
     return null
+}
+
+/**
+ * Why a lamp (`lampWatts`, `lampKelvin`) may not be stored on a patch of [typeKey], or null when the
+ * type is hung with a lantern (`FixtureType.acceptsLantern` — a generic dimmer): only a lantern's lamp
+ * is drawn from them. Asked only when a non-null value is written; clearing one is always allowed.
+ */
+internal fun lamplessRefusal(typeKey: String): String? {
+    if (FixtureTypeRegistry.typeInfoForKey(typeKey)?.acceptsLantern == true) return null
+    return "lampWatts and lampKelvin are only for fixture types hung with a lantern (such as generic-dimmer); " +
+        "'$typeKey' is not"
 }
 
 /**

@@ -133,6 +133,8 @@ class RigScope private constructor(
             lengthM = if (position != null) position.lengthM else patch.lengthM,
             focus = focus?.lantern ?: patch.focus,
             beamAngleDeg = if (focus != null) focus.beamAngleDeg else patch.beamAngleDeg,
+            lampWatts = if (focus != null) focus.lampWatts else patch.lampWatts,
+            lampKelvin = if (focus != null) focus.lampKelvin else patch.lampKelvin,
             kindOverride = if (focus != null) kindUnderLantern(focus.lanternType, patch.lanternType, patch.kindOverride) else patch.kindOverride,
             gelCode = if (media != null) media.gelCode else patch.gelCode,
             fittedMedia = if (media != null) media.media else patch.fittedMedia,

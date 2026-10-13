@@ -212,7 +212,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 25`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 26`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -265,6 +265,17 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 26 — lamps
+
+`FixturePatchJson` gains `lampWatts` and `lampKelvin`: a lantern-hung patch's own lamp power and
+colour temperature at full (`docs/fixtures-engineering.md` §"Lamps"), each null — omitted — taking the
+lantern library's. `SUPPORTED_FORMAT_VERSION = 26`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. A
+patch with neither exports byte-for-byte as at v25. The writer's number moves by the sharp-edge rule:
+a v25 reader imports every lamp as its lantern's and its next wipe-then-export push writes the patch
+file without them, putting every peer's lamps back to the library's. Imported as stored, with no type
+check: the write boundary refuses a lamp on a type with no lantern. A venue patch's lamp is part of
+its **Focus** facet, so a show's override of it travels in `showOverrides/` under the same number.
 
 ### Version 25 — model textures
 

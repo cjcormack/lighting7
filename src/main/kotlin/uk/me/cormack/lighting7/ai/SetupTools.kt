@@ -55,6 +55,7 @@ import uk.me.cormack.lighting7.routes.clearStaleInheritedZooms
 import uk.me.cormack.lighting7.routes.createCueChildren
 import uk.me.cormack.lighting7.routes.deleteFixtureGroupRows
 import uk.me.cormack.lighting7.routes.fixedLengthRefusal
+import uk.me.cormack.lighting7.routes.lamplessRefusal
 import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
@@ -528,6 +529,8 @@ class SetupTools(
                             putOptional("rollDeg", p.baseRollDeg)
                             p.beamAngleDeg?.let { put("beamAngleDeg", it) }
                             p.gelCode?.let { put("gelCode", it) }
+                            p.lampWatts?.let { put("lampWatts", it) }
+                            p.lampKelvin?.let { put("lampKelvin", it) }
                             p.kindOverride?.let { put("kind", it) }
                             putOptional("lengthM", p.lengthM)
                             putFocus(p.focus)
@@ -670,6 +673,9 @@ class SetupTools(
             if (placement.setsLength && FixtureTypeRegistry.typeInfoForKey(typeKey) != null) {
                 fixedLengthRefusal(typeKey)?.let { rowProblems += it }
             }
+            if (placement.setsLamp && FixtureTypeRegistry.typeInfoForKey(typeKey) != null) {
+                lamplessRefusal(typeKey)?.let { rowProblems += it }
+            }
             val infrastructure = optionalBoolean(row, "infrastructure", rowProblems)
             val headNumber = row["headNumber"]?.let { element ->
                 parseHeadNumber(element).fold({ Optional(it) }, { rowProblems += it.message.orEmpty(); null })
@@ -800,7 +806,11 @@ class SetupTools(
                 patch.displayName = row.name
                 patch.startChannel = row.startChannel
                 row.placement.applyTo(patch, row.focusWrite, force = row.dropsLantern)
-                if (row.dropsLantern) extraPlacementsOf(patch).forEach { it.focus = LanternFocus() }
+                if (row.dropsLantern) {
+                    extraPlacementsOf(patch).forEach { it.focus = LanternFocus() }
+                    patch.lampWatts = null
+                    patch.lampKelvin = null
+                }
                 // A type change leaves no media the new type cannot hold — the fixture's (unless the
                 // row sends its own) and each lantern's (unless the row sends `alsoAt`) — so the next
                 // write does not trip on a string loaded into a scroller the unit no longer has.
@@ -948,6 +958,8 @@ class SetupTools(
         val x: Optional<Double?>?, val y: Optional<Double?>?, val z: Optional<Double?>?,
         val yawDeg: Optional<Double?>?, val pitchDeg: Optional<Double?>?, val rollDeg: Optional<Double?>?,
         val beamAngleDeg: Optional<Int?>?,
+        val lampWatts: Optional<Int?>?,
+        val lampKelvin: Optional<Int?>?,
         val gelCode: Optional<String?>?,
         val kind: Optional<String?>?,
         val lengthM: Optional<Double?>?,
@@ -984,6 +996,10 @@ class SetupTools(
         val setsLength: Boolean
             get() = lengthM?.value != null || alsoAt.orEmpty().any { it.lengthM != null }
 
+        /** Whether the row writes a non-null lamp, which only a lantern-hung type may hold (`lamplessRefusal`). */
+        val setsLamp: Boolean
+            get() = lampWatts?.value != null || lampKelvin?.value != null
+
         /**
          * Lands the row on [patch]. The kind and the focus are written only when the row carried a
          * focus key or a kind (or [force] — a type change that drops the lantern), as the REST PUT
@@ -999,6 +1015,8 @@ class SetupTools(
             pitchDeg?.let { patch.basePitchDeg = it.value }
             rollDeg?.let { patch.baseRollDeg = it.value }
             beamAngleDeg?.let { patch.beamAngleDeg = it.value }
+            lampWatts?.let { patch.lampWatts = it.value }
+            lampKelvin?.let { patch.lampKelvin = it.value }
             gelCode?.let { patch.gelCode = it.value }
             val writesFocus = force || focusSent.isNotEmpty() || kind != null
             if (writesFocus) {
@@ -1088,8 +1106,12 @@ class SetupTools(
         val roll = field("rollDeg") { it.doubleOrNull }
         val beam = field("beamAngleDeg") { it.doubleOrNull?.toInt() }
         val length = field("lengthM") { it.doubleOrNull }
-        validateStageMetadata(x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value, length?.value, roll?.value)
-            ?.let { problems += it }
+        val lampWatts = field("lampWatts") { it.doubleOrNull?.toInt() }
+        val lampKelvin = field("lampKelvin") { it.doubleOrNull?.toInt() }
+        validateStageMetadata(
+            x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value, length?.value, roll?.value,
+            lampWatts?.value, lampKelvin?.value,
+        )?.let { problems += it }
         val gel = field("gelCode") { it.contentOrNull }?.let { Optional(normaliseGelCode(it.value)) }
         val kind = field("kind") { it.contentOrNull }?.let {
             try {
@@ -1106,7 +1128,7 @@ class SetupTools(
         val media = if ("media" in row) {
             FittedMedia.parse(row["media"]).fold({ Optional(it) }, { problems += it.message.orEmpty(); null })
         } else null
-        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, gel, kind, length, hidden, alsoAt, focusSent, focus, media)
+        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, lampWatts, lampKelvin, gel, kind, length, hidden, alsoAt, focusSent, focus, media)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -1200,6 +1222,7 @@ class SetupTools(
             if (!seen.add(key)) rowProblems += "key '$key' is listed twice"
             val placement = parsePlacement(row, riggingIds, rowProblems)
             if (placement.setsLength && stored != null) fixedLengthRefusal(stored.typeKey)?.let { rowProblems += it }
+            if (placement.setsLamp && stored != null) lamplessRefusal(stored.typeKey)?.let { rowProblems += it }
             val focusWrite = if (rowProblems.isEmpty() && stored != null) {
                 placement.resolveFocus(stored.typeKey, stored.focus, stored.kindOverride, rowProblems)
             } else null

@@ -14,6 +14,7 @@ import {
   findDimmerProperty,
   findGroupColourSource,
   findStrobeProperties,
+  resolveFixtureKind,
   type Fixture,
   type FixtureTypeInfo,
 } from '../../store/fixtures'
@@ -21,6 +22,9 @@ import type { FixturePatch } from '../../api/patchApi'
 import { findGel, indexGels, type Gel } from '../../lib/gels'
 import { colourFilters, fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
 import gelsJson from '../../../../src/main/resources/gels.json'
+import lanternsJson from '../../../../src/main/resources/lanterns/library.json'
+import { indexLanterns, type Lantern } from '../../lib/lanterns'
+import { unitLamp } from '../../lib/lamp'
 import { chan, colourProp, makeFixture, settingProp, sliderProp } from '../../test/fixtureFactories'
 import { BAND_STEP_S, ColourBandClockContext, type ColourBandClock } from '../../lib/colourBands'
 import { createColourTicker, type ColourTicker } from './colourTicker'
@@ -32,10 +36,16 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 // The served gel library (`GET /gels`), read from the resource the desk serves it from.
 const GELS = indexGels(gelsJson as Gel[])
+const LANTERNS = indexLanterns(lanternsJson as Lantern[])
 vi.mock('@/hooks/useGelIndex', async () => {
   const { indexGels } = await import('@/lib/gels')
   const gels = (await import('../../../../src/main/resources/gels.json')).default
   return { useGelIndex: () => indexGels(gels) }
+})
+vi.mock('@/hooks/useLanternIndex', async () => {
+  const { indexLanterns } = await import('@/lib/lanterns')
+  const lanterns = (await import('../../../../src/main/resources/lanterns/library.json')).default
+  return { useLanternIndex: () => indexLanterns(lanterns as never) }
 })
 
 /**
@@ -115,6 +125,9 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
   const properties = fittedProperties(fixture?.properties, patch.media, GELS)
   const colourSource = properties ? findColourSource(properties) : undefined
   const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(GELS, patch.gelCode) : null
+  const lamp = colourSource
+    ? null
+    : unitLamp(patch, fixtureType?.acceptsLantern === true, resolveFixtureKind(patch.kindOverride, fixtureType?.kind), LANTERNS)
 
   const colorStateRef = {
     current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 },
@@ -126,6 +139,7 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
         groupColour={findGroupColourSource(fixture)}
         colourSource={colourSource}
         gel={gel}
+        lamp={lamp}
         filters={colourFilters(properties, colourSource)}
         dimmerProp={findDimmerProperty(properties)}
         strobes={findStrobeProperties(properties)}
@@ -149,6 +163,7 @@ interface Scenario {
 }
 
 const PATCH = { id: 1, key: 'fx-1', displayName: 'Fixture 1' } as FixturePatch
+const LANTERN_DIMMER = { typeKey: 'generic-dimmer', acceptsGel: true, acceptsLantern: true, kind: 'GENERIC' } as FixtureTypeInfo
 const DIMMER = sliderProp('dimmer', 'dimmer', chan(1))
 const RGB = colourProp('rgb', chan(2), chan(3), chan(4))
 const WHEEL = settingProp('colourWheel', 'colour', chan(5), [
@@ -244,6 +259,33 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
       fixture: makeFixture('fx-1', [DIMMER]),
       fixtureType: { typeKey: 't', acceptsGel: true } as FixtureTypeInfo,
       values: { '0:1': 255 },
+    }),
+  },
+  ...[255, 128, 20].map((level) => ({
+    name: `a profile's tungsten lamp at DMX ${level} (its amber drift)`,
+    scenario: scenario({
+      patch: { ...PATCH, lanternType: 's4-26' } as FixturePatch,
+      fixture: makeFixture('fx-1', [DIMMER]),
+      fixtureType: LANTERN_DIMMER,
+      values: { '0:1': level },
+    }),
+  })),
+  {
+    name: 'a gelled profile, the gel filtering its lamp',
+    scenario: scenario({
+      patch: { ...PATCH, lanternType: 's4-26', gelCode: 'L201' } as FixturePatch,
+      fixture: makeFixture('fx-1', [DIMMER]),
+      fixtureType: LANTERN_DIMMER,
+      values: { '0:1': 200 },
+    }),
+  },
+  {
+    name: 'a house LED downlight dimmed (no drift), its patch naming its own colour temperature',
+    scenario: scenario({
+      patch: { ...PATCH, lanternType: 'downlight', lampKelvin: 2700 } as FixturePatch,
+      fixture: makeFixture('fx-1', [DIMMER]),
+      fixtureType: LANTERN_DIMMER,
+      values: { '0:1': 40 },
     }),
   },
   {
@@ -379,6 +421,29 @@ describe('2D and 3D colour dispatch parity', () => {
     const s = scenario({ fixture: ROBE, values })
     expect(resolve3D(s, t).colour).toBe(resolve2D(s, t).colour)
     expect(resolve3D(s, t).intensity).toBeCloseTo(resolve2D(s, t).intensity, 10)
+  })
+})
+
+describe("a lantern's lamp", () => {
+  const profile = (level: number, extra: Partial<FixturePatch> = {}) =>
+    resolve2D(
+      scenario({
+        patch: { ...PATCH, lanternType: 's4-26', ...extra } as FixturePatch,
+        fixture: makeFixture('fx-1', [DIMMER]),
+        fixtureType: LANTERN_DIMMER,
+        values: { '0:1': level },
+      }),
+    )
+
+  it('draws a profile warmer than the old fallback colour and warmer still as it dims', () => {
+    const blue = (hexColour: string) => parseInt(hexColour.slice(5, 7), 16)
+    expect(blue(profile(255).colour)).toBeLessThan(0xd5)
+    expect(blue(profile(30).colour)).toBeLessThan(blue(profile(255).colour))
+    expect(profile(128).intensity).toBeCloseTo(128 / 255, 10)
+  })
+
+  it('takes the patch’s colour temperature over the lantern’s', () => {
+    expect(profile(255, { lampKelvin: 5600 }).colour).not.toBe(profile(255).colour)
   })
 })
 

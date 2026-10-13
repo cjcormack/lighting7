@@ -58,19 +58,34 @@ class LanternLibraryTest {
         val bad = """
             [
               {"id": "Bad Id", "name": "", "maker": "x", "family": "FRESNEL", "archetype": "mover", "fieldDeg": 40,
+               "watts": 0, "kelvin": 20000,
                "zoom": {"minDeg": 10, "maxDeg": 30}, "oval": {"wideDeg": 40, "narrowDeg": 20},
                "lensDiameterM": 0.1, "lengthM": 0.3, "widthM": 0.2, "heightM": 0.2, "source": "x"},
-              {"id": "a", "name": "A", "maker": "x", "family": "PAR", "archetype": "par", "fieldDeg": 20,
+              {"id": "a", "name": "A", "maker": "x", "family": "PAR", "archetype": "par", "fieldDeg": 20, "watts": 1000, "kelvin": 3200,
                "lensDiameterM": 0.1, "lengthM": 0.3, "widthM": 0.2, "heightM": 0.2, "defaultFor": ["PAR"], "source": "x"},
-              {"id": "a", "name": "A", "maker": "x", "family": "PAR", "archetype": "par", "fieldDeg": 20,
+              {"id": "a", "name": "A", "maker": "x", "family": "PAR", "archetype": "par", "fieldDeg": 20, "watts": 1000, "kelvin": 3200,
                "lensDiameterM": 0.1, "lengthM": 0.3, "widthM": 0.2, "heightM": 0.2, "defaultFor": ["PAR"], "source": "x"}
             ]
         """.trimIndent()
         val e = assertFailsWith<IllegalArgumentException> { LanternLibrary.parse(bad) }
         val message = e.message.orEmpty()
-        for (expected in listOf("lower-case", "name is blank", "outside its zoom", "only a PAR", "not a conventional", "appears twice", "default of")) {
+        for (expected in listOf(
+            "lower-case", "name is blank", "outside its zoom", "only a PAR", "not a conventional", "appears twice", "default of",
+            "watts 0 is outside", "kelvin 20000 is outside",
+        )) {
             assertTrue(message.contains(expected), "expected '$expected' in: $message")
         }
+    }
+
+    @Test
+    fun `every lantern declares its lamp, and the house downlight is an LED`() {
+        for (l in LanternLibrary.all) {
+            assertTrue(l.watts in MIN_LAMP_WATTS..MAX_LAMP_WATTS, "${l.id} watts")
+            assertTrue(l.kelvin in MIN_LAMP_KELVIN..MAX_LAMP_KELVIN, "${l.id} kelvin")
+        }
+        val downlight = LanternLibrary.byId("downlight")!!
+        assertEquals(LampKind.LED, downlight.lamp)
+        assertEquals(LampKind.TUNGSTEN, LanternLibrary.byId("s4-19")!!.lamp, "a lamp kind left out is tungsten")
     }
 
     @Test

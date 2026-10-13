@@ -25,7 +25,7 @@ import java.util.UUID
  * |---|---|
  * | Address | `universeConfigUuid`, `startChannel` |
  * | Position | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
- * | Focus | `lanternType`, `beamAngleDeg`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, and each placement's |
+ * | Focus | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, and each placement's lantern fields |
  * | Media | `gelCode`, `media`, and each placement's |
  *
  * **Placements are carried by the venue placement's uuid** (`placements: [{placementUuid, …}]`), each
@@ -84,6 +84,9 @@ data class PlacementPosition(
 data class FocusFacet(
     val lanternType: String? = null,
     val beamAngleDeg: Int? = null,
+    /** The lamp — the patch's alone, one for every lantern it drives, so no placement carries one. */
+    val lampWatts: Int? = null,
+    val lampKelvin: Int? = null,
     val zoomDeg: Double? = null,
     val lampRotationDeg: Double? = null,
     val shutters: List<ShutterBlade>? = null,
@@ -189,6 +192,7 @@ fun venueFacetOf(patch: DaoFixturePatch, placements: List<DaoFixturePatchPlaceme
         PatchFacet.FOCUS -> patch.focus.let { f ->
             FocusFacet(
                 lanternType = f.lanternType, beamAngleDeg = patch.beamAngleDeg,
+                lampWatts = patch.lampWatts, lampKelvin = patch.lampKelvin,
                 zoomDeg = f.zoomDeg, lampRotationDeg = f.lampRotationDeg, shutters = f.shutters,
                 gateRotationDeg = f.gateRotationDeg, iris = f.iris, focusSoftness = f.focusSoftness,
                 placements = placements.map { p ->
@@ -232,6 +236,8 @@ class EffectivePatch internal constructor(
     val lengthM: Double?,
     val focus: LanternFocus,
     val beamAngleDeg: Int?,
+    val lampWatts: Int?,
+    val lampKelvin: Int?,
     /** Derived from the lantern as a write derives it (`resolvePatchFocus`): an overridden lantern's kind. */
     val kindOverride: String?,
     val gelCode: String?,
