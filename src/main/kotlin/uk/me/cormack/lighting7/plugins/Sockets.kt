@@ -38,10 +38,10 @@ class SocketConnection(val session: WebSocketServerSession) {
  * Adding a new domain is a one-file change plus its wiring: define a sealed
  * `XxxInMessage : InMessage()` with leaf cases, add a `handleXxx(scope, message)` and
  * (optionally) a `setupXxxSubscriptions(scope)` in that file, list the intermediate in its
- * root's `@SealedIntermediates` in `SocketMessages.kt`, then add one arm to the dispatch
- * `when` below + one call to setup. The Kotlin sealed-class exhaustiveness check enforces that
- * every leaf gets a handler arm, and `SealedSerializerScopeTest` that every intermediate is
- * listed.
+ * root's `@SealedIntermediates` in `SocketMessages.kt`, then add one arm to [dispatch] + one call
+ * to setup, and classify each new frame in `TraceSampling.WS_MESSAGES`. The Kotlin sealed-class
+ * exhaustiveness check enforces that every leaf gets a handler arm, `SealedSerializerScopeTest`
+ * that every intermediate is listed, and `TraceSamplingTest` that every frame has a sampling row.
  *
  * That recipe describes the **show-scoped** band of subscriptions, which is registered after
  * the warm-up gate because it touches `state.show`. There is a second, **machine-scoped** band
@@ -171,18 +171,8 @@ fun Application.configureSockets(state: State) {
                     // malformed payload) must not tear down the operator's whole socket.
                     try {
                         when (val message = converter?.deserialize<InMessage>(frame)) {
-                            is ChannelInMessage -> handleChannel(scope, message)
-                            is ParkInMessage -> handlePark(scope, message)
-                            is FxInMessage -> handleFx(scope, message)
-                            is ProjectInMessage -> handleProject(scope, message)
-                            is SurfaceInMessage -> handleSurface(scope, message)
-                            is ProgrammerInMessage -> handleProgrammer(scope, message)
-                            is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
-                            is SelectionInMessage -> handleSelection(scope, message)
-                            is HandInMessage -> handleHand(scope, message)
-                            is WindowsInMessage -> handleWindows(scope, message)
-                            is BuskInMessage -> handleBusk(scope, message)
                             null -> System.err.println("WS /api: undeserializable frame ignored")
+                            else -> scope.traceMessage(message) { dispatch(scope, message) }
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
@@ -204,5 +194,21 @@ fun Application.configureSockets(state: State) {
                 unregisterBroadcastListener()
             }
         }
+    }
+}
+
+private suspend fun dispatch(scope: SocketScope, message: InMessage) {
+    when (message) {
+        is ChannelInMessage -> handleChannel(scope, message)
+        is ParkInMessage -> handlePark(scope, message)
+        is FxInMessage -> handleFx(scope, message)
+        is ProjectInMessage -> handleProject(scope, message)
+        is SurfaceInMessage -> handleSurface(scope, message)
+        is ProgrammerInMessage -> handleProgrammer(scope, message)
+        is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
+        is SelectionInMessage -> handleSelection(scope, message)
+        is HandInMessage -> handleHand(scope, message)
+        is WindowsInMessage -> handleWindows(scope, message)
+        is BuskInMessage -> handleBusk(scope, message)
     }
 }

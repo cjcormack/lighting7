@@ -13,6 +13,7 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import java.io.Closeable
+import uk.me.cormack.lighting7.telemetry.installSentry
 
 private val logger = LoggerFactory.getLogger("GitHubReleaseClient")
 
@@ -56,6 +57,7 @@ class GitHubReleaseClient(
         // Asset download URLs 302 from github.com to objects.githubusercontent.com. CIO follows
         // redirects by default; this makes the reliance explicit rather than incidental.
         followRedirects = true
+        installSentry()
     }
 
     suspend fun fetchLatestRelease(etag: String?): ReleaseCheckResult {

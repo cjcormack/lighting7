@@ -17,6 +17,7 @@ import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import uk.me.cormack.lighting7.telemetry.Tracing
 
 /**
  * Thin wrapper around JGit so callers (snapshot engine, REST routes, tests) don't
@@ -27,6 +28,14 @@ import java.nio.file.Path
  * be wrapped in `.use { ... }` at the call site.
  */
 object JGitClient {
+    /** A fetch, push or clone as an `http.client` span (Sentry plan D6), named without the URL's credentials. */
+    private fun <T> network(verb: String, url: String?, block: () -> T): T {
+        val where = url?.let { runCatching { URIish(it).setUser(null).setPass(null).toString() }.getOrNull() } ?: "remote"
+        return Tracing.span("http.client", "git $verb $where") { block() }
+    }
+
+    private fun remoteUrl(repo: Repository, remote: String): String? = repo.config.getString("remote", remote, "url")
+
 
     /** Initial branch for new repos. JGit defaults to `master`; we want `main`. */
     const val DEFAULT_BRANCH = "main"
@@ -218,14 +227,15 @@ object JGitClient {
     ): Repository {
         Files.createDirectories(path)
         try {
-            return Git.cloneRepository()
-                .setURI(repoUrl)
-                .setDirectory(path.toFile())
-                .setBranch(branch)
-                .setBranchesToClone(listOf("refs/heads/$branch"))
-                .setCredentialsProvider(credentials.toProvider())
-                .call()
-                .repository
+            return network("clone", repoUrl) {
+                Git.cloneRepository()
+                    .setURI(repoUrl)
+                    .setDirectory(path.toFile())
+                    .setBranch(branch)
+                    .setBranchesToClone(listOf("refs/heads/$branch"))
+                    .setCredentialsProvider(credentials.toProvider())
+                    .call()
+            }.repository
         } catch (e: TransportException) {
             throw e.toAuthOrRethrow()
         }
@@ -263,11 +273,13 @@ object JGitClient {
     ): ObjectId? {
         Git(repo).use { git ->
             try {
-                val result = git.fetch()
-                    .setRemote(remote)
-                    .setRefSpecs(RefSpec("+refs/heads/$branch:refs/remotes/$remote/$branch"))
-                    .setCredentialsProvider(credentials.toProvider())
-                    .call()
+                val result = network("fetch", remoteUrl(repo, remote)) {
+                    git.fetch()
+                        .setRemote(remote)
+                        .setRefSpecs(RefSpec("+refs/heads/$branch:refs/remotes/$remote/$branch"))
+                        .setCredentialsProvider(credentials.toProvider())
+                        .call()
+                }
                 val advertised = result.advertisedRefs.firstOrNull { it.name == "refs/heads/$branch" }
                 return advertised?.objectId
             } catch (e: TransportException) {
@@ -299,12 +311,14 @@ object JGitClient {
             try {
                 val refSpec = if (force) "+refs/heads/$branch:refs/heads/$branch"
                               else "refs/heads/$branch:refs/heads/$branch"
-                val results = git.push()
-                    .setRemote(remote)
-                    .setRefSpecs(RefSpec(refSpec))
-                    .setCredentialsProvider(credentials.toProvider())
-                    .setForce(force)
-                    .call()
+                val results = network("push", remoteUrl(repo, remote)) {
+                    git.push()
+                        .setRemote(remote)
+                        .setRefSpecs(RefSpec(refSpec))
+                        .setCredentialsProvider(credentials.toProvider())
+                        .setForce(force)
+                        .call()
+                }
                 val update = results.firstOrNull()?.remoteUpdates?.firstOrNull()
                     ?: return PushResult(status = PushStatus.UP_TO_DATE, message = null)
                 return when (update.status) {
@@ -376,13 +390,15 @@ object JGitClient {
     fun fetchTags(repo: Repository, remote: String, credentials: GitCredentials) {
         Git(repo).use { git ->
             try {
-                git.fetch()
-                    .setRemote(remote)
-                    .setRefSpecs(RefSpec("+refs/tags/*:${remoteTagPrefix(remote)}*"))
-                    .setTagOpt(org.eclipse.jgit.transport.TagOpt.NO_TAGS)
-                    .setRemoveDeletedRefs(true)
-                    .setCredentialsProvider(credentials.toProvider())
-                    .call()
+                network("fetch", remoteUrl(repo, remote)) {
+                    git.fetch()
+                        .setRemote(remote)
+                        .setRefSpecs(RefSpec("+refs/tags/*:${remoteTagPrefix(remote)}*"))
+                        .setTagOpt(org.eclipse.jgit.transport.TagOpt.NO_TAGS)
+                        .setRemoveDeletedRefs(true)
+                        .setCredentialsProvider(credentials.toProvider())
+                        .call()
+                }
             } catch (e: TransportException) {
                 throw e.toAuthOrRethrow()
             }
@@ -403,14 +419,16 @@ object JGitClient {
     ): Map<String, PushResult> {
         Git(repo).use { git ->
             try {
-                val results = git.push()
-                    .setRemote(remote)
-                    .setRefSpecs(
-                        RefSpec("refs/heads/$branch:refs/heads/$branch"),
-                        RefSpec("refs/tags/$tag:refs/tags/$tag"),
-                    )
-                    .setCredentialsProvider(credentials.toProvider())
-                    .call()
+                val results = network("push", remoteUrl(repo, remote)) {
+                    git.push()
+                        .setRemote(remote)
+                        .setRefSpecs(
+                            RefSpec("refs/heads/$branch:refs/heads/$branch"),
+                            RefSpec("refs/tags/$tag:refs/tags/$tag"),
+                        )
+                        .setCredentialsProvider(credentials.toProvider())
+                        .call()
+                }
                 return results.flatMap { it.remoteUpdates }.associate { update ->
                     update.remoteName to when (update.status) {
                         RemoteRefUpdate.Status.OK,

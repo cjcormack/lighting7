@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.telemetry.reportingExceptionHandler
+import uk.me.cormack.lighting7.telemetry.LiveSentryContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -508,7 +510,8 @@ class EffectsService(private val state: State) {
         }
     }
 
-    private fun newScope() = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private fun newScope() =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default + LiveSentryContext() + reportingExceptionHandler(EffectsService::class.java))
 
     companion object {
         /** How long an arm holds unless asked for longer: the record's 60 s. */

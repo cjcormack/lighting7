@@ -1,19 +1,21 @@
 package uk.me.cormack.lighting7.telemetry
 
-import io.ktor.server.application.ApplicationCall
 import io.sentry.Breadcrumb
-import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
 import io.sentry.SentryLogEvent
 import io.sentry.SentryLogEventAttributeValue
+import io.sentry.protocol.SentrySpan
+import io.sentry.protocol.SentryTransaction
 import io.sentry.protocol.User
 import org.slf4j.Marker
 import org.slf4j.MarkerFactory
-import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
-import uk.me.cormack.lighting7.mcp.isRemote
+import uk.me.cormack.lighting7.auth.AuthenticatedUser
+import uk.me.cormack.lighting7.plugins.ERROR_HANDLING_LOGGER
+import uk.me.cormack.lighting7.plugins.UNMATCHED_ROUTE
 import uk.me.cormack.lighting7.plugins.isClientErrorException
 import java.io.IOException
+import kotlin.random.Random
 import java.nio.channels.ClosedChannelException
 import java.util.concurrent.CancellationException
 
@@ -23,7 +25,7 @@ import java.util.concurrent.CancellationException
  */
 val USER_SCRIPT: Marker = MarkerFactory.getMarker("USER_SCRIPT")
 
-/** Set by [withSentryCallScope]: present only on events raised while handling a request. */
+/** Set by the call scope `plugins/SentryTracing.kt` forks: present only on events raised while handling a request. */
 internal const val LISTENER_TAG = "listener"
 
 /** What Sentry may send, and how it is scrubbed (Sentry plan D8, D12). */
@@ -31,14 +33,63 @@ object SentryFilters {
     fun beforeSend(event: SentryEvent): SentryEvent? {
         val thrown = event.throwable
         if (thrown != null && isDisconnect(thrown)) return null
-        // Only a request's: the same exception logged by background work is a fault.
-        if (thrown != null && event.getTag(LISTENER_TAG) != null && isClientErrorException(thrown)) return null
+        // Only StatusPages' own, while answering a request: the same exception logged by a route
+        // that answers 500, or by background work, is a fault.
+        if (thrown != null && isStatusPagesEvent(event) && isClientErrorException(thrown)) return null
         if (event.getExtra("marker")?.toString()?.contains(USER_SCRIPT.name) == true) {
             event.level = SentryLevel.WARNING
             event.setTag("origin", "user-script")
         }
         scrub(event)
         return event
+    }
+
+    /**
+     * Drops a call no route matched and an idle auto-sync run sampled out, and scrubs span
+     * descriptions and data. A transaction's name is
+     * a route template or a constant, never a raw path; one the scrubber would change is a naming
+     * fault, and is dropped rather than sent, since the SDK gives a transaction's name no setter.
+     */
+    fun beforeSendTransaction(
+        transaction: SentryTransaction,
+        idleSyncSampleRate: Double,
+        draw: Double = Random.nextDouble(),
+    ): SentryTransaction? {
+        val name = transaction.transaction ?: return transaction
+        if (name.endsWith(UNMATCHED_ROUTE)) return null
+        val trace = transaction.contexts.trace
+        if (trace?.operation == TraceSampling.OP_SYNC_RUN) {
+            val data = trace.data
+            if (!TraceSampling.keepSyncRun(data["sync.trigger"], data["sync.outcome"], idleSyncSampleRate, draw)) return null
+        }
+        if (TokenScrubber.scrub(name) != name) return null
+        val spans = transaction.spans
+        for (i in spans.indices) spans[i] = scrubbed(spans[i])
+        transaction.request?.let { r ->
+            r.url = TokenScrubber.scrubOrNull(r.url)
+            r.queryString = TokenScrubber.scrubOrNull(r.queryString)
+        }
+        return transaction
+    }
+
+    private fun scrubbed(span: SentrySpan): SentrySpan {
+        span.data?.let { data ->
+            span.data = data.mapValues { (key, value) ->
+                when {
+                    value !is String -> value
+                    // An HTTP span's query arrives without its `?`, which the scrubber keys on.
+                    key == "http.query" -> TokenScrubber.scrub("?$value").removePrefix("?")
+                    else -> TokenScrubber.scrub(value)
+                }
+            }
+        }
+        val description = span.description ?: return span
+        val clean = TokenScrubber.scrub(description)
+        if (clean == description) return span
+        return SentrySpan(
+            span.startTimestamp, span.timestamp, span.traceId, span.spanId, span.parentSpanId,
+            span.op, clean, span.status, span.origin, span.tags, span.measurements, span.data,
+        )
     }
 
     fun beforeBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
@@ -57,6 +108,9 @@ object SentryFilters {
         }
         return log
     }
+
+    private fun isStatusPagesEvent(event: SentryEvent): Boolean =
+        event.getTag(LISTENER_TAG) != null && event.logger == ERROR_HANDLING_LOGGER
 
     /** A client that went away, or a coroutine cancelled: not a fault, anywhere in the cause chain. */
     internal fun isDisconnect(thrown: Throwable): Boolean =
@@ -99,20 +153,8 @@ object SentryFilters {
     }
 }
 
-/**
- * Runs [block] — a log call — with the request's listener and caller on the Sentry scope, so an
- * error it reports names them. The user is the desk account's id and role, nothing else.
- */
-internal fun ApplicationCall.withSentryCallScope(block: () -> Unit) {
-    val call = this
-    Sentry.withScope { scope ->
-        scope.setTag(LISTENER_TAG, if (call.isRemote) "public" else "local")
-        call.authenticatedUserOrNull?.let { user ->
-            scope.user = User().apply {
-                id = user.uuid.toString()
-                data = mapOf("role" to user.role.name)
-            }
-        }
-        block()
-    }
+/** The desk account as Sentry's user: its uuid and role, nothing else. */
+internal fun sentryUser(user: AuthenticatedUser): User = User().apply {
+    id = user.uuid.toString()
+    data = mapOf("role" to user.role.name)
 }

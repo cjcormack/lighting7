@@ -1,6 +1,8 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.telemetry.TraceSampling
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.coroutines.*
@@ -107,6 +109,19 @@ class CueStackManager(
         scope: CoroutineScope = GlobalScope,
         rejectMarkers: Boolean = false,
         fireEvents: Boolean = true,
+    ): ActivateResult = Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
+        span?.setData("cue.stack_id", stackId)
+        span?.setData("cue.id", cueId)
+        activate(state, stackId, cueId, scope, rejectMarkers, fireEvents)
+    }
+
+    private fun activate(
+        state: State,
+        stackId: Int,
+        cueId: Int,
+        scope: CoroutineScope,
+        rejectMarkers: Boolean,
+        fireEvents: Boolean,
     ): ActivateResult {
         // Read cue data from DB
         val cueData = transaction(state.database) {
@@ -180,83 +195,88 @@ class CueStackManager(
         // Note this path previously called `buildCueAssignmentsForCue` *alone*, so an immediate
         // preset's property assignments never reached Layer 4 on a stack GO — unlike `applyCue`,
         // which concatenated both. Routing both paths through the cook fixes that asymmetry.
-        val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
-        val cooked = CueComposer.cookAll(
-            fixtures = state.show.fixtures,
-            cueId = cueData.cueId,
-            priority = cueDerivedPriority(cueData),
-            layers = cueData.layers,
-            localRows = localRows,
-            resolveLook = state.show.lookRegistry::snapshot,
-            resolveTemplate = state.show.templateRegistry::snapshot,
-        )
-
-        // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
-        // spawn order alone is enough to make layer order the composition order.
-        for ((layer, lookEffect, target) in cooked.effects) {
-            val effectSpec = lookEffect.toEffectSpec()
-            val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
-            } catch (e: Exception) {
-                logger.warn(
-                    "cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}",
-                    cueData.cueId, layer.source.name, target.key, e.message,
-                )
-                null
-            } ?: continue
-
-            val instance = EffectSpawner.createEffectInstanceOrNull(
-                effectSpec, fxTarget, state = state,
-                context = "cue ${cueData.cueId}: layer on '${layer.source.name}'",
-                overrideSpeedMasterUuid = layer.speedMasterUuid,
-                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-            ) ?: continue
-            instance.cueId = cueData.cueId
-            instance.cueStackId = stackId
-            // The whole source, kind included: a template layer owns effects now (D5), and
-            // `FxInstance.lookId` derives the Look-only id from this.
-            instance.source = layer.source
-            instance.cueLayerId = layer.layerId
-            spawning += instance
-        }
-
-        // Apply immediate ad-hoc effects
-        for (adHoc in immediateAdHoc) {
-            val target = CueTargetDto(adHoc.target)
-            val adHocEffectSpec = LookEffectSpec(
-                effectType = adHoc.effectType,
-                category = adHoc.category,
-                propertyName = adHoc.propertyName,
-                beatDivision = adHoc.beatDivision,
-                blendMode = adHoc.blendMode,
-                distribution = adHoc.distribution,
-                phaseOffset = adHoc.phaseOffset,
-                elementMode = adHoc.elementMode,
-                elementFilter = adHoc.elementFilter,
-                stepTiming = adHoc.stepTiming,
-                parameters = adHoc.parameters,
-                speedMasterUuid = adHoc.speedMasterUuid,
-                rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
+        val cooked = Tracing.span("cue.compose") {
+            val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
+            CueComposer.cookAll(
+                fixtures = state.show.fixtures,
+                cueId = cueData.cueId,
+                priority = cueDerivedPriority(cueData),
+                layers = cueData.layers,
+                localRows = localRows,
+                resolveLook = state.show.lookRegistry::snapshot,
+                resolveTemplate = state.show.templateRegistry::snapshot,
             )
-            val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
-            } catch (e: Exception) {
-                logger.warn(
-                    "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
-                    cueData.cueId, adHoc.targetKey, e.message,
-                )
-                null
-            } ?: continue
-
-            val instance = EffectSpawner.createEffectInstanceOrNull(
-                adHocEffectSpec, fxTarget, state, "cue ${cueData.cueId}: ad-hoc effect on '${adHoc.targetKey}'",
-            ) ?: continue
-            instance.cueId = cueData.cueId
-            instance.cueStackId = stackId
-            spawning += instance
         }
 
-        fxEngine.addEffects(spawning)
+        Tracing.span("cue.spawn") { span ->
+            // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
+            // spawn order alone is enough to make layer order the composition order.
+            for ((layer, lookEffect, target) in cooked.effects) {
+                val effectSpec = lookEffect.toEffectSpec()
+                val fxTarget = try {
+                    EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
+                } catch (e: Exception) {
+                    logger.warn(
+                        "cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}",
+                        cueData.cueId, layer.source.name, target.key, e.message,
+                    )
+                    null
+                } ?: continue
+
+                val instance = EffectSpawner.createEffectInstanceOrNull(
+                    effectSpec, fxTarget, state = state,
+                    context = "cue ${cueData.cueId}: layer on '${layer.source.name}'",
+                    overrideSpeedMasterUuid = layer.speedMasterUuid,
+                    overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+                ) ?: continue
+                instance.cueId = cueData.cueId
+                instance.cueStackId = stackId
+                // The whole source, kind included: a template layer owns effects now (D5), and
+                // `FxInstance.lookId` derives the Look-only id from this.
+                instance.source = layer.source
+                instance.cueLayerId = layer.layerId
+                spawning += instance
+            }
+
+            // Apply immediate ad-hoc effects
+            for (adHoc in immediateAdHoc) {
+                val target = CueTargetDto(adHoc.target)
+                val adHocEffectSpec = LookEffectSpec(
+                    effectType = adHoc.effectType,
+                    category = adHoc.category,
+                    propertyName = adHoc.propertyName,
+                    beatDivision = adHoc.beatDivision,
+                    blendMode = adHoc.blendMode,
+                    distribution = adHoc.distribution,
+                    phaseOffset = adHoc.phaseOffset,
+                    elementMode = adHoc.elementMode,
+                    elementFilter = adHoc.elementFilter,
+                    stepTiming = adHoc.stepTiming,
+                    parameters = adHoc.parameters,
+                    speedMasterUuid = adHoc.speedMasterUuid,
+                    rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
+                )
+                val fxTarget = try {
+                    EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
+                } catch (e: Exception) {
+                    logger.warn(
+                        "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
+                        cueData.cueId, adHoc.targetKey, e.message,
+                    )
+                    null
+                } ?: continue
+
+                val instance = EffectSpawner.createEffectInstanceOrNull(
+                    adHocEffectSpec, fxTarget, state, "cue ${cueData.cueId}: ad-hoc effect on '${adHoc.targetKey}'",
+                ) ?: continue
+                instance.cueId = cueData.cueId
+                instance.cueStackId = stackId
+                spawning += instance
+            }
+
+            fxEngine.addEffects(spawning)
+            span?.setData("cue.effects", spawning.size)
+        }
         val effectCount = spawning.size
 
         // Apply Layer 4 for the incoming cue, from the cook hoisted above. Under crossfade the
@@ -351,11 +371,11 @@ class CueStackManager(
         runState.publishRunState(state, stackId, transition = true)
         // And the scenery: the stack's set and its cues down to this one, tracked from the top of
         // the list, with this cue's own changes moving on their clocks (stage-view plan session 8).
-        state.sceneryService.onCueLive(stackId, cueData.cueId)
+        Tracing.span("scenery.resolve") { state.sceneryService.onCueLive(stackId, cueData.cueId) }
         // And its events: fired on GO into this cue only, while armed, at their offsets — scheduled
         // here and never waited on (stage-view plan session 9). Not on a GO BACK, which steps back
         // into a cue rather than going to it.
-        if (fireEvents) state.effectsService.onCueGo(cueData.cueId, cueData.cueLabel, cueData.goEvents)
+        if (fireEvents) Tracing.span("cue.events") { state.effectsService.onCueGo(cueData.cueId, cueData.cueLabel, cueData.goEvents) }
 
         return ActivateResult(
             stackId = stackId,

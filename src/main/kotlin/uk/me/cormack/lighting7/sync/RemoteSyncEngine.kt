@@ -10,6 +10,8 @@ import org.eclipse.jgit.lib.Repository
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.TraceSampling
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.venue.VenuePins
@@ -79,18 +81,22 @@ class RemoteSyncEngine(
         installUuid: UUID,
         installFriendlyName: String,
         trigger: SyncTrigger = SyncTrigger.MANUAL,
-    ): SyncRunResult {
-        when (transaction(state.database) { DaoProject.findById(projectId)?.kind }) {
+    ): SyncRunResult = Tracing.transactionSuspending(TraceSampling.OP_SYNC_RUN, "sync.run") { span ->
+        span?.setData("sync.trigger", trigger.name)
+        val kind = transaction(state.database) { DaoProject.findById(projectId)?.kind }
+        span?.setData("project.kind", kind?.name ?: "unknown")
+        val result = when (kind) {
             // A venue syncs its published versions, never its draft (venue plan §3.4).
-            ProjectKind.VENUE -> return runVenueSync(projectId, trigger)
+            ProjectKind.VENUE -> runVenueSync(projectId, trigger)
             ProjectKind.VENUE_VERSION -> throw SyncException(
                 SyncErrorCode.SYNC_DISABLED, "A venue version syncs as a tag of its venue's repo, never on its own.",
             )
-            else -> Unit
+            else -> withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
+                doRun(projectId, projectUuid, installUuid, installFriendlyName, trigger)
+            }
         }
-        return withProjectLock(projectId, SyncLogEvent.RUN_FAILED) {
-            doRun(projectId, projectUuid, installUuid, installFriendlyName, trigger)
-        }
+        span?.setData("sync.outcome", result.outcome.name)
+        result
     }
 
     /**
@@ -211,11 +217,13 @@ class RemoteSyncEngine(
 
         val credentials = resolveCredentials(repoUrl)
 
-        snapshotEngine.snapshot(
-            projectId, projectUuid, installUuid, installFriendlyName,
-            message = null,
-            logNoop = trigger.logsIdleRuns,
-        )
+        Tracing.spanSuspending("sync.export", "snapshot") {
+            snapshotEngine.snapshot(
+                projectId, projectUuid, installUuid, installFriendlyName,
+                message = null,
+                logNoop = trigger.logsIdleRuns,
+            )
+        }
 
         val workingTreePath = workingTree.pathFor(projectUuid)
         val outcome = withContext(Dispatchers.IO) {
@@ -321,9 +329,24 @@ class RemoteSyncEngine(
             }
         }
 
-        val relation = JGitClient.classify(repo, "HEAD", remoteRef)
+        val relation = Tracing.span("sync.diff", "classify") { JGitClient.classify(repo, "HEAD", remoteRef) }
         logger.info("Sync classify for repo={}: {} (attempts remaining {})", repoUrl, relation, attemptsRemaining)
 
+        return Tracing.span("sync.apply", relation::class.simpleName) { applyRelation(relation, repo, projectId, installUuid, installFriendlyName, repoUrl, branch, credentials, attemptsRemaining) }
+    }
+
+    private fun applyRelation(
+        relation: HistoryRelation,
+        repo: Repository,
+        projectId: Int,
+        installUuid: UUID,
+        installFriendlyName: String,
+        repoUrl: String,
+        branch: String,
+        credentials: GitCredentials,
+        attemptsRemaining: Int,
+    ): SyncRunResult {
+        val remoteRef = remoteBranchRef(branch)
         return when (relation) {
             HistoryRelation.Equal -> {
                 val head = JGitClient.head(repo)?.sha ?: error("Equal classification with null HEAD")

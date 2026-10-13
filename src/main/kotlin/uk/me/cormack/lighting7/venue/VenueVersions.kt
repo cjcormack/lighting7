@@ -11,6 +11,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoVenueVersion
@@ -94,7 +95,10 @@ class VenueVersions(private val state: State) {
      * Publish the draft as the next version, with [note]; [publishedBy] is the account's name, null
      * on a desk with no accounts. Refused when the draft is the installed version already.
      */
-    suspend fun publish(venueId: Int, note: String, publishedBy: String?): VenueVersionDto = lock.withLock {
+    suspend fun publish(venueId: Int, note: String, publishedBy: String?): VenueVersionDto =
+        Tracing.transactionSuspending("venue.publish", "venue.publish") { publishTraced(venueId, note, publishedBy) }
+
+    private suspend fun publishTraced(venueId: Int, note: String, publishedBy: String?): VenueVersionDto = lock.withLock {
         val trimmed = note.trim()
         if (trimmed.isEmpty()) throw VenueException.badRequest(CODE_NOTE_REQUIRED, "A version needs a note saying what changed")
         if (trimmed.length > VENUE_VERSION_NOTE_MAX) {
@@ -105,7 +109,7 @@ class VenueVersions(private val state: State) {
                 requireVenue(venueId)
                 versionsOf(venueId).firstOrNull()?.toDto()
             }
-            if (draftDiff(venueId, installed).size == 0) {
+            if (Tracing.span("venue.diff", "draft") { draftDiff(venueId, installed) }.size == 0) {
                 throw VenueException.conflict(
                     CODE_DRAFT_EMPTY,
                     if (installed == null) "The venue is empty: there is nothing to publish"
@@ -118,7 +122,7 @@ class VenueVersions(private val state: State) {
             val number = (installed?.number ?: 0) + 1
             val snapshotUuid = UUID.randomUUID()
             var published: VenueVersionDto? = null
-            KeptUuidCopy.copy(
+            Tracing.span("venue.snapshot") { KeptUuidCopy.copy(
                 state, venueId,
                 name = snapshotName(snapshotUuid),
                 kind = ProjectKind.VENUE_VERSION,
@@ -133,7 +137,7 @@ class VenueVersions(private val state: State) {
                     snapshotProject = snapshot
                 }
                 published = version.toDto()
-            }
+            } }
             logger.info("Published venue {} v{} ({})", venueId, number, snapshotUuid)
             published ?: error("Version row was not written")
         }

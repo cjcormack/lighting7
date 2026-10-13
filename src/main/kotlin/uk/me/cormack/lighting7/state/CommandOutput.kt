@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.telemetry.reportingExceptionHandler
+import uk.me.cormack.lighting7.telemetry.LiveSentryContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,7 +108,8 @@ class CommandOutput(
     }
 
     private val lock = Any()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default + LiveSentryContext() + reportingExceptionHandler(CommandOutput::class.java))
 
     /** Fixture key → its hold in flight. Guarded by [lock]. */
     private val running = HashMap<String, Pair<Running, Job>>()

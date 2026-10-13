@@ -10,6 +10,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.intOrNull
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.FIXTURE_COMMANDS_REMOTE_REFUSAL
 import uk.me.cormack.lighting7.ai.RUN_FIXTURE_COMMAND
@@ -97,7 +99,7 @@ class McpProtocol(private val state: State) {
                 "tools/list" -> result(id, buildJsonObject {
                     put("tools", buildJsonArray { toolDefs.forEach { add(it.toMcp()) } })
                 })
-                "tools/call" -> result(id, callTool(params, user))
+                "tools/call" -> result(id, traceToolCall(params, user))
                 // Declared absent in capabilities, but answering empty is kinder to clients that
                 // probe anyway than a method-not-found error in their logs.
                 "resources/list" -> result(id, buildJsonObject { put("resources", JsonArray(emptyList())) })
@@ -145,6 +147,19 @@ class McpProtocol(private val state: State) {
         appendLine(SETUP_GUIDE)
         appendLine()
         append(briefing.keyConcepts())
+    }
+
+    /** An `mcp.server` span per tool call, after Sentry's MCP conventions. */
+    private suspend fun traceToolCall(params: JsonObject, user: AuthenticatedUser): JsonObject {
+        val name = (params["name"] as? JsonPrimitive)?.contentOrNull?.takeIf { tool -> toolDefs.any { it.name == tool } }
+            ?: return callTool(params, user)
+        return Tracing.spanSuspending("mcp.server", "tools/call $name") { span ->
+            span?.setData("mcp.method.name", "tools/call")
+            span?.setData("mcp.tool.name", name)
+            callTool(params, user).also { result ->
+                (result["isError"] as? JsonPrimitive)?.booleanOrNull?.let { span?.setData("mcp.tool.result.is_error", it) }
+            }
+        }
     }
 
     private suspend fun callTool(params: JsonObject, user: AuthenticatedUser): JsonObject {

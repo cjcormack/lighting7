@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.show
 
+import uk.me.cormack.lighting7.telemetry.LiveSentryContext
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -21,6 +22,8 @@ import uk.me.cormack.lighting7.state.CommandOutput
 import uk.me.cormack.lighting7.state.TriggerOutput
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
+import uk.me.cormack.lighting7.telemetry.ScriptCacheProbe
+import uk.me.cormack.lighting7.telemetry.Tracing
 import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.script.experimental.api.*
@@ -252,14 +255,16 @@ class Show(
     }
 
     fun start() {
-        try {
-            // Park state must be loaded before controllers are constructed: controllers read
-            // it via [ParkSource] on their first transmit.
-            parkManager.loadFromDatabase()
-            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource, hold = rigHold)
-            dropRefusedParks()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        Tracing.span("show.fixtures", "load fixtures") {
+            try {
+                // Park state must be loaded before controllers are constructed: controllers read
+                // it via [ParkSource] on their first transmit.
+                parkManager.loadFromDatabase()
+                DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource, hold = rigHold)
+                dropRefusedParks()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
 
         // Attach the global scaler to every controller so Blackout / Grand Master toggles
@@ -285,7 +290,7 @@ class Show(
                 speedMasterFlushSignal.trySend(Unit)
             }
         }
-        speedMasterFlushJob = GlobalScope.launch {
+        speedMasterFlushJob = GlobalScope.launch(LiveSentryContext()) {
             for (signal in speedMasterFlushSignal) {
                 delay(SPEED_MASTER_WRITE_DEBOUNCE_MS)
                 flushSpeedMasterWrites()
@@ -314,7 +319,7 @@ class Show(
         // pay the Kotlin-compiler cold start. This runs off the server-accept path (server-first
         // boot) and, after the first boot, loads from the on-disk compiled-script cache, so it is
         // cheap enough to always run — there is no longer a toggle for it.
-        prewarmCueScripts()
+        Tracing.span("show.prewarm", "cue trigger scripts") { prewarmCueScripts() }
 
         // Mark the show usable last: fixtures are loaded and the FX engine is running. Readers of
         // [isStarted] (the readiness gate) now see a fully-initialised show.
@@ -469,7 +474,13 @@ class Show(
 
         return scriptsLock.run {
             scripts.getOrPut(scriptKey) {
-                Script(this@Show, scriptName, literalScript, scriptType)
+                Tracing.transaction("script.compile", "script.compile") { span ->
+                    span?.setData("script.type", scriptType.name)
+                    ScriptCacheProbe.take()
+                    Script(this@Show, scriptName, literalScript, scriptType).also {
+                        span?.setData("cache", ScriptCacheProbe.tag(ScriptCacheProbe.take()))
+                    }
+                }
             }
         }
     }
@@ -564,7 +575,7 @@ class Show(
             val compiledResult = script.compiledResult
             val compiledScript = compiledResult.valueOrThrow()
 
-            job = CoroutineScope(show.runnerPool).launch {
+            job = CoroutineScope(show.runnerPool + LiveSentryContext()).launch {
                 when (script.scriptType) {
                     ScriptType.GENERAL -> {
                         val transaction = ControllerTransaction(show.fixtures.controllers)

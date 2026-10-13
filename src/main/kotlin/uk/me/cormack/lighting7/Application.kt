@@ -4,6 +4,7 @@ import io.ktor.server.application.*
 import io.ktor.server.netty.*
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import uk.me.cormack.lighting7.plugins.InstallChangedOutMessage
 import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
+import uk.me.cormack.lighting7.plugins.installSentryTracing
 import uk.me.cormack.lighting7.routes.configureRouting
 import uk.me.cormack.lighting7.state.BootPhase
 import uk.me.cormack.lighting7.state.InstanceLock
@@ -24,9 +26,12 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.appDataDir
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
+import uk.me.cormack.lighting7.telemetry.BootTrace
 import uk.me.cormack.lighting7.telemetry.DevCommit
 import uk.me.cormack.lighting7.telemetry.InstallTags
+import uk.me.cormack.lighting7.telemetry.LiveSentryContext
 import uk.me.cormack.lighting7.telemetry.SentryRuntime
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.update.InstallKind
 
 fun main(argv: Array<String>) {
@@ -68,10 +73,16 @@ fun main(argv: Array<String>) {
 }
 
 fun Application.module() {
+    val startedAt = Instant.now()
     val state = State(environment.config)
+    val stateBuiltAt = Instant.now()
     // Here and nowhere else, so tests never meet Sentry. After State, which opens the database
     // that holds this install's consent.
     startSentry(state)
+    val boot = BootTrace.start(startedAt)
+    boot?.recorded(BootTrace.OP_PHASE, "starting", startedAt, stateBuiltAt) { phase ->
+        state.databaseInitWindow?.let { (start, end) -> boot.recorded("db.init", "schema", start, end, phase) }
+    }
 
     // Break-glass admin recovery and the zero-users warning live here, not in State's
     // constructor: tests build State dozens of times and must never scan the real data
@@ -106,12 +117,16 @@ fun Application.module() {
         // it on Default instead would starve the very fan-out it is waiting for.
         moduleWithState(state)
         state.autoSyncScheduler.start()
-        launch(Dispatchers.IO) { runShowStartupGuarded(state) }
+        launch(Dispatchers.IO + (boot?.context ?: LiveSentryContext())) { runShowStartupGuarded(state, boot) }
     } else {
         // Legacy blocking order: fully initialise the show before accepting any connections, so
         // the server never serves traffic before the rig is live. Exceptions propagate and abort
         // server startup — the deliberate fail-fast contract of this mode.
-        runShowStartup(state)
+        if (boot == null) {
+            runShowStartup(state)
+        } else {
+            boot.onThisThread { runCatching { runShowStartup(state, boot) }.onFailure(boot::finish).getOrThrow() }
+        }
         state.autoSyncScheduler.start()
         moduleWithState(state)
     }
@@ -124,15 +139,16 @@ fun Application.module() {
  * server is already accepting connections, so surfacing the error to the loading UI beats a
  * half-open crash.
  */
-private fun Application.runShowStartup(state: State) {
+private fun Application.runShowStartup(state: State, boot: BootTrace? = null) {
     state.bootProgress.update(BootPhase.SHOW_INIT, "Initializing show…", 5)
     // The Show constructor compiles the built-in FX effects, driving FX_COMPILE progress (10–55%).
-    val show = state.initializeShow()
+    val show = Tracing.span(BootTrace.OP_PHASE, "show_init") { state.initializeShow() }
     // start() loads fixtures then pre-warms cue scripts — the slow tail after FX compilation.
     state.bootProgress.update(BootPhase.FIXTURES, "Loading fixtures & pre-warming cues…", 60)
-    show.start()
-    registerMdns(state)
+    Tracing.span(BootTrace.OP_PHASE, "fixtures") { show.start() }
+    Tracing.span(BootTrace.OP_PHASE, "mdns") { registerMdns(state) }
     state.bootProgress.markReady()
+    boot?.finish()
     // After markReady, never before: constructing the service reconciles the previous apply, and
     // the first network check is deliberately delayed further still — a desk mid-boot is
     // compiling FX scripts and loading its patch, and should not also be pulling on the network.
@@ -140,12 +156,13 @@ private fun Application.runShowStartup(state: State) {
     log.info("Show startup complete")
 }
 
-private fun Application.runShowStartupGuarded(state: State) {
+private fun Application.runShowStartupGuarded(state: State, boot: BootTrace?) {
     try {
-        runShowStartup(state)
+        runShowStartup(state, boot)
     } catch (e: Throwable) {
         state.bootProgress.markFailed(e)
         log.error("Show startup failed", e)
+        boot?.finish(e)
     }
 }
 
@@ -207,6 +224,8 @@ private fun Application.registerMdns(state: State) {
  * [State.initializeShow] bootstrap. Prod continues through [module].
  */
 fun Application.moduleWithState(state: State) {
+    // Before error handling, so StatusPages runs inside the call's Sentry scope.
+    installSentryTracing()
     // Installed first so it wraps everything below: an exception escaping any route handler
     // becomes a JSON ErrorResponse with a meaningful status, not Netty's bodyless 500.
     configureErrorHandling()
