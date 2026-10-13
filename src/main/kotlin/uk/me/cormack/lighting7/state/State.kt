@@ -106,6 +106,9 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.update.BuildInfo.current,
     )
 
+    /** The browser's envelope spool behind `POST /api/sentry`; only `Application.module()` forwards it. */
+    val browserTunnel = uk.me.cormack.lighting7.telemetry.BrowserTunnel(telemetry, appDataDir().resolve("sentry-browser"))
+
     /** The `mcp { }` block: the MCP listener's port, bind address and public URL. */
     val mcpConfig = uk.me.cormack.lighting7.mcp.McpConfig.from(config)
 

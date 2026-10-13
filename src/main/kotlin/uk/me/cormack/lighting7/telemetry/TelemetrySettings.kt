@@ -23,6 +23,8 @@ data class SentryConfig(
     val environment: String?,
     /** For an auto-sync run that changed nothing; null is [tracesSampleRate]. */
     val idleSyncSampleRate: Double? = null,
+    /** The browser's project (`lighting7-react`): what the frontend reports to, and all the tunnel forwards. */
+    val browserDsn: String? = null,
 ) {
     companion object {
         fun from(config: ApplicationConfig): SentryConfig = SentryConfig(
@@ -31,6 +33,7 @@ data class SentryConfig(
             tracesSampleRate = rate(config, "sentry.tracesSampleRate"),
             environment = config.optionalString("sentry.environment"),
             idleSyncSampleRate = rate(config, "sentry.idleSyncSampleRate"),
+            browserDsn = config.optionalString("sentry.browserDsn"),
         )
 
         private fun rate(config: ApplicationConfig, key: String): Double? = config.optionalString(key)?.let { raw ->

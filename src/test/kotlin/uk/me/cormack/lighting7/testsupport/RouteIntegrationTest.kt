@@ -50,10 +50,13 @@ abstract class RouteIntegrationTest {
     protected lateinit var state: State
     protected var projectId: Int = 0
 
+    /** Config the test's [State] is built with, beyond [testAppConfig]'s. */
+    protected open val extraConfig: List<Pair<String, String>> = emptyList()
+
     @Before
     fun setUpIntegrationTest() {
         IntegrationTestDb.reset()
-        state = State(testAppConfig())
+        state = State(testAppConfig(*extraConfig.toTypedArray()))
         projectId = seedMinimalProject(state)
         state.initializeShow()
         state.show.start()

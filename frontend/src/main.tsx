@@ -11,12 +11,20 @@ import { startTemplatesBridge } from "./store/templates"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
 import { windowName } from "./lib/windowIdentity"
 import { applyImmersiveLaunch } from "./lib/immersive"
+import { refreshTelemetry, startSentry } from "./lib/sentry"
+import { lightingApi } from "./api/lightingApi"
+
+// Asks the desk whether to report, before the bridges start; it never holds up the first paint.
+startSentry()
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
 // loading overlay renders before the user menu's ThemeMenuItem effect runs, so without
 // this the overlay would be light regardless of preference; this also removes
 // the flash-of-light on normal loads. Resolution is shared with ThemeMenuItem.
 applyThemeClass(getInitialTheme())
+
+// The telemetry switch is an install setting, so turning it off on any screen stops this one too.
+lightingApi.install.subscribe(refreshTelemetry)
 
 // Keep the GitHub identity cache live for the whole app, so the sidebar badge and the re-auth
 // banner learn about a rejected authorisation without a sync page being open. Started here

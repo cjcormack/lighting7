@@ -50,6 +50,10 @@ import { InstallSettings } from "./routes/InstallSettings";
 import { ResetPasswordPage } from "./routes/ResetPasswordPage";
 import { DeviceLoginPage } from "./routes/DeviceLoginPage";
 import { isPublicPath } from "./lib/publicPath";
+import { useRouterMayStart } from "./lib/sentryReady";
+import { windowViewOf } from "./lib/windowViews";
+import { ErrorBoundary, setTag, wrapCreateBrowserRouter } from "@sentry/react";
+import { Button } from "@/components/ui/button";
 
 // Route-level lazy boundaries for two of the four heavy islands.
 //
@@ -107,8 +111,18 @@ function ProjectSyncToSettings() {
 // for exactly that reason.
 const publicPath = isPublicPath(window.location.pathname)
 
-function App() {
-  const router = createBrowserRouter([
+// The SDK instruments a router only if `Sentry.init` ran before it was made, so it is made once, on
+// the first render after `lib/sentry.ts` settles; the gates around it render meanwhile.
+const createRouter = wrapCreateBrowserRouter(createBrowserRouter)
+let appRouter: ReturnType<typeof createRouter> | null = null
+
+function viewTag(pathname: string) {
+  setTag("view", windowViewOf(pathname)?.id ?? "other")
+}
+
+function getAppRouter() {
+  if (appRouter != null) return appRouter
+  appRouter = createRouter([
     {
       path: "/",
       element: <Layout />,
@@ -437,14 +451,37 @@ function App() {
       element: <DeviceLoginPage />,
     },
   ])
+  viewTag(appRouter.state.location.pathname)
+  appRouter.subscribe((state) => viewTag(state.location.pathname))
+  return appRouter
+}
+
+function DeskFailed() {
+  return (
+    <div className="p-6 space-y-3">
+      <p className="font-medium">The desk&apos;s page failed.</p>
+      <p className="text-sm text-muted-foreground">
+        The show keeps running: the lights are the backend&apos;s. Reloading will bring the page back.
+      </p>
+      <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+        Reload
+      </Button>
+    </div>
+  )
+}
+
+function App() {
+  const routerMayStart = useRouterMayStart()
 
   return (
       <React.StrictMode>
-        <AuthGate bypass={publicPath}>
-          <BootGate bypass={publicPath}>
-            <RouterProvider router={router}/>
-          </BootGate>
-        </AuthGate>
+        <ErrorBoundary fallback={<DeskFailed />}>
+          <AuthGate bypass={publicPath}>
+            <BootGate bypass={publicPath}>
+              {routerMayStart && <RouterProvider router={getAppRouter()}/>}
+            </BootGate>
+          </AuthGate>
+        </ErrorBoundary>
         <Toaster position="bottom-right" />
       </React.StrictMode>
   )

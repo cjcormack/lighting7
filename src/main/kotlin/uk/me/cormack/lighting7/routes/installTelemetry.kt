@@ -47,6 +47,8 @@ data class TelemetryDto(
     /** `development`, `release` or `cloud`. */
     val environment: String,
     val tracesSampleRate: Double,
+    /** The browser's project (`lighting7-react`), reported to through `/api/sentry`; null when none is configured. */
+    val browserDsn: String? = null,
 )
 
 private fun TelemetrySettings.toDto() = TelemetryDto(
@@ -54,4 +56,5 @@ private fun TelemetrySettings.toDto() = TelemetryDto(
     release = release,
     environment = environment,
     tracesSampleRate = tracesSampleRate,
+    browserDsn = config.browserDsn,
 )

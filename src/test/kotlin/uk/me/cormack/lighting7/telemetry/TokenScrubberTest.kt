@@ -1,57 +1,50 @@
 package uk.me.cormack.lighting7.telemetry
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
+/**
+ * The cases are `src/test/resources/telemetry/scrubCases.fixture.json`, which the browser's
+ * `lib/sentryScrub.test.ts` runs too: the two scrubbers share their patterns, and this pins that
+ * they apply them alike.
+ */
 class TokenScrubberTest {
 
-    private fun assertScrubbed(input: String, expected: String) = assertEquals(expected, TokenScrubber.scrub(input), input)
+    @Serializable
+    private data class Case(val input: String, val expected: String? = null)
+
+    @Serializable
+    private data class Cases(val cases: List<Case>)
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val cases = json.decodeFromString<Cases>(
+        checkNotNull(javaClass.getResource("/telemetry/scrubCases.fixture.json")) { "the shared cases are missing" }.readText(),
+    ).cases
 
     @Test
-    fun `GitHub tokens are redacted whole`() {
-        assertScrubbed("push failed with ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8", "push failed with [redacted]")
-        assertScrubbed("token=gho_16C7e42F292c6912E7710c838347Ae178B4a here", "token=[redacted] here")
-        assertScrubbed("github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz", "[redacted]")
-        assertScrubbed("ghs_abcdefghijklmnopqrstuvwxyz0123", "[redacted]")
+    fun `every shared case scrubs as the fixture says`() {
+        assertTrue(cases.size > 20)
+        for (case in cases) assertEquals(case.expected ?: case.input, TokenScrubber.scrub(case.input), case.input)
     }
 
-    @Test
-    fun `ngrok authtokens are redacted by shape and by key`() {
-        assertScrubbed("using 2abcDEFghiJKLmnoPQRstuVWXyz1_7AbCdEfGhIjKlMnOpQrStU", "using [redacted]")
-        assertScrubbed("authtoken: hunter2hunter2", "authtoken: [redacted]")
-        assertScrubbed("NGROK_AUTHTOKEN=s3cret-value", "NGROK_AUTHTOKEN=[redacted]")
-        assertScrubbed("ngrok start --authtoken s3cret-value --log stdout", "ngrok start --authtoken [redacted] --log stdout")
-    }
+    @Serializable
+    private data class Pattern(val about: String, val pattern: String, val ignoreCase: Boolean = false)
+
+    @Serializable
+    private data class Patterns(val patterns: List<Pattern>)
 
     @Test
-    fun `bearer credentials keep the scheme and lose the token`() {
-        assertScrubbed("Authorization: Bearer eyJhbGciOi.JIUzI1NiJ9.abc-def_ghi", "Authorization: Bearer [redacted]")
-        assertScrubbed("bearer abc123", "bearer [redacted]")
-    }
-
-    @Test
-    fun `reset and device paths keep the route and lose the token`() {
-        assertScrubbed("Bad request on /api/rest/auth/reset/AbC123xyz_-9: expired", "Bad request on /api/rest/auth/reset/[redacted]: expired")
-        assertScrubbed("GET /api/rest/auth/device/Zz9-Yy8?x=1", "GET /api/rest/auth/device/[redacted]?x=1")
-        // The authenticated mint route is not a token path.
-        assertScrubbed("POST /api/rest/auth/device-logins", "POST /api/rest/auth/device-logins")
-    }
-
-    @Test
-    fun `OAuth codes, tokens and the session cookie are redacted`() {
-        assertScrubbed("/oauth/callback?code=abc123&state=xyz789", "/oauth/callback?code=[redacted]&state=[redacted]")
-        assertScrubbed("{\"access_token\":\"abc\",\"refresh_token\":\"def\"}", "{\"access_token\":\"[redacted]\",\"refresh_token\":\"[redacted]\"}")
-        assertScrubbed("Cookie: lighting7_session=AAAABBBBCCCC; other=1", "Cookie: lighting7_session=[redacted]; other=1")
-    }
-
-    @Test
-    fun `ordinary log lines pass untouched`() {
-        for (line in listOf(
-            "Show startup complete",
-            "FX engine paused SineWave on front-wash after 5 consecutive failing ticks",
-            "Remote access authtoken is stored",
-            "Loaded 24/24 built-in effects in 1.2s",
-            "Unhandled exception on /api/rest/projects/4/cues/12",
-        )) assertScrubbed(line, line)
+    fun `every pattern has a case that it redacts`() {
+        val patterns = json.decodeFromString<Patterns>(
+            checkNotNull(javaClass.getResource("/telemetry/secret-patterns.json")).readText(),
+        ).patterns
+        for (p in patterns) {
+            val regex = if (p.ignoreCase) Regex(p.pattern, RegexOption.IGNORE_CASE) else Regex(p.pattern)
+            assertTrue(cases.any { it.expected != null && regex.containsMatchIn(it.input) }, "no case for: ${p.about}")
+        }
     }
 }

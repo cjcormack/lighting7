@@ -9,6 +9,8 @@ import io.sentry.Breadcrumb
 import io.sentry.ILogger
 import io.sentry.IScopes
 import io.sentry.ScopeType
+import io.sentry.SendCachedEnvelopeFireAndForgetIntegration
+import io.sentry.SendFireAndForgetEnvelopeSender
 import io.sentry.Sentry
 import io.sentry.SentryLevel
 import io.sentry.SentryOptions
@@ -45,10 +47,14 @@ class SentryRuntime(
     @Volatile private var bootPhase: String? = null
     @Volatile private var project: Map<String, String>? = null
 
-    /** Starts or stops Sentry off the caller's thread; closing flushes for up to two seconds. */
+    /**
+     * The switch: starts or stops Sentry off the caller's thread. Stopping flushes for up to two
+     * seconds, then deletes the disk cache — turning telemetry off withdraws consent for what is
+     * queued too.
+     */
     fun apply(enabled: Boolean) {
         try {
-            switcher.execute { if (enabled) start() else stop() }
+            switcher.execute { if (enabled) start() else stop(purgeQueue = true) }
         } catch (_: RejectedExecutionException) {
             // Closed: the desk is stopping, and Sentry with it.
         }
@@ -118,13 +124,14 @@ class SentryRuntime(
         }
     }
 
-    private fun stop() {
+    private fun stop(purgeQueue: Boolean = false) {
         val r = running ?: return
         running = null
         metrics?.stop()
         detachAppender(r.appender)
         runCatching { r.rootScopes.endSession() }
         runCatching { Sentry.close() }
+        if (purgeQueue) purgeDiskCache(cacheDir)
         logger.info("Sentry stopped")
     }
 
@@ -139,6 +146,7 @@ class SentryRuntime(
         options.isSendDefaultPii = false
         options.cacheDirPath = cacheDir.toString()
         options.maxCacheItems = 300
+        resendDiskCache(options)
         options.shutdownTimeoutMillis = 2_000
         options.flushTimeoutMillis = 2_000
         options.maxBreadcrumbs = 200
@@ -242,6 +250,20 @@ class SentryRuntime(
 
     companion object {
         const val APPENDER_NAME = "SENTRY"
+
+        /**
+         * Sends what an offline run left in the disk cache, each time Sentry starts (D15). Only
+         * Android's SDK registers this by default; on the JVM the cache is written and never read.
+         */
+        internal fun resendDiskCache(options: SentryOptions) {
+            options.addIntegration(SendCachedEnvelopeFireAndForgetIntegration(SendFireAndForgetEnvelopeSender { options.cacheDirPath }))
+        }
+
+        /** Deletes everything the SDK queued under [cacheDir]; only after `Sentry.close`. */
+        internal fun purgeDiskCache(cacheDir: Path) {
+            cacheDir.toFile().listFiles()?.forEach { it.deleteRecursively() }
+        }
+
         private const val TELEMETRY_PACKAGE = "uk.me.cormack.lighting7.telemetry"
     }
 }

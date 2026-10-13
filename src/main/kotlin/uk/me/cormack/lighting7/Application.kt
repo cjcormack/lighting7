@@ -184,8 +184,15 @@ private fun Application.startSentry(state: State) {
     )
     val sentry = SentryRuntime(state.telemetry, appDataDir().resolve("sentry"), installTags(state) ?: InstallTags("unknown", "unknown", false), metrics)
     sentry.applyNow(state.telemetry.enabled)
-    state.telemetry.onChange = sentry::apply
-    monitor.subscribe(ApplicationStopping) { sentry.close() }
+    state.browserTunnel.startForwarding()
+    state.telemetry.onChange = { enabled ->
+        sentry.apply(enabled)
+        state.browserTunnel.onTelemetryChanged(enabled)
+    }
+    monitor.subscribe(ApplicationStopping) {
+        state.browserTunnel.close()
+        sentry.close()
+    }
 
     fun tagProject(projectId: Int?) {
         val (uuid, kind) = projectId?.let { projectContext(state, it) } ?: return

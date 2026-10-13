@@ -5313,6 +5313,17 @@ trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, 
   (`REMOTE_ACCESS_INVALID`: a bad domain, no desk accounts) itself.
 - **No free-plan warning**, by decision (Chris, 2026-09-26): ngrok's quotas are not pre-empted.
 
+### Sentry
+
+`lib/sentry.ts` is the browser's Sentry and `main.tsx` its only importer (`sentryImports.test.ts`),
+so no test can report; everything else calls `@sentry/react` directly, which does nothing until a
+client exists. It asks `GET /install/telemetry` first and reports through the desk's `/api/sentry`
+tunnel. `App` creates the router only once `lib/sentryReady.ts` says init has settled, because the
+SDK instruments only a router made after `Sentry.init`; keep it that way, or page-load and
+navigation transactions silently stop. Secrets are scrubbed by `lib/sentryScrub.ts` from the
+backend's own pattern list. The whole contract, and what each event carries, is
+`../docs/observability-engineering.md` §"The browser".
+
 ## API Communication
 
 The app maintains a persistent WebSocket connection to the backend for:
