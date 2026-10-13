@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { captureReactException } from '@sentry/react'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -45,8 +46,11 @@ export class FeatureErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // The desk's diagnostics are the browser console; nothing else collects these.
     console.error(`[${this.props.feature}] failed to render`, error, info.componentStack)
+    captureReactException(error, info, {
+      captureContext: { tags: { feature: this.props.feature } },
+      mechanism: { handled: true, type: 'auto.function.react.feature_error_boundary' },
+    })
   }
 
   render() {

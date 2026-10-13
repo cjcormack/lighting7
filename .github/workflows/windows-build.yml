@@ -31,6 +31,9 @@ jobs:
     steps:
       - name: Checkout lighting7
         uses: actions/checkout@v7
+        with:
+          # The Sentry Vite plugin sets the release's commits from history (Sentry plan D14).
+          fetch-depth: 0
 
       # Pre-flight, deliberately before the JDK installs and the build: a bad tag
       # should cost seconds, not the 40 minutes it takes to discover the same thing from
@@ -118,6 +121,11 @@ jobs:
         env:
           GH_OAUTH_CLIENT_ID: ${{ secrets.LIGHTING7_GH_OAUTH_CLIENT_ID }}
           GH_OAUTH_CLIENT_SECRET: ${{ secrets.LIGHTING7_GH_OAUTH_CLIENT_SECRET }}
+          # Uploads the frontend's source maps inside buildFrontend, which injects their debug IDs
+          # into the bundle it seals into the MSI, then deletes them (Sentry plan D14). Unset, as
+          # on a fork, the build makes no source maps and uploads nothing. The release name comes
+          # from -PbuildCommitSha below, through Gradle.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           .\gradlew.bat packageWindows `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `

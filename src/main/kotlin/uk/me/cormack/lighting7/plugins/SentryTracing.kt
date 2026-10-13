@@ -128,10 +128,10 @@ internal fun withoutSamplingInputs(baggage: List<String>?): List<String>? = bagg
 
 private val SAMPLING_INPUTS = setOf("sentry-sample_rand", "sentry-sample_rate")
 
-/** Whether a request path is traced: the API and MCP, not the UI's files, boot polling or render uploads. */
+/** Whether a request path is traced: the API and MCP, not the UI's files, boot polling, render uploads or the browser's tunnel. */
 internal fun isTracedPath(path: String): Boolean {
     val p = path.trimEnd('/')
-    if (p == "/api/rest/status" || p.startsWith("/api/rest/stage-renders/")) return false
+    if (p == "/api/rest/status" || p.startsWith("/api/rest/stage-renders/") || p == "/api/sentry") return false
     return p.startsWith("/api/") || p == "/mcp" || p.startsWith("/mcp/") || p.startsWith("/oauth/") || p.startsWith("/.well-known/")
 }
 

@@ -1,21 +1,25 @@
 # Observability — Sentry
 
 The desk reports errors, logs, run sessions, traces and metrics to Sentry (`lighting7-kotlin`, EU
-region). The frontend (`lighting7-react`) comes in later sessions of
-[`plans/sentry-plan.md`](plans/sentry-plan.md); this document covers what exists today: the
-backend foundation, its tracing and its metrics.
+region), and its browsers report errors, sessions and traces to `lighting7-react` through the desk
+(§"The browser"). Replay, feedback and the browser's metrics are later sessions of
+[`plans/sentry-plan.md`](plans/sentry-plan.md).
 
 ## The switch
 
 Telemetry is an **install setting**, admin only and machine-local (plan D1):
 
-- `GET /api/rest/install/telemetry` answers `{enabled, release, environment, tracesSampleRate}` to
-  any caller, signed in or not, on either listener — the frontend reads it before sign-in. The
+- `GET /api/rest/install/telemetry` answers `{enabled, release, environment, tracesSampleRate,
+  browserDsn}` to any caller, signed in or not, on either listener — the frontend reads it before
+  sign-in. The
   auth gate exempts the **GET only**: an exempt path carries no user, which `requireAdmin` reads as
   allowed, so a method-blind exemption would let a signed-out `PUT` through.
-- `PUT /api/rest/install/telemetry` `{enabled}` is an admin's. It stores the choice in
-  `telemetry_settings` (one row, never synced), fires `installChanged`, and starts or stops Sentry
-  without a restart.
+- `PUT /api/rest/install/telemetry` `{enabled}` is an admin's — the *Send diagnostics* switch on
+  Install settings → General, shown to admins only. It stores the choice in `telemetry_settings`
+  (one row, never synced), fires `installChanged`, and starts or stops Sentry without a restart;
+  the tunnel refuses and stops forwarding at once, and every open browser stops its own Sentry on
+  the `installChanged` frame. Off withdraws consent for what is already queued too: once the SDK
+  has flushed (2 s at most) the backend's disk cache is deleted, and so is the tunnel's spool.
 - An install that has never chosen reports from a `DEV` build and not from a `RELEASE` one.
 - `sentry.enabled = false` in `local.conf` turns it off whatever the choice says; `enabled` in the
   GET answer is that combination.
@@ -34,6 +38,7 @@ sentry {
     tracesSampleRate = ""   # empty: 1.0, or 0.2 in `release`
     idleSyncSampleRate = "" # an auto-sync run that changed nothing; empty: tracesSampleRate
     environment = ""        # empty: `release` for a RELEASE build, else `development`
+    browserDsn = "…"        # application.conf: the lighting7-react DSN, all the tunnel forwards to
 }
 ```
 
@@ -74,8 +79,13 @@ telemetry off and on again without a restart starts a new session, but a thread 
 fork keeps the ended one, so that run's release-health counts are approximate; its events are not
 affected.
 
-Offline, envelopes queue in `<appDataDir>/sentry` (300 at most), and shutdown and flush wait at
-most 2 s each, so a desk with no route out still quits promptly.
+Offline, envelopes queue in `<appDataDir>/sentry/<dsn hash>/` (300 at most), and shutdown and flush
+wait at most 2 s each, so a desk with no route out still quits promptly. The queue is sent each time
+Sentry starts — at boot, or when the switch is turned back on — by
+`SendCachedEnvelopeFireAndForgetIntegration`, which `SentryRuntime.resendDiskCache` registers: on the
+JVM nothing else ever reads the cache, and the SDK has no connectivity signal there, so a desk that
+regains its route mid-run sends the backlog at its next start, not at once (`DiskCacheResendTest`).
+A shutdown keeps the queue; turning the switch off deletes it (§"The switch").
 
 ## What is not sent (`SentryFilters.beforeSend`)
 
@@ -97,18 +107,28 @@ editor as diagnostics and never logged at `ERROR`, so they never reach Sentry.
 ## Scrubbing
 
 `TokenScrubber` runs over every event (message, its parameters, exception values, breadcrumbs,
-request URL and query), every breadcrumb, and every log's body and string attributes. It redacts:
+request URL and query), every breadcrumb, and every log's body and string attributes. Its patterns
+are `src/main/resources/telemetry/secret-patterns.json`, the one list of what is secret: the
+browser's scrubber (`frontend/src/lib/sentryScrub.ts`) compiles the same file. It redacts:
 
 - GitHub tokens: `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`.
 - ngrok authtokens, by shape (`<digit><20+ alphanumerics>_<15+ alphanumerics>`) and by key
   (`authtoken: …`, `NGROK_AUTHTOKEN=…`, `--authtoken …`).
 - `Bearer …` credentials, keeping the scheme.
-- The one-time token in `/auth/reset/{token}` and `/auth/device/{token}`.
+- The one-time token in `/auth/reset/{token}` and `/auth/device/{token}`, and in the pages' own
+  `/reset/{token}` and `/device/{token}` at the start of a path or right after a host — never a
+  route that only has a `device` segment, such as `/oauth/github/device/start`, whose transaction
+  `beforeSendTransaction` would otherwise drop.
 - OAuth `code=`, `state=` and `token=` query parameters, and `access_token` / `refresh_token` /
   `id_token` values.
 - The `lighting7_session` cookie.
 
-Add a pattern there, with a case in `TokenScrubberTest`, when the desk starts handling a new secret.
+Add a pattern there when the desk starts handling a new secret, with a case in
+`src/test/resources/telemetry/scrubCases.fixture.json`. Both `TokenScrubberTest` and
+`sentryScrub.test.ts` run every case and fail on a pattern no case exercises; the two scrubbers
+apply a match the same way (group 1 kept, the rest replaced), and those shared cases are where they
+are kept in step. A pattern must mean the same in Java and JavaScript regex: no inline flags such as `(?i)`
+(set `ignoreCase` instead).
 
 ## Tracing
 
@@ -215,7 +235,8 @@ and the user-script runner take it alone.
 - The FX engine's tick and ArtNet's send loop: no span and no context element, nothing per frame.
   Their health is a metric (§"Metrics").
 - Outbound WS frames, and the continuous and snapshot frames above.
-- The UI's files, `/api/rest/status` (boot polling), `/api.json`, `/openapi`, stage-render uploads
+- The UI's files, `/api/rest/status` (boot polling), `/api.json`, `/openapi`, stage-render uploads,
+  the browser's tunnel (`/api/sentry`: a transaction per browser envelope would double the volume)
   and the WebSocket upgrade itself.
 - The ngrok agent's download, which uses `java.net.http` rather than Ktor.
 
@@ -312,4 +333,107 @@ Counts and events cost nothing in a window without them.
 - `StateFlow` conflation (above), and the MIDI flows' own DROP_OLDEST buffers, which feed the
   surfaces, not a socket.
 - The browser. Frontend metrics are session 5's.
+
+## The browser
+
+`frontend/src/lib/sentry.ts` is the browser's Sentry, and `main.tsx` is the only module that imports
+it (`sentryImports.test.ts` fails on a second), so no vitest file can start it. Everything else calls
+the SDK directly — `captureReactException`, `addBreadcrumb`, `startSpan`, the Redux enhancer — and
+those do nothing until a client exists.
+
+### Starting and stopping
+
+- `startSentry()` fetches `GET /install/telemetry`, aborted after 1 s. No answer, an error,
+  `enabled: false` or no `browserDsn` means no Sentry for this page load.
+- Rendering never waits. `AuthGate`, `BootGate` and their overlays render at once; only the router
+  waits, because the SDK instruments a router only if `Sentry.init` ran before it was created
+  (`wrapCreateBrowserRouter` reads the client then). `App` creates it once, when
+  `lib/sentryReady.ts` says the fetch has settled, or after 2 s if nothing says so. The router
+  already renders only after `/auth/status`, which the same desk answers, so the wait shows only on
+  the public `/reset` and `/device` pages, and never for more than a second.
+- `installChanged` makes every open page fetch the setting again: off closes the client (it flushes
+  for up to 2 s, then drops everything); on starts it, with errors and fetch spans but no route
+  transactions until the next load, since the router was made before the client.
+
+| Option | Value |
+|---|---|
+| `release` | `__LIGHTING7_RELEASE__` (§"Release and source maps"), else the GET's `release` |
+| `environment`, `tracesSampleRate` | the GET's, so one setting governs both halves |
+| `tunnel` | `/api/sentry` |
+| `tracePropagationTargets` | `[/^\/api\//]`: a REST call's backend transaction is in the browser's trace. The backend continues the trace and draws its own sampling decision (§"Sampling") |
+| `dataCollection` | every category off. It is v11's replacement for `sendDefaultPii`, every default of which collects; 11.7.0's browser reads only `userInfo`, which on would have Sentry infer the client's IP |
+| `integrations` | `reactRouterBrowserTracingIntegration` from `@sentry/react/react-router`, which binds the router hooks itself |
+| `ignoreErrors` | `ResizeObserver loop…`, WebGL context loss, and `AbortError` from an aborted fetch |
+
+### What is sent
+
+| What | From |
+|---|---|
+| Issues | uncaught errors and rejections; `FeatureErrorBoundary`, through `captureReactException` with the tag `feature` (`This page`, `The script editor`) and the component stack; the root `ErrorBoundary` in `App` for what no feature boundary contains |
+| Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per property |
+| Sessions | one per page load (the SDK's `page` lifecycle), so browser release health counts page loads |
+| Breadcrumbs | the SDK's (clicks, console, fetch, history); the socket's open, close with its code, and reconnects; and one per Redux action, carrying its type and RTK Query endpoint but never a payload — a query's is its whole response — and not RTK Query's per-frame bookkeeping (`queryResultPatched`, subscriptions, config) |
+
+Every event carries the tags `window` (this tab's name, following a rename) and `view`
+(`windowViewOf`'s id for the route, `other` elsewhere), and the Redux enhancer's `state` context:
+`{project: {id, kind}, connection, boot: {phase, ready}}`, never the store. Its `redux_state.json`
+attachment is off. The browser sets no user.
+
+`beforeSend`, `beforeSendTransaction` and `beforeBreadcrumb` run `lib/sentryScrub.ts` (§"Scrubbing")
+over the message, the transaction name, the request's URL, query and `Referer`, exception values,
+breadcrumbs, and every span's description and data.
+
+### The tunnel (`/api/sentry`)
+
+`routes/sentryTunnel.kt` is mounted under `/api` outside the warm-up and auth gates, so the login
+screen and the boot overlay report too, on both listeners, and is not traced. `BrowserTunnel.accept`
+answers:
+
+| Status | Code | When |
+|---|---|---|
+| 403 | `TELEMETRY_OFF` | the switch is off, or no `sentry.browserDsn` |
+| 413 | `ENVELOPE_TOO_LARGE` | above 1 MB, by `Content-Length` and then by a bounded read |
+| 400 | `ENVELOPE_INVALID` | the header line is not JSON naming a `dsn` |
+| 403 | `ENVELOPE_DSN_REFUSED` | the `dsn` is not `sentry.browserDsn`: key, host, port and project are compared |
+| 503 | `ENVELOPE_NOT_SPOOLED` | the spool could not be written |
+| 200 | — | spooled as it came to `<appDataDir>/sentry-browser/`, 300 envelopes or 64 MB at most, oldest dropped. The spool is listed once, on first use, and kept as an index after that; a `.part` file a crash left half-written is swept then |
+
+On the public listener those checks, with the listener's own (an account must exist; a POST from a
+foreign `Origin` is refused), are the whole defence. Whatever is spooled can only go to
+`lighting7-react`, which anyone holding its public DSN could post to directly.
+
+Only `Application.module()` starts the forwarder (the `sentry-browser-tunnel` thread), so the suite
+spools and never sends. It posts each envelope byte for byte, oldest first, to the project's
+envelope endpoint, with `java.net.http` rather than a Ktor client, whose Sentry plugin would trace it.
+Nothing is re-serialised: the JVM SDK's envelope model would drop what it does not know. It sends
+only while telemetry is on. A 2xx deletes the envelope, and so does any other 4xx (logged at `WARN`,
+locally). A 429 waits as long as `Retry-After` or `X-Sentry-Rate-Limits` says, a minute if neither
+does. A network failure, a 5xx or a spool file it cannot read backs off from 5 s, doubling to 5 min;
+nothing stops the worker but shutdown. A new envelope or a toggle wakes it, but does not cut a
+backoff short. Turning the switch off deletes the spool (§"The switch").
+
+### Release and source maps
+
+- **Release** (D10). `buildFrontend` hands Vite `LIGHTING7_RELEASE`, made from `:generateBuildInfo`'s
+  own version and commit and spelled as `TelemetrySettings.releaseName` spells the backend's — the
+  two spellings are kept in step by hand. Only a build that carries its commit has one, which every
+  release build does; otherwise the browser takes the desk's from the GET, which includes the
+  checkout's commit (§"Configuration").
+- **Source maps** (D14). `windows-build.yml` gives the `gradlew packageWindows` step
+  `SENTRY_AUTH_TOKEN`, and only then does `vite.config.ts` load `@sentry/vite-plugin`: hidden source
+  maps, debug IDs injected as it bundles (which is why it runs inside `buildFrontend`, not after it),
+  the upload, the release's commits (`fetch-depth: 0`), and the maps deleted. `copyFrontend`
+  excludes `*.map` as well, so none can reach the jar. The plugin's own telemetry is off. Its
+  default is to fail the build on an upload or set-commits error, so a release build needs the
+  GitHub integration connected in Sentry. Without the token — locally, in `ci.yml`, on a fork —
+  there are no source maps and no plugin.
+
+### Volume
+
+Per page load: one session and one page-load transaction. Per navigation: one transaction, at
+`tracesSampleRate`. A REST call makes a span only inside one of those (the SDK makes a fetch span
+only under an open span), so the auto-sync's refetches cost nothing between navigations, though they
+still carry the page's trace id to the backend. Nothing per WS frame, gesture or Redux action leaves
+the browser on its own; errors go as they happen. A search-only URL change is a `replace` throughout
+the app, which the SDK does not treat as a navigation.
 

@@ -7,6 +7,7 @@ import { saveStatusSlice } from './saveStatusSlice'
 import { selectionSlice } from './selectionSlice'
 import { editLockSlice } from './editLockSlice'
 import { buskEditSlice } from './buskEditSlice'
+import { sentryReduxEnhancer } from './sentryRedux'
 
 export const store = configureStore({
   reducer: {
@@ -50,7 +51,9 @@ export const store = configureStore({
       // Runs after restApi.middleware so it sees the rejected endpoint actions RTK Query
       // dispatches. Any mutation failure not claimed by its call site becomes a toast.
     }).concat(restApi.middleware, errorToastMiddleware)
-  }
+  },
+  // A no-op until lib/sentry.ts starts Sentry; see store/sentryRedux.ts.
+  enhancers: (getDefaultEnhancers) => getDefaultEnhancers().concat(sentryReduxEnhancer),
 })
 
 setupListeners(store.dispatch)

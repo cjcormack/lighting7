@@ -1,3 +1,4 @@
+import { startSpan } from '@sentry/react'
 import type { CueTarget, LayerSource } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
@@ -1023,10 +1024,16 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
   >()
 
-  const request = <T,>(build: (requestId: string) => ProgrammerOutgoingMessage, gesture: boolean): Promise<T> =>
-    new Promise<T>((resolve, reject) => {
-      const requestId = `req-${nextRequestId++}`
-      const message = build(requestId)
+  // A span under the page's own transaction, never one of its own: a key stack is asked per property.
+  const request = <T,>(build: (requestId: string) => ProgrammerOutgoingMessage, gesture: boolean): Promise<T> => {
+    const requestId = `req-${nextRequestId++}`
+    let message: ProgrammerOutgoingMessage
+    try {
+      message = build(requestId)
+    } catch (err) {
+      return Promise.reject(err)
+    }
+    return startSpan({ name: message.type, op: 'websocket.request', onlyIfParent: true }, () => new Promise<T>((resolve, reject) => {
       const sent = gesture ? sendGesture(conn, message) : conn.send(JSON.stringify(message))
       if (!sent) {
         reject(new Error('The desk is not connected'))
@@ -1037,7 +1044,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         reject(new Error(`${message.type} was not answered`))
       }, PROGRAMMER_REQUEST_TIMEOUT_MS)
       pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject, timer })
-    })
+    }))
+  }
 
   const settle = (requestId: string | null | undefined, error: string | null | undefined, value: unknown) => {
     if (requestId == null) return

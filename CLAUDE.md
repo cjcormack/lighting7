@@ -529,7 +529,8 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 
 ### Remote Access Endpoints
 - `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
-- `GET/PUT /api/rest/install/telemetry` - The install's Sentry switch, machine-local. `GET` is open to any caller, signed out included, on both listeners, answering `{enabled, release, environment, tracesSampleRate}`; `PUT {enabled}` is admin only and starts or stops Sentry live. `sentry.enabled = false` in local.conf wins. See `docs/observability-engineering.md`
+- `GET/PUT /api/rest/install/telemetry` - The install's Sentry switch, machine-local. `GET` is open to any caller, signed out included, on both listeners, answering `{enabled, release, environment, tracesSampleRate, browserDsn}`; `PUT {enabled}` is admin only and starts or stops Sentry live, the browsers' with it. `sentry.enabled = false` in local.conf wins. See `docs/observability-engineering.md`
+- `POST /api/sentry` - The browser SDK's envelope tunnel, open to every caller on both listeners and outside the warm-up and auth gates: spooled to `<appDataDir>/sentry-browser/` only while telemetry is on, at most 1 MB, and only if its header names `sentry.browserDsn`; forwarded byte for byte by a worker only `module()` starts, and deleted when telemetry is turned off. See `docs/observability-engineering.md` §"The tunnel"
 
 ### Cue Stack Run Endpoints
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
@@ -837,7 +838,9 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   there — no remote bootstrap, a sign-in lockout, `Secure` cookies, an Origin check, no QR flows,
   scripts refused unless an admin allows them, and arming, firing and fixture commands likewise
   (`requireEffectsAccess`, `requireCommandsAccess` — MCP's `run_fixture_command` included). Anything mounted on it is reachable from the
-  internet, and a script-capable route must call `requireScriptAccess`. See
+  internet, and a script-capable route must call `requireScriptAccess`. The browser's Sentry
+  tunnel, `/api/sentry`, is mounted there too, signed out included: its DSN check, 1 MB cap and
+  telemetry gate are all that keep it from being an open relay. See
   [docs/mcp-engineering.md](docs/mcp-engineering.md)
 
 ## Engineering Documentation

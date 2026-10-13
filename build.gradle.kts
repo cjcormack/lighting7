@@ -247,6 +247,8 @@ val copyFrontend = tasks.register<Sync>("copyFrontend") {
     dependsOn(buildFrontend)
     from(frontendDir.resolve("dist"))
     into(frontendStaticDir)
+    // Uploaded to Sentry and deleted by the release build; never shipped if that ever fails to delete one.
+    exclude("**/*.map")
     // Require an actual entry point — a bare empty `dist/` (e.g. after a vite failure) means
     // the bundle is broken; serving the previous classpath copy is preferable to copying nothing.
     // Note this skips the *pruning* as well as the copy, which is the intended pairing: a failed
@@ -389,6 +391,19 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
 }
 
 sourceSets["main"].resources.srcDir(generateBuildInfo)
+
+// The browser's Sentry release (Sentry plan D10) from the same values, spelled as
+// `TelemetrySettings.releaseName` spells the backend's. A build without a commit names none, and the
+// browser takes the desk's from `/install/telemetry`, which knows the checkout's.
+buildFrontend.configure {
+    val release = if (buildCommitSha.isBlank()) "" else "lighting7@$jpackageAppVersion+${buildCommitSha.take(7)}"
+    inputs.property("sentryRelease", release)
+    // lib/sentryScrub.ts bundles the backend's list of secrets.
+    inputs.file(layout.projectDirectory.file("src/main/resources/telemetry/secret-patterns.json"))
+    // With a token (the release workflow only) Vite emits source maps, uploads them and deletes them (D14).
+    inputs.property("sourceMapUpload", providers.environmentVariable("SENTRY_AUTH_TOKEN").map { it.isNotBlank() }.orElse(false))
+    if (release.isNotEmpty()) environment.put("LIGHTING7_RELEASE", release)
+}
 
 // ─── Host / target OS ──────────────────────────────────────────────────
 // Declared here rather than down with the jlink/jpackage block that also uses them:

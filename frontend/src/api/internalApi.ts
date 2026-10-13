@@ -1,3 +1,4 @@
+import { addBreadcrumb } from '@sentry/react'
 import {Subscription} from "./subscription";
 
 // The backend accepts the `/api` upgrade and then closes with this code when the
@@ -94,6 +95,7 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
   function scheduleReconnect() {
     if (reconnectTimer) return
     console.log(`WebSocket closed, reconnecting in ${reconnectDelay}ms...`)
+    addBreadcrumb({ category: 'websocket', message: 'reconnect scheduled', data: { delayMs: reconnectDelay } })
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
       reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
@@ -106,12 +108,14 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
 
     newWs.onopen = (ev) => {
       reconnectDelay = 1000
+      addBreadcrumb({ category: 'websocket', message: 'open' })
       notifyEvent(ev)
     }
     newWs.onerror = (ev) => {
       notifyEvent(ev)
     }
     newWs.onclose = (ev) => {
+      addBreadcrumb({ category: 'websocket', message: 'close', data: { code: ev.code } })
       notifyEvent(ev)
       // The server rejected our session. Reconnecting would loop against the same
       // dead cookie forever; instead authWsApi turns this into a cache invalidation
@@ -150,6 +154,7 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
         return
       }
       reconnectDelay = 1000
+      addBreadcrumb({ category: 'websocket', message: 'reconnect', data: { force } })
       // A socket opened while the backend was still bootstrap-open carries no user.
       // After setup, login or logout it has to re-handshake so the server re-reads
       // the cookie, rather than leaving a socket streaming under a stale identity.

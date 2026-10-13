@@ -26,6 +26,9 @@ fun Application.configureRouting(state: State) {
     }
     routing {
         route("/api") {
+            // Ungated: the browser reports before sign-in and while the show boots.
+            routeApiSentryTunnel(state)
+
             // The gates go on a transparent child, never on this `/api` node itself: Ktor's
             // `createChild` reuses a child whose selector compares equal, so `route("/api")` here
             // and `webSocket("/api")` in plugins/Sockets.kt are one and the same RoutingNode.

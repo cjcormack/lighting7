@@ -35,9 +35,9 @@ export const {
   useUpdateInstallMutation,
 } = installsApi
 
-// The desk was renamed on another client. Machine-scoped state, so this arrives on the same
-// socket band as the user-list frame rather than on the per-project fixtures bus — see
-// `plugins/MachineSocket.kt`.
+// The desk was renamed, or its telemetry switched, on another client. Machine-scoped state, so this
+// arrives on the same socket band as the user-list frame rather than on the per-project fixtures
+// bus — see `plugins/MachineSocket.kt`.
 lightingApi.install.subscribe(() => {
-  store.dispatch(restApi.util.invalidateTags(['Install']))
+  store.dispatch(restApi.util.invalidateTags(['Install', 'Telemetry']))
 })

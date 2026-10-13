@@ -15,6 +15,7 @@ import { DiagnosticsContent } from "./Diagnostics"
 import { CloudSyncHubBody } from "./CloudSync"
 import { UpdatePanel } from "@/components/updates/UpdatePanel"
 import { RemoteAccessPanel } from "@/components/remoteAccess/RemoteAccessPanel"
+import { TelemetryCard } from "@/components/telemetry/TelemetryCard"
 
 const TABS = ["general", "users", "sync", "remote", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
@@ -64,7 +65,13 @@ export function InstallSettings() {
         </Tabs>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 p-4">
-        {activeTab === "general" && <GeneralTab />}
+        {activeTab === "general" && (
+          <div className="space-y-4">
+            <GeneralTab />
+            {/* Admin only, like Remote access: the PUT is `requireAdmin`. */}
+            {isAdmin && <TelemetryCard />}
+          </div>
+        )}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "sync" && <CloudSyncHubBody />}
         {activeTab === "remote" && <RemoteAccessPanel />}
