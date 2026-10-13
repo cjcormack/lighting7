@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.canonicalJson
@@ -23,8 +24,9 @@ import kotlin.io.path.name
  * which `docs/fixtures-engineering.md` §"Venue versions" states for the record:
  *
  * - **Output**: a universe added, removed or re-addressed (its subnet, universe or controller type),
- *   or a patch added, removed, re-addressed (its universe or start channel) or re-typed (its type
- *   key, which names the mode).
+ *   a patch added, removed, re-addressed (its universe or start channel) or re-typed (its type
+ *   key, which names the mode), or a **park** added, removed or changed in value — a venue's parks
+ *   reach its shows with the version, and hold a channel above everything they send.
  * - **Drawing**: everything else — positions, focus, media, names, groups, riggings, the scene,
  *   viewpoints, regions, the stage's size.
  *
@@ -32,7 +34,9 @@ import kotlin.io.path.name
  * what sync carries, field for field — and every table it carries, so whatever a publish would freeze
  * and a discard would undo is counted. The rig — universes, patches and their placements, groups,
  * riggings, regions, scene elements, viewpoints and the stage's size — is classified and named; any
- * other table (a Look or a parked channel made in a venue through the API) is `OTHER`, drawing only.
+ * other table (a Look made in a venue through the API) is `OTHER`, drawing only. Parks are matched by
+ * **channel** (universe and channel), not by row uuid: a venue that unparks a channel and parks it again
+ * at the same value has changed nothing a show would see.
  * The speed masters are the one table left out ([IGNORED_FOLDERS]).
  * A controller's IP is machine-local and never exported, so it is never a change. A row's
  * `sortOrder` alone is not one either: order is the list's, not the rig's.
@@ -91,7 +95,9 @@ object VenueDiff {
     }
 
     /** What changed from [before] to [after], output first, each list in a stable order. */
-    fun compare(before: Records, after: Records): Diff {
+    fun compare(beforeRecords: Records, afterRecords: Records): Diff {
+        val before = beforeRecords.parksByChannel()
+        val after = afterRecords.parksByChannel()
         val context = Context(before, after)
         val changes = (before.byKey.keys + after.byKey.keys)
             .filter { it.folder != PROJECT && it.folder !in IGNORED_FOLDERS }
@@ -107,6 +113,21 @@ object VenueDiff {
         val size: Int get() = output.size + drawing.size
     }
 
+    /** The channel a [VenueChangeKind.PARK] change is to, read back from its [VenueChangeDto.address]; null for any other. */
+    fun parkAddressOf(change: VenueChangeDto): ParkAddress? {
+        if (change.kind != VenueChangeKind.PARK) return null
+        val (universe, channel) = change.address?.split('-')?.takeIf { it.size == 2 } ?: return null
+        return ParkAddress(universe.toIntOrNull() ?: return null, channel.toIntOrNull() ?: return null)
+    }
+
+    /** [this] with its parks keyed by channel (`universe:channel`) rather than row uuid. */
+    private fun Records.parksByChannel(): Records = Records(
+        byKey.mapKeys { (key, record) ->
+            if (key.folder != PARKS) key
+            else Key(PARKS, "${record.int("universe") ?: "?"}:${record.int("channel") ?: "?"}")
+        },
+    )
+
     // ── One record ──────────────────────────────────────────────────────────────
 
     /** The universes and riggings of each side, to name what a patch points at. */
@@ -121,11 +142,14 @@ object VenueDiff {
         val kind = KIND_BY_FOLDER[key.folder] ?: VenueChangeKind.OTHER
         val record = new ?: old ?: return null
         val name = nameOf(kind, key.folder, record)
+        // A park's key is its channel; its uuid is the row's (the new side's where both are there).
+        val uuid = if (kind == VenueChangeKind.PARK) record.text("uuid") else key.uuid
         val isPatch = kind == VenueChangeKind.PATCH
         val addressOf = { r: JsonObject?, universes: Map<String, JsonObject> -> r?.let { patchAddress(it, universes) } }
         val address = when (kind) {
             VenueChangeKind.PATCH -> addressOf(new, context.universesAfter) ?: addressOf(old, context.universesBefore)
             VenueChangeKind.UNIVERSE -> universeAddress(record)
+            VenueChangeKind.PARK -> parkAddress(record)
             else -> null
         }
         if (old == null || new == null) {
@@ -133,10 +157,10 @@ object VenueDiff {
             return VenueChangeDto(
                 kind = kind,
                 table = key.folder,
-                uuid = key.uuid,
+                uuid = uuid,
                 name = name,
                 change = if (added) VenueChangeType.ADDED else VenueChangeType.REMOVED,
-                output = kind == VenueChangeKind.PATCH || kind == VenueChangeKind.UNIVERSE,
+                output = kind == VenueChangeKind.PATCH || kind == VenueChangeKind.UNIVERSE || kind == VenueChangeKind.PARK,
                 address = address,
             )
         }
@@ -186,12 +210,14 @@ object VenueDiff {
         val output = when (kind) {
             VenueChangeKind.PATCH -> VenueFacet.ADDRESS in facets || VenueFacet.TYPE in facets
             VenueChangeKind.UNIVERSE -> fields.any { it.field in UNIVERSE_OUTPUT_FIELDS }
+            // Keyed by channel, so the value is all a park can change.
+            VenueChangeKind.PARK -> true
             else -> false
         }
         return VenueChangeDto(
             kind = kind,
             table = key.folder,
-            uuid = key.uuid,
+            uuid = uuid,
             name = name,
             change = VenueChangeType.CHANGED,
             output = output,
@@ -224,7 +250,8 @@ object VenueDiff {
     private fun nameOf(kind: VenueChangeKind, folder: String, record: JsonObject): String = when (kind) {
         VenueChangeKind.PATCH -> record.text("displayName") ?: record.text("key") ?: "Fixture"
         VenueChangeKind.UNIVERSE -> "Universe ${record.int("universe") ?: "?"}"
-        // A record with no name of its own (a parked channel, a cue's layer) is named by its table.
+        VenueChangeKind.PARK -> "Park ${parkAddress(record) ?: "?"}"
+        // A record with no name of its own (a cue's layer) is named by its table.
         VenueChangeKind.OTHER -> record.text("name") ?: record.text("label") ?: folder
         else -> record.text("name") ?: record.text("label") ?: kind.name.lowercase().replaceFirstChar { it.uppercase() }
     }
@@ -234,6 +261,13 @@ object VenueDiff {
         val universe = patch.text("universeConfigUuid")?.let { universes[it] }?.int("universe") ?: return null
         val channel = patch.int("startChannel") ?: return null
         return "$universe-${channel.toString().padStart(3, '0')}"
+    }
+
+    /** `1-005`: a park's universe number and channel, as a patch's address is written. */
+    private fun parkAddress(park: JsonObject): String? {
+        val universe = park.int("universe") ?: return null
+        val channel = park.int("channel") ?: return null
+        return ParkAddress(universe, channel).toString()
     }
 
     /** `ARTNET 0:3` — the controller type, where the universe names one, then subnet and universe. */
@@ -286,6 +320,7 @@ object VenueDiff {
     private fun JsonObject.int(name: String): Int? = (this[name] as? JsonPrimitive)?.intOrNull
 
     private const val PROJECT = "project"
+    private const val PARKS = "parkedChannels"
 
     /**
      * The speed masters every project is made with (`ensureDefaultSpeedMasters`): an empty venue holds
@@ -318,20 +353,22 @@ object VenueDiff {
         "stageRegions" to VenueChangeKind.REGION,
         "stageElements" to VenueChangeKind.ELEMENT,
         "stageViewpoints" to VenueChangeKind.VIEWPOINT,
+        PARKS to VenueChangeKind.PARK,
     )
     private val KIND_ORDER = listOf(
-        VenueChangeKind.UNIVERSE, VenueChangeKind.PATCH, VenueChangeKind.GROUP, VenueChangeKind.RIGGING,
+        VenueChangeKind.UNIVERSE, VenueChangeKind.PATCH, VenueChangeKind.PARK, VenueChangeKind.GROUP, VenueChangeKind.RIGGING,
         VenueChangeKind.REGION, VenueChangeKind.ELEMENT, VenueChangeKind.VIEWPOINT, VenueChangeKind.STAGE,
         VenueChangeKind.OTHER,
     )
 }
 
 /**
- * What a [VenueChangeDto] is a change to: a rig table, the stage's size, or `OTHER` — any other table
- * a venue project holds (a Look, a script, a parked channel), named by [VenueChangeDto.table].
+ * What a [VenueChangeDto] is a change to: a rig table, a parked channel ([PARK], output), the stage's
+ * size, or `OTHER` — any other table a venue project holds (a Look, a script), named by
+ * [VenueChangeDto.table].
  */
 @Serializable
-enum class VenueChangeKind { UNIVERSE, PATCH, GROUP, RIGGING, REGION, ELEMENT, VIEWPOINT, STAGE, OTHER }
+enum class VenueChangeKind { UNIVERSE, PATCH, PARK, GROUP, RIGGING, REGION, ELEMENT, VIEWPOINT, STAGE, OTHER }
 
 @Serializable
 enum class VenueChangeType { ADDED, REMOVED, CHANGED }
@@ -349,7 +386,7 @@ data class VenueFieldChangeDto(val field: String, val from: String?, val to: Str
 
 /**
  * One record's change. [table] is the export folder it lives in (`fixturePatches`); [address] is a
- * patch's `1-005` (the new side's, or the old side's for a removal) or a universe's
+ * patch's or a park's `1-005` (the new side's, or the old side's for a removal) or a universe's
  * `ARTNET 0:3`; [facets] is a patch's only.
  */
 @Serializable

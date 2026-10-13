@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoShowHide
+import uk.me.cormack.lighting7.models.DaoShowParkRelease
+import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
 import uk.me.cormack.lighting7.models.DaoShowOverrides
@@ -20,6 +22,7 @@ import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.venue.VenuePins
 import org.jetbrains.exposed.v1.core.eq
@@ -91,6 +94,7 @@ import java.util.UUID
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
+ * /showParkReleases/{uuid}.json    -- v27: a show's releases of its venue's parks
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json
  * /cuePropertyAssignments/{uuid}.json
@@ -679,6 +683,15 @@ class ProjectExporter(private val state: State) {
                     channel = p.channel,
                     value = p.value,
                 )
+            }
+
+            // v27: a show's releases of its venue's parks, by channel.
+            count += writeAll(
+                targetDir, "showParkReleases",
+                DaoShowParkRelease.find { DaoShowParkReleases.project eq project.id }.toList(),
+                ShowParkReleaseJson.serializer(), { it.uuid }, liveKeys,
+            ) { r ->
+                ShowParkReleaseJson(uuid = r.uuid.toString(), universe = r.universe, channel = r.channel)
             }
 
             count += writeAll(

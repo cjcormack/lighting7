@@ -42,6 +42,8 @@ import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoShowHide
+import uk.me.cormack.lighting7.models.DaoShowParkRelease
+import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
 import uk.me.cormack.lighting7.models.DaoShowOverrides
@@ -50,6 +52,7 @@ import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.encodeFacet
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.venue.VenueException
 import uk.me.cormack.lighting7.venue.VenuePins
@@ -161,6 +164,11 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v27 made a show on a venue inherit its pinned version's parks and added `showParkReleases/`, the
+// venue parks it releases, keyed by universe and channel. SUPPORTED moved by the sharp-edge rule — a
+// v26 reader would drop every release and write them away on its next push, and run a show without its
+// venue's parks; MIN stays at 5 because a missing folder is no releases.
+//
 // v26 added `lampWatts` and `lampKelvin` to `FixturePatchJson` (a lantern-hung patch's own lamp).
 // SUPPORTED moved for v14's reason — a v25 reader would import every lamp as its lantern's and write
 // them away on its next push; MIN stays at 5 because both fields default to null. Imported as stored:
@@ -223,7 +231,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 26
+internal const val SUPPORTED_FORMAT_VERSION = 27
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -468,6 +476,7 @@ class ProjectImporter(private val state: State) {
             project.controlSurfaceBindings.forEach { it.delete() }
             DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
             DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq project.id }
+            DaoShowParkReleases.deleteWhere { DaoShowParkReleases.project eq project.id }
 
             project.name = projectJson.name
             project.description = projectJson.description
@@ -598,6 +607,7 @@ class ProjectImporter(private val state: State) {
         // Pages after every record a pad can name.
         importBuskPages(sourceDir, project, templateMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
+        importShowParkReleases(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
         // Last, once the patches and groups exist to judge them by: an archive written before v21 may
         // still hold a row naming a one-shot trigger, and none may come back (stage-view session 9).
@@ -1652,6 +1662,41 @@ class ProjectImporter(private val state: State) {
                 channel = p.channel
                 value = p.value
                 this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * v27: a show's releases of its venue's parks, keyed by channel. One with no venue park on its
+     * channel at the pinned version is kept — it is dormant, and an Update to a version that parks the
+     * channel honours it — and one an archive repeats for a channel (a merge that kept both sides) is
+     * kept once. A project on no venue has nothing to release: dropped with a warn, as a hide is.
+     * After the parks: a channel the show both parks and releases (a merge again) keeps its park.
+     */
+    private fun importShowParkReleases(dir: Path, project: DaoProject) {
+        val seen = HashSet<Pair<Int, Int>>()
+        val parked = project.parkedChannels.map { it.universe to it.channel }.toSet()
+        readDir(dir.resolve("showParkReleases")) { json ->
+            val r = canonicalDecode(ShowParkReleaseJson.serializer(), json)
+            val uuid = runCatching { UUID.fromString(r.uuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("A show park release's uuid is not a uuid: ${r.uuid}")
+            val channel = r.universe to r.channel
+            when {
+                project.kind != ProjectKind.SHOW || project.venueUuid == null ->
+                    logger.warn("Import: park release {} in a project on no venue; dropping it", r.uuid)
+                r.channel !in 1..512 || r.universe < 0 ->
+                    throw ImportError.invalidArchive("Show park release ${r.uuid} names no channel: ${r.universe}/${r.channel}")
+                channel in parked ->
+                    logger.warn("Import: park release {} on a channel the show parks; keeping the park", r.uuid)
+                !seen.add(channel) ->
+                    logger.warn("Import: park release {} names {}/{} a second time; dropping it", r.uuid, r.universe, r.channel)
+                else -> DaoShowParkRelease.new {
+                    this.project = project
+                    universe = r.universe
+                    this.channel = r.channel
+                    this.uuid = uuid
+                }
             }
             uuid to Unit
         }

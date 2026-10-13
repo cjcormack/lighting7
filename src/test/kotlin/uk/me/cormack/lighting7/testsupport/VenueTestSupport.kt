@@ -4,6 +4,8 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.models.DaoParkedChannel
+import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoRigging
@@ -179,6 +181,23 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
         )
         ShowOverrides.put(show, target, PatchFacet.MEDIA, MediaFacet(gelCode = "L202"))
         target.patch.uuid to boom.uuid
+    }
+    // Venue parks (formatVersion 27): the rich project's three parks moved into the venue with the
+    // extract, so the show inherits them from its version. It releases one (0/12) and re-parks another
+    // (1/7) at a value of its own, over the venue's 255 — every value non-default.
+    transaction(state.database) {
+        val show = DaoProject[showId]
+        DaoShowParkRelease.new {
+            project = show
+            universe = 0
+            channel = 12
+        }
+        DaoParkedChannel.new {
+            project = show
+            universe = 1
+            channel = 7
+            value = 200
+        }
     }
     return VenueShowFixture(showId, venueId, hideKind, hidden, additionUuid, overriddenUuid, boomUuid)
 }

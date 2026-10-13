@@ -36,7 +36,12 @@ import uk.me.cormack.lighting7.models.DaoMachineOverride
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRiggings
+import uk.me.cormack.lighting7.models.DaoParkedChannel
+import uk.me.cormack.lighting7.models.DaoParkedChannels
 import uk.me.cormack.lighting7.models.DaoShowHides
+import uk.me.cormack.lighting7.models.DaoShowParkReleases
+import uk.me.cormack.lighting7.models.ParkAddress
+import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.DaoStageElements
 import uk.me.cormack.lighting7.models.DaoStageRegions
@@ -59,7 +64,8 @@ import java.util.UUID
  *
  * **What is copied** is [RigScope]'s effective rig at the **pinned** version, less what the show
  * already owns: every universe, and every patch (with its extra placements), rigging, region,
- * scene element, group and viewpoint of the snapshot that the show does not hide. A patch is written
+ * scene element, group and viewpoint of the snapshot that the show does not hide — and every park of
+ * the snapshot the show neither re-parks nor releases ([VenueParks]), so each parked channel holds. A patch is written
  * with its facet overrides **applied** — `RigScope.effective` / `effectivePlacements`' fields, never
  * the snapshot row's — and a dormant override contributes nothing, as it does to the loaded rig. A
  * venue group comes over with its members as the rig sees them (less hidden patches). The snapshot's
@@ -285,6 +291,23 @@ class VenueDetach(private val state: State) {
             }
         }
 
+        // The venue's parks at the pin, as the show runs them: every one the show neither re-parks nor
+        // releases becomes the show's own row, uuid kept — so every parked channel holds its level.
+        val parkLayers = VenueParks.of(show.id)
+        val venueParks = DaoParkedChannel.find { DaoParkedChannels.project eq snapshotId }
+            .filter { ParkAddress(it.universe, it.channel).let { a -> a !in parkLayers.own && a !in parkLayers.releases } }
+            .sortedWith(compareBy({ it.universe }, { it.channel }))
+        for (park in venueParks) {
+            DaoParkedChannel.new {
+                project = show
+                universe = park.universe
+                channel = park.channel
+                value = park.value
+                uuid = park.uuid
+            }
+        }
+        val releasesDropped = DaoShowParkReleases.deleteWhere { DaoShowParkReleases.project eq show.id }
+
         // The show's layer goes, and the show stands on its own: no pin, and the stage it was reading.
         DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq show.id }
         DaoShowHides.deleteWhere { DaoShowHides.project eq show.id }
@@ -312,9 +335,11 @@ class VenueDetach(private val state: State) {
                 elements = elements.map { it.name },
                 groups = groups.map { it.name },
                 viewpoints = viewpoints.map { it.name },
+                parks = venueParks.map { ParkAddress(it.universe, it.channel).toString() },
             ),
             overridesApplied = overridden,
             hidesDropped = hides,
+            parkReleasesDropped = releasesDropped,
             relinked = relinked,
             dropped = dropped,
             machineOverridesCopied = machineOverrides,
@@ -423,6 +448,8 @@ data class DetachRowsDto(
     val elements: List<String>,
     val groups: List<String>,
     val viewpoints: List<String>,
+    /** The venue's parks at the pin the show ran (neither re-parked nor released), as `1-005`. */
+    val parks: List<String> = emptyList(),
 )
 
 /** What a detach did — or, with [dryRun], would do. */
@@ -443,6 +470,8 @@ data class DetachResultDto(
     val overridesApplied: List<String>,
     /** The show's hides, gone with the venue they hid records of. */
     val hidesDropped: Int,
+    /** The show's releases of venue parks, gone with the venue parks they released. */
+    val parkReleasesDropped: Int = 0,
     /** The show's links re-pointed from the version onto its own rows, by `table.column`. */
     val relinked: Map<String, Int>,
     /** Links to a hidden record, which have nothing to point at once the venue is gone. */

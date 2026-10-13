@@ -23,6 +23,16 @@ const patch = (over: Partial<VenueChange>): VenueChange => ({
 })
 
 describe('venue mode copy', () => {
+  it('draws a park change by its address, with its value move as the detail (venue parks)', () => {
+    const park = (over: Partial<VenueChange>): VenueChange =>
+      patch({ kind: 'PARK', table: 'parkedChannels', name: 'Park 0-012', address: '0-012', output: true, ...over })
+    expect(changeLine(park({ change: 'ADDED' }))).toEqual({ title: 'Park 0-012', detail: null })
+    expect(changeLine(park({ fields: [{ field: 'value', from: '128', to: '200' }] }))).toEqual({
+      title: 'Park 0-012',
+      detail: 'value 128 → 200',
+    })
+  })
+
   it('names the draft against the installed version, or none', () => {
     expect(draftChipLabel({ installed: 5, draft: { changes: 6, outputChanges: 4 } })).toBe('Draft · 6 changes since v5')
     expect(draftChipLabel({ installed: 1, draft: { changes: 1, outputChanges: 0 } })).toBe('Draft · 1 change since v1')

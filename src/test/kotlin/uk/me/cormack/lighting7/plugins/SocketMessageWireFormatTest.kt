@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.LedState
 import uk.me.cormack.lighting7.midi.RingState
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.state.WindowRegistry
@@ -85,10 +86,31 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `park domain — ParkStateOutMessage round-trips with discriminator`() {
-        val out = ParkStateOutMessage(listOf(ParkedChannelState(0, 5, 100u)))
+        val out = ParkStateOutMessage(
+            listOf(ParkedChannelState(0, 5, 100u, RigOwner.SHOW), ParkedChannelState(0, 6, 40u, RigOwner.SHOW, venueValue = 255u)),
+            released = listOf(ReleasedParkState(1, 7, 90u)),
+        )
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"parkState""""))
         assertEquals(out, assertIs<ParkStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `park domain — owner and an empty released list are always on the wire`() {
+        // The client reads `owner` to draw a venue park, and `released` to draw what the show freed: the
+        // WS Json drops defaults, so neither may have one.
+        val encoded = json.encodeToString<OutMessage>(
+            ParkStateOutMessage(listOf(ParkedChannelState(0, 5, 100u, RigOwner.VENUE)), released = emptyList()),
+        )
+        assertTrue(encoded.contains(""""owner":"VENUE""""), encoded)
+        assertTrue(encoded.contains(""""released":[]"""), encoded)
+    }
+
+    @Test
+    fun `park domain — RestoreChannelParkInMessage routes via ParkInMessage`() {
+        val decoded = json.decodeFromString<InMessage>("""{"type":"restoreChannelPark","universe":1,"channel":7}""")
+        val leaf = assertIs<RestoreChannelParkInMessage>(decoded)
+        assertEquals(7, leaf.channel)
     }
 
     // ─── FX domain ──────────────────────────────────────────────────────────

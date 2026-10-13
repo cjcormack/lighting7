@@ -85,6 +85,7 @@ object TraceSampling {
             "programmer.setBlind",
             "programmer.setScenery",
             "removeFx",
+            "restoreChannelPark",
             "resumeFx",
             "selection.clear",
             "selection.set",

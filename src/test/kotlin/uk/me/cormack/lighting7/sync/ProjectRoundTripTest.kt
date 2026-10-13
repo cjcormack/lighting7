@@ -22,6 +22,9 @@ import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
+import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
+import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
+import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.sync.dto.VenueVersionJson
 import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
 import uk.me.cormack.lighting7.venue.VenueDiff
@@ -1049,6 +1052,17 @@ class ProjectRoundTripTest {
         assertEquals(f.boomUuid.toString(), (decodeFacet(PatchFacet.POSITION, overrides.getValue(PatchFacet.POSITION).value) as PositionFacet).riggingUuid)
         assertEquals("L202", (decodeFacet(PatchFacet.MEDIA, overrides.getValue(PatchFacet.MEDIA).value) as MediaFacet).gelCode)
 
+        // v27: the show's own re-park of a venue park travels as a park, and its release of another
+        // as `showParkReleases/{uuid}.json`, by channel; the venue's parks are the version's, not here.
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 27, "venue parks sync from v27")
+        val parks = Files.list(exportDirA.resolve("parkedChannels")).use { it.toList() }
+            .map { canonicalDecode(ParkedChannelJson.serializer(), Files.readString(it)) }
+        assertEquals(listOf(Triple(1, 7, 200)), parks.map { Triple(it.universe, it.channel, it.value) })
+        val releases = Files.list(exportDirA.resolve("showParkReleases")).use { it.toList() }
+            .map { canonicalDecode(ShowParkReleaseJson.serializer(), Files.readString(it)) }
+        assertEquals(listOf(0 to 12), releases.map { it.universe to it.channel })
+        val effectiveBefore = transaction(state.database) { VenueParks.of(f.showId).effective }
+
         transaction(state.database) { deleteProjectRows(state, DaoProject[f.showId]) }
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
         ProjectExporter(state).export(imported.projectId, exportDirB)
@@ -1058,6 +1072,7 @@ class ProjectRoundTripTest {
             assertEquals(venueUuid, show.venueUuid)
             assertEquals(1, show.venueVersion)
             assertTrue(RigScope.of(show).isHidden(f.hideKind, f.hiddenUuid))
+            assertEquals(effectiveBefore, VenueParks.of(show.id).effective, "the imported show runs the same parks")
             // The imported show's rig lays its overrides over the venue's patch again.
             val rig = RigScope.of(show)
             val overridden = rig.effective(rig.patches().first { it.uuid == f.overriddenUuid })

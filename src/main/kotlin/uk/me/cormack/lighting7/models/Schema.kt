@@ -53,4 +53,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoShowHides,
     // A show's facet overrides of venue patches (venue plan session 5); keyed by record uuid likewise.
     DaoShowOverrides,
+    // A show's releases of venue parks (venue parks, PR 2); keyed by universe and channel, no FK into the rig.
+    DaoShowParkReleases,
 )

@@ -194,13 +194,14 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Same sheet, and the same reason twice over: the only thing that fails here is a display
   // name the user typed, and the field it belongs beside is right there.
   'updateProfile', // src/components/auth/ProfileSheet.tsx
-  // The three WebSocket-backed mutations. They look like REST from the outside but their
+  // The four WebSocket-backed mutations. They look like REST from the outside but their
   // transport is a fire-and-forget frame, and they now report a dropped write as a real error so
   // `.unwrap()` and `isError` agree with the rig. `sendGesture` has already raised the toast by
   // then — under one shared id, so a drag collapses to one — and a second toast here would say
   // the same thing again, per endpoint, out of sync with the first.
   'parkChannel', // src/api/wsGesture.ts raises it
   'unparkChannel', // ...same
+  'restoreChannelPark', // ...same
   'updateChannel', // ...same
   // `render_view`'s answers (stage-view plan session 4). The render runs on an operator's screen
   // mid-show for a model that asked over MCP, and a refused answer — the desk gave up waiting, or

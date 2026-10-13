@@ -2094,9 +2094,9 @@ exporting each (`ProjectExporter.export(…, blobs = false)`; a snapshot's is re
 matching records by uuid, field by field. It reads **every table the export carries**, so whatever a
 publish would freeze and a discard would undo is counted: the rig — universes, patches and their
 extra placements, groups, riggings, regions, scene elements, viewpoints, and the stage's size from
-`project.json` — is classified and named, and any other table a venue project holds (a Look or a
-parked channel made through the API, since the views that make them are hidden in a venue) is
-`OTHER`, drawing only, named by its table. The one table left out is the **speed masters** every
+`project.json` — is classified and named, and so are its **parked channels** (§"Venue parks"), matched
+by channel rather than row uuid; any other table a venue project holds (a Look made through the API,
+since the views that make one are hidden in a venue) is `OTHER`, drawing only, named by its table. The one table left out is the **speed masters** every
 project is made with: an empty venue holds them before anything is drawn. A row's `sortOrder` alone
 is not a change; a controller IP is machine-local, never exported, and never one either.
 
@@ -2115,6 +2115,7 @@ Each change is classified the way a show's update will be (venue plan §3.1, D7)
 | a patch added or removed | groups and their members, riggings, regions, scene elements, viewpoints |
 | a patch re-addressed — its universe or start channel, read as `1-005` through each side's universes | the stage's size |
 | a patch re-typed — its `fixtureTypeKey`, which names the mode | |
+| a park added, removed or changed in value (`PARK`, by channel: `1-005`) | |
 
 A patch change also names its **facets** (§3.2's Address, Position, Focus, Media, plus Type, Identity
 and Other), which is what the Patch list's Draft column says (`Media · L201 → L202`). A renumbered
@@ -2326,6 +2327,10 @@ same diff History draws, through its snapshot cache — and §"The diff rule" ab
   hold is for what an Update would change on the wire, and a hold over a change the update itself
   would not make only darkens the rig until someone presses a button that sends the same thing. A gap
   that cannot be read fails closed, as `OUTPUT`.
+- A change to a **park** on a channel the show **parks itself or has released** counts as drawing too
+  (§"Venue parks"): the show's own word on the channel stands at both versions, so the venue's park
+  never reaches it. Any other park change is output — a park holds a channel above everything the
+  show sends.
 - **`DRAWING`** otherwise; **`NONE`** on the installed version, for a standalone show, a venue, and a
   pin this desk lacks (it loads no rig, `VENUE_MISSING`).
 
@@ -2368,6 +2373,12 @@ or a facet override is). One transaction:
 5. **Dead references**: every fixture key and group name the update takes out of the rig that the
    show's cue, Look or template rows still name, with who names them. The rows stay and read as
    *Missing fixture*, as a deleted fixture's do.
+6. **Parks** follow by themselves: the show's own parks and its releases are keyed by channel, so the
+   pin moving is all an Update does to them. The review's `carryOver` lists each as `PARK` or
+   `RELEASE`, saying what the venue does on its channel from the pin to the target (*Your park of
+   1-007 at 200 stays: the venue's park moves from 255 to 10 in v4*; a release on a channel the target
+   no longer parks is kept, dormant). There is no drift for a park and no *Keep mine* / *Take
+   venue's*: a re-park records no base (decided with Chris, 2026-10-13).
 
 The review is the same run **rolled back**, so it cannot disagree with the update; it answers
 `{from, to, output, drawing, carryOver, drift, dropped, decisions, blockers, deadReferences}`. `to` is
@@ -2388,7 +2399,8 @@ scope's uuids before and after, on `RichProjectFixture`).
 
 - **What moves** — `include`, absent for all: `UNIVERSES`, `PATCHES` (with their placements),
   `RIGGINGS`, `REGIONS`, `ELEMENTS` (every `VENUE`-layer element but seating), `SEATING`, `GROUPS`,
-  `VIEWPOINTS` (camera views; a seat view moves with its Fixed seating). Each row changes project,
+  `VIEWPOINTS` (camera views; a seat view moves with its Fixed seating), `PARKS` (the show's parked
+  channels, which link to nothing and so move whatever else does — §"Venue parks"). Each row changes project,
   uuid kept. The parts are checked against each other first (400 `VENUE_EXTRACT_INCOMPLETE`, every
   problem named, nothing moved): a patch on a universe or hung on a rigging that stays, a group
   holding a patch that stays, a platform decking a region that stays. A show already on a venue is
@@ -2436,6 +2448,9 @@ before and after, on `seedShowOnVenue`, whose three overrides must come over app
   dormant override contributing nothing, as it does to the load. A venue group comes over with its
   members as the rig sees them. **Preset seating is left out** (the show already seats its own copy,
   which the rig reads in its place); Fixed seating comes over with its seat views.
+- **Parks are flattened too** (§"Venue parks"): every park of the snapshot the show neither re-parks
+  nor releases becomes the show's own row, the venue park's uuid kept, so every parked channel holds
+  its level; the show's releases are dropped (`parkReleasesDropped`) and its own parks stay.
 - **Uuids are kept.** Everything the show holds that names a venue record names it by uuid — a seat
   view's seating, a platform's region, a scenery row once re-pointed, a peer's importer maps — so the
   copy is the same record under the show, as Extract's move is the other way. uuid columns are not
@@ -2469,6 +2484,61 @@ before and after, on `seedShowOnVenue`, whose three overrides must come over app
   its pin through the importer that already does (`mergeProjectPin` takes the remote's when the local
   pin is the base's), and a desk with no copy of the venue imports it as any standalone show
   (`VenueRepoSyncTest`).
+
+### Venue parks
+
+**Parks can be made on a venue, and they reach its shows with a version** (decided with Chris,
+2026-10-13). A venue's `parked_channels` rows are its draft's, like its patch; publishing freezes them
+into the version (they were already portable, so `KeptUuidCopy` copies them and the venue repo carries
+them), and a show takes them only when it is on, or updates to, a version that holds them. Parks stay
+**channel-level** — a universe number and a channel, never following a fixture — so a venue park is on
+a channel of the hall whatever the show patches there.
+
+**A show on a venue runs its pinned version's parks, overlaid by its own and less its releases**
+(`models/VenueParks.kt`, the `RigScope` of parks):
+
+```
+effective(c) = show's own park(c) ?: (c ∈ show's releases ? unparked : version's park(c))
+```
+
+- **Re-park.** Parking a channel in the show writes the **show's own row**, whatever the venue parks
+  there — a version is read-only (`VENUE_VERSION_READ_ONLY`), and a show never writes its venue's rows.
+  Its value replaces the venue's for this show. Unparking it brings the venue's park back
+  (`UnparkOutcome.VENUE_RESTORED`) — park to park, so nothing is handed down.
+- **Release.** Unparking a **venue** park in a show stores a release (`show_park_releases`: project,
+  universe, channel, its own uuid; unique on the three) and hands the venue's value down as any unpark
+  does, so the output does not move (`RELEASED`). It is keyed by **channel**, not by the venue park's
+  uuid, so it survives the venue unparking the channel and parking it again; one with no venue park
+  under it at the pin is **dormant** — it releases nothing, is kept, and an Update to a version that
+  parks the channel honours it.
+- **One word per channel.** Parking a released channel deletes the release, so unparking that park
+  brings the venue's back rather than the release. *Restore* (`restoreChannelPark` over the socket,
+  `ParkManager.restoreVenuePark`) drops a release, and the show's own park over a venue park, taking
+  the venue's back.
+- **Who.** In a venue a park is the venue's rig, so an operator's park or unpark is refused —
+  `parkError VENUE_ADMIN_ONLY` over the socket, the tools' *Only an admin can change a venue.* over
+  MCP; in a show either role parks, as before.
+- **Where it is read.** The loader (`ParkManager.loadFromDatabase`), a switch's hand-over
+  (`ParkManager.storedParks` — so a channel two shows on one venue both inherit keeps its level across
+  the switch), the reload carry (`ShowCarry`, through the live `ParkManager`) and the hold (a held
+  show's venue parks get through it, as its own do) all read the effective parks. A refused park
+  `Show.dropRefusedParks` forgets that is the venue's is left out for the show's life rather than
+  deleted from the version.
+- **Behind and Update.** A venue park added, removed or changed between the pin and the installed
+  version is an **output** change (§"The diff rule"), so it holds the show — unless the show parks or
+  releases that channel itself (§"Behind, the hold and Update"). The Update review lists the show's
+  parks and releases as carry-over (step 6 there).
+- **Wire.** `parkState` carries each park's `owner` (`SHOW | VENUE`), a re-park's `venueValue` and the
+  `released` list (`docs/websocket-engineering.md`); `park_channel`, `unpark_channel`,
+  `get_current_state` and `describe_rig` say whose each park is (`docs/mcp-engineering.md`). The
+  Channels cards draw a venue park as *V*, the DMX sheet names it on the cell's hover and offers
+  *Restore*, and every unpark confirm names the venue parks it would release.
+- **Sync.** `formatVersion` 27 — `docs/sync-engineering.md` §"Version 27 — venue parks". Extract moves
+  a show's parks into the venue (`PARKS`), Detach flattens the ones it runs (§"Detach").
+
+`VenueParksTest` pins the layering, release, restore and re-park, the hold, a switch between two shows
+on one venue and a pin-moving reload without a frame at zero, Detach and the diff classification;
+`ParkSocketTest` the wire and the operator refusal; `McpParkToolsTest` the tools' owners.
 
 ### Seating presets
 

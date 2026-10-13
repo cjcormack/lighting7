@@ -20,7 +20,9 @@ import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoStageElement
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
+import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
+import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.DaoVenueVersion
 import uk.me.cormack.lighting7.models.PlatformParams
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -47,7 +49,8 @@ import java.util.UUID
  *
  * **What moves.** [ExtractKind] names each part; the default is all of them (§3.5): the universes,
  * the patches (with their extra placements), the riggings, the regions, every `VENUE`-layer scene
- * element, the groups, the camera viewpoints, and the seating. Every row keeps its uuid and changes
+ * element, the groups, the camera viewpoints, the seating, and the parked channels — which then reach
+ * the show through its pin, so every parked channel holds its level. Every row keeps its uuid and changes
  * project — nothing is copied but Preset seating. The parts are checked against each other before
  * anything moves ([VenueException] 400 `VENUE_EXTRACT_INCOMPLETE`): a venue patch on a show's universe
  * or hung on a show's rigging, a venue group holding a show's patch (D12) or a venue platform decking
@@ -79,7 +82,7 @@ class VenueExtract(private val state: State) {
     private val logger = LoggerFactory.getLogger(VenueExtract::class.java)
 
     /** The parts of a show's rig an extract can move (venue plan §3.5's default set is all of them). */
-    enum class ExtractKind { UNIVERSES, PATCHES, RIGGINGS, REGIONS, ELEMENTS, SEATING, GROUPS, VIEWPOINTS }
+    enum class ExtractKind { UNIVERSES, PATCHES, RIGGINGS, REGIONS, ELEMENTS, SEATING, GROUPS, VIEWPOINTS, PARKS }
 
     /**
      * Extract [include] of show [showId] into a new venue called [name]; [publishedBy] signs v1.
@@ -176,6 +179,7 @@ class VenueExtract(private val state: State) {
         plan.elements.forEach { it.project = venue }
         plan.groups.forEach { it.project = venue }
         plan.viewpoints.forEach { it.project = venue }
+        plan.parks.forEach { it.project = venue }
         plan.presetSeating.forEach { copyElement(it, venue) }
 
         // What follows the rows: their machine-local overrides, and the images they are painted with.
@@ -234,6 +238,7 @@ class VenueExtract(private val state: State) {
                 elements = plan.elements.map { it.name },
                 groups = plan.groups.map { it.name },
                 viewpoints = plan.viewpoints.map { it.name },
+                parks = plan.parks.map { ParkAddress(it.universe, it.channel).toString() }.sorted(),
             ),
             copiedPresetSeating = plan.presetSeating.map { it.name },
             relinked = repointed.filterValues { it.moved > 0 }.mapValues { it.value.moved },
@@ -253,9 +258,11 @@ class VenueExtract(private val state: State) {
         val presetSeating: List<DaoStageElement>,
         val groups: List<DaoFixtureGroup>,
         val viewpoints: List<DaoStageViewpoint>,
+        /** Channel-level, linking to nothing: a park moves whether or not its universe does. */
+        val parks: List<DaoParkedChannel>,
     ) {
         fun isEmpty() = universes.isEmpty() && patches.isEmpty() && riggings.isEmpty() && regions.isEmpty() &&
-            elements.isEmpty() && presetSeating.isEmpty() && groups.isEmpty() && viewpoints.isEmpty()
+            elements.isEmpty() && presetSeating.isEmpty() && groups.isEmpty() && viewpoints.isEmpty() && parks.isEmpty()
 
         fun movedUuids(): Set<UUID> = buildSet {
             universes.mapTo(this) { it.uuid }
@@ -321,7 +328,8 @@ class VenueExtract(private val state: State) {
         if (problems.isNotEmpty()) {
             throw VenueException.badRequest(CODE_EXTRACT_INCOMPLETE, "Extract would split the rig: ${problems.joinToString("; ")}")
         }
-        return Plan(universes, patches, riggings, regions, elements, presetSeating, groups, viewpoints)
+        val parks = if (has(ExtractKind.PARKS)) show.parkedChannels.toList() else emptyList()
+        return Plan(universes, patches, riggings, regions, elements, presetSeating, groups, viewpoints, parks)
     }
 
     /** [element] copied into [venue], uuid kept: a Preset seating block, which stays the show's too. */
@@ -372,6 +380,8 @@ data class ExtractRowsDto(
     val elements: List<String>,
     val groups: List<String>,
     val viewpoints: List<String>,
+    /** Parked channels, as `1-005`. */
+    val parks: List<String> = emptyList(),
 )
 
 /** What an extract did — or, with [dryRun], would do. */

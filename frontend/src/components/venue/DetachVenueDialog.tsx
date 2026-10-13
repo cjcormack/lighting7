@@ -103,6 +103,7 @@ function DetachSummary({ result }: { result: DetachResult }) {
     [c.groups.length, 'group'],
     [c.regions.length, 'region'],
     [c.viewpoints.length, 'viewpoint'],
+    [c.parks?.length ?? 0, 'parked channel'],
   ] as const
   const listed = counts.filter(([n]) => n > 0).map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
   const behind = result.behind != null && result.behind !== 'NONE' && result.installed != null
@@ -130,6 +131,11 @@ function DetachSummary({ result }: { result: DetachResult }) {
       {result.hidesDropped > 0 && (
         <p className="text-muted-foreground">
           {result.hidesDropped} hidden record{result.hidesDropped === 1 ? '' : 's'} stay{result.hidesDropped === 1 ? 's' : ''} the venue&apos;s.
+        </p>
+      )}
+      {(result.parkReleasesDropped ?? 0) > 0 && (
+        <p className="text-muted-foreground">
+          {result.parkReleasesDropped} released venue park{result.parkReleasesDropped === 1 ? '' : 's'} stay{result.parkReleasesDropped === 1 ? 's' : ''} unparked.
         </p>
       )}
       {(result.dropped ?? []).map((item, i) => (

@@ -477,7 +477,8 @@ wire = held ? (parked ? value : 0 for each channel) : values
 ```
 
 - **Above every modifier; a park gets through.** Held, every channel goes out at zero *but a parked
-  one*, which goes out at its park (after its reserve). A park is the operator's hand on the channel —
+  one* — the show's own park or one it inherits from its venue's pinned version (§"Parking") — which
+  goes out at its park (after its reserve). A park is the operator's hand on the channel —
   typically a hard-powered fixture's dimmer held up — and zeroing it would power-cycle that fixture
   because its show opened behind its venue. The hold used to sit above park too, on the argument that a
   v3 park on a v5 rig is as wrong as a v3 cue; the operator decided the fixture matters more.
@@ -536,8 +537,9 @@ a frame at zero** unless zero is where the next show puts it.
   the incoming ones, so its parked channels hold their level and everything else stops.
   `ProjectChangedEvent.reload` tells `State`'s collector which it was.
 - **A switch** leaves a blackout, except on a channel the incoming project parks
-  (`ParkManager.storedParks`), which stays as it was until the incoming park takes it: a channel both
-  projects park goes from one park to the other. A channel only the outgoing project parks goes to zero
+  (`ParkManager.storedParks` — its **effective** parks, so a show on a venue's include its pinned
+  version's less its releases), which stays as it was until the incoming park takes it: a channel both
+  projects park goes from one park to the other, and so does one two shows on one venue both inherit. A channel only the outgoing project parks goes to zero
   with the incoming show's first frame — parks are per project, and that is the incoming project's word.
 - **A reload** carries the rig across (`show/ShowCarry.kt`): the outgoing frame **as the rig shows
   it** — a parked channel at its park, and a held controller at zero bar its parks, so a reload
@@ -579,6 +581,15 @@ Unparking hands the parked value down to the layers below (direct-write store + 
 buffer) *before* removing the override, via the `UnparkValueSink` that `Show` wires into
 `ParkManager` — so releasing park never moves the output and park/unpark is a safe toggle.
 Regression coverage: `UnparkPreservesValueTest`.
+
+**Whose parks.** A project's parks are its own rows — and, for a show on a venue, its pinned version's
+too, overlaid by its own re-parks and less its releases (`models/VenueParks.kt`; the rule is
+`docs/fixtures-engineering.md` §"Venue parks"). `ParkManager` holds the three layers and recomputes the
+transmit loop's per-universe view one channel at a time, so `universeView` stays one lookup per frame.
+Every write is the project's own: a re-park writes the show's row, unparking a venue park stores a
+release (and hands the venue's value down, so the output does not move), and unparking the show's
+park over a venue's goes park to park with nothing handed down. `ParkedChannel.owner` says whose a
+park is.
 
 The MCP tools `park_channel` / `unpark_channel` (`ai/AiTools.kt`) go through the same
 `ParkManager` calls as the WebSocket's `parkChannel` / `unparkChannel`, so both keep these

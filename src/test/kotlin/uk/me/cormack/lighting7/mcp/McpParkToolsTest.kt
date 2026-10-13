@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -173,5 +174,34 @@ class McpParkToolsTest : RouteIntegrationTest() {
         assertTrue(call("unpark_channel", """{"universe":0,"channel":7}""").success)
         assertTrue(call("unpark_channel", """{"universe":0,"channel":12}""").success)
         assertFalse("Parked Channels" in briefing.describeRig())
+    }
+
+    @Test
+    fun `on a show on a venue the tools say whose each park is, and unpark releases the venue's`() {
+        val f = seedShowOnVenue(state)
+        runBlocking { state.projectManager.switchProject(f.showId) }
+
+        val parked = parkedList().associateBy { it["universe"]!!.jsonPrimitive.int to it["channel"]!!.jsonPrimitive.int }
+        assertEquals("VENUE", parked.getValue(0 to 5)["owner"]!!.jsonPrimitive.content)
+        assertEquals("SHOW", parked.getValue(1 to 7)["owner"]!!.jsonPrimitive.content)
+        assertEquals(255, parked.getValue(1 to 7)["venueValue"]!!.jsonPrimitive.int, "the venue's park under the show's re-park")
+        val released = call("get_current_state", """{"include":["parked"]}""").json()["releasedVenueParks"]!!.jsonArray
+        assertEquals(listOf(0 to 12), released.map { it.jsonObject["universe"]!!.jsonPrimitive.int to it.jsonObject["channel"]!!.jsonPrimitive.int })
+
+        val rig = RigBriefing(state).describeRig()
+        assertTrue("(venue)" in rig && "released in this show" in rig, rig)
+
+        val release = call("unpark_channel", """{"universe":0,"channel":5}""")
+        assertTrue(release.success, release.result)
+        assertEquals("RELEASED", release.json()["outcome"]!!.jsonPrimitive.content)
+        assertTrue("the venue keeps it" in release.description, release.description)
+
+        val back = call("unpark_channel", """{"universe":1,"channel":7}""")
+        assertEquals("VENUE_RESTORED", back.json()["outcome"]!!.jsonPrimitive.content)
+        assertEquals(255, back.json()["venueValue"]!!.jsonPrimitive.int)
+
+        val repark = call("park_channel", """{"universe":1,"channel":7,"value":40}""")
+        assertEquals("VENUE", repark.json()["previousOwner"]!!.jsonPrimitive.content)
+        assertEquals(255, repark.json()["venueValue"]!!.jsonPrimitive.int)
     }
 }

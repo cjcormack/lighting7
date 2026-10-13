@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-PARKS`](#fu-manual-venue-parks) | a park made on a trial venue reaches its shows only when published and taken, holds its level through a switch between two shows on it, and a show re-parks and releases it for itself without the rig dipping — on a trial venue, since it publishes | Venue parks, 2026-10-13 |
 | [`FU-MANUAL-VENUE-S7`](#fu-manual-venue-s7) | the panto is created from the Projects page on the hall with the stalls preset, and a detached copy of a show outputs exactly what it did on the venue | Venue S7, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) | a show behind its venue on output opens held — the rig at zero but for its parks, while the Stage view draws — *Run against* drives the old patch with the cannon's channels idle, and Update clears the hold — on a trial venue, since it publishes | Venue S6, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S5`](#fu-manual-venue-s5) | a show re-hangs a mover and re-gels a unit as its own, touching neither the venue's draft nor any other show, and the venue's later change to the same facet shows as drift — on a trial venue, since it publishes | Venue S5, 2026-10-11 |
@@ -86,6 +87,28 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
+
+## `FU-MANUAL-VENUE-PARKS`
+
+**What it proves**: *a hall's parks are the hall's, and a show's word on one is its own* — venue parks
+(`docs/fixtures-engineering.md` §"Venue parks"): a park in a venue's draft reaches a show only through a
+published version it is on, a show's re-park and release never touch the venue, and every transition
+takes a parked channel from its old value to its new one without a frame at zero.
+
+**Why it is here**: `VenueParksTest` asserts the layering, the hold and the no-zero switch on mock
+controllers; a hard-powered fixture on a real dimmer is the rig's.
+
+**It runs on a trial venue, never the Commemoration Hall** — a publish is a version every show sees.
+
+1. **Park on the venue.** Open the trial venue as an admin; on the Channels page park the house-light
+   dimmer at a safe level. As an operator the park is refused (*Only an admin can change a venue's
+   parks*). Publish: History lists the park as an output change.
+2. **Take it.** A show pinned before the publish opens held, the dimmer at its park through the hold;
+   Update it. Open a second show on the same venue and switch between the two: the dimmer never dips.
+3. **Re-park and release.** In one show park the dimmer at another level (the card's badge reads *P*,
+   the hover *over the venue's*), then unpark it: it goes back to the venue's level. Unpark the venue's
+   park (*Release for this show*): the dimmer holds where it was and the card shows the dashed release
+   mark; *Restore the venue's park* takes it back. The venue's draft and the other show are untouched.
 
 ## `FU-MANUAL-VENUE-S7`
 

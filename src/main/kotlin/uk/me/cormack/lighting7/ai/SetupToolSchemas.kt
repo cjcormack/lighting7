@@ -682,8 +682,8 @@ internal val extractVenueTool = ToolDef(
         prop("name", "string", "The venue's name: unique on the desk, so not the show's own name. At most 50 characters.")
         arrayProp(
             "include",
-            buildJsonObject { put("type", "string"); put("enum", buildJsonArray { listOf("UNIVERSES", "PATCHES", "RIGGINGS", "REGIONS", "ELEMENTS", "SEATING", "GROUPS", "VIEWPOINTS").forEach { add(it) } }) },
-            "The parts to move; absent moves all of them. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
+            buildJsonObject { put("type", "string"); put("enum", buildJsonArray { listOf("UNIVERSES", "PATCHES", "RIGGINGS", "REGIONS", "ELEMENTS", "SEATING", "GROUPS", "VIEWPOINTS", "PARKS").forEach { add(it) } }) },
+            "The parts to move; absent moves all of them. PARKS moves the show's parked channels, which then reach it (and every show on the venue) from the version. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
         )
         prop("dryRun", "boolean", "Answer what would move and keep nothing. Default false.")
         prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, restarting every running effect. Only when the operator has said the desk is free.")
