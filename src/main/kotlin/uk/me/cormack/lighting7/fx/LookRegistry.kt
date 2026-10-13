@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookEffects
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
@@ -289,31 +290,37 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                 },
             effects = look.effects
                 .orderBy(DaoLookEffects.sortOrder to SortOrder.ASC)
-                .mapNotNull { effect ->
-                    val target = if (effect.targetType == DEFERRED_TARGET_TYPE) {
-                        null
-                    } else {
-                        TargetRef.ofOrNull(effect.targetType, effect.targetKey) ?: return@mapNotNull null
-                    }
-                    EffectEntry(
-                        target = target,
-                        effectType = effect.effectType,
-                        category = effect.category,
-                        propertyName = effect.propertyName,
-                        beatDivision = effect.beatDivision,
-                        blendMode = effect.blendMode,
-                        distribution = effect.distribution,
-                        phaseOffset = effect.phaseOffset,
-                        elementMode = effect.elementMode,
-                        elementFilter = effect.elementFilter,
-                        stepTiming = effect.stepTiming,
-                        parameters = effect.parameters,
-                        speedMasterUuid = effect.speedMasterUuid,
-                        rateSpeedMasterUuid = effect.rateSpeedMasterUuid,
-                    )
-                },
+                .mapNotNull { it.toEffectEntry() },
         )
     }
+
+/**
+ * A stored Look effect as the registry holds it, or null for one whose target discriminator is
+ * unknown — such a row is skipped rather than run on nothing. Must be called inside a transaction.
+ */
+internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
+    val target = if (targetType == DEFERRED_TARGET_TYPE) {
+        null
+    } else {
+        TargetRef.ofOrNull(targetType, targetKey) ?: return null
+    }
+    return EffectEntry(
+        target = target,
+        effectType = effectType,
+        category = category,
+        propertyName = propertyName,
+        beatDivision = beatDivision,
+        blendMode = blendMode,
+        distribution = distribution,
+        phaseOffset = phaseOffset,
+        elementMode = elementMode,
+        elementFilter = elementFilter,
+        stepTiming = stepTiming,
+        parameters = parameters,
+        speedMasterUuid = speedMasterUuid,
+        rateSpeedMasterUuid = rateSpeedMasterUuid,
+    )
+}
 
 /**
  * A Look effect as the generic effect spec the instance factories consume.

@@ -197,6 +197,13 @@ export interface ActiveEffect {
   speedMasterUuid: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid: string | null
+  /**
+   * The Look whose effect Include ran here — never `lookId`, which a busk pad lights from. Absent
+   * from a desk before Include ran a Look's effects, and on every other effect.
+   */
+  includedLookId?: number | null
+  /** An included Look effect changed since Include: what Update would write back. */
+  editedSinceInclude?: boolean
 }
 
 // === RTK Query Endpoints ===

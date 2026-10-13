@@ -100,6 +100,30 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a colour on a fixture whose colour is per zone is held on every zone`() {
+        val patched = runBlocking {
+            SetupTools(state, tools).executeTool(
+                "patch_fixtures",
+                Json.parseToJsonElement(
+                    """{"fixtures":[{"key":"shehds-1","name":"Shehds 1","fixtureTypeKey":"shehds-led19-rgbw-24ch","universe":0,"startChannel":80}]}""",
+                ).jsonObject,
+            )
+        }
+        assertTrue(patched.success, patched.result)
+        val set = ok(
+            "set_programmer",
+            """{"targets":[{"type":"fixture","key":"shehds-1"}],"values":[{"propertyName":"rgbColour","value":"#0000ff"}]}""",
+        )
+        assertEquals(
+            listOf("shehds-1.zone-1", "shehds-1.zone-2", "shehds-1.zone-3"),
+            set["written"]!!.jsonArray.map { it.jsonObject["targetKey"]!!.jsonPrimitive.content },
+        )
+        assertTrue(set["skipped"]?.jsonArray.isNullOrEmpty(), "$set")
+        // Zone n's blue is at 90 + 4(n − 1).
+        assertEquals(listOf(255, 255, 255), listOf(level(90), level(94), level(98)))
+    }
+
+    @Test
     fun `a head that cannot take a value is skipped by name, and a value nothing can take writes nothing`() {
         patchRig()
         val set = ok(

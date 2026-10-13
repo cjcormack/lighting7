@@ -162,10 +162,18 @@ export function ProgrammerSourceStrip({
   const { data: activeEffects } = useActiveEffectsQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { isVenue } = useVenueMode(projectId)
-  const dirty = useIncludeBaseline()
+  const valuesDirty = useIncludeBaseline()
 
   const target = summary?.lastIncluded ?? null
   const lookId = target?.kind === 'LOOK' ? target.lookId : null
+  // An included Look's effects that have been changed since Include — Update writes those back too,
+  // so an effect edit alone must un-grey it. The desk says which (`editedSinceInclude`) against the
+  // settings it spawned each with; `null` stays `null`, as `withSceneryChanges` keeps it.
+  const effectsDirty =
+    lookId == null
+      ? 0
+      : (activeEffects?.filter((e) => e.includedLookId === lookId && e.editedSinceInclude).length ?? 0)
+  const dirty = valuesDirty == null ? null : valuesDirty + effectsDirty
   // Only to label the Look's families; skipped entirely when a cue (or nothing) is included.
   const { data: looks } = useLookListQuery({ projectId }, { skip: lookId == null })
 

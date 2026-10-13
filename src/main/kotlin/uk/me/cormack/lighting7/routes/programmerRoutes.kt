@@ -206,6 +206,11 @@ internal data class ProgrammerIncludeRequest(
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
     val fadeMs: Long? = null,
+    /**
+     * What a Look's deferred effects run on while included — the selection the operator is
+     * including onto. Absent takes the desk's selection. A cue's effects name their own targets.
+     */
+    val targets: List<CueTargetDto>? = null,
 )
 
 @Serializable
@@ -254,6 +259,8 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
         when (
             val result = performProgrammerInclude(
                 state, project, request.cueId, request.lookId, mask, request.fadeMs ?: 0,
+                includeFx = request.includeFx,
+                targets = request.targets,
             )
         ) {
             is IncludeCoreResult.Failure -> call.respond(
@@ -290,8 +297,10 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                     // A Look's group rows expand to members before they reach the programmer, so
                     // there is no group-shaped selection to hand back.
                     groupKeys = emptyList(),
-                    fxSpawned = 0,
-                    fxAlreadyRunning = 0,
+                    fxSpawned = result.outcome.fxSpawned,
+                    fxAlreadyRunning = result.outcome.fxAlreadyRunning,
+                    // A Look's effects carry no timing of their own (it is the layer's), so none is
+                    // ever skipped for it.
                     fxTimedSkipped = 0,
                     lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
                     skipped = result.outcome.skipped.map { it.toDto() },
@@ -343,6 +352,8 @@ internal data class ProgrammerLookUpdateResult(
     val lookId: Int,
     val lookName: String,
     val rowsWritten: Int,
+    /** The Look's included effects the operator changed, written back onto them. */
+    val effectsWritten: Int = 0,
     /** Scenery rows written back into the Look. */
     val sceneryWritten: Int = 0,
     /** What the re-resolve moved: live consumers of the Look. */
@@ -406,7 +417,7 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
             is UpdateCoreResult.LookUpdated -> call.respond(
                 ProgrammerUpdateResponse(
-                    applied = result.result.rowsWritten + result.result.sceneryWritten > 0,
+                    applied = result.result.rowsWritten + result.result.effectsWritten + result.result.sceneryWritten > 0,
                     mode = "A",
                     lookResult = result.result,
                     skipped = result.skipped.map { it.toDto() },

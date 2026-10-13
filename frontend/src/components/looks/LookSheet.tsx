@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { ArrowRight, AudioWaveform, Blinds, Clapperboard, CopyPlus, Download, Hand, LayoutGrid, Trash2, X } from 'lucide-react'
+import { ArrowRight, Blinds, Clapperboard, CopyPlus, Download, Hand, LayoutGrid, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { CopyToProjectSheet } from '@/components/sheet/CopyToProjectSheet'
@@ -22,7 +22,7 @@ import { useStageElementListQuery } from '@/store/stageElements'
 import { handPickUp } from '@/store/hand'
 import { useCopyLookMutation, useSaveLookMutation } from '@/store/looks'
 import type { LookSummary } from '@/api/looksApi'
-import { LookPreviewSwatches } from './lookValueChips'
+import { LookPreviewStrip } from './lookValueChips'
 import { useLookDelete } from './useLookDelete'
 
 export type LookColumnKey = 'families' | 'preview' | 'contents' | 'scenery' | 'notes' | 'layers' | 'pages'
@@ -114,17 +114,18 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
       {
         key: 'preview',
         label: 'Preview',
-        width: '120px',
+        width: 'minmax(120px, 170px)',
         value: () => undefined,
-        display: (row) =>
-          row.look.preview.length > 0 ? (
-            <span className="mx-1.5 flex min-w-0 overflow-hidden">
-              <LookPreviewSwatches preview={row.look.preview} />
-            </span>
-          ) : row.look.effectCount > 0 ? (
-            // No literal to show: a Look that only runs effects says so with the desk's FX glyph.
-            <AudioWaveform className="mx-2 size-3.5 text-violet-400" aria-label="Effects only" />
-          ) : null,
+        // One line, as many chips as fit and `+N` for the rest; a Look of effects alone names them.
+        display: (row) => (
+          <span className="mx-1.5 flex min-w-0 flex-1 overflow-hidden">
+            <LookPreviewStrip
+              preview={row.look.preview}
+              effectTypes={row.look.effectTypes}
+              effectCount={row.look.effectCount}
+            />
+          </span>
+        ),
       },
       {
         key: 'contents',

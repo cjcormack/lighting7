@@ -197,6 +197,17 @@ on that element, a cue row's `transitionMs` kept beside the held state so Update
 the clock it had — never the scenery the cue only tracks, and never masked. A cue that only moves
 scenery is something to include: it sets the include target.
 
+**A Look's effects are included too** (`includeFx`, default true; `routes/programmerLookInclude.kt`):
+each runs as a programmer-band effect stamped with the stored effect it realises
+(`FxInstance.includedLookEffect`, the Look effect's row id and the instance's settings as spawned).
+A **bound** effect runs on its own target; a **deferred** one — every effect `create_look` writes —
+runs on the request's `targets`, else the desk selection, one instance per target as a layer runs
+it, and with neither it is not spawned and a warning says to select the fixtures. The cue rule
+holds: an effect the Look is already running where it is live (a programmer or cue layer, or an
+earlier Include of it) is not run again, and says so. They are local effects, so Clear and Release
+take them. Before this a Look of effects alone included nothing, and its effects could be neither
+seen nor changed.
+
 **`update { targets?, mask? }`** writes back.
 
 - **Mode A** — with an include target, only entries that *changed since Include* are written. The
@@ -218,6 +229,15 @@ scenery is something to include: it sets the include target.
   last Include, Record or Update left the source saying — and `programmer.sceneryState` carries
   `changedSinceInclude` against it, so the source strip's Update is enabled by a moved tab as by a
   moved value.
+- **A Look's included effects** go back in Mode A only, onto the effect each came from
+  (`writeIncludedEffectsBack`) — and only one changed since Include, judged against the settings the
+  instance was spawned with rather than the stored row, because a running effect reports its whole
+  parameter set, defaults filled in. A bound effect keeps its target and a deferred one stays
+  deferred: what was edited is how it runs, not where. Where a deferred effect ran on several heads
+  and more than one was changed, the first is written. An effect the operator stopped stays in the
+  Look (Update never deletes), and what was written becomes the new baseline. The active-effect DTO
+  carries `includedLookId` and `editedSinceInclude`, so the source strip's Update is enabled by an
+  effect edit too.
 
 There used to be a **cueEdit guard** here — an asymmetric one, because the risks were: Record and
 Update targeting a cue with an open cue-edit session answered **409 unless forced** (`beginEdit`

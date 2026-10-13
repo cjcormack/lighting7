@@ -1,6 +1,9 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import { AudioWaveform } from 'lucide-react'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { hexToRgb, parseExtendedColour } from '@/components/fx/colourUtils'
 import { parseProgrammerValue } from '@/lib/programmerValue'
+import { previewChipsThatFit } from './previewFit'
 
 /**
  * Rendering one *stored Look literal*, which is the canonical assignment grammar and nothing else —
@@ -102,5 +105,122 @@ export function LookPreviewSwatches({
         <LookValueChip key={`${value}-${index}`} value={value} />
       ))}
     </div>
+  )
+}
+
+/** The gap between two items on the strip — `gap-1`, in px, for the fit. */
+const STRIP_GAP_PX = 4
+
+/** An effect type's id as words: `ColourCycle` → `Colour Cycle`. */
+function effectTypeLabel(effectType: string): string {
+  return effectType.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+}
+
+/**
+ * A Look's Preview as the library sheet draws it: **one line that never wraps.** The chips that fit
+ * the cell, then `+N` for the rest — every value is on the cell's hover — then, for a Look that runs
+ * effects, the effects glyph. A Look of effects alone names them instead of showing a bare glyph.
+ *
+ * It wrapped until this: `LookPreviewSwatches`' `flex-wrap` in a 36px row put a Look's second and
+ * third lines of chips over the rows above and below. What fits is measured off an invisible copy
+ * of every chip ([previewChipsThatFit]) and re-measured as the column resizes; with no layout to
+ * measure (a test, a cell not yet laid out) every chip is drawn and the cell clips them.
+ */
+export function LookPreviewStrip({
+  preview,
+  effectTypes,
+  effectCount,
+}: {
+  preview: readonly string[]
+  /** The Look's effect types, each once; absent from an older desk. */
+  effectTypes?: readonly string[]
+  effectCount: number
+}) {
+  const lineRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState(preview.length)
+  const effectNames = (effectTypes ?? []).map(effectTypeLabel)
+  const effectsTitle =
+    effectCount > 0
+      ? `${effectCount} effect${effectCount === 1 ? '' : 's'}${effectNames.length > 0 ? `: ${effectNames.join(', ')}` : ''}`
+      : ''
+
+  useLayoutEffect(() => {
+    const line = lineRef.current
+    const measure = measureRef.current
+    if (!line || !measure) {
+      setShown(preview.length)
+      return
+    }
+    const fit = () => {
+      const width = (selector: string) => measure.querySelector<HTMLElement>(selector)?.getBoundingClientRect().width ?? 0
+      const chips = [...measure.querySelectorAll<HTMLElement>('[data-preview-chip]')].map(
+        (chip) => chip.getBoundingClientRect().width,
+      )
+      const tail = width('[data-preview-effects]')
+      const available = line.getBoundingClientRect().width - (tail > 0 ? tail + STRIP_GAP_PX : 0)
+      setShown(previewChipsThatFit(chips, available, STRIP_GAP_PX, width('[data-preview-more]')))
+    }
+    fit()
+    // Absent in some test environments — the one-off fit above still stands.
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(fit)
+    observer.observe(line)
+    return () => observer.disconnect()
+  }, [preview, effectCount])
+
+  if (preview.length === 0) {
+    if (effectCount === 0) return null
+    return (
+      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={effectsTitle}>
+        <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label="Effects only" />
+        <span className="truncate">{effectNames.length > 0 ? effectNames.join(', ') : effectsTitle}</span>
+      </span>
+    )
+  }
+
+  const hidden = preview.length - shown
+  const effectsGlyph =
+    effectCount > 0 ? (
+      <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label={effectsTitle} />
+    ) : null
+
+  return (
+    <div
+      ref={lineRef}
+      data-preview-line
+      className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap"
+      title={[preview.join('  '), effectsTitle].filter(Boolean).join(' · ')}
+    >
+      {/* The measuring copy: every chip, a `+N` as wide as the widest, and the glyph. Absolute and
+          invisible, so it takes no room and is never read; `aria-hidden` for the same reason. */}
+      <div
+        ref={measureRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1 whitespace-nowrap"
+      >
+        {preview.map((value, index) => (
+          <span key={`${value}-${index}`} data-preview-chip className="inline-flex shrink-0">
+            <LookValueChip value={value} />
+          </span>
+        ))}
+        <MoreChip data-preview-more count={preview.length} />
+        {effectCount > 0 && <span data-preview-effects className="inline-flex size-3.5 shrink-0" />}
+      </div>
+      {preview.slice(0, shown).map((value, index) => (
+        <LookValueChip key={`${value}-${index}`} value={value} />
+      ))}
+      {hidden > 0 && <MoreChip count={hidden} />}
+      {effectsGlyph}
+    </div>
+  )
+}
+
+/** `+N` for the chips that did not fit. */
+function MoreChip({ count, ...rest }: { count: number; 'data-preview-more'?: boolean }) {
+  return (
+    <span {...rest} className="inline-block shrink-0 px-0.5 text-[10px] leading-4 text-muted-foreground">
+      +{count}
+    </span>
   )
 }

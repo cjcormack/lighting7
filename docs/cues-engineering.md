@@ -144,7 +144,7 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
-| POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows, into the programmer for editing |
+| POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows and effects (a deferred effect on `targets`, else the desk selection), into the programmer for editing |
 | POST | `/programmer/record-look` | Record the programmer into a Look — `CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, with an explicit I/P/C/B mask |
 | POST | `/project/{id}/looks` … `/looks/{lookId}` | Look CRUD, banked by derived attribute family; delete guarded by `LOOK_IN_USE` |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |

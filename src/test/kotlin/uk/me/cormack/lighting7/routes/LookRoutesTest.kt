@@ -651,12 +651,12 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `including an effects-only look says it holds no rows, not that the patch is wrong`() = testApplication {
+    fun `including an effects-only look onto no selection says to select fixtures, not that the patch is wrong`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         // The other zero-write reason, and the one that must *not* blame the patch: a Look holding
-        // only effects has nothing for the programmer by construction.
+        // only a deferred effect runs it on the selection it is included onto, and there is none.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -678,7 +678,9 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
         }.body<ProgrammerIncludeResponse>()
         assertEquals(0, body.entriesWritten)
-        assertTrue(body.warnings.any { it.contains("holds no rows") }, body.warnings.toString())
+        assertEquals(0, body.fxSpawned)
+        assertTrue(body.warnings.single().contains("select the fixtures"), body.warnings.toString())
+        assertTrue(body.warnings.none { it.contains("patch") }, body.warnings.toString())
     }
 
     @Test

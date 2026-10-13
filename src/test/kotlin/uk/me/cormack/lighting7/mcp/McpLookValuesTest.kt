@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
+import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.dmx.MockDmxController
@@ -233,6 +234,87 @@ class McpLookValuesTest : RouteIntegrationTest() {
         assertFalse(twice.success)
         assertTrue("already set by values[0]" in twice.description, twice.description)
         assertEquals(before, lookCount())
+    }
+
+    /** A 24-channel Shehds at 80: its colour is on its three zones only, zone n's red at 88 + 4(n − 1). */
+    private fun patchShehds() {
+        val patched = runBlocking {
+            SetupTools(state, tools).executeTool(
+                "patch_fixtures",
+                Json.parseToJsonElement(
+                    """{"fixtures":[
+                        {"key":"shehds-1","name":"Shehds 1","fixtureTypeKey":"shehds-led19-rgbw-24ch","universe":0,"startChannel":80,"groups":["Spots"]},
+                        {"key":"hex-9","name":"Hex 9","fixtureTypeKey":"hex","universe":0,"startChannel":110,"groups":["Spots"]}
+                    ]}""",
+                ).jsonObject,
+            )
+        }
+        assertTrue(patched.success, patched.result)
+    }
+
+    @Test
+    fun `a colour on a fixture whose colour is per zone lands on every zone, and plays`() {
+        patchShehds()
+        val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
+        val created = call(
+            "create_look",
+            """{"name":"Shehds red","values":[
+                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"rgbColour","value":"#ff0000;w40"},
+                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"dimmer","value":"pct:100"}
+            ],"apply":true}""",
+        )
+        assertTrue(created.success, created.result)
+        assertEquals(
+            listOf(
+                LookRowDto("fixture", "shehds-1", "rgbColour", "#ff0000;w40", elementKey = "shehds-1.zone-1"),
+                LookRowDto("fixture", "shehds-1", "rgbColour", "#ff0000;w40", elementKey = "shehds-1.zone-2"),
+                LookRowDto("fixture", "shehds-1", "rgbColour", "#ff0000;w40", elementKey = "shehds-1.zone-3"),
+                // The fixture has a dimmer of its own, so that stays one fixture row.
+                LookRowDto("fixture", "shehds-1", "dimmer", "255"),
+            ),
+            storedRows("Shehds red"),
+        )
+        assertTrue(created.json()["skipped"]?.jsonArray.isNullOrEmpty(), created.result)
+        for (red in listOf(88, 92, 96)) {
+            assertEquals(255, controller.getEffectiveValue(red).toInt(), "zone red at $red")
+            assertEquals(40, controller.getEffectiveValue(red + 3).toInt(), "zone white at ${red + 3}")
+        }
+    }
+
+    @Test
+    fun `a zone named by its own key beats the fixture's colour, and a group reaches the zones too`() {
+        patchShehds()
+        val created = call(
+            "create_look",
+            """{"name":"Two tone","values":[
+                {"target":{"type":"group","key":"Spots"},"propertyName":"rgbColour","value":"#00ff00"},
+                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"rgbColour","value":"#ff0000"},
+                {"target":{"type":"fixture","key":"shehds-1.zone-2"},"propertyName":"rgbColour","value":"#0000ff"}
+            ]}""",
+        )
+        assertTrue(created.success, created.result)
+        val rows = storedRows("Two tone")
+        assertEquals(
+            listOf("hex-9" to null),
+            rows.filter { it.value.startsWith("#00ff00") }.map { it.targetKey to it.elementKey },
+            "the group's green reaches only the head nothing names more closely: $rows",
+        )
+        assertEquals(
+            listOf("shehds-1.zone-1", "shehds-1.zone-3"),
+            rows.filter { it.value.startsWith("#ff0000") }.map { it.elementKey },
+            "the fixture's red leaves zone 2 to its own value",
+        )
+        assertEquals(
+            listOf(LookRowDto("fixture", "shehds-1", "rgbColour", "#0000ff", elementKey = "shehds-1.zone-2")),
+            rows.filter { it.value.startsWith("#0000ff") },
+        )
+    }
+
+    @Test
+    fun `describe_rig names a multi-head fixture's cells by key`() {
+        patchShehds()
+        val rig = RigBriefing(state).describeRig()
+        assertTrue("cells=3 (`shehds-1.zone-1` … `shehds-1.zone-3`)" in rig, rig)
     }
 
     @Test
