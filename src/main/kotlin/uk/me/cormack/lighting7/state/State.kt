@@ -90,6 +90,16 @@ class State(val config: ApplicationConfig) {
         bcryptCost = config.optionalString("auth.bcryptCost")?.toIntOrNull() ?: DEFAULT_BCRYPT_COST,
     )
 
+    /**
+     * This install's telemetry switch (Sentry plan D1). Only the setting: Sentry itself is started by
+     * `Application.module()`, never here, so a test's `State` never reports.
+     */
+    val telemetry = uk.me.cormack.lighting7.telemetry.TelemetrySettings(
+        database,
+        uk.me.cormack.lighting7.telemetry.SentryConfig.from(config),
+        uk.me.cormack.lighting7.update.BuildInfo.current,
+    )
+
     /** The `mcp { }` block: the MCP listener's port, bind address and public URL. */
     val mcpConfig = uk.me.cormack.lighting7.mcp.McpConfig.from(config)
 

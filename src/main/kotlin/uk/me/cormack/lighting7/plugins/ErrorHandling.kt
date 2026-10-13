@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.routes.ErrorResponse
+import uk.me.cormack.lighting7.telemetry.withSentryCallScope
 import uk.me.cormack.lighting7.venue.VenueException
 
 private val logger = LoggerFactory.getLogger("error-handling")
@@ -41,7 +42,7 @@ fun Application.configureErrorHandling() {
                 logger.warn("Unique constraint violation on {}", call.request.local.uri, cause)
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(cause.friendlyConstraintMessage()))
             } else {
-                logger.error("Database error on {}", call.request.local.uri, cause)
+                call.withSentryCallScope { logger.error("Database error on {}", call.request.local.uri, cause) }
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     ErrorResponse("Database error: ${cause.cause?.message ?: cause.message ?: "unknown"}"),
@@ -145,13 +146,34 @@ fun Application.configureErrorHandling() {
             // keeps structured concurrency intact.
             if (cause is CancellationException) throw cause
 
-            logger.error("Unhandled exception on {}", call.request.local.uri, cause)
+            call.withSentryCallScope { logger.error("Unhandled exception on {}", call.request.local.uri, cause) }
             call.respond(
                 HttpStatusCode.InternalServerError,
                 ErrorResponse(cause.message ?: cause::class.simpleName ?: "Internal server error"),
             )
         }
     }
+}
+
+/**
+ * Whether [configureErrorHandling] answers [cause] with a 4xx. Sentry's `beforeSend` drops these,
+ * so this must name every exception a handler above turns into a client error.
+ */
+internal fun isClientErrorException(cause: Throwable): Boolean = when (cause) {
+    is ExposedSQLException -> cause.isUniqueConstraintViolation()
+    is VenueException -> cause.status.value < 500
+    is BadRequestException,
+    is SerializationException,
+    is CannotTransformContentToTypeException,
+    is AuthenticationException,
+    is AuthorizationException,
+    is RemoteScriptsDisabledException,
+    is RemoteEffectsDisabledException,
+    is RemoteCommandsDisabledException,
+    is TriggerNotStorableException,
+    is CommandNotStorableException,
+    is PasswordPolicyException -> true
+    else -> false
 }
 
 /**

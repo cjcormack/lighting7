@@ -123,6 +123,12 @@ dependencies {
     implementation("io.ktor:ktor-server-websockets")
     implementation("io.ktor:ktor-server-netty")
     implementation("ch.qos.logback:logback-classic:$logback_version")
+    // Errors, logs and (later) traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
+    // plugin: it auto-adds integrations and touches the build (docs/plans/sentry-plan.md D2).
+    implementation(platform("io.sentry:sentry-bom:8.60.0"))
+    implementation("io.sentry:sentry")
+    implementation("io.sentry:sentry-logback")
+    implementation("io.sentry:sentry-kotlin-extensions")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("io.ktor:ktor-client-content-negotiation")
     testImplementation("io.ktor:ktor-client-websockets")
