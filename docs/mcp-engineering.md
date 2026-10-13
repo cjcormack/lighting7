@@ -653,7 +653,7 @@ every fixture and group line, `overrides=position,media (drifted)` on a venue fi
 show overrides (a drifted or a dormant one marked), and *[venue's]* on the stage paragraph's regions and riggings.
 A show **held** behind its venue on output (session 6) gets an *Output is held* paragraph under the Venue
 section, and `get_patch` a `venue.held` sentence (session 7): the show composes and draws while every
-controller sends zero, so without it a model reads `apply_cue` as working while the rig stays dark.
+controller sends zero on every unparked channel, so without it a model reads `apply_cue` as working while the rig stays dark.
 Every field either tool shows is the effective one — a fixture's address, position, lantern and media
 as the show's overrides leave them. `get_patch` carries `venue: {name, version, note}`, `owner` on
 every fixture, universe, rigging and region, `overrides: [{facet, drifted?, dormant?}]` on an overridden

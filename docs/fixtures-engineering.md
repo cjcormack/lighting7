@@ -2330,8 +2330,8 @@ same diff History draws, through its snapshot cache — and §"The diff rule" ab
   pin this desk lacks (it loads no rig, `VENUE_MISSING`).
 
 `ProjectDto.venue.behind` carries it. A show behind on output **opens held**: `DbFixtureLoader` asks
-`state/VenueHoldService.kt` before it builds a controller, and every controller sends zero, above park,
-while the show composes and draws (`docs/dmx-engineering.md` §"The hold"). *Run against vN* (`POST
+`state/VenueHoldService.kt` before it builds a controller, and every controller sends zero on every
+channel but a parked one (a park gets through the hold), while the show composes and draws (`docs/dmx-engineering.md` §"The hold"). *Run against vN* (`POST
 /projects/{id}/venue/run-against {on}`, the current project, both roles, 409 `VENUE_NOT_BEHIND` when
 there is no hold) lifts it for this pin pair on this desk run — a reload keeps it, another project, a
 moved pin, a newer version or a restart drops it — and keeps the installed version's trigger, arm and

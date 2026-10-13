@@ -174,7 +174,7 @@ class VenueVersions(private val state: State) {
             }
         }
         if (state.projectManager.currentProject.id.value == venueId) {
-            state.projectManager.switchProject(venueId)
+            state.projectManager.switchProject(venueId, reload = true)
         }
         return history(venueId)
     }

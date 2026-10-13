@@ -424,6 +424,33 @@ class ProgrammerWriter internal constructor(
         onProgrammerChanged()
     }
 
+    /**
+     * Publish everything the programmer holds, as it holds it — every property key and every
+     * sideband channel, through the same routes [setBlind] takes. For a store that arrived with its
+     * contents already in it: a same-project reload hands the outgoing show's [ProgrammerStore] to
+     * its successor, whose controllers have never heard it. Snaps; the successor's controllers start
+     * from the outgoing show's last frame, so a value the reload did not move does not move. Blind,
+     * the cascade publish leaves the programmer out on its own and an unbacked channel is left as
+     * the carried frame has it.
+     */
+    fun republishAll() {
+        val keys = HashSet(programmerStore.activeKeys())
+        val unbacked = mutableListOf<ProgrammerStore.ChannelEntryView>()
+        for (entry in programmerStore.channelEntries()) {
+            val key = publisher.resolveChannelCoveringKey(entry.universe, entry.channel)
+            if (key != null) keys += key else unbacked += entry
+        }
+        if (keys.isNotEmpty()) publisher.publishCascadeForKeys(keys)
+        if (!programmerStore.blind) {
+            for (entry in unbacked) {
+                val value = (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                    ?: continue
+                fixtures.controllerOrNull(Universe(0, entry.universe))?.setValue(entry.channel, value, 0)
+            }
+        }
+        onProgrammerChanged()
+    }
+
     /** Drop all sideband slots under the given channel writes — see [writeProperty]. */
     private fun absorbSidebandUnder(writes: List<PropertyChannelResolver.ChannelWrite>) {
         programmerStore.clearChannelsAbsorbedBy(

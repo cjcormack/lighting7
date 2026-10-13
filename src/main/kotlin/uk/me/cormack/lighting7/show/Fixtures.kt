@@ -617,7 +617,20 @@ class Fixtures {
         fun setPatchMetadata(fixtureKey: String, metadata: FixturePatchMetadata)
     }
 
+    /** One [register] at a time, end to end: its close-and-wait runs outside [registerLock]. */
+    private val registerSerial = Any()
+
     fun register(removeUnused: Boolean = true, block: FixtureRegisterer.() -> Unit) {
+        synchronized(registerSerial) { registerSerially(removeUnused, block) }
+        // Outside [registerSerial]: a listener is free to do anything, including reach another
+        // thread that is itself waiting to register.
+        changeListeners.forEach {
+            it.controllersChanged()
+            it.fixturesChanged()
+        }
+    }
+
+    private fun registerSerially(removeUnused: Boolean, block: FixtureRegisterer.() -> Unit) {
         val registerer: FixtureRegisterer = object : FixtureRegisterer {
             override fun addController(controller: DmxController): DmxController {
                 val controllerKey = controller.universe.controllerKey()
@@ -668,26 +681,32 @@ class Fixtures {
             }
         }
 
-        registerLock.write {
-            if (removeUnused) {
-                controllerRegister.forEach { (controllerKey, controller) ->
-                    when (controller) {
-                        is ArtNetController -> {
-                            controller.unregisterListener(checkNotNull(controllerChannelChangeListeners[controllerKey]))
-                            // Stop the transmission loop and release its thread and socket.
-                            // A controller dropped from the register but left running keeps
-                            // its own transport open and, once output is a continuous
-                            // stream, keeps broadcasting its stale buffer to the very
-                            // universe its replacement is about to take over — one more
-                            // fighting transmitter per rebuild, and a rebuild happens on
-                            // every patch edit.
-                            controller.close()
-                        }
-                        is MockDmxController -> {} // Mock doesn't need listeners
-                        is AsyncTestDmxController -> {} // Test fake doesn't need listeners
+        if (removeUnused) {
+            // Stop every outgoing transmitter, releasing its thread and socket: a controller dropped
+            // from the register but left running keeps its own transport open and, output being a
+            // continuous stream, keeps broadcasting its stale buffer to the very universe its
+            // replacement is about to take over — one more fighting transmitter per rebuild, and a
+            // rebuild happens on every patch edit. Mock and test controllers have nothing to stop.
+            //
+            // And wait for each one's last frame *before* [block] can build the replacements, which
+            // start streaming the moment they are constructed: otherwise an old controller's final
+            // frame (sent from its own thread as the cancel lands) can follow its successor's first,
+            // putting the old buffer back on the rig for a frame. The wait is outside the lock because
+            // that final frame calls the channel listener, which takes the read lock — which is why
+            // [registerSerial] keeps a second `register` from slipping in between.
+            val outgoing = registerLock.write {
+                controllerRegister.mapNotNull { (controllerKey, controller) ->
+                    (controller as? ArtNetController)?.also {
+                        controllerChannelChangeListeners[controllerKey]?.let(it::unregisterListener)
+                        it.close()
                     }
                 }
+            }
+            outgoing.forEach { it.awaitClosed() }
+        }
 
+        registerLock.write {
+            if (removeUnused) {
                 controllerRegister.clear()
                 fixtureRegister.clear()
                 groupRegister.clear()
@@ -701,11 +720,6 @@ class Fixtures {
             // first would let a reader take the new version, then build against the old
             // register, and stamp the stale result as current.
             structureVersionCounter.incrementAndGet()
-        }
-
-        changeListeners.forEach {
-            it.controllersChanged()
-            it.fixturesChanged()
         }
     }
 

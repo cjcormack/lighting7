@@ -458,7 +458,7 @@ button's place runs the same append `POST /busk/banks/{bankId}/pads` runs. See
 | `venue.hold` | `projectId?: Int`, `held: Boolean`, `pinned?: Int`, `installed?: Int`, `runAgainst: Boolean` | Connect snapshot + broadcast |
 
 The live show's hold (venue plan P5, D7; session 6; `state/VenueHoldService.kt`): `held` while it is
-behind its venue on output and every controller sends zero, `runAgainst` once the operator has lifted
+behind its venue on output and every controller sends zero but for a park, `runAgainst` once the operator has lifted
 that for the session, `pinned` the version the show uses and `installed` the venue's latest. A
 standalone show, a venue and a show on its installed version send `held: false` with no versions.
 **Outbound only**: *Run against* and Update are REST (`POST …/venue/run-against`, `…/venue/update`),

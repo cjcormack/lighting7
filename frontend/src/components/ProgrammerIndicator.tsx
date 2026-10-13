@@ -39,7 +39,7 @@ import { heldByVenue } from '../lib/venueHold'
  * that prop was deleted.
  *
  * **Blind has a second reason** (venue plan P5, session 6): a live show behind its venue on output is
- * held — every controller sends zero — and the badge says *Blind · venue*, the board's "the same Blind
+ * held — every controller sends zero but for a park — and the badge says *Blind · venue*, the board's "the same Blind
  * as the programmer's, with venue as its reason". Still a reporter: the hold is lifted by Update or
  * *Run against* on the venue banner, never here.
  */
@@ -52,7 +52,7 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
 
   const entryCount = summary?.entryCount ?? 0
   // The venue hold is the same Blind with another reason (venue plan P5, session 6): the live show is
-  // behind its venue on output, so nothing it does reaches the rig. The badge says *Blind · venue*.
+  // behind its venue on output, so nothing it does reaches the rig but its parks. The badge says *Blind · venue*.
   const venueHeld = heldByVenue(hold, currentProject?.id)
   const blind = (summary?.blind ?? false) || venueHeld
   if (entryCount === 0 && !blind) return null

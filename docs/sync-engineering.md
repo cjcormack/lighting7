@@ -1319,8 +1319,12 @@ serialise:
 9. **Update `sync_configs`**: `lastSyncedSha = HEAD-after-sync`,
    `lastSyncedAt = now`.
 10. **Hot-reload show** if the just-pulled project happens to be the active
-    one — `ProjectManager.switchProject(currentId)` tears down + rebuilds the
-    show so fixtures, cues, etc. reflect the new DB state immediately.
+    one — `ProjectManager.switchProject(currentId, reload = true)` tears down +
+    rebuilds the show so fixtures, cues, etc. reflect the new DB state
+    immediately, **carrying the running show across**: the rig holds its levels,
+    each live cue is GO'd again, the programmer and hand-run effects come back
+    (effects restart their phase), and whatever the pull changed crossfades in —
+    `docs/dmx-engineering.md` §"Handing the rig from one show to the next".
 
 ### Pull-only installs
 
