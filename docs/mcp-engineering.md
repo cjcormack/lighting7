@@ -287,6 +287,15 @@ its hand-down; `park_channel` refuses a universe the show does not output, the s
 counting universes from 1 would otherwise make, and `unpark_channel` on an unparked address answers
 `wasParked: false` rather than an error.
 
+On a show on a venue (`docs/fixtures-engineering.md` §"Venue parks") every parked entry carries its
+`owner` — `SHOW`, or `VENUE` for one inherited from the pinned version — and a show's re-park its
+`venueValue`; `get_current_state` adds `releasedVenueParks`, and `describe_rig` marks a venue park
+*(venue)* and lists the released ones. `park_channel` answers `owner: SHOW`, `previousOwner` and the
+venue's `venueValue` under it; `unpark_channel` answers an `outcome` — `UNPARKED`, `RELEASED` (a venue
+park released for this show, the venue keeping it) or `VENUE_RESTORED` (the show's park gone, the
+venue's at `venueValue` standing again). In a venue both are admin-only, as every stored write there is
+(`VENUE_STORED_WRITE_TOOLS`).
+
 `create_look` authors a Look's **values** as well as its deferred effects and scenery (`ai/LookValues.kt`):
 `values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
 always is. The model states an intent — the template grammar (`pct:`, `#rrggbb`, `deg:`, `dmx:`,

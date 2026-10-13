@@ -31,6 +31,7 @@ const PARTS: { kind: ExtractKind; label: string }[] = [
   { kind: 'SEATING', label: 'Seating' },
   { kind: 'GROUPS', label: 'Groups' },
   { kind: 'VIEWPOINTS', label: 'Views' },
+  { kind: 'PARKS', label: 'Parks' },
 ]
 const ALL_PARTS = PARTS.map((p) => p.kind)
 
@@ -217,6 +218,7 @@ function ExtractPreview({ result, reading }: { result: ExtractVenueResult | unde
     [m.regions.length, 'region'],
     [m.groups.length, 'group'],
     [m.viewpoints.length, 'view'],
+    [m.parks?.length ?? 0, 'parked channel'],
   ] as const
   const listed = counts.filter(([n]) => n > 0).map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
   return (

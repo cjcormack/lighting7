@@ -32,6 +32,14 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v27: venue parks. A venue's `parkedChannels/` were already in its versions; from v27 a show on a
+    // venue **inherits** its pinned version's parks, overlaid by its own (a re-park at another value),
+    // and gains `showParkReleases/{uuid}.json`, the venue parks it releases for its run, keyed by
+    // universe and channel. The writer's number moves by the sharp-edge rule: a v26 reader would drop
+    // every release and its next wipe-then-export push would write them away for every peer, and would
+    // run a show on a venue without the venue's parks. `minReader` stays at **5** — a missing folder is
+    // no releases. See `docs/sync-engineering.md` §"Version 27 — venue parks".
+    //
     // v26: lamps. `FixturePatchJson` gains `lampWatts` and `lampKelvin`: a lantern-hung patch's own
     // lamp power and colour temperature, null — omitted — taking the lantern library's. A patch with
     // neither exports byte-for-byte as at v25. The writer's number moves by the sharp-edge rule: a v25
@@ -225,7 +233,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 26,
+    val formatVersion: Int = 27,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -271,6 +279,18 @@ data class ShowHideJson(
     val uuid: String,
     val recordKind: HideKind,
     val recordUuid: String,
+)
+
+/**
+ * v27: one of a show's releases of its venue's parks, `showParkReleases/{uuid}.json` — a channel the
+ * pinned version parks that the show leaves unparked. Keyed by `universe` and `channel`, as a park is,
+ * never by the venue park's uuid; a clone remaps only `uuid`, the release's own identity.
+ */
+@Serializable
+data class ShowParkReleaseJson(
+    val uuid: String,
+    val universe: Int,
+    val channel: Int,
 )
 
 /**

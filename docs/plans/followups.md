@@ -1466,6 +1466,11 @@ plan session 4, 2026-10-11): v24 is the venue plan's one bump and carries the pi
 venue repo's layout, none of which concerns who made an edit, and the design for machine-local users
 is still owed. Flagged rather than folded in, as the gate asks.
 
+**v25–v27 passed without it as well** (model textures, lamps, and venue parks, 2026-10-13): v27 makes
+a show on a venue inherit its version's parks and adds `showParkReleases/`, keyed by universe and
+channel, which records nothing about who released a park. The design for machine-local users is still
+owed; flagged again rather than folded in.
+
 ### `FU-AUTH-AUDIT-LOG`
 
 **A `user_audit` table for logins, resets and user changes** · Trigger · Multi-user-auth §out of
@@ -1516,6 +1521,12 @@ inbound message.
 Nor by `completed/fixture-fx-sheets-plan.md` session 1: `updateFx` is `pauseFx`'s tier (an operator gesture on
 both roles, gated as `pauseFx` / `removeFx` are), `programmer.clearTarget` is `programmer.clearEntry`'s,
 and `programmer.keyStack` is a read.
+**Fired, narrowly, by venue parks** (2026-10-13): a park in a **venue** is the venue's rig, so
+`handlePark` (`plugins/ParkSocket.kt`) checks the role per message while the current project is a
+venue and answers an operator's `parkChannel`, `unparkChannel` or `restoreChannelPark` with a unicast
+`parkError VENUE_ADMIN_ONLY` — an error frame, not a close, the shape this item asks for. It is that
+one family's check, not the general gate: a show's park frames stay operator-tier, and no dispatch-site
+role check exists for any other message.
 
 **Trigger**: an admin-only operation gains a socket command, or `FU-AUTH-OPERATOR-LOCKDOWN` lands
 and a locked-down control is also reachable over WS — otherwise the two are the same change made

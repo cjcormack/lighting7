@@ -301,7 +301,14 @@ for it rather than blacking it out mid-run; **Update** (`venue/VenueUpdate.kt`) 
 `VenueLinks` link in one transaction, dropping links to removed records, after a review that is the
 same run rolled back. `docs/fixtures-engineering.md` §"Behind, the hold and Update". Its overrides travel as `showOverrides/{uuid}.json` at the same v24 (session 4
 reserved the folder, so a session-4 desk refuses a show that carries one). A venue a show pins refuses
-delete (`VENUE_IN_USE`) until its shows are detached or deleted. The Projects page (session 7) draws a
+delete (`VENUE_IN_USE`) until its shows are detached or deleted. **Venue parks** (`formatVersion` 27): a venue's parked channels are
+its rig, versioned with it, and a show on a venue runs its pinned version's parks overlaid by its own
+re-parks and less its **releases** (`show_park_releases`, keyed by universe and channel, never a park's
+uuid) — `models/VenueParks.kt` is the one resolution, read by the loader, a switch's hand-over
+(`ParkManager.storedParks`), the reload carry and the hold. Unparking a venue park in a show releases
+it (the version is never written), unparking a show's re-park brings the venue's back, a venue park
+change is output for the hold unless the show parks or releases that channel, and a park in a venue is
+an admin's (`parkError VENUE_ADMIN_ONLY`). `docs/fixtures-engineering.md` §"Venue parks". The Projects page (session 7) draws a
 Venues row (each venue's card, an admin's *Extract a venue…*) over the Shows, each show card with its
 venue badge, and a show's menu carries *Update venue* and *Detach*. `docs/fixtures-engineering.md`
 §"Shows on a venue".
@@ -523,7 +530,7 @@ All four are **admin only** (mounted in `adminOnly`; venue plan §3.5, D3), REST
 
 ### Show-on-a-venue Endpoints
 Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound only):
-- `POST /api/rest/projects/{id}/venue/extract` `{name, include?, dryRun?}` - **Admin only**: move a show's universes, patches, riggings, regions, VENUE-layer elements, seating (Fixed moves, Preset is copied), groups and camera views into a new venue, publish v1 and pin the show — one transaction, uuids kept, links re-pointed through `VenueLinks`, the moved records' machine overrides and scene images following them. `dryRun` answers the same run rolled back. 400 `VENUE_EXTRACT_INCOMPLETE` (a part that would point out of the venue), 409 `VENUE_EXTRACT_REFUSED` / `_EMPTY`. A live show reloads
+- `POST /api/rest/projects/{id}/venue/extract` `{name, include?, dryRun?}` - **Admin only**: move a show's universes, patches, riggings, regions, VENUE-layer elements, seating (Fixed moves, Preset is copied), groups, camera views and parked channels into a new venue, publish v1 and pin the show — one transaction, uuids kept, links re-pointed through `VenueLinks`, the moved records' machine overrides and scene images following them. `dryRun` answers the same run rolled back. 400 `VENUE_EXTRACT_INCOMPLETE` (a part that would point out of the venue), 409 `VENUE_EXTRACT_REFUSED` / `_EMPTY`. A live show reloads
 - `POST /api/rest/projects` `{…, venueId, seatingPresetUuid?}` - A new show on that venue, pinned to its installed version (409 `VENUE_NOTHING_PUBLISHED` before v1), with a copy of that version's Preset seating block as its own stalls when named (400 `SEATING_PRESET_UNKNOWN`, session 7); `ProjectDto.venue` is `{uuid, id, name, version, installed, behind, drawingChanges}`, `behind` `NONE | DRAWING | OUTPUT` (session 6). The list's venue rows carry `venueSummary` `{version, publishedAt, patches, universes, riggings, fixedSeating, shows, behind}` — the Projects page's venue card
 - `POST /api/rest/projects/{id}/detach` `{dryRun?}` - *Detach* (session 7, D9): the effective rig at the pin written into the show's own rows, uuids kept, links re-pointed, the venue's machine overrides copied, hides, overrides and pin cleared — one transaction, `dryRun` the same run rolled back. A behind show detaches at its pin (the answer's `behind`, `installed`). 409 `NOT_A_VENUE_SHOW` / `VENUE_MISSING` / `VENUE_DETACH_BLOCKED`. Both roles; a live show reloads, which lifts its hold
 - `GET /api/rest/projects/{id}/seating/presets` + `POST …/seating/from-preset` `{elementUuid, force?}` - A venue's Preset seating at its installed version, or a show's at its pinned one, and the show's own seating; *Replace from preset* swaps every seating block the show owns for a fresh copy, moving its seat views to it (409 `STAGE_ELEMENT_IN_USE` naming one the copy has no seat for, `force` leaves it without one) and the stalls' scenery with it. 409 `NOT_A_VENUE` / `SEATING_PRESET_NAME_TAKEN`, 400 `SEATING_PRESET_UNKNOWN`. Both roles (session 7)

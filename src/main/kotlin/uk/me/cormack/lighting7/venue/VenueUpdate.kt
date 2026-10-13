@@ -59,6 +59,8 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.EffectivePatch
 import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.models.ParkAddress
+import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -722,7 +724,44 @@ class VenueUpdate(private val state: State) {
             if (p.uuid.toString() in decidedMine) continue
             out += UpdateItemDto("ADDITION", "${p.displayName} (${p.key})", "Your ${p.displayName}", p.uuid.toString())
         }
+        out += parkCarryOver(project, pin)
         return out
+    }
+
+    /**
+     * The show's own parks and its releases of venue parks: keyed by channel, they follow the pin by
+     * themselves, and the show's word on a channel stands over whatever the target parks there — which
+     * is why a venue park change under one is not output for this show (`ShowBehind`). Each says what
+     * the venue does on its channel from the pin to the target.
+     */
+    private fun parkCarryOver(project: DaoProject, pin: Pin): List<UpdateItemDto> {
+        val from = VenueParks.rowsOf(pin.fromSnapshot)
+        val to = VenueParks.rowsOf(pin.toSnapshot)
+        fun venueMove(address: ParkAddress): String? {
+            val a = from[address]
+            val b = to[address]
+            return when {
+                a == b -> null
+                a == null -> "v${pin.to} parks it at $b"
+                b == null -> "v${pin.to} no longer parks it"
+                else -> "the venue's park moves from $a to $b in v${pin.to}"
+            }
+        }
+        val parks = VenueParks.rowsOf(project.id).toSortedMap().map { (address, value) ->
+            val detail = venueMove(address)?.let { "Your park of $address at $value stays: $it" }
+                ?: to[address]?.let { "Your park of $address at $value, over the venue's at $it" }
+                ?: "Your park of $address at $value"
+            UpdateItemDto("PARK", "Park $address", detail)
+        }
+        val releases = VenueParks.releasesOf(project.id).sorted().map { address ->
+            val detail = when {
+                to[address] == null -> "Your release of the venue's park on $address: v${pin.to} parks nothing there, so it releases nothing (kept)"
+                else -> venueMove(address)?.let { "Your release of the venue's park on $address stays: $it" }
+                    ?: "Your release of the venue's park on $address"
+            }
+            UpdateItemDto("RELEASE", "Park $address", detail)
+        }
+        return parks + releases
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -789,7 +828,7 @@ data class VenueRunAgainstRequest(val on: Boolean)
 /** One line of the review: a record carried over, dropped, or blocking. */
 @Serializable
 data class UpdateItemDto(
-    /** `OVERRIDE | HIDE | ADDITION | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+    /** `OVERRIDE | HIDE | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
     val kind: String,
     val name: String,
     val detail: String,

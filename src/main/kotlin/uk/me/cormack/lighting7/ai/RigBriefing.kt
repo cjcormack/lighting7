@@ -192,12 +192,30 @@ class RigBriefing(private val state: State) {
         // would apply a look to a parked head, see nothing change, and have no way to say why.
         // Only when something is parked: an empty heading every turn would be noise.
         val parked = parkedChannelReports(state)
-        if (parked.isNotEmpty()) {
+        val released = releasedParkReports(state)
+        if (parked.isNotEmpty() || released.isNotEmpty()) {
             sb.appendLine("## Parked Channels")
             sb.appendLine("Held at a fixed value above everything else — cues, looks, effects and the programmer do not reach them. unpark_channel releases one.")
+            if (state.show.parkManager.isOnVenue) {
+                sb.appendLine(
+                    "This show is on a venue: a park marked (venue) is the venue's, inherited from its version. " +
+                        "park_channel re-parks it at another value for this show only; unpark_channel releases it for this show " +
+                        "(the venue keeps it), and unparking this show's park over a venue's brings the venue's back.",
+                )
+            }
             for (p in parked) {
                 val drives = p.mapping?.let { " — ${it.fixtureName} (key=`${it.fixtureKey}`): ${it.description}" } ?: " — not patched"
-                sb.appendLine("- universe ${p.universe}, channel ${p.channel} at ${p.value}$drives")
+                val whose = when {
+                    p.owner == RigOwner.VENUE -> " (venue)"
+                    p.venueValue != null -> " (this show's, over the venue's at ${p.venueValue})"
+                    else -> ""
+                }
+                sb.appendLine("- universe ${p.universe}, channel ${p.channel} at ${p.value}$whose$drives")
+            }
+            for (r in released) {
+                val drives = r.mapping?.let { " — ${it.fixtureName} (key=`${it.fixtureKey}`): ${it.description}" } ?: " — not patched"
+                val venue = r.venueValue?.let { "the venue parks it at $it" } ?: "the venue no longer parks it"
+                sb.appendLine("- universe ${r.universe}, channel ${r.channel}: released in this show ($venue)$drives")
             }
             sb.appendLine()
         }

@@ -11,10 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const updateChannel = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const parkChannel = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const unparkChannel = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const restoreChannelPark = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/channels', () => ({ useUpdateChannelMutation: () => [updateChannel] }))
 vi.mock('@/store/park', () => ({
   useParkChannelMutation: () => [parkChannel],
   useUnparkChannelMutation: () => [unparkChannel],
+  useRestoreChannelParkMutation: () => [restoreChannelPark],
 }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
@@ -465,6 +467,30 @@ describe('DmxSheet', () => {
     fireEvent.click(selectionBar().getByRole('button', { name: /Unpark/ }))
     expect(unparkChannel).toHaveBeenCalledTimes(1)
     expect(unparkChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 8 })
+  })
+
+  it("names a venue's park on the cell, says an unpark releases it, and restores a released one (venue parks)", () => {
+    draw({
+      parkValueMap: new Map([[7, 255], [8, 60]]),
+      parks: new Map([
+        [7, { universe: 1, channel: 7, value: 255, owner: 'VENUE' as const }],
+        [8, { universe: 1, channel: 8, value: 60, owner: 'SHOW' as const, venueValue: 90 }],
+      ]),
+      released: new Map([[9, { universe: 1, channel: 9, venueValue: 30 }]]),
+    })
+    expect(cell(7).closest('[title]')!.getAttribute('title')).toContain('Parked by the venue at 255')
+    expect(cell(8).closest('[title]')!.getAttribute('title')).toContain("over the venue's 90")
+    expect(screen.getByText(/1 by the venue/)).toBeInTheDocument()
+    expect(screen.getByText(/1 venue park released/)).toBeInTheDocument()
+
+    dragRow0(6, 8)
+    const unpark = selectionBar().getByRole('button', { name: /Unpark/ })
+    expect(unpark.getAttribute('title')).toContain("1 is the venue's, released for this show only")
+    // 008 is the show's over the venue's, 009 released: both take the venue's back.
+    fireEvent.click(selectionBar().getByRole('button', { name: /Restore/ }))
+    expect(restoreChannelPark).toHaveBeenCalledTimes(2)
+    expect(restoreChannelPark).toHaveBeenCalledWith({ universe: 1, channelNo: 8 })
+    expect(restoreChannelPark).toHaveBeenCalledWith({ universe: 1, channelNo: 9 })
   })
 
   it('makes every cell inert with the desk offline — pointer, keyboard, verbs and Spread', async () => {

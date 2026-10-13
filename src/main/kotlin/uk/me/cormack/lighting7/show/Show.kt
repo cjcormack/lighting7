@@ -272,12 +272,19 @@ class Show(
      * stored before the Twin Shot's channels were triggers, or brought in by a sync import or a clone.
      */
     internal fun dropRefusedParks() {
-        for (park in parkManager.getAllParked()) {
-            val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value)
-                ?: commandOutput.parkRefusal(park.universe, park.channel, park.value)
-                ?: continue
-            org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
-            parkManager.forget(park.universe, park.channel)
+        // Twice at most: forgetting a show's own refused re-park exposes the venue's park under it
+        // (venue parks), which must be judged too; the second pass finds nothing new to expose.
+        repeat(2) {
+            var dropped = false
+            for (park in parkManager.getAllParked()) {
+                val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value)
+                    ?: commandOutput.parkRefusal(park.universe, park.channel, park.value)
+                    ?: continue
+                org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
+                parkManager.forget(park.universe, park.channel)
+                dropped = true
+            }
+            if (!dropped) return
         }
     }
 

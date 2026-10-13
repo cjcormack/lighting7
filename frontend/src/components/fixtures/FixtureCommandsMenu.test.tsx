@@ -106,8 +106,8 @@ describe('FixtureCommandsMenu', () => {
   it('finds a parked channel on the command first, then its preconditions, on its own universe', () => {
     const reset = COMMANDS[1]
     expect(parkedChannelOf(reset, [])).toBeNull()
-    expect(parkedChannelOf(reset, [{ universe: 1, channel: 12, value: 0 }])).toBeNull()
-    expect(parkedChannelOf(reset, [{ universe: 0, channel: 3, value: 0 }, { universe: 0, channel: 12, value: 0 }])).toBe(12)
+    expect(parkedChannelOf(reset, [{ universe: 1, channel: 12, value: 0, owner: 'SHOW' }])).toBeNull()
+    expect(parkedChannelOf(reset, [{ universe: 0, channel: 3, value: 0, owner: 'SHOW' }, { universe: 0, channel: 12, value: 0, owner: 'SHOW' }])).toBe(12)
   })
 
   it('reads the preconditions mid-sentence, keeping an initialism', () => {

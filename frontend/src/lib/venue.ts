@@ -58,6 +58,7 @@ const FIELD_WORDS: Record<string, string> = {
 const KIND_WORDS: Record<VenueChange['kind'], string> = {
   UNIVERSE: 'universe',
   PATCH: 'fixture',
+  PARK: 'park',
   GROUP: 'group',
   RIGGING: 'rigging',
   REGION: 'region',
@@ -97,9 +98,10 @@ export function fieldChangeLine(field: { field: string; from?: string | null; to
  * names what changed and says how underneath (`LX2 FRES position` / `x −1.20 → −0.90`).
  */
 export function changeLine(change: VenueChange): { title: string; detail: string | null } {
-  const where = change.address ? ` · ${change.address}` : ''
+  // A park is named by its address already (`Park 0-012`), so it is not said twice.
+  const where = change.address && change.kind !== 'PARK' ? ` · ${change.address}` : ''
   if (change.change !== 'CHANGED') {
-    const what = change.kind === 'PATCH' || change.kind === 'UNIVERSE' ? '' : ` (${kindWord(change)})`
+    const what = change.kind === 'PATCH' || change.kind === 'UNIVERSE' || change.kind === 'PARK' ? '' : ` (${kindWord(change)})`
     return { title: `${change.name}${what}${where}`, detail: null }
   }
   const fields = change.fields ?? []
@@ -110,6 +112,10 @@ export function changeLine(change: VenueChange): { title: string; detail: string
       title: `${change.name} · ${address.from ?? '—'} → ${address.to ?? '—'}`,
       detail: rest.length > 0 ? rest.slice(0, 2).map(fieldChangeLine).join('; ') : null,
     }
+  }
+  // A park's key is its channel, so its value is all that can change: `Park 1-005` / `value 128 → 200`.
+  if (change.kind === 'PARK') {
+    return { title: change.name, detail: fields.length > 0 ? fields.map(fieldChangeLine).join('; ') : null }
   }
   const facets = (change.facets ?? []).filter((f) => f !== 'OTHER')
   const what = facets.length > 0

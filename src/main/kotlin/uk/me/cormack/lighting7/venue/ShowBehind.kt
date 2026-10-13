@@ -15,6 +15,8 @@ import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.models.ParkAddress
+import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.decodeFacet
@@ -29,8 +31,8 @@ import java.util.UUID
  * - **DRAWING** — pinned older than the installed version, and nothing between the two changes what
  *   this show would send: a banner, output live.
  * - **OUTPUT** — at least one change between the two is output-affecting by [VenueDiff]'s own rule (a
- *   universe added, removed or re-addressed; a patch added, removed, re-addressed or re-typed) **and
- *   reaches this show**. The show then opens held (`dmx/OutputHold.kt`).
+ *   universe added, removed or re-addressed; a patch added, removed, re-addressed or re-typed; a park
+ *   added, removed or changed) **and reaches this show**. The show then opens held (`dmx/OutputHold.kt`).
  *
  * **What "reaches this show" means.** The show's layer can stand between a venue change and its output,
  * and the hold is for what an Update would change on the wire — holding a show over a change the update
@@ -41,7 +43,9 @@ import java.util.UUID
  *   neither version;
  * - a **re-address** of a patch whose Address the show **overrides**, where the override applies at
  *   both versions (its universe is in both rigs): the show sends that unit to its own address either
- *   way. The venue's move is still drift, which the Update review and the Patch list's chip say.
+ *   way. The venue's move is still drift, which the Update review and the Patch list's chip say;
+ * - a change to a **park** on a channel the show parks itself or has released: the show's own word on
+ *   the channel stands at both versions (`models/VenueParks.kt`), so the venue's park never reaches it.
  *
  * A re-type is never discounted (no facet overrides the type), nor is any universe change (a show's
  * override names a universe, so re-addressing the universe moves the unit too), nor an added patch.
@@ -83,6 +87,8 @@ object ShowBehind {
         /** Universes an override may name at the pinned version: the show's own and the pinned snapshot's. */
         val universesAtPin: Set<String>,
         val universesAtInstalled: Set<String>,
+        /** The channels the show parks itself or has released: a venue park change there does not reach it. */
+        val ownParkChannels: Set<ParkAddress>,
     )
 
     /** Judge [projectId]. Blocking; opens its own transactions (and joins a caller's). */
@@ -130,6 +136,7 @@ object ShowBehind {
     }
 
     private fun Layer.discounts(change: VenueChangeDto): Boolean {
+        VenueDiff.parkAddressOf(change)?.let { return it in ownParkChannels }
         if (change.kind != VenueChangeKind.PATCH) return false
         val uuid = change.uuid?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return false
         if (uuid in hiddenPatches) return true
@@ -168,6 +175,7 @@ object ShowBehind {
             addressUniverses = addresses,
             universesAtPin = own + universesOf(pinnedSnapshot.id),
             universesAtInstalled = own + universesOf(installed.snapshotProject.id),
+            ownParkChannels = VenueParks.rowsOf(project.id).keys + VenueParks.releasesOf(project.id),
         )
     }
 }
