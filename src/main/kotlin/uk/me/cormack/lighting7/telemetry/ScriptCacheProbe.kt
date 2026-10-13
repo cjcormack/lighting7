@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.telemetry
 
-/** Which cache answered the last script compile on this thread, for the span that covers it. */
+import uk.me.cormack.lighting7.perf.DeskMetrics
+
+/** Which cache answered the last script compile on this thread, for the span that covers it, and `script.cache`. */
 object ScriptCacheProbe {
     enum class Source {
         /** The process's own cache of compiled FX scripts. */
@@ -15,7 +17,10 @@ object ScriptCacheProbe {
 
     private val last = ThreadLocal<Source?>()
 
-    fun record(source: Source) = last.set(source)
+    fun record(source: Source) {
+        last.set(source)
+        DeskMetrics.global.scriptCache(source)
+    }
 
     /** What answered since the last [take] on this thread, or null if nothing was recorded. */
     fun take(): Source? = last.get().also { last.remove() }

@@ -45,6 +45,7 @@ import uk.me.cormack.lighting7.midi.PadRef
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.perf.DbConnectionMetrics
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.routes.buskPageContents
 import uk.me.cormack.lighting7.routes.readBuskRigSpec
@@ -1246,6 +1247,7 @@ class State(val config: ApplicationConfig) {
             maximumPoolSize = 1
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_SERIALIZABLE"
+            metricsTrackerFactory = DbConnectionMetrics()
             validate()
         })
         dataSource = ds

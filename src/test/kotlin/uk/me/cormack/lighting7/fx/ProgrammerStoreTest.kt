@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.dmx.packChannelKey
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -333,7 +334,7 @@ class ProgrammerStoreTest {
 
         store.mutateLayers { listOf(layer(1, 0)) to Unit }
 
-        assertEquals(listOf(layer(1, 0)), store.layersFlow.replayCache.last())
+        assertEquals(listOf(layer(1, 0)), store.layersFlow.replayCache.last().layers)
     }
 
     @Test
@@ -345,7 +346,27 @@ class ProgrammerStoreTest {
         store.mutateLayers { listOf(layer(1, 0)) to Unit }
         store.mutateLayers { emptyList<ProgrammerLayer>() to Unit }
 
-        assertEquals(emptyList(), store.layersFlow.replayCache.last(), "the clear is broadcast too")
+        assertEquals(emptyList(), store.layersFlow.replayCache.last().layers, "the clear is broadcast too")
+    }
+
+    @Test
+    fun `layer emissions arrive in seq order however many threads mutate`() {
+        // `ws.outbound.dropped` reads a gap in `seq` as a dropped frame, so an out-of-order emission
+        // would count one that was never lost. `Unconfined` delivers on the emitting thread.
+        val store = ProgrammerStore()
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Long>())
+        val collector = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            store.layersFlow.collect { seen += it.seq }
+        }
+        val threads = (1..8).map { t ->
+            kotlin.concurrent.thread { repeat(500) { i -> store.mutateLayers { listOf(layer(t * 1000 + i, 0)) to Unit } } }
+        }
+        threads.forEach { it.join() }
+        collector.cancel()
+
+        val order = seen.toList()
+        assertNull(order.zipWithNext().firstOrNull { (a, b) -> b <= a }, "an emission arrived out of seq order")
+        assertEquals(4000L, order.last())
     }
 
     @Test

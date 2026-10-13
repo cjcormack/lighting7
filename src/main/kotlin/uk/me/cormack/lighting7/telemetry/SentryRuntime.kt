@@ -14,6 +14,7 @@ import io.sentry.SentryLevel
 import io.sentry.SentryOptions
 import io.sentry.logback.SentryAppender
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.perf.MetricsReporter
 import java.nio.file.Path
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -33,6 +34,8 @@ class SentryRuntime(
     private val settings: TelemetrySettings,
     private val cacheDir: Path,
     @Volatile private var install: InstallTags,
+    /** Runs while Sentry does: started after init, stopped before close. */
+    private val metrics: MetricsReporter? = null,
 ) {
     private val switcher = Executors.newSingleThreadExecutor { r -> Thread(r, "sentry-switch").apply { isDaemon = true } }
 
@@ -101,6 +104,12 @@ class SentryRuntime(
             }
             rootScopes.startSession()
             running = Running(rootScopes, attachAppender())
+            // Metrics failing to start costs metrics, never the rest of Sentry.
+            try {
+                metrics?.start()
+            } catch (e: Throwable) {
+                logger.warn("Couldn't start metrics: {}", e.toString())
+            }
             logger.info("Sentry started: {} ({})", settings.release, settings.environment)
         } catch (e: Exception) {
             // WARN, not ERROR: an ERROR here would go round through the appender.
@@ -112,6 +121,7 @@ class SentryRuntime(
     private fun stop() {
         val r = running ?: return
         running = null
+        metrics?.stop()
         detachAppender(r.appender)
         runCatching { r.rootScopes.endSession() }
         runCatching { Sentry.close() }
@@ -139,6 +149,8 @@ class SentryRuntime(
         // No outbound host is ours (D6): GitHub and Hue never get trace headers.
         options.setTracePropagationTargets(emptyList())
         options.logs.isEnabled = true
+        // Nothing in 8.60.0 reads `metrics.isEnabled`; MetricsReporter, run only while this is, is the switch (D7).
+        options.metrics.isEnabled = true
         options.logs.beforeSend = SentryOptions.Logs.BeforeSendLogCallback(SentryFilters::beforeSendLog)
         options.beforeSend = SentryOptions.BeforeSendCallback { event, _ -> SentryFilters.beforeSend(event) }
         options.beforeBreadcrumb = SentryOptions.BeforeBreadcrumbCallback { crumb, _ -> SentryFilters.beforeBreadcrumb(crumb) }

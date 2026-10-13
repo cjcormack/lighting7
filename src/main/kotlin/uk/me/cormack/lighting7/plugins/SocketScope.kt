@@ -7,6 +7,8 @@ import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.serialization.SerialName
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
 import java.util.UUID
@@ -96,6 +98,7 @@ class SocketScope(
             // serialization bug in an OutMessage) stays loud and fails the session scope,
             // exactly as before, so a broken message type can't silently stale the UI.
             if (e.isConnectionTeardown()) {
+                DeskMetrics.global.wsDropped(wireType(message), DeskMetrics.WsDrop.CLOSED)
                 throw kotlinx.coroutines.CancellationException("WS send raced connection teardown", e)
             }
             throw e
@@ -126,6 +129,10 @@ class SocketScope(
         jobs.clear()
     }
 }
+
+/** An outbound frame's `type` on the wire: its `@SerialName`, else its class name. */
+internal fun wireType(message: OutMessage): String =
+    message::class.java.getAnnotation(SerialName::class.java)?.value ?: message::class.java.simpleName
 
 /**
  * The failures a WS push can hit only because the connection or application is going

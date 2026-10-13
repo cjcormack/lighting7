@@ -392,7 +392,7 @@ class ProgrammerLayerStackTest {
         // Amber stack, so the count is taken after subscription has drained it.
         val frames = mutableListOf<List<ProgrammerLayer>>()
         val collector = CoroutineScope(Dispatchers.Unconfined).launch {
-            rig.store.layersFlow.collect { frames += it }
+            rig.store.layersFlow.collect { frames += it.layers }
         }
         frames.clear()
 

@@ -10,6 +10,7 @@ import org.eclipse.jgit.lib.Repository
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.telemetry.TraceSampling
 import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.DaoProject
@@ -81,6 +82,21 @@ class RemoteSyncEngine(
         installUuid: UUID,
         installFriendlyName: String,
         trigger: SyncTrigger = SyncTrigger.MANUAL,
+    ): SyncRunResult = try {
+        traceRun(projectId, projectUuid, installUuid, installFriendlyName, trigger).also { DeskMetrics.global.syncRun(it.outcome, trigger) }
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        DeskMetrics.global.syncRun(null, trigger)
+        throw e
+    }
+
+    private suspend fun traceRun(
+        projectId: Int,
+        projectUuid: UUID,
+        installUuid: UUID,
+        installFriendlyName: String,
+        trigger: SyncTrigger,
     ): SyncRunResult = Tracing.transactionSuspending(TraceSampling.OP_SYNC_RUN, "sync.run") { span ->
         span?.setData("sync.trigger", trigger.name)
         val kind = transaction(state.database) { DaoProject.findById(projectId)?.kind }

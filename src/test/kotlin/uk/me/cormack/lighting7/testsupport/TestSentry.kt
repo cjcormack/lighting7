@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.testsupport
 
 import io.sentry.SentryEvent
+import io.sentry.SentryMetricsEvent
 import io.sentry.Sentry
 import io.sentry.SentryOptions
 import io.sentry.protocol.SentryTransaction
@@ -13,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class CapturedSentry {
     val events = CopyOnWriteArrayList<SentryEvent>()
     val transactions = CopyOnWriteArrayList<SentryTransaction>()
+    val metrics = CopyOnWriteArrayList<SentryMetricsEvent>()
 }
 
 /**
@@ -33,6 +35,7 @@ fun <T> withTestSentry(block: (CapturedSentry) -> T): T {
         options.beforeSendTransaction = SentryOptions.BeforeSendTransactionCallback { tx, _ ->
             SentryFilters.beforeSendTransaction(tx, 1.0)?.also(captured.transactions::add)
         }
+        options.metrics.beforeSend = SentryOptions.Metrics.BeforeSendMetricCallback { metric, _ -> metric.also(captured.metrics::add) }
     }
     try {
         return block(captured)

@@ -85,6 +85,8 @@ data class BundledProvenance(
 data class ProvenanceUpdate(
     val entries: List<ProvenanceEntry>,
     val programmerRevision: Long,
+    /** One more than the previous emission's: a subscriber that sees a gap was skipped by DROP_OLDEST. */
+    val seq: Long = 0,
 )
 
 /**
@@ -215,6 +217,14 @@ class ProvenanceService internal constructor(
     /** Flow of full provenance snapshots for WebSocket broadcasting. */
     val flow: SharedFlow<ProvenanceUpdate> = _flow.asSharedFlow()
 
+    private val emitted = AtomicLong(0)
+    private val emitLock = Any()
+
+    // Numbering and emitting as one step, so emissions arrive in seq order and a gap means a drop.
+    private fun publish(entries: List<ProvenanceEntry>) = synchronized(emitLock) {
+        _flow.tryEmit(ProvenanceUpdate(entries, programmerRevision = programmerRevision.get(), seq = emitted.incrementAndGet()))
+    }
+
     // Coalesces provenance recomputes: emitUpdate is called from every layer-event site —
     // including per-MIDI-CC programmer writes and per-crossfade-tick Layer 4 republishes that
     // run while holding the publish lock — so the marker must be near-free and the
@@ -265,15 +275,14 @@ class ProvenanceService internal constructor(
         val scope = scope
         if (scope == null) {
             val entries = compute()
-            _flow.tryEmit(ProvenanceUpdate(entries, programmerRevision = programmerRevision.get()))
+            publish(entries)
             return
         }
         if (dirty.compareAndSet(false, true)) {
             scope.launch(Dispatchers.Default) {
                 delay(COALESCE_MS)
                 dirty.set(false)
-                val entries = compute()
-                _flow.tryEmit(ProvenanceUpdate(entries, programmerRevision = programmerRevision.get()))
+                publish(compute())
             }
         }
     }
