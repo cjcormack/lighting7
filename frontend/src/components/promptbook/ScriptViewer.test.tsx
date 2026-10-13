@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { StrictMode, type ComponentProps } from 'react'
+import { StrictMode, Suspense, type ComponentProps } from 'react'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
@@ -32,22 +32,37 @@ const PDF_H = 842
 /** Comfortably over the component's `MIN_TEXT_ITEMS` floor for "this page has real text". */
 const TEXT_ITEMS = 120
 
-vi.mock('react-pdf', () => ({
-  pdfjs: { GlobalWorkerOptions: {} },
-  Document: ({
-    onLoadSuccess,
-    children,
-  }: {
-    onLoadSuccess: (pdf: unknown) => void
-    children: React.ReactNode
-  }) => {
-    loadDocument = () => onLoadSuccess({ numPages: PAGE_COUNT, getPage })
-    return <div>{children}</div>
-  },
-  Page: ({ pageIndex }: { pageIndex: number }) => <div data-testid={`pdf-page-${pageIndex}`} />,
-}))
+vi.mock('react-pdf', async () => {
+  const { use } = await import('react')
+  /** A page load that has not come back — what a page the book has never drawn waits on. */
+  const pageLoad = new Promise<never>(() => {})
+  return {
+    pdfjs: { GlobalWorkerOptions: {} },
+    Document: ({
+      onLoadSuccess,
+      children,
+      suspense,
+    }: {
+      onLoadSuccess: (pdf: unknown) => void
+      children: React.ReactNode
+      suspense?: boolean
+    }) => {
+      documentSuspense = suspense
+      loadDocument = () => onLoadSuccess({ numPages: PAGE_COUNT, getPage })
+      return <div>{children}</div>
+    },
+    // react-pdf 11's default: a page loads through Suspense unless it, or the document it inherits
+    // the setting from, says `suspense={false}`.
+    Page: ({ pageIndex, suspense }: { pageIndex: number; suspense?: boolean }) => {
+      if ((suspense ?? documentSuspense) !== false) use(pageLoad)
+      return <div data-testid={`pdf-page-${pageIndex}`} />
+    },
+  }
+})
 
 let loadDocument: (() => void) | null = null
+/** The `suspense` the component handed `<Document>`, which every `<Page>` inherits. */
+let documentSuspense: boolean | undefined
 /** Page *indices* the fake document has no selectable text on — i.e. scans. */
 let scannedPages = new Set<number>()
 
@@ -219,6 +234,30 @@ describe('ScriptViewer render window', () => {
 
     await act(async () => observer.report([40, 41]))
     expect(mounted().sort((a, b) => a - b)).toEqual([40, 41])
+  })
+
+  it('never hands a page that mounts for the first time to the route\'s Suspense boundary', async () => {
+    // The reported bug: scroll well away, click a cue far ahead, and the book is back at page one.
+    // react-pdf 11 loads a page through Suspense by default, and the nearest boundary above this
+    // pane is `Layout`'s, around the whole route — so a page the book had never drawn (every page a
+    // far jump lands among) could swap the route for its fallback. That hides the scroller with
+    // `display: none`, and it comes back at the top.
+    const { ScriptViewer } = await import('./ScriptViewer')
+    const view = render(
+      <Suspense fallback={<div data-testid="route-fallback" />}>
+        <ScriptViewer {...baseProps} />
+      </Suspense>,
+    )
+    await act(async () => {
+      loadDocument?.()
+    })
+    const observer = windows.at(-1) as FakeIntersectionObserver
+
+    await act(async () => observer.report([80, 81]))
+
+    expect(view.queryByTestId('route-fallback')).toBeNull()
+    expect(view.getByTestId('pdf-page-80')).toBeTruthy()
+    expect(view.getByTestId('pdf-page-81')).toBeTruthy()
   })
 
   it('re-registers nothing with the observer when the component merely re-renders', async () => {
