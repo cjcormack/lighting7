@@ -5,7 +5,7 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
 /**
  * The desk's **hold** (venue plan P5, D7, session 6; lighting7 `state/VenueHoldService.kt` and
  * `plugins/VenueSocket.kt` are the wire contract): a show on a venue whose pinned version is behind
- * the installed one **on output** is held — every controller sends zero, above park — while it still
+ * the installed one **on output** is held — every controller sends zero but for a park — while it still
  * composes and draws. *Run against* lifts that for the session (REST, `store/venueHold.ts`).
  *
  * One outbound frame, `venue.hold`, a `StateFlow`: the subscription is the connect snapshot.

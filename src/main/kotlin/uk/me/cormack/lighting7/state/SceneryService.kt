@@ -152,17 +152,27 @@ class SceneryService(private val state: State) {
      * Follow [show]: its list-change events (an edit anywhere moves the stage), its programmer's
      * layer stack and the programmer's own scenery. Called on start and again on every project
      * switch, which also forgets the old show's live cues — they belong to a show that is gone.
+     *
+     * [reload] is a same-project reload (`ShowCarry`): [show] has GO'd the stacks that were live
+     * again, so their GOs stand — every other one is forgotten, as is every cue applied outside a
+     * stack, which the reload does not bring back — and what is on stage stays where it is rather
+     * than starting again from each element's base.
      */
-    fun attach(show: Show, scope: CoroutineScope) {
+    fun attach(show: Show, scope: CoroutineScope, reload: Boolean = false) {
         synchronized(lock) {
             listenedFixtures?.unregisterListener(listener)
             show.fixtures.registerListener(listener)
             listenedFixtures = show.fixtures
-            goes.clear()
             applied.clear()
-            pendingGos.clear()
-            entries = emptyMap()
-            staged = emptyMap()
+            if (reload) {
+                goes.keys.retainAll(show.cueStackManager.getActiveStackIds())
+                pendingGos.keys.retainAll(goes.keys)
+            } else {
+                goes.clear()
+                pendingGos.clear()
+                entries = emptyMap()
+                staged = emptyMap()
+            }
         }
         layersJob?.cancel()
         layersJob = show.programmerStore.layersFlow.onEach { recompute() }.launchIn(scope)

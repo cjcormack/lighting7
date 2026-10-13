@@ -199,4 +199,16 @@ class ParkManager(
     private fun emitState() {
         _parkStateFlow.value = getAllParked()
     }
+
+    companion object {
+        /**
+         * The parks [projectId] has stored, read without loading it: what a project switch keeps
+         * out of the outgoing show's blackout, so a channel both projects park goes from one park to
+         * the other without a frame at zero in between.
+         */
+        fun storedParks(database: Database, projectId: Int): List<ParkedChannel> = transaction(database) {
+            DaoParkedChannel.find { DaoParkedChannels.project eq projectId }
+                .map { ParkedChannel(it.universe, it.channel, it.value.toUByte()) }
+        }
+    }
 }

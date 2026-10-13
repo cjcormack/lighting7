@@ -451,7 +451,7 @@ class SetupTools(
                             put(
                                 "held",
                                 "Output is held: this show is on v${it.version} and v${hold.installed} changes its patch, so every " +
-                                    "controller sends zero. Cues, looks and the programmer still compose and draw, but nothing reaches " +
+                                    "controller sends zero on every unparked channel. Cues, looks and the programmer still compose and draw, but nothing reaches " +
                                     "the rig until the operator updates the show to the venue's version or runs against v${it.version}.",
                             )
                         }

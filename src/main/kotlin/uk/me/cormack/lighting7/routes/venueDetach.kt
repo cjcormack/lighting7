@@ -50,7 +50,7 @@ internal fun Route.routeApiRestVenueDetach(state: State) {
                 // hold afresh (none — a standalone show is never behind). Committed by now, so a reload
                 // that fails is logged, not answered as a failed detach.
                 if (current == projectId) {
-                    runCatching { state.projectManager.switchProject(projectId) }
+                    runCatching { state.projectManager.switchProject(projectId, reload = true) }
                         .onFailure { logger.error("Project {} was detached but did not reload: {}", projectId, it.message, it) }
                 }
                 state.show.fixtures.projectDetailsChanged(projectId)

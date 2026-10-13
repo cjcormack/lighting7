@@ -28,8 +28,10 @@ flown piece trimmed or a piece shown is resolved separately, never as a channel 
 
 **The venue hold sits above the stack, not in it** (venue plan P5, session 6). A show on a venue whose
 pinned version is behind the installed one on output is held: the stack resolves exactly as above —
-park included — and every view draws the result, but the wire carries zero on every channel, because
-the show's addresses (and its parks) belong to a rig the hall no longer is. It is not a layer: nothing
+park included — and every view draws the result, but the wire carries zero on every channel **but a
+parked one**, because the show's addresses belong to a rig the hall no longer is — while a park is the
+operator's hand on the channel, often a hard-powered fixture's dimmer held up, and goes out as parked.
+It is not a layer: nothing
 composes under or over it, and it changes no layer's state, so lifting it (an Update, or *Run against*)
 puts the composed output on the wire at once. *Run against* leaves the installed version's trigger and
 command channels reserved idle above park. Programmer Blind (Layer 2's gate) is a different thing and

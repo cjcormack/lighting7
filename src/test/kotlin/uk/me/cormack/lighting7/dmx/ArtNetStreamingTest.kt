@@ -144,9 +144,9 @@ class ArtNetStreamingTest {
 
         withTimeout(2_000) { transport.frames.receive() }
 
-        // Stand in for ProjectManager.shutdownShow, which blacks out every channel and then
-        // immediately tears the controllers down. Without the flush on close, the cancel
-        // races the next tick and the blackout can never reach the wire.
+        // Stand in for ProjectManager.shutdownShow, which freezes every controller on its final
+        // frame (a blackout, on a switch) and then tears the controllers down. Without the flush
+        // on close, the cancel races the next tick and that frame can never reach the wire.
         val blackout: Map<Int, UByte> = (1..512).associateWith { 0u.toUByte() }
         controller.restoreState(blackout + mapOf(3 to 99u.toUByte()))
         controller.close()

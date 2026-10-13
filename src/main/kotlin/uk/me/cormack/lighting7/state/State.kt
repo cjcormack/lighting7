@@ -459,8 +459,8 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * The current show's hold (venue plan P5, session 6): behind its venue on output it sends zero,
-     * unless run against its older pin — `venue.hold`. See [VenueHoldService].
+     * The current show's hold (venue plan P5, session 6): behind its venue on output it sends zero
+     * on every unparked channel, unless run against its older pin — `venue.hold`. See [VenueHoldService].
      */
     val venueHold: VenueHoldService by lazy { VenueHoldService(this) }
 
@@ -714,7 +714,9 @@ class State(val config: ApplicationConfig) {
      * [DeskSelection] and `docs/lighting-composition-model.md` §"Layer 2".
      */
     val deskSelection: DeskSelection by lazy {
-        DeskSelection(rigOrder = ::buskRigOrder) { runCatching { show.fixtures }.getOrNull() }
+        // Not a show being torn down: its registry empties as it goes, and a prune against that
+        // would drop every target — on a reload, the selection the reload exists to keep.
+        DeskSelection(rigOrder = ::buskRigOrder) { runCatching { show.takeUnless { it.isClosing }?.fixtures }.getOrNull() }
     }
 
     /**
@@ -1001,28 +1003,42 @@ class State(val config: ApplicationConfig) {
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
-            projectManager.projectChangedFlow.collect {
-                // Before the publisher rebuilds: a selection naming the old project's heads must
-                // not survive into the new show's index, and an encoder bank pointing at an
-                // attribute the new rig has no fixture for would leave every strip encoder dark.
-                deskSelection.clear()
-                encoderBankState.clearAll()
-                // A page id belongs to one project's page list, so carrying one across would show
-                // a page that is not there — or, worse, another project's page by id collision.
-                buskPageState.clear()
-                // And the hand, for the same reason: it holds a record id from the project being
-                // left, and the place mutations that id would reach are the new project's. Like the
-                // two clears above this runs in the collector, so there is a window after the switch
-                // where a stale chip is still shown; also like them it is harmless, because every
-                // door scopes its lookup to the *new* project and a stale id simply fails to
-                // resolve rather than landing on another project's row.
-                handState.drop()
+            projectManager.projectChangedFlow.collect { event ->
+                // The same project reloaded (a sync pull, a venue Update…; `ShowCarry`) keeps the
+                // desk as it was — the clears below are about another project's ids, and the reload
+                // brought back what the old show was running — less whatever the reload removed: a
+                // head the pull unpatched, a page or a held record it deleted.
+                val reload = event.reload
+                if (reload) {
+                    // The page and the hand read the database; a desk shutting down under the
+                    // collector must not have that escape it, so each is best-effort.
+                    deskSelection.prune()
+                    runCatching { buskPageState.reconcile() }
+                    BuskPadKind.entries.forEach { kind -> runCatching { handState.reconcile(kind) } }
+                } else {
+                    // Before the publisher rebuilds: a selection naming the old project's heads must
+                    // not survive into the new show's index, and an encoder bank pointing at an
+                    // attribute the new rig has no fixture for would leave every strip encoder dark.
+                    deskSelection.clear()
+                    encoderBankState.clearAll()
+                    // A page id belongs to one project's page list, so carrying one across would show
+                    // a page that is not there — or, worse, another project's page by id collision.
+                    buskPageState.clear()
+                    // And the hand, for the same reason: it holds a record id from the project being
+                    // left, and the place mutations that id would reach are the new project's. Like the
+                    // two clears above this runs in the collector, so there is a window after the switch
+                    // where a stale chip is still shown; also like them it is harmless, because every
+                    // door scopes its lookup to the *new* project and a stale id simply fails to
+                    // resolve rather than landing on another project's row.
+                    handState.drop()
+                }
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
                 // A live cue belongs to the show being left; the new one starts with its base. The
-                // programmer's scenery names the old project's elements, so it goes first.
-                programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
-                sceneryService.attach(projectManager.show, GlobalScope)
+                // programmer's scenery names the old project's elements, so it goes first. A reload
+                // keeps both: its show GO'd the live cues again and carried the programmer.
+                programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull(), reload = reload)
+                sceneryService.attach(projectManager.show, GlobalScope, reload = reload)
                 // The arm drops on a project switch: the new show's cannons start disarmed, its tubes
                 // are read afresh, and nothing the old show scheduled fires (stage-view plan session 9).
                 effectsService.attach(projectManager.show)

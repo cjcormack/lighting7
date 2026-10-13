@@ -37,7 +37,7 @@ internal fun Route.routeApiRestVenueExtract(state: State) {
         )
         if (!result.dryRun) {
             val current = transaction(state.database) { state.projectManager.currentProject.id.value }
-            if (current == resource.id) state.projectManager.switchProject(resource.id)
+            if (current == resource.id) state.projectManager.switchProject(resource.id, reload = true)
             state.show.fixtures.projectDetailsChanged(resource.id)
             result.venueId?.let { state.show.fixtures.projectDetailsChanged(it) }
         }

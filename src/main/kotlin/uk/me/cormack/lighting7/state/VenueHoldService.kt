@@ -37,7 +37,7 @@ private val logger = LoggerFactory.getLogger("VenueHoldService")
  * - **Judged by the loader**, before it builds a controller (`DbFixtureLoader`, through the show's
  *   [uk.me.cormack.lighting7.show.RigHold]): every load of the current project — opening it, a patch
  *   edit, an Update, a sync pull that moves the pin — judges afresh. Held means every controller sends
- *   zero on every channel, above park; the show still composes and draws. A publish or a venue pull
+ *   zero on every channel but a parked one; the show still composes and draws. A publish or a venue pull
  *   that installs a newer version re-judges the live show too ([refreshCurrent]), but never blacks out
  *   one that is running: it carries on *run against* its pin, guarded, and opens held next time.
  * - **Run against** lifts the hold for **this pin pair on this desk run**: it is runtime only, survives

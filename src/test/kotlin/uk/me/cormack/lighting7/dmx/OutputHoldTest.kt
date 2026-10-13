@@ -13,9 +13,10 @@ import kotlin.test.assertTrue
 
 /**
  * The show's hold on the wire (venue plan P5, session 6; `dmx/OutputHold.kt`): held, every channel goes
- * out at zero — a parked one too, because the hold is checked above park — while the channel
- * listeners, and so every view, still hear what the show composed; reserved channels go out idle and
- * the listeners hear that, since it is what the wire carries.
+ * out at zero but a parked one, which goes out at its park — a hard-powered fixture on a parked dimmer
+ * is not power-cycled by a show opening held — while the channel listeners, and so every view, still
+ * hear what the show composed; reserved channels go out idle and the listeners hear that, since it is
+ * what the wire carries.
  */
 class OutputHoldTest {
 
@@ -30,7 +31,7 @@ class OutputHoldTest {
     private fun ByteArray.at(channel: Int): UByte = this[channel - 1].toUByte()
 
     @Test
-    fun `held, every channel goes out at zero — parked ones included — while listeners hear the show`() = runBlocking {
+    fun `held, every channel but a parked one goes out at zero while listeners hear the show`() = runBlocking {
         val parks = MutableParkSource().apply { park(universe = 0, channel = 5, value = 200u) }
         val hold = OutputHold().apply { setHeld(true) }
         val transport = RecordingTransport()
@@ -50,11 +51,13 @@ class OutputHoldTest {
         try {
             assertTrue(controller.held)
             val frame = transport.nextFrame()
-            assertTrue(frame.all { it == 0.toByte() }, "a held frame is all zeros, park included")
+            assertEquals(200u.toUByte(), frame.at(5), "a parked channel gets through the hold")
+            assertTrue(frame.withIndex().all { (i, b) -> i == 4 || b == 0.toByte() }, "every other channel is zero")
             // Composition carries on underneath: the buffer, getValue (park included) and the listeners.
             controller.setValue(9, 128u)
             val held = transport.frameWhere { true }
-            assertTrue(held.all { it == 0.toByte() })
+            assertEquals(0u.toUByte(), held.at(9))
+            assertEquals(200u.toUByte(), held.at(5))
             assertEquals(200u.toUByte(), controller.getValue(5), "getValue still reads through park")
             assertEquals(128u.toUByte(), controller.getValue(9))
             val change = withTimeout(2_000) {
@@ -115,7 +118,7 @@ class OutputHoldTest {
         assertEquals(180u.toUByte(), mock.transmittedValue(3))
         hold.setHeld(true)
         assertTrue(mock.held)
-        assertEquals(0u.toUByte(), mock.transmittedValue(3), "held is above park")
+        assertEquals(180u.toUByte(), mock.transmittedValue(3), "a park gets through the hold")
         assertEquals(0u.toUByte(), mock.transmittedValue(4))
         assertEquals(180u.toUByte(), mock.getEffectiveValue(3), "what the views draw is unchanged")
         assertEquals(90u.toUByte(), mock.getEffectiveValue(4))

@@ -37,7 +37,7 @@ describe('bannerMessage', () => {
   it('is the board’s copy', () => {
     expect(bannerMessage({ kind: 'held', venue: 'Commemoration Hall', pinned: 3, installed: 5 }, 'Spring Concert')).toBe(
       'Output held — this show is in Blind. It uses Commemoration Hall v3; the hall has been re-patched since (v5 is as hung). ' +
-        'Its addresses would drive whatever is hung there now.',
+        'Its addresses would drive whatever is hung there now; only parked channels reach the rig.',
     )
     expect(bannerMessage({ kind: 'running', venue: 'Commemoration Hall', pinned: 3, installed: 5 }, 'Spring Concert')).toBe(
       "Running against v3. Live output uses the old house patch. v5's trigger and command channels stay guarded.",

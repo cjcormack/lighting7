@@ -133,6 +133,9 @@ class CueRunStateTracker internal constructor(
     /** The cue an operator has explicitly armed on [stackId], if any. */
     fun getStandbyCueId(stackId: Int): Int? = standbyCueIds[stackId]
 
+    /** Every armed standby, stack → cue: what a carried reload (`ShowCarry`) re-arms. */
+    fun armedStandbys(): Map<Int, Int> = HashMap(standbyCueIds)
+
     /**
      * The cue the next GO on [stackId] will fire: the armed standby when one is set and isn't
      * already live, else the positional next. Null at the end of a non-looping stack.

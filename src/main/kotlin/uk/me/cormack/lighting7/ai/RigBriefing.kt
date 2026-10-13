@@ -88,7 +88,7 @@ class RigBriefing(private val state: State) {
                 sb.appendLine()
                 sb.appendLine(
                     "**Output is held.** This show is on v${hold.pinned} and ${o.venueName} v${hold.installed} changes its " +
-                        "patch, so every controller sends zero: cues, looks and the programmer still compose and draw, but " +
+                        "patch, so every controller sends zero on every unparked channel: cues, looks and the programmer still compose and draw, but " +
                         "nothing reaches the rig until the operator updates the show to v${hold.installed} or runs it " +
                         "against v${hold.pinned} (the venue banner's *Review update* and *Run against*).",
                 )

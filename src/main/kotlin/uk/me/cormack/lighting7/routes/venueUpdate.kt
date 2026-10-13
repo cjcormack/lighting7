@@ -62,7 +62,7 @@ internal fun Route.routeApiRestVenueUpdate(state: State) {
                 // judges its hold afresh (lifted, now it is on the version it was behind). The update
                 // is committed by now, so a reload that fails is logged, not answered as a failed update.
                 if (current == projectId) {
-                    runCatching { state.projectManager.switchProject(projectId) }
+                    runCatching { state.projectManager.switchProject(projectId, reload = true) }
                         .onFailure { logger.error("Project {} was updated but did not reload: {}", projectId, it.message, it) }
                 }
                 state.show.fixtures.projectDetailsChanged(projectId)

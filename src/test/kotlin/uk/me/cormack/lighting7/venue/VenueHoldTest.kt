@@ -47,7 +47,7 @@ import kotlin.test.assertTrue
 
 /**
  * A show that is behind its venue (venue plan §3.1, P5, D7; session 6): the classification, the hold —
- * zeros on the wire above park while the show composes — the refusals of arm, fire and command, *Run
+ * zeros on the wire but for a park while the show composes — the refusals of arm, fire and command, *Run
  * against* with the installed version's trigger channels kept idle, and what drops or keeps it.
  */
 class VenueHoldTest : RouteIntegrationTest() {
@@ -80,7 +80,7 @@ class VenueHoldTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a held show sends zero above park and still composes, and arm, fire and command are refused`() = testApplication {
+    fun `a held show sends zero but for a park and still composes, and arm, fire and command are refused`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val f = seedShowOnVenue(state)
@@ -101,7 +101,7 @@ class VenueHoldTest : RouteIntegrationTest() {
         assertEquals(200u.toUByte(), controller.getEffectiveValue(hex.firstChannel), "the show composes and the views draw it")
         assertEquals(150u.toUByte(), controller.getValue(hex.firstChannel + 1), "park still reads through")
         assertEquals(0u.toUByte(), controller.transmittedValue(hex.firstChannel), "held: the wire carries zero")
-        assertEquals(0u.toUByte(), controller.transmittedValue(hex.firstChannel + 1), "held is above park")
+        assertEquals(150u.toUByte(), controller.transmittedValue(hex.firstChannel + 1), "a park gets through the hold")
 
         // Arm, fire and command: VENUE_HOLD. A rehearsal is drawn and sends nothing, so it stands.
         awaitEffectsOn(f.showId)
@@ -226,6 +226,38 @@ class VenueHoldTest : RouteIntegrationTest() {
         open(projectId)
         open(f.showId)
         assertTrue(state.venueHold.status.value.held)
+    }
+
+    @Test
+    fun `an Update that lifts the hold brings the show up from what the rig showed, not the held composition`() = testApplication {
+        mountTestApp(state)
+        val f = seedShowOnVenue(state)
+        val free = freeHex(f)
+        publish(f, "Re-address $free") { draftPatch(f, free).startChannel = 260 }
+        open(f.showId)
+        assertTrue(state.venueHold.status.value.held)
+
+        // Held: the show composes onto its old addresses, and a park stands on the wire.
+        val hex = state.show.fixtures.untypedFixture(free) as uk.me.cormack.lighting7.fixture.DmxFixture
+        val old = state.show.fixtures.controllerOrNull(hex.universe) as MockDmxController
+        old.setValue(hex.firstChannel, 200u)
+        runBlocking { state.show.parkManager.park(hex.universe.universe, 500, 180u) }
+        assertEquals(0u.toUByte(), old.transmittedValue(hex.firstChannel))
+
+        val result = runBlocking { state.venueUpdate.update(f.showId, null, emptyList(), dryRun = false) }
+        assertFalse(result.dryRun)
+        runBlocking { state.projectManager.switchProject(f.showId, reload = true) }
+
+        assertFalse(state.venueHold.status.value.held, "on the installed version: no hold")
+        val frozen = checkNotNull(old.frozen) { "the held show left on its last frame" }
+        assertEquals(0u.toUByte(), frozen[hex.firstChannel], "the held composition never reached the wire, so it is not carried")
+        assertEquals(180u.toUByte(), frozen[500], "the park is carried")
+        val fresh = state.show.fixtures.controllerOrNull(hex.universe) as MockDmxController
+        assertEquals(180u.toUByte(), fresh.transmittedValue(500))
+        assertTrue(
+            fresh.writesTo(hex.firstChannel).none { it == 200u.toUByte() },
+            "the old patch's level is never written to its old address: ${fresh.writesTo(hex.firstChannel)}",
+        )
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

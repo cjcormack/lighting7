@@ -473,13 +473,16 @@ for each channel:
     value = parked ?: modifiers(currentValues[channel])   // as above
     value = reserved[channel]?.guard(value) ?: value      // run-against only, below
     listeners hear value                                    // what every view draws
-wire = held ? zeros : values
+wire = held ? (parked ? value : 0 for each channel) : values
 ```
 
-- **Above park, above every modifier.** Held, every channel goes out at zero — a parked one too. A
-  park is the show's, and a v3 park on a v5 rig is as wrong as a v3 cue, so it is not the operator's
-  hand on *this* rig. `DmxController.held` says so; `MockDmxController.transmittedValue` is the wire for
-  a test.
+- **Above every modifier; a park gets through.** Held, every channel goes out at zero *but a parked
+  one*, which goes out at its park (after its reserve). A park is the operator's hand on the channel —
+  typically a hard-powered fixture's dimmer held up — and zeroing it would power-cycle that fixture
+  because its show opened behind its venue. The hold used to sit above park too, on the argument that a
+  v3 park on a v5 rig is as wrong as a v3 cue; the operator decided the fixture matters more.
+  `DmxController.held` says the show is held; `MockDmxController.transmittedValue` is the wire for a
+  test.
 - **The show composes and draws as normal.** The buffer, `getValue` (park included) and the channel
   listeners — `channelState`, the Stage view, the channel views, Preview, the surfaces' feedback —
   carry on as if the hold were not there: only the bytes handed to the transport are zeroed. That is
@@ -504,9 +507,61 @@ wire = held ? zeros : values
   output, held or running against (`state/VenueHoldService.kt`); a rehearsed fire, drawn and never
   sent, is not. Programmer Blind is unchanged — it is the programmer's gate, the hold is the show's.
 
-Regression coverage: `OutputHoldTest` (the wire against the listeners, park, the reserves) and
-`venue/VenueHoldTest` (a held show composes and sends zero, the refusals, the reserved trigger channel
-under *Run against*).
+Regression coverage: `OutputHoldTest` (the wire against the listeners, park through the hold, the
+reserves) and `venue/VenueHoldTest` (a held show composes and sends zero but for a park, the refusals,
+the reserved trigger channel under *Run against*).
+
+## Handing the rig from one show to the next
+
+A project switch and a **reload** (the current project again — a sync pull, a venue Update, Detach,
+Extract, a venue's Discard all reload through `ProjectManager.switchProject`) tear the whole `Show`
+down and build another. The rule both keep: a channel goes from its old value to its new one **without
+a frame at zero** unless zero is where the next show puts it.
+
+- **Freeze, then tear down.** `ProjectManager.shutdownShow` first freezes every outgoing controller on
+  the frame it leaves (`DmxController.freeze`: the transmit loop sends that frame, park still overlaid,
+  whatever the buffer does). Only then is the FX engine stopped — whose reset of every effect-covered
+  property used to reach the wire for a frame or two, a dip — and the controllers closed.
+- **The last frame goes first.** `ArtNetController.close` sends its final frame from its own thread as
+  the cancel lands, which could follow a successor's first frame on the same universe.
+  `Fixtures.register(removeUnused = true)` closes the outgoing controllers and waits for each one's
+  final frame (`awaitClosed`, 250 ms at most) *outside* its lock — the final frame calls the channel
+  listener, which takes the read lock — before its block can build the successors. Every patch-edit
+  rebuild takes the same path.
+- **A reload is asked for, never inferred.** `switchProject(id, reload = true)` is passed by the
+  callers that changed the current project's rows underneath it — a sync pull
+  (`RemoteSyncEngine.reloadShowIfActive`), a venue Update, Detach, Extract (REST and MCP) and a
+  venue's Discard. Every other switch to the current project — `POST /set-current`, MCP's
+  `switch_project` — is a clean restart: the switch rules below, with the project's own parks as
+  the incoming ones, so its parked channels hold their level and everything else stops.
+  `ProjectChangedEvent.reload` tells `State`'s collector which it was.
+- **A switch** leaves a blackout, except on a channel the incoming project parks
+  (`ParkManager.storedParks`), which stays as it was until the incoming park takes it: a channel both
+  projects park goes from one park to the other. A channel only the outgoing project parks goes to zero
+  with the incoming show's first frame — parks are per project, and that is the incoming project's word.
+- **A reload** carries the rig across (`show/ShowCarry.kt`): the outgoing frame **as the rig shows
+  it** — a parked channel at its park, and a held controller at zero bar its parks, so a reload
+  that lifts a venue hold brings the new show up from dark rather than putting the held show's
+  old-patch levels on the new addresses — each live stack's live cue and each armed standby, the
+  `ProgrammerStore` itself (values, layers, sideband, Blind) with the `LocateManager` that pairs
+  with its LOCATE slots, and every effect no cue or programmer layer owns. The successor's controllers are seeded with the frame and **frozen on it**
+  (`Show.start(seedValues)`) while `Show.resume` puts the effects back, GOes each cue again (events not
+  re-fired; its auto-advance timer starts again from the reload), re-arms each standby, re-cooks the programmer's layers and republishes it, publishes every patched property from
+  whatever now composes it (so a property nothing drives any more releases to its base), and zeroes
+  every channel no fixture covers and no programmer channel holds. Then it unfreezes, ramping every
+  channel the rebuild moved from its carried value to its new one over `RESUME_FADE_MS` (2 s). A
+  universe the reloaded project no longer has is left dark. Each resume step is guarded on its own, so
+  one that fails is logged and the rest still run, and the freeze is always lifted. Effects restart
+  their phase; cues applied outside a stack (`apply_cue`) are not brought back. The desk selection, encoder bank, busk page, hand
+  and the programmer's scenery stay (`State`'s project collector skips their clears on
+  `ProjectChangedEvent.reload`), each pruned of what the reload removed.
+
+Regression coverage: `dmx/ControllerHandoverTest` (freeze, `awaitClosed`, no old frame after a
+successor's first), `state/ProjectReloadCarryTest` (a reload with a cue, the programmer, an effect
+and a park; a crossfaded change and a release; a dropped park handed down; standby and Locate carried;
+the selection pruned; a same-id switch without `reload` a clean start; a switch between two projects
+that park) and `venue/VenueHoldTest` (an Update that lifts the hold starts from the wire, not the
+held composition).
 
 ## Parking
 

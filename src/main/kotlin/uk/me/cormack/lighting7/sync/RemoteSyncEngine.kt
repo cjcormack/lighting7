@@ -1223,7 +1223,7 @@ class RemoteSyncEngine(
         }
         if (!isActive) return
         try {
-            state.projectManager.switchProject(projectId)
+            state.projectManager.switchProject(projectId, reload = true)
         } catch (e: Exception) {
             logger.warn("Failed to hot-reload show after pull for project {}: {}", projectId, e.message)
         }

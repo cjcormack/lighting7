@@ -14,7 +14,7 @@ sealed class VenueOutMessage : OutMessage()
 
 /**
  * The current show's hold (venue plan P5, D7): [held] when it is behind its venue on output and sends
- * zero on every channel, [runAgainst] when the operator has lifted that for the session, [pinned] the
+ * zero on every channel but a parked one, [runAgainst] when the operator has lifted that for the session, [pinned] the
  * version the show uses and [installed] the venue's latest. All null / false for a standalone show,
  * a venue, and a show on its installed version. `StateFlow`-backed, so the subscription is the connect
  * snapshot and every change is a whole frame.

@@ -23,11 +23,22 @@ sealed interface DmxController {
     val currentValues: Map<Int, UByte>
 
     /**
-     * Whether this controller is sending zero on every channel because its show is **held** (venue
-     * plan P5, `dmx/OutputHold.kt`): checked above park, after every modifier. The buffer, [getValue]
-     * and the channel listeners carry on as if it were not — a held show composes and draws as normal.
+     * Whether this controller is sending zero on every channel but a parked one because its show is
+     * **held** (venue plan P5, `dmx/OutputHold.kt`): checked after every modifier. The buffer,
+     * [getValue] and the channel listeners carry on as if it were not — a held show composes and
+     * draws as normal.
      */
     val held: Boolean get() = false
+
+    /**
+     * Pin what this controller transmits to [values] (channel → value, park still overlaid) from the
+     * next frame, whatever its buffer does meanwhile; null lets the buffer through again. A project
+     * switch or reload freezes the outgoing show's controllers on the frame it wants left on the rig
+     * *before* it tears the show down, so a teardown write — an effect resetting its property, the FX
+     * engine stopping — can never reach the wire as a dip; a reload's successor is frozen on the
+     * carried frame while it rebuilds what was running. No-op where nothing transmits.
+     */
+    fun freeze(values: Map<Int, UByte>?) {}
 
     fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>)
 
