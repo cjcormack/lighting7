@@ -108,6 +108,13 @@ class TelemetryTest : RouteIntegrationTest() {
         local.adoptDevCommit("fedcba9")
         assertEquals("lighting7@1.0.0+fedcba9", local.release)
         assertNull(SentryConfig.from(testAppConfig("sentry.tracesSampleRate" to "lots")).tracesSampleRate)
+
+        assertEquals(1.0, dev.idleSyncSampleRate, "empty follows tracesSampleRate")
+        assertEquals(0.2, release.idleSyncSampleRate)
+        val idle = SentryConfig.from(testAppConfig("sentry.idleSyncSampleRate" to "0.01"))
+        assertEquals(0.01, idle.idleSyncSampleRate)
+        assertEquals(0.01, settings(BuildInfo.Channel.DEV, idle).idleSyncSampleRate)
+        assertNull(SentryConfig.from(testAppConfig("sentry.idleSyncSampleRate" to "2")).idleSyncSampleRate)
     }
 
     @Test

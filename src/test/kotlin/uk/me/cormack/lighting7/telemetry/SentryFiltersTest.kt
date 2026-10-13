@@ -17,6 +17,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
+import uk.me.cormack.lighting7.plugins.ERROR_HANDLING_LOGGER
 import uk.me.cormack.lighting7.venue.VenueException
 import java.io.IOException
 import java.nio.channels.ClosedChannelException
@@ -31,7 +32,15 @@ class SentryFiltersTest {
 
     private fun eventFor(thrown: Throwable) = SentryEvent(thrown)
 
-    private fun requestEventFor(thrown: Throwable) = SentryEvent(thrown).apply { setTag(LISTENER_TAG, "local") }
+    private fun requestEventFor(thrown: Throwable) = SentryEvent(thrown).apply {
+        setTag(LISTENER_TAG, "local")
+        logger = ERROR_HANDLING_LOGGER
+    }
+
+    private fun routeEventFor(thrown: Throwable) = SentryEvent(thrown).apply {
+        setTag(LISTENER_TAG, "local")
+        logger = "routes.cloudSync"
+    }
 
     private val clientErrors = listOf(
         AuthenticationException("Not signed in"),
@@ -62,6 +71,7 @@ class SentryFiltersTest {
         for (thrown in clientErrors) {
             assertNull(SentryFilters.beforeSend(requestEventFor(thrown)), "expected a drop: $thrown")
             assertNotNull(SentryFilters.beforeSend(eventFor(thrown)), "expected a keep: $thrown")
+            assertNotNull(SentryFilters.beforeSend(routeEventFor(thrown)), "a route that logs it and answers 500 is a fault: $thrown")
         }
     }
 

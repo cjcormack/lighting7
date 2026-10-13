@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
@@ -86,7 +87,11 @@ class ProjectManager(
     /**
      * Switch to a different project at runtime.
      */
-    suspend fun switchProject(projectId: Int): Show {
+    suspend fun switchProject(projectId: Int): Show = Tracing.transactionSuspending("project.switch", "project.switch") {
+        switchProjectTraced(projectId)
+    }
+
+    private suspend fun switchProjectTraced(projectId: Int): Show {
         val newProject = transaction(database) {
             DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project with ID $projectId not found")
@@ -107,7 +112,7 @@ class ProjectManager(
 
         // Shutdown current show
         _show?.let { oldShow ->
-            shutdownShow(oldShow)
+            Tracing.span("project.unload") { shutdownShow(oldShow) }
         }
 
         // Update database: clear old current, set new current
@@ -127,17 +132,17 @@ class ProjectManager(
 
         // Create and start new show
         _currentProject = newProject
-        _show = createShow(newProject)
-        _show!!.start()
+        _show = Tracing.span("project.load") { createShow(newProject) }
+        Tracing.span("project.start") { _show!!.start() }
 
         // Emit change event for WebSocket broadcast
-        _projectChangedFlow.emit(
+        Tracing.spanSuspending("project.notify") { _projectChangedFlow.emit(
             ProjectChangedEvent(
                 previousProjectId = previousProjectId,
                 newProjectId = projectId,
                 newProjectName = newProject.name
             )
-        )
+        ) }
 
         return _show!!
     }

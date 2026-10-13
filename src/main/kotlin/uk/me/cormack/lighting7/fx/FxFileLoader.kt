@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
+import io.sentry.ISpan
+import uk.me.cormack.lighting7.telemetry.ScriptCacheProbe
+import uk.me.cormack.lighting7.telemetry.Tracing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -103,65 +106,72 @@ class FxFileLoader(
         // parallel pass is not final — it may still be retried below — so counting it here
         // would drive the (monotonic) boot bar to done == total before the sequential retry
         // even starts, leaving the UI reporting "compiled" while it recompiles in silence.
-        fun compileOne(p: ParsedFx, isFinalAttempt: Boolean): CompiledFxScript? {
+        // Workers run on threads the caller's Sentry scope is not current on, so each span names its parent.
+        var phase: ISpan? = null
+        fun compileOne(p: ParsedFx, isFinalAttempt: Boolean): CompiledFxScript? = Tracing.childOf(phase, "fx.compile", p.relativePath) { span ->
+            ScriptCacheProbe.take()
             val compiled = try {
                 compiler.compile(p.scriptBody, p.effectMode)
             } catch (e: Exception) {
                 logger.warn("Compiling fx/{} threw", p.relativePath, e)
                 null
             }
+            span?.setData("cache", ScriptCacheProbe.tag(ScriptCacheProbe.take()))
             val succeeded = compiled != null && compiled.isSuccess
             if (succeeded || isFinalAttempt) progress?.invoke(completed.incrementAndGet(), total)
-            return compiled
+            compiled
         }
 
-        val compileInParallel = parallel && parsed.size > 1
-        val firstPass: List<Pair<ParsedFx, CompiledFxScript?>> = if (compileInParallel) {
-            runBlocking {
-                coroutineScope {
-                    parsed.map { p -> async(Dispatchers.Default) { p to compileOne(p, false) } }.awaitAll()
-                }
-            }
-        } else {
-            parsed.map { p -> p to compileOne(p, true) }
-        }
-
-        // Stage 2b: re-run the failures with no concurrency, but ONLY when the first pass was
-        // actually parallel — the sole thing this pass can establish is whether contention on
-        // the scripting host shared across workers caused the failure. After a sequential first
-        // pass the conditions are identical, so a retry would just double the compile cost and
-        // reach the same answer.
-        //
-        // Note what this cannot fix: when the compiled-script disk cache is enabled
-        // (ScriptCache.kt, the default) the host resolves a jar keyed by source + config +
-        // build fingerprint, so a *corrupt cached jar* fails identically on the retry. Clearing
-        // `<appDataDir>/script-cache` is the fix for that, which is why the failure log below
-        // says so rather than blaming the build outright.
-        val failedFirstPass = firstPass.count { (_, c) -> c == null || !c.isSuccess }
-        val compiledResults: List<Pair<ParsedFx, CompiledFxScript?>> = if (failedFirstPass == 0 || !compileInParallel) {
-            firstPass
-        } else {
-            logger.warn(
-                "{} of {} built-in effect(s) failed the parallel compile; retrying sequentially",
-                failedFirstPass, total,
-            )
-            firstPass.map { (p, compiled) ->
-                if (compiled != null && compiled.isSuccess) {
-                    p to compiled
-                } else {
-                    // compile() caches failures (so a user hammering "Test" on a broken script
-                    // doesn't re-run the compiler each time), so drop the entry or the retry
-                    // would just hand back the cached error without recompiling.
-                    compiler.invalidate(p.scriptBody, p.effectMode)
-                    val retried = compileOne(p, true)
-                    if (retried != null && retried.isSuccess) {
-                        logger.warn(
-                            "fx/{} compiled on sequential retry — the parallel compile pass is " +
-                                "unreliable on this JVM; consider fx.parallelCompile=false",
-                            p.relativePath,
-                        )
+        val compiledResults: List<Pair<ParsedFx, CompiledFxScript?>> = Tracing.span("fx.compile", "built-in effects") { span ->
+            phase = span
+            val compileInParallel = parallel && parsed.size > 1
+            val firstPass: List<Pair<ParsedFx, CompiledFxScript?>> = if (compileInParallel) {
+                runBlocking {
+                    coroutineScope {
+                        parsed.map { p -> async(Dispatchers.Default) { p to compileOne(p, false) } }.awaitAll()
                     }
-                    p to (retried ?: compiled)
+                }
+            } else {
+                parsed.map { p -> p to compileOne(p, true) }
+            }
+
+            // Stage 2b: re-run the failures with no concurrency, but ONLY when the first pass was
+            // actually parallel — the sole thing this pass can establish is whether contention on
+            // the scripting host shared across workers caused the failure. After a sequential first
+            // pass the conditions are identical, so a retry would just double the compile cost and
+            // reach the same answer.
+            //
+            // Note what this cannot fix: when the compiled-script disk cache is enabled
+            // (ScriptCache.kt, the default) the host resolves a jar keyed by source + config +
+            // build fingerprint, so a *corrupt cached jar* fails identically on the retry. Clearing
+            // `<appDataDir>/script-cache` is the fix for that, which is why the failure log below
+            // says so rather than blaming the build outright.
+            val failedFirstPass = firstPass.count { (_, c) -> c == null || !c.isSuccess }
+            if (failedFirstPass == 0 || !compileInParallel) {
+                firstPass
+            } else {
+                logger.warn(
+                    "{} of {} built-in effect(s) failed the parallel compile; retrying sequentially",
+                    failedFirstPass, total,
+                )
+                firstPass.map { (p, compiled) ->
+                    if (compiled != null && compiled.isSuccess) {
+                        p to compiled
+                    } else {
+                        // compile() caches failures (so a user hammering "Test" on a broken script
+                        // doesn't re-run the compiler each time), so drop the entry or the retry
+                        // would just hand back the cached error without recompiling.
+                        compiler.invalidate(p.scriptBody, p.effectMode)
+                        val retried = compileOne(p, true)
+                        if (retried != null && retried.isSuccess) {
+                            logger.warn(
+                                "fx/{} compiled on sequential retry — the parallel compile pass is " +
+                                    "unreliable on this JVM; consider fx.parallelCompile=false",
+                                p.relativePath,
+                            )
+                        }
+                        p to (retried ?: compiled)
+                    }
                 }
             }
         }

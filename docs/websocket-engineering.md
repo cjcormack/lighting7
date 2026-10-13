@@ -1067,21 +1067,17 @@ still showing the boot overlay — harmless, since the invalidations are idempot
 for (frame in incoming) {
     try {
         when (val message = converter?.deserialize<InMessage>(frame)) {
-            is ChannelInMessage -> handleChannel(scope, message)
-            is ParkInMessage -> handlePark(scope, message)
-            is FxInMessage -> handleFx(scope, message)
-            is ProjectInMessage -> handleProject(scope, message)
-            is SurfaceInMessage -> handleSurface(scope, message)
-            is ProgrammerInMessage -> handleProgrammer(scope, message)
-            is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
-            is SelectionInMessage -> handleSelection(scope, message)
-            is WindowsInMessage -> handleWindows(scope, message)
-            is BuskInMessage -> handleBusk(scope, message)
             null -> System.err.println("WS /api: undeserializable frame ignored")
+            else -> scope.traceMessage(message) { dispatch(scope, message) }
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { /* logged */ }
 }
 ```
+
+`dispatch` is the `when` over the domains (`is ChannelInMessage -> handleChannel(scope, message)`,
+…). `traceMessage` (`plugins/SentryTracing.kt`) makes a gesture frame a Sentry transaction and
+does nothing for a continuous or snapshot one, by `TraceSampling.WS_MESSAGES` —
+`docs/observability-engineering.md` §"Sampling".
 
 The per-message guard is load-bearing: one bad frame (unknown universe, stale fixture key,
 malformed payload) must not tear down the operator's whole socket.
@@ -1186,14 +1182,16 @@ exhaustively — the compiler then refuses to let a new message ship without a h
 
 ## Adding a domain
 
-One file, four edits:
+One file, five edits:
 
 1. Define `sealed class XxxInMessage : InMessage()` (and `XxxOutMessage : OutMessage()`) with the
    leaf messages and their `@SerialName`s.
 2. Add `handleXxx(scope, message)` with an exhaustive `when`.
 3. Add `setupXxxSubscriptions(scope)` if the family has live state — and push its connect snapshot
    there, per §"Snapshot rule".
-4. Add one arm to the dispatch `when` in `Sockets.kt` and one call to setup.
+4. Add one arm to the `dispatch` `when` in `Sockets.kt` and one call to setup.
+5. Classify each new inbound frame in `TraceSampling.WS_MESSAGES` — continuous, snapshot or
+   gesture; `TraceSamplingTest` fails until it has a row.
 
 Register in the **pre-warm-up band** only if the family reads nothing off `state.show`; everything
 show-scoped goes after the gate. Then add the family to the tables above.
@@ -1205,6 +1203,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/Sockets.kt` | Plugin config, `/api` endpoint, auth + warm-up gates, frame dispatch, teardown |
 | `plugins/SocketScope.kt` | Per-connection context: `send`, `subscribe`, `sendSnapshot`, `cancelAll` |
 | `plugins/SocketMessages.kt` | The `InMessage` / `OutMessage` sealed roots |
+| `plugins/SentryTracing.kt` | `traceMessage`: a gesture frame as a Sentry transaction (and the HTTP plugin) |
 | `plugins/BootSocket.kt` | `bootProgressState` |
 | `plugins/BroadcastSocket.kt` | `FixturesChangeListener` wiring and the 15 broadcast frames |
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |

@@ -16,6 +16,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.AddressFacet
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
@@ -114,10 +115,16 @@ class VenueUpdate(private val state: State) {
         run(projectId, to, decisions, dryRun)
 
     private suspend fun run(projectId: Int, toRequested: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): VenueUpdateDto =
+        Tracing.transactionSuspending("venue.update", "venue.update") { span ->
+            span?.setData("venue.dry_run", dryRun)
+            runTraced(projectId, toRequested, decisions, dryRun)
+        }
+
+    private suspend fun runTraced(projectId: Int, toRequested: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): VenueUpdateDto =
         withContext(Dispatchers.IO) {
             val pin = transaction(state.database) { pinOf(projectId, toRequested) }
             // The hall's changes, read through the version cache before the transaction (snapshots never change).
-            val hall = state.venueVersions.diff(pin.venueId, pin.from, pin.to)
+            val hall = Tracing.span("venue.diff", "v${pin.from} to v${pin.to}") { state.venueVersions.diff(pin.venueId, pin.from, pin.to) }
             val result = transaction(state.database) {
                 val outcome = apply(projectId, pin, decisions)
                 val blocked = outcome.blockers.isNotEmpty()

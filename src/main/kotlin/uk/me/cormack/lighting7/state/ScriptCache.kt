@@ -2,14 +2,18 @@ package uk.me.cormack.lighting7.state
 
 import io.ktor.server.config.ApplicationConfig
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.ScriptCacheProbe
+import uk.me.cormack.lighting7.telemetry.Tracing
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.security.MessageDigest
+import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.SourceCode
 import kotlin.script.experimental.api.baseClass
 import kotlin.script.experimental.host.ScriptingHostConfiguration
+import kotlin.script.experimental.jvm.CompiledJvmScriptsCache
 import kotlin.script.experimental.jvm.compilationCache
 import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvm.jvm
@@ -55,9 +59,11 @@ fun buildScriptingHostConfiguration(config: ApplicationConfig): ScriptingHostCon
         ScriptingHostConfiguration(defaultJvmScriptingHostConfiguration) {
             jvm {
                 compilationCache(
-                    CompiledScriptJarsCache { source, compilationConfiguration ->
-                        cacheDir.resolve("${cacheKey(source, compilationConfiguration, buildFingerprint)}.jar").toFile()
-                    },
+                    ProbedScriptsCache(
+                        CompiledScriptJarsCache { source, compilationConfiguration ->
+                            cacheDir.resolve("${cacheKey(source, compilationConfiguration, buildFingerprint)}.jar").toFile()
+                        },
+                    ),
                 )
             }
         }
@@ -127,4 +133,18 @@ private fun computeBuildFingerprint(): String {
         }
     }
     return md.digest().toHexString()
+}
+
+/** Says whether each lookup hit, as a `cache.get` span and through [ScriptCacheProbe]. */
+private class ProbedScriptsCache(private val delegate: CompiledJvmScriptsCache) : CompiledJvmScriptsCache {
+    override fun get(script: SourceCode, scriptCompilationConfiguration: ScriptCompilationConfiguration): CompiledScript? =
+        Tracing.span("cache.get", "compiled script jar") { span ->
+            delegate.get(script, scriptCompilationConfiguration).also { hit ->
+                span?.setData("cache.hit", hit != null)
+                ScriptCacheProbe.record(if (hit != null) ScriptCacheProbe.Source.DISK else ScriptCacheProbe.Source.COMPILED)
+            }
+        }
+
+    override fun store(compiledScript: CompiledScript, script: SourceCode, scriptCompilationConfiguration: ScriptCompilationConfiguration) =
+        delegate.store(compiledScript, script, scriptCompilationConfiguration)
 }

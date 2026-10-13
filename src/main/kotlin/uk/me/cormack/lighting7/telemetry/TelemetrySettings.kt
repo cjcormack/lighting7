@@ -21,17 +21,22 @@ data class SentryConfig(
     val tracesSampleRate: Double?,
     /** Null derives it from the build. */
     val environment: String?,
+    /** For an auto-sync run that changed nothing; null is [tracesSampleRate]. */
+    val idleSyncSampleRate: Double? = null,
 ) {
     companion object {
         fun from(config: ApplicationConfig): SentryConfig = SentryConfig(
             dsn = config.optionalString("sentry.dsn"),
             enabled = config.optionalBoolean("sentry.enabled", default = true),
-            tracesSampleRate = config.optionalString("sentry.tracesSampleRate")?.let { raw ->
-                raw.toDoubleOrNull()?.takeIf { it in 0.0..1.0 }
-                    ?: null.also { logger.warn("sentry.tracesSampleRate '{}' is not a number from 0 to 1; using the default", raw) }
-            },
+            tracesSampleRate = rate(config, "sentry.tracesSampleRate"),
             environment = config.optionalString("sentry.environment"),
+            idleSyncSampleRate = rate(config, "sentry.idleSyncSampleRate"),
         )
+
+        private fun rate(config: ApplicationConfig, key: String): Double? = config.optionalString(key)?.let { raw ->
+            raw.toDoubleOrNull()?.takeIf { it in 0.0..1.0 }
+                ?: null.also { logger.warn("{} '{}' is not a number from 0 to 1; using the default", key, raw) }
+        }
     }
 }
 
@@ -57,6 +62,9 @@ class TelemetrySettings(
 
     val environment: String = config.environment ?: if (build.channel == BuildInfo.Channel.RELEASE) "release" else "development"
     val tracesSampleRate: Double = config.tracesSampleRate ?: if (environment == "release") 0.2 else 1.0
+
+    /** The rate an auto-sync run that changed nothing is kept at (`TraceSampling.keepSyncRun`). */
+    val idleSyncSampleRate: Double = config.idleSyncSampleRate ?: tracesSampleRate
 
     /** The choice of an install that has never made one. */
     val defaultChoice: Boolean = build.channel == BuildInfo.Channel.DEV

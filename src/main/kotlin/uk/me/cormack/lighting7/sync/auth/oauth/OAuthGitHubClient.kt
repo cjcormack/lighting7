@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.net.URLEncoder
 import java.util.Base64
+import uk.me.cormack.lighting7.telemetry.installSentry
 
 /**
  * Narrow interface the [OAuthTokenProvider] depends on. Allows tests to substitute a
@@ -60,6 +61,7 @@ class OAuthGitHubClient(
         // GitHub returns its own JSON error shape on 4xx; we throw rather than letting
         // ContentNegotiation auto-decode into an unrelated class.
         expectSuccess = false
+        installSentry()
     }
 
     suspend fun exchangeCode(code: String, redirectUri: String): TokenResponse {

@@ -18,10 +18,12 @@ import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.routes.ErrorResponse
-import uk.me.cormack.lighting7.telemetry.withSentryCallScope
 import uk.me.cormack.lighting7.venue.VenueException
 
-private val logger = LoggerFactory.getLogger("error-handling")
+/** The logger StatusPages' own error lines use; Sentry's 4xx drop applies to these alone. */
+internal const val ERROR_HANDLING_LOGGER = "error-handling"
+
+private val logger = LoggerFactory.getLogger(ERROR_HANDLING_LOGGER)
 
 /**
  * Last-resort exception handler.
@@ -42,7 +44,7 @@ fun Application.configureErrorHandling() {
                 logger.warn("Unique constraint violation on {}", call.request.local.uri, cause)
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(cause.friendlyConstraintMessage()))
             } else {
-                call.withSentryCallScope { logger.error("Database error on {}", call.request.local.uri, cause) }
+                logger.error("Database error on {}", call.request.local.uri, cause)
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     ErrorResponse("Database error: ${cause.cause?.message ?: cause.message ?: "unknown"}"),
@@ -146,7 +148,7 @@ fun Application.configureErrorHandling() {
             // keeps structured concurrency intact.
             if (cause is CancellationException) throw cause
 
-            call.withSentryCallScope { logger.error("Unhandled exception on {}", call.request.local.uri, cause) }
+            logger.error("Unhandled exception on {}", call.request.local.uri, cause)
             call.respond(
                 HttpStatusCode.InternalServerError,
                 ErrorResponse(cause.message ?: cause::class.simpleName ?: "Internal server error"),

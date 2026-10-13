@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.fixture.lantern.focus
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
@@ -98,11 +99,17 @@ class VenueDetach(private val state: State) {
     private val logger = LoggerFactory.getLogger(VenueDetach::class.java)
 
     /** Detach [projectId]; with [dryRun] nothing is kept. The caller reloads a live show. */
-    suspend fun detach(projectId: Int, dryRun: Boolean): DetachResultDto = withContext(Dispatchers.IO) {
+    suspend fun detach(projectId: Int, dryRun: Boolean): DetachResultDto =
+        Tracing.transactionSuspending("venue.detach", "venue.detach") { span ->
+            span?.setData("venue.dry_run", dryRun)
+            detachTraced(projectId, dryRun)
+        }
+
+    private suspend fun detachTraced(projectId: Int, dryRun: Boolean): DetachResultDto = withContext(Dispatchers.IO) {
         // Refused before anything is judged, so a project that is not a show on a venue is answered by name.
         val showUuid = transaction(state.database) { requireDetachable(projectId).uuid.toString() }
         // How far behind the pin is: through the version cache, outside the transaction (it exports).
-        val behind = ShowBehind.judge(state, projectId)
+        val behind = Tracing.span("venue.behind") { ShowBehind.judge(state, projectId) }
         val copied = mutableListOf<String>()
         try {
             transaction(state.database) {

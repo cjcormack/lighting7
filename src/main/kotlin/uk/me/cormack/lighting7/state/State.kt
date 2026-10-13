@@ -69,6 +69,7 @@ import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
 import uk.me.cormack.lighting7.models.asInstant
 import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.telemetry.DbTracing
 
 private val logger = LoggerFactory.getLogger("State")
 
@@ -76,6 +77,10 @@ class State(val config: ApplicationConfig) {
     // Exposed's `Database.connect()` doesn't surface the underlying datasource, so the
     // reference is kept here for [shutdown] to drain the pool.
     private var dataSource: HikariDataSource? = null
+
+    /** When [initDatabase] opened and reconciled the schema: the boot trace's first span, taken before Sentry starts. */
+    var databaseInitWindow: Pair<java.time.Instant, java.time.Instant>? = null
+        private set
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
 
@@ -1231,6 +1236,7 @@ class State(val config: ApplicationConfig) {
     }
 
     private fun initDatabase(): Database {
+        val startedAt = java.time.Instant.now()
         val dbPath = config.optionalString("database.path")
             ?: appDataDir().resolve("lighting7.db").toString()
         val ds = HikariDataSource(HikariConfig().apply {
@@ -1243,7 +1249,7 @@ class State(val config: ApplicationConfig) {
             validate()
         })
         dataSource = ds
-        val database = Database.connect(ds)
+        val database = Database.connect(DbTracing.dataSource(ds))
 
         transaction(database) {
             // Create tables - order matters for FK constraints
@@ -1293,6 +1299,7 @@ class State(val config: ApplicationConfig) {
             ensureInstallRow()
         }
 
+        databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }
 

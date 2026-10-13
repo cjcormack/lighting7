@@ -9,6 +9,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoMachineOverride
@@ -85,6 +86,17 @@ class VenueExtract(private val state: State) {
      * With [dryRun] nothing is kept. The caller reloads a live show.
      */
     suspend fun extract(
+        showId: Int,
+        name: String,
+        include: Set<ExtractKind>,
+        dryRun: Boolean,
+        publishedBy: String?,
+    ): ExtractResultDto = Tracing.transactionSuspending("venue.extract", "venue.extract") { span ->
+        span?.setData("venue.dry_run", dryRun)
+        extractTraced(showId, name, include, dryRun, publishedBy)
+    }
+
+    private suspend fun extractTraced(
         showId: Int,
         name: String,
         include: Set<ExtractKind>,

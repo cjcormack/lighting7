@@ -134,6 +134,10 @@ class SentryRuntime(
         options.maxBreadcrumbs = 200
         options.isEnableUncaughtExceptionHandler = true
         options.tracesSampleRate = settings.tracesSampleRate
+        options.tracesSampler = SentryOptions.TracesSamplerCallback { TraceSampling.sample(it, settings.tracesSampleRate) }
+        options.beforeSendTransaction = SentryOptions.BeforeSendTransactionCallback { tx, _ -> SentryFilters.beforeSendTransaction(tx, settings.idleSyncSampleRate) }
+        // No outbound host is ours (D6): GitHub and Hue never get trace headers.
+        options.setTracePropagationTargets(emptyList())
         options.logs.isEnabled = true
         options.logs.beforeSend = SentryOptions.Logs.BeforeSendLogCallback(SentryFilters::beforeSendLog)
         options.beforeSend = SentryOptions.BeforeSendCallback { event, _ -> SentryFilters.beforeSend(event) }

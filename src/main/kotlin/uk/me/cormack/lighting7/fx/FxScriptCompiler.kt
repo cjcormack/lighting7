@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.telemetry.ScriptCacheProbe
 import uk.me.cormack.lighting7.scripts.*
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -72,6 +73,10 @@ class FxScriptCompiler(
      */
     fun compile(script: String, effectMode: EffectMode): CompiledFxScript {
         val cacheKey = "${effectMode.name}-${script.cacheKey()}"
+        cache[cacheKey]?.let {
+            ScriptCacheProbe.record(ScriptCacheProbe.Source.MEMORY)
+            return it
+        }
         return cache.getOrPut(cacheKey) {
             doCompileAndExtract(script, effectMode)
         }
