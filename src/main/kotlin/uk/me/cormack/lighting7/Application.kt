@@ -7,8 +7,12 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.auth.runBreakGlassIfRequested
 import uk.me.cormack.lighting7.mcp.startPublicListener
+import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.plugins.InstallChangedOutMessage
 import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
@@ -20,6 +24,10 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.appDataDir
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
+import uk.me.cormack.lighting7.telemetry.DevCommit
+import uk.me.cormack.lighting7.telemetry.InstallTags
+import uk.me.cormack.lighting7.telemetry.SentryRuntime
+import uk.me.cormack.lighting7.update.InstallKind
 
 fun main(argv: Array<String>) {
     // Resolve the data dir up front — before Ktor/config — since both the single-instance
@@ -61,6 +69,9 @@ fun main(argv: Array<String>) {
 
 fun Application.module() {
     val state = State(environment.config)
+    // Here and nowhere else, so tests never meet Sentry. After State, which opens the database
+    // that holds this install's consent.
+    startSentry(state)
 
     // Break-glass admin recovery and the zero-users warning live here, not in State's
     // constructor: tests build State dozens of times and must never scan the real data
@@ -137,6 +148,47 @@ private fun Application.runShowStartupGuarded(state: State) {
         log.error("Show startup failed", e)
     }
 }
+
+private fun Application.startSentry(state: State) {
+    if (InstallKind.fromEnv() == InstallKind.DEV) DevCommit.resolve()?.let(state.telemetry::adoptDevCommit)
+    val sentry = SentryRuntime(state.telemetry, appDataDir().resolve("sentry"), installTags(state) ?: InstallTags("unknown", "unknown", false))
+    sentry.applyNow(state.telemetry.enabled)
+    state.telemetry.onChange = sentry::apply
+    monitor.subscribe(ApplicationStopping) { sentry.close() }
+
+    fun tagProject(projectId: Int?) {
+        val (uuid, kind) = projectId?.let { projectContext(state, it) } ?: return
+        sentry.setProject(uuid, kind)
+    }
+    // Each body guarded: tagging must never end its collector, let alone the application.
+    launch {
+        state.bootProgress.flow.collect { status ->
+            runCatching {
+                sentry.setBootPhase(if (status.ready) null else status.phase.name.lowercase())
+                if (status.ready) tagProject(state.projectManager.currentProject.id.value)
+            }
+        }
+    }
+    launch {
+        state.projectManager.projectChangedFlow.collect { event -> runCatching { tagProject(event.newProjectId) } }
+    }
+    launch {
+        state.machineEventsFlow.collect { message ->
+            if (message is InstallChangedOutMessage) runCatching { installTags(state)?.let(sentry::setInstall) }
+        }
+    }
+}
+
+private fun installTags(state: State): InstallTags? = runCatching {
+    transaction(state.database) {
+        val install = DaoInstall.all().firstOrNull() ?: return@transaction null
+        InstallTags(install.uuid.toString(), install.friendlyName, InstallKind.fromEnv() == InstallKind.PACKAGED)
+    }
+}.getOrNull()
+
+private fun projectContext(state: State, projectId: Int): Pair<String, String>? = runCatching {
+    transaction(state.database) { DaoProject.findById(projectId)?.let { it.uuid.toString() to it.kind.name } }
+}.getOrNull()
 
 private fun Application.registerMdns(state: State) {
     val enabled = state.config.optionalBoolean("mdns.enabled", default = true)

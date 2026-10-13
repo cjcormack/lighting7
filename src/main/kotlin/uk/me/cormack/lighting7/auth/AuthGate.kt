@@ -61,7 +61,7 @@ fun Route.installAuthGate(state: State) {
         val auth = state.authService
         if (!auth.hasAnyUser) return@intercept
         val path = routingNormalisedPath(call.request.path())
-        if (isAuthExempt(path)) return@intercept
+        if (isAuthExempt(path, call.request.httpMethod)) return@intercept
 
         val user = call.resolveSessionUser(state)
         if (user == null) {
@@ -130,8 +130,11 @@ internal fun routingNormalisedPath(rawPath: String): String =
  * matches `/api/rest/auth/device-logins`, which would hand the mint endpoint to anyone on the
  * network. `AuthGateTest` pins this.
  */
-private fun isAuthExempt(path: String): Boolean =
+private fun isAuthExempt(path: String, method: HttpMethod): Boolean =
     path == "/api/rest/status" ||
+        // Read before sign-in, so a browser knows whether to report. GET only: an exempt path has
+        // no user attribute, which `requireAdmin` reads as allowed, so the PUT must stay gated.
+        (path == "/api/rest/install/telemetry" && method == HttpMethod.Get) ||
         path == "/api/rest/auth/status" ||
         path == "/api/rest/auth/login" ||
         path == "/api/rest/auth/setup" ||

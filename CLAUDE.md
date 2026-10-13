@@ -529,6 +529,7 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 
 ### Remote Access Endpoints
 - `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
+- `GET/PUT /api/rest/install/telemetry` - The install's Sentry switch, machine-local. `GET` is open to any caller, signed out included, on both listeners, answering `{enabled, release, environment, tracesSampleRate}`; `PUT {enabled}` is admin only and starts or stops Sentry live. `sentry.enabled = false` in local.conf wins. See `docs/observability-engineering.md`
 
 ### Cue Stack Run Endpoints
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
@@ -857,6 +858,7 @@ For deeper technical details, see the docs in `docs/`:
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery
 - [Windows Updates](docs/windows-updates.md) - The pinned MSI UpgradeCode, MSI version rules, `BuildInfo` in both jars, the GitHub release check, and the backend→launcher marker handshake that applies an update
+- [Observability](docs/observability-engineering.md) - Sentry: the install telemetry switch (`/install/telemetry`), what is sent and filtered, token scrubbing, and why only `Application.module()` starts it
 
 ## Windows updates — the load-bearing constants
 

@@ -113,6 +113,7 @@ write_conf() {
 # Written by scripts/cloud-session.sh — a throwaway cloud-session install.
 database { path = "" }
 mdns { enabled = false }
+sentry { environment = "cloud" }
 sync {
     # Pull-only: this install must never write to a show's repo. See
     # docs/sync-engineering.md §"Pull-only installs".

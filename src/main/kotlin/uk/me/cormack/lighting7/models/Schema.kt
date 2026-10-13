@@ -44,6 +44,7 @@ val ALL_TABLES: List<Table> = listOf(
     // After DaoUsers, which a grant references.
     DaoMcpOAuthClients, DaoMcpOAuthGrants,
     DaoRemoteAccessSettingsTable,
+    DaoTelemetrySettingsTable,
     // Machine-local one-shot tube state (stage-view plan session 9); keyed by patch uuid, no FK.
     DaoEffectTubeStates,
     // Machine-local: this desk's index of venue snapshots (venue plan session 2), after the projects.

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.telemetry.USER_SCRIPT
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
@@ -200,7 +201,11 @@ class CueTriggerManager(
                             || (trigger.delayMs != null && trigger.delayMs > 0)
                     if (hasTiming) {
                         val job = launchTimedAction(trigger.delayMs, trigger.intervalMs, trigger.randomWindowMs, scope) {
-                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                            try {
+                                executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                            } catch (e: Exception) {
+                                logger.error(USER_SCRIPT, "Error executing timed ACTIVATION script trigger for cue $cueId", e)
+                            }
                         }
                         if (job != null) jobs.add(job)
                     } else {
@@ -208,7 +213,7 @@ class CueTriggerManager(
                         try {
                             executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
                         } catch (e: Exception) {
-                            logger.error("Error executing ACTIVATION script trigger for cue $cueId", e)
+                            logger.error(USER_SCRIPT, "Error executing ACTIVATION script trigger for cue $cueId", e)
                         }
                     }
                 }
@@ -237,7 +242,7 @@ class CueTriggerManager(
             try {
                 executeScriptTrigger(trigger.scriptId, cueId, cueToStack[cueId], mutableListOf())
             } catch (e: Exception) {
-                logger.error("Error executing DEACTIVATION script trigger for cue $cueId", e)
+                logger.error(USER_SCRIPT, "Error executing DEACTIVATION script trigger for cue $cueId", e)
             }
         }
 
