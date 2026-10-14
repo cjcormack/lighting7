@@ -338,7 +338,7 @@ It should start from `docs/lighting-composition-model.md`.
 | 2 | S2 Chrome and defaults | — | |
 | 3 | S3 Cue list fixes | — | |
 | 4 | S4 Templates → palettes | — | |
-| 5 | R1 Cue model | — | |
+| 5 | R1 Cue model | — | [`cue-model-plan.md`](cue-model-plan.md) |
 | 6 | S5 Grand master | S4 | |
 | 7 | S6 Make rig safe, Undo / Quit desk | S4 | |
 | 8 | S10 Record polish | S4 | |

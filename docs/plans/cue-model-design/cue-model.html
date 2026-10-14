@@ -1,0 +1,452 @@
+<title>Shared Cue Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of plan sections, wide figures and tables scroll inside their own boxes.
+     Colour carries the model: amber = the cue (content), blue = a stack entry (place), teal = a loose hold. */
+  :root {
+    --bg:#f3f4f7; --panel:#ffffff; --fg:#161a22; --muted:#596171; --line:#d7dbe3; --soft:#eceef3;
+    --cue:#9a6200; --cue-bg:#fbf1dc; --entry:#2f5fd0; --entry-bg:#e7edfb; --loose:#127a76; --loose-bg:#ddf2f0;
+    --open:#8a3fa0;
+    --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#0e1015; --panel:#161920; --fg:#eceef3; --muted:#9aa1af; --line:#2b2f39; --soft:#1d2129;
+    --cue:#f4c15d; --cue-bg:#2e2615; --entry:#8fb3ff; --entry-bg:#1a2338; --loose:#6fd3cf; --loose-bg:#14302f;
+    --open:#d59cf0; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#0e1015; --panel:#161920; --fg:#eceef3; --muted:#9aa1af; --line:#2b2f39; --soft:#1d2129;
+    --cue:#f4c15d; --cue-bg:#2e2615; --entry:#8fb3ff; --entry-bg:#1a2338; --loose:#6fd3cf; --loose-bg:#14302f;
+    --open:#d59cf0; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1040px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:44px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 12px var(--mono); letter-spacing:0.07em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 14px; }
+  .eyebrow .status { color:var(--open); }
+  h1 { margin:0; font-size:clamp(30px, 5vw, 44px); line-height:1.08; font-weight:700; letter-spacing:-0.02em; text-wrap:balance; max-width:22ch; }
+  h1 .c { color:var(--cue); } h1 .e { color:var(--entry); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:2; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-20px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:3px 11px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--entry); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:23px; line-height:1.2; font-weight:600; text-wrap:balance; }
+  h2 small { font:500 12px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:6px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:70ch; }
+  .muted { color:var(--muted); }
+  code, .mono { font-family:var(--mono); font-size:0.88em; }
+  code { background:var(--soft); border-radius:4px; padding:0 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:72ch; display:flex; flex-direction:column; gap:6px; }
+
+  .tag { display:inline-block; font:500 11.5px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; }
+  .tag.cue { color:var(--cue); background:var(--cue-bg); }
+  .tag.entry { color:var(--entry); background:var(--entry-bg); }
+  .tag.loose { color:var(--loose); background:var(--loose-bg); }
+  .tag.open { color:var(--open); border:1px dashed var(--open); }
+
+  .findings { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; }
+  .finding { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; }
+  .finding b { display:block; margin-bottom:3px; }
+  .finding .where { display:block; margin-top:6px; font:12px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 12px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.k { font:500 13px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:260px; }
+
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:680px) { .split { grid-template-columns:1fr; } }
+  .half { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-width:0; display:flex; flex-direction:column; gap:8px; }
+  .half.cue { border-top:3px solid var(--cue); } .half.entry { border-top:3px solid var(--entry); }
+  .half h3 { margin:0; }
+  .half ul { margin:0; padding-left:18px; font-size:14px; }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  .fig { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .fig svg { display:block; width:100%; min-width:640px; height:auto; color:var(--fg); font-family:var(--sans); }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:72ch; }
+
+  .bands { display:flex; flex-direction:column; gap:4px; max-width:620px; }
+  .band { border:1px solid var(--line); border-radius:6px; padding:8px 12px; background:var(--panel); display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; }
+  .band span:last-child { color:var(--muted); font-size:13px; }
+  .band.loose { border-color:var(--loose); background:var(--loose-bg); }
+  .band.stack { border-color:var(--entry); background:var(--entry-bg); }
+
+  pre.tree { margin:0; font:12.5px/1.6 var(--mono); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  pre.tree .del { color:var(--muted); text-decoration:line-through; }
+  pre.tree .add { color:var(--entry); }
+
+  ol.sessions { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; counter-reset:s; }
+  ol.sessions li { counter-increment:s; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px 12px 56px; position:relative; font-size:14px; min-width:0; }
+  ol.sessions li::before { content:counter(s); position:absolute; left:14px; top:11px; width:28px; height:28px; border-radius:50%; background:var(--soft); color:var(--fg); font:600 14px var(--mono); display:grid; place-items:center; }
+  ol.sessions b { font-size:15px; }
+  ol.sessions .scope { font:12px var(--mono); color:var(--muted); margin-left:6px; }
+  ol.sessions p { margin-top:4px; }
+
+  .open-q { display:flex; flex-direction:column; gap:8px; }
+  .q { border:1px dashed var(--open); border-radius:8px; padding:10px 14px; font-size:14px; background:var(--panel); }
+  .q b { color:var(--open); font:500 12px var(--mono); margin-right:8px; }
+
+  footer { font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  a { color:var(--entry); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>lighting7 · design session R1</span><span>venue-visit plan D1</span><span class="status">Draft · under review · 2026-10-14</span></div>
+    <h1>One <span class="c">cue</span>, many <span class="e">stacks</span></h1>
+    <p class="lede">A cue becomes a project record of what a state <em>is</em>. A stack becomes an ordered list of <strong>entries</strong> that each name a cue. Edit a cue once and every stack that uses it changes. A cue can sit in no stack, and deleting one is its own deliberate act.</p>
+    <p class="muted" style="font-size:13.5px">The engineering plan is <code>docs/plans/cue-model-plan.md</code>; this page is its one-page copy, checked in as <code>docs/plans/cue-model-design/cue-model.html</code>. Where they differ, the markdown wins.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#problem">Problem</a><a href="#decisions">Decisions</a><a href="#model">Model</a><a href="#runtime">Runtime</a><a href="#references">References</a><a href="#delete">Delete</a><a href="#table">Cues table</a><a href="#copy">Copy</a><a href="#sync">Sync</a><a href="#mcp">MCP</a><a href="#sessions">Sessions</a>
+  </nav>
+
+  <section id="problem">
+    <h2>The problem<small>§1</small></h2>
+    <p>On the first evening in the hall, the same blackout ended every act, and each act's stack held its own copy. Fix one and the others stayed wrong. Today a cue can't be shared: its place in a stack is written into the cue itself.</p>
+    <div class="findings">
+      <div class="finding"><b>The stack is a column on the cue</b>Stack, order, number, auto flag and follow all live on the <code>cues</code> row, and numbers are unique through a partial index on <code>(cue_stack_id, cue_number)</code>.<span class="where">models/cues.kt:175 · state/State.kt:1314</span></div>
+      <div class="finding"><b>Deleting a stack deletes its cues</b>So does the card's Remove, with no confirmation. Every cleanup is a hand-written sweep, because SQLite foreign keys are off here.<span class="where">routes/projectCueStacks.kt:699 · projectCuesHelpers.kt:630</span></div>
+      <div class="finding"><b>Twenty-odd places infer the stack</b>A pad press, <code>FireCue</code>, <code>/apply</code>, Record, Update, scenery tracking and pad LEDs all read <code>cue.cueStack</code> rather than being told.<span class="where">BuskPressService.kt:91 · CueStackManager.kt:618</span></div>
+      <div class="finding"><b>The engine is keyed by cue alone</b>Layer&nbsp;4 rows, fade weights, triggers and priority are per cue. The same cue live in two stacks would overwrite itself, and either stack moving on would tear it down.<span class="where">fx/CueAssignmentLayer.kt:31–58 · fx/CueApply.kt:184</span></div>
+      <div class="finding"><b>Sync puts the order inside every cue</b><code>CueJson</code> carries stack, sort order and number, so one renumber rewrites every cue file in the stack and conflicts with any edit to them.<span class="where">sync/dto/SyncDtos.kt:835 · formatVersion 27</span></div>
+      <div class="finding"><b>No schema migrations, and a NOT NULL column</b>SQLite can't relax <code>cue_stack_id</code> without rebuilding the table. <code>InstallBootstrap.kt</code> says where a recovered migration plugs in.<span class="where">state/InstallBootstrap.kt · CLAUDE.md §Database</span></div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions<small>agreed 2026-10-14, four rounds</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td class="k">D1</td><td class="d"><strong>One shared cue.</strong> A stack is an ordered list of entries naming cues. A cue may be in no stack (<span class="tag loose">loose</span>). Removing an entry or deleting a stack never deletes a cue.</td></tr>
+        <tr><td class="k">D2</td><td class="d">An <span class="tag entry">entry</span> holds position, number (and auto) and follow. The <span class="tag cue">cue</span> holds everything else, fade included: one fade per cue.</td></tr>
+        <tr><td class="k">D3</td><td class="d">A cue live in two places is <strong>one contribution, held until the last</strong>. It fades in on the first hold and out on the last release.</td></tr>
+        <tr><td class="k">D4</td><td class="d">Prompt-book anchors are <strong>per entry</strong>: a cue used in two acts is anchored at each place.</td></tr>
+        <tr><td class="k">D5</td><td class="d">Existing data arrives by a <strong>recovered startup migration</strong>, with a backup copy first.</td></tr>
+        <tr><td class="k">D6</td><td class="d">Busk pads, cue slots, MIDI <code>FireCue</code> and the hand name the cue and <strong>run it loose</strong>: no follow, no tracking.</td></tr>
+        <tr><td class="k">D7</td><td class="d">A cue may appear <strong>twice in one stack</strong>. Everything keys on the entry.</td></tr>
+        <tr><td class="k">D8</td><td class="d">Deleting a cue in use is <strong>409 <code>CUE_IN_USE</code></strong> naming every reference; <code>?force=true</code> takes them with it. The UI always confirms with the list.</td></tr>
+        <tr><td class="k">D9</td><td class="d">Copying from another show is <strong>mapped by key</strong>, venue records by uuid first, across versions. Unresolved rows are reported, after a dry run.</td></tr>
+        <tr><td class="k">D10</td><td class="d">Loose holds compose <strong>above every stack</strong>, newest press on top.</td></tr>
+        <tr><td class="k">D11</td><td class="d">A cue pad is <strong>solid</strong> when held loose and <strong>outlined</strong> when live only through a stack. A press toggles the loose hold.</td></tr>
+        <tr><td class="k">D12</td><td class="d">A <strong>marker</strong> is a labelled entry, not a cue.</td></tr>
+        <tr><td class="k">D13</td><td class="d">The <strong>all-cues table</strong> is its own nav item, beside Looks and Templates.</td></tr>
+        <tr><td class="k">D14</td><td class="d">Numbering is per entry; an explicit renumber never relabels its auto neighbours (venue-visit D11).</td></tr>
+        <tr><td class="k">D15</td><td class="d">A cue's events fire <strong>when it comes on</strong>, on its first hold. A GO into a cue already live elsewhere fires nothing.</td></tr>
+        <tr><td class="k">D16</td><td class="d">Removing the <strong>live entry</strong> leaves the stage alone; the stack's next GO fires the entry that followed it.</td></tr>
+        <tr><td class="k">D17</td><td class="d">A stack delete <strong>offers</strong> to delete the cues it would leave loose, unticked by default.</td></tr>
+        <tr><td class="k">D18</td><td class="d"><strong>Any project</strong> can be a copy's source; venue records match by uuid when both are on the same venue.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="model">
+    <h2>The model<small>§3.1–3.3</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 820 330" role="img" aria-label="Two stacks, Act 1 and Act 2, each a list of numbered entries. Both stacks' Blackout entries, Q14 in Act 1 and Q3 in Act 2, name the same Blackout cue. A busk pad holds a loose cue, Storm flash, that no stack names.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <!-- column heads -->
+          <text x="125" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--entry)">Stack · Act 1</text>
+          <text x="410" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--cue)">Cues · project records</text>
+          <text x="695" y="26" text-anchor="middle" font-size="13" font-weight="600" fill="var(--entry)">Stack · Act 2</text>
+
+          <!-- Act 1 entries -->
+          <g font-size="12.5">
+            <rect x="20" y="44" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="32" y="64" font-family="var(--mono)" fill="var(--entry)">Q1</text><text x="70" y="64" fill="currentColor">entry</text><text x="220" y="64" text-anchor="end" fill="var(--muted)">auto</text>
+            <rect x="20" y="84" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="32" y="104" font-family="var(--mono)" fill="var(--entry)">Q2</text><text x="70" y="104" fill="currentColor">entry</text><text x="220" y="104" text-anchor="end" fill="var(--muted)">follow 2 s</text>
+            <rect x="20" y="124" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="32" y="144" font-family="var(--mono)" fill="var(--entry)">Q14</text><text x="70" y="144" fill="currentColor">entry</text><text x="220" y="144" text-anchor="end" fill="var(--muted)">explicit</text>
+          </g>
+
+          <!-- Act 2 entries -->
+          <g font-size="12.5">
+            <rect x="590" y="44" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="602" y="64" font-family="var(--mono)" fill="var(--entry)">Q1</text><text x="640" y="64" fill="currentColor">entry</text>
+            <rect x="590" y="84" width="210" height="30" rx="5" fill="var(--soft)" stroke="var(--line)" stroke-dasharray="4 3"/>
+            <text x="602" y="104" fill="var(--muted)" font-style="italic">marker · “Storm”</text>
+            <rect x="590" y="124" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="602" y="144" font-family="var(--mono)" fill="var(--entry)">Q3</text><text x="640" y="144" fill="currentColor">entry</text>
+            <rect x="590" y="164" width="210" height="30" rx="5" fill="var(--entry-bg)" stroke="var(--entry)"/>
+            <text x="602" y="184" font-family="var(--mono)" fill="var(--entry)">Q9</text><text x="640" y="184" fill="currentColor">entry</text>
+          </g>
+
+          <!-- Cues -->
+          <g font-size="13">
+            <rect x="300" y="44" width="220" height="30" rx="5" fill="var(--panel)" stroke="var(--cue)"/>
+            <text x="312" y="64" fill="currentColor">Pre-show</text><text x="508" y="64" text-anchor="end" font-size="11.5" fill="var(--muted)">fade 0 s</text>
+            <rect x="300" y="84" width="220" height="30" rx="5" fill="var(--panel)" stroke="var(--cue)"/>
+            <text x="312" y="104" fill="currentColor">Lights up</text><text x="508" y="104" text-anchor="end" font-size="11.5" fill="var(--muted)">fade 5 s</text>
+            <rect x="300" y="124" width="220" height="30" rx="5" fill="var(--cue-bg)" stroke="var(--cue)" stroke-width="2"/>
+            <text x="312" y="144" font-weight="600" fill="currentColor">Blackout</text><text x="508" y="144" text-anchor="end" font-size="11.5" fill="var(--cue)">2 entries</text>
+            <rect x="300" y="164" width="220" height="30" rx="5" fill="var(--panel)" stroke="var(--cue)"/>
+            <text x="312" y="184" fill="currentColor">Interval out</text>
+            <rect x="300" y="204" width="220" height="30" rx="5" fill="var(--panel)" stroke="var(--cue)"/>
+            <text x="312" y="224" fill="currentColor">Bows</text>
+            <rect x="300" y="256" width="220" height="30" rx="5" fill="var(--loose-bg)" stroke="var(--loose)"/>
+            <text x="312" y="276" fill="currentColor">Storm flash</text><text x="508" y="276" text-anchor="end" font-size="11.5" fill="var(--loose)">loose</text>
+          </g>
+
+          <!-- entry → cue arrows -->
+          <g stroke="var(--entry)" stroke-width="1.4" fill="none" color="var(--entry)">
+            <line x1="230" y1="59" x2="298" y2="59" marker-end="url(#ah)"/>
+            <line x1="230" y1="99" x2="298" y2="99" marker-end="url(#ah)"/>
+            <line x1="230" y1="139" x2="298" y2="139" marker-end="url(#ah)"/>
+            <line x1="590" y1="59" x2="522" y2="179" marker-end="url(#ah)"/>
+            <line x1="590" y1="139" x2="522" y2="139" marker-end="url(#ah)"/>
+            <line x1="590" y1="179" x2="522" y2="219" marker-end="url(#ah)"/>
+          </g>
+          <text x="264" y="131" text-anchor="middle" font-size="11" fill="var(--muted)">names</text>
+          <text x="556" y="131" text-anchor="middle" font-size="11" fill="var(--muted)">names</text>
+
+          <!-- pad -->
+          <rect x="590" y="256" width="210" height="30" rx="15" fill="var(--panel)" stroke="var(--loose)" stroke-width="2"/>
+          <text x="695" y="276" text-anchor="middle" font-size="12.5" fill="currentColor">Busk pad</text>
+          <line x1="590" y1="271" x2="522" y2="271" stroke="var(--loose)" stroke-width="1.4" color="var(--loose)" marker-end="url(#ah)"/>
+          <text x="556" y="263" text-anchor="middle" font-size="11" fill="var(--loose)">holds loose</text>
+
+          <text x="410" y="316" text-anchor="middle" font-size="11.5" fill="var(--muted)">edit Blackout once → Act 1 Q14 and Act 2 Q3 both change</text>
+        </svg>
+      </div>
+      <figcaption>Each stack is a list of entries; an entry carries the number and follow, and names a cue. Act 1's Q14 and Act 2's Q3 are two entries naming one Blackout. The marker is an entry with a label and no cue. Storm flash is in no stack; a busk pad runs it loose.</figcaption>
+    </figure>
+
+    <div class="split">
+      <div class="half entry"><h3>The entry · its place in a stack</h3>
+        <ul><li>position (an <code>ordinal</code>, a double)</li><li>number, and whether it is auto</li><li>follow: auto-advance and its delay</li><li>or, for a marker, a label and no cue</li><li>its prompt-book anchor</li></ul></div>
+      <div class="half cue"><h3>The cue · what the state is</h3>
+        <ul><li>name, notes, stomp</li><li>fade time and curve</li><li>layers, values, ad-hoc effects, triggers</li><li>scenery and cue events</li><li>(and the speed masters S16 adds)</li></ul></div>
+    </div>
+
+    <h3>Getting there from today's data</h3>
+    <p>One startup migration, run once when <code>cues</code> still has <code>cue_stack_id</code>. It runs before the schema reconciliation, because SQLite can't add a NOT NULL column to a populated anchors table.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Step</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Backup</td><td><code>VACUUM INTO &lt;db&gt;.pre-cue-model-&lt;utc&gt;.db</code>, outside the transaction.</td></tr>
+        <tr><td class="k">Entries</td><td>One entry per cue, from its stack, sort order (renormalised to 1.0, 2.0, …), number, auto flag and follow.</td></tr>
+        <tr><td class="k">Markers</td><td>A MARKER cue becomes a marker entry labelled with its name, and the cue goes.</td></tr>
+        <tr><td class="k">Anchors</td><td>Re-pointed from the cue to its one entry.</td></tr>
+        <tr><td class="k">Rebuild</td><td><code>cues</code> and <code>prompt_book_anchors</code> rebuilt to the model's DDL, rows copied by id; the old number index dropped.</td></tr>
+        <tr><td class="k">Again?</td><td>A second start finds no <code>cue_stack_id</code> and does nothing.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="runtime">
+    <h2>Runtime: holds<small>§3.4</small></h2>
+    <p>Anything that makes a cue live takes a <strong>hold</strong> on it: a running stack whose live entry names the cue, or a loose press. One registry, <code>fx/CueHolds.kt</code>, decides when the cue fades in, when it fades out, and at what priority it composes.</p>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 780 250" role="img" aria-label="Timeline of one Blackout cue held by Act 1, then also by Act 2. It fades in when Act 1 takes the first hold, stays at full when Act 2 goes to it and when Act 1 moves on, and fades out only when Act 2 releases the last hold.">
+          <!-- grid -->
+          <g stroke="var(--line)" stroke-width="1">
+            <line x1="150" y1="30" x2="150" y2="212"/><line x1="760" y1="30" x2="760" y2="212"/>
+          </g>
+          <!-- event lines -->
+          <g stroke="currentColor" stroke-width="1" stroke-dasharray="3 4" opacity="0.55">
+            <line x1="200" y1="30" x2="200" y2="212"/><line x1="340" y1="30" x2="340" y2="212"/><line x1="520" y1="30" x2="520" y2="212"/><line x1="650" y1="30" x2="650" y2="212"/>
+          </g>
+          <g font-size="11" fill="var(--muted)" text-anchor="middle">
+            <text x="200" y="24">Act 1 GO → Q14</text><text x="340" y="24">Act 2 GO → Q3</text><text x="520" y="24">Act 1 GO → Q15</text><text x="650" y="24">Act 2 GO → Q4</text>
+          </g>
+          <!-- rows -->
+          <g font-size="12.5" text-anchor="end" fill="currentColor">
+            <text x="138" y="62">Act 1 · Q14</text><text x="138" y="102">Act 2 · Q3</text><text x="138" y="172">Blackout on stage</text>
+          </g>
+          <rect x="200" y="48" width="320" height="22" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/>
+          <text x="360" y="63" text-anchor="middle" font-size="11.5" fill="var(--entry)">stack hold</text>
+          <rect x="340" y="88" width="310" height="22" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/>
+          <text x="495" y="103" text-anchor="middle" font-size="11.5" fill="var(--entry)">stack hold</text>
+          <!-- on-stage envelope -->
+          <polygon points="200,190 250,140 650,140 700,190" fill="var(--cue-bg)" stroke="var(--cue)" stroke-width="1.6"/>
+          <line x1="150" y1="190" x2="760" y2="190" stroke="currentColor" stroke-width="1"/>
+          <g font-size="11" fill="var(--cue)">
+            <text x="222" y="208" text-anchor="middle">fade in · first hold</text>
+            <text x="676" y="208" text-anchor="middle">fade out · last release</text>
+          </g>
+          <g font-size="11" fill="var(--muted)" text-anchor="middle">
+            <text x="340" y="132">already live: no fade</text>
+            <text x="520" y="132">still held by Act 2: stays</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>The Blackout fades in when Act 1 takes the first hold. Act 2 going to it changes nothing on stage, and neither does Act 1 moving on. It fades out on Act 2's GO, the last release.</figcaption>
+    </figure>
+
+    <h3>Where a held cue composes</h3>
+    <p>Its priority is the highest of its holds. A loose press sits above every stack (D10), so a pad beats the playback on any property both set.</p>
+    <div class="bands" role="list">
+      <div class="band" role="listitem"><span>Programmer</span><span>unchanged, above playback</span></div>
+      <div class="band loose" role="listitem"><span>Loose holds</span><span>newest press on top</span></div>
+      <div class="band stack" role="listitem"><span>Stack holds</span><span>by stack, then by entry position</span></div>
+      <div class="band" role="listitem"><span>Base</span><span>the patch's defaults</span></div>
+    </div>
+
+    <ul class="plain">
+      <li><strong>Standby, next, GO TO and Preview</strong> name an entry, so a cue twice in one stack is never ambiguous. A crossfade between two entries of the same cue moves nothing.</li>
+      <li><strong>Scenery</strong> tracks down a stack's entries to its live entry. A loose cue folds in like a one-cue stack, in GO order.</li>
+      <li><strong>Pads</strong> read the new outbound frame <code>cueHolds.state</code>: <span class="tag loose">solid</span> held loose, <span class="tag entry">outline</span> live through a stack.</li>
+      <li><strong>Cue events</strong> fire when the cue comes on, on its first hold, labelled with the entry's number (D15). A GO into a cue already live elsewhere fires nothing.</li>
+    </ul>
+  </section>
+
+  <section id="references">
+    <h2>Everything that names a cue<small>§3.5</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Reference</th><th>Today</th><th>After</th></tr></thead>
+      <tbody>
+        <tr><td>Stack list</td><td><code>cues.cue_stack_id</code> + <code>sort_order</code></td><td><span class="tag entry">entries</span></td></tr>
+        <tr><td>Busk pad, cue slot, <code>FireCue</code>, the hand</td><td>the cue; press GOes in its stack</td><td><span class="tag cue">the cue</span>; press holds it <span class="tag loose">loose</span></td></tr>
+        <tr><td>Prompt-book anchor</td><td>the cue, one per book</td><td><span class="tag entry">the entry</span></td></tr>
+        <tr><td>Events, scenery, layers, values, effects, triggers</td><td>the cue</td><td><span class="tag cue">the cue</span></td></tr>
+        <tr><td>Include target</td><td>(cue, stack)</td><td>(cue, entry it came from); Update writes the cue</td></tr>
+        <tr><td>Record CREATE</td><td>needs a stack</td><td>stack optional; without one the cue is loose</td></tr>
+        <tr><td>Standby, GO TO, Preview, activate at</td><td>a cue id</td><td><span class="tag entry">an entry id</span></td></tr>
+        <tr><td>Stack set, playhead, MIDI stack GO</td><td>the stack</td><td>unchanged</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="delete">
+    <h2>Removing and deleting<small>§3.6</small></h2>
+    <ul class="plain">
+      <li><strong>Remove from stack</strong> deletes the entry and its anchor, and renumbers that stack. The cue stays, loose if that was its last entry. Removing the live entry changes nothing on stage until the stack's next GO, which fires the entry that followed (D16).</li>
+      <li><strong>Delete a stack</strong> deletes its entries and its set. Its cues stay, and the confirm offers <em>Also delete the N cues no other stack uses</em>, unticked (D17).</li>
+      <li><strong>Delete a cue</strong> in use is 409 <code>CUE_IN_USE</code>, listing every entry, pad, slot, anchor and binding. With <code>force</code>, all of them go with it, and every hold is released first. The card's Remove becomes <em>Remove from stack</em>; delete lives in the Cues table.</li>
+    </ul>
+  </section>
+
+  <section id="table">
+    <h2>The Cues table<small>§3.7</small></h2>
+    <p>A library view at <code>/projects/:id/cues</code>, beside Looks and Templates in the nav, and openable on any window from the Screens sheet.</p>
+    <div class="tablebox"><table aria-label="Example rows of the Cues table">
+      <thead><tr><th>Name</th><th>In</th><th>Fade</th><th>Layers</th><th>Scenery</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td>Blackout</td><td><span class="tag entry">Act 1 · Q14</span> <span class="tag entry">Act 2 · Q3</span></td><td class="mono">3 s</td><td class="mono">1</td><td>—</td><td>—</td></tr>
+        <tr><td>Storm flash</td><td><span class="tag loose">Loose</span></td><td class="mono">0 s</td><td class="mono">2</td><td>—</td><td>pad · Busk 1</td></tr>
+        <tr><td>Lights up</td><td><span class="tag entry">Act 1 · Q2</span></td><td class="mono">5 s</td><td class="mono">3</td><td>tabs open</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:13.5px">Example rows. Filters: a stack, <em>Loose only</em>, <em>Shared only</em>, <em>On a pad</em>. Multi-select: <em>Add to stack…</em>, <em>Duplicate</em>, <em>Delete…</em>, <em>Copy from another show…</em>. In-place editing is R2's.</p>
+  </section>
+
+  <section id="copy">
+    <h2>Copying from another show<small>§3.8</small></h2>
+    <p>A copy is a new cue in the target, loose or into a chosen stack. It reuses <code>copy_to_project</code>'s copier, cut down to cues.</p>
+    <ul class="plain">
+      <li><strong>Fixtures and groups</strong> are already named by key; anything the target's rig lacks is kept and marked, as an Update's dead references are.</li>
+      <li><strong>Venue records match by uuid first.</strong> Two shows on one venue share its records' uuids across versions, so a cannon event or a tab's scenery resolves even one version apart. A show's own patch maps by key, and its own element by name.</li>
+      <li><strong>Looks and templates</strong> link by name or are copied; speed masters by index; scripts by name. A dry run answers the same thing rolled back.</li>
+    </ul>
+    <p class="muted" style="font-size:13.5px">Any project can be the source (D18); from a show off the venue, everything maps by key and name. It replaces <code>POST /cues/{id}/copy</code>, which left the source project's Look ids on the copy's layers.</p>
+  </section>
+
+  <section id="sync">
+    <h2>Sync · formatVersion 28<small>§3.9</small></h2>
+    <div class="split">
+      <pre class="tree" aria-label="Archive layout before and after">cues/{uuid}.json
+  name, fade, layers…
+  <span class="del">cueStackUuid, sortOrder,</span>
+  <span class="del">cueNumber, cueNumberAuto,</span>
+  <span class="del">autoAdvance, cueType</span>
+<span class="add">cueStackEntries/{uuid}.json</span>
+<span class="add">  cueStackUuid, cueUuid?,</span>
+<span class="add">  ordinal (double), label?,</span>
+<span class="add">  cueNumber? (explicit only),</span>
+<span class="add">  autoAdvance?</span>
+promptBookAnchors/{uuid}.json
+  <span class="del">cueUuid</span> <span class="add">entryUuid</span></pre>
+      <div class="half" style="justify-content:center">
+        <ul style="padding-left:18px; margin:0; font-size:14px; display:flex; flex-direction:column; gap:6px">
+          <li><strong>One file per entry.</strong> Two desks adding to a stack add two records; a drag rewrites one file.</li>
+          <li><strong>Auto numbers aren't written.</strong> Every reader recomputes them from position.</li>
+          <li><strong>v5–v27 archives import.</strong> Each cue becomes one entry; a stack-less cue is loose, so "Unsorted" goes.</li>
+          <li>A v27 desk refuses v28, as every bump since v6 has.</li>
+        </ul>
+      </div>
+    </div>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 780 150" role="img" aria-label="Two desks each insert a cue between ordinals 2.0 and 3.0. Both pick 2.5. After the merge both entries are kept, ordered by ordinal then uuid.">
+          <g font-size="12" fill="currentColor">
+            <text x="20" y="34" font-weight="600">Desk 1</text><text x="20" y="74" font-weight="600">Desk 2</text><text x="20" y="124" font-weight="600">Merged</text>
+          </g>
+          <g font-family="var(--mono)" font-size="12">
+            <rect x="110" y="18" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="145" y="34" text-anchor="middle" fill="var(--entry)">2.0</text>
+            <rect x="200" y="18" width="110" height="24" rx="4" fill="var(--cue-bg)" stroke="var(--cue)"/><text x="255" y="34" text-anchor="middle" fill="var(--cue)">2.5 · a3…</text>
+            <rect x="330" y="18" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="365" y="34" text-anchor="middle" fill="var(--entry)">3.0</text>
+            <rect x="110" y="58" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="145" y="74" text-anchor="middle" fill="var(--entry)">2.0</text>
+            <rect x="200" y="58" width="110" height="24" rx="4" fill="var(--loose-bg)" stroke="var(--loose)"/><text x="255" y="74" text-anchor="middle" fill="var(--loose)">2.5 · 7f…</text>
+            <rect x="330" y="58" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="365" y="74" text-anchor="middle" fill="var(--entry)">3.0</text>
+            <rect x="110" y="108" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="145" y="124" text-anchor="middle" fill="var(--entry)">2.0</text>
+            <rect x="200" y="108" width="110" height="24" rx="4" fill="var(--cue-bg)" stroke="var(--cue)"/><text x="255" y="124" text-anchor="middle" fill="var(--cue)">2.5 · a3…</text>
+            <rect x="330" y="108" width="110" height="24" rx="4" fill="var(--loose-bg)" stroke="var(--loose)"/><text x="385" y="124" text-anchor="middle" fill="var(--loose)">2.5 · 7f…</text>
+            <rect x="460" y="108" width="70" height="24" rx="4" fill="var(--entry-bg)" stroke="var(--entry)"/><text x="495" y="124" text-anchor="middle" fill="var(--entry)">3.0</text>
+          </g>
+          <g font-size="11.5" fill="var(--muted)">
+            <text x="420" y="34">inserts between 2.0 and 3.0: the midpoint</text>
+            <text x="420" y="74">inserts into the same gap, offline</text>
+            <text x="550" y="118">both kept: ordered by</text><text x="550" y="133">(ordinal, uuid)</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Ordinals are doubles on entries (<code>FU-SYNC-ORDINAL-DOUBLE</code>, for entries only). Two offline inserts into one gap both survive the merge in a stable order. If two desks type the same explicit number, the lower uuid keeps it and the other becomes auto, named in the sync result.</figcaption>
+    </figure>
+  </section>
+
+  <section id="mcp">
+    <h2>The MCP tools<small>§3.10</small></h2>
+    <p>Tools name a cue by id, as today, and an entry by <code>entryId</code> or by the stack's <code>number</code>, the label an operator reads off the Show view.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Tool</th><th>Shape</th></tr></thead>
+      <tbody>
+        <tr><td class="k">create_cue</td><td>Loose by default; <code>stackId</code>, <code>number</code> and <code>after</code> also add an entry. No more “Unsorted”.</td></tr>
+        <tr><td class="k">add_cue_to_stack</td><td><strong>Shares</strong> the cue and answers the entry. No longer “moved”.</td></tr>
+        <tr><td class="k">remove_cue_from_stack</td><td>New. <code>{stackId, entryId | number}</code>. Never deletes the cue.</td></tr>
+        <tr><td class="k">delete_cues</td><td>New. <code>{cueIds, force?, dryRun?}</code> under the D8 guard.</td></tr>
+        <tr><td class="k">copy_cues</td><td>New. <code>{fromProjectId, cueIds, stackId?, dryRun?}</code>.</td></tr>
+        <tr><td class="k">build_cue_stack</td><td>A row may name an existing <code>cueId</code> to share it.</td></tr>
+        <tr><td class="k">set_standby, activate_cue_stack</td><td>An entry, by <code>entryId</code> or <code>number</code>.</td></tr>
+        <tr><td class="k">apply_cue, stop_cue</td><td>A loose hold and its release.</td></tr>
+        <tr><td class="k">record_cue</td><td>CREATE's <code>stackId</code> is optional.</td></tr>
+        <tr><td class="k">describe_rig, get_current_state</td><td>Each cue lists <code>in: Act 1 Q14, Act 2 Q3</code> or <code>loose</code>; a new <code>cue_holds</code>.</td></tr>
+        <tr><td class="k">get_prompt_book, mark_up_prompt_book</td><td>Anchors name an entry.</td></tr>
+        <tr><td class="k">delete_cue_stacks</td><td>Cues stay; the answer counts those left loose.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="sessions">
+    <h2>Seven sessions, one PR each<small>§5</small></h2>
+    <p>Sessions 1 and 2 keep one entry per cue, so a v27 archive can still describe the desk. Sync lands in session 3, before session 4 lets a cue be shared or loose.</p>
+    <ol class="sessions">
+      <li><b>Entries and the migration</b><span class="scope">backend + frontend</span><p>The new table, the startup migration with its backup, numbering on entries, markers as entries, anchors on entries. Behaviour unchanged; the exporter still writes v27. Chris runs it on a copy of the desk's database first.</p></li>
+      <li><b>Holds</b><span class="scope">backend + frontend</span><p><code>CueHolds</code> under the manager, the crossfade, the cue layer, triggers, scenery, events and the show carry. Pads, slots, <code>FireCue</code> and the hand run loose. Entry-keyed standby and run state, <code>cueHolds.state</code>, the pad's two looks.</p></li>
+      <li><b>Sync v28</b><span class="scope">backend</span><p>Entry files, double ordinals, auto numbers left out, anchors by entry, the v27 reader, the number-clash rule.</p></li>
+      <li><b>Sharing and explicit delete</b><span class="scope">backend + Show view</span><p>Add shares; remove from stack; a stack delete leaves its cues; delete with its guard; Record without a stack. The <em>in N stacks</em> chip and the new card actions.</p></li>
+      <li><b>The Cues table</b><span class="scope">frontend + backend</span><p>The library view, its filters and its multi-select actions.</p></li>
+      <li><b>Copy from another show</b><span class="scope">backend + frontend</span><p>The copy route and sheet, <em>Duplicate</em>, and the old copy route's removal.</p></li>
+      <li><b>The MCP tools</b><span class="scope">backend</span><p>The new tools, the changed ones, and a briefing rewritten for shared and loose cues.</p></li>
+    </ol>
+  </section>
+
+  <footer>Design session R1 of the venue-visit plan. Engineering plan: <code>docs/plans/cue-model-plan.md</code>. Design record: <code>docs/plans/cue-model-design/INDEX.md</code>. Diagrams are illustrative; stack and cue names are examples.</footer>
+</div>
