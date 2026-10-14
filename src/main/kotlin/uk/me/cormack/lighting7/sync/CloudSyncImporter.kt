@@ -118,6 +118,22 @@ class CloudSyncImporter(
                         this.lastSyncedAt = nowUtc()
                     }
                 }
+                // The DB now holds exactly the cloned tree, so that tree is the last state this
+                // install and the remote agree on. Without these rows the first sync that
+                // diverges has no base: every record the remote changed since — however
+                // untouched here — is a conflict, and a deletion made here ships without a
+                // tombstone. Past the commit above, so a failure here must not fail the import (a
+                // retry could only 409 on the project it made): the config's lastSyncedSha is the
+                // same commit, and the first snapshot seeds from it (SyncStateBookkeeping.seedIfMissing).
+                try {
+                    JGitClient.open(finalRepoPath)?.use { repo ->
+                        SyncStateBookkeeping.bootstrapAt(state.database, result.projectId, repo, headSha)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.warn("Imported project {} but could not seed its sync_state: {}", result.projectId, e.message)
+                }
             }
             // A venue's repo (venue plan §3.4): the clone made its draft from the branch's tip, the
             // latest version; every tag is a version, materialised here as a snapshot with its index

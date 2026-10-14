@@ -72,6 +72,10 @@ class SnapshotEngine(private val state: State) {
 
         val response = withContext(Dispatchers.IO) {
             workingTree.ensureInitialised(path).use { repo ->
+                // Tombstones come from sync_state, so a project that has a last-synced commit
+                // but no rows (imported before the importer seeded them) gets them first —
+                // else a deletion made since would ship without one and come back on pull.
+                SyncStateBookkeeping.seedIfMissing(state.database, projectId, repo)
                 // Preserve the peer install registry across the wipe-then-export step so
                 // installs.json accumulates contributors rather than overwriting them on
                 // every push.
