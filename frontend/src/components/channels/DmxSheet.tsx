@@ -1,5 +1,5 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Lock, LockOpen, X } from 'lucide-react'
+import { Lock, LockOpen, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
@@ -7,7 +7,8 @@ import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import { useChannelValue } from '@/hooks/usePropertyValues'
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { useUpdateChannelMutation } from '@/store/channels'
-import { useParkChannelMutation, useUnparkChannelMutation } from '@/store/park'
+import { useParkChannelMutation, useRestoreChannelParkMutation, useUnparkChannelMutation, type ParkState, type ReleasedPark } from '@/store/park'
+import { overVenuePark, parkLabel } from '@/lib/parkOwner'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { ownershipCellClass, OWNERSHIP_LABELS } from '@/components/fixtures-list/ownership'
 import { OwnershipSwatch } from '@/components/fixtures-list/OwnershipLegend'
@@ -343,6 +344,13 @@ function LeadingCut({ className, text }: { className: string; text: string | und
   )
 }
 
+/** A cell's hover note on its park: whose it is, or that the show released the venue's. */
+function parkNoteOf(park: ParkState | undefined, released: ReleasedPark | undefined): string | undefined {
+  if (park) return park.owner === 'VENUE' || park.venueValue != null ? parkLabel(park) : undefined
+  if (released) return released.venueValue != null ? `the venue's park (${released.venueValue}) released here` : undefined
+  return undefined
+}
+
 /**
  * What the face reads, and nothing else — `DmxCell` is memoised, and a field it never reads would
  * still be compared on every render. The wrapper's own fields are `DmxCellWithOwnership`'s.
@@ -426,16 +434,26 @@ export function DmxSheet({
   connected,
   mappings,
   parkValueMap,
+  parks,
+  released,
 }: {
   universe: number
   /** The desk is reachable — every write here is a WebSocket frame. */
   connected: boolean
   mappings: Record<number, ChannelMappingEntry> | undefined
   parkValueMap: ReadonlyMap<number, number>
+  /**
+   * Each parked address's park, owner and all (venue parks): whose it is goes on the cell's hover
+   * and the selection's verbs. Absent, every park reads as the project's own.
+   */
+  parks?: ReadonlyMap<number, ParkState>
+  /** The venue parks the show has released on this universe, which *Restore* takes back. */
+  released?: ReadonlyMap<number, ReleasedPark>
 }) {
   const [updateChannel] = useUpdateChannelMutation()
   const [parkChannel] = useParkChannelMutation()
   const [unparkChannel] = useUnparkChannelMutation()
+  const [restoreChannelPark] = useRestoreChannelParkMutation()
   const blind = useWsProgrammerBlind()
   const sideband = useWsProgrammerSideband(universe)
 
@@ -498,6 +516,7 @@ export function DmxSheet({
               sideband={sideband.get(channelNo)}
               blind={blind}
               parkedValue={parkValueMap.get(channelNo)}
+              parkNote={parkNoteOf(parks?.get(channelNo), released?.get(channelNo))}
               props={props as Omit<React.ComponentProps<typeof LevelCell>, 'value' | 'face'>}
             />
           )
@@ -511,7 +530,7 @@ export function DmxSheet({
           for (const row of rows) write(row.base + i, 0)
         },
       })),
-    [blind, columnKeys, mappings, parkValueMap, runStarts, sideband, universe, write],
+    [blind, columnKeys, mappings, parkValueMap, parks, released, runStarts, sideband, universe, write],
   )
 
   const copy = useCallback(
@@ -601,6 +620,15 @@ export function DmxSheet({
 
   const parkedSelected = selectedChannels.filter((n) => parkValueMap.has(n))
   const unparkedSelected = selectedChannels.filter((n) => !parkValueMap.has(n))
+  // Venue parks among the selection, which an unpark releases for this show; and the addresses the
+  // venue's park can be taken back on — released, or the show's own park over the venue's.
+  const venueSelected = parkedSelected.filter((n) => parks?.get(n)?.owner === 'VENUE')
+  const restorableSelected = selectedChannels.filter((n) => released?.has(n) || overVenuePark(parks?.get(n)))
+  const restoreSelection = () => {
+    for (const channelNo of restorableSelected) {
+      restoreChannelPark({ universe, channelNo }).unwrap().catch(ignoreReportedError)
+    }
+  }
   const parkSelection = () => {
     for (const channelNo of unparkedSelected) {
       parkChannel({ universe, channelNo, value: lightingApi.channels.get(universe, channelNo) })
@@ -659,12 +687,31 @@ export function DmxSheet({
               ? DESK_OFFLINE_LABEL
               : parkedSelected.length === 0
                 ? 'No selected channel is parked'
-                : `Unpark ${parkedSelected.length} channel${parkedSelected.length === 1 ? '' : 's'}`
+                : `Unpark ${parkedSelected.length} channel${parkedSelected.length === 1 ? '' : 's'}` +
+                  (venueSelected.length > 0
+                    ? ` — ${venueSelected.length} ${venueSelected.length === 1 ? "is the venue's" : "are the venue's"}, released for this show only`
+                    : '')
           }
         >
           <LockOpen className="size-3.5" />
           <span className={WORD_CLASS}>Unpark</span>
         </Button>
+        {restorableSelected.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!connected}
+            onClick={restoreSelection}
+            title={
+              !connected
+                ? DESK_OFFLINE_LABEL
+                : `Take the venue's park back on ${restorableSelected.length} channel${restorableSelected.length === 1 ? '' : 's'}`
+            }
+          >
+            <Undo2 className="size-3.5" />
+            <span className={WORD_CLASS}>Restore</span>
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
           <X className="size-3.5" />
           <span className="hidden sm:inline">Deselect</span>
@@ -673,6 +720,7 @@ export function DmxSheet({
     ) : null
 
   const patched = useMemo(() => Object.keys(mappings ?? {}).length, [mappings])
+  const venueParkCount = useMemo(() => [...(parks?.values() ?? [])].filter((p) => p.owner === 'VENUE').length, [parks])
 
   return (
     <div ref={measureRef} className="flex min-h-0 flex-1 flex-col">
@@ -711,6 +759,8 @@ export function DmxSheet({
       <SheetPage.Footer>
         <span>
           Universe {universe} · {patched} of 512 patched · {parkValueMap.size} parked
+          {venueParkCount > 0 && ` (${venueParkCount} by the venue)`}
+          {(released?.size ?? 0) > 0 && ` · ${released?.size} venue park${released?.size === 1 ? '' : 's'} released`}
         </span>
         <span className="font-medium">Owned by</span>
         {(
@@ -745,8 +795,11 @@ function DmxCellWithOwnership({
   keys,
   sideband,
   blind,
+  parkNote,
   ...face
 }: DmxFaceProps & {
+  /** Whose park the address's is, or that the venue's was released here (venue parks); for the hover. */
+  parkNote: string | undefined
   /** The first address of a fixture's footprint — draws the run edge. */
   runStart: boolean
   /** Every property the desk says drives this address — read by the ownership hook. */
@@ -760,8 +813,9 @@ function DmxCellWithOwnership({
   const title = useMemo(() => {
     const address = formatAddress(channelNo)
     const what = mapping ? [address, mapping.fixtureName, mapping.description].filter(Boolean).join(' · ') : `${address} · Unpatched`
-    return ownership.source !== 'baseline' ? `${what} — ${OWNERSHIP_LABELS[ownership.source]}` : what
-  }, [channelNo, mapping, ownership.source])
+    const owned = ownership.source !== 'baseline' ? `${what} — ${OWNERSHIP_LABELS[ownership.source]}` : what
+    return parkNote ? `${owned} · ${parkNote}` : owned
+  }, [channelNo, mapping, ownership.source, parkNote])
   // The edge is a sibling of the ownership wrapper, not its child: the baseline dim is an opacity on
   // that wrapper, and a footprint does not fade because nothing happens to be driving it.
   return (

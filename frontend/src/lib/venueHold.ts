@@ -6,8 +6,8 @@ import type { ProjectVenue } from '../api/projectApi'
  * lighting7 `docs/plans/completed/venue-design/Update.dc.html`). Pure, so the copy is pinned by
  * `venueHold.test.ts`.
  *
- * - **held** — the live show is behind on output: every controller sends zero, the chip says *Blind ·
- *   venue*, and the banner offers *Review update* and *Run against vN…*.
+ * - **held** — the live show is behind on output: every controller sends zero on every channel but a
+ *   parked one, the chip says *Blind · venue*, and the banner offers *Review update* and *Run against vN…*.
  * - **running** — the operator ran against the older pin for this session: output is live on the old
  *   patch, the installed version's trigger and command channels stay guarded.
  * - **drawing** — only drawing changed: a banner, output live, dismissable for the session.
@@ -47,7 +47,7 @@ export function bannerMessage(banner: BehindBanner, showName: string, drawingCha
   switch (banner.kind) {
     case 'held':
       return `Output held — this show is in Blind. It uses ${venue} v${pinned}; the hall has been re-patched since ` +
-        `(v${installed} is as hung). Its addresses would drive whatever is hung there now.`
+        `(v${installed} is as hung). Its addresses would drive whatever is hung there now; only parked channels reach the rig.`
     case 'running':
       return `Running against v${pinned}. Live output uses the old house patch. v${installed}'s trigger and command ` +
         'channels stay guarded.'

@@ -203,6 +203,18 @@ lighting7 `docs/fixtures-engineering.md` §"Infrastructure fixtures".
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 
+**A park is the project's own or its venue's** (venue parks; lighting7
+`docs/fixtures-engineering.md` §"Venue parks"). `parkState` carries each park's `owner` (`SHOW |
+VENUE`), a show's re-park's `venueValue` and the `released` list; `api/parkApi.ts` keeps them
+(`getEntries`, `getReleased`), `store/park.ts`'s `ParkState` carries them and `restoreChannelPark` is
+the fourth WS-backed mutation. `lib/parkOwner.ts` is the one wording — `parkLabel`, `unparkLabel`,
+`unparkConfirm` — for the Channels cards (a *V* badge, a dashed ring on a released channel, *Restore*
+in the row's menu), the DMX sheet (the cell's hover, *Restore* on the bar, the footer's counts), the
+fixture sheet's Park and both Unpark All confirms: unparking a venue park **releases** it for this show,
+and unparking a show's re-park goes back to the venue's. A refused write arrives as `parkError` and is
+toasted under one id. A desk that predates venue parks sends neither field, and every park reads as
+the project's own.
+
 ### Stage views
 
 Two surfaces render live fixture state: the 3D canvas and the **Positions** panel behind the

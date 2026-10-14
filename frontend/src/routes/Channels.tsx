@@ -19,15 +19,20 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal } from "lucide-react"
+import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Undo2 } from "lucide-react"
 import { useUpdateChannelMutation } from "../store/channels"
 import { useChannelValue } from "@/hooks/usePropertyValues"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
 import {
   useGetParkStateListQuery,
+  useGetReleasedParkListQuery,
   useParkChannelMutation,
+  useRestoreChannelParkMutation,
   useUnparkChannelMutation,
+  type ParkState,
+  type ReleasedPark,
 } from "../store/park"
+import { overVenuePark, parkLabel, unparkConfirm, unparkLabel } from "@/lib/parkOwner"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { useIsDeskConnected } from "../store/status"
 import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
@@ -55,22 +60,20 @@ const CHANNEL_GROUPS: number[][] = Array.from({ length: 64 }, (_, g) =>
  */
 function parkActionReason({
   connected,
-  isParked,
   value,
-  parkedValue,
+  park,
 }: {
   connected: boolean
-  isParked: boolean
   value: number
-  parkedValue?: number
+  park?: ParkState
 }): string {
-  if (!isParked) {
+  if (!park) {
     return connected
       ? `Park at current value (${value})`
       : `Park at current value — ${DESK_OFFLINE_LABEL.toLowerCase()}`
   }
-  if (!connected) return `Parked at ${parkedValue} — ${DESK_OFFLINE_LABEL.toLowerCase()}`
-  return 'Unpark channel'
+  if (!connected) return `${parkLabel(park)} — ${DESK_OFFLINE_LABEL.toLowerCase()}`
+  return `${parkLabel(park)}. ${unparkLabel(park)}`
 }
 
 export const ChannelSlider = React.memo(function ChannelSlider({
@@ -79,7 +82,8 @@ export const ChannelSlider = React.memo(function ChannelSlider({
   isEditing,
   connected,
   mapping,
-  parkedValue,
+  park,
+  released,
   onFixtureClick,
 }: {
   universe: number
@@ -93,18 +97,24 @@ export const ChannelSlider = React.memo(function ChannelSlider({
    */
   connected: boolean
   mapping?: ChannelMappingEntry
-  parkedValue?: number
+  /** The channel's park, owner and all; absent when it is not parked. */
+  park?: ParkState
+  /** The venue's park on this channel that the show has released, when it has. */
+  released?: ReleasedPark
   onFixtureClick?: (fixtureKey: string) => void
 }) {
   const value = useChannelValue({ universe, channelNo: id })
 
-  const isParked = parkedValue !== undefined
-  const displayValue = isParked ? parkedValue : value
+  const parkedValue = park?.value
+  const isParked = park !== undefined
+  const isVenuePark = park?.owner === "VENUE"
+  const displayValue = park ? park.value : value
   const percentage = Math.round((displayValue / 255) * 100)
 
   const [runUpdateChannelMutation] = useUpdateChannelMutation()
   const [runParkChannel] = useParkChannelMutation()
   const [runUnparkChannel] = useUnparkChannelMutation()
+  const [runRestoreChannelPark] = useRestoreChannelParkMutation()
 
   const handleSliderChange = useCallback((values: number[]) => {
     if (values[0] !== undefined) {
@@ -131,15 +141,23 @@ export const ChannelSlider = React.memo(function ChannelSlider({
   // wire write, so it needs the socket like everything else here.
   const canPark = !isParked && connected
 
-  const parkReason = parkActionReason({ connected, isParked, value, parkedValue })
+  const parkReason = parkActionReason({ connected, value, park })
+  // A venue park the show released, or the show's own park over a venue's: the venue's can be
+  // taken back (venue parks).
+  const canRestore = connected && (released !== undefined || overVenuePark(park))
+  const restoreLabel = released
+    ? released.venueValue != null
+      ? `Restore the venue's park (${released.venueValue})`
+      : "Forget the release — the venue no longer parks it"
+    : `Back to the venue's park (${park?.venueValue})`
 
   const handleParkToggle = useCallback(() => {
-    if (isParked) {
-      if (canUnpark && confirm(`Unpark channel ${id}?`)) runUnparkChannel({ universe, channelNo: id })
+    if (park) {
+      if (canUnpark && confirm(unparkConfirm([park], `(channel ${id})`))) runUnparkChannel({ universe, channelNo: id })
     } else if (canPark) {
       runParkChannel({ universe, channelNo: id, value })
     }
-  }, [isParked, canUnpark, canPark, universe, id, value, runParkChannel, runUnparkChannel])
+  }, [park, canUnpark, canPark, universe, id, value, runParkChannel, runUnparkChannel])
 
   const channelContent = (
     <div className={`rounded px-1 py-0.5 ${isParked ? "bg-amber-50/70 dark:bg-amber-900/20" : ""}`}>
@@ -147,11 +165,23 @@ export const ChannelSlider = React.memo(function ChannelSlider({
         {/* Channel number + park badge */}
         <span className="text-xs font-medium w-8 shrink-0 text-muted-foreground relative">
           {id}
-          {isParked && (
-            <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-amber-500 text-[7px] font-bold text-white leading-none">
-              P
+          {/* P for the show's own park, V for one inherited from the venue (venue parks); a
+              released venue park is a dashed ring with nothing in it. */}
+          {isParked ? (
+            <span
+              title={park && parkLabel(park)}
+              className={`absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full text-[7px] font-bold leading-none ${
+                isVenuePark ? "border border-amber-500 bg-background text-amber-600 dark:text-amber-400" : "bg-amber-500 text-white"
+              }`}
+            >
+              {isVenuePark ? "V" : "P"}
             </span>
-          )}
+          ) : released ? (
+            <span
+              title={restoreLabel}
+              className="absolute -top-1 -right-1 size-3 rounded-full border border-dashed border-amber-500/70"
+            />
+          ) : null}
         </span>
 
         {isEditing && !isParked ? (
@@ -186,7 +216,7 @@ export const ChannelSlider = React.memo(function ChannelSlider({
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                Parked at {parkedValue}. Right-click to unpark.
+                {park && parkLabel(park)}. Right-click to unpark.
               </TooltipContent>
             </Tooltip>
             <span className="w-8 sm:w-10 text-xs text-right text-amber-600 dark:text-amber-400 font-medium shrink-0">
@@ -273,13 +303,13 @@ export const ChannelSlider = React.memo(function ChannelSlider({
         <div>{channelContent}</div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {isParked ? (
+        {park ? (
           <ContextMenuItem
             disabled={!canUnpark}
             onClick={() => canUnpark && runUnparkChannel({ universe, channelNo: id })}
           >
             <LockOpen className="size-4" />
-            {canUnpark ? "Unpark" : parkReason}
+            {canUnpark ? unparkLabel(park) : parkReason}
           </ContextMenuItem>
         ) : (
           <ContextMenuItem
@@ -288,6 +318,15 @@ export const ChannelSlider = React.memo(function ChannelSlider({
           >
             <Lock className="size-4" />
             {parkReason}
+          </ContextMenuItem>
+        )}
+        {(released !== undefined || overVenuePark(park)) && (
+          <ContextMenuItem
+            disabled={!canRestore}
+            onClick={() => canRestore && runRestoreChannelPark({ universe, channelNo: id })}
+          >
+            <Undo2 className="size-4" />
+            {restoreLabel}
           </ContextMenuItem>
         )}
       </ContextMenuContent>
@@ -456,6 +495,7 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
 
   // Lifted queries — single subscription for all mappings and park states
   const { data: parkStateList } = useGetParkStateListQuery()
+  const { data: releasedList } = useGetReleasedParkListQuery()
   const { data: mappingRecord } = useGetChannelMappingListQuery()
   const { data: universes } = useGetUniverseQuery()
   const [runUnparkChannel] = useUnparkChannelMutation()
@@ -466,12 +506,18 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
   )
   const parkedCount = parkedChannelSet.size
 
-  // Build per-channel park value lookup for this universe
-  const parkValueMap = useMemo(() => {
-    const map = new Map<number, number>()
-    parkStateList?.filter((p) => p.universe === universe).forEach((p) => map.set(p.channel, p.value))
+  // Build per-channel park lookup for this universe, owner and all
+  const parkMap = useMemo(() => {
+    const map = new Map<number, ParkState>()
+    parkStateList?.filter((p) => p.universe === universe).forEach((p) => map.set(p.channel, p))
     return map
   }, [parkStateList, universe])
+  // The venue parks this show has released on this universe (venue parks)
+  const releasedMap = useMemo(() => {
+    const map = new Map<number, ReleasedPark>()
+    releasedList?.filter((r) => r.universe === universe).forEach((r) => map.set(r.channel, r))
+    return map
+  }, [releasedList, universe])
 
   // Channel mappings for this universe
   const universeMappings = mappingRecord?.[universe]
@@ -481,7 +527,7 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
 
   const handleUnparkAll = () => {
     if (!canUnpark) return
-    if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
+    if (confirm(unparkConfirm([...parkMap.values()], `in universe ${universe}`))) {
       parkStateList
         ?.filter((p) => p.universe === universe)
         .forEach((p) => runUnparkChannel({ universe: p.universe, channelNo: p.channel }))
@@ -614,7 +660,8 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
           onFixtureClick={setSelectedFixtureKey}
           filterParked={showParkedOnly ? parkedChannelSet : undefined}
           universeMappings={universeMappings}
-          parkValueMap={parkValueMap}
+          parkMap={parkMap}
+          releasedMap={releasedMap}
         />
       </Card>
       <FixtureDetailModal fixtureKey={selectedFixtureKey} onClose={() => setSelectedFixtureKey(null)} />
@@ -662,7 +709,8 @@ const ChannelGroups = ({
   onFixtureClick,
   filterParked,
   universeMappings,
-  parkValueMap,
+  parkMap,
+  releasedMap,
 }: {
   universe: number
   isEditing: boolean
@@ -671,7 +719,8 @@ const ChannelGroups = ({
   onFixtureClick?: (fixtureKey: string) => void
   filterParked?: Set<number>
   universeMappings?: Record<number, ChannelMappingEntry>
-  parkValueMap: Map<number, number>
+  parkMap: Map<number, ParkState>
+  releasedMap: Map<number, ReleasedPark>
 }) => {
   const gridRef = useRef<HTMLDivElement>(null)
   const columns = useGridColumns(gridRef)
@@ -748,7 +797,8 @@ const ChannelGroups = ({
                           isEditing={isEditing}
                           connected={connected}
                           mapping={universeMappings?.[channelNo]}
-                          parkedValue={parkValueMap.get(channelNo)}
+                          park={parkMap.get(channelNo)}
+                          released={releasedMap.get(channelNo)}
                           onFixtureClick={onFixtureClick}
                         />
                       )

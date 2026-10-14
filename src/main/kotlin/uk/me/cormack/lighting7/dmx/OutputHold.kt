@@ -7,8 +7,11 @@ package uk.me.cormack.lighting7.dmx
  *
  * - **Held** — a show on a venue whose pinned version is behind the installed one *on output*: its
  *   addresses would drive whatever the hall has hung there since. Every controller then sends zero on
- *   every channel, parked ones included — the hold is checked **above park**, because a park is the
- *   show's, and a v3 park on a v5 rig is as wrong as a v3 cue. Nothing else changes: the show composes
+ *   every channel **but a parked one**: a park is the operator's hand on the channel — often a
+ *   hard-powered fixture's dimmer held up — and zeroing it would power-cycle the fixture because its
+ *   show opened behind its venue. A parked channel goes out at its park (after the reserve below).
+ *   Earlier the hold sat above park, on the argument that a v3 park on a v5 rig is as wrong as a v3
+ *   cue; the operator chose otherwise. Nothing else changes: the show composes
  *   as normal, and a controller still reports the value it would have sent to its channel listeners,
  *   so the Stage view, the channel views and Preview keep drawing what the show is doing.
  * - **Reserved** — while the show *runs against* its older pin (the hold lifted for the session), the
@@ -46,7 +49,7 @@ class OutputHold {
     @Volatile
     private var reserved: Map<Int, Array<Reserve?>> = emptyMap()
 
-    /** Whether every controller sends zero on every channel. */
+    /** Whether every controller sends zero on every channel but a parked one. */
     val isHeld: Boolean get() = held
 
     fun setHeld(value: Boolean) {
@@ -70,7 +73,7 @@ class OutputHold {
     /** One lookup per frame: [universe]'s reserved channels, or null when it has none. */
     fun reservedView(universe: Int): Array<Reserve?>? = reserved[universe]
 
-    /** [value] on [universe] [channel] after the reserve — what the wire carries unless [isHeld]. */
+    /** [value] on [universe] [channel] after the reserve — what the wire carries unless [isHeld] and the channel is not parked. */
     fun guard(universe: Int, channel: Int, value: UByte): UByte =
         reserved[universe]?.getOrNull(channel)?.guard(value) ?: value
 }

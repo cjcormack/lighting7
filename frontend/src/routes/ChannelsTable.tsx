@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Lock, LockOpen } from "lucide-react"
 import { useGetChannelMappingListQuery } from "../store/channelMapping"
-import { useGetParkStateListQuery, useUnparkChannelMutation } from "../store/park"
+import { useGetParkStateListQuery, useGetReleasedParkListQuery, useUnparkChannelMutation, type ParkState, type ReleasedPark } from "../store/park"
+import { unparkConfirm } from "../lib/parkOwner"
 import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
 import { useIsDeskConnected } from "../store/status"
 import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
@@ -64,6 +65,7 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
   const navigate = useNavigate()
   const connected = useIsDeskConnected()
   const { data: parkStateList } = useGetParkStateListQuery()
+  const { data: releasedList } = useGetReleasedParkListQuery()
   const { data: mappingRecord } = useGetChannelMappingListQuery()
   const { data: universes } = useGetUniverseQuery()
   const [runUnparkChannel] = useUnparkChannelMutation()
@@ -74,13 +76,25 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
     return map
   }, [parkStateList, universe])
   const parkedCount = parkValueMap.size
+  // Owners and releases (venue parks): the DMX sheet names whose each park is, and Restore takes
+  // a released venue park back.
+  const parks = useMemo(() => {
+    const map = new Map<number, ParkState>()
+    parkStateList?.filter((p) => p.universe === universe).forEach((p) => map.set(p.channel, p))
+    return map
+  }, [parkStateList, universe])
+  const released = useMemo(() => {
+    const map = new Map<number, ReleasedPark>()
+    releasedList?.filter((r) => r.universe === universe).forEach((r) => map.set(r.channel, r))
+    return map
+  }, [releasedList, universe])
 
   // Unpark All keeps its confirm dialog — the single most destructive park action on the page —
   // but not the cards' Edit gate: the table has no Edit mode, so the confirmation is the gate.
   const canUnpark = parkedCount > 0 && connected
   const handleUnparkAll = () => {
     if (!canUnpark) return
-    if (confirm(`Unpark all ${parkedCount} channel(s) in universe ${universe}?`)) {
+    if (confirm(unparkConfirm([...parks.values()], `in universe ${universe}`))) {
       parkStateList
         ?.filter((p) => p.universe === universe)
         .forEach((p) => runUnparkChannel({ universe: p.universe, channelNo: p.channel }))
@@ -151,6 +165,8 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
         connected={connected}
         mappings={mappingRecord?.[universe]}
         parkValueMap={parkValueMap}
+        parks={parks}
+        released={released}
       />
     </SheetPage>
   )

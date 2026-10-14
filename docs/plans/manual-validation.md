@@ -15,8 +15,9 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-PARKS`](#fu-manual-venue-parks) | a park made on a trial venue reaches its shows only when published and taken, holds its level through a switch between two shows on it, and a show re-parks and releases it for itself without the rig dipping — on a trial venue, since it publishes | Venue parks, 2026-10-13 |
 | [`FU-MANUAL-VENUE-S7`](#fu-manual-venue-s7) | the panto is created from the Projects page on the hall with the stalls preset, and a detached copy of a show outputs exactly what it did on the venue | Venue S7, 2026-10-11 |
-| [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) | a show behind its venue on output opens held — the rig at zero, park included, while the Stage view draws — *Run against* drives the old patch with the cannon's channels idle, and Update clears the hold — on a trial venue, since it publishes | Venue S6, 2026-10-11 |
+| [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) | a show behind its venue on output opens held — the rig at zero but for its parks, while the Stage view draws — *Run against* drives the old patch with the cannon's channels idle, and Update clears the hold — on a trial venue, since it publishes | Venue S6, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S5`](#fu-manual-venue-s5) | a show re-hangs a mover and re-gels a unit as its own, touching neither the venue's draft nor any other show, and the venue's later change to the same facet shows as drift — on a trial venue, since it publishes | Venue S5, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S4`](#fu-manual-venue-s4) | project 9 is extracted into the Commemoration Hall for real, the hall's repo carries `v1`, `v2` as tags, and a cloud session imports the venue and then the show | Venue S4, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) | Extract on a clone of project 9 outputs the same channels on the same nodes as project 9, and a show's hide and key rules hold on the hall's rig | Venue S3, 2026-10-11 |
@@ -87,6 +88,28 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-PARKS`
+
+**What it proves**: *a hall's parks are the hall's, and a show's word on one is its own* — venue parks
+(`docs/fixtures-engineering.md` §"Venue parks"): a park in a venue's draft reaches a show only through a
+published version it is on, a show's re-park and release never touch the venue, and every transition
+takes a parked channel from its old value to its new one without a frame at zero.
+
+**Why it is here**: `VenueParksTest` asserts the layering, the hold and the no-zero switch on mock
+controllers; a hard-powered fixture on a real dimmer is the rig's.
+
+**It runs on a trial venue, never the Commemoration Hall** — a publish is a version every show sees.
+
+1. **Park on the venue.** Open the trial venue as an admin; on the Channels page park the house-light
+   dimmer at a safe level. As an operator the park is refused (*Only an admin can change a venue's
+   parks*). Publish: History lists the park as an output change.
+2. **Take it.** A show pinned before the publish opens held, the dimmer at its park through the hold;
+   Update it. Open a second show on the same venue and switch between the two: the dimmer never dips.
+3. **Re-park and release.** In one show park the dimmer at another level (the card's badge reads *P*,
+   the hover *over the venue's*), then unpark it: it goes back to the venue's level. Unpark the venue's
+   park (*Release for this show*): the dimmer holds where it was and the card shows the dashed release
+   mark; *Restore the venue's park* takes it back. The venue's draft and the other show are untouched.
+
 ## `FU-MANUAL-VENUE-S7`
 
 **What it proves**: *a second show in the hall starts from the Projects page, and a show can leave
@@ -128,14 +151,15 @@ Where something fails, promote it to a `FU-` item in `followups.md`.
 
 **What it proves**: *a show the hall has moved on from cannot drive the new patch by accident* —
 venue plan session 6 (`c7fe1e7`): behind is judged per show, a show behind on output opens held
-(`dmx/OutputHold.kt`, every controller sending zero **above park**), *Run against* lifts the hold for
+(`dmx/OutputHold.kt`, every controller sending zero — since the park-safety change, on every channel
+but a parked one), *Run against* lifts the hold for
 this desk run with the installed version's trigger and command channels kept idle, and Update moves
 the pin and clears the hold.
 
 **Why it is here**: the plan's §9 check for session 6
 ([`venue-plan.md`](completed/venue-plan.md) §9). PR #109 drove the held banner → *Run against* →
 review → Update in Chromium, and `OutputHoldTest` / `VenueHoldTest` assert zeros on the wire with a
-park set and the reserved trigger channel idle — but a real node's output and the Twin Shot's channels
+park standing through them and the reserved trigger channel idle — but a real node's output and the Twin Shot's channels
 are the rig's.
 
 **It runs on a trial venue, never the Commemoration Hall.** Its re-patch is a published version, and
@@ -152,7 +176,7 @@ in the cannon**:
    publish. History's diff names both as output changes.
 2. **Open the older show.** Make the trial copy of project 9 current: it opens held. The banner says
    so, the header chip reads *Blind · venue*, and every channel on every node reads zero — park one
-   channel at full: it stays at zero on the wire. The Stage view still draws the show, and a GO moves the drawing but
+   channel at full: it goes out at full on the wire (a park gets through the hold). The Stage view still draws the show, and a GO moves the drawing but
    not the rig. Arm and fire are refused (`VENUE_HOLD`).
 3. **Run against.** *Run against vN…* lists the moved addresses; confirm. The rig plays the show on its
    **old** patch (the dimmer at its old address), and the cannon's channels at the installed

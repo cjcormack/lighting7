@@ -62,6 +62,8 @@ showHides/{uuid}.json          # v24+: a show on a venue's hides of venue record
                                # recordUuid)
 showOverrides/{uuid}.json      # v24+ (venue plan session 5): a show's facet overrides of venue
                                # patches (recordUuid, facet, value, base)
+showParkReleases/{uuid}.json   # v27+: a show on a venue's releases of venue parks (universe,
+                               # channel)
 venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
@@ -212,7 +214,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 26`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 27`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -265,6 +267,26 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 27 — venue parks
+
+A venue's parks are its rig, versioned with it (`docs/fixtures-engineering.md` §"Venue parks"): a
+venue's `parkedChannels/` were already in every version it froze, and from v27 a show on a venue
+**inherits** its pinned version's, overlaid by its own `parkedChannels/` (a re-park of a venue park at
+another value) and less its new **`showParkReleases/{uuid}.json`** (`ShowParkReleaseJson`: `uuid`,
+`universe`, `channel`) — the venue parks it releases for its run. A release is keyed by **channel**,
+never by the venue park's uuid, so it survives the venue unparking a channel and parking it again; one
+with no venue park on its channel at the pin is dormant and kept. `show_park_releases` is
+`Portable("showParkReleases")` in `SyncCoverageTest`, read from `seedShowOnVenue`'s export like the
+hides. `SUPPORTED_FORMAT_VERSION = 27`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing folder
+is no releases. The writer's number moves by the sharp-edge rule: a v26 reader would import a show
+without its releases and write them away on its next push, and would run the show without its venue's
+parks. The importer drops a release in a project on no venue (with a warn, as a hide), keeps one
+repeated for a channel once, and keeps the park where an archive both parks and releases a channel (a
+merge). `replaceFromWorkingTree` and a project delete sweep the show's releases; Detach writes the
+venue parks the show ran into its own rows, uuids kept, and drops its releases, so a detached show
+exports no `showParkReleases/`. A clone remaps only a release's own `uuid`. A show with none writes no
+folder, so its records export byte-for-byte as at v26 (only `formatVersion.json` says 27).
 
 ### Version 26 — lamps
 
@@ -1319,8 +1341,12 @@ serialise:
 9. **Update `sync_configs`**: `lastSyncedSha = HEAD-after-sync`,
    `lastSyncedAt = now`.
 10. **Hot-reload show** if the just-pulled project happens to be the active
-    one — `ProjectManager.switchProject(currentId)` tears down + rebuilds the
-    show so fixtures, cues, etc. reflect the new DB state immediately.
+    one — `ProjectManager.switchProject(currentId, reload = true)` tears down +
+    rebuilds the show so fixtures, cues, etc. reflect the new DB state
+    immediately, **carrying the running show across**: the rig holds its levels,
+    each live cue is GO'd again, the programmer and hand-run effects come back
+    (effects restart their phase), and whatever the pull changed crossfades in —
+    `docs/dmx-engineering.md` §"Handing the rig from one show to the next".
 
 ### Pull-only installs
 

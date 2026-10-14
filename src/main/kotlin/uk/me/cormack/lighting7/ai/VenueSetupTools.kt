@@ -138,14 +138,15 @@ internal class VenueSetupTools(private val state: State) {
         val current = state.projectManager.currentProject.id.value
         if (from == current && !dryRun && input.bool("reloadLiveShow") != true) {
             return failure(
-                "Project $from is the current project: extracting moves its rig into the venue and reloads it, which stops " +
-                    "every running cue and effect as switch_project does. Run it with dryRun first; send reloadLiveShow: true " +
+                "Project $from is the current project: extracting moves its rig into the venue and reloads it: the " +
+                    "rig holds its levels and each live cue, the programmer and hand-run effects come back, but every effect " +
+                    "restarts and a cue's one-shot events do not fire again. Run it with dryRun first; send reloadLiveShow: true " +
                     "only when the operator has said the desk is not in use for a show.",
             )
         }
         val result = state.venueExtract.extract(from!!, name, include, dryRun, publishedBy = caller)
         if (!result.dryRun) {
-            if (from == current) state.projectManager.switchProject(from)
+            if (from == current) state.projectManager.switchProject(from, reload = true)
             state.show.fixtures.projectDetailsChanged(from)
             result.venueId?.let { state.show.fixtures.projectDetailsChanged(it) }
         }

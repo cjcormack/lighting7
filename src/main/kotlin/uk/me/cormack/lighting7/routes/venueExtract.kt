@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.venue.VenueExtract.ExtractKind
  * `POST /projects/{id}/venue/extract` `{name, include?, dryRun?}` — *Extract a venue* (venue plan
  * §3.5): move a show's room and house rig into a new venue, publish v1 and pin the show to it, in one
  * transaction (`venue/VenueExtract.kt`). **Admin only** (D3): it makes a venue. `include` names the
- * parts (`UNIVERSES | PATCHES | RIGGINGS | REGIONS | ELEMENTS | SEATING | GROUPS | VIEWPOINTS`),
+ * parts (`UNIVERSES | PATCHES | RIGGINGS | REGIONS | ELEMENTS | SEATING | GROUPS | VIEWPOINTS | PARKS`),
  * absent for all of them; `dryRun` answers what the move would do and keeps nothing. A live show
  * reloads onto its pinned rig — the same fixtures at the same addresses. REST only, no socket
  * operation; the Projects page's *Extract a venue…* sheet reads its dry run as the preview (session 7).
@@ -37,7 +37,7 @@ internal fun Route.routeApiRestVenueExtract(state: State) {
         )
         if (!result.dryRun) {
             val current = transaction(state.database) { state.projectManager.currentProject.id.value }
-            if (current == resource.id) state.projectManager.switchProject(resource.id)
+            if (current == resource.id) state.projectManager.switchProject(resource.id, reload = true)
             state.show.fixtures.projectDetailsChanged(resource.id)
             result.venueId?.let { state.show.fixtures.projectDetailsChanged(it) }
         }

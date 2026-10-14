@@ -326,7 +326,7 @@ What a device's strip encoders drive is per-device session state: `EncoderBankSt
 
 It moves two ways: a button bound to `EncoderBankSet(propertyName, colourAxis?)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`. The LED lights when both halves match, so a *hue* button and a *saturation* button on one colour property light one at a time. `deriveStripTarget` puts the axis on the strip's **encoder** and nowhere else — the fader and flash are the dimmer whatever the bank says.
 
-It survives a device unplug and is **reset on project switch** — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionPropertiesOf`, the same set `SelectionProperty` validates against), so carrying a property across projects could point every encoder at an attribute the new rig has no fixture for.
+It survives a device unplug and is **reset on project switch** (a carried reload of the same project keeps it) — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionPropertiesOf`, the same set `SelectionProperty` validates against), so carrying a property across projects could point every encoder at an attribute the new rig has no fixture for.
 
 A change rebuilds the feedback index — every strip encoder now stands on different channels — and re-arms takeover on that type's devices through the same path a bank change uses, because the meaning of the control moved under the operator's hand without them touching it.
 
@@ -629,7 +629,8 @@ server-owned**: the composition model's one-programmer argument applies verbatim
 programmer page, an X-Touch's select buttons, the AI's `get_current_state` — reads and writes this
 one list through the `selection.*` socket family (`docs/websocket-engineering.md`). Transient:
 cleared on project switch (before the publisher rebuilds, so a stale head never enters the new
-index), pruned on `fixturesChanged` / `patchListChanged` of any target that no longer resolves
+index) — a carried reload of the same project (a sync pull, a venue Update; `ShowCarry`) keeps it and
+prunes it instead — pruned on `fixturesChanged` / `patchListChanged` of any target that no longer resolves
 (the rest stay, the rule a press applies), never persisted.
 
 **A group and its members are two spellings of one selection.** `fx/TargetCoverage.kt` is the one
@@ -650,8 +651,8 @@ complete test double.
 ## The showing busk page
 
 `state/BuskPageState.kt` is `DeskSelection`'s twin for a *position*: which busk page the desk is
-showing, as a `StateFlow<Int?>` on `State`, transient, cleared on project switch and reconciled on
-`buskLayoutChanged`. It exists for the same reason the selection does — a hardware *next page*
+showing, as a `StateFlow<Int?>` on `State`, transient, cleared on project switch (reconciled instead
+on a carried reload of the same project) and reconciled on `buskLayoutChanged`. It exists for the same reason the selection does — a hardware *next page*
 button and a tab click in the busk view are two ways of making one gesture, so there has to be one
 answer or the button and the screen disagree the moment either is used. WS family
 `busk.pageState` / `busk.setPage`; the client's `?page=` mirrors it.
@@ -733,7 +734,7 @@ From `State.kt`:
 |---|---|
 | `State.midiRegistry` | Lazy; started in `State.initializeShow()` after `show.start()` |
 | `State.activeBankState` | Lazy; ephemeral, no persistence |
-| `State.deskSelection` | Lazy; ephemeral — cleared on project switch, pruned on fixture reload, no persistence |
+| `State.deskSelection` | Lazy; ephemeral — cleared on project switch (pruned on a carried same-project reload), pruned on fixture reload, no persistence |
 | `State.flashStateTracker` | Lazy; ephemeral |
 | `Show.globalScalerState` | Per-show; `.attach()` called in `Show.start()` after fixture load; `.detach()` in `Show.close()` |
 | `State.surfaceFeedbackPublisher` | Lazy; started in `initializeShow()` **before** `surfaceInputRouter` so hooks are ready when the first inbound event arrives |

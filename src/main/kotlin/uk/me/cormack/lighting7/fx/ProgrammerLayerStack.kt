@@ -697,6 +697,15 @@ class ProgrammerLayerStack(
     }
 
     /**
+     * Cook the whole stack onto this show's engine, effects and all — for a stack that arrived
+     * already built: a same-project reload hands the outgoing show's [ProgrammerStore] to its
+     * successor, whose engine runs none of the layers' effects yet. Every layer's effects spawn
+     * afresh (their phase restarts); the values republish with the rest of the programmer through
+     * `ProgrammerWriter.republishAll`, which the caller runs after this.
+     */
+    fun reinstate(): ProgrammerLayerOutcome = recook(store.layers)
+
+    /**
      * Re-cook if any layer names [lookUuid] — the programmer's half of a Look edit.
      *
      * Returns the keys whose value moved, for `republishForLookEdit` to fold into its single

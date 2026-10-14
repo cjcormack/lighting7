@@ -6,6 +6,8 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.select
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.time.Duration.Companion.nanoseconds
 
@@ -26,8 +28,8 @@ class ArtNetController(
     private val parkSource: ParkSource? = null,
     private val transport: ArtNetTransport = DefaultArtNetTransport(),
     /**
-     * The show's hold (venue plan P5): read once per frame, above park and every modifier. Null —
-     * tests, and anything built outside a show — is never held.
+     * The show's hold (venue plan P5): read once per frame, above every modifier; a parked channel
+     * gets through it. Null — tests, and anything built outside a show — is never held.
      */
     private val hold: OutputHold? = null,
     metrics: DeskMetrics = DeskMetrics.global,
@@ -49,6 +51,9 @@ class ArtNetController(
         const val MAX_REFRESH_INTERVAL_MS = 1000
 
         private const val MAX_CONSECUTIVE_ERRORS = 20
+
+        /** A frame period and the cancel's dispatch, with room to spare; a wedged thread costs this much. */
+        const val AWAIT_CLOSED_TIMEOUT_MS = 250L
     }
 
     internal val fadeTickMs = 10
@@ -101,6 +106,17 @@ class ArtNetController(
      */
     private val transmissionJob: Job
 
+    /**
+     * The frame this controller goes out with from now on, whatever is written to its buffer — set
+     * by [freeze] as a show is torn down, so nothing the teardown writes (an effect's reset, the FX
+     * engine's stop) reaches the wire before the controller's last frame. Park is still overlaid.
+     */
+    @Volatile
+    private var frozenFrame: Map<Int, UByte>? = null
+
+    /** Counted down once the last frame has gone out, so [awaitClosed] can order it before a successor's first. */
+    private val finalFrameSent = CountDownLatch(1)
+
     val packetsPerSecond: Double get() = packetCounter.packetsPerSecond()
     val totalPacketsSent: Long get() = packetCounter.total
 
@@ -129,14 +145,17 @@ class ArtNetController(
         // completion handler and not a `finally` inside the loop.
         transmissionJob.invokeOnCompletion {
             // One final frame, so whatever was last written actually reaches the wire.
-            // `ProjectManager.shutdownShow` blacks out every channel and *then* tears down
-            // the controllers: without this flush the cancel can beat the next tick and the
-            // blackout never transmits, leaving any universe the incoming project doesn't
-            // cover holding its last look. Best-effort — the transport may already be
-            // broken if the loop bailed out on repeated errors.
+            // `ProjectManager.shutdownShow` freezes every controller on the frame it leaves
+            // (a blackout, bar the incoming project's parks, on a switch) and *then* tears
+            // them down: without this flush the cancel can beat the next tick and that frame
+            // never transmits, leaving any universe the incoming project doesn't cover holding
+            // its last look. `Fixtures.register` waits for it ([awaitClosed]) before building a
+            // successor. Best-effort — the transport may already be broken if the loop bailed
+            // out on repeated errors.
             runCatching { sendCurrentValues() }
             runCatching { transport.stop() }
             artNetDispatcher.close()
+            finalFrameSent.countDown()
         }
 
         GlobalScope.launch {
@@ -264,6 +283,23 @@ class ArtNetController(
     }
 
     /**
+     * Wait — at most [timeoutMs] — for the last frame [close] sends to have gone out. Without it a
+     * controller rebuilt on the same universe can transmit first and the old controller's final
+     * frame lands *after* it, putting the old buffer back on the rig for one frame: on a project
+     * switch that is a frame of blackout on a channel the incoming project parks. True when the
+     * frame went out in time. Call after [close], and never while holding a lock the controller's
+     * channel listeners take.
+     */
+    fun awaitClosed(timeoutMs: Long = AWAIT_CLOSED_TIMEOUT_MS): Boolean =
+        finalFrameSent.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+    override fun freeze(values: Map<Int, UByte>?) {
+        // Every channel, as the live buffer has: the transmit loop walks the frame's entries, so a
+        // channel left out would never reach the wire at all — not even at its park.
+        frozenFrame = values?.let { frame -> (1..512).associateWith { frame[it] ?: 0u } }
+    }
+
+    /**
      * Continuous streaming: one Art-Net frame for this universe every [refreshIntervalMs],
      * unconditionally, whether or not any channel changed.
      *
@@ -387,7 +423,7 @@ class ArtNetController(
         val reservedView = hold?.reservedView(universe.universe)
         val heldNow = hold?.isHeld == true
 
-        currentValues.forEach { (channelNo, channelValue) ->
+        (frozenFrame ?: currentValues).forEach { (channelNo, channelValue) ->
             val parked = parkedView?.get(channelNo)
             val composed = if (parked != null) {
                 parked
@@ -407,9 +443,11 @@ class ArtNetController(
         }
         previousSentDmxData = dmxData
 
-        // Held, the wire carries zeros on every channel — park included — while the listeners
-        // below still hear what the show composed, so every view keeps drawing it.
-        val wire = if (heldNow) ByteArray(512) else dmxData
+        // Held, the wire carries zeros on every channel but a parked one — while the listeners
+        // below still hear what the show composed, so every view keeps drawing it. Park gets
+        // through: it is the operator's hand on the channel, and a hard-powered fixture parked on
+        // a dimmer must not be power-cycled because its show opened behind its venue.
+        val wire = if (heldNow) heldFrame(dmxData) else dmxData
         if (address == null) {
             transport.broadcastDmx(universe.subnet, universe.universe, wire)
         } else {
@@ -427,6 +465,16 @@ class ArtNetController(
                 it.channelsChanged(changes)
             }
         }
+    }
+
+    /** [composed] with every channel but a parked one zeroed: what a held show puts on the wire. */
+    private fun heldFrame(composed: ByteArray): ByteArray {
+        val wire = ByteArray(512)
+        val parks = parkSource ?: return wire
+        for (channelNo in 1..512) {
+            if (parks.isParked(universe.universe, channelNo)) wire[channelNo - 1] = composed[channelNo - 1]
+        }
+        return wire
     }
 
     override fun equals(other: Any?): Boolean {

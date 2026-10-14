@@ -4,6 +4,7 @@ import {
   useGetParkStateListQuery,
   useParkChannelMutation,
   useUnparkChannelMutation,
+  type ParkState,
 } from "../store/park"
 import { lightingApi } from "../api/lightingApi"
 
@@ -26,10 +27,14 @@ export function useChannelsPark(channels: readonly ChannelRef[]) {
   const [runParkChannel] = useParkChannelMutation()
   const [runUnparkChannel] = useUnparkChannelMutation()
 
-  const parkedCount = useMemo(() => {
-    if (!parkStateList) return 0
-    return channels.filter((ch) => parkStateList.some((p) => p.universe === ch.universe && p.channel === ch.channelNo)).length
+  // The parks on these channels, owner and all: what the unpark confirm names (a venue park is
+  // released for this show, a show park over a venue's goes back to the venue's).
+  const parkedStates = useMemo<ParkState[]>(() => {
+    if (!parkStateList) return []
+    return channels.flatMap((ch) => parkStateList.filter((p) => p.universe === ch.universe && p.channel === ch.channelNo))
   }, [channels, parkStateList])
+  const parkedCount = parkedStates.length
+  const venueParkedCount = parkedStates.filter((p) => p.owner === 'VENUE').length
 
   const totalChannels = channels.length
   const isFullyParked = totalChannels > 0 && parkedCount === totalChannels
@@ -50,6 +55,8 @@ export function useChannelsPark(channels: readonly ChannelRef[]) {
 
   return {
     parkedCount,
+    parkedStates,
+    venueParkedCount,
     totalChannels,
     isFullyParked,
     isPartiallyParked,

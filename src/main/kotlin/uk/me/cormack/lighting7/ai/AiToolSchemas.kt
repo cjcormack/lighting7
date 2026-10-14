@@ -312,7 +312,10 @@ internal val parkChannelTool = ToolDef(
             "the programmer and manual channel writes all stop reaching it until it is unparked. For holding a light " +
             "that must not move whatever the show does (a work light, a hazer's level, a channel with a faulty lamp " +
             "parked at 0). Parking an already parked channel changes its value. Park persists with the project, " +
-            "across restarts. The answer names the fixture channel it drives, when it is patched.",
+            "across restarts. The answer names the fixture channel it drives, when it is patched. On a show on a venue, " +
+            "a channel the venue parks (owner VENUE in get_current_state's `parked`) is re-parked for this show only — " +
+            "the venue keeps its value, and unparking this show's park brings the venue's back. In a venue, parks are " +
+            "the venue's rig and reach its shows when it publishes a version.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", parkAddressProperties {
@@ -329,7 +332,10 @@ internal val unparkChannelTool = ToolDef(
     name = "unpark_channel",
     description = "Unpark a parked DMX channel, handing it back to the show. The output does not jump: the parked " +
             "value is handed down as the channel's value underneath, where the next cue, effect or programmer " +
-            "write takes over from it. get_current_state's `parked` (and describe_rig) list what is parked.",
+            "write takes over from it. get_current_state's `parked` (and describe_rig) list what is parked and whose " +
+            "each park is. On a show on a venue, unparking a venue park releases it for this show only (the venue keeps " +
+            "it, and the answer's outcome is RELEASED); unparking this show's park over a venue park brings the venue's " +
+            "back (VENUE_RESTORED).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", parkAddressProperties())

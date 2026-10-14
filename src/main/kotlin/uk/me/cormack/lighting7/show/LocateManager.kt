@@ -10,8 +10,8 @@ import uk.me.cormack.lighting7.models.TargetRef
  *
  * Records, per located target, the Layer-4 property writes it asserted so toggle-off knows
  * exactly what to clear. Deliberately in-memory only: the writes themselves live in the
- * equally in-memory `ProgrammerStore`, so a restart drops the state and the output together
- * — same contract as the preset toggle bookkeeping in `routes/projectFxPresets.kt`.
+ * equally in-memory `ProgrammerStore`, so a restart drops the state and the output together,
+ * and a same-project reload (`ShowCarry`) carries the two together.
  *
  * A plain lock (not per-key compute) because toggle-off must also *re-assert* other active
  * locates whose writes overlap the cleared ones — e.g. releasing a group locate while one of

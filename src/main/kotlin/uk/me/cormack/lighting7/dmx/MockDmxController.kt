@@ -93,9 +93,11 @@ class MockDmxController(
      * value in registration order; then a reserved channel of the show's [OutputHold] is guarded.
      * Not the hold itself: this is what the channel listeners would hear ([transmittedValue] is the wire).
      */
-    fun getEffectiveValue(channelNo: Int): UByte {
+    fun getEffectiveValue(channelNo: Int): UByte = effectiveValueOf(channelNo, values[channelNo] ?: 0u)
+
+    private fun effectiveValueOf(channelNo: Int, buffered: UByte): UByte {
         val composed = parkSource?.getParkedValue(universe.universe, channelNo) ?: run {
-            var v = values[channelNo] ?: 0u
+            var v = buffered
             for (mod in _transmitModifiers) v = mod.modify(universe, channelNo, v)
             v
         }
@@ -103,10 +105,27 @@ class MockDmxController(
     }
 
     /**
-     * What [ArtNetController] would put on the wire for this channel: [getEffectiveValue], or zero
-     * while the show is held (venue plan P5) — above park and every modifier. For test assertions.
+     * What [ArtNetController] would put on the wire for this channel: [getEffectiveValue] (from the
+     * [frozen] frame once there is one), or zero while the show is held (venue plan P5) — unless the
+     * channel is parked, which gets through the hold. For test assertions.
      */
-    fun transmittedValue(channelNo: Int): UByte = if (held) 0u else getEffectiveValue(channelNo)
+    fun transmittedValue(channelNo: Int): UByte {
+        val frame = frozen
+        val composed = if (frame == null) getEffectiveValue(channelNo) else effectiveValueOf(channelNo, frame[channelNo] ?: 0u)
+        return when {
+            !held -> composed
+            parkSource?.isParked(universe.universe, channelNo) == true -> composed
+            else -> 0u
+        }
+    }
+
+    /** The frame [freeze] pinned, or null: what a test reads to see what a teardown left on the wire. */
+    var frozen: Map<Int, UByte>? = null
+        private set
+
+    override fun freeze(values: Map<Int, UByte>?) {
+        frozen = values?.toMap()
+    }
 
     /**
      * Reset all channels to 0.

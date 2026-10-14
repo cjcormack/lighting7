@@ -38,10 +38,23 @@ import kotlin.time.measureTime
  */
 private const val SPEED_MASTER_WRITE_DEBOUNCE_MS = 750L
 
+/**
+ * How long a same-project reload takes to move a channel from where the rig was to where the reloaded
+ * show puts it ([Show.resume]). Most channels do not move at all; this is for the ones a pulled cue,
+ * an Update's re-address or a release changed.
+ */
+const val RESUME_FADE_MS = 2000L
+
 @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 class Show(
     val state: State,
     val project: DaoProject,
+    /**
+     * What a same-project reload carries from the show it replaces ([ShowCarry]): the programmer —
+     * values, layers, sideband, Blind — and the Locate bookkeeping that pairs with its LOCATE slots,
+     * so a located fixture is still located. Null starts both empty. [resume] brings back the rest.
+     */
+    carried: ShowCarry? = null,
 ) {
     val fixtures = Fixtures()
     val fxScriptCompiler = FxScriptCompiler(state.scriptingHostConfiguration)
@@ -61,7 +74,7 @@ class Show(
             }
         }
     }
-    val programmerStore = ProgrammerStore()
+    val programmerStore = carried?.programmerStore ?: ProgrammerStore()
 
     /**
      * Looks, flattened for per-fixture lookup. See [LookRegistry] for the two invalidation
@@ -174,7 +187,7 @@ class Show(
 
     /**
      * The show's hold (venue plan P5, session 6): a show on a venue whose pinned version is behind the
-     * installed one on output sends zero on every channel, above park, while it composes and draws as
+     * installed one on output sends zero on every channel but a parked one, while it composes and draws as
      * normal; one running against its older pin keeps the installed version's trigger and command
      * channels idle. Every `DbFixtureLoader.loadFixtures` call passes this, which judges it before it
      * builds a controller and hands [OutputHold] to each. The judging is [State.venueHold]'s.
@@ -206,7 +219,7 @@ class Show(
 
     /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */
     val speedMasterBank: SpeedMasterBank get() = fxEngine.speedMasters
-    val locateManager = LocateManager()
+    val locateManager = carried?.locateManager ?: LocateManager()
     val cueStackManager = CueStackManager(fxEngine)
 
     /**
@@ -239,28 +252,65 @@ class Show(
         private set
 
     /**
+     * True from the moment a switch or reload starts tearing this show down. Its registry empties
+     * as it goes, and a listener reading the current show's rig then would read an empty one — the
+     * desk selection's prune would drop every target a reload is meant to keep. Such readers ask
+     * this first.
+     */
+    @Volatile
+    var isClosing: Boolean = false
+        private set
+
+    fun beginClose() {
+        isClosing = true
+    }
+
+    /**
      * Drop every stored park the trigger output refuses — a firing level on a one-shot trigger or
      * its arm (stage-view plan session 9). The output already passes them over
      * ([TriggerOutput.admitsPark]); this keeps the park list honest about it. They can only be rows
      * stored before the Twin Shot's channels were triggers, or brought in by a sync import or a clone.
      */
     internal fun dropRefusedParks() {
-        for (park in parkManager.getAllParked()) {
-            val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value)
-                ?: commandOutput.parkRefusal(park.universe, park.channel, park.value)
-                ?: continue
-            org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
-            parkManager.forget(park.universe, park.channel)
+        // Twice at most: forgetting a show's own refused re-park exposes the venue's park under it
+        // (venue parks), which must be judged too; the second pass finds nothing new to expose.
+        repeat(2) {
+            var dropped = false
+            for (park in parkManager.getAllParked()) {
+                val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value)
+                    ?: commandOutput.parkRefusal(park.universe, park.channel, park.value)
+                    ?: continue
+                org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
+                parkManager.forget(park.universe, park.channel)
+                dropped = true
+            }
+            if (!dropped) return
         }
     }
 
-    fun start() {
+    /**
+     * @param seedValues each universe's channels to start from instead of zero — a same-project
+     *   reload's carried frame ([ShowCarry.values]). Every controller seeded from it is also
+     *   **frozen** on it, so nothing reaches the wire until [resume] has rebuilt what was running and
+     *   crossfades from it; a [start] given seeds must be followed by [resume].
+     */
+    fun start(seedValues: Map<Universe, Map<Int, UByte>> = emptyMap()) {
         Tracing.span("show.fixtures", "load fixtures") {
             try {
                 // Park state must be loaded before controllers are constructed: controllers read
                 // it via [ParkSource] on their first transmit.
                 parkManager.loadFromDatabase()
-                DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource, hold = rigHold)
+                DbFixtureLoader.loadFixtures(
+                    project.id.value, fixtures, state.database,
+                    parkSource = outputSource, hold = rigHold, seedValues = seedValues,
+                )
+                // Frozen on the carried frame from the very first frame (the loader seeded the
+                // buffer before the transmit loop started, so even the bootstrap frame carries it):
+                // what [resume] writes while it rebuilds the cues and the programmer must not reach
+                // the rig a piece at a time.
+                for (controller in fixtures.controllers) {
+                    seedValues[controller.universe]?.let { controller.freeze(it) }
+                }
                 dropRefusedParks()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -325,6 +375,102 @@ class Show(
         // [isStarted] (the readiness gate) now see a fully-initialised show.
         isStarted = true
     }
+
+    /**
+     * Bring back what [carry] says the replaced show was running — the second half of a same-project
+     * reload (a sync pull, a venue Update, Detach, Extract, a venue's Discard; `ProjectManager`), after
+     * [start] was given [ShowCarry.values]. The rig never sees zero for it: the controllers start on
+     * the carried frame, frozen there while this rebuilds, then every channel the rebuild moved
+     * crossfades to its new value over [RESUME_FADE_MS].
+     *
+     * Rebuilt, in order: the effects the operator ran by hand (a cue's or a programmer layer's come
+     * back with their owner; one on a target the reload removed is dropped); each stack's live cue,
+     * GO'd again without its events (a GO into a cue, not this) — its auto-advance timer starting
+     * again from now — and each armed standby re-armed; the programmer's layers and values, from the
+     * store [ShowCarry] handed over. Then every patched property is published from what now composes
+     * it — so a property nothing drives any more (its cue changed, its stack's cue is gone) releases
+     * to its base, as it would have had the change been made live — and every channel no fixture
+     * covers, and no programmer channel holds, goes to zero. A cue applied outside a stack
+     * (`apply_cue`) is not brought back.
+     */
+    fun resume(carry: ShowCarry) {
+        val logger = org.slf4j.LoggerFactory.getLogger("Show")
+        // Each step on its own: one that fails is logged and the rest still run, so a property
+        // nothing drives is still released and a loose channel still zeroed. Whatever was rebuilt
+        // then crossfades in, and the freeze is always lifted.
+        fun step(what: String, block: () -> Unit) {
+            runCatching(block).onFailure { logger.error("Reload could not {}", what, it) }
+        }
+        try {
+            step("bring back the hand-run effects") {
+                val effects = carry.effects.filter { targetExists(it.target) }
+                if (effects.size < carry.effects.size) {
+                    logger.info("Reload dropped {} effect(s) whose target is no longer patched", carry.effects.size - effects.size)
+                }
+                if (effects.isNotEmpty()) fxEngine.addEffects(effects)
+            }
+
+            for ((stackId, cueId) in carry.liveCues) {
+                runCatching { cueStackManager.activateCueInStack(state, stackId, cueId, fireEvents = false) }
+                    .onFailure { logger.warn("Reload could not bring back cue {} on stack {}: {}", cueId, stackId, it.message) }
+            }
+            // After the GOs, which consume a stack's standby. A cue the reload removed is refused.
+            for ((stackId, cueId) in carry.standbys) {
+                runCatching { cueStackManager.runState.setStandby(state, stackId, cueId) }
+                    .onFailure { logger.info("Reload could not re-arm cue {} on stack {}: {}", cueId, stackId, it.message) }
+            }
+
+            step("re-cook the programmer's layers") { programmerLayerStack.reinstate() }
+            step("republish the programmer") { fxEngine.programmer.republishAll() }
+
+            // Every patched property, from what composes it now. Effect-covered and parked keys are
+            // skipped by the publish itself — an effect repaints its own on the next tick.
+            step("republish the rig") {
+                val keys = PropertyChannelWriter.channelKeyIndex(fixtures).propertyKeys.values.flatten().toSet()
+                fxEngine.programmer.republishKeys(keys)
+            }
+
+            step("release the channels no fixture covers") {
+                val mapped = fixtures.channelMappingSnapshot().mappings
+                val sideband = programmerStore.channelEntries().mapTo(HashSet()) { it.universe to it.channel }
+                for (controller in fixtures.controllers) {
+                    val covered = mapped[controller.universe.universe].orEmpty()
+                    val loose = (1..512).filter { channel ->
+                        channel !in covered && (controller.universe.universe to channel) !in sideband
+                    }
+                    if (loose.isNotEmpty()) controller.restoreState(loose.associateWith { 0u.toUByte() })
+                }
+            }
+        } finally {
+            crossfadeFromCarried(carry.values)
+        }
+    }
+
+    /**
+     * Lift the freeze [start] put on the carried frame, ramping every channel whose buffer the rebuild
+     * moved from its carried value to its new one. The buffer is put back to the carried value first,
+     * so the ramp starts where the rig is.
+     */
+    private fun crossfadeFromCarried(carried: Map<Universe, Map<Int, UByte>>) {
+        for (controller in fixtures.controllers) {
+            val from = carried[controller.universe] ?: continue
+            val to = controller.currentValues
+            val moved = (1..512).mapNotNull { channel ->
+                val target = to[channel] ?: 0u
+                val start = from[channel] ?: 0u
+                if (target != start) Triple(channel, start, target) else null
+            }
+            if (moved.isNotEmpty()) {
+                controller.restoreState(moved.associate { (channel, start, _) -> channel to start })
+                controller.setValues(moved.map { (channel, _, target) -> channel to ChannelChange(target, RESUME_FADE_MS) })
+            }
+            controller.freeze(null)
+        }
+    }
+
+    private fun targetExists(target: FxTarget): Boolean = runCatching {
+        if (target.isGroupTarget) fixtures.untypedGroup(target.targetKey) else fixtures.untypedGroupableFixture(target.targetKey)
+    }.isSuccess
 
     fun close() {
         globalScalerState.detach()

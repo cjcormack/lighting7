@@ -28,6 +28,17 @@ object DbFixtureLoader {
     private val logger = LoggerFactory.getLogger(DbFixtureLoader::class.java)
 
     /**
+     * The universes [projectId]'s rig would build controllers for, read without building them —
+     * [loadFixtures]'s own reading, so a reload can tell which of the outgoing show's universes its
+     * successor will not cover (and leave those dark rather than holding their last look).
+     */
+    fun universesOf(projectId: Int, database: Database): Set<Universe> = transaction(database) {
+        val project = DaoProject.findById(projectId) ?: return@transaction emptySet()
+        if (VenuePins.isMissing(project)) return@transaction emptySet()
+        RigScope.of(project).universeConfigs().mapTo(mutableSetOf()) { Universe(it.subnet, it.universe) }
+    }
+
+    /**
      * Load all fixture configuration from the database for the given project.
      * Clears existing fixtures and rebuilds from DB state.
      *
@@ -41,6 +52,11 @@ object DbFixtureLoader {
      * — and then shared by every controller built here. Every load judges it afresh, so an Update or a
      * pulled pin move lifts or re-applies it at the reload that follows. Pass `null` from tests that
      * don't exercise the hold.
+     *
+     * [seedValues] seeds a controller this registry does not already have — a reload's fresh show
+     * carrying the replaced show's last frame (`ProjectManager`'s same-project reload), so the rig
+     * starts where it was rather than at zero. A controller the registry has already seeds from
+     * itself, as before.
      */
     fun loadFixtures(
         projectId: Int,
@@ -48,6 +64,7 @@ object DbFixtureLoader {
         database: Database,
         parkSource: ParkSource? = null,
         hold: RigHold? = null,
+        seedValues: Map<Universe, Map<Int, UByte>> = emptyMap(),
     ) {
         hold?.judge(projectId)
         val (universeConfigs, patches, groups) = transaction(database) {
@@ -121,7 +138,7 @@ object DbFixtureLoader {
         // the rig is actually outputting; the next write (fixture, FX, manual) will
         // overwrite them.
         val priorValuesByUniverse: Map<Universe, Map<Int, UByte>> =
-            fixtures.controllers.associate { it.universe to it.currentValues.toMap() }
+            seedValues + fixtures.controllers.associate { it.universe to it.currentValues.toMap() }
 
         fixtures.register(removeUnused = true) {
             // 1. Create controllers

@@ -35,8 +35,8 @@ export interface VenueShow {
   version: number
 }
 
-/** `OTHER` is any table outside the rig a venue holds (a Look, a parked channel), named by `table`. */
-export type VenueChangeKind = 'UNIVERSE' | 'PATCH' | 'GROUP' | 'RIGGING' | 'REGION' | 'ELEMENT' | 'VIEWPOINT' | 'STAGE' | 'OTHER'
+/** `PARK` is a parked channel (output, by channel); `OTHER` is any table outside the rig a venue holds (a Look, a script), named by `table`. */
+export type VenueChangeKind = 'UNIVERSE' | 'PATCH' | 'PARK' | 'GROUP' | 'RIGGING' | 'REGION' | 'ELEMENT' | 'VIEWPOINT' | 'STAGE' | 'OTHER'
 export type VenueChangeType = 'ADDED' | 'REMOVED' | 'CHANGED'
 /** The plan's four facets (Address, Position, Focus, Media), plus Type, Identity and Other. */
 export type VenueFacet = 'ADDRESS' | 'TYPE' | 'IDENTITY' | 'POSITION' | 'FOCUS' | 'MEDIA' | 'OTHER'
@@ -82,7 +82,7 @@ export type UpdateAnswer = 'KEEP_BOTH' | 'READDRESS_MINE' | 'HIDE_VENUES' | 'REM
 
 /** One line of the review: a record carried over, dropped, or blocking. */
 export interface UpdateItem {
-  /** `OVERRIDE | HIDE | ADDITION | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+  /** `OVERRIDE | HIDE | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
   kind: string
   name: string
   detail: string
@@ -175,10 +175,12 @@ export interface VenueRigRows {
   elements: string[]
   groups: string[]
   viewpoints: string[]
+  /** Parked channels, as `1-005` (venue parks); absent when none. */
+  parks?: string[]
 }
 
 /** The parts of a show's rig *Extract a venue* can move; all of them by default (venue plan §3.5). */
-export type ExtractKind = 'UNIVERSES' | 'PATCHES' | 'RIGGINGS' | 'REGIONS' | 'ELEMENTS' | 'SEATING' | 'GROUPS' | 'VIEWPOINTS'
+export type ExtractKind = 'UNIVERSES' | 'PATCHES' | 'RIGGINGS' | 'REGIONS' | 'ELEMENTS' | 'SEATING' | 'GROUPS' | 'VIEWPOINTS' | 'PARKS'
 
 /** `POST /projects/{id}/venue/extract` — what an extract did, or with `dryRun` would do. */
 export interface ExtractVenueResult {
@@ -211,6 +213,8 @@ export interface DetachResult {
   /** `key: facet, facet` for each venue patch whose overrides were written in. */
   overridesApplied: string[]
   hidesDropped: number
+  /** The show's releases of venue parks, gone with the venue; absent when none. */
+  parkReleasesDropped?: number
   relinked: Record<string, number>
   dropped?: UpdateItem[]
   machineOverridesCopied: number

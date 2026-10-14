@@ -275,8 +275,14 @@ and provenance read a sideband slot through the same lookup.
 | Message | Fields | Effect |
 |---|---|---|
 | `parkState` | — | Resync: replies `parkState` |
-| `parkChannel` | `universe: Int`, `channel: Int`, `value: UByte` | Parks a channel; lands on the next frame of that universe. No reply |
-| `unparkChannel` | `universe: Int`, `channel: Int` | Releases the park. No reply |
+| `parkChannel` | `universe: Int`, `channel: Int`, `value: UByte` | Parks a channel; lands on the next frame of that universe. On a show on a venue it is the show's own park, replacing the venue's for this show and dropping a release of the channel. A refusal — a trigger's firing level, a command's band, an operator's park on a venue — is a unicast `parkError` |
+| `unparkChannel` | `universe: Int`, `channel: Int` | Releases the park. On a show on a venue, a venue park is **released** for this show (the version untouched) and the show's own park over a venue park brings the venue's back. No reply |
+| `restoreChannelPark` | `universe: Int`, `channel: Int` | A show on a venue: takes the venue's park back — drops the show's release of the channel, and its own park over the venue's. No reply |
+
+A venue's parks are its rig: while the current project is a **venue**, an operator's `parkChannel`,
+`unparkChannel` or `restoreChannelPark` is refused with `parkError VENUE_ADMIN_ONLY` and changes
+nothing (venue plan D3; a zero-user desk's socket counts as an admin). In a show either role parks.
+See `docs/fixtures-engineering.md` §"Venue parks".
 
 ### FX — `FxSocket.kt`
 
@@ -458,7 +464,7 @@ button's place runs the same append `POST /busk/banks/{bankId}/pads` runs. See
 | `venue.hold` | `projectId?: Int`, `held: Boolean`, `pinned?: Int`, `installed?: Int`, `runAgainst: Boolean` | Connect snapshot + broadcast |
 
 The live show's hold (venue plan P5, D7; session 6; `state/VenueHoldService.kt`): `held` while it is
-behind its venue on output and every controller sends zero, `runAgainst` once the operator has lifted
+behind its venue on output and every controller sends zero but for a park, `runAgainst` once the operator has lifted
 that for the session, `pinned` the version the show uses and `installed` the venue's latest. A
 standalone show, a venue and a show on its installed version send `held: false` with no versions.
 **Outbound only**: *Run against* and Update are REST (`POST …/venue/run-against`, `…/venue/update`),
@@ -676,7 +682,8 @@ duplicate alike. See `docs/cue-stacks-engineering.md` §"WebSocket".
 
 | Message | Payload | When |
 |---|---|---|
-| `parkState` | `channels: [{universe, channel, value}]` | Every emission of `ParkManager.parkStateFlow` — a `StateFlow`, so the empty set is a value and arrives on connect |
+| `parkState` | `channels: [{universe, channel, value, owner, venueValue?}]`, `released: [{universe, channel, venueValue?}]` | Every emission of `ParkManager.parkStateFlow` — a `StateFlow`, so the empty set is a value and arrives on connect. `owner` (`SHOW | VENUE`) and `released` have no default, so both are always sent; `venueValue` is the venue's park under a show's own re-park (and on a released one, what restoring brings back), absent when there is none. A desk older than venue parks sends neither, and the client reads every park as the project's own |
+| `parkError` | `code`, `message` | Unicast, to the socket whose park write was refused: `VENUE_ADMIN_ONLY` (an operator's on a venue) or `PARK_REFUSED` (a firing level on a trigger, a level that would hold a fixture command). The park list does not move |
 
 ### FX — `FxSocket.kt`
 

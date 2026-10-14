@@ -216,7 +216,7 @@ internal val createProjectTool = ToolDef(
 
 internal val switchProjectTool = ToolDef(
     name = "switch_project",
-    description = "Make another project the current one. This stops the running show: every effect and cue stops and all DMX output goes to zero before the new project's patch loads. Only do it when the operator has said the desk is not in use for a show, or asked for the switch. Call describe_rig afterwards.",
+    description = "Make another project the current one. This stops the running show: every effect and cue stops and all DMX output goes to zero before the new project's patch loads, except channels the new project parks, which hold their level into its park. Choosing the project that is already current is the same clean restart. Only do it when the operator has said the desk is not in use for a show, or asked for the switch. Call describe_rig afterwards.",
     inputSchema = objectSchema(required = listOf("projectId")) {
         prop("projectId", "integer", "From list_projects.")
     },
@@ -676,17 +676,17 @@ internal val extractVenueTool = ToolDef(
     description = "Turn the room and house rig of an existing show into a venue, publish it as v1, and put that show on it — in one step, all or nothing. " +
         "Moved into the venue (each record keeps its identity, so nothing the show's cues and Looks name breaks): the VENUE-layer scene elements, Fixed seating, camera viewpoints and seat views in Fixed seating, and — unless include leaves them out — the universes, patch, riggings, regions and groups. " +
         "The show keeps its SET-layer elements, cues, Looks, templates and prompt book, and draws and outputs exactly as before, now reading the room from the venue. Preset seating is copied into the venue and also stays the show's. " +
-        "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it, which stops its running cues and effects, so that needs reloadLiveShow.",
+        "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run effects come back, restarting every effect — so that needs reloadLiveShow.",
     inputSchema = objectSchema(required = listOf("fromProjectId", "name")) {
         prop("fromProjectId", "integer", "The show whose room and rig become the venue (list_projects). It must not already be on a venue.")
         prop("name", "string", "The venue's name: unique on the desk, so not the show's own name. At most 50 characters.")
         arrayProp(
             "include",
-            buildJsonObject { put("type", "string"); put("enum", buildJsonArray { listOf("UNIVERSES", "PATCHES", "RIGGINGS", "REGIONS", "ELEMENTS", "SEATING", "GROUPS", "VIEWPOINTS").forEach { add(it) } }) },
-            "The parts to move; absent moves all of them. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
+            buildJsonObject { put("type", "string"); put("enum", buildJsonArray { listOf("UNIVERSES", "PATCHES", "RIGGINGS", "REGIONS", "ELEMENTS", "SEATING", "GROUPS", "VIEWPOINTS", "PARKS").forEach { add(it) } }) },
+            "The parts to move; absent moves all of them. PARKS moves the show's parked channels, which then reach it (and every show on the venue) from the version. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
         )
         prop("dryRun", "boolean", "Answer what would move and keep nothing. Default false.")
-        prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, stopping running cues and effects. Only when the operator has said the desk is free.")
+        prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, restarting every running effect. Only when the operator has said the desk is free.")
     },
 )
 

@@ -18,7 +18,8 @@ import java.util.UUID
  *
  * **Project-scoped like [SceneryService]**: [attach]ed to the current project at start and again by
  * State's project collector, which drops everything held — an element uuid belongs to one project's
- * scene. Clear (`clearProgrammerCompletely`) releases it all on the Clear fade.
+ * scene. A carried reload of the same project (`ShowCarry`) keeps it, less the pieces whose element
+ * the reload removed, as it keeps the programmer. Clear (`clearProgrammerCompletely`) releases it all on the Clear fade.
  *
  * **A write is checked against its element's kind** with [parseSceneryState] — `open` only on a
  * drawn drape, `trimM` only on a flown piece — and merges into what the element already holds, so
@@ -71,7 +72,21 @@ class ProgrammerScenery(
     private val releases = HashMap<UUID, Long>()
 
     /** The current project changed (or the desk started): everything held belonged to the old one. */
-    fun attach(projectId: Int?) {
+    fun attach(projectId: Int?, reload: Boolean = false) {
+        if (reload && projectId != null && _flow.value.projectId == projectId) {
+            // A carried reload (`ShowCarry`) keeps the programmer, and this is the programmer's
+            // scenery — less any piece whose element the reload (a pull, an Update) removed.
+            // Best-effort: this runs on the project collector, and a read that fails (the desk
+            // shutting down under it) keeps every held piece rather than escaping the collector.
+            val known = runCatching { elementsOf(projectId).keys }.getOrNull() ?: return
+            synchronized(lock) {
+                val current = _flow.value
+                if (current.projectId == projectId && !known.containsAll(current.elements.keys)) {
+                    _flow.value = current.copy(elements = current.elements.filterKeys { it in known })
+                }
+            }
+            return
+        }
         synchronized(lock) {
             releases.clear()
             _flow.value = Snapshot(projectId, emptyMap())

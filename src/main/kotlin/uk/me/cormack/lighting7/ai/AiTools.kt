@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
+import uk.me.cormack.lighting7.dmx.UnparkOutcome
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.json.*
@@ -825,9 +826,27 @@ class AiTools(private val state: State) {
                 // say why. Always present (empty when nothing is parked), like `windows`.
                 put("parked", buildJsonArray {
                     for (parked in parkedChannelReports(state)) {
-                        addJsonObject { putParkedChannel(parked.universe, parked.channel, parked.value, parked.mapping) }
+                        addJsonObject {
+                            putParkedChannel(parked.universe, parked.channel, parked.value, parked.mapping)
+                            put("owner", parked.owner.name)
+                            parked.venueValue?.let { put("venueValue", it) }
+                        }
                     }
                 })
+                // A show on a venue: the venue parks it has released for its run (unpark_channel on a
+                // venue park), so a model can tell a channel the venue parks from one this show freed.
+                if (state.show.parkManager.isOnVenue) {
+                    put("releasedVenueParks", buildJsonArray {
+                        for (released in releasedParkReports(state)) {
+                            addJsonObject {
+                                put("universe", released.universe)
+                                put("channel", released.channel)
+                                released.venueValue?.let { put("venueValue", it) }
+                                released.mapping?.let { putChannelMapping(it) }
+                            }
+                        }
+                    })
+                }
             }
         }
 
@@ -1003,18 +1022,26 @@ class AiTools(private val state: State) {
         state.show.commandOutput.parkRefusal(universe, channel, value.toUByte())?.let { return errorResult(it) }
         val parkManager = state.show.parkManager
         val previous = parkManager.getParkedValue(universe, channel)?.toInt()
+        val previousOwner = parkManager.ownerOf(universe, channel)
         parkManager.park(universe, channel, value.toUByte())
         state.show.fxEngine.provenance.emitUpdate()
+        // On a show on a venue, the venue's park on the channel (inherited from its version, or one the
+        // show had released) is what unpark_channel brings back.
+        val venueValue = parkManager.venueParkOf(universe, channel)?.toInt()
 
         val mapping = channelMappingAt(state, universe, channel)
         return ToolExecutionResult(
             success = true,
             description = "Parked universe $universe channel $channel at $value" +
                 (mapping?.let { " (${it.fixtureName} — ${it.description})" } ?: "") +
-                (previous?.let { " (was parked at $it)" } ?: ""),
+                (previous?.let { " (was parked at $it${if (previousOwner == RigOwner.VENUE) " by the venue" else ""})" } ?: "") +
+                (venueValue?.let { " — this show's park, over the venue's at $it, which unpark_channel brings back" } ?: ""),
             result = buildJsonObject {
                 putParkedChannel(universe, channel, value, mapping)
+                put("owner", RigOwner.SHOW.name)
+                venueValue?.let { put("venueValue", it) }
                 previous?.let { put("previousValue", it) }
+                previousOwner?.let { put("previousOwner", it.name) }
             }.toString(),
         )
     }
@@ -1040,19 +1067,28 @@ class AiTools(private val state: State) {
                     put("wasParked", false)
                 }.toString(),
             )
-        parkManager.unpark(universe, channel)
+        val owner = parkManager.ownerOf(universe, channel)
+        val outcome = parkManager.unpark(universe, channel)
         state.show.fxEngine.provenance.emitUpdate()
+        val venueValue = parkManager.getParkedValue(universe, channel)?.toInt()?.takeIf { outcome == UnparkOutcome.VENUE_RESTORED }
 
         val mapping = channelMappingAt(state, universe, channel)
+        val what = when (outcome) {
+            UnparkOutcome.VENUE_RESTORED -> "Removed this show's park on universe $universe channel $channel (was $parkedValue): the venue's park at $venueValue stands again"
+            UnparkOutcome.RELEASED -> "Released the venue's park on universe $universe channel $channel (was $parkedValue) for this show; the venue keeps it"
+            else -> "Unparked universe $universe channel $channel (was $parkedValue)"
+        }
         return ToolExecutionResult(
             success = true,
-            description = "Unparked universe $universe channel $channel (was $parkedValue)" +
-                (mapping?.let { " (${it.fixtureName} — ${it.description})" } ?: ""),
+            description = what + (mapping?.let { " (${it.fixtureName} — ${it.description})" } ?: ""),
             result = buildJsonObject {
                 put("universe", universe)
                 put("channel", channel)
                 put("wasParked", true)
                 put("parkedValue", parkedValue)
+                owner?.let { put("owner", it.name) }
+                put("outcome", outcome.name)
+                venueValue?.let { put("venueValue", it) }
                 mapping?.let { putChannelMapping(it) }
             }.toString(),
         )

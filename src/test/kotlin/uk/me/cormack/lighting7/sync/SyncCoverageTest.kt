@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoVenueVersions
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverrides
+import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueEvents
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
@@ -216,6 +217,9 @@ class SyncCoverageTest {
         // Venue plan §3.2, exported from session 5 at formatVersion 24 (session 4 reserved the folder).
         // A show on a venue's alone, read from `seedShowOnVenue`'s export like the hides.
         DaoShowOverrides to Disposition.Portable("showOverrides"),
+        // Venue parks, formatVersion 27: a show's releases of its venue's parks, a show on a venue's
+        // alone, read from `seedShowOnVenue`'s export like the hides.
+        DaoShowParkReleases to Disposition.Portable("showParkReleases"),
     )
 
     private lateinit var state: State

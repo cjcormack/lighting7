@@ -5,6 +5,7 @@ import { Lock, LockOpen } from "lucide-react"
 import type { ChannelRef, Fixture } from "@/store/fixtures"
 import { useMemo } from "react"
 import { fixtureChannelRefs, useChannelsPark } from "@/hooks/useFixturePark"
+import { unparkConfirm } from "@/lib/parkOwner"
 
 /**
  * Park / unpark every channel of a fixture.
@@ -44,7 +45,7 @@ export function ParkButton({
   isEditing: boolean
   iconOnly?: boolean
 }) {
-  const { parkedCount, totalChannels, isPartiallyParked, isAnyParked, parkFixture, unparkFixture } =
+  const { parkedCount, parkedStates, venueParkedCount, totalChannels, isPartiallyParked, isAnyParked, parkFixture, unparkFixture } =
     useChannelsPark(channels)
 
   const canUnpark = isAnyParked && isEditing
@@ -55,16 +56,19 @@ export function ParkButton({
       return
     }
     if (!canUnpark) return
-    if (confirm(`Unpark ${parkedCount} channel(s) on ${name}?`)) {
+    if (confirm(unparkConfirm(parkedStates, `on ${name}`))) {
       unparkFixture()
     }
   }
 
+  // A venue's park is named: unparking it releases it for this show, which is not what "unpark"
+  // means on the show's own.
+  const byVenue = venueParkedCount > 0 ? ` (${venueParkedCount} by the venue)` : ""
   const tooltip = !isAnyParked
     ? `Park all ${totalChannels} channels at current values`
     : canUnpark
-      ? `Unpark all ${parkedCount} channel(s)`
-      : `${parkedCount} channel(s) parked — the desk is not connected`
+      ? `Unpark all ${parkedCount} channel(s)${byVenue}`
+      : `${parkedCount} channel(s) parked${byVenue} — the desk is not connected`
 
   return (
     <Tooltip>
