@@ -1119,32 +1119,8 @@ class RemoteSyncEngine(
      * advances HEAD (NO_OP, PUSHED, FAST_FORWARDED, MERGED). Bootstraps the table on the
      * first Phase-5 sync after upgrading from Phase 4.
      */
-    private fun bootstrapSyncStateAtHead(projectId: Int, repo: Repository, sha: String) {
-        // Common case (NO_OP, repeat snapshot) — every existing row is already at this
-        // SHA. Skip the delete-all + insert-all churn entirely.
-        val alreadyAtSha = transaction(state.database) {
-            val rows = DaoSyncState.find { DaoSyncStates.project eq projectId }
-            val any = rows.firstOrNull()
-            any != null && rows.all { it.lastSyncedSha == sha }
-        }
-        if (alreadyAtSha) return
-
-        val snapshots = RecordHasher.fromRef(repo, sha)
-        transaction(state.database) {
-            DaoSyncState.find { DaoSyncStates.project eq projectId }.forEach { it.delete() }
-            val project = DaoProject.findById(projectId) ?: return@transaction
-            for ((key, snap) in snapshots) {
-                DaoSyncState.new {
-                    this.project = project
-                    this.tableName = key.tableName
-                    this.recordUuid = key.uuid
-                    this.lastSyncedSha = sha
-                    this.lastSyncedHash = snap.hash
-                    this.lastSyncedIsDeleted = snap.isDeleted
-                }
-            }
-        }
-    }
+    private fun bootstrapSyncStateAtHead(projectId: Int, repo: Repository, sha: String) =
+        SyncStateBookkeeping.bootstrapAt(state.database, projectId, repo, sha)
 
     /**
      * Fast-forward the local DB and git HEAD to the tip of [remoteRef].

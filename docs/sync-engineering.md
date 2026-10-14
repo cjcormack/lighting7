@@ -1781,13 +1781,37 @@ outcome that advances HEAD: `NO_OP`, `PUSHED`, `FAST_FORWARDED`, and the
 post-merge / post-apply paths. It deletes every `sync_state` row for the
 project and re-creates one row per record on disk at `sha`. This is the
 **bootstrap** path: the very first Phase-5 sync on a Phase-4 working tree
-finds zero rows and seeds them all.
+finds zero rows and seeds them all. Two other writers exist, both below: the
+import of a remote project seeds the rows at the clone, and a snapshot of a
+project with none seeds them at its last-synced commit.
 
 The deliberate corollary: **the first sync after upgrade can't tell prior
 local edits from remote ones**, so any disagreement at that moment surfaces
 as a conflict. The engineering trade-off is one extra round of operator
 attention immediately after upgrade in exchange for never silently dropping
 peer work.
+
+That corollary must never reach a project added **from its remote repo**: its
+DB is exactly the cloned tree, so that tree is already agreed. `CloudSyncImporter`
+therefore seeds `sync_state` at the clone's HEAD (`SyncStateBookkeeping.bootstrapAt`,
+the same body as `bootstrapSyncStateAtHead`). Before it did, an imported desk had no
+rows until a sync ended in a terminal bootstrap, and a pull-only desk whose every run
+ended local-ahead never got any. The first sync that diverged — any local commit, even
+one the operator didn't knowingly make — then conflicted on **every record the remote
+had changed**, ones never touched locally included (local equal to the merge base, yet
+`base == null`), and a deletion made meanwhile shipped with no tombstone, so a peer with
+a commit of its own kept the record and pushed it back.
+
+Desks imported before the fix are repaired by `SyncStateBookkeeping.seedIfMissing`,
+which `SnapshotEngine.snapshot` runs before deriving tombstones: a project with no rows
+whose `sync_configs.lastSyncedSha` is in the working tree is bootstrapped there. It inserts
+only while the rows are still empty, in the transaction that checks, because the manual
+snapshot route does not hold the engine's project lock and a sync may have bootstrapped at a
+newer commit meanwhile. The import's own seed is past the import's commit, so a failure there
+only logs: the watermark is the same commit, and the first snapshot seeds from it. That
+watermark names the last agreed tree on every path that sets it (the import's clone, the
+remote tip a pull-only run keeps, the HEAD a push or merge leaves). `ImportedProjectSyncTest`
+covers both, push-enabled and pull-only.
 
 ## Sync session lifecycle (Phase 5)
 
@@ -1820,7 +1844,7 @@ Tables (machine-local, never serialised):
 
 | Table | What it carries |
 |---|---|
-| `sync_state` | One row per `(project, table, uuid)`: `last_synced_sha` / `last_synced_hash`. Rebuilt by `bootstrapSyncStateAtHead` after every advance. |
+| `sync_state` | One row per `(project, table, uuid)`: `last_synced_sha` / `last_synced_hash`. Rebuilt by `bootstrapSyncStateAtHead` after every advance; seeded at the clone by `CloudSyncImporter`, and at `lastSyncedSha` by `SyncStateBookkeeping.seedIfMissing` when a snapshot finds none. |
 | `sync_session` | One row per session: `state`, `local_sha`, `remote_sha`, `base_sha`, `error_message`. Historical `DONE`/`FAILED`/`ABORTED` rows accumulate as audit trail. |
 | `sync_session_conflict` | One row per conflicting record in the session: `conflict_kind` (`EDIT_EDIT` only in Phase 5), `resolution` (`LOCAL`/`REMOTE`/`MANUAL`/null), `manual_value_json` (Phase 6, populated when `resolution = MANUAL`), and the canonical-JSON snapshots (`local_json` / `remote_json` / `base_json`) captured at session-open time so resolution remains stable across stale fetches. |
 

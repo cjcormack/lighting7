@@ -87,10 +87,9 @@ internal fun Route.routeApiRestCloudSync(state: State) {
      *     + `project.json` and creates DB rows — refusing with 409 on UUID or name
      *     collision, 422 on unsupported format, 400 on a missing/malformed archive.
      *  4. Move the pending tree to the canonical `<root>/{projectUuid}/repo/` location.
-     *  5. Persist `sync_configs` so the next "Sync now" works without further setup.
-     *
-     * Sync-state bootstrap is left to the next sync run — its `Equal` history branch
-     * already calls [bootstrapSyncStateAtHead], which keeps that helper private.
+     *  5. Persist `sync_configs` so the next "Sync now" works without further setup, and
+     *     seed `sync_state` at the clone's HEAD — the tree the DB now holds is the last one
+     *     this install and the remote agree on, which the first diverged sync diffs against.
      */
     post<CloudSyncImportResource> {
         val request = call.receive<ImportFromRemoteRequest>()
