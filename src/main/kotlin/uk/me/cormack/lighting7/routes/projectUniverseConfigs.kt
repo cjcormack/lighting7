@@ -135,35 +135,15 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                     rig, DaoUniverseConfig.findById(resource.configId), { it.project.id }, { "Universe ${it.universe}" },
                 ) ?: return@transaction null
 
-                // Drop every machine-local override for this universe before the row goes
-                // away — overrides FK to the project, not the universe row, so they'd
-                // otherwise linger as orphan rows keyed by a now-vanished UUID.
-                Overrides.setUniverseAddress(project.id.value, config.uuid, null)
-                Overrides.setUniverseRefreshIntervalMs(project.id.value, config.uuid, null)
-
-                // Delete patches in this universe first — each one's busk rig tiles with it, the
-                // sweep the patch delete route makes (`DaoBuskRigTiles` has no cascade).
-                var sweptTiles = 0
-                config.fixturePatches.forEach { patch ->
-                    sweptTiles += deleteBuskRigTilesReferencing(patchId = patch.id.value)
-                    DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
-                        .forEach { it.delete() }
-                    deletePlacementsOf(patch)
-                    // A cue event fires one of this patch's tubes: it goes with the patch.
-                    deleteCueEventsForPatches(listOf(patch.id))
-                    patch.delete()
-                }
-                // A venue patch the show put on this universe goes back to the venue's address.
-                ShowOverrides.sweepUniverse(project.id, config.uuid)
-                config.delete()
-                sweptTiles
+                deleteOwnUniverse(project, config)
             }
 
             if (deleted == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Universe config not found"))
                 return@withProject
             }
-            if (deleted > 0) state.show.fixtures.buskRigChanged()
+            if (deleted.first > 0) state.show.fixtures.buskRigChanged()
+            if (deleted.second > 0) state.show.fixtures.cueListChanged()
 
             // Reload controllers to remove the deleted universe
             if (state.isCurrentProject(project)) {
@@ -174,6 +154,31 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
             call.respond(HttpStatusCode.NoContent)
         }
     }
+}
+
+/**
+ * Delete a show's own universe [config] and everything on it, inside the caller's transaction: its
+ * machine-local overrides, each of its patches as [deleteOwnPatch] deletes one, and any Address
+ * override that put a venue patch on it. Answers how many busk rig tiles and cue events went, for the
+ * caller's `buskRigChanged` / `cueListChanged`. The universe route's delete, and `unpatch_fixtures`'.
+ */
+internal fun deleteOwnUniverse(project: DaoProject, config: DaoUniverseConfig): Pair<Int, Int> {
+    // Overrides FK to the project, not the universe row, so they'd otherwise linger as orphan
+    // rows keyed by a now-vanished UUID.
+    Overrides.setUniverseAddress(project.id.value, config.uuid, null)
+    Overrides.setUniverseRefreshIntervalMs(project.id.value, config.uuid, null)
+
+    var sweptTiles = 0
+    var sweptEvents = 0
+    config.fixturePatches.toList().forEach { patch ->
+        val (tiles, events) = deleteOwnPatch(patch)
+        sweptTiles += tiles
+        sweptEvents += events
+    }
+    // A venue patch the show put on this universe goes back to the venue's address.
+    ShowOverrides.sweepUniverse(project.id, config.uuid)
+    config.delete()
+    return sweptTiles to sweptEvents
 }
 
 // Resources
