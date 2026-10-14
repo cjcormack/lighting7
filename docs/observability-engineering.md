@@ -492,8 +492,9 @@ backoff short. Turning the switch off deletes the spool (§"The switch").
   maps, debug IDs injected as it bundles (which is why it runs inside `buildFrontend`, not after it),
   the upload, the release's commits (`fetch-depth: 0`), and the maps deleted. `copyFrontend`
   excludes `*.map` as well, so none can reach the jar. The plugin's own telemetry is off. Its
-  default is to fail the build on an upload or set-commits error, so a release build needs the
-  GitHub integration connected in Sentry. Without the token — locally, in `ci.yml`, on a fork —
+  `errorHandler` rethrows, so an upload or set-commits error fails the build — the plugin's own
+  default only logs one, its README notwithstanding — and a release build needs the GitHub
+  integration connected in Sentry. Without the token — locally, in `ci.yml`, on a fork —
   there are no source maps and no plugin.
 
 ### Volume

@@ -22,6 +22,10 @@ export default defineConfig({
             project: "lighting7-react",
             authToken: process.env.SENTRY_AUTH_TOKEN,
             telemetry: false,
+            // Without a handler the plugin only logs a failed release or upload, whatever its README says.
+            errorHandler: (err) => {
+              throw err
+            },
             release: { name: release || undefined, inject: false, setCommits: { auto: true, ignoreMissing: true } },
             sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
           }),
