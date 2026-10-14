@@ -1140,7 +1140,7 @@ z-fight it.
 
 ### Painted cloths
 
-Scrim plan sessions 2–6 (`../../docs/plans/scrim-plan.md` D2–D10, D12, D13). A drape's
+Scrim plan sessions 2–6 (`../../docs/plans/completed/scrim-plan.md` D2–D10, D12, D13). A drape's
 `fabric` and a drape's or a flat's `paint` (lighting7 `docs/fixtures-engineering.md` §"The scene
 document") are drawn, and since session 3 **light passes a net and a hole**: a flat front light
 lights the set through a gauze, a steep wash barely does, a beam's air runs on to the next solid

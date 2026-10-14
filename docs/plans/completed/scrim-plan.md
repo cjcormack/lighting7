@@ -1,6 +1,11 @@
 # Scrims and painted cloths — light through cloth, and images on it
 
-> **Document status: APPROVED — all six sessions shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd` (2026-10-09), `324c3b99`, `302ac2a1` and `9420fa28` (2026-10-10).** Scope agreed with Chris, 2026-10-09,
+> **Document status: COMPLETE — all six sessions shipped, as `2729120d`, `6c6f4f85`, `14dcb7bd`
+> (2026-10-09), `324c3b99`, `302ac2a1` and `9420fa28` (2026-10-10).** §8's follow-ups are in
+> [`followups.md`](../followups.md); §9's desk checks are `FU-MANUAL-SCRIM-S1` and
+> `FU-MANUAL-SCRIM-ESTIMATES` (outstanding), `FU-MANUAL-STAGE-LIGHT-BUDGET` for session 5's frame
+> budget, and `FU-MANUAL-SCRIM-S2` to `-S4` (validated by the sessions' own runs) in
+> [`manual-validation.md`](../manual-validation.md). Scope agreed with Chris, 2026-10-09,
 > over three rounds of questions (the answers are in §10 and in the design record). The survey and
 > the pictures are in [`scrim-design/INDEX.md`](scrim-design/INDEX.md). The same proposal for human
 > readers is [`scrim-design/scrim.html`](scrim-design/scrim.html), with a live copy at
@@ -296,7 +301,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 
 ## 8. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-SCENE-IMAGE-WEBP` — WebP uploads, gated on a designer's files arriving as WebP (session 1).
 - `FU-STAGE-PAINT-ALL-SURFACES` — paint beyond drapes and flats, gated on a set the two cannot dress

@@ -15,6 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SENTRY-RELEASE`](#fu-manual-sentry-release) | the first release build uploads its source maps and commits to Sentry and ships none, and a fresh Windows install sends nothing until an admin turns diagnostics on | Sentry S4, 2026-10-13 |
+| [`FU-MANUAL-SCRIM-S1`](#fu-manual-scrim-s1) | a painted cloth's images travel with its show — through the repo to a second desk, and into a clone | Scrim S1, 2026-10-09 |
 | [`FU-MANUAL-VENUE-PARKS`](#fu-manual-venue-parks) | a park made on a trial venue reaches its shows only when published and taken, holds its level through a switch between two shows on it, and a show re-parks and releases it for itself without the rig dipping — on a trial venue, since it publishes | Venue parks, 2026-10-13 |
 | [`FU-MANUAL-VENUE-S7`](#fu-manual-venue-s7) | the panto is created from the Projects page on the hall with the stalls preset, and a detached copy of a show outputs exactly what it did on the venue | Venue S7, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S6`](#fu-manual-venue-s6) | a show behind its venue on output opens held — the rig at zero but for its parks, while the Stage view draws — *Run against* drives the old patch with the cannon's channels idle, and Update clears the hold — on a trial venue, since it publishes | Venue S6, 2026-10-11 |
@@ -85,6 +87,72 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-SENTRY-RELEASE`
+
+**What it proves**: *a release build is readable in Sentry and silent until asked* — Sentry plan D1
+and D14 (`docs/observability-engineering.md` §"Release and source maps"): the release workflow
+uploads the browser's source maps and sets the release's commits from inside `packageWindows`, the
+MSI carries no `.map`, and a `RELEASE` install reports nothing until an admin opts in.
+
+**Why it is here**: every Sentry session was checked on the dev desk, which is a `DEV` build that
+reports by default and has no source-map upload. No release has been built since session 4 put the
+upload in `windows-build.yml`, and the plugin fails the build on an upload or set-commits error.
+
+**Before**: the `SENTRY_AUTH_TOKEN` repository secret is set, and the GitHub integration is
+connected to the `lighting7` org in Sentry (set-commits needs it).
+
+**Test**, on the first release:
+
+1. **The build.** `windows-build.yml` goes green. In Sentry, the release `lighting7@<version>+<sha>`
+   exists under `lighting7-react` with its commits listed, and Settings › Source Maps shows an
+   artifact bundle for it.
+2. **No maps shipped.** Unpack the MSI (or the installed `lighting7.jar`): no `*.map` under
+   `static/`.
+3. **Off by default.** Install on a clean Windows machine and use the desk for a few minutes:
+   nothing arrives in either Sentry project. Install settings shows *Send diagnostics* off, and an
+   operator cannot change it.
+4. **On.** As an admin, turn it on. A desk run appears under `lighting7-kotlin`'s release health, and
+   *Report a problem…* in the user menu sends a feedback with its replay. The release's first
+   browser issue, whenever one comes, names the original source files rather than the bundle's.
+5. **Offline.** Unplug the network, send another *Report a problem…*, plug it back in: it arrives
+   (the desk's spool forwards it).
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+20 minutes, plus the build.
+
+---
+
+## `FU-MANUAL-SCRIM-S1`
+
+**What it proves**: *a cloth's painting goes where its show goes* — scrim plan session 1
+(`2729120d`): the images live in a per-machine store and travel as raw bytes at `sceneImages/` in a
+show's repo (`formatVersion` 23), and a clone fills the new project's store through the importer.
+
+**Why it is here**: the plan's §9 check for session 1
+([`scrim-plan.md`](completed/scrim-plan.md) §9). PR #95 checked the element sheet in Chromium
+against the running desk — upload, thumbnails, the aspect hint — and `ProjectRoundTripTest` carries
+the fixture's images byte for byte; a second desk pulling the repo was never run.
+
+**Test**, in a throwaway show with a repo attached:
+
+1. **Paint.** On a drape, upload a PNG with transparency as the front paint and a JPEG as the back;
+   on a flat, a front paint. The thumbnails show and the aspect hint reads right; *Transparent pixels
+   cut holes* shows for the PNG.
+2. **Sync.** *Sync now*. The repo has `sceneImages/` with exactly the three images, named by hash.
+3. **A second desk.** On another desk (a cloud session from `scripts/cloud-session.sh` will do),
+   import the repo: the element sheet shows the same thumbnails and the Stage view draws the cloths
+   painted.
+4. **Clone.** Clone the show on the first desk: the clone's cloths are painted.
+5. **MCP.** From Claude, `upload_scene_image` a PNG and `set_scene` it onto a flat; `render_view`
+   shows it painted.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+20 minutes.
 
 ---
 
@@ -2620,3 +2688,6 @@ file's git history if one is ever needed again.
 | `FU-MANUAL-DESK-SPACE` | 2026-09-10 | checks 1–4 pass in Safari/WebKit on a desk and a real iPhone — the rail overlays and remembers its width, the two apply gestures work and selection reads white against blue ownership, and the landscape phone shows six whole fixture rows (first fixture `y` 175.5 in WebKit against 169 in Chromium). Check 3's touch gestures and check 5's Blind both fail: the marquee has no touch story, ⌥-press has no touch equivalent, and Blind must be togglable on the programmer. Check 3's GO half has no subject — session 5 left this view with no `ShowBar`. None of §7's four follow-ups was asked for. Per-check results in `completed/programmer-space-plan.md` §6; the seventeen findings are in `completed/programmer-desk-findings.md` |
 | `FU-MANUAL-DESK-FINDINGS` | 2026-09-11 | marked manually tested by the operator rather than staged as a check of its own. Covers the whole of [`completed/programmer-desk-findings.md`](completed/programmer-desk-findings.md) — the touch group on a real phone (a finger pans, a held one marquees, the template chip's hold tracks, the bar folds to its chips — `10b0c7c`), Blind as the programmer action bar's control with the three barred views reporting it (`a46fe1e`), the summoned speed-master panel (`80714da`), the two cell editors (`ec70f32`), the rail's sheet (`86a18fa`), one Record (`3ebaa8e`), the multi-head template cell (`813eb54`, `10b4d90`) and the two truncation fixes (`7b33420`, `fe36ee6`). There is no per-check record: the finding entries in that document are the account of what each change was, and the one successor is `FU-LOOK-ELEMENT-ROWS` |
 | `FU-MANUAL-VENUE-S2` | 2026-10-11 | venue plan session 2's §9 check (`d93e174`), run whole in PR #105's review on a cloud desk (`scripts/cloud-session.sh`), in Chromium as an admin and as an operator: *Add venue* made an empty venue; patching into it and publishing v1 and v2 listed both in History, and Compare named the change; an operator saw the venue read-only, with no draft count, History or Publish. It needs no rig, so it was not re-run at the desk |
+| `FU-MANUAL-SCRIM-S2` | 2026-10-09 | scrim plan session 2's §9 check (`6c6f4f85`), run whole in Chromium against the running desk in PR #96: a painted cloth from Orbit and seat F6, drawn tabs at open 0 / 0.4 / 0.8 / 1, painted velour following its pleats, flat muslin, *Full detail* going 2048 → 4096 live, cut-out holes, a missing image, and a `render_view` capture. How it reads on a real GPU is `FU-MANUAL-SCRIM-ESTIMATES` |
+| `FU-MANUAL-SCRIM-S3` | 2026-10-09 | scrim plan session 3's §9 check (`14dcb7bd`), run whole in Chromium against the running desk in PR #97: a flat FOH lit the set through a gauze, a steep wash barely did, the wash's air ran past the gauze to the floor, and a cut cloth's wall and floor shadow followed its holes |
+| `FU-MANUAL-SCRIM-S4` | 2026-10-10 | scrim plan session 4's §9 check (`324c3b99`), run whole in Playwright against the running desk and in `render_view` in PR #98: the reveal (the gauze solid under a front wash, gone with the scene lit behind), denser from the house side, a muslin day/night cloth front-lit and back-lit, and a cut cloth's holes |

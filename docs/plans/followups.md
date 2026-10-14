@@ -141,6 +141,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCENERY-DRIVEN-BY`](#fu-scenery-driven-by) | Trigger | Stage | a venue's tabs or flys run on a DMX-controlled track the desk patches |
 | [`FU-SCENERY-STAGE-HANDLES`](#fu-scenery-stage-handles) | Trigger | Stage | the Stage popover feels indirect on the rig |
 | [`FU-SCENERY-FLY-DEPT`](#fu-scenery-fly-dept) | Trigger | Show | fly cues are called separately from LX |
+| [`FU-SENTRY-LAUNCHER-REPORT`](#fu-sentry-launcher-report) | Trigger | Dist | a desk fails before `module()` and nobody can say why |
+| [`FU-SENTRY-PROFILING`](#fu-sentry-profiling) | Trigger | Perf | a Stage view or FX compile slowdown that traces and metrics cannot place |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2754,6 +2756,39 @@ lane of their own beside the LX one, with the rail's cards grouped or tagged to 
 naming which department's GO it describes. The glyph stays for an LX cue that also moves something.
 The transport question — one GO for both, or a GO per department — is the larger half, and the
 reason this waits for a show that needs it.
+
+---
+
+## Observability
+
+### `FU-SENTRY-LAUNCHER-REPORT`
+
+**The launcher reports nothing, so a backend that dies before `module()` is invisible** · Trigger · Sentry plan §7, 2026-10-13
+
+Sentry starts in `Application.module()` (`docs/observability-engineering.md`), after `State` has
+opened the database the telemetry switch lives in. A backend that never gets that far — a bad
+`local.conf`, a locked data dir, a JVM that will not start — sends nothing, and the launcher, which
+is pure JDK by design, sends nothing either. **Trigger**: a desk fails at startup and the operator
+cannot say why from the launcher's log. **Then**: have the launcher post one minimal envelope (an
+event with the child's exit code and the tail of its output, scrubbed by the same patterns as
+`TokenScrubber`) with `java.net.http`, adding no dependency. Two things to settle first: the
+launcher cannot read the `telemetry_settings` row without a SQLite driver, so consent has to reach
+it some other way (a marker file the backend writes when the switch changes, as the update marker
+crosses between the two); and it must honour `sentry.enabled = false` in `local.conf`.
+
+### `FU-SENTRY-PROFILING`
+
+**Continuous profiling for the JVM and the browser** · Trigger · Sentry plan §6, 2026-10-13
+
+Traces say which span was slow and metrics say how often; neither says which code inside it.
+JVM continuous profiling (`sentry-async-profiler`) is **macOS and Linux only**, so it would cover
+the dev desk and never a Windows install, and it adds native binaries the per-OS payload table and
+its `nativePayloadOs` verifier would have to learn. Browser profiling needs a
+`Document-Policy: js-profiling` response header from the desk and is Chromium-only. **Trigger**: a
+slowdown in the Stage view or the FX compile that `app.boot`'s spans, `stage.fps` and the
+`fx.tick.duration` metric cannot place. **Then**: the browser half first (the header on the desk's
+static responses, `browserProfilingIntegration` loaded through `lib/sentryLazy.ts`, sampled per
+session), and the JVM half only for the dev desk, its binaries kept out of the Windows jar.
 
 ## Completed
 

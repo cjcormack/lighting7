@@ -412,7 +412,7 @@ repo between two desks.
 ### Version 23 — painted cloths
 
 Bumped when the images painted on scene cloths began travelling in the repo (scrim plan session 1,
-P2 — `docs/plans/scrim-plan.md`). `SUPPORTED_FORMAT_VERSION = 23`; `MIN_SUPPORTED_FORMAT_VERSION`
+P2 — `docs/plans/completed/scrim-plan.md`). `SUPPORTED_FORMAT_VERSION = 23`; `MIN_SUPPORTED_FORMAT_VERSION`
 **stays 5**, so a v23 install still reads every earlier repo: a missing folder is no images, and
 every key defaults. The writer emits `formatVersion = 23`.
 
