@@ -3,6 +3,7 @@ import { Loader2, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { useBootStatusQuery } from "./store/bootStatus"
+import { markBootReady } from "./lib/sentryMetrics"
 
 const POLL_MS = 400
 
@@ -35,6 +36,10 @@ export function BootGate({
   useEffect(() => {
     setPollingInterval(settled ? 0 : POLL_MS)
   }, [settled])
+
+  useEffect(() => {
+    if (ready && !bypass) markBootReady()
+  }, [ready, bypass])
 
   if (bypass || ready) return <>{children}</>
 

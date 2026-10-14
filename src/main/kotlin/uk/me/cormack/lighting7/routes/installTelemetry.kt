@@ -49,6 +49,8 @@ data class TelemetryDto(
     val tracesSampleRate: Double,
     /** The browser's project (`lighting7-react`), reported to through `/api/sentry`; null when none is configured. */
     val browserDsn: String? = null,
+    val replaysSessionSampleRate: Double,
+    val replaysOnErrorSampleRate: Double,
 )
 
 private fun TelemetrySettings.toDto() = TelemetryDto(
@@ -57,4 +59,6 @@ private fun TelemetrySettings.toDto() = TelemetryDto(
     environment = environment,
     tracesSampleRate = tracesSampleRate,
     browserDsn = config.browserDsn,
+    replaysSessionSampleRate = replaysSessionSampleRate,
+    replaysOnErrorSampleRate = replaysOnErrorSampleRate,
 )

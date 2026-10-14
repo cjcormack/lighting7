@@ -1,8 +1,8 @@
 # Observability — Sentry
 
 The desk reports errors, logs, run sessions, traces and metrics to Sentry (`lighting7-kotlin`, EU
-region), and its browsers report errors, sessions and traces to `lighting7-react` through the desk
-(§"The browser"). Replay, feedback and the browser's metrics are later sessions of
+region), and its browsers report errors, sessions, traces, replays, feedback and metrics to
+`lighting7-react` through the desk (§"The browser"). The plan is
 [`plans/sentry-plan.md`](plans/sentry-plan.md).
 
 ## The switch
@@ -10,7 +10,7 @@ region), and its browsers report errors, sessions and traces to `lighting7-react
 Telemetry is an **install setting**, admin only and machine-local (plan D1):
 
 - `GET /api/rest/install/telemetry` answers `{enabled, release, environment, tracesSampleRate,
-  browserDsn}` to any caller, signed in or not, on either listener — the frontend reads it before
+  browserDsn, replaysSessionSampleRate, replaysOnErrorSampleRate}` to any caller, signed in or not, on either listener — the frontend reads it before
   sign-in. The
   auth gate exempts the **GET only**: an exempt path carries no user, which `requireAdmin` reads as
   allowed, so a method-blind exemption would let a signed-out `PUT` through.
@@ -39,6 +39,8 @@ sentry {
     idleSyncSampleRate = "" # an auto-sync run that changed nothing; empty: tracesSampleRate
     environment = ""        # empty: `release` for a RELEASE build, else `development`
     browserDsn = "…"        # application.conf: the lighting7-react DSN, all the tunnel forwards to
+    replaysSessionSampleRate = ""  # empty: 0.1, or 0 in `release` (plan D13)
+    replaysOnErrorSampleRate = ""  # empty: 1.0
 }
 ```
 
@@ -332,7 +334,8 @@ Counts and events cost nothing in a window without them.
 - Inbound WS frame rates. Traces already sample the gestures.
 - `StateFlow` conflation (above), and the MIDI flows' own DROP_OLDEST buffers, which feed the
   surfaces, not a socket.
-- The browser. Frontend metrics are session 5's.
+
+The browser's three metrics are §"The browser"'s.
 
 ## The browser
 
@@ -352,18 +355,20 @@ those do nothing until a client exists.
   already renders only after `/auth/status`, which the same desk answers, so the wait shows only on
   the public `/reset` and `/device` pages, and never for more than a second.
 - `installChanged` makes every open page fetch the setting again: off closes the client (it flushes
-  for up to 2 s, then drops everything); on starts it, with errors and fetch spans but no route
-  transactions until the next load, since the router was made before the client.
+  for up to 2 s, then drops everything), stops replay without flushing it and takes *Report a
+  problem…* out of the menu; on starts it, with errors, feedback and fetch spans, but no route
+  transactions and no replay until the next load, since the router and replay were bound to the
+  first client. Its one page-load transaction is named by the raw path.
 
 | Option | Value |
 |---|---|
 | `release` | `__LIGHTING7_RELEASE__` (§"Release and source maps"), else the GET's `release` |
-| `environment`, `tracesSampleRate` | the GET's, so one setting governs both halves |
+| `environment`, `tracesSampleRate`, `replaysSessionSampleRate`, `replaysOnErrorSampleRate` | the GET's, so one setting governs both halves |
 | `tunnel` | `/api/sentry` |
 | `traceLifecycle` | `'static'`. 11.7.0's default is `'stream'`, which sends each span as it ends: a fetch with no page load or navigation open becomes a root span of its own (a transaction per auto-sync refetch), and `beforeSendTransaction` is never called, so nothing would be scrubbed. Found by session 4's live check |
 | `tracePropagationTargets` | `[/^\/api\//]`: a REST call's backend transaction is in the browser's trace. The backend continues the trace and draws its own sampling decision (§"Sampling") |
 | `dataCollection` | every category off. It is v11's replacement for `sendDefaultPii`, every default of which collects; 11.7.0's browser reads only `userInfo`, which on would have Sentry infer the client's IP |
-| `integrations` | `reactRouterBrowserTracingIntegration` from `@sentry/react/react-router`, which binds the router hooks itself |
+| `integrations` | `reactRouterBrowserTracingIntegration` from `@sentry/react/react-router`, which binds the router hooks itself; `Lighting7Scrub` (§"Scrubbing" below); replay and feedback once their chunk has loaded (§"Replay", §"Feedback") |
 | `ignoreErrors` | `ResizeObserver loop…`, WebGL context loss, and `AbortError` from an aborted fetch |
 
 ### What is sent
@@ -374,6 +379,9 @@ those do nothing until a client exists.
 | Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per property |
 | Sessions | one per page load (the SDK's `page` lifecycle), so browser release health counts page loads |
 | Breadcrumbs | the SDK's (clicks, console, fetch, history); the socket's open, close with its code, and reconnects; and one per Redux action, carrying its type and RTK Query endpoint but never a payload — a query's is its whole response — and not RTK Query's per-frame bookkeeping (`queryResultPatched`, subscriptions, config) |
+| Replays | a page load that errors, from up to a minute before the error; a tenth of page loads whole outside `release` (§"Replay") |
+| Feedback | *Report a problem…* in the user menu, with an optional screenshot and the replay buffer (§"Feedback") |
+| Metrics | `ws.reconnect`, `boot.ready`, `stage.fps` (§"Metrics in the browser") |
 
 Every event carries the tags `window` (this tab's name, following a rename) and `view`
 (`windowViewOf`'s id for the route, `other` elsewhere), and the Redux enhancer's `state` context:
@@ -382,7 +390,66 @@ attachment is off. The browser sets no user.
 
 `beforeSend`, `beforeSendTransaction` and `beforeBreadcrumb` run `lib/sentryScrub.ts` (§"Scrubbing")
 over the message, the transaction name, the request's URL, query and `Referer`, exception values,
-breadcrumbs, and every span's description and data.
+breadcrumbs, and every span's description and data. A replay event and a feedback reach none of
+those three hooks — 11.7.0 runs `beforeSend` only for an event with no `type` — so a client-level
+integration, `Lighting7Scrub`, scrubs both in `processEvent`: a replay's `urls` and request, a
+feedback's message and page URL.
+
+### Replay
+
+`lib/sentryLazy.ts` re-exports `replayIntegration` and `feedbackIntegration` from `@sentry/react`,
+and `lib/sentry.ts` imports it with a dynamic `import()` once `Sentry.init` has run, only while
+telemetry is on, then adds both to the client. Vite puts the two in a chunk of their own, served by
+the desk; the entry chunk holds neither (`sentryImports.test.ts` pins the import). Not the SDK's
+`lazyLoadIntegration`, which the plan named: in 11.7.0 it fetches the bundle from
+`browser.sentry-cdn.com`, around the desk and nowhere at an offline venue. An error in the moment
+before the chunk lands has no replay.
+
+The options are D13's. The two rates come from the GET; `maskAllText: false`, because fixture names
+and cue labels are the point of a replay; `maskAllInputs: true`; `blockAllMedia` left on, so icons
+and the QR codes are drawn as placeholders; no canvas integration. Three regions carry
+`data-sentry-block` and are drawn as empty boxes, because each changes every frame: the Stage view's
+canvas and its label layer (`Stage3D`), the channel grid (`routes/Channels.tsx`) and each Prompt Book
+page (`ScriptViewer`'s `PdfPage`). With text unmasked, what shows a credential is masked or blocked
+where it is drawn: the reset and device-login links and their QR codes (`ResetQrSheet`,
+`DeviceLoginSection`) and the GitHub device code (`DeviceFlowModal`).
+
+URLs are scrubbed in three places. `beforeAddRecordingEvent` runs `scrubRecordingEvent` over the
+replay's own events (its breadcrumbs, navigation and network spans); `Lighting7Scrub` takes the
+replay event's `urls`. The page URL in a DOM snapshot is rrweb's, and the SDK hands no hook for it,
+so **a page loaded at a secret URL records no replay**: `wantsReplay` asks whether `scrub` changes
+`location.href`, which a phone opening `/reset/<token>` or `/device/<token>` does.
+
+The SDK refuses a second replay instance on a page, and its hooks are bound to the client it
+started under. So turning the switch off stops replay without flushing (off withdraws consent for
+the buffer too), and turning it on again in the same page starts errors, feedback and fetch spans
+but no replay until the next load — as with route transactions.
+
+### Feedback
+
+*Report a problem…* sits in the user menu, never as the SDK's floating button, which would sit
+over desk controls; the item is drawn only while a feedback integration is in place
+(`lib/reportProblem.ts`, set by `lib/sentry.ts`, so the menu never imports it). It opens the SDK's
+own form (`createForm`, `autoInject: false`) in the app's theme, with no name or email fields — the
+browser sets no user (D11) — and a screenshot button. The screenshot is the SDK's: the browser asks
+to share the tab (`getDisplayMedia`), and an iPad has none. Opening the form flushes the replay
+buffer and the feedback names that replay, so a report carries the minute before it.
+
+The screenshot is a PNG at the device's pixel ratio and travels in the feedback's envelope, so one
+over the tunnel's cap would lose the feedback with it. `lib/sentryScreenshot.ts` fits it in
+`Lighting7Scrub`: over 700 kB it is redrawn as a JPEG no wider than 1920 px, at quality 0.85, 0.7 or
+0.5, the first that fits; one that still will not is left out and the feedback goes without it.
+
+### Metrics in the browser
+
+`lib/sentryMetrics.ts`, through `Sentry.metrics`, which buffers and sends only while a client is
+running (the SDK flushes 5 s after the first sample of a batch):
+
+| Metric | Kind | Recorded by | Attributes |
+|---|---|---|---|
+| `ws.reconnect` | count | `internalApi.ts`, on every socket open after the page's first | `cause`: `forced` (the app re-handshook after sign-in, sign-out or setup) or `dropped` (anything else: the socket closed under it, or the manual reconnect) |
+| `boot.ready` | distribution (ms) | `BootGate`, the first time the show is ready on this page load: `performance.now()`, so from navigation start, waiting for the desk's own boot included. Held until Sentry has started, since the show is often ready before the telemetry fetch settles. Not sent for a page load that showed the sign-in or setup screen (`AuthGate`), which would time the operator's typing | — |
+| `stage.fps` | distribution | the Stage route, every 10 s while the page is visible, from the canvas's own frame-rate probe. The canvas renders on demand, and an idle one (nothing drawn for a second) sends nothing, so this is the rate while it draws | — |
 
 ### The tunnel (`/api/sentry`)
 
@@ -434,7 +501,28 @@ backoff short. Turning the switch off deletes the spool (§"The switch").
 Per page load: one session and one page-load transaction. Per navigation: one transaction, at
 `tracesSampleRate`. A REST call makes a span only inside one of those (the SDK makes a fetch span
 only under an open span), so the auto-sync's refetches cost nothing between navigations, though they
-still carry the page's trace id to the backend. Nothing per WS frame, gesture or Redux action leaves
-the browser on its own; errors go as they happen. A search-only URL change is a `replace` throughout
+still carry the page's trace id to the backend (only with `traceLifecycle: 'static'`, above). Outside a
+recording replay, nothing per WS frame, gesture or Redux action leaves the browser on its own;
+errors go as they happen. A search-only URL change is a `replace` throughout
 the app, which the SDK does not treat as a navigation.
 
+Replay, feedback and metrics, measured on a test desk with 11.7.0 (2026-10-13):
+
+- **Replay, buffering** (a page load that has not errored, so every page load in `release`): nothing
+  is sent. On an error the last minute goes as segment 0: 75–90 kB compressed (550–680 kB of rrweb
+  events) across the busk view, the Stage view and a library page. The tunnel's 1 MB cap leaves
+  room, but a much larger rig drawing more DOM than the busk view's tiles scales that segment with it.
+- **Replay, recording** (the rest of a session that has errored, or a sampled whole session): a
+  segment every ~5.5 s while anything changes. Idle, 0.3–1.7 kB; on the busk view with six heads
+  under two effects, ~7 kB a segment (~205 rrweb events, ~120 kB raw), about 1.3 kB/s or 4.6 MB an
+  hour, almost all of it live tiles. A replay session lasts at most an hour and lapses after
+  15 minutes idle; each new one is sampled again, and it is kept per tab across reloads.
+- **How many replays.** In `release`, one per replay session that errors. In `development`, a tenth
+  of replay sessions besides: a desk window active twelve hours is about a dozen sessions a day, so
+  two windows send two or three whole-session replays a day — more than the free plan's monthly
+  replay quota allows over a month. Lower `replaysSessionSampleRate` in `local.conf` if it matters.
+- **Feedback**: 15–16 kB without a screenshot. A screenshot of a 1920×1080 screen at 2× is a ~3 MB
+  PNG, which `fitScreenshot` turns into a ~580 kB JPEG, so the envelope stays near 600 kB.
+- **Metrics**: one `boot.ready` per page load that did not sign in, one `ws.reconnect` per re-open,
+  and one `stage.fps` every 10 s while a visible Stage view draws — at most 8,640 a day for a Stage
+  window left open and moving. Each batch is one envelope, sent 5 s after its first sample.

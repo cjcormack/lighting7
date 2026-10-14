@@ -25,6 +25,10 @@ data class SentryConfig(
     val idleSyncSampleRate: Double? = null,
     /** The browser's project (`lighting7-react`): what the frontend reports to, and all the tunnel forwards. */
     val browserDsn: String? = null,
+    /** The browser's whole-session replay rate; null derives it from the environment. */
+    val replaysSessionSampleRate: Double? = null,
+    /** The browser's replay rate for a page load that errors; null is 1.0. */
+    val replaysOnErrorSampleRate: Double? = null,
 ) {
     companion object {
         fun from(config: ApplicationConfig): SentryConfig = SentryConfig(
@@ -34,6 +38,8 @@ data class SentryConfig(
             environment = config.optionalString("sentry.environment"),
             idleSyncSampleRate = rate(config, "sentry.idleSyncSampleRate"),
             browserDsn = config.optionalString("sentry.browserDsn"),
+            replaysSessionSampleRate = rate(config, "sentry.replaysSessionSampleRate"),
+            replaysOnErrorSampleRate = rate(config, "sentry.replaysOnErrorSampleRate"),
         )
 
         private fun rate(config: ApplicationConfig, key: String): Double? = config.optionalString(key)?.let { raw ->
@@ -65,6 +71,10 @@ class TelemetrySettings(
 
     val environment: String = config.environment ?: if (build.channel == BuildInfo.Channel.RELEASE) "release" else "development"
     val tracesSampleRate: Double = config.tracesSampleRate ?: if (environment == "release") 0.2 else 1.0
+
+    /** Replay records errors, not shows (plan D13). */
+    val replaysSessionSampleRate: Double = config.replaysSessionSampleRate ?: if (environment == "release") 0.0 else 0.1
+    val replaysOnErrorSampleRate: Double = config.replaysOnErrorSampleRate ?: 1.0
 
     /** The rate an auto-sync run that changed nothing is kept at (`TraceSampling.keepSyncRun`). */
     val idleSyncSampleRate: Double = config.idleSyncSampleRate ?: tracesSampleRate

@@ -198,7 +198,8 @@ export function ResetQrSheet({
                 from the user&apos;s Reset links list.
               </p>
               {/* White plate regardless of theme: a dark-on-dark QR doesn't scan. */}
-              <div className="flex justify-center rounded-md bg-white p-4">
+              {/* The link is a credential: blocked and masked in a session replay. */}
+              <div data-sentry-block className="flex justify-center rounded-md bg-white p-4">
                 <QRCode value={token.url} size={192} />
               </div>
               <p className="text-center text-sm tabular-nums text-muted-foreground">
@@ -207,7 +208,7 @@ export function ResetQrSheet({
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Or type it in:</p>
                 <div className="flex items-start gap-2">
-                  <code className="min-w-0 flex-1 rounded-md border px-2 py-1.5 text-xs break-all select-all">
+                  <code data-sentry-mask className="min-w-0 flex-1 rounded-md border px-2 py-1.5 text-xs break-all select-all">
                     {token.url}
                   </code>
                   <Button variant="outline" size="icon" onClick={() => void handleCopy()}>
@@ -221,7 +222,7 @@ export function ResetQrSheet({
                   <summary className="cursor-pointer select-none">
                     Phone can&apos;t reach it? Other addresses
                   </summary>
-                  <ul className="mt-2 space-y-1">
+                  <ul data-sentry-mask className="mt-2 space-y-1">
                     {token.alternateUrls.map((url) => (
                       <li key={url} className="break-all select-all">
                         {url}

@@ -1,9 +1,10 @@
-import React from "react"
+import React, { useEffect } from "react"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LoginScreen } from "./components/auth/LoginScreen"
 import { SetupScreen } from "./components/auth/SetupScreen"
 import { useAuthStatusQuery } from "./store/auth"
+import { markSignInShown } from "./lib/sentryMetrics"
 
 // Full-screen authentication gate. Sits *outside* BootGate: `GET /auth/status` is
 // exempt from the backend's warm-up check, so identity resolves while the show is
@@ -27,6 +28,11 @@ export function AuthGate({
     refetchOnFocus: true,
     refetchOnReconnect: true,
   })
+
+  const signingIn = data != null && (data.setupRequired || !data.authenticated)
+  useEffect(() => {
+    if (signingIn) markSignInShown()
+  }, [signingIn])
 
   if (bypass) return <>{children}</>
 

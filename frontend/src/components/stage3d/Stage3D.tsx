@@ -919,6 +919,8 @@ export function Stage3D({
       ) : (
         <Canvas
           key={canvasKey}
+          // Session replay draws a placeholder: the canvas changes every frame (Sentry plan D13).
+          data-sentry-block
           flat
           dpr={[1, 1.5]}
           frameloop="demand"
@@ -935,6 +937,7 @@ export function Stage3D({
       {/* The label layer: every label's <div>, owned and positioned by the store. */}
       <div
         ref={labelContainerRef}
+        data-sentry-block
         aria-hidden
         className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
       />

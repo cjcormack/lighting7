@@ -168,6 +168,7 @@ import type { StageRegionDto } from '../api/stageRegionApi'
 import type { RiggingDto } from '../api/riggingApi'
 import type { StageElementDto } from '../api/stageElementApi'
 import { useMediaQuery, SM_BREAKPOINT } from '../hooks/useMediaQuery'
+import { sampleStageFps } from '../lib/sentryMetrics'
 
 const REGION_DEFAULT_SIZE_M = 2
 
@@ -285,6 +286,7 @@ export function Stage() {
   // What the canvas is doing, for the View popover's Performance tab. Never read here: a route that
   // re-rendered on it would hand the canvas new props and ask for the frames it measures.
   const [stageStats] = useState(createStageStats)
+  useEffect(() => sampleStageFps(() => stageStats.getSnapshot().frameRate?.fps ?? null), [stageStats])
   const frameRateReadout = useFrameRateReadout()
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   const [viewMenuTab, setViewMenuTab] = useState<StageViewMenuTab>('view')
