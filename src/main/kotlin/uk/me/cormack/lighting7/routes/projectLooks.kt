@@ -147,7 +147,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.name = name
                     this.notes = request.notes
                 }
-                createLookChildren(look, request.rows, request.effects)
+                writeLookChildren(look, request.rows, request.effects, created = true)
                 look.toDetailsDto(state)
             }
             if (result == null) {
@@ -187,20 +187,14 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 val hasEffects = "effects" in body
                 val rows = if (hasRows) {
                     lookJson.decodeFromJsonElement<List<LookRowDto>>(body["rows"]!!)
-                } else emptyList()
-                if (hasRows) {
-                    validateLookRows(rows)?.let { return@transaction LookWriteOutcome.Invalid(it) }
-                }
+                } else null
+                rows?.let { validateLookRows(it) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
                 val effects = if (hasEffects) {
                     lookJson.decodeFromJsonElement<List<LookEffectDto>>(body["effects"]!!)
-                } else emptyList()
-                if (hasEffects) {
-                    validateLookEffects(effects)?.let { return@transaction LookWriteOutcome.Invalid(it) }
-                }
+                } else null
+                effects?.let { validateLookEffects(it) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
 
-                if (hasRows) look.rows.forEach { it.delete() }
-                if (hasEffects) look.effects.forEach { it.delete() }
-                if (hasRows || hasEffects) createLookChildren(look, rows, effects)
+                if (hasRows || hasEffects) writeLookChildren(look, rows, effects)
 
                 LookWriteOutcome.Written(look.toDetailsDto(state), look.uuid, hasRows || hasEffects)
             }
@@ -948,58 +942,140 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
     return null
 }
 
-/** Must be called inside a transaction. */
-internal fun createLookChildren(
+/** [pairs] is each incoming item with the existing one it updates, or null; [unmatched] the existing items left over. */
+internal class KeyedPairing<E, I>(val pairs: List<Pair<I, E?>>, val unmatched: List<E>)
+
+/**
+ * Pairs each of [incoming] with the existing item of the same key. The n-th incoming item of a key
+ * takes the n-th existing one of it in [existing]'s order, so a list that holds one key twice pairs
+ * deterministically.
+ */
+internal fun <E, I, K> pairByKey(
+    existing: List<E>,
+    incoming: List<I>,
+    existingKey: (E) -> K,
+    incomingKey: (I) -> K,
+): KeyedPairing<E, I> {
+    val queues = existing.groupByTo(LinkedHashMap(), existingKey) { it }.mapValues { ArrayDeque(it.value) }
+    val pairs = incoming.map { item -> item to queues[incomingKey(item)]?.removeFirstOrNull() }
+    val claimed = pairs.mapNotNullTo(HashSet()) { it.second }
+    return KeyedPairing(pairs, existing.filterNot { it in claimed })
+}
+
+/** A Look row's identity within its Look: what it is on, never what it holds. */
+internal data class LookRowKey(val targetType: String, val targetKey: String, val elementKey: String?, val propertyName: String)
+
+internal fun lookRowKey(targetType: String, targetKey: String, elementKey: String?, propertyName: String) =
+    LookRowKey(targetType, targetKey, elementKey, canonicalPropertyName(propertyName))
+
+internal val DaoLookRow.rowKey get() = lookRowKey(targetType, targetKey, elementKey, propertyName)
+
+private val LookRowDto.rowKey get() = lookRowKey(targetType, targetKey, elementKey, propertyName)
+
+/** A Look effect's identity within its Look: the effect, and what it runs on. */
+internal data class LookEffectKey(val targetType: String, val targetKey: String, val propertyName: String?, val effectType: String)
+
+internal fun lookEffectKey(targetType: String, targetKey: String, propertyName: String?, effectType: String) =
+    LookEffectKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), effectType)
+
+internal val DaoLookEffect.effectKey get() = lookEffectKey(targetType, targetKey, propertyName, effectType)
+
+private val LookEffectDto.effectKey get() = lookEffectKey(targetType, targetKey, propertyName, effectType)
+
+/** A Look's stored rows, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
+internal fun DaoLook.rowsInOrder(): List<DaoLookRow> = rows.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+internal fun DaoLook.effectsInOrder(): List<DaoLookEffect> = effects.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+/**
+ * Make a Look's rows [rows] and its effects [effects]; null leaves that list alone. [created] says
+ * the Look has no children yet, so there is nothing to read.
+ *
+ * A row or effect that survives the write is updated in place rather than recreated, so it keeps
+ * its `uuid` and a one-value edit reads as one changed row in a sync diff. A row is matched by
+ * [LookRowKey], an effect by [LookEffectKey] — see [pairByKey] for a key held twice.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun writeLookChildren(
     look: DaoLook,
-    rows: List<LookRowDto>,
-    effects: List<LookEffectDto>,
+    rows: List<LookRowDto>?,
+    effects: List<LookEffectDto>?,
+    created: Boolean = false,
 ) {
     // No row and no effect may name a one-shot trigger (stage-view plan session 9, D15). Thrown, so
     // the write's transaction rolls back whole and the route answers 400 with every problem at once.
     // The index is queries; build it only when some name could be refused at all.
     // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
-    val mayTrigger = rows.any { TriggerIndex.mayRefuse(it.propertyName) } || effects.any { TriggerIndex.mayRefuse(it.propertyName) }
+    val newRows = rows.orEmpty()
+    val newEffects = effects.orEmpty()
+    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.propertyName) } || newEffects.any { TriggerIndex.mayRefuse(it.propertyName) }
     // A row is also refused for a level inside a command's band on a property that shares its channel.
-    val mayCommand = rows.any { CommandIndex.mayRefuseRow(it.propertyName) } || effects.any { CommandIndex.mayRefuse(it.propertyName) }
+    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.propertyName) } || newEffects.any { CommandIndex.mayRefuse(it.propertyName) }
     if (mayTrigger || mayCommand) {
-        val refs = rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]", r.value) } +
-            effects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "effects[$i]") }
+        val refs = newRows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]", r.value) } +
+            newEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "effects[$i]") }
         if (mayTrigger) TriggerIndex.of(look.project).check(refs)
         if (mayCommand) CommandIndex.of(look.project).check(refs)
     }
-    for (row in rows) {
-        DaoLookRow.new {
-            this.look = look
-            targetType = row.targetType
-            targetKey = row.targetKey
-            propertyName = row.propertyName
-            value = row.value
-            fadeDuration = row.fadeDurationMs.asDuration()
-            elementKey = row.elementKey
-            sortOrder = row.sortOrder
+    if (rows != null) {
+        val pairing = pairByKey(if (created) emptyList() else look.rowsInOrder(), rows, { it.rowKey }, { it.rowKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((row, stored) in pairing.pairs) {
+            if (stored != null) {
+                stored.take(row)
+            } else {
+                DaoLookRow.new {
+                    this.look = look
+                    targetType = row.targetType
+                    targetKey = row.targetKey
+                    elementKey = row.elementKey
+                    take(row)
+                }
+            }
         }
     }
-    for (effect in effects) {
-        DaoLookEffect.new {
-            this.look = look
-            targetType = effect.targetType
-            targetKey = effect.targetKey
-            effectType = effect.effectType
-            category = effect.category
-            propertyName = effect.propertyName
-            beatDivision = effect.beatDivision
-            blendMode = effect.blendMode
-            distribution = effect.distribution
-            phaseOffset = effect.phaseOffset
-            elementMode = effect.elementMode
-            elementFilter = effect.elementFilter
-            stepTiming = effect.stepTiming
-            parameters = effect.parameters
-            speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-            rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-            sortOrder = effect.sortOrder
+    if (effects != null) {
+        val pairing = pairByKey(if (created) emptyList() else look.effectsInOrder(), effects, { it.effectKey }, { it.effectKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((effect, stored) in pairing.pairs) {
+            if (stored != null) {
+                stored.take(effect)
+            } else {
+                DaoLookEffect.new {
+                    this.look = look
+                    targetType = effect.targetType
+                    targetKey = effect.targetKey
+                    take(effect)
+                }
+            }
         }
     }
+}
+
+/** [row] onto this row, but for the key fields [writeLookChildren] matched it on. */
+private fun DaoLookRow.take(row: LookRowDto) {
+    propertyName = row.propertyName
+    value = row.value
+    fadeDuration = row.fadeDurationMs.asDuration()
+    sortOrder = row.sortOrder
+}
+
+private fun DaoLookEffect.take(effect: LookEffectDto) {
+    effectType = effect.effectType
+    category = effect.category
+    propertyName = effect.propertyName
+    beatDivision = effect.beatDivision
+    blendMode = effect.blendMode
+    distribution = effect.distribution
+    phaseOffset = effect.phaseOffset
+    elementMode = effect.elementMode
+    elementFilter = effect.elementFilter
+    stepTiming = effect.stepTiming
+    parameters = effect.parameters
+    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    sortOrder = effect.sortOrder
 }
 
 /**

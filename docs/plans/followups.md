@@ -89,6 +89,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-FIELD-LEVEL-MERGE`](#fu-sync-field-level-merge) | Trigger | Sync | frequent conflicts on disjoint fields |
 | [`FU-SYNC-MANUAL-MULTIFILE`](#fu-sync-manual-multifile) | Trigger | Sync | an operator wants to hand-merge a script conflict |
 | [`FU-SYNC-PUSHRETRY-TEST-SEAM`](#fu-sync-pushretry-test-seam) | Trigger | Sync | `FU-SYNC-MERGE-ATOMICITY` is picked up |
+| [`FU-SYNC-CHILD-UUID-CHURN`](#fu-sync-child-uuid-churn) | Ready | Sync | — |
 | [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | second half only — `CueStackManager` lookups are still project-blind |
 | [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
 | [`FU-WINDOWS-SHOW-OFFLINE`](#fu-windows-show-offline) | Trigger | Screens | a `windows.show` lost to a disconnected target matters |
@@ -1844,6 +1845,23 @@ Safari bundle name.
 ---
 
 ## Cloud sync
+
+### `FU-SYNC-CHILD-UUID-CHURN`
+
+**Child rows keep their uuid across an edit** · Ready · Cloud sync; logged 2026-10-14
+
+A Look's rows and effects are reconciled by natural key on every write (`writeLookChildren` in
+`routes/projectLooks.kt`, `pairByKey`), so a one-value edit is one changed row in the sync diff.
+The same delete-every-child-then-recreate pattern still mints a fresh uuid for every child on:
+
+- a cue's layers, ad-hoc effects, property assignments and triggers (the cue `PUT` in
+  `routes/projectCues.kt`, `deleteCueChildren` in `routes/projectCuesHelpers.kt`);
+- a template's rows (the template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
+
+Not a conflict source — the three-way diff hashes whole records — but the git diff, the conflict
+view and the history read every such edit as "all children replaced". Give each the Look's
+treatment with its own natural key; a cue layer has none beyond its position, so it may want
+pairing by `(source, sortOrder)`.
 
 ### `FU-SYNC-TOMBSTONE-GC`
 

@@ -154,6 +154,36 @@ class LookRecordTest : RouteIntegrationTest() {
         }
 
     @Test
+    fun `UPDATE_EXISTING writes over an in-remit row it records again, keeping its uuid`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            seedHex("hex-2", 13)
+            val lookId = client.createLook(
+                "Warm",
+                LookRowDto("fixture", "hex-1", "dimmer", "200"),
+                LookRowDto("fixture", "hex-2", "dimmer", "50"),
+            )
+            val before = rowUuids(lookId)
+
+            setProgrammer("hex-1", "dimmer", "255")
+            val response: ProgrammerRecordLookResponse = client.recordLook(
+                ProgrammerRecordLookRequest(
+                    projectId.toString(), "UPDATE_EXISTING", lookId = lookId,
+                    targets = listOf(
+                        uk.me.cormack.lighting7.models.CueTargetDto("fixture", "hex-1"),
+                        uk.me.cormack.lighting7.models.CueTargetDto("fixture", "hex-2"),
+                    ),
+                )
+            ).body()
+
+            assertEquals(2, response.rowsRemoved, "both in-remit rows are still replaced")
+            assertEquals(mapOf(("hex-1" to "dimmer") to "255"), client.lookRows(lookId))
+            assertEquals(before.getValue("hex-1"), rowUuids(lookId).getValue("hex-1"))
+        }
+
+    @Test
     fun `MERGE upserts the recorded rows and leaves the rest alone`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
@@ -338,6 +368,10 @@ class LookRecordTest : RouteIntegrationTest() {
     private suspend fun HttpClient.lookRows(lookId: Int): Map<Pair<String, String>, String> =
         get("/api/rest/projects/$projectId/looks/$lookId")
             .body<LookDetails>().rows.associate { (it.targetKey to it.propertyName) to it.value }
+
+    private fun rowUuids(lookId: Int) = transaction(state.database) {
+        DaoLook[lookId].rows.associate { it.targetKey to it.uuid }
+    }
 
     private fun LookDetails.rowsByTarget(): Map<String, String> =
         rows.associate { it.targetKey to it.value }
