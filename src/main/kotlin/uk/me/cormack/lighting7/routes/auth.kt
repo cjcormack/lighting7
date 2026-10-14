@@ -63,6 +63,9 @@ internal fun Route.routeApiRestAuth(state: State) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse("Setup has already been completed"))
             return@post
         }
+        // Onboarding is a courtesy: a failure to flag it must not strand the admin just created.
+        runCatching { markOnboardingPending(state) }
+            .onFailure { logger.warn("Could not flag onboarding as pending", it) }
         // Log the new admin straight in — mintSession, not login: re-verifying the
         // password we hashed one line ago would pay a second bcrypt for nothing.
         val (user, rawToken) = state.authService.mintSession(

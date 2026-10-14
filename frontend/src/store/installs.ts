@@ -6,10 +6,24 @@ export interface Install {
   uuid: string
   friendlyName: string
   createdAt: string
+  /** The first admin has not yet finished or skipped onboarding; absent from a desk that predates it. */
+  onboardingPending?: boolean
 }
 
 export interface UpdateInstallRequest {
   friendlyName: string
+}
+
+export interface FinishOnboardingRequest {
+  /** The project to open once onboarding is done; absent keeps the current one. */
+  openProjectId?: number
+}
+
+export interface FinishOnboardingResponse {
+  currentProjectId: number
+  /** The empty placeholder project the desk booted on, when finishing removed it. */
+  removedPlaceholder?: string | null
+  onboardingPending: boolean
 }
 
 export const installsApi = restApi.injectEndpoints({
@@ -26,6 +40,14 @@ export const installsApi = restApi.injectEndpoints({
       }),
       invalidatesTags: ['Install'],
     }),
+    finishOnboarding: build.mutation<FinishOnboardingResponse, FinishOnboardingRequest>({
+      query: (body) => ({
+        url: 'install/onboarding/finish',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Install', 'ProjectList', 'Project'],
+    }),
   }),
   overrideExisting: false,
 })
@@ -33,6 +55,7 @@ export const installsApi = restApi.injectEndpoints({
 export const {
   useInstallQuery,
   useUpdateInstallMutation,
+  useFinishOnboardingMutation,
 } = installsApi
 
 // The desk was renamed, or its telemetry switched, on another client. Machine-scoped state, so this

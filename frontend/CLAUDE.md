@@ -4903,6 +4903,14 @@ recovery. Frontend shape:
   `LoginScreen`, and the app from `GET /auth/status`. A 401 from **any** endpoint
   invalidates the `Auth` tag, which is the entire logout mechanism; a WS close with
   code **4401** does the same, because the backend revokes live sockets.
+- **`OnboardingGate`** (`components/onboarding/`, between `BootGate` and the router) shows a new
+  desk's first admin two steps before the app while `GET /install` says `onboardingPending`:
+  diagnostics (the telemetry switch, nothing picked until the admin picks) and projects — GitHub
+  through `IdentityRow` (whose web flow returns to `/`; the step and the imports so far survive that
+  in `sessionStorage`) and a checklist of lighting repos imported through `/cloud-sync/import`,
+  **venues first**, a taken name numbered (`Default (2)`), or the boot-time `Default` kept and named
+  as a blank project. Finishing with an import opens it and the
+  desk deletes the empty `Default`. An operator never sees it; the screen itself is a lazy chunk.
 - `store/users.ts` is admin-only CRUD (`/api/rest/users`); `store/passwordReset.ts`
   and `store/deviceLogin.ts` are the **public** endpoint pairs the two phone pages
   use. They are separate slices because they are separate audiences —

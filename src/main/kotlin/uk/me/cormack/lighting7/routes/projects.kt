@@ -125,7 +125,10 @@ internal fun Route.routeApiRestProjects(state: State) {
         // GET /current - Get current project
         routingGet("/current") {
             val project = transaction(state.database) {
-                state.projectManager.currentProject.toDetailDto(state)
+                // Read afresh: the manager's entity is the one loaded at the switch, and a rename
+                // since (`PUT /projects/{id}`) writes through another.
+                val current = state.projectManager.currentProject
+                (DaoProject.findById(current.id) ?: current).toDetailDto(state)
             }
             call.respond(project)
         }
