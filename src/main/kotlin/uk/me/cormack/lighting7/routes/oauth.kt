@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.models.DaoOAuthIdentities
 import uk.me.cormack.lighting7.models.DaoOAuthIdentity
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
+import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.plugins.OAuthIdentityChangedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.oauth.DevicePollResult
@@ -425,6 +426,7 @@ private fun toDto(repo: GithubRepository, project: ProjectJson? = null) = RepoDt
     projectName = project?.name,
     projectDescription = project?.description,
     projectUuid = project?.uuid,
+    projectKind = project?.kind,
 )
 
 // ─── Lighting-project detection ─────────────────────────────────────────
@@ -582,4 +584,6 @@ data class RepoDto(
     val projectName: String? = null,
     val projectDescription: String? = null,
     val projectUuid: String? = null,
+    /** `project.json`'s kind — a venue's repo must be imported before a show pinned to it. */
+    val projectKind: ProjectKind? = null,
 )

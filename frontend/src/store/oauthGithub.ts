@@ -1,4 +1,5 @@
 import { lightingApi } from "../api/lightingApi"
+import type { ProjectKind } from "../api/projectApi"
 import { useIsNavAdmin } from "../navigation"
 import { restApi } from "./restApi"
 import { store } from "./index"
@@ -54,6 +55,8 @@ export interface GithubRepo {
   projectName: string | null
   projectDescription: string | null
   projectUuid: string | null
+  /** `project.json`'s kind; absent from a desk that predates it. A venue imports before its shows. */
+  projectKind?: ProjectKind | null
 }
 
 export interface CreateRepoBody {

@@ -27,6 +27,13 @@ object DaoInstalls : IntIdTable("installs") {
      * install, which the UI cannot override.
      */
     val updateCheckEnabled = bool("update_check_enabled").default(true)
+
+    /**
+     * Whether the desk still owes its first admin the onboarding steps (diagnostics, cloud sync,
+     * first projects). Set when the first admin account is created, cleared when onboarding is
+     * finished or skipped. Defaults false, so an install that predates onboarding never sees it.
+     */
+    val onboardingPending = bool("onboarding_pending").default(false)
 }
 
 class DaoInstall(id: EntityID<Int>) : IntEntity(id) {
@@ -36,4 +43,5 @@ class DaoInstall(id: EntityID<Int>) : IntEntity(id) {
     var friendlyName by DaoInstalls.friendlyName
     var createdAt by DaoInstalls.createdAt
     var updateCheckEnabled by DaoInstalls.updateCheckEnabled
+    var onboardingPending by DaoInstalls.onboardingPending
 }

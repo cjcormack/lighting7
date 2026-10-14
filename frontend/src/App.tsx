@@ -2,6 +2,7 @@ import React from "react"
 import { Toaster } from "sonner"
 import { AuthGate } from "./AuthGate"
 import { BootGate } from "./BootGate"
+import { OnboardingGate } from "./components/onboarding/OnboardingGate"
 import Layout from "./Layout"
 import {createBrowserRouter, Navigate, useLocation, useParams} from "react-router";
 // v8 keeps the DOM-specific entry points in `react-router/dom`.
@@ -478,7 +479,9 @@ function App() {
         <ErrorBoundary fallback={<DeskFailed />}>
           <AuthGate bypass={publicPath}>
             <BootGate bypass={publicPath}>
-              {routerMayStart && <RouterProvider router={getAppRouter()}/>}
+              <OnboardingGate bypass={publicPath}>
+                {routerMayStart && <RouterProvider router={getAppRouter()}/>}
+              </OnboardingGate>
             </BootGate>
           </AuthGate>
         </ErrorBoundary>

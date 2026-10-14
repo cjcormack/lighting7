@@ -1,6 +1,7 @@
 import React, { useEffect } from "react"
-import { AlertTriangle, Loader2 } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FullScreenSpinner } from "./components/FullScreenSpinner"
 import { LoginScreen } from "./components/auth/LoginScreen"
 import { SetupScreen } from "./components/auth/SetupScreen"
 import { useAuthStatusQuery } from "./store/auth"
@@ -38,13 +39,7 @@ export function AuthGate({
 
   // Cold load only. A re-check triggered by a 401 or a 4401 keeps the stale `data`
   // (isFetching, not isLoading), so the whole app must not blank out for it.
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
+  if (isLoading) return <FullScreenSpinner />
 
   // Nothing cached and the request failed — the backend is down or unreachable.
   // Distinct from "signed out", so nobody types a password into a dead form.

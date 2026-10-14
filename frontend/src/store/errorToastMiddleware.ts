@@ -26,6 +26,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'copyScript', // src/CopyScriptDialog.tsx, and components/scripts/ScriptSheet.tsx (Copy to… through sheet/CopyToProjectSheet.tsx)
   'cloneProject', // src/CloneProjectDialog.tsx
   'importProject', // src/ImportProjectDialog.tsx
+  'finishOnboarding', // src/components/onboarding/OnboardingProjectsStep.tsx — inline alert
   'exportProject', // src/ExportProjectDialog.tsx
   'deleteProject', // src/routes/Projects.tsx
   // BUSK_PAGE_NAME_TAKEN is an ordinary step in naming a page, shown beside the field.
@@ -173,7 +174,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cloudSyncRun',
   'cloudSyncDisconnect',
   'cloudSyncSnapshot',
-  'cloudSyncImport',
+  'cloudSyncImport', // ImportFromRemoteDialog toasts it; onboarding draws it on the repo's row
   'cloudSyncResolve',
   'cloudSyncApply',
   'cloudSyncAbort',

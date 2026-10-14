@@ -20,7 +20,8 @@
 #   3. Starts `./gradlew run` in the background if nothing answers on :8413, and waits for the
 #      show to be ready. That builds frontend/ too. Log: <data dir>/run.log.
 #   4. Creates the first admin account (or logs in as it), so a browser test gets past the
-#      "Set up this desk" screen with the credentials below.
+#      "Set up this desk" screen with the credentials below, and finishes the onboarding that
+#      account would otherwise be shown — the repos below are this desk's projects.
 #   5. Imports each repo through cloud sync and switches its auto-sync off: every venue repo
 #      first, then every show. Which a repo is comes from its project.json (`kind`, absent for a
 #      show), read from a shallow clone before anything is imported. A venue's import brings
@@ -160,6 +161,7 @@ ensure_admin() {
   setup="$(python3 -c 'import json,sys; print(json.dumps(dict(username=sys.argv[1], displayName="Cloud session", password=sys.argv[2])))' "$ADMIN_USER" "$ADMIN_PASSWORD")"
   if [[ "$(api GET /auth/status | json 'd["setupRequired"]')" == "True" ]]; then
     api POST /auth/setup "$setup" >/dev/null
+    api POST /install/onboarding/finish '{}' >/dev/null
     log "Created admin '$ADMIN_USER'"
   else
     api POST /auth/login "$login" >/dev/null || die "could not log in as '$ADMIN_USER' — set LIGHTING7_ADMIN_USER / LIGHTING7_ADMIN_PASSWORD"

@@ -72,6 +72,8 @@ data class InstallDto(
     val friendlyName: String,
     /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
     val createdAt: String,
+    /** The first admin has not yet finished or skipped onboarding. See `installOnboarding.kt`. */
+    val onboardingPending: Boolean,
 )
 
 @Serializable
@@ -79,8 +81,9 @@ data class UpdateInstallRequest(
     val friendlyName: String,
 )
 
-private fun DaoInstall.toDto() = InstallDto(
+internal fun DaoInstall.toDto() = InstallDto(
     uuid = uuid.toString(),
     friendlyName = friendlyName,
     createdAt = createdAt.toIsoUtc(),
+    onboardingPending = onboardingPending,
 )
