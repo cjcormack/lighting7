@@ -50,6 +50,14 @@ private fun JsonObjectBuilder.arrayProp(name: String, items: JsonObject, descrip
     })
 }
 
+private fun JsonObjectBuilder.stringListProp(name: String, description: String) {
+    put(name, buildJsonObject {
+        put("type", "array")
+        put("items", buildJsonObject { put("type", "string") })
+        put("description", description)
+    })
+}
+
 private fun objectSchema(required: List<String> = emptyList(), properties: JsonObjectBuilder.() -> Unit) =
     buildJsonObject {
         put("type", "object")
@@ -281,6 +289,80 @@ internal val deleteGroupsTool = ToolDef(
             put("description", "Group names exactly as get_patch lists them.")
         })
         prop("force", "boolean", "Also delete groups that still have members. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
+/** What a patch edit leaves naming a key, said once for every tool that reports it. */
+private const val NAMED_BY_NOTE =
+    "The answer's `namedBy` lists every cue, Look, template, surface binding and script that names a removed key or group. " +
+        "Nothing is refused for it: those rows stay and show as a missing fixture, as a fixture deleted on the desk does."
+
+private val universeRefSchema = objectSchema(required = listOf("universe")) {
+    prop("universe", "integer", "The universe number as get_patch lists it.")
+    prop("subnet", "integer", "Default 0.")
+}
+
+internal val unpatchFixturesTool = ToolDef(
+    name = "unpatch_fixtures",
+    description = "Remove fixtures from a project's patch (the current one unless projectId names another) by key, and optionally remove whole universes with every fixture patched on them. " +
+        "A removed fixture leaves its groups, its busk rig tiles, its extra lantern placements and its cue events; the groups themselves stay (delete_groups removes them). " +
+        "On a show on a venue only the show's own fixtures and universes can be removed: a venue fixture (owner=venue) is hidden in this show with override_venue_fixtures instead. " +
+        "Everything is checked first and nothing is removed if anything fails; dryRun answers what would go. $NAMED_BY_NOTE",
+    inputSchema = objectSchema {
+        stringListProp("keys", "Fixture keys exactly as get_patch lists them.")
+        arrayProp("universes", universeRefSchema)
+        prop("dryRun", "boolean", "Answer what would be removed and remove nothing. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
+private val renameRowSchema = objectSchema(required = listOf("key", "newKey")) {
+    prop("key", "string", "The fixture's key now, from get_patch.")
+    prop("newKey", "string", "Its new key: unique in the project, at most 100 characters, no '.' (a fixture's cells are named <key>.<cell>).")
+}
+
+internal val renameFixturesTool = ToolDef(
+    name = "rename_fixtures",
+    description = "Change patched fixtures' keys in a project (the current one unless projectId names another) — every other tool names a fixture by its key, so this is how a key typed wrong at patch time is put right. " +
+        "patch_fixtures cannot do it: there the key is the fixture's identity, and a new key patches a new fixture. " +
+        "The project's cues, Looks, templates, surface bindings and busk rig cells that name the old key (or one of its cells) are rewritten to the new one; scripts are Kotlin source and are not — the answer's `scriptsNotRewritten` names any that mention an old key. " +
+        "Keys can be swapped in one call. On a show on a venue only the show's own fixtures can be renamed, and a new key may not be a venue fixture's. " +
+        "On the current project a cue or Look already running is recomposed under the new key; the programmer's own values and effects already running are not, so clear and re-apply them. " +
+        "Everything is checked first and nothing is written if anything fails; dryRun answers what would change.",
+    inputSchema = objectSchema(required = listOf("fixtures")) {
+        arrayProp("fixtures", renameRowSchema)
+        prop("dryRun", "boolean", "Answer what would change and write nothing. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
+private val groupEditSchema = objectSchema(required = listOf("name")) {
+    prop("name", "string", "The group's name now, as get_patch lists it. A name the project has no group by creates one, when the row sends members or add.")
+    prop(
+        "newName", "string",
+        "Rename the group: unique in the project, at most 100 characters. The project's cues, Looks and surface bindings that name it are rewritten to the new name; " +
+            "scripts are not — the answer's `scriptsNotRewritten` names any that mention the old name.",
+    )
+    stringListProp(
+        "members",
+        "The group's whole membership, in order — fixture keys from get_patch. Members not listed leave the group; the fixtures stay patched. " +
+            "Order is how a group's effects and spreads run across it. Not with add or remove.",
+    )
+    stringListProp("add", "Fixture keys to append to the group, in order. One already in it is left where it is.")
+    stringListProp("remove", "Fixture keys to take out of the group. The fixtures stay patched.")
+}
+
+internal val editGroupsTool = ToolDef(
+    name = "edit_groups",
+    description = "Change a project's fixture groups (the current one unless projectId names another): take fixtures out of a group, set its whole membership and order, append to it, rename it, or make a new one. " +
+        "patch_fixtures only ever adds a fixture to a group; this is how one leaves. delete_groups deletes a group. " +
+        "On a show on a venue only the show's own groups can be edited (a show's group may hold the venue's fixtures); a venue group is the venue's. " +
+        "On the current project a renamed group's cues and Looks already running are recomposed under the new name; the programmer's own values and effects already running are not. " +
+        "Everything is checked first and nothing is written if any row fails; dryRun answers what would change.",
+    inputSchema = objectSchema(required = listOf("groups")) {
+        arrayProp("groups", groupEditSchema)
+        prop("dryRun", "boolean", "Answer what would change and write nothing. Default false.")
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
@@ -756,6 +838,9 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     getPatchTool,
     patchFixturesTool,
     deleteGroupsTool,
+    unpatchFixturesTool,
+    renameFixturesTool,
+    editGroupsTool,
     setStageTool,
     setSceneTool,
     getSceneTool,

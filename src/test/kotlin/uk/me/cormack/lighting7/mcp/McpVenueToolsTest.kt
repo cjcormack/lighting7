@@ -65,6 +65,10 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         // Placing one needs its Position to be this show's first (McpVenueFixtureOverridesTest).
         assertVenueOwned(call("place_fixtures", """{"placements":[{"key":"hex-1","x":1.0}]}"""), fixture = true)
         assertVenueOwned(call("delete_groups", """{"names":["front-wash"],"force":true}"""))
+        assertVenueOwned(call("unpatch_fixtures", """{"keys":["hex-1"]}"""), fixture = true)
+        assertVenueOwned(call("unpatch_fixtures", """{"universes":[{"universe":0}]}"""))
+        assertVenueOwned(call("rename_fixtures", """{"fixtures":[{"key":"hex-1","newKey":"hex-one"}]}"""), fixture = true)
+        assertVenueOwned(call("edit_groups", """{"groups":[{"name":"front-wash","remove":["hex-1"]}]}"""))
         assertVenueOwned(call("set_stage", """{"riggings":[{"name":"FOH Truss","y":-3.0}]}"""))
         assertVenueOwned(call("set_stage", """{"stage":{"widthM":4.0}}"""))
         assertVenueOwned(call("set_scene", """{"removeElements":["House tabs"]}"""))
@@ -72,6 +76,15 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         // The show's own additions still go through: a hired spot on its own universe, in its own group.
         val added = call("patch_fixtures", """{"fixtures":[{"key":"spot-9","name":"Spot","fixtureTypeKey":"uv","universe":2,"startChannel":1,"groups":["panto"]}]}""")
         assertTrue(added.success, added.result)
+
+        // A show's own group may hold a venue fixture; a show's own fixture may not take a venue key.
+        val grouped = call("edit_groups", """{"groups":[{"name":"panto","add":["hex-1"]}]}""")
+        assertTrue(grouped.success, grouped.result)
+        val renamed = call("rename_fixtures", """{"fixtures":[{"key":"spot-9","newKey":"hex-2"}]}""")
+        assertFalse(renamed.success, renamed.result)
+        assertEquals(VenueRigGuard.CODE_KEY_TAKEN_BY_VENUE, renamed.json()["code"]?.jsonPrimitive?.content, renamed.result)
+        val unpatched = call("unpatch_fixtures", """{"keys":["spot-9"],"dryRun":true}""")
+        assertTrue(unpatched.success, unpatched.result)
 
         // A venue fixture's head number is the venue's, coded as REST codes it.
         val numbered = call("patch_fixtures", """{"fixtures":[{"key":"spot-10","name":"Spot","fixtureTypeKey":"uv","universe":2,"startChannel":2,"headNumber":104}]}""")

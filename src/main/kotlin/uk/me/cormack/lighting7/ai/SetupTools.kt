@@ -105,6 +105,7 @@ class SetupTools(
     private val render = RenderViewTool(state)
     private val venues = VenueSetupTools(state)
     private val venueFixtures = VenueFixtureTools(state)
+    private val patchEdits = PatchEditTools(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
@@ -123,6 +124,9 @@ class SetupTools(
             getPatchTool.name -> getPatch(state.toolProject(input))
             patchFixturesTool.name -> patchFixtures(input, state.toolProject(input))
             deleteGroupsTool.name -> deleteGroups(input, state.toolProject(input))
+            unpatchFixturesTool.name -> patchEdits.unpatchFixtures(input, state.toolProject(input))
+            renameFixturesTool.name -> patchEdits.renameFixtures(input, state.toolProject(input))
+            editGroupsTool.name -> patchEdits.editGroups(input, state.toolProject(input))
             setStageTool.name -> setStage(input, state.toolProject(input))
             setSceneTool.name -> scene.setScene(input, state.toolProject(input))
             getSceneTool.name -> scene.getScene(state.toolProject(input))

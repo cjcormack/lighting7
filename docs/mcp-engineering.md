@@ -445,6 +445,9 @@ prompt-book markup from a script and lighting notes.
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
+| `unpatch_fixtures` | Remove fixtures by key, and whole universes (`{universe, subnet?}`) with every patch on them, `dryRun` (`ai/PatchEditTools.kt`). Shares `deleteOwnPatch` / `deleteOwnUniverse` with the REST deletes, so memberships, busk rig tiles, extra placements, cue events and the universe's machine overrides go as there; the groups stay. Never refused for a reference: `namedBy` lists every cue, Look, template, surface binding and script still naming a removed key (`ai/RigKeyReferences.kt`), whose rows stay and show as a missing fixture |
+| `rename_fixtures` | Change keys, `{key, newKey}` rows, `dryRun`. `patch_fixtures` cannot, since the key is its identity. Unlike the REST `PUT`, which sweeps a renamed patch's busk cell tiles and leaves every other reference dangling, it **rewrites** the project's own references — cue rows, ad-hoc effects and layer targets, Look rows (their cell `elementKey` too) and effects, template rows, surface bindings and busk cell tiles — a cell's `<key>.<cell>` by its prefix, so `foh-1` never matches `foh-10`, and a stored key that is itself a patched fixture's is never read as another's cell; scripts are only named (`scriptsNotRewritten`). Keys go through a temporary value first, so a swap passes the unique index. A new key may not hold a `.` |
+| `edit_groups` | A group's membership (`members`, the whole ordered list; or `add` / `remove`), name (`newName`, references rewritten as `rename_fixtures` does, scripts named in `scriptsNotRewritten`) or a new group, `dryRun`. A venue fixture the show hides stays in a show group whose members are replaced |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
 | `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. In a show on a venue a row of exactly `{name, hidden}` naming a venue element is a **hide** (`ShowHides.setHiddenByUuid`, `HideKind.ELEMENT`) — `true` hides it for the show's run, `false` brings back one the show hides — checked first with `ShowHides.hideRefusal`, so `VENUE_HIDE_IN_USE`'s holders are listed with every other problem; any other row naming a venue element is `VENUE_OWNED`, with a hint naming the hide row, a stack set for a part-show move, and the venue's draft for a change for every show. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things. **Models** (`docs/fixtures-engineering.md` §"Model objects"): an `OBJECT` with `shape: MODEL` and `params.parts` is how another Claude session makes a set piece no primitive draws — the schema's `MODEL_PARTS_NOTE` is the whole vocabulary — and a row that sends parts but leaves a size out is sized to the parts' bounds; `modelFrom` copies a model (its parts, and its size and finish unless the row states them) from a stored element or an earlier row of the same call |
 | `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, a painted element's `paintImages` (each face's `{width, height, hasAlpha}`, or *missing on this machine*), a model's `modelSize` (its parts' bounds, before the fit), and the built-in viewpoints. The read-only extras (`seats`, `seatedEye`, `note`, `paintImages`, `owner`, `modelSize`) are ignored when a row is resent. It names the `project`; a show on a venue gets `venue: {id, name, version, installed, behind, hiddenElements?, note}` (`venueDto`, the Projects list's own read), a venue that its rows are its draft. Read-only |
@@ -523,11 +526,17 @@ Three decisions shape them:
 - **Writes broadcast as the routes do** (`patchListChanged` after a `DbFixtureLoader` reload,
   `riggingListChanged`, `stageRegionListChanged`, `stageElementListChanged`,
   `stageViewpointListChanged`, `projectDetailsChanged` for the stage box,
-  `buskRigChanged` when `delete_groups` takes rig tiles off, `cueListChanged` /
+  `buskRigChanged` when `delete_groups` or `unpatch_fixtures` takes rig tiles off, `cueListChanged` /
   `cueStackListChanged`, `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
   metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way —
   and, like both REST placement paths, refreshes the one thing the running show caches from them,
   the gel (`Fixtures.setPatchMetadata`, which `GET /fixtures` reads).
+  A rename (`rename_fixtures`, `edit_groups`' `newName`) also fires the list signal of every kind it
+  rewrote, `cuesRecomposed` for the cues, and invalidates the surface bindings; on the current project
+  it republishes each rewritten Look and template (`republishForLookEdit` / `republishForTemplateEdit`)
+  and each live cue (`republishCueIfLive`) after the reload, so what is on stage keeps its fixtures.
+  The programmer's own slots and effects already running are runtime state keyed by the old key, and
+  are left to the operator.
 - **A malformed value is refused, never read as a clear.** An explicit `null` clears a field; a
   number field holding a string is a problem like any other. A cue layer naming a Look that is
   not in the project is refused too, although the shared cue write (`createCueChildren`) drops
@@ -560,7 +569,8 @@ head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 ### Another project than the live one
 
 The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
-`patch_fixtures`, `delete_groups`, `set_stage`, `place_fixtures`, `override_venue_fixtures`, `set_scene`, `get_scene`,
+`patch_fixtures`, `delete_groups`, `unpatch_fixtures`, `rename_fixtures`, `edit_groups`, `set_stage`, `place_fixtures`,
+`override_venue_fixtures`, `set_scene`, `get_scene`,
 `upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, and the
 show-running `set_scenery` — so a show can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
@@ -623,11 +633,18 @@ The writes it covers, by tool:
 - `place_fixtures` — a venue patch's `kind` or `stageHidden`, and any field of a facet the show
   does not own (below);
 - `delete_groups` — a venue group;
+- `unpatch_fixtures` — a venue patch (hide it with `override_venue_fixtures`) or universe;
+- `rename_fixtures` — a venue patch, and a new key that is a venue patch's (`KEY_TAKEN_BY_VENUE`);
+- `edit_groups` — a venue group, and a new name that is one's; a show group may take venue fixtures;
 - `set_stage` — the stage's size (the venue's), and a region or rigging set or removed by a venue
   record's name;
 - `set_scene` — an element or viewpoint set or removed by a venue record's name, the
   `proscenium-hall` template's rows included — except a row of only `{name, hidden}`, which hides a
   venue element for the show's run or brings it back (the table above).
+
+`unpatch_fixtures`, `rename_fixtures` and `edit_groups` on a venue's **draft** report and rewrite
+the venue's own records only. The shows pinned to it keep naming the old key or group until each is
+updated, when Update's review lists it under `deadReferences`.
 
 **`override_venue_fixtures`** (`ai/VenueFixtureTools.kt`) is the fixture sheet's *Venue | This show*
 switch, *Keep mine* and *Hide in this show*, per venue fixture by key — a hidden one included, so it
