@@ -1,8 +1,13 @@
 # Sentry — errors, traces, logs and metrics for the desk and its UI
 
-> **Document status: AGREED, 2026-10-13. Not started.** Chris answered §9's questions on
-> 2026-10-13, and the decisions below record those answers. SDK facts were checked on 2026-10-13 against `sentry-java` 8.60.0 and
-> `@sentry/react` 11.7.0.
+> **Document status: COMPLETE — all five sessions shipped, as `df8c0b65`, `0fa1e6e4`, `ee704c36`,
+> `fa8c5026` (2026-10-13) and `5aec25a9` (2026-10-14), with `a9899d6a` a fix to session 4's browser
+> tracing.** Agreed with Chris on 2026-10-13, whose answers to §9's questions the decisions below
+> record. SDK facts were checked that day against `sentry-java` 8.60.0 and `@sentry/react` 11.7.0.
+> Where this plan and [`docs/observability-engineering.md`](../../observability-engineering.md)
+> disagree, the engineering doc describes what shipped; §5 lists the departures. §6 and §7's
+> follow-ups are in [`followups.md`](../followups.md), and the release workflow's first real run is
+> `FU-MANUAL-SENTRY-RELEASE` in [`manual-validation.md`](../manual-validation.md).
 
 ## 1. Context
 
@@ -175,19 +180,36 @@ buffer, and is how an operator says "this went wrong" mid-show without a stack t
 One PR each, per CLAUDE.md §"Git workflow"; each ends with `./gradlew test` and `npm run check`
 green and `docs/observability-engineering.md` updated.
 
-1. **Backend foundation.** BOM and deps; `module()` init; config block; D1's table, route and
-   gate (no UI yet); release/environment/context (D10, D11); logback appender and log scrubbing (D8);
-   `beforeSend` filters (D12); disk cache and shutdown (D15); run sessions; shadow-jar check; a test
-   that `moduleWithState` leaves Sentry disabled.
-2. **Backend tracing.** The Ktor plugin (D3) and `SentryContext` propagation; WS message
-   transactions (D4); the Exposed interceptor and connection-acquire span (D5); `sentry-ktor-client`
-   and JGit spans (D6); §3.3's custom transactions.
-3. **Backend metrics.** `MetricsReporter` and §3.4's table.
-4. **Frontend foundation and tracing.** §4.1; the Install settings switch (D1's UI); release
-   injection from Gradle (D10); the envelope tunnel (D9); source-map upload in
-   `windows-build.yml` (D14).
-5. **Replay, feedback and frontend metrics.** §4.2, §4.3; the `data-sentry-block` markings; check
-   the busk and Stage views' frame time with replay recording on, against off, on the dev desk.
+1. **Backend foundation** — done, `df8c0b65`. BOM and deps; `module()` init; config block; D1's
+   table, route and gate (no UI yet); release/environment/context (D10, D11); logback appender and
+   log scrubbing (D8); `beforeSend` filters (D12); disk cache and shutdown (D15); run sessions;
+   shadow-jar check; a test that `moduleWithState` leaves Sentry disabled.
+   *As shipped:* a non-packaged run reads its commit from `git rev-parse` at startup, since local
+   builds keep the SHA out of the build's inputs.
+2. **Backend tracing** — done, `0fa1e6e4`. The Ktor plugin (D3) and `SentryContext` propagation;
+   WS message transactions (D4); the Exposed interceptor and connection-acquire span (D5);
+   `sentry-ktor-client` and JGit spans (D6); §3.3's custom transactions.
+   *As shipped:* D5's transaction span wraps the **data source**, not the ~418 `transaction()` call
+   sites, for the same span tree; an idle auto-sync run is sampled at `sentry.idleSyncSampleRate`
+   rather than always kept (§7), which would have been ~43,000 transactions a month; an incoming
+   trace is continued without the caller's `sample_rand` / `sample_rate`, so a caller cannot choose
+   to be sampled.
+3. **Backend metrics** — done, `ee704c36`. `MetricsReporter` and §3.4's table.
+   *As shipped:* `jvm.gc.pause` needed `jdk.management` added to the jlinked runtime.
+4. **Frontend foundation and tracing** — done, `fa8c5026` (and `a9899d6a`). §4.1; the Install
+   settings switch (D1's UI); release injection from Gradle (D10); the envelope tunnel (D9);
+   source-map upload in `windows-build.yml` (D14).
+   *As shipped:* the tunnel spools envelopes to disk and a worker forwards them byte for byte with
+   `java.net.http`, rather than re-sending through the JVM SDK; `sentry-java` 8.60.0 never reads its
+   disk cache back on the JVM, so `SentryRuntime` registers the resender itself; turning telemetry
+   off deletes both queues; the browser traces with `traceLifecycle: 'static'`, since 11.7.0's
+   default `'stream'` skipped `beforeSendTransaction` and made every REST call a root trace.
+5. **Replay, feedback and frontend metrics** — done, `5aec25a9`. §4.2, §4.3; the
+   `data-sentry-block` markings; check the busk and Stage views' frame time with replay recording
+   on, against off, on the dev desk (busk 60 fps either way, Stage ~20 fps either way).
+   *As shipped:* replay and feedback load by a dynamic `import()` of a chunk the desk serves, not
+   §4.2's `lazyLoadIntegration`, which in 11.7.0 fetches from Sentry's CDN — nowhere at an offline
+   venue.
 
 ## 6. Other Sentry features worth having
 

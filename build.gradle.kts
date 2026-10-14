@@ -124,7 +124,8 @@ dependencies {
     implementation("io.ktor:ktor-server-netty")
     implementation("ch.qos.logback:logback-classic:$logback_version")
     // Errors, logs and traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
-    // plugin: it auto-adds integrations and touches the build (docs/plans/sentry-plan.md D2).
+    // plugin: it auto-adds integrations and touches the build
+    // (docs/plans/completed/sentry-plan.md D2).
     implementation(platform("io.sentry:sentry-bom:8.60.0"))
     implementation("io.sentry:sentry")
     implementation("io.sentry:sentry-logback")

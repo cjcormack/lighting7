@@ -3,7 +3,7 @@
 The desk reports errors, logs, run sessions, traces and metrics to Sentry (`lighting7-kotlin`, EU
 region), and its browsers report errors, sessions, traces, replays, feedback and metrics to
 `lighting7-react` through the desk (§"The browser"). The plan is
-[`plans/sentry-plan.md`](plans/sentry-plan.md).
+[`plans/completed/sentry-plan.md`](plans/completed/sentry-plan.md).
 
 ## The switch
 

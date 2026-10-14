@@ -1719,7 +1719,7 @@ unflown) from the form.
 piece no longer has (a drape switched to `DEAD`). Like every key here it needs no `formatVersion`:
 `params` travel verbatim, and an older desk keeps a field it does not read.
 
-**Fabric and paint** (scrim plan session 1, D1 and D4; `docs/plans/scrim-plan.md`). A drape's
+**Fabric and paint** (scrim plan session 1, D1 and D4; `docs/plans/completed/scrim-plan.md`). A drape's
 `fabric` is the cloth's, not its role's: a flown gauze is `BACKCLOTH` + `FLY` + `SHARKSTOOTH`, a
 traveller scrim `TABS` + `DRAW`. Absent is velour, the only fabric that pleats; canvas is the flat
 painted cloth, muslin is translucent, and the two nets are scrims. A drape's or a flat's `paint` is

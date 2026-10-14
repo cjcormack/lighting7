@@ -49,7 +49,7 @@ renderer in `scrim.html` stays a sketch of the model, not the shipped one (the p
   (`walkTree`'s skip) and `ExportUuidRemapper.kt`.
 - **`docs/sync-engineering.md`** §"Version 4 — Prompt-book PDF binaries" (the contract the image
   store follows, and why it bumps `formatVersion`) and §"A params key added later needs no bump".
-- **[`../completed/stage-light-plan.md`](../completed/stage-light-plan.md)**, whose box occlusion,
+- **[`../stage-light-plan.md`](../stage-light-plan.md)**, whose box occlusion,
   finishes and exposure this builds on.
 
 ## Why the view cannot show these cloths today
