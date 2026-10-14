@@ -127,18 +127,21 @@ const PdfPage = memo(function PdfPage({
   onHasText: (index: number, hasText: boolean) => void
   onTextLayerRendered: (index: number) => void
 }) {
+  // Out of session replay: a page's text layer would dominate its size (Sentry plan D13).
   return (
-    <Page
-      pageIndex={index}
-      width={width}
-      renderTextLayer
-      renderAnnotationLayer={false}
-      // The sheet behind it is the placeholder; react-pdf's "Loading page…" text would flash on
-      // every page a scroll passes over.
-      loading={null}
-      onGetTextSuccess={(tc) => onHasText(index, (tc.items?.length ?? 0) >= MIN_TEXT_ITEMS)}
-      onRenderTextLayerSuccess={() => onTextLayerRendered(index)}
-    />
+    <div data-sentry-block>
+      <Page
+        pageIndex={index}
+        width={width}
+        renderTextLayer
+        renderAnnotationLayer={false}
+        // The sheet behind it is the placeholder; react-pdf's "Loading page…" text would flash on
+        // every page a scroll passes over.
+        loading={null}
+        onGetTextSuccess={(tc) => onHasText(index, (tc.items?.length ?? 0) >= MIN_TEXT_ITEMS)}
+        onRenderTextLayerSuccess={() => onTextLayerRendered(index)}
+      />
+    </div>
   )
 })
 

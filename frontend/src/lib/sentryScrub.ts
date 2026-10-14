@@ -4,7 +4,7 @@
  * `TokenScrubber` compiles them; `scrubCases.fixture.json` is run by both test suites, so a
  * difference in how the two apply them fails one.
  */
-import type { Breadcrumb, BrowserOptions, ErrorEvent } from '@sentry/react'
+import type { Breadcrumb, BrowserOptions, ErrorEvent, Event } from '@sentry/react'
 import secrets from '../../../src/main/resources/telemetry/secret-patterns.json'
 
 export type TransactionEvent = Parameters<NonNullable<BrowserOptions['beforeSendTransaction']>>[0]
@@ -51,7 +51,7 @@ export function scrubBreadcrumb(crumb: Breadcrumb): Breadcrumb {
   }
 }
 
-function scrubCommon<E extends ErrorEvent | TransactionEvent>(event: E): E {
+function scrubCommon<E extends Event>(event: E): E {
   if (event.message != null) event.message = scrub(event.message)
   if (event.transaction != null) event.transaction = scrub(event.transaction)
   if (event.request?.url != null) event.request.url = scrub(event.request.url)
@@ -81,4 +81,23 @@ export function scrubTransaction(event: TransactionEvent): TransactionEvent {
     if (span.data != null) span.data = scrubValue(span.data) as typeof span.data
   }
   return event
+}
+
+/**
+ * A replay's and a feedback's events, which no `beforeSend` sees: the replay event's `urls` and
+ * request, and the feedback's message and page URL (in `contexts`).
+ */
+export function scrubOtherEvent<E extends Event & { urls?: unknown }>(event: E): E {
+  if (event.type !== 'replay_event' && event.type !== 'feedback') return event
+  scrubCommon(event)
+  if (Array.isArray(event.urls)) event.urls = event.urls.map((u) => (typeof u === 'string' ? scrub(u) : u))
+  return event
+}
+
+/**
+ * Replay's own recording events — its breadcrumbs, navigation and network spans. The page URL in a
+ * DOM snapshot is not one of them, which is why a page loaded on a secret URL records no replay.
+ */
+export function scrubRecordingEvent<R extends { data?: unknown }>(event: R): R {
+  return event.data == null ? event : { ...event, data: scrubValue(event.data) }
 }

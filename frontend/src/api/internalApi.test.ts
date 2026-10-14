@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createInternalApiConnection, InternalEventType } from "./internalApi"
 
+const reconnects = vi.hoisted(() => ({ count: vi.fn() }))
+vi.mock("../lib/sentryMetrics", () => ({ countWsReconnect: reconnects.count }))
+
 // A stand-in for the browser WebSocket that never opens a socket, so a test can
 // push frames at the connection the way the server would.
 class FakeWebSocket {
@@ -121,5 +124,36 @@ describe("createInternalApiConnection", () => {
     // Callers carrying an operator gesture use the answer to say so — see `sendGesture`.
     expect(conn.send('{"type":"surfaceScaler.setBlackout","enabled":true}')).toBe(false)
     expect(written).not.toHaveBeenCalled()
+  })
+
+  it("counts a re-open as ws.reconnect, by cause, and never the page's first open", () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, "log").mockImplementation(() => {})
+    reconnects.count.mockClear()
+    const { conn, socket: first } = connect()
+    first.onopen?.(new Event("open"))
+    expect(reconnects.count).not.toHaveBeenCalled()
+
+    first.readyState = FakeWebSocket.CLOSED
+    first.onclose?.(new CloseEvent("close", { code: 1006 }))
+    vi.advanceTimersByTime(1_000)
+    const second = FakeWebSocket.last!
+    expect(second).not.toBe(first)
+    second.onopen?.(new Event("open"))
+    expect(reconnects.count).toHaveBeenLastCalledWith("dropped")
+
+    conn.reconnect(true)
+    FakeWebSocket.last!.onopen?.(new Event("open"))
+    expect(reconnects.count).toHaveBeenLastCalledWith("forced")
+
+    // Sign-in after the desk refused a signed-out socket: closed, not scheduled, then forced.
+    const refused = FakeWebSocket.last!
+    refused.readyState = FakeWebSocket.CLOSED
+    refused.onclose?.(new CloseEvent("close", { code: 4401 }))
+    conn.reconnect(true)
+    FakeWebSocket.last!.onopen?.(new Event("open"))
+    expect(reconnects.count).toHaveBeenLastCalledWith("forced")
+    expect(reconnects.count).toHaveBeenCalledTimes(3)
+    vi.useRealTimers()
   })
 })

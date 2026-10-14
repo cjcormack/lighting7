@@ -40,6 +40,7 @@ const screensSheet = { open: vi.fn() }
 vi.mock('@/components/screens/screensSheetState', () => ({ openScreensSheet: () => screensSheet.open() }))
 
 import { UserMenu } from './UserMenu'
+import { setReportProblem } from '@/lib/reportProblem'
 
 // jsdom has no `matchMedia`. The menu renders `ThemeMenuItem` on both branches, whose
 // `getInitialTheme` falls back to the OS preference when nothing is stored — so without this the
@@ -199,6 +200,24 @@ describe('UserMenu', () => {
       render(<UserMenu />)
       openMenu()
       expect(screen.getByRole('menuitem', { name: /^Screens…/ })).toHaveTextContent('1 window')
+    })
+  })
+
+  describe('Report a problem', () => {
+    afterEach(() => setReportProblem(null))
+
+    it('is drawn only while Sentry has set an opener, and selecting it opens the form', () => {
+      signedInAs('Chris Cormack')
+      render(<UserMenu />)
+      openMenu()
+      expect(screen.queryByRole('menuitem', { name: /Report a problem/ })).toBeNull()
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+      const open = vi.fn()
+      setReportProblem(open)
+      openMenu()
+      fireEvent.click(screen.getByRole('menuitem', { name: /Report a problem/ }))
+      expect(open).toHaveBeenCalledTimes(1)
     })
   })
 })

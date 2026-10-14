@@ -5333,8 +5333,13 @@ client exists. It asks `GET /install/telemetry` first and reports through the de
 tunnel. `App` creates the router only once `lib/sentryReady.ts` says init has settled, because the
 SDK instruments only a router made after `Sentry.init`; keep it that way, or page-load and
 navigation transactions silently stop. Secrets are scrubbed by `lib/sentryScrub.ts` from the
-backend's own pattern list. The whole contract, and what each event carries, is
-`../docs/observability-engineering.md` §"The browser".
+backend's own pattern list. Replay and feedback are a dynamic `import()` of `lib/sentryLazy.ts`,
+never a static one (the SDK's `lazyLoadIntegration` would fetch them from Sentry's CDN), and
+*Report a problem…* in the user menu reads `lib/reportProblem.ts` rather than `lib/sentry.ts`. A
+region that changes every frame carries `data-sentry-block`; text is unmasked in a replay, so
+anything that shows a credential carries `data-sentry-mask` (or `-block`, for a QR code). The
+whole contract, and what each event carries, is `../docs/observability-engineering.md` §"The
+browser".
 
 ## API Communication
 

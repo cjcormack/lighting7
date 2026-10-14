@@ -118,6 +118,25 @@ class TelemetryTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `replay records every errored page load, and whole sessions only off a release`() {
+        val dev = settings(BuildInfo.Channel.DEV)
+        assertEquals(0.1, dev.replaysSessionSampleRate)
+        assertEquals(1.0, dev.replaysOnErrorSampleRate)
+
+        val release = settings(BuildInfo.Channel.RELEASE)
+        assertEquals(0.0, release.replaysSessionSampleRate)
+        assertEquals(1.0, release.replaysOnErrorSampleRate)
+
+        val set = SentryConfig.from(
+            testAppConfig("sentry.replaysSessionSampleRate" to "0.5", "sentry.replaysOnErrorSampleRate" to "0.25"),
+        )
+        val overridden = settings(BuildInfo.Channel.RELEASE, set)
+        assertEquals(0.5, overridden.replaysSessionSampleRate)
+        assertEquals(0.25, overridden.replaysOnErrorSampleRate)
+        assertNull(SentryConfig.from(testAppConfig("sentry.replaysOnErrorSampleRate" to "2")).replaysOnErrorSampleRate)
+    }
+
+    @Test
     fun `GET answers a signed-out caller, and PUT is an admin's`() = testApplication {
         mountTestApp(state)
         seedUser(state, "admin", UserRole.ADMIN)
@@ -130,6 +149,8 @@ class TelemetryTest : RouteIntegrationTest() {
         assertEquals(state.telemetry.enabled, dto.enabled)
         assertEquals(state.telemetry.release, dto.release)
         assertEquals(state.telemetry.environment, dto.environment)
+        assertEquals(state.telemetry.replaysSessionSampleRate, dto.replaysSessionSampleRate)
+        assertEquals(state.telemetry.replaysOnErrorSampleRate, dto.replaysOnErrorSampleRate)
 
         val signedOut = http.put(path) {
             contentType(ContentType.Application.Json)

@@ -3,7 +3,7 @@ import type { ErrorEvent } from '@sentry/react'
 import type { TransactionEvent } from './sentryScrub'
 import fixture from '../../../src/test/resources/telemetry/scrubCases.fixture.json'
 import secrets from '../../../src/main/resources/telemetry/secret-patterns.json'
-import { REDACTED, scrub, scrubBreadcrumb, scrubEvent, scrubTransaction } from './sentryScrub'
+import { REDACTED, scrub, scrubBreadcrumb, scrubEvent, scrubOtherEvent, scrubRecordingEvent, scrubTransaction } from './sentryScrub'
 
 const cases: { input: string; expected?: string }[] = fixture.cases
 
@@ -61,5 +61,34 @@ describe('sentryScrub', () => {
   it('leaves a breadcrumb without secrets alone', () => {
     const crumb = { category: 'fetch', data: { url: '/api/rest/projects/4', status_code: 200 } }
     expect(scrubBreadcrumb(crumb)).toEqual(crumb)
+  })
+
+  it("scrubs a replay event's URLs and a feedback's page and message, which no beforeSend sees", () => {
+    const replay = scrubOtherEvent({
+      type: 'replay_event',
+      urls: ['http://desk.local:8413/reset/AbC123xyz', '/projects/1/busk'],
+      request: { url: 'http://desk.local:8413/device/Zz9-Yy8' },
+    } as Parameters<typeof scrubOtherEvent>[0])
+    expect(replay.urls).toEqual([`http://desk.local:8413/reset/${REDACTED}`, '/projects/1/busk'])
+    expect(replay.request?.url).toBe(`http://desk.local:8413/device/${REDACTED}`)
+
+    const feedback = scrubOtherEvent({
+      type: 'feedback',
+      contexts: { feedback: { message: 'pasted ghp_abcdefghijklmnopqrstuvwxyz0123', url: '/reset/AbC123xyz' } },
+    } as Parameters<typeof scrubOtherEvent>[0])
+    expect(JSON.stringify(feedback)).not.toMatch(/ghp_abcdef|AbC123xyz/)
+
+    const error = { message: '/reset/AbC123xyz' } as Parameters<typeof scrubOtherEvent>[0]
+    expect(scrubOtherEvent(error).message).toBe('/reset/AbC123xyz')
+  })
+
+  it("scrubs a replay recording event's payload", () => {
+    const event = scrubRecordingEvent({
+      type: 5,
+      timestamp: 1,
+      data: { tag: 'performanceSpan', payload: { op: 'navigation.push', description: '/device/Zz9-Yy8' } },
+    })
+    expect(JSON.stringify(event)).not.toContain('Zz9-Yy8')
+    expect(event.timestamp).toBe(1)
   })
 })

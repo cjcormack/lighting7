@@ -8,6 +8,8 @@ export interface TelemetrySettings {
   environment: string
   tracesSampleRate: number
   browserDsn?: string | null
+  replaysSessionSampleRate?: number
+  replaysOnErrorSampleRate?: number
 }
 
 export const telemetryApi = restApi.injectEndpoints({

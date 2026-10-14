@@ -755,8 +755,10 @@ const ChannelGroups = ({
   }, [isEditing, virtualizer])
 
   return (
+    // Out of session replay: every cell changes at the DMX frame rate (Sentry plan D13).
     <div
       ref={gridRef}
+      data-sentry-block
       className="overflow-y-auto"
       style={{ maxHeight: "calc(100vh - 10rem)" }}
     >

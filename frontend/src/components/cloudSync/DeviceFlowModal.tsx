@@ -147,7 +147,7 @@ export function DeviceFlowModal({ open, onOpenChange }: DeviceFlowModalProps) {
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                 Your code
               </div>
-              <div className="font-mono text-2xl tracking-widest select-all">
+              <div data-sentry-mask className="font-mono text-2xl tracking-widest select-all">
                 {code.userCode}
               </div>
             </div>

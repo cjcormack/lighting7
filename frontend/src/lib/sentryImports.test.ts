@@ -10,4 +10,15 @@ describe('lib/sentry', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(500)
     expect(importers).toEqual(['/src/main.tsx'])
   })
+
+  it('keeps replay and feedback out of the entry chunk: only lib/sentry imports lib/sentryLazy, and dynamically', () => {
+    const importers = Object.entries(SOURCES)
+      .filter(([, text]) => /sentryLazy['"]/.test(text))
+      .filter(([path]) => !path.endsWith('/sentryImports.test.ts'))
+      .map(([path]) => path)
+    expect(importers).toEqual(['/src/lib/sentry.ts'])
+    const sentry = SOURCES['/src/lib/sentry.ts']
+    expect(sentry).toMatch(/import\(\s*['"]\.\/sentryLazy['"]\s*\)/)
+    expect(sentry).not.toMatch(/from\s+['"]\.\/sentryLazy['"]/)
+  })
 })

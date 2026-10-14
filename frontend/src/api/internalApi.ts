@@ -1,4 +1,5 @@
 import { addBreadcrumb } from '@sentry/react'
+import { countWsReconnect, type ReconnectCause } from '../lib/sentryMetrics'
 import {Subscription} from "./subscription";
 
 // The backend accepts the `/api` upgrade and then closes with this code when the
@@ -75,6 +76,8 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
   const eventSubscriptions = new Map<number, InternalEventHandler>()
   let reconnectDelay = 1000
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  // Why the next open is a reconnect; null until this page's first socket has opened.
+  let reopenCause: ReconnectCause | null = null
 
   const notifyEvent = (ev: Event) => {
     const evType = ev.type as InternalEventType
@@ -109,6 +112,8 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
     newWs.onopen = (ev) => {
       reconnectDelay = 1000
       addBreadcrumb({ category: 'websocket', message: 'open' })
+      if (reopenCause != null) countWsReconnect(reopenCause)
+      reopenCause = 'dropped'
       notifyEvent(ev)
     }
     newWs.onerror = (ev) => {
@@ -155,6 +160,7 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
       }
       reconnectDelay = 1000
       addBreadcrumb({ category: 'websocket', message: 'reconnect', data: { force } })
+      if (reopenCause != null) reopenCause = force ? 'forced' : 'dropped'
       // A socket opened while the backend was still bootstrap-open carries no user.
       // After setup, login or logout it has to re-handshake so the server re-reads
       // the cookie, rather than leaving a socket streaming under a stale identity.

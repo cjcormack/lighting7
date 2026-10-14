@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CircleUser, LogOut, Maximize2, Minimize2, MonitorSmartphone } from "lucide-react"
+import { CircleUser, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,7 @@ import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } fr
 import { useWindowName } from "@/lib/windowIdentity"
 import { useDeskWindows } from "@/store/windows"
 import { openScreensSheet } from "@/components/screens/screensSheetState"
+import { useReportProblem } from "@/lib/reportProblem"
 
 // Words are filtered to those that *start* with a letter or digit, not merely contain one, so
 // a name like "Chris C (desk)" initials as "CC" rather than "C(" — a parenthesised qualifier
@@ -42,6 +43,7 @@ export function UserMenu() {
   const windowName = useWindowName()
   const windows = useDeskWindows()
   const { active: fullscreen } = useFullscreenState()
+  const reportProblem = useReportProblem()
 
   // Bootstrap-open: no users exist yet, so there is no identity to show — the setup screen is what
   // prompts for one — but the menu still opens, because three of its items are per-*viewer* and
@@ -140,6 +142,14 @@ export function UserMenu() {
               {windows.length} {windows.length === 1 ? "window" : "windows"}
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          {/* Sentry feedback (plan §4.2), only while this install reports: never a floating button
+              over desk controls. */}
+          {reportProblem && (
+            <DropdownMenuItem onSelect={reportProblem}>
+              <MessageSquareWarning className="size-4" />
+              Report a problem…
+            </DropdownMenuItem>
+          )}
           {user && (
             <DropdownMenuItem onSelect={() => void logout()}>
               <LogOut className="size-4" />
