@@ -360,6 +360,7 @@ those do nothing until a client exists.
 | `release` | `__LIGHTING7_RELEASE__` (§"Release and source maps"), else the GET's `release` |
 | `environment`, `tracesSampleRate` | the GET's, so one setting governs both halves |
 | `tunnel` | `/api/sentry` |
+| `traceLifecycle` | `'static'`. 11.7.0's default is `'stream'`, which sends each span as it ends: a fetch with no page load or navigation open becomes a root span of its own (a transaction per auto-sync refetch), and `beforeSendTransaction` is never called, so nothing would be scrubbed. Found by session 4's live check |
 | `tracePropagationTargets` | `[/^\/api\//]`: a REST call's backend transaction is in the browser's trace. The backend continues the trace and draws its own sampling decision (§"Sampling") |
 | `dataCollection` | every category off. It is v11's replacement for `sendDefaultPii`, every default of which collects; 11.7.0's browser reads only `userInfo`, which on would have Sentry infer the client's IP |
 | `integrations` | `reactRouterBrowserTracingIntegration` from `@sentry/react/react-router`, which binds the router hooks itself |

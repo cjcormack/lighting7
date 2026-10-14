@@ -54,6 +54,9 @@ function start(telemetry: Telemetry): void {
     release: __LIGHTING7_RELEASE__ || telemetry.release,
     environment: telemetry.environment,
     tracesSampleRate: telemetry.tracesSampleRate,
+    // 11.7.0 defaults to 'stream', where a fetch with no open span is a root span of its own and
+    // beforeSendTransaction never runs, so scrubTransaction would scrub nothing.
+    traceLifecycle: 'static',
     tracePropagationTargets: [/^\/api\//],
     // v11's replacement for `sendDefaultPii: false`, every default of which is to collect; userInfo
     // is the one 11.7.0's browser reads, and off it stops Sentry inferring the client's IP.
