@@ -5,7 +5,7 @@ first evening in the hall the same blackout ended every act, and each act's stac
 The venue-visit plan's D1 decided the model: one shared cue, stacks as ordered membership, cues
 outside any stack, and delete as its own explicit operation. This session worked out the rest.
 
-**Status: DRAFT, under review with Chris.** The implementation plan is
+**Status: approved 2026-10-14.** The implementation plan is
 [`../cue-model-plan.md`](../cue-model-plan.md). A one-page copy for human readers is
 [`cue-model.html`](cue-model.html), with a live copy at
 <https://claude.ai/artifact/396mjPfVFE8D6oi2Xh6EHH>, private to Chris and a convenience; the files

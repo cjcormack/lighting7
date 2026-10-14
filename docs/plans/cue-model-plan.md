@@ -1,6 +1,6 @@
 # The cue model — one shared cue, stacks as ordered entries
 
-> **Document status: DRAFT, 2026-10-14 — under review with Chris.** This is design session R1 of
+> **Document status: AGREED, 2026-10-14.** This is design session R1 of
 > [`venue-visit-plan.md`](venue-visit-plan.md), whose D1 it implements: one shared cue, stacks as
 > ordered membership, cues outside any stack, and delete as its own explicit operation. The
 > questions asked and their answers are in §10 and in the design record,
