@@ -1291,7 +1291,7 @@ private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDt
         parameters = effect.parameters
         // `speedMasterUuidOrNull`, not `UUID.fromString`: this is a client-supplied string, and
         // the bare parse throws `IllegalArgumentException` out of the transaction and out of the
-        // handler — a 500 on a malformed body. The Look path (`createLookChildren`) already goes
+        // handler — a 500 on a malformed body. The Look path (`writeLookChildren`) already goes
         // through the tolerant helper, and null here means master 1, which is the documented
         // meaning of an absent master everywhere else.
         speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)

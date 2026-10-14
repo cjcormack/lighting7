@@ -315,7 +315,7 @@ a fixture or group row out to cells), and a cell named on its own keeps its own 
 gap a model hit: the Shehds' fixture-level colour was refused and nothing said a cell had a key, so
 `describe_rig` now lists each multi-head fixture's cells (`cells=3 (…zone-1 … …zone-3)`) and the
 target and `create_look` descriptions say how to name one. The rows then go through the
-REST write path (`validateLookRows`, `createLookChildren`), so a trigger or command name is refused as
+REST write path (`validateLookRows`, `writeLookChildren`), so a trigger or command name is refused as
 it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
 and a cue layer's targets are optional for the same reason. `list_fixture_types` with `properties: true`
 is where the model learns the names. A layer with no targets on a Look with effects is refused by

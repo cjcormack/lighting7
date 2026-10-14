@@ -107,11 +107,6 @@ internal fun writeRecordingIntoLook(
     var written = 0
     var removed = 0
 
-    data class RowKey(val targetType: String, val targetKey: String, val elementKey: String?, val propertyName: String)
-
-    fun key(targetType: String, targetKey: String, elementKey: String?, propertyName: String) =
-        RowKey(targetType, targetKey, elementKey, canonicalPropertyName(propertyName))
-
     /** The stored shape of a collapsed row: its parent and cell when it names a cell. */
     fun shape(row: CuePropertyAssignmentDto): Pair<String, String?> {
         // Fixture rows only, the same guard [elementParentsOf] applies: a group whose name happened
@@ -121,10 +116,16 @@ internal fun writeRecordingIntoLook(
         return parent to row.targetKey
     }
 
-    // Sorted in memory rather than with `orderBy`: this iterates the referrer collection, and
-    // Exposed refuses to order a SizedIterable once it has been loaded.
-    val existing = look.rows.sortedBy { it.sortOrder }
-    val existingByKey = existing.associateBy { key(it.targetType, it.targetKey, it.elementKey, it.propertyName) }
+    val existing = look.rowsInOrder()
+    val existingByKey = existing.associateBy { it.rowKey }
+
+    /** Everything a recorded row sets but its key, whether written over a stored row or inserted. */
+    fun DaoLookRow.take(row: CuePropertyAssignmentDto, sortOrder: Int) {
+        propertyName = canonicalPropertyName(row.propertyName)
+        value = row.value
+        fadeDuration = null
+        this.sortOrder = sortOrder
+    }
 
     fun insert(row: CuePropertyAssignmentDto, sortOrder: Int) {
         val (parentKey, cellKey) = shape(row)
@@ -133,27 +134,25 @@ internal fun writeRecordingIntoLook(
             targetType = row.targetType
             targetKey = parentKey
             elementKey = cellKey
-            propertyName = canonicalPropertyName(row.propertyName)
-            value = row.value
-            this.sortOrder = sortOrder
+            take(row, sortOrder)
         }
     }
 
-    fun keyOf(row: CuePropertyAssignmentDto): RowKey {
+    fun keyOf(row: CuePropertyAssignmentDto): LookRowKey {
         val (parentKey, cellKey) = shape(row)
-        return key(row.targetType, parentKey, cellKey, row.propertyName)
+        return lookRowKey(row.targetType, parentKey, cellKey, row.propertyName)
     }
 
     when (mode) {
         RecordMode.CREATE, RecordMode.UPDATE_EXISTING -> {
-            for (row in existing) {
-                if (!inRemit(row)) continue
-                row.delete()
-                removed++
-            }
-            var nextSort = existing.filterNot(inRemit).maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
-            for (row in collapsed.rows) {
-                insert(row, nextSort++)
+            // An in-remit row recorded again is written over, keeping its uuid.
+            val (remit, kept) = existing.partition(inRemit)
+            val pairing = pairByKey(remit, collapsed.rows, { it.rowKey }, ::keyOf)
+            pairing.unmatched.forEach { it.delete() }
+            removed = remit.size
+            var nextSort = kept.maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+            for ((row, stored) in pairing.pairs) {
+                if (stored == null) insert(row, nextSort++) else stored.take(row, nextSort++)
                 written++
             }
         }
@@ -510,22 +509,38 @@ internal fun programmerBandEffectsById(state: State, ids: List<Long>): List<FxIn
  * to be in it.
  */
 internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: RecordMode) {
-    // CREATE and UPDATE_EXISTING replace the Look's contents, so their effects go with the rows —
-    // otherwise a re-record would accumulate a second copy of every chase. MERGE adds.
-    if (mode == RecordMode.CREATE || mode == RecordMode.UPDATE_EXISTING) {
-        look.effects.forEach { it.delete() }
+    fun targetTypeOf(effect: FxInstance) = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
+
+    fun DaoLookEffect.take(effect: FxInstance, sortOrder: Int) {
+        category = categoryFromPropertyName(effect.target.propertyName)
+        propertyName = effect.target.propertyName
+        takeSettings(effect.lookEffectSettings())
+        this.sortOrder = sortOrder
     }
+
+    // CREATE and UPDATE_EXISTING replace the Look's contents, so their effects go with the rows —
+    // otherwise a re-record would accumulate a second copy of every chase. MERGE adds. A stored
+    // effect recorded again is written over, keeping its uuid.
+    val replace = mode == RecordMode.CREATE || mode == RecordMode.UPDATE_EXISTING
+    val pairing = pairByKey(
+        if (replace) look.effectsInOrder() else emptyList(), effects,
+        { it.effectKey },
+        { lookEffectKey(targetTypeOf(it), it.target.targetKey, it.target.propertyName, it.lookEffectSettings().effectType) },
+    )
+    pairing.unmatched.forEach { it.delete() }
     if (effects.isEmpty()) return
-    var nextSort = (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
-    for (effect in effects) {
-        DaoLookEffect.new {
-            this.look = look
-            targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
-            targetKey = effect.target.targetKey
-            category = categoryFromPropertyName(effect.target.propertyName)
-            propertyName = effect.target.propertyName
-            takeSettings(effect.lookEffectSettings())
-            sortOrder = nextSort++
+    var nextSort = if (replace) 0 else (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    for ((effect, stored) in pairing.pairs) {
+        val sortOrder = nextSort++
+        if (stored != null) {
+            stored.take(effect, sortOrder)
+        } else {
+            DaoLookEffect.new {
+                this.look = look
+                targetType = targetTypeOf(effect)
+                targetKey = effect.target.targetKey
+                take(effect, sortOrder)
+            }
         }
     }
 }

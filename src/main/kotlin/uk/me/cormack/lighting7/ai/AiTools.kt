@@ -178,7 +178,7 @@ class AiTools(private val state: State) {
             }
             // Every effect is deferred: the tool describes the effects, and the targets come from
             // whatever applies the look. Values are bound rows, each naming its own fixture or group.
-            createLookChildren(created, values.rows, effects)
+            writeLookChildren(created, values.rows, effects, created = true)
             replaceLookScenery(created, scenery)
             created
         } ?: return errorResult("A look named '$name' already exists in this project")
@@ -259,9 +259,7 @@ class AiTools(private val state: State) {
                 look.name = name
             }
             if (notesGiven) look.notes = notes
-            if (values != null) look.rows.forEach { it.delete() }
-            if (effects != null) look.effects.forEach { it.delete() }
-            if (values != null || effects != null) createLookChildren(look, values?.rows.orEmpty(), effects.orEmpty())
+            if (values != null || effects != null) writeLookChildren(look, values?.rows, effects)
             scenery?.let { replaceLookScenery(look, it) }
             look.name to look.uuid
         }

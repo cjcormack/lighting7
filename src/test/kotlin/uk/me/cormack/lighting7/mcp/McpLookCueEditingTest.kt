@@ -106,6 +106,34 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `update_look keeps the uuids of the values and effects it keeps`() {
+        patchRig()
+        val foh2 = """{"target":{"type":"fixture","key":"foh-2"},"propertyName":"dimmer","value":"dmx:40"}"""
+        val hex1 = """{"target":{"type":"fixture","key":"hex-1"},"propertyName":"rgbColour","value":"#ff0000"}"""
+        val lookId = ok(
+            "create_look",
+            """{"name":"Keep","values":[${foh1("dmx:200")},$foh2],"effects":[$pulse]}""",
+        )["lookId"]!!.jsonPrimitive.int
+        fun uuids() = transaction(state.database) {
+            DaoLook[lookId].rows.associate { it.targetKey to it.uuid } to DaoLook[lookId].effects.map { it.uuid }
+        }
+        val (rowsBefore, effectsBefore) = uuids()
+
+        val slower = pulse.replace("\"beatDivision\":1.0", "\"beatDivision\":2.0")
+        ok("update_look", """{"lookId":$lookId,"values":[${foh1("dmx:90")},$hex1],"effects":[$slower]}""")
+
+        val (rowsAfter, effectsAfter) = uuids()
+        assertEquals(rowsBefore.getValue("foh-1"), rowsAfter.getValue("foh-1"), "changed in place")
+        assertFalse("foh-2" in rowsAfter, "dropped")
+        assertFalse(rowsAfter.getValue("hex-1") in rowsBefore.values, "added with a fresh uuid")
+        assertEquals(effectsBefore, effectsAfter)
+        transaction(state.database) {
+            assertEquals("90", DaoLook[lookId].rows.single { it.targetKey == "foh-1" }.value)
+            assertEquals(2.0, DaoLook[lookId].effects.single().beatDivision)
+        }
+    }
+
+    @Test
     fun `update_look replaces only the parts it is given`() {
         patchRig()
         val lookId = ok(
