@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.show
 
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.DmxFixture
@@ -161,6 +162,9 @@ class Fixtures {
          *  wheel snap reads the unit's colours from. A placement's is not here — its DMX is the
          *  patch's, so a snap can answer for one unit only, and the patch is the fixture's own. */
         val media: FittedMedia? = null,
+        /** The patch's stored locate (`DaoFixturePatches.locate`, through a show's Focus override):
+         *  the pan and tilt Locate points each unit at. Empty is none. */
+        val locate: List<UnitLocate> = emptyList(),
     )
     private val patchMetadataRegister: MutableMap<String, FixturePatchMetadata> = mutableMapOf()
 
@@ -427,6 +431,13 @@ class Fixtures {
      * key, a Hue fixture or an unknown key: every option its stock.
      */
     fun fittedMediaFor(fixtureKey: String): FittedMedia? = patchMetadataFor(fixtureKey)?.media
+
+    /**
+     * The stored locate of the patch keyed [fixtureKey] (venue-visit plan D6) — what
+     * [LocateValueResolver][uk.me.cormack.lighting7.fx.LocateValueResolver] points each unit at. Empty
+     * for none, a cell key (ask with its parent's), a Hue fixture or an unknown key.
+     */
+    fun storedLocateFor(fixtureKey: String): List<UnitLocate> = patchMetadataFor(fixtureKey)?.locate.orEmpty()
 
     /**
      * Whether the fixture keyed [fixtureKey] is patched as infrastructure. False for a key with no

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -18,12 +18,27 @@ vi.mock('../../store/locate', () => ({
   useLocateStateQuery: () => ({ data: { targets: [] } }),
   useToggleLocateMutation: () => [vi.fn()],
 }))
+const storedLocate = { projectId: 3 as number | undefined, storeFromCurrent: vi.fn(), clearLocate: vi.fn(), busy: false }
+vi.mock('@/hooks/useStoredLocateActions', () => ({ useStoredLocateActions: () => storedLocate }))
 
 const { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, SelectionToolbar, WORD_CLASS } = await import(
   './SelectionToolbar'
 )
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+  storedLocate.projectId = 3
+})
+
+/** Radix's DropdownMenuTrigger opens on `pointerdown`, not `click`. */
+function openLocateMenu() {
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Locate options' }), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: 'mouse',
+  })
+}
 
 function toolbar() {
   return render(
@@ -60,5 +75,23 @@ describe('SelectionToolbar', () => {
   it('drops the two words earlier still, since a tooltip already carries them', () => {
     toolbar()
     expect(screen.getByText('Locate')).toHaveClass(WORD_CLASS.split(' ').at(-1)!)
+  })
+
+  it('offers Set locate from current and Clear locate over the selection, folding with Locate', () => {
+    toolbar()
+    const trigger = screen.getByRole('button', { name: 'Locate options' })
+    expect(trigger).toHaveClass(STRIP_MID_FOLDED_CLASS)
+    openLocateMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set locate from current' }))
+    expect(storedLocate.storeFromCurrent).toHaveBeenCalledWith([{ type: 'fixture', key: 'hex-1' }])
+    openLocateMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Clear locate' }))
+    expect(storedLocate.clearLocate).toHaveBeenCalledWith([{ type: 'fixture', key: 'hex-1' }])
+  })
+
+  it('withholds the locate menu until the current project is known', () => {
+    storedLocate.projectId = undefined
+    toolbar()
+    expect(screen.getByRole('button', { name: 'Locate options' })).toBeDisabled()
   })
 })

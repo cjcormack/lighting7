@@ -185,6 +185,17 @@ Both use scripts as their base and allow configuring script settings per scene/c
 ### Fixtures
 DMX fixture definitions - describes what channels a fixture uses and how to control it.
 
+**A unit's stored locate** (venue-visit plan D6, D17; lighting7 `docs/fixtures-engineering.md`
+§"Stored locate") is where Locate points its pan and tilt: `FixturePatch.locate`, bytes per unit
+(`head` absent for the fixture's own), shown on the centre-relative scale (`lib/storedLocate.ts` over
+`positionScale.ts`). Two doors set it, both one REST call that reads **the desk's output** on the
+current project (`useStoredLocateActions`, `store/locate.ts`'s `storeLocate` / `clearLocate`): row C's
+Locate menu (*Set locate from current* · *Clear locate*, a chevron beside Locate that folds with it, so
+the phone's row C keeps its budget) and the patch sheet's **Locate** box (`patches/LocateBox.tsx`,
+in both `EditPatchForm` and `VenuePatchPanel`; nothing there waits for Save). On a venue patch in a
+show the desk writes the show's Focus override, so `facetValueOf('FOCUS')` carries `locate` whole and
+making Focus the show's keeps the venue's.
+
 **Infrastructure fixtures.** A patch marked `infrastructure` (a dimmer on hard power, a relay) is
 hidden from every view but **Patches** and **Channels**, the Stage included. The raw
 `useFixtureListQuery` / `usePatchListQuery` still carry it, because a cue, group or binding that

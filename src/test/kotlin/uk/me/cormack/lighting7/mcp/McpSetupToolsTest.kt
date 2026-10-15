@@ -10,6 +10,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
@@ -19,6 +20,8 @@ import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import java.time.Duration
@@ -143,6 +146,38 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertEquals(listOf("foh-1"), groups["Front wash"]!!.jsonArray.map { it.jsonPrimitive.content })
         val foh2 = patch["fixtures"]!!.jsonArray.map { it.jsonObject }.single { it["key"]!!.jsonPrimitive.content == "foh-2" }
         assertEquals(2, foh2["startChannel"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `patch_fixtures and place_fixtures set a stored locate, get_patch reads it, and a retype keeps only the type's units`() {
+        val mover = """{"fixtures":[{"key":"mac-1","name":"MAC 1","fixtureTypeKey":"%s","universe":0,"startChannel":1%s}]}"""
+        val set = call("patch_fixtures", mover.format("martin-mac-250-mode-4", ""","locate":[{"pan":40,"tilt":200,"panFine":7,"tiltFine":9}]"""))
+        assertTrue(set.success, set.result)
+        fun stored() = transaction(state.database) {
+            DaoFixturePatch.find { (DaoFixturePatches.project eq projectId) and (DaoFixturePatches.key eq "mac-1") }.single().storedLocate
+        }
+        assertEquals(listOf(UnitLocate(pan = 40, tilt = 200, panFine = 7, tiltFine = 9)), stored())
+        assertEquals(stored(), state.show.fixtures.storedLocateFor("mac-1"), "the live rig reads it")
+        fun locateOf() = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.map { it.jsonObject }
+            .single { it["key"]!!.jsonPrimitive.content == "mac-1" }["locate"]
+        assertEquals(Json.parseToJsonElement("""[{"pan":40,"panFine":7,"tilt":200,"tiltFine":9}]"""), locateOf())
+
+        // place_fixtures takes it too; a unit the type does not have is refused by name, nothing written.
+        val placed = call("place_fixtures", """{"placements":[{"key":"mac-1","locate":[{"pan":1,"tilt":2}]}]}""")
+        assertTrue(placed.success, placed.result)
+        assertEquals(listOf(UnitLocate(pan = 1, tilt = 2)), stored())
+        assertEquals(stored(), state.show.fixtures.storedLocateFor("mac-1"))
+        val refused = call("place_fixtures", """{"placements":[{"key":"mac-1","locate":[{"head":2,"pan":1,"tilt":2}]}]}""")
+        assertFalse(refused.success)
+        assertTrue(refused.problems().any { "head 3 does not pan and tilt" in it }, refused.result)
+        assertEquals(listOf(UnitLocate(pan = 1, tilt = 2)), stored())
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"mac-1","locate":null}]}""").success)
+        assertNull(locateOf(), "null clears it")
+        assertTrue(call("patch_fixtures", mover.format("martin-mac-250-mode-4", ""","locate":[{"pan":40,"tilt":200}]""")).success)
+
+        // A dimmer neither pans nor tilts, so a retype to one leaves no locate behind.
+        assertTrue(call("patch_fixtures", mover.format("generic-dimmer", "")).success)
+        assertNull(locateOf())
     }
 
     @Test

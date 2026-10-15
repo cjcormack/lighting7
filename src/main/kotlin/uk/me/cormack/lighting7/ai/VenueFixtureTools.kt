@@ -35,6 +35,7 @@ import uk.me.cormack.lighting7.models.kindUnderLantern
 import uk.me.cormack.lighting7.models.venueFacetOf
 import uk.me.cormack.lighting7.routes.addressOverlaps
 import uk.me.cormack.lighting7.routes.parseFacet
+import uk.me.cormack.lighting7.routes.syncStoredLocates
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.ShowHides
@@ -128,6 +129,10 @@ internal class VenueFixtureTools(private val state: State) {
                     target.project.id.value, state.show.fixtures, state.database,
                     parkSource = state.show.outputSource, hold = state.show.rigHold,
                 )
+            } else if (target.isCurrent) {
+                // A Focus taken back to the venue's (or made this show's) can move a stored locate,
+                // which the live patch metadata carries for Locate without a reload.
+                syncStoredLocates(state, target.project.id.value, done.map { it.key })
             }
             state.show.fixtures.patchListChanged()
         }
@@ -315,7 +320,7 @@ internal class VenueFixtureTools(private val state: State) {
             when (name) {
                 "rigging" -> rigging(value, "$where: rigging")?.let { field(PatchFacet.POSITION, "riggingUuid", it) }
                 in POSITION_NAMES -> field(PatchFacet.POSITION, POSITION_NAMES.getValue(name), value)
-                in LanternFocus.KEYS, "beamAngleDeg", "lampWatts", "lampKelvin" -> field(PatchFacet.FOCUS, name, value)
+                in LanternFocus.KEYS, "beamAngleDeg", "lampWatts", "lampKelvin", "locate" -> field(PatchFacet.FOCUS, name, value)
                 "gelCode", "media" -> field(PatchFacet.MEDIA, name, value)
             }
         }

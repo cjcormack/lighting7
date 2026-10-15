@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.models.DaoShowOverride
 import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.EffectivePatch
@@ -122,6 +124,29 @@ class McpVenueFixtureOverridesTest : RouteIntegrationTest() {
             assertEquals(31.5, p.focus.zoomDeg)
             assertTrue(p.overridden.isEmpty())
         }
+    }
+
+    @Test
+    fun `a venue fixture's locate is set as this show's Focus, and taking the venue's brings its own back`() {
+        val showId = liveShowOnVenue()
+        val venueLocate = listOf(UnitLocate(pan = 140, tilt = 96, panFine = 12, tiltFine = 200))
+        fun showLocate() = transaction(state.database) { RigScope.of(showId).let { rig -> rig.effective(rig.patches().single { it.key == "rev-1" }).locate } }
+
+        val refused = call("place_fixtures", """{"placements":[{"key":"rev-1","locate":[{"pan":10,"tilt":20}]}]}""")
+        assertEquals(VenueRigGuard.CODE_VENUE_OWNED, refused.json()["code"]?.jsonPrimitive?.content, refused.result)
+
+        ok("override_venue_fixtures", """{"fixtures":[{"key":"rev-1","facets":{"FOCUS":"SHOW"}}]}""")
+        assertEquals(venueLocate, showLocate(), "the switch starts from the venue's")
+        ok("place_fixtures", """{"placements":[{"key":"rev-1","locate":[{"pan":10,"tilt":20}]}]}""")
+        assertEquals(listOf(UnitLocate(pan = 10, tilt = 20)), showLocate())
+        assertEquals(showLocate(), state.show.fixtures.storedLocateFor("rev-1"), "the live rig reads the show's")
+        transaction(state.database) {
+            assertEquals(venueLocate, RigScope.of(showId).patches().single { it.key == "rev-1" }.storedLocate, "the venue's row is untouched")
+        }
+
+        ok("override_venue_fixtures", """{"fixtures":[{"key":"rev-1","facets":{"FOCUS":"VENUE"}}]}""")
+        assertEquals(venueLocate, showLocate())
+        assertEquals(venueLocate, state.show.fixtures.storedLocateFor("rev-1"), "and the live rig follows without a reload")
     }
 
     @Test

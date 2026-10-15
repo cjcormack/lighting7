@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
@@ -357,6 +358,32 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
         }.single { it.key == "adv2-1" }
         assertEquals(adv2, back, "the importer keeps the lantern and every focus field, on the patch and the placement")
+    }
+
+    /**
+     * v30: a stored locate on the patch, and absent where unset — a patch with none carries no key, so
+     * an export of a rig with no stored locate is v29's byte for byte.
+     */
+    @Test
+    fun `a stored locate exports on the patch and imports back`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val rev = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "rev-1" }
+        assertEquals(listOf(UnitLocate(head = null, pan = 140, tilt = 96, panFine = 12, tiltFine = 200)), rev.locate)
+        assertTrue(docs.filter { !it.contains("\"rev-1\"") }.none { it.contains("\"locate\"") }, "a patch with none carries no key")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 30, "stored locate travels from v30")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "rev-1" }
+        assertEquals(rev.locate, back.locate, "the importer keeps the stored locate")
     }
 
     /**

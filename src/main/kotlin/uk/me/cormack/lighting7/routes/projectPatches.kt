@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import uk.me.cormack.lighting7.fixture.lantern.focus
 import uk.me.cormack.lighting7.fixture.lantern.lampKelvinError
 import uk.me.cormack.lighting7.fixture.lantern.lampWattsError
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.*
@@ -520,6 +521,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     patchDto!!.key,
                     Fixtures.FixturePatchMetadata(
                         gelCode = patchDto.gelCode, infrastructure = patchDto.infrastructure, media = patchDto.media,
+                        locate = patchDto.locate,
                     ),
                 )
                 // A rebuild would have announced this itself; without one, the fixture list's
@@ -870,7 +872,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 for (dto in updated) {
                     state.show.fixtures.setPatchMetadata(
                         dto.key,
-                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode, infrastructure = dto.infrastructure, media = dto.media),
+                        Fixtures.FixturePatchMetadata(
+                            gelCode = dto.gelCode, infrastructure = dto.infrastructure, media = dto.media, locate = dto.locate,
+                        ),
                     )
                 }
             }
@@ -1063,6 +1067,14 @@ data class FixturePatchDto(
      */
     val media: FittedMedia? = null,
     /**
+     * The unit's **stored locate** (venue-visit plan D6, D17): the pan and tilt bytes Locate points
+     * each of its units at — `[{head?, pan, tilt, panFine?, tiltFine?}]`, `head` null for the fixture's
+     * own and a head's index otherwise. Empty is none: every unit locates to its centre. Part of the
+     * Focus facet; set by `POST …/locate/store` and `…/locate/clear`, never by this patch's `PUT`. See
+     * `docs/fixtures-engineering.md` §"Stored locate".
+     */
+    val locate: List<UnitLocate> = emptyList(),
+    /**
      * The other places this fixture hangs — a paired dimmer's second lantern, SL beside SR.
      * One fixture to control, several to draw. In order; empty for almost every patch.
      */
@@ -1247,6 +1259,7 @@ internal fun DaoFixturePatch.toDto(
         lampWatts = e.lampWatts,
         lampKelvin = e.lampKelvin,
         media = e.fittedMedia,
+        locate = e.locate,
         extraPlacements = rig.effectivePlacements(this, placements).map { it.toDto() },
         owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
         universeConfigUuid = e.universeConfig.uuid.toString(),

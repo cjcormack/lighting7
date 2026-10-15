@@ -1636,6 +1636,68 @@ The desk only stores and checks a lamp; the Stage view draws it — its colour f
 temperature, warming as a tungsten lamp dims, filtered by the gel, and its brightness from its watts
 and kind (`frontend/src/lib/lamp.ts`, `frontend/docs/stage-vis-engineering.md` §"A lantern's lamp").
 
+### Stored locate
+
+**A unit's stored locate is where Locate points it** (venue-visit plan D6, D17): pan and tilt, coarse
+and fine, in place of the centre of travel. Every other property Locate writes keeps its category
+default — full, open, white, the zoom at its middle — stored locate or not. It is
+`fixture_patches.locate`, canonical JSON `[{head?, pan, tilt, panFine?, tiltFine?}]`
+(`fixture/locate/StoredLocate.kt`, `DaoFixturePatch.storedLocate`), one entry per **unit** that pans
+and tilts: `head` absent for the fixture's own axes, a head's zero-based `elementIndex` otherwise — so a
+bar whose heads each move (the Slender Beam Bar Quad, the Scantastic) holds one per head. **Bytes, not
+the centre scale**: a locate is a literal for one unit, like a cue row's `"pan,tilt"`, and the
+frontend shows and reads it on the centre-relative scale through `positionScale.ts` (D3). The fine
+bytes are kept because a stored aim is only as good as its fine channel; a unit with fine channels and
+no fine byte stored locates with fine 0, as the default does.
+
+- **The resolver.** `LocateValueResolver.resolve(fixture, media, locate)` takes the patch's entries —
+  the parent's for a head (`Fixtures.storedLocateFor`, the patch metadata the loader fills) — and a
+  unit with an entry gets its `position` and fine sliders from it, clamped into each slider's range; a
+  unit without one centres. `LocateValueResolver.axesOf` is the one statement of a unit's axes (its
+  `WithPosition` sliders and its `PAN_FINE` / `TILT_FINE` properties), which the store reads and
+  `StoredLocate.unitsOf` checks against. Locate over a group resolves per member, as it always has,
+  so each member takes its own patch's entry.
+- **Set locate from current** — `POST /projects/{id}/locate/store {targets}` (`routes/locateStore.kt`):
+  each unit the targets reach that pans and tilts takes the pan and tilt **the desk is sending it
+  now** — `DmxController.getValue`, the composed frame with park overlaid, whatever put it there — so
+  an operator focuses the head with the programmer, a cue or an aim and stores it. A fixture stores
+  its own unit and every head's; a head (its element key) stores its own and keeps its siblings'. A
+  target that does not move is skipped by name, and so is a unit whose channels have no controller in
+  the live rig — never stored as 0, a corner of travel. **Clear locate** — `…/locate/clear {targets}` — takes
+  those units' entries away. Both answer `{stored: [{patchId, key, locate}], skipped}`, refuse an empty
+  target list (400 `LOCATE_NEEDS_SELECTION`), are current-project only (the store reads the live
+  output) and are stored writes, so an operator's on a venue is 403 `VENUE_ADMIN_ONLY` and a version's
+  409 `VENUE_VERSION_READ_ONLY` (`projectWriteGuard.kt`). A unit located while its stored locate
+  changes is re-asserted at once (`LocateManager.reassert`), so releasing the programmer value that
+  held the head where it was focused does not snap it back to the old point. The live rig's patch
+  metadata is refreshed in place (`refreshStoredLocate`); a locate change never rebuilds a fixture.
+- **On a venue it is the venue's, and a show overrides it as Focus** (D6). It is a field of the Focus
+  facet (`FocusFacet.locate`, the patch's alone — no placement carries one), so `RigScope.effective`
+  lays a show's Focus override over the venue's, and a store or clear on a venue patch **in a show**
+  writes the show's Focus override — the Focus the show sees now (its override, else the venue's) with
+  the new entries — and never the venue's row. *Clear locate* there leaves the show with none; the
+  venue's comes back only through *Take venue's* on Focus. A hidden venue patch is skipped. A Focus
+  facet write (`PUT …/facets/FOCUS`) takes `locate` like any other Focus field, checked against the
+  type's units (`StoredLocate.parse`: a head the type has, a unit that pans and tilts, a fine byte only
+  where it has a fine channel), and refreshes the live metadata, as `override_venue_fixtures` does.
+- **It is drawing, not output, for the hold.** `VenueDiff` files `locate` under Focus, drawing only:
+  the desk sends a stored locate only while an operator holds Locate, never on a show's own, so a
+  publish that moves one reaches a show as a banner, not a hold — Media's case for the same reason.
+- **Sync** at `formatVersion` 30 (`FixturePatchJson.locate`, `docs/sync-engineering.md` §"Version 30 —
+  stored locate"); a show's override of it travels in `showOverrides/` under the same number. A
+  retype through `patch_fixtures` keeps only the units the new type has (`StoredLocate.fitTo`). Detach
+  copies the effective locate onto the show's own rows, and Extract and clone carry it with the patch.
+- **MCP** reads and writes it as bytes: `get_patch` lists a fixture's `locate`, and `patch_fixtures`
+  and `place_fixtures` take a `locate` list (null or `[]` clears it), checked against the type's units
+  (`StoredLocate.typeProblems`) with every other row problem. For a venue fixture in a show it is a
+  Focus field like the lantern's, so `place_fixtures` writes it into the show's Focus override once
+  `override_venue_fixtures` has made Focus the show's. Each write refreshes the live rig's patch
+  metadata and re-asserts a unit located now.
+- **The UI**: row C's Locate has a menu with *Set locate from current* and *Clear locate* over the
+  selection, and the patch sheet's **Locate** box (`frontend/src/components/patches/LocateBox.tsx`)
+  shows each unit's stored locate on the centre scale with *Set from current* and *Clear*, for the
+  patch and for a venue patch in a show alike.
+
 ### Fitted media
 
 What is loaded into a unit — the gel string in its scroller, the gobos or dichroics in its module
@@ -2240,7 +2302,7 @@ Each change is classified the way a show's update will be (venue plan §3.1, D7)
 
 | Changes output | Drawing only |
 |---|---|
-| a universe added or removed, or re-addressed — its `subnet`, `universe` or `controllerType` | everything else: a patch's position, focus, media, name, key or head number |
+| a universe added or removed, or re-addressed — its `subnet`, `universe` or `controllerType` | everything else: a patch's position, focus (its stored locate included — §"Stored locate"), media, name, key or head number |
 | a patch added or removed | groups and their members, riggings, regions, scene elements, viewpoints |
 | a patch re-addressed — its universe or start channel, read as `1-005` through each side's universes | the stage's size |
 | a patch re-typed — its `fixtureTypeKey`, which names the mode | |
@@ -2366,7 +2428,7 @@ head number) and its placements' count, order and labels stay the venue's.
 |---|---|
 | `ADDRESS` | `universeConfigUuid`, `startChannel` |
 | `POSITION` | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
-| `FOCUS` | `lanternType`, `beamAngleDeg`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, and each placement's |
+| `FOCUS` | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, `locate` (the patch's alone), and each placement's lantern fields |
 | `MEDIA` | `gelCode`, `media`, and each placement's |
 
 **Stored** as `show_overrides` (`models/showOverrides.kt`): `project_id`, `record_uuid` (the venue

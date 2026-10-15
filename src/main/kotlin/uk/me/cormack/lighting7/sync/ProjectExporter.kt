@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.sync
 
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import kotlinx.serialization.KSerializer
@@ -417,6 +418,7 @@ class ProjectExporter(private val state: State) {
                     focusSoftness = p.focusSoftness,
                     lampWatts = p.lampWatts,
                     lampKelvin = p.lampKelvin,
+                    locate = p.storedLocate,
                     media = p.fittedMedia,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(

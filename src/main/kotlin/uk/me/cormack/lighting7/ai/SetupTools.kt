@@ -3,11 +3,16 @@ package uk.me.cormack.lighting7.ai
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.locate.StoredLocate
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.routes.patchMediaRefusal
 import uk.me.cormack.lighting7.routes.PatchFocusWrite
 import uk.me.cormack.lighting7.routes.placementFocusRefusal
+import uk.me.cormack.lighting7.routes.reassertLocates
+import uk.me.cormack.lighting7.routes.syncStoredLocates
 import uk.me.cormack.lighting7.routes.resolvePatchFocus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -550,6 +555,7 @@ class SetupTools(
                             putOptional("lengthM", p.lengthM)
                             putFocus(p.focus)
                             putMedia(p.fittedMedia)
+                            putLocate(p.locate)
                             if (p.stageHidden) put("stageHidden", true)
                             if (p.infrastructure) put("infrastructure", true)
                             val alsoAt = placementsByPatch[p.id.value].orEmpty()
@@ -830,6 +836,8 @@ class SetupTools(
                 // row sends its own) and each lantern's (unless the row sends `alsoAt`) — so the next
                 // write does not trip on a string loaded into a scroller the unit no longer has.
                 if (row.typeChanged) {
+                    // A stored locate keeps only the units the new type pans and tilts.
+                    patch.storedLocate = StoredLocate.fitTo(row.typeKey, patch.storedLocate)
                     if (row.placement.media == null && patch.fittedMedia?.typeProblems(row.typeKey)?.isNotEmpty() == true) {
                         patch.fittedMedia = null
                     }
@@ -864,6 +872,8 @@ class SetupTools(
 
         if (target.isCurrent) {
             DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+            // A stored locate a row sent reaches a unit that is located now, at once.
+            reassertLocates(state, parsed.filter { it.placement.locate != null }.map { it.key }.toSet())
         }
         state.show.fixtures.patchListChanged()
 
@@ -986,6 +996,8 @@ class SetupTools(
         val focus: LanternFocus,
         /** The fixture's fitted media when the row carried `media` (`Some(null)` clears it). */
         val media: Optional<FittedMedia?>?,
+        /** The stored locate when the row carried `locate` (empty — `null` or `[]` — clears it). */
+        val locate: Optional<List<UnitLocate>>?,
     ) {
         /**
          * The fixture's lantern, focus and kind once this row lands on [stored] — the REST routes'
@@ -1003,6 +1015,9 @@ class SetupTools(
             // Fitted media, the fixture's and each `alsoAt` lantern's: the REST routes' rule.
             patchMediaRefusal(typeKey, media?.value, media != null, inputs)
                 ?.let { problems += it.replace("extraPlacements", "alsoAt"); return null }
+            // A stored locate only on the units the type pans and tilts (venue-visit plan D6).
+            locate?.value?.let { StoredLocate.typeProblems(typeKey, it) }?.takeIf { it.isNotEmpty() }
+                ?.let { problems += it; return null }
             return write
         }
 
@@ -1040,6 +1055,7 @@ class SetupTools(
             }
             lengthM?.let { patch.lengthM = it.value }
             media?.let { patch.fittedMedia = it.value }
+            locate?.let { patch.storedLocate = it.value }
             stageHidden?.let { patch.stageHidden = it }
             alsoAt?.let { list ->
                 // Positional identity: the n-th lantern listed keeps the n-th placement's uuid, so
@@ -1143,7 +1159,11 @@ class SetupTools(
         val media = if ("media" in row) {
             FittedMedia.parse(row["media"]).fold({ Optional(it) }, { problems += it.message.orEmpty(); null })
         } else null
-        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, lampWatts, lampKelvin, gel, kind, length, hidden, alsoAt, focusSent, focus, media)
+        // Checked against the type in `resolveFocus`, where the row's type is known.
+        val locate = if ("locate" in row) {
+            StoredLocate.parse(row["locate"]).fold({ Optional(it) }, { problems += it.message.orEmpty(); null })
+        } else null
+        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, lampWatts, lampKelvin, gel, kind, length, hidden, alsoAt, focusSent, focus, media, locate)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -1262,6 +1282,7 @@ class SetupTools(
                 placement.applyTo(patch, focusWrite)
                 patch.key to Fixtures.FixturePatchMetadata(
                     gelCode = patch.gelCode, infrastructure = patch.infrastructure, media = patch.fittedMedia,
+                    locate = patch.storedLocate,
                 )
             }
         }
@@ -1274,6 +1295,11 @@ class SetupTools(
             for ((key, metadata) in gels) {
                 state.show.fixtures.setPatchMetadata(key, metadata)
             }
+            // A stored locate the rows sent reaches a unit located now, at once; a venue fixture's
+            // (its Focus facet's) through the same re-read.
+            // `gels` is `parsed` row for row, so the keys of the rows that sent one are paired by index.
+            reassertLocates(state, parsed.zip(gels).filter { (row, _) -> row.second.locate != null }.map { (_, g) -> g.first }.toSet())
+            syncStoredLocates(state, project.id.value, venuePlacements.map { it.key })
             // A venue fixture's media is its facet's, which the loader lays over the venue's row.
             if (venuePlacements.any { it.reloads }) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
@@ -1901,6 +1927,12 @@ class SetupTools(
     private fun JsonObjectBuilder.putMedia(media: FittedMedia?) {
         val text = FittedMedia.toText(media) ?: return
         put("media", Json.parseToJsonElement(text))
+    }
+
+    /** A unit's stored locate (venue-visit plan D6), as DMX bytes per unit — absent when it has none. */
+    private fun JsonObjectBuilder.putLocate(locate: List<UnitLocate>) {
+        val text = StoredLocate.toText(locate) ?: return
+        put("locate", Json.parseToJsonElement(text))
     }
 
     /** A lantern and its focus, each field only where set — an unfocused lantern adds nothing. */

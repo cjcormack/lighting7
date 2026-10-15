@@ -358,6 +358,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // Before the patch routes, so `patches/hidden` is matched as itself.
         routeApiRestShowHides(state)
         routeApiRestPatchFacets(state)
+        routeApiRestLocateStore(state)
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)

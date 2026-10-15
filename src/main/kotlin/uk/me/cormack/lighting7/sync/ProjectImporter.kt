@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.sync
 
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
@@ -164,6 +165,12 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v30 added `locate` to `FixturePatchJson` (venue-visit plan D6): each unit's stored pan and tilt
+// bytes. SUPPORTED moved for v14's reason — a v29 reader would import every patch with no stored
+// locate and write them away on its next push; MIN stays at 5 because the field defaults to empty.
+// Imported as stored (canonicalised, no type check): the write boundary refuses a unit the type does
+// not pan and tilt, and Locate ignores an entry it cannot place.
+//
 // v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
 // beat effect's `beatDivision` is then its cycle in seconds. SUPPORTED moved for v14's reason — a v28
@@ -244,7 +251,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 29
+internal const val SUPPORTED_FORMAT_VERSION = 30
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1093,6 +1100,7 @@ class ProjectImporter(private val state: State) {
             focusSoftness = p.focusSoftness
             lampWatts = p.lampWatts
             lampKelvin = p.lampKelvin
+            storedLocate = p.locate
             fittedMedia = p.media
             this.uuid = uuid
         }

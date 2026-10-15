@@ -340,7 +340,7 @@ object VenueDiff {
             .forEach { put(it, VenueFacet.POSITION) }
         listOf(
             "lanternType", "beamAngleDeg", "lampWatts", "lampKelvin", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg",
-            "iris", "focusSoftness",
+            "iris", "focusSoftness", "locate",
         ).forEach { put(it, VenueFacet.FOCUS) }
         listOf("gelCode", "media").forEach { put(it, VenueFacet.MEDIA) }
     }

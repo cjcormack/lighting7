@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.OPEN_WHITE
 import uk.me.cormack.lighting7.fixture.media.colourOf
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.show.focusRange
@@ -31,8 +32,10 @@ import kotlin.math.roundToInt
  * Computes the property values a console "Locate" asserts on a fixture: centre the beam and
  * force it open white so the physical unit can be identified in the rig.
  *
- * Per category: pan/tilt to the middle of their range (fine channels to 0 — the 16-bit
- * midpoint is coarse-mid + fine-0), dimmer full, shutter open, colour white, gobo open,
+ * Per category: pan/tilt to the unit's **stored locate** where its patch holds one (venue-visit plan
+ * D6, D17 — `fixture/locate/StoredLocate.kt`, coarse and fine as stored, fine 0 where none is stored),
+ * else to the middle of their range (fine channels to 0 — the 16-bit midpoint is coarse-mid +
+ * fine-0); every other property keeps its category default, stored locate or not: dimmer full, shutter open, colour white, gobo open,
  * prism out, iris/frost open, zoom mid, focus at the middle *distance* of a declared range
  * (mid-DMX where none is declared), and every framing shutter out and square to the gate.
  * "Colour white" adapts to the engine: RGB mixers get full RGB *and* full white (the fan-out in
@@ -74,13 +77,21 @@ object LocateValueResolver {
     /**
      * [media] is the fixture's fitted media (`Fixtures.fittedMediaFor`): Locate's white frame is the
      * one that is open **on this unit**, so a venue string with a gel in the stock open leader still
-     * locates to white. Defaulted only for the tests, which hold no patch; the route passes it.
+     * locates to white. [locate] is the stored locate of the patch [fixture] belongs to — its parent's
+     * for a head (`Fixtures.storedLocateFor`) — each unit taking its own entry: the fixture's (head
+     * null) and each head's by index. Both defaulted only for the tests, which hold no patch; the
+     * route passes them.
      */
-    fun resolve(fixture: GroupableFixture, media: FittedMedia? = null): List<LocateAssignment> = buildList {
-        addAll(resolveSingle(fixture, media = media))
+    fun resolve(
+        fixture: GroupableFixture,
+        media: FittedMedia? = null,
+        locate: List<UnitLocate> = emptyList(),
+    ): List<LocateAssignment> = buildList {
+        fun storedFor(head: Int?) = locate.firstOrNull { it.head == head }
+        addAll(resolveSingle(fixture, media = media, stored = storedFor((fixture as? FixtureElement<*>)?.elementIndex)))
         when (fixture) {
             is MultiElementFixture<*> -> for (element in fixture.elements) {
-                addAll(resolveSingle(element))
+                addAll(resolveSingle(element, stored = storedFor(element.elementIndex)))
             }
             is FixtureElement<*> -> addAll(
                 resolveSingle(fixture.parentFixture, onlyCategories = PARENT_MASTER_CATEGORIES)
@@ -89,10 +100,33 @@ object LocateValueResolver {
         }
     }
 
+    /**
+     * A unit's pan and tilt, where it pans and tilts on DMX channels: the coarse sliders, and the fine
+     * ones by property name where it has them. What a stored locate is captured from and written to.
+     */
+    data class LocateAxes(
+        val pan: DmxSlider,
+        val tilt: DmxSlider,
+        val panFine: Pair<String, DmxSlider>?,
+        val tiltFine: Pair<String, DmxSlider>?,
+    )
+
+    /** [target]'s [LocateAxes], or null where it does not pan and tilt on DMX channels. */
+    fun axesOf(target: GroupableFixture): LocateAxes? {
+        if (target !is WithPosition) return null
+        val pan = target.pan as? DmxSlider ?: return null
+        val tilt = target.tilt as? DmxSlider ?: return null
+        val properties = PropertyChannelWriter.resolvedProperties(target)
+        fun fine(category: PropertyCategory) = properties.firstOrNull { it.category == category }
+            ?.let { property -> (property.value as? DmxSlider)?.let { property.name to it } }
+        return LocateAxes(pan, tilt, fine(PropertyCategory.PAN_FINE), fine(PropertyCategory.TILT_FINE))
+    }
+
     private fun resolveSingle(
         target: GroupableFixture,
         onlyCategories: Set<PropertyCategory>? = null,
         media: FittedMedia? = null,
+        stored: UnitLocate? = null,
     ): List<LocateAssignment> {
         val properties = PropertyChannelWriter.resolvedProperties(target)
         val hasRgbEngine = properties.any {
@@ -102,9 +136,14 @@ object LocateValueResolver {
         // Candidates carry their backing so channel collisions can be resolved below.
         val candidates = mutableListOf<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>>()
 
+        // A stored locate is the unit's own only where it pans and tilts on DMX channels — the units
+        // `StoredLocate.unitsOf` offers — and is kept inside each slider's range.
+        val storedAxes = stored?.takeIf { onlyCategories == null }?.let { s -> axesOf(target)?.let { s to it } }
         if (onlyCategories == null && target is WithPosition) {
-            val pan = (target.pan as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
-            val tilt = (target.tilt as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
+            val pan = storedAxes?.let { (s, axes) -> clampTo(s.pan, axes.pan) }
+                ?: (target.pan as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
+            val tilt = storedAxes?.let { (s, axes) -> clampTo(s.tilt, axes.tilt) }
+                ?: (target.tilt as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
             candidates += PropertyChannelWriter.NamedProperty("position", PropertyCategory.OTHER, Unit) to
                 CueAssignmentResolver.PropertyValue.Position(pan, tilt)
         }
@@ -118,7 +157,8 @@ object LocateValueResolver {
             ) {
                 continue
             }
-            val value = locateValueFor(property.name, property.category, property.value, hasRgbEngine, declared[property.name], media)
+            val value = storedAxes?.let { (s, axes) -> storedFineFor(property, s, axes) }
+                ?: locateValueFor(property.name, property.category, property.value, hasRgbEngine, declared[property.name], media)
                 ?: continue
             candidates += property to value
         }
@@ -263,6 +303,23 @@ object LocateValueResolver {
             claimed.add(channel)
         }
     }
+
+    /** A stored locate's fine byte for [property] where it is the unit's fine pan or tilt: 0 where none is stored. */
+    private fun storedFineFor(
+        property: PropertyChannelWriter.NamedProperty,
+        stored: UnitLocate,
+        axes: LocateAxes,
+    ): CueAssignmentResolver.PropertyValue? {
+        val (fine, value) = when (property.name) {
+            axes.panFine?.first -> axes.panFine.second to stored.panFine
+            axes.tiltFine?.first -> axes.tiltFine.second to stored.tiltFine
+            else -> return null
+        }
+        return CueAssignmentResolver.PropertyValue.Slider(clampTo(value ?: 0, fine))
+    }
+
+    private fun clampTo(value: Int, slider: DmxSlider): UByte =
+        value.coerceIn(slider.min.toInt(), slider.max.toInt()).toUByte()
 
     // Round up so a full 0..255 range centres on the DMX convention of 128 (16-bit 0x8000
     // with fine at 0), not 127.

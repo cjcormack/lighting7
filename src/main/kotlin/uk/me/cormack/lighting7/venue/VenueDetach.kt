@@ -20,6 +20,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoCueEvents
@@ -221,6 +222,7 @@ class VenueDetach(private val state: State) {
             copy.beamAngleDeg = e.beamAngleDeg
             copy.lampWatts = e.lampWatts
             copy.lampKelvin = e.lampKelvin
+            copy.storedLocate = e.locate
             copy.kindOverride = e.kindOverride
             copy.gelCode = e.gelCode
             copy.fittedMedia = e.fittedMedia
