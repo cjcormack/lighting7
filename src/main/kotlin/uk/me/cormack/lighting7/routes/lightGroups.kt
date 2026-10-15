@@ -129,6 +129,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         // showed a live rate-master chip for a field it cannot read.
                         speedMasterUuid = instance.reportedSpeedMasterUuid,
                         rateSpeedMasterUuid = instance.reportedRateSpeedMasterUuid,
+                        seconds = instance.onSeconds,
                     )
                 }
                 call.respond(dtos)
@@ -203,7 +204,8 @@ data class GroupDetailDto(
 data class AddGroupFxRequest(
     val effectType: String,
     val propertyName: String,  // "dimmer", "colour", "position", "uv"
-    val beatDivision: Double = BeatDivision.QUARTER,
+    /** One bar when omitted — venue-visit plan D16's default for a new effect. */
+    val beatDivision: Double = BeatDivision.ONE_BAR,
     val blendMode: String = "OVERRIDE",
     val distribution: String = "LINEAR",
     val phaseOffset: Double = 0.0,
@@ -215,6 +217,8 @@ data class AddGroupFxRequest(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
+    /** On *Seconds* (D7) — see [AddEffectRequest.seconds]. */
+    val seconds: Boolean = false,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
@@ -251,6 +255,8 @@ data class GroupEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
+    /** D7's reading — see [uk.me.cormack.lighting7.fx.EffectDto.seconds]. */
+    val seconds: Boolean = false,
 )
 
 @Serializable
@@ -352,8 +358,11 @@ private fun applyGroupEffect(
     val elFilter = EffectSpecCoercion.Strict.elementFilter(request.elementFilter)
 
     // Create SINGLE FxInstance for the entire group
+    secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
+        ?.let { throw IllegalArgumentException(it) }
+    val registration = state.show.fxRegistry.getRegistration(request.effectType)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
-        registrationId = state.show.fxRegistry.getRegistration(request.effectType)?.id
+        registrationId = registration?.id
         phaseOffset = request.phaseOffset
         distributionStrategy = distribution
         this.elementMode = elementMode
@@ -361,6 +370,9 @@ private fun applyGroupEffect(
         request.stepTiming?.let { this.stepTiming = it }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
         rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
+        // The type's loop, and D7's choice — this route never set the loop before S15, so a
+        // wall-clock effect on a group ran on the beat loop.
+        applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
     }
 
     markProgrammerOwned(instance, request.programmerOwned)

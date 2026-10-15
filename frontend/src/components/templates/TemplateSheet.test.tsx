@@ -206,7 +206,7 @@ describe('TemplateSheet — the columns', () => {
     expect(row(6)).toHaveTextContent('2 heads · per fixture')
     // An effect template holds no rows at all on the wire — its Value is the effect and its speed.
     expect(row(3)).toHaveTextContent('Dimmer Pulse · ')
-    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4s')
+    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4 s')
     expect(row(3)).toHaveTextContent('Effect')
     expect(row(1)).toHaveTextContent('Value')
   })
@@ -216,8 +216,8 @@ describe('TemplateSheet — the columns', () => {
     expect(row(3).querySelector('[data-cell="fade"] button')).toBeNull()
     expect(row(1).querySelector('[data-cell="master"] button')).toBeNull()
     expect(row(3)).toHaveTextContent('M4 Strobe')
-    // A wall-clock effect's null rate master is unscaled, not master 1.
-    expect(row(5)).toHaveTextContent('unscaled')
+    // A wall-clock effect's null rate master is Seconds (D7), not master 1.
+    expect(row(5)).toHaveTextContent('Seconds')
     // An empty but settable Fade is the em-dash; a set one its seconds.
     expect(within(row(1).querySelector('[data-cell="fade"]') as HTMLElement).getByText('—')).toBeInTheDocument()
     expect(row(2)).toHaveTextContent('2s')
@@ -284,6 +284,20 @@ describe('TemplateSheet — Master', () => {
     expect(saveTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 3, effect: { ...PULSE.effect, speedMasterUuid: null } })
   })
 
+  it('puts a beat effect on Seconds keeping its speed, and offers it before every master (D7)', async () => {
+    draw()
+    drag('master', 3, 3)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    expect(options[0]).toBe('Seconds')
+    fireEvent.click(screen.getByRole('option', { name: 'Seconds' }))
+    // The beats at the master's stored tempo (every master here is 120 BPM): half a second a beat.
+    const sent = saveTemplate.mock.calls[0][0] as { effect: { beatDivision: number; seconds: boolean; speedMasterUuid: null } }
+    expect(sent.effect.seconds).toBe(true)
+    expect(sent.effect.speedMasterUuid).toBeNull()
+    expect(sent.effect.beatDivision).toBe(PULSE.effect!.beatDivision / 2)
+  })
+
   it('a beat effect on master 1 still takes a Master before the bank has loaded', () => {
     draw({ masters: [] })
     // Not blank and not skipped: a null beat master is master 1 whether or not its uuid is known.
@@ -295,12 +309,12 @@ describe('TemplateSheet — Master', () => {
     expect(row(8)).toHaveTextContent('M1')
   })
 
-  it('writes the rate master on a WALL_CLOCK effect, and offers Unscaled there', async () => {
+  it('writes the rate master on a WALL_CLOCK effect, and offers Seconds first', async () => {
     draw()
     drag('master', 5, 5)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
-    expect(options[0]).toBe('Unscaled')
+    expect(options[0]).toBe('Seconds')
     fireEvent.click(screen.getByRole('option', { name: 'M3 · Movement' }))
     expect(saveTemplate).toHaveBeenCalledWith({
       projectId: 1,
@@ -310,7 +324,7 @@ describe('TemplateSheet — Master', () => {
     expect(saveTemplate.mock.calls[0][0]).not.toHaveProperty('effect.speedMasterUuid')
   })
 
-  it('Clear writes M1 on a beat effect and unscaled on a wall-clock one — both the stored null', async () => {
+  it('Clear writes M1 on a beat effect and Seconds on a wall-clock one — both the stored null', async () => {
     const running = template(7, {
       name: 'Rainbow Fast',
       family: 'COLOUR',
@@ -474,7 +488,7 @@ describe('TemplateSheet — Value (session 3)', () => {
       expect(row(id).querySelector('[data-cell="value"]')).toBeNull()
     }
     expect(row(6)).toHaveTextContent('2 heads · per fixture')
-    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4s')
+    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4 s')
     expect(row(4).querySelector('[data-cell="value"] button')).not.toBeNull()
   })
 

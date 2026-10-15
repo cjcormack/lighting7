@@ -82,6 +82,12 @@ export interface TemplateEffect {
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
   /**
+   * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
+   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   */
+  seconds?: boolean
+  /**
    * `BEAT` or `WALL_CLOCK` — **resolved server-side on read and ignored on write**, the same
    * contract `TemplateRow.health` has.
    *

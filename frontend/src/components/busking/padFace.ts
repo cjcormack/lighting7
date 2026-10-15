@@ -68,7 +68,7 @@ export function describeTemplate(template: TemplateSummary): string {
     if (template.effect == null) return 'Effect'
     // No master label: that reads a live bank through a hook, and this string has to be renderable
     // by the overlay ghost. The pad draws `EffectPadDetail` over it and gains the `· M2`.
-    const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource)
+    const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource, template.effect.seconds)
     return [template.effect.effectType, speed, isAroundSpelling(template.effect) ? 'around' : null].filter(Boolean).join(' · ')
   }
   if (!template.isGeneric) {

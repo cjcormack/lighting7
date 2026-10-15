@@ -314,6 +314,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
                     parameters = fx.parameters,
                     speedMasterUuid = fx.speedMasterUuid,
                     rateSpeedMasterUuid = fx.rateSpeedMasterUuid,
+                    seconds = fx.seconds,
                 )
             },
         )

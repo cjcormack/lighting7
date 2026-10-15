@@ -296,6 +296,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                        seconds = effect.seconds
                         sortOrder = effect.sortOrder
                     }
                 }
@@ -1073,8 +1074,10 @@ private fun DaoLookEffect.take(effect: LookEffectDto) {
     elementFilter = effect.elementFilter
     stepTiming = effect.stepTiming
     parameters = effect.parameters
-    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
+    speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    seconds = effect.seconds
     sortOrder = effect.sortOrder
 }
 
@@ -1240,6 +1243,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     parameters = it.parameters,
                     speedMasterUuid = it.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = it.rateSpeedMasterUuid?.toString(),
+                    seconds = it.seconds,
                     sortOrder = it.sortOrder,
                 )
             },

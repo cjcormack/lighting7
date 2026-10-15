@@ -3,7 +3,8 @@ import { Layers, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   EFFECT_CATEGORY_INFO,
-  getBeatDivisionLabel,
+  effectSpeedLabel,
+  secondsLabel,
   getDistributionLabel,
   getElementModeLabel,
   getElementFilterLabel,
@@ -12,6 +13,7 @@ import { resolveColourToHex, isTemplateRef } from './colourUtils'
 import { useColourTemplates, type ColourTemplates } from './FxColourTemplates'
 import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
+import { isOnSeconds } from '@/lib/effectTiming'
 
 export interface EffectSummaryProps {
   /** Normalised effect data */
@@ -41,7 +43,11 @@ export function EffectSummary({
   const colourTemplates = useColourTemplates()
   const categoryInfo = EFFECT_CATEGORY_INFO[effect.category]
   const CategoryIcon = categoryInfo?.icon
-  const speedLabel = getBeatDivisionLabel(effect.beatDivision)
+  // An effect type the library no longer resolves has no timing source, so its division could be
+  // beats or seconds — the number is dropped rather than guessed, unless the flag says Seconds.
+  const speedLabel = effect.seconds
+    ? secondsLabel(effect.beatDivision)
+    : effectSpeedLabel(effect.beatDivision, effect.timingSource, isOnSeconds(effect, effect.timingSource))
   const { colourSwatches, textParams } = getCustomParams(effect, colourTemplates)
 
   return (
@@ -69,7 +75,7 @@ export function EffectSummary({
           {target && <TargetIndicator target={target} />}
         </div>
         <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-          <span>{speedLabel}</span>
+          {speedLabel != null && <span>{speedLabel}</span>}
           {effect.blendMode !== 'OVERRIDE' && (
             <>
               <Dot />

@@ -115,6 +115,12 @@ export interface CueAdHocEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /**
+   * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
+   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   */
+  seconds?: boolean
 }
 
 /**

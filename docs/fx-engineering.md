@@ -213,8 +213,13 @@ Effects reference timing via `BeatDivision` constants:
 | `QUARTER` | 1.0 | One beat |
 | `HALF` | 2.0 | Two beats |
 | `WHOLE` | 4.0 | Four beats (one bar) |
-| `ONE_BAR` | 4.0 | Four beats |
+| `ONE_BAR` | 4.0 | Four beats — a new effect's default (venue-visit plan D16) |
 | `TWO_BARS` | 8.0 | Eight beats |
+
+Everything a person reads says the division in **beats a cycle** — `½ beat`, `1 beat`, `2 beats`,
+`1 bar`, `2 bars`, `4 bars` — from one table (`SPEED_STEPS` in the frontend's `fxConstants.ts`), the
+editor's segment and every chip alike; an effect on Seconds reads `4 s`. The note values the chips
+once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S15).
 
 ## Effect Types
 
@@ -1249,7 +1254,8 @@ The `stepTiming` field is optional. When provided, it overrides the effect's def
   "distributionStrategy": "CENTER_OUT",
   "elementMode": "FLAT",
   "stepTiming": false,
-  "rateSpeedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2"
+  "rateSpeedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+  "seconds": false
 }
 ```
 
@@ -1261,7 +1267,9 @@ and any concurrently racing pause/resume. Dynamics fields (`phaseOffset`, `distr
 replacement, so a tick pass never observes half of an update. `speedMasterUuid` /
 `rateSpeedMasterUuid` are also updated in place; both follow the same null-means-no-change
 convention, and to return an effect to the default, send master 1's uuid (master 1 always exists
-and behaves identically to the null default).
+and behaves identically to the null default). `seconds` moves the effect between *Seconds* and a
+master — see [Seconds](#seconds--an-effects-own-cycle-venue-visit-plan-d7) — and is the only way to
+put a wall-clock effect back to unscaled.
 
 ## WebSocket Messages
 
@@ -1657,15 +1665,71 @@ holds a real slot, which is the usual case.
 `rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, look
 effects, cue ad-hoc effects, per-application overrides, cue-edit, and sync. The two coexist
 rather than excluding each other, so an effect whose `timingSource` changes keeps both
-assignments; BEAT effects simply never read the rate scale. **Scripts and the AI tool are
-the deliberate exception** — neither has ever addressed a per-effect master at all, so there
-was nothing to mirror.
+assignments; BEAT effects simply never read the rate scale. The MCP effect tools take both, and
+*Seconds* beside them (below). **Scripts are the deliberate exception** — the script API has never
+addressed a per-effect master's absence, so there was nothing to mirror.
 
 For STATEFUL effects, `deltaMs` is computed from the wall-clock interval directly. These
 effects already use `deltaMs` rather than phase, so they work naturally — and by the same
 token a rate master has no effect on one that never reads its phase. Both shipped wall-clock
 effects (`CandleFlicker`, `FluorescentFlicker`) are STATEFUL, so nothing in-tree currently
 exercises rate scaling end to end; author a STANDARD + WALL_CLOCK definition to try it.
+
+### Seconds — an effect's own cycle (venue-visit plan D7)
+
+An effect's **timing** is one of two things: it follows a speed master, or it runs on *Seconds* —
+its own cycle, with no master, for a slow breathe or drift that must not move when the tempo does.
+It is one question for every effect, asked by one chip (`Seconds | M1 | M2…`), and stored as one
+flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`template_effects`), a
+Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`), with
+`LookEffectSpec`, `EffectEntry` and `LookEffectSettings` carrying it between them. It syncs from
+`formatVersion` 28. The rules are `fx/EffectTiming.kt`'s:
+
+- **A beat effect on Seconds** reads its `beatDivision` as seconds and runs on the **wall-clock
+  loop** with both masters null — `FxInstance.seconds` true, `timingSource` `WALL_CLOCK`,
+  `rateMasterSlot` `NO_RATE_MASTER`. That is exactly an unscaled wall-clock effect, so neither loop
+  learned anything; `applyTimingChoice` is the one writer before an instance reaches the engine, and
+  `FxEngine.updateEffect`'s `newSeconds` the one after (a swap, since the loop changes).
+- **A wall-clock effect's** division is seconds already. Its Seconds is having **no rate master**,
+  and a master is its rate master, which scales the cycle by `bpm / 120` as above. So the instance's
+  flag stays false for it — `FxInstance.registrationTimingSource` can then tell the two kinds apart on
+  the wall-clock loop — and `FxInstance.onSeconds` is the reading for either kind. A stored row may
+  carry the flag for a wall-clock effect (a client's or the AI's Seconds), which spawns it with no rate
+  master; a stored wall-clock row with no rate master and no flag — every row before S15 — is on
+  Seconds too.
+- **Seconds is free of every master**, so nothing retimes it: a cue layer's or a programmer layer's
+  master override does not reach it (`EffectSpawner` applies the timing after the overrides), and a
+  busk or AI press's beat-division override leaves its cycle alone
+  (`LookEffectSpec.withBeatDivisionOverride`). A wall-clock row that merely has no rate master keeps
+  the rule it always had — a layer's rate override still scales it.
+- **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `seconds`; `PUT /fx/{id}` and
+  `updateFx` (one parse, `applyEffectUpdate`) take `seconds: Boolean?` — `true` onto Seconds, `false`
+  onto the master sent beside it (a beat effect's absent master is master 1; a wall-clock effect must
+  name its rate master, since a null one *is* Seconds), and naming a master alone also leaves Seconds.
+  `seconds: true` beside a master is refused on the effect routes and by the MCP effect tools
+  (`secondsTimingConflict`) — two answers to one question; the stored-effect writes take Seconds and
+  drop the master instead (below). A move between Seconds and a master changes the loop the effect
+  runs on, so it is a swap and the effect's **phase restarts**; every other edit keeps it. On a wall-clock effect, `seconds: true` is the explicit *unscaled* that a null
+  `rateSpeedMasterUuid` (which means "no change") never could say — `FU-FX-RATE-MASTER-CLEAR`, closed
+  by S15. `EffectDto.seconds` (and the group and indirect effect DTOs') reports `onSeconds`; a beat
+  effect on Seconds reports `timingSource` `WALL_CLOCK`, the loop it runs on, so every speed label
+  reads its number as seconds.
+- **A stored row on Seconds keeps no master beside the flag**: the Look, palette and cue writes
+  null both masters where `seconds` is set, rather than refusing the pair as the effect routes do.
+- **Record and Include carry it** with the masters. Both had dropped the masters of a cue's ad-hoc
+  effect until S15 — `programmerCapture` recorded none, and `CueAdHocEffectDto.toEffectSpec`
+  (Include's adapter) passed none on — so a recorded busk fell back to master 1.
+
+**A new effect is one bar** (venue-visit plan D16): four beats, on the master whose `usage` matches
+its family where one is tagged, else master 1. The master is **stamped as a uuid when the effect is
+written**, never resolved later, so `null` still means master 1 everywhere: by the editor's picker
+(`FxPicker`), the palette editor and the MCP effect tools (`AiTools.parseEffectTiming`, which also
+makes `beatDivision` optional). REST's `AddEffectRequest` and `AddGroupFxRequest` default an omitted
+division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
+seconds — since "one bar" means nothing to an effect timed in seconds. Moving a beat effect between
+Seconds and a master in the editor or the palette sheet keeps its speed: the division is converted
+at the master's tempo (4 beats at 120 BPM is 2 s). The effects plan's sessions build on this timing
+and default.
 
 ### Configuration
 

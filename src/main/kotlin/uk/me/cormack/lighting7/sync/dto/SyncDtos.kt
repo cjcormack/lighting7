@@ -32,6 +32,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v28: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
+    // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
+    // then seconds. The writer's number moves by the sharp-edge rule: a v27 reader would import a
+    // ten-second breathe as ten beats of master 1 and its next wipe-then-export push would write the
+    // flag away for every peer. `minReader` stays at **5** — a missing flag is a master. See
+    // `docs/sync-engineering.md` §"Version 28 — Seconds".
+    //
     // v27: venue parks. A venue's `parkedChannels/` were already in its versions; from v27 a show on a
     // venue **inherits** its pinned version's parks, overlaid by its own (a re-park at another value),
     // and gains `showParkReleases/{uuid}.json`, the venue parks it releases for its run, keyed by
@@ -233,7 +240,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 27,
+    val formatVersion: Int = 28,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -379,6 +386,8 @@ data class LookEffectJson(
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
+    /** D7's *Seconds* — the effect follows no master (formatVersion 28). Omitted when false. */
+    val seconds: Boolean = false,
     val sortOrder: Int = 0,
 )
 
@@ -450,6 +459,8 @@ data class TemplateEffectJson(
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
+    /** D7's *Seconds* — the effect follows no master (formatVersion 28). Omitted when false. */
+    val seconds: Boolean = false,
 )
 
 /**
@@ -817,6 +828,8 @@ data class CueAdHocEffectJson(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). */
     val rateSpeedMasterUuid: String? = null,
+    /** D7's *Seconds* — the effect follows no master (formatVersion 28). Omitted when false. */
+    val seconds: Boolean = false,
 )
 
 @Serializable

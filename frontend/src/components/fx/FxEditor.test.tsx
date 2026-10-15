@@ -193,7 +193,7 @@ describe('FxEditor', () => {
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '200' } })
     fireEvent.pointerUp(size)
-    fireEvent.click(screen.getByRole('radio', { name: '4 beats a cycle' }))
+    fireEvent.click(screen.getByRole('radio', { name: '1 bar a cycle' }))
     updateFx.mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
@@ -204,6 +204,22 @@ describe('FxEditor', () => {
       blendMode: 'ADDITIVE',
       phaseOffset: 0,
     })
+  })
+
+  it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
+    render(<FxEditor effect={makeActiveEffect({ effectType: 'Pulse', propertyName: 'dimmer', beatDivision: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Timing: Seconds' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /M1 · Main/ }))
+    expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
+    updateFx.mockClear()
+
+    const revert = screen.getByRole('button', { name: 'Revert' })
+    fireEvent.click(revert)
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(lastFrame()).toMatchObject({ seconds: true, beatDivision: 2 })
+    expect(lastFrame()).not.toHaveProperty('speedMasterUuid')
+    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('reads a stored Additive with the centre at 128 as Around, and hides the centre', () => {

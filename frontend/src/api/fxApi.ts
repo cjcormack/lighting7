@@ -47,6 +47,8 @@ export interface FxEffectState {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /** D7's reading: follows no master. See `ActiveEffect.seconds`. */
+  seconds?: boolean
   // `speedMasterIndex` and `rateSpeedMasterIndex` — the 1-based display positions the server
   // numbered the bank at — were declared beside the two uuids and never read. The FX-sheet chip
   // resolves both indices from the live master list, which is the only way they can't drift from a
@@ -85,6 +87,14 @@ export interface UpdateFxRequest {
   speedMasterUuid?: string
   /** Reassign the wall-clock rate master; omitted = no change, as above. */
   rateSpeedMasterUuid?: string
+  /**
+   * Move the effect between *Seconds* and a master (venue-visit plan D7); omitted = no change.
+   * `true` puts it on Seconds — a beat effect's division read as seconds, no master; a wall-clock
+   * effect's rate master dropped, the *unscaled* a null could never say (`FU-FX-RATE-MASTER-CLEAR`).
+   * Refused beside a master. `false` puts it on the master sent beside it (a beat effect's absent
+   * master is master 1; a wall-clock effect must name one).
+   */
+  seconds?: boolean
 }
 
 /**

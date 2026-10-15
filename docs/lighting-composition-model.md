@@ -904,7 +904,7 @@ refuses a row whose registration disagrees with it. `timingSource` is not stored
 resolved into `TemplateEffectDto` on every read — an effect's timing source belongs to the effect
 *type*, so a column would be a second copy that a re-registered script could contradict. It is on
 the DTO because without it `beatDivision` cannot be read: the field is beats for a `BEAT` effect and
-*seconds* for a `WALL_CLOCK` one, and a client would otherwise have to fetch the whole FX library to
+*seconds* for a `WALL_CLOCK` one — or for a beat effect on *Seconds* (`seconds`, venue-visit plan D7), and a client would otherwise have to fetch the whole FX library to
 tell a two-beat pulse from a two-second one.
 
 **The cook gained no new path.** `CueComposer.effectsForLayer` was already the single fan-out shared

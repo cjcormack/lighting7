@@ -40,6 +40,7 @@ import {
 import { formatError } from '@/lib/formatError'
 import { FxEffectFields } from '@/components/fx/FxEffectFields'
 import { startingSpec, templateDraftOf, withTemplateDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
+import { NEW_EFFECT_DIVISION } from '@/lib/effectTiming'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
@@ -233,11 +234,14 @@ export function TemplateEditor({
         // starts on Override. The blend is not carried from the last effect — it was the hard-coded
         // Override that made every Circle template circle 128/128.
         const spec = startingSpec(entry)
+        // Seconds (D7) carries within one timing source like the division it qualifies.
+        const seconds = sameTiming && prev?.seconds === true
         return {
           effectType: entry.name,
           category: entry.category,
           propertyName: null,
-          beatDivision: sameTiming ? (prev?.beatDivision ?? 1.0) : 1.0,
+          // A new effect is one bar (venue-visit plan D16) — four seconds for a wall-clock one.
+          beatDivision: sameTiming ? (prev?.beatDivision ?? NEW_EFFECT_DIVISION) : NEW_EFFECT_DIVISION,
           blendMode: spec.blendMode,
           distribution: prev?.distribution ?? 'LINEAR',
           phaseOffset: prev?.phaseOffset ?? 0,
@@ -245,10 +249,14 @@ export function TemplateEditor({
           elementFilter: null,
           stepTiming: null,
           parameters: spec.parameters,
-          // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere,
-          // and this is the surface `useSpeedMasterForCategory` was kept uncalled for.
-          speedMasterUuid: masterForCategory(entry.category),
-          rateSpeedMasterUuid: prev?.rateSpeedMasterUuid ?? null,
+          // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere.
+          // An effect on Seconds follows none.
+          speedMasterUuid: seconds ? null : masterForCategory(entry.category),
+          rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
+          seconds,
+          // The draft's own reading of its kind, until the desk answers with the registry's: what
+          // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
+          timingSource: entry.timingSource ?? 'BEAT',
         }
       })
     },
@@ -581,14 +589,13 @@ function EffectControls({
             extendedChannels={undefined}
             settingProperty={undefined}
             readOnly={false}
-            allowUnscaledRate
             set={(patch) => onPatch(patch)}
             setParam={(name, value) => onPatch({ parameters: { ...fxDraft.parameters, [name]: value } })}
           />
           {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
           <EditorReadout>
-            The master defaults to the one whose usage matches this family, and is stored on the
-            palette — every layer applying it follows the same tempo.
+            A new effect is one bar on the master whose usage matches this family, stored on the
+            palette — every layer applying it follows the same tempo. On Seconds it follows none.
           </EditorReadout>
         </div>
       )}
@@ -649,6 +656,7 @@ function effectKey(effect: TemplateEffect | null): string {
     effect.phaseOffset ?? 0,
     effect.speedMasterUuid ?? null,
     effect.rateSpeedMasterUuid ?? null,
+    effect.seconds === true,
     Object.entries(effect.parameters).sort(([a], [b]) => a.localeCompare(b)),
   ])
 }

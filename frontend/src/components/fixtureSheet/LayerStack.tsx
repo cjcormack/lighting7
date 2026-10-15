@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { getBeatDivisionLabel } from '../fx/fxConstants'
+import { getBeatDivisionLabel, secondsLabel } from '../fx/fxConstants'
 import { EditorSurface } from '../editor/EditorSurface'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
@@ -31,7 +31,10 @@ interface LayerLine {
 /** One stack entry in the Layers board's words. Pure, so the six kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
   const effectName = layer.effectName ?? layer.effectType ?? 'Effect'
-  const division = layer.beatDivision != null ? getBeatDivisionLabel(layer.beatDivision) : null
+  // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
+  const inSeconds = layer.seconds === true || layer.timingSource === 'WALL_CLOCK'
+  const division =
+    layer.beatDivision == null ? null : inSeconds ? secondsLabel(layer.beatDivision) : getBeatDivisionLabel(layer.beatDivision)
   const paused = layer.running === false ? 'paused' : null
   switch (layer.kind) {
     case 'PARK':

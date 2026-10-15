@@ -588,6 +588,11 @@ internal fun fxInstancesToCueChildren(
                     } else null,
                     parameters = effect.effect.parameters,
                     sortOrder = adHocEffects.size,
+                    // The effect's timing (venue-visit plan S15, D7) — its master, or Seconds. The
+                    // masters were left behind here before S15, so a recorded busk fell back to master 1.
+                    speedMasterUuid = effect.speedMasterUuid?.toString(),
+                    rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
+                    seconds = effect.seconds,
                 )
         )
     }

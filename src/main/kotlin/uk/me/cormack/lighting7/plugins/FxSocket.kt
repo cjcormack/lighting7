@@ -63,6 +63,7 @@ data class UpdateFxInMessage(
     val stepTiming: Boolean? = null,
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
+    val seconds: Boolean? = null,
 ) : FxInMessage() {
     fun toRequest() = UpdateEffectRequest(
         effectType = effectType,
@@ -76,6 +77,7 @@ data class UpdateFxInMessage(
         stepTiming = stepTiming,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
+        seconds = seconds,
     )
 }
 

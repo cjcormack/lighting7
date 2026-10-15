@@ -71,6 +71,12 @@ data class EffectDto(
     /** 1-based display index of that rate master. */
     val rateSpeedMasterIndex: Int = 1,
     /**
+     * D7's reading ([FxInstance.onSeconds]): the effect follows no master — a beat effect on its own
+     * cycle in seconds (then [timingSource] reads `WALL_CLOCK`, the loop it runs on), or a wall-clock
+     * effect with no rate master.
+     */
+    val seconds: Boolean = false,
+    /**
      * The Look whose effect Include ran here as this programmer-band effect — never [lookId], which
      * a busk pad lights from, and an included effect is the programmer's to edit, not the Look's.
      */
@@ -144,6 +150,7 @@ internal fun FxInstance.toEffectDto(
         speedMasterIndex = masterStates.getOrNull(speedMasterSlot)?.index ?: 1,
         rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
         rateSpeedMasterIndex = masterStates.getOrNull(rateMasterSlot)?.index ?: 1,
+        seconds = onSeconds,
         includedLookId = includedLookEffect?.lookId,
         editedSinceInclude = includedLookEffect?.let { lookEffectSettings() != it.baseline } ?: false,
     )

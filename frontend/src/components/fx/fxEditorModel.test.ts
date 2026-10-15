@@ -18,6 +18,7 @@ import {
   positionAxesOf,
   sizeToDegrees,
   startingSpec,
+  timingChoicePatch,
   updateRequestOf,
   withCentreMode,
 } from './fxEditorModel'
@@ -113,6 +114,54 @@ describe('fxEditorModel', () => {
       speedMasterUuid: 'm1',
     })
     expect(updateRequestOf(draft, touched)).not.toHaveProperty('speedMasterUuid')
+  })
+
+  it('sends Seconds with no master beside it, and a master with Seconds false (D7)', () => {
+    const onMaster = draftOf(makeActiveEffect({ speedMasterUuid: 'm2' }))
+    expect(onMaster.seconds).toBe(false)
+    const touched = new Set(['seconds', 'speedMasterUuid', 'rateSpeedMasterUuid'] as const)
+    const toSeconds = updateRequestOf({ ...onMaster, seconds: true, speedMasterUuid: null }, touched, 'm1')
+    expect(toSeconds.seconds).toBe(true)
+    expect(toSeconds).not.toHaveProperty('speedMasterUuid')
+    expect(toSeconds).not.toHaveProperty('rateSpeedMasterUuid')
+    // Revert of a beat effect moved off its master: Seconds false and the master back.
+    expect(updateRequestOf(onMaster, touched, 'm1')).toMatchObject({ seconds: false, speedMasterUuid: 'm2' })
+  })
+
+  it("Revert puts a wall-clock effect back to unscaled — FU-FX-RATE-MASTER-CLEAR's close", () => {
+    const unscaled = draftOf(makeActiveEffect({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: null }))
+    expect(unscaled.seconds).toBe(true)
+    const request = updateRequestOf(unscaled, new Set(['seconds', 'rateSpeedMasterUuid'] as const))
+    expect(request.seconds).toBe(true)
+    expect(request).not.toHaveProperty('rateSpeedMasterUuid')
+  })
+
+  it('reads the desk\'s Seconds off a running effect, whatever loop it reports', () => {
+    expect(draftOf(makeActiveEffect({ timingSource: 'WALL_CLOCK', seconds: true })).seconds).toBe(true)
+    expect(draftOf(makeActiveEffect({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'm2' })).seconds).toBe(false)
+  })
+
+  it('keeps a beat effect\'s speed when the chip moves it onto Seconds and back', () => {
+    const bpm = (uuid: string | null) => (uuid === 'm2' ? 60 : 120)
+    const beat = { beatDivision: 4, seconds: false, speedMasterUuid: null, rateSpeedMasterUuid: null }
+    // Four beats of master 1 at 120 BPM is two seconds.
+    expect(timingChoicePatch(beat, false, null, bpm)).toEqual({
+      seconds: true,
+      speedMasterUuid: null,
+      rateSpeedMasterUuid: null,
+      beatDivision: 2,
+    })
+    // Two seconds onto master 2 at 60 BPM is two beats.
+    expect(timingChoicePatch({ ...beat, seconds: true, beatDivision: 2 }, false, 'm2', bpm)).toEqual({
+      seconds: false,
+      speedMasterUuid: 'm2',
+      beatDivision: 2,
+    })
+    // A master to a master keeps the beats.
+    expect(timingChoicePatch(beat, false, 'm2', bpm)).toEqual({ seconds: false, speedMasterUuid: 'm2' })
+    // A wall-clock effect's number is seconds either way; its master is its rate master.
+    expect(timingChoicePatch({ ...beat, seconds: true }, true, 'm2', bpm)).toEqual({ seconds: false, rateSpeedMasterUuid: 'm2' })
+    expect(timingChoicePatch(beat, true, null, bpm)).toEqual({ seconds: true, speedMasterUuid: null, rateSpeedMasterUuid: null })
   })
 
   it('reads an axis from a camelCase word, never a substring', () => {

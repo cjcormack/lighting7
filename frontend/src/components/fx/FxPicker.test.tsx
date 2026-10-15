@@ -30,6 +30,10 @@ vi.mock('@/store/groups', () => ({
   useRemoveGroupFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
+// Venue-visit plan D16: a master is tagged for position, none for dimmer.
+vi.mock('@/store/speedMasters', () => ({
+  useSpeedMasterForCategory: () => (category: string | null | undefined) => (category === 'position' ? 'm-position' : null),
+}))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [], fixtureByKey: new Map() }) }))
 
 import { FxPicker, type AuditionedEffect, type FxTarget } from './FxPicker'
@@ -93,8 +97,19 @@ describe('FxPicker', () => {
       programmerOwned: true,
       blendMode: 'ADDITIVE',
       parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      // D16: one bar, on the master tagged for its family's usage.
+      beatDivision: 4,
+      speedMasterUuid: 'm-position',
     })
     expect(updateFx).not.toHaveBeenCalled()
+  })
+
+  it('starts on master 1 — no master sent — where no master is tagged for the family', async () => {
+    render(<Harness initialFamily="INTENSITY" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'Pulse', beatDivision: 4 })
+    expect(addFixtureFx.mock.calls[0][0]).not.toHaveProperty('speedMasterUuid')
   })
 
   it('swaps on a second tap — one updateFx, no add — keeping the instance', async () => {
@@ -147,7 +162,7 @@ describe('FxPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
     expect(updateFx.mock.calls[0][1]).not.toHaveProperty('beatDivision')
     fireEvent.click(screen.getByRole('button', { name: 'CandleFlicker' }))
-    expect(updateFx.mock.calls[1][1]).toMatchObject({ effectType: 'CandleFlicker', beatDivision: 1 })
+    expect(updateFx.mock.calls[1][1]).toMatchObject({ effectType: 'CandleFlicker', beatDivision: 4 })
   })
 
   it('swaps a second tap made before the effect list has caught up, rather than starting a second effect', async () => {

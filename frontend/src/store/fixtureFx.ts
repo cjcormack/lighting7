@@ -62,6 +62,8 @@ export interface FixtureDirectEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /** D7's reading: follows no master. */
+  seconds?: boolean
 }
 
 export interface FixtureIndirectEffect {
@@ -81,6 +83,8 @@ export interface FixtureIndirectEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /** D7's reading: follows no master. */
+  seconds?: boolean
 }
 
 export interface FixtureEffects {
@@ -133,6 +137,8 @@ export interface AddFixtureFxRequest {
    * WALL_CLOCK effects; it sits alongside `speedMasterUuid` rather than replacing it.
    */
   rateSpeedMasterUuid?: string
+  /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
+  seconds?: boolean
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -197,6 +203,12 @@ export interface ActiveEffect {
   speedMasterUuid: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid: string | null
+  /**
+   * D7's reading (venue-visit plan S15): the effect follows no master — a beat effect on its own
+   * cycle in seconds (its `timingSource` then reads `WALL_CLOCK`, the loop it runs on), or a
+   * wall-clock effect with no rate master. Absent from a desk before S15; `isOnSeconds` reads it.
+   */
+  seconds?: boolean
   /**
    * The Look whose effect Include ran here — never `lookId`, which a busk pad lights from. Absent
    * from a desk before Include ran a Look's effects, and on every other effect.

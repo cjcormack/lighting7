@@ -382,6 +382,7 @@ class CueTriggerManager(
             parameters = effect.parameters,
             speedMasterUuid = effect.speedMasterUuid,
             rateSpeedMasterUuid = effect.rateSpeedMasterUuid,
+            seconds = effect.seconds,
         )
 
         val fxTarget = try {
