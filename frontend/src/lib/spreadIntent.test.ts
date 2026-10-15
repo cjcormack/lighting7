@@ -36,7 +36,7 @@ describe('spreadIntent', () => {
     }
   })
 
-  it('serialises a template endpoint as the tmpl: reference an FX colour parameter uses', () => {
+  it('serialises a palette endpoint as the tmpl: reference an FX colour parameter uses', () => {
     const uuid = '0b2a4c6e-1111-2222-3333-444455556666'
     expect(serializeSpreadEndpoint({ kind: 'template', uuid })).toBe(serializeTemplateRef(uuid))
     expect(serializeSpreadEndpoint({ kind: 'template', uuid })).toBe(`tmpl:${uuid}`)
@@ -45,7 +45,7 @@ describe('spreadIntent', () => {
     expect(parseTemplateIntent(`tmpl:${uuid}`)).toBeNull()
   })
 
-  it('offers the template vocabulary per family, minus the switch', () => {
+  it('offers the palette vocabulary per family, minus the switch', () => {
     const offered = (['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'] as const).flatMap((family) => spreadPropertiesFor(family))
     const expected = TEMPLATE_PROPERTIES.filter((p) => p.intent !== 'switch')
     expect(offered.map((p) => p.propertyName).sort()).toEqual(expected.map((p) => p.propertyName).sort())

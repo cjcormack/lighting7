@@ -29,7 +29,7 @@ export function FamilyControls({
           />
           <PercentControl
             label="Strobe"
-            hint="A percentage of each head's own strobe channel, not a rate: the heads' strobe rates are mostly estimates, so a template cannot promise one yet."
+            hint="A percentage of each head's own strobe channel, not a rate: the heads' strobe rates are mostly estimates, so a palette cannot promise one yet."
             value={values.strobe}
             onChange={(i) => onChange('strobe', i)}
           />

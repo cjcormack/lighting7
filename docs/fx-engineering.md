@@ -624,8 +624,8 @@ in the desk's words and sends an existing spelling (plan P2 — no new field, no
 Reading back is by spelling, not by flag: a stored `ADDITIVE` with both centres at 128 **is**
 Around, whoever stored it; `OVERRIDE` is Absolute or Replace; anything else (`MAX`, an `ADDITIVE`
 with a centre of its own) presses neither and the editor's Advanced section still shows the raw
-blend, which stays editable there for every effect. Effect templates ask the same Centre question
-in session 5 (D16); stored templates keep `OVERRIDE` and read as Absolute (call 6).
+blend, which stays editable there for every effect. Effect palettes ask the same Centre question
+in session 5 (D16); stored palettes keep `OVERRIDE` and read as Absolute (call 6).
 
 ### Reading `blendMode` and friends out of a string
 
@@ -719,22 +719,22 @@ Its client is the live editor (`FxEditor`, session 3): every control writes the 
 `useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per effect
 (`store/fixtureFx.ts`), so a drag refused on every frame is one toast.
 
-**Reset to template** (W5). `POST /fx/{id}/reset` re-applies a programmer template layer's
+**Reset to palette** (W5). `POST /fx/{id}/reset` re-applies a programmer palette layer's
 **current** effect to the instance it spawned, through `updateEffect` — id and phase kept — with
 every setting the layer would spawn it with, its overrides included, both masters set exactly
 (`replaceMasters`, which can clear a master as the single-master arguments cannot). It also moves
-the instance's spawn key to the template's current entry, under the stack's effects lock, so the
-next recook keeps it rather than respawning it. 409 `FX_NOT_FROM_TEMPLATE` for anything no
-programmer template layer started (a Look's, a manual one, a cue's template layer, which the next GO
-respawns); 409 `FX_TEMPLATE_GONE` when the template holds no effect any more.
+the instance's spawn key to the palette's current entry, under the stack's effects lock, so the
+next recook keeps it rather than respawning it. 409 `FX_NOT_FROM_PALETTE` for anything no
+programmer palette layer started (a Look's, a manual one, a cue's palette layer, which the next GO
+respawns); 409 `FX_PALETTE_GONE` when the palette holds no effect any more.
 
 **What a recook does to an edited instance.** `ProgrammerLayerStack.syncEffects` matches a live
 instance by the `EffectEntry` it was **spawned** from (`ProgrammerLayerEffectKey`), never by its
 current parameters, and `updateEffect` carries that key across its swap — so an instance edited
-through `updateFx` survives a patch, a move or an unrelated add. A template-effect `PUT` recooks
+through `updateFx` survives a patch, a move or an unrelated add. A palette-effect `PUT` recooks
 values only and leaves the instance alone, but the next recook of the stack *for any reason* reads
-the edited template, whose entry no longer matches the instance's key, and respawns it from the
-template — its phase restarted, any instance edit gone. Reset is the per-instance way back. Pinned
+the edited palette, whose entry no longer matches the instance's key, and respawns it from the
+palette — its phase restarted, any instance edit gone. Reset is the per-instance way back. Pinned
 by `FxLiveEditRoutesTest`; see `FU-TMPL-FX-EDIT-NO-RETIME`.
 
 ### Locate versus park
@@ -1361,8 +1361,8 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
 | `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (24 files) |
-| `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
-| `fx/TemplateRegistry.kt` | Template snapshots cached by uuid — rows, or the one effect an effect template holds; the scoped version a running effect's colour cache watches |
+| `fx/TemplateColourSource.kt` | Colour-palette resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `fx/TemplateRegistry.kt` | Palette snapshots cached by uuid — rows, or the one effect an effect palette holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
 | `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
@@ -1552,7 +1552,7 @@ and the failure surfaces much later, when the row is applied.
 | `models/cues.kt` | `DaoCues`, `DaoCueLayers`, `DaoCueAdHocEffects` tables |
 | `routes/projectCues.kt` | Cue CRUD, apply, from-state endpoints |
 | `models/looks.kt` | `DaoLooks`, `DaoLookRows`, `DaoLookEffects` tables |
-| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning (a Look layer's effects and an effect template's one, through the same fan-out) |
+| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning (a Look layer's effects and an effect palette's one, through the same fan-out) |
 | `fx/LookRegistry.kt` | Cached per-fixture Look expansion; two invalidation triggers |
 | `routes/projectLooks.kt` | Look CRUD, derived family banking, `LOOK_IN_USE` delete guard |
 

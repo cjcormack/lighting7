@@ -213,7 +213,7 @@ registry all persist per rig — sharing one would make the numbers order-depend
 | `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
 | `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
 | `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
-| `[cook-split]` / `[cook-once]` | a three-layer stack over a 168-head group: a 40-row Look bound to the group, a two-row template layer, a Look holding 24 head-bound effects | sweep C8 — the only scenario that measures `CueComposer` rather than `FxEngine` |
+| `[cook-split]` / `[cook-once]` | a three-layer stack over a 168-head group: a 40-row Look bound to the group, a two-row palette layer, a Look holding 24 head-bound effects | sweep C8 — the only scenario that measures `CueComposer` rather than `FxEngine` |
 
 `[spawn-each]`/`[spawn-batch]` and `[cook-split]`/`[cook-once]` are shaped differently from the
 other four on purpose: each reports both shapes in the same run, so it carries its own
@@ -222,7 +222,7 @@ rig setup, outside the measured window, which is why none of them could see C7 a
 of the five reaches the cook, which is why C8 needed a sixth.
 
 The cook rig needs no engine, no `State` and no database: `CueComposer` resolves Looks and
-templates through the two lambdas it is handed, so the scenario is a straight function call over
+palettes through the two lambdas it is handed, so the scenario is a straight function call over
 plain snapshots. What it *does* need is the group. A bound row naming a group is what makes the
 cook expand per row; the layer naming that same group is what makes the allowed-set rebuild per
 row; and effects bound to individual heads inside it are what push `coversTarget` past its
@@ -416,14 +416,14 @@ And the crossfade rig runs its `FxEngine` without `start()`, so the provenance e
 provenance *synchronously inside every measured frame* rather than coalescing as it does live —
 `[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
 
-**2026-08-26 — sweep item C4 (template colour-cache versioning): no comparison taken, and why.**
-C4's cost lives on the *invalidation* path — a template edit re-resolving `tmpl:` colour parameters,
+**2026-08-26 — sweep item C4 (palette colour-cache versioning): no comparison taken, and why.**
+C4's cost lives on the *invalidation* path — a palette edit re-resolving `tmpl:` colour parameters,
 and the DB read that resolve opens — and none of the five scenarios has a `tmpl:` parameter in it.
 The harness's effects are the frozen `testsupport/TestEffects.kt` copies, which do not go through
 `TypedParams` at all, so nothing here calls `colourSourceVersion` once, let alone 50×/s. A
 before/after pair would have measured run-to-run noise and then sat in this section looking like
-evidence. What C4 would need is a sixth scenario — effects with template-referencing colour
-parameters, ticking across a template edit — which nobody has needed enough to build; its unit
+evidence. What C4 would need is a sixth scenario — effects with palette-referencing colour
+parameters, ticking across a palette edit — which nobody has needed enough to build; its unit
 coverage is the load-count assertions in `TemplateColourSourceTest`, and its rig behaviour is
 `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
@@ -494,7 +494,7 @@ calling flow publishes.
 
 **2026-08-27, selwyn.local, JDK 25** — sweep item C8 (cook-internal repeated work), on the new
 `layer stack cook cost` scenario: a three-layer stack (a 40-row Look bound to a 168-head group, a
-two-row template layer, a Look holding 24 head-bound effects) cooked 200 times after 40 warmups.
+two-row palette layer, a Look holding 24 head-bound effects) cooked 200 times after 40 warmups.
 No tick scenario reaches [`CueComposer`] at all, which is why C8 needed a sixth rig rather than a
 before/after on the existing five.
 
@@ -507,7 +507,7 @@ before/after on the existing five.
 
 Two separate wins, and the table separates them deliberately. **`[cook-split]` before → after** is
 the per-row and per-head hoisting *inside* `applyLayer`, which both arms share — the allowed-set
-and target expansion off the row loop and onto a per-layer `LayerTargets`, the template intent
+and target expansion off the row loop and onto a per-layer `LayerTargets`, the palette intent
 parsed per row rather than per head, and `TemplateResolver` walking the head's property catalogue
 once instead of twice. That is ~32 % of the cook and ~35 % of its allocation. **`[cook-split]` →
 `[cook-once]`** is the consolidation: one pass over the stack, one `contributingLayers` sort

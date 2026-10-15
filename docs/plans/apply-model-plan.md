@@ -25,8 +25,8 @@ disagree on where it lands.
 
 - **What a press puts on differs by surface.**
   - The palette strip and the picker: a click writes literals into Local
-    (`POST /templates/{id}/apply`), and ⌥click or a 500 ms hold adds a tracking layer
-    (`POST /templates/{id}/toggle`) (`components/programmer/useTemplatePress.ts:32-142`).
+    (`POST /palettes/{id}/apply`), and ⌥click or a 500 ms hold adds a tracking layer
+    (`POST /palettes/{id}/toggle`) (`components/programmer/useTemplatePress.ts:32-142`).
   - A busk pad always toggles a tracking layer; a hold opens a menu (`BuskPad.tsx:166-237`,
     `routes/BuskPressService.kt`).
   - The colour cell's *Recent* chips apply literals only, and offer only palettes pressed before
@@ -150,7 +150,7 @@ The plan adds its own:
 4. **Widening** (P3). An *on* press whose record's newest layer is the top of the stack, with the
    same mask, blend and amount, widens that layer's targets instead of adding one.
 5. **The mask cuts; the layer keeps the cut**, as today: a palette outside the mask is refused
-   (`TEMPLATE_OUTSIDE_MASK`); a Look lands masked and names the skipped families; an off press comes
+   (`PALETTE_OUTSIDE_MASK`); a Look lands masked and names the skipped families; an off press comes
    off under any mask. A cell's popup is masked to its own family.
 6. **Scope redirects** (D7). With a Look focused, a press resolves without writing the programmer and
    writes the Look. In the cue editor it writes the cue. Nothing reaches the stage in either.
@@ -200,7 +200,7 @@ and a layer records both as its `targets` and `propertyMask`.
   - The layer is then removed with no republish of its keys, so the stage does not move.
   - The rail's layer menu and S14's tables carry it.
 - **Apply as values** is ⌥click and the hold menu's second item:
-  - for a palette, today's `POST /templates/{id}/apply` (literals, a detached effect copy);
+  - for a palette, today's `POST /palettes/{id}/apply` (literals, a detached effect copy);
   - for a Look, a new `POST /looks/{id}/apply`, which is the Look's rows over the selection (or its own
     fixtures) as `WEB` literals and its effects as Local, the same work as a press followed by Detach,
     in one recook.
@@ -208,7 +208,7 @@ and a layer records both as its `targets` and `propertyMask`.
 ### 3.6 Into a record (D7)
 
 - **A focused Look layer.**
-  - `POST /templates/{id}/apply` gains `write: false`, as Spread has: the same resolve and fan-out
+  - `POST /palettes/{id}/apply` gains `write: false`, as Spread has: the same resolve and fan-out
     (`TemplateFanOut`), answering `written[].value` as each head's literal in the Look row grammar, and
     writing nothing.
   - The client lands those values in `LookRowStore`'s draft, which saves through the ordinary Look PUT.
@@ -229,10 +229,10 @@ and a layer records both as its `targets` and `propertyMask`.
 
 | Route or frame | Session | Notes |
 |---|---|---|
-| `POST /templates/{id}/toggle`, `/looks/{id}/toggle`, `/busk/pads/{id}/press` | 1 | Replacement siblings (§3.2 rule 3) and widening (rule 4). No request change. |
+| `POST /palettes/{id}/toggle`, `/looks/{id}/toggle`, `/busk/pads/{id}/press` | 1 | Replacement siblings (§3.2 rule 3) and widening (rule 4). No request change. |
 | `programmer.detachLayer {layerId}` | 1 | Inbound WS, an operator gesture; a `TraceSampling.WS_MESSAGES` row. Answers `programmer.layerState`. |
 | `POST /looks/{id}/apply` | 1 | `{targets, families?, fadeMs?}`; Apply as values for a Look. |
-| `POST /templates/{id}/apply` `write` | 1 | `false` answers `written[].value` without writing (D7). |
+| `POST /palettes/{id}/apply` `write` | 1 | `false` answers `written[].value` without writing (D7). |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
 | `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?, timing?}`; a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
 | `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |

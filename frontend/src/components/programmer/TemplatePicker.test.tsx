@@ -186,7 +186,7 @@ describe('TemplatePicker', () => {
 
   it('filters every section from the one search field', () => {
     render(picker())
-    fireEvent.change(within(panel()).getByLabelText('Search templates'), {
+    fireEvent.change(within(panel()).getByLabelText('Search palettes'), {
       target: { value: 'amber' },
     })
     expect(sectionPads('Recent')).toEqual(['Amber Key'])
@@ -211,7 +211,7 @@ describe('TemplatePicker', () => {
     expect(panel()).toBeInTheDocument()
   })
 
-  it('⌥click adds a tracking layer instead, masked to the template’s family', async () => {
+  it('⌥click adds a tracking layer instead, masked to the palette’s family', async () => {
     render(picker())
     await act(async () => {
       fireEvent.click(within(panel()).getAllByTitle(/Click to set these values/)[0], { altKey: true })
@@ -259,7 +259,7 @@ describe('TemplatePicker', () => {
     // D3, the strip's own rule — and the sheet sits outside it because the desk selection is
     // shared, so `targets` can empty while a template name is half typed.
     render(picker({ targets: [] }))
-    expect(screen.queryByLabelText('Search templates')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Search palettes')).not.toBeInTheDocument()
     expect(newSheetProps).toHaveBeenCalled()
   })
 

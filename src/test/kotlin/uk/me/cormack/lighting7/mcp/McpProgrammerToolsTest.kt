@@ -217,7 +217,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
             Triple("record_look", """{"name":"Wide","targets":"foh-1"}""", "'targets' must be an array"),
             Triple("record_look", """{"name":{"text":"Wide"}}""", "'name' must be a string"),
             Triple("record_look", """{"name":"Wide","mask":"COLOUR"}""", "'mask' must be an array"),
-            Triple("apply_template", """{"templateName":["Half"]}""", "'templateName' must be a string"),
+            Triple("apply_palette", """{"paletteName":["Half"]}""", "'paletteName' must be a string"),
             Triple("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":{},"value":"pct:10"}]}""", "'propertyName' must be a string"),
             Triple("set_blind", """{"blind":"yes"}""", "'blind' must be true or false"),
         )) {
@@ -269,33 +269,49 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `apply_template lands a template as literals or as a layer that toggles`() {
+    fun `the palette tools are offered under their palette names, and the template names are gone`() {
+        val user = AuthenticatedUser(1, UUID.randomUUID(), "tester", "Tester", UserRole.ADMIN, "test")
+        val listed = runBlocking {
+            McpProtocol(state).handle(Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}"""), user)
+        }!!["result"]!!.jsonObject["tools"]!!.jsonArray.associateBy { it.jsonObject["name"]!!.jsonPrimitive.content }
+        assertTrue("apply_palette" in listed && "create_palette" in listed, listed.keys.toString())
+        assertTrue(listed.keys.none { "template" in it }, listed.keys.toString())
+        val apply = listed.getValue("apply_palette").jsonObject["inputSchema"]!!.jsonObject["properties"]!!.jsonObject
+        assertEquals(setOf("paletteId", "paletteName"), apply.keys.filter { it.startsWith("palette") || it.startsWith("template") }.toSet())
+        val include = listed.getValue("get_current_state").jsonObject["inputSchema"]!!.jsonObject["properties"]!!
+            .jsonObject["include"]!!.jsonObject["items"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertTrue("palettes" in include && "templates" !in include, include.toString())
+    }
+
+    @Test
+    fun `apply_palette lands a template as literals or as a layer that toggles`() {
         patchRig()
-        ok("create_template", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
+        ok("create_palette", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
 
-        val bare = call("apply_template", """{"templateName":"Half"}""")
+        val bare = call("apply_palette", """{"paletteName":"Half"}""")
         assertFalse(bare.success)
-        assertEquals("TEMPLATE_NEEDS_SELECTION", bare.json()["code"]!!.jsonPrimitive.content)
-        val masked = call("apply_template", """{"templateName":"Half","targets":[{"type":"group","key":"FOH"}],"mask":["POSITION"]}""")
+        assertEquals("PALETTE_NEEDS_SELECTION", bare.json()["code"]!!.jsonPrimitive.content)
+        val masked = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mask":["POSITION"]}""")
         assertFalse(masked.success)
-        assertEquals("TEMPLATE_OUTSIDE_MASK", masked.json()["code"]!!.jsonPrimitive.content)
-        val maskedLayer = call("apply_template", """{"templateName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER","mask":["POSITION"]}""")
-        assertEquals("TEMPLATE_OUTSIDE_MASK", maskedLayer.json()["code"]!!.jsonPrimitive.content)
-        assertFalse(call("apply_template", """{"templateName":"Nope","targets":[{"type":"group","key":"FOH"}]}""").success)
+        assertEquals("PALETTE_OUTSIDE_MASK", masked.json()["code"]!!.jsonPrimitive.content)
+        val maskedLayer = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER","mask":["POSITION"]}""")
+        assertEquals("PALETTE_OUTSIDE_MASK", maskedLayer.json()["code"]!!.jsonPrimitive.content)
+        assertFalse(call("apply_palette", """{"paletteName":"Nope","targets":[{"type":"group","key":"FOH"}]}""").success)
 
-        val literals = ok("apply_template", """{"templateName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
+        val literals = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
         assertEquals(2, literals["written"]!!.jsonPrimitive.int)
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
         assertEquals(setOf("foh-1", "foh-2"), programmerEntries().map { it.first }.toSet(), "literals sit in the programmer")
         ok("clear_programmer", "{}")
         assertEquals(0, level(1))
 
-        val on = ok("apply_template", """{"templateName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
+        val on = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
         assertEquals("applied", on["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
         val layers = ok("get_current_state", """{"include":["programmer"]}""")["programmer"]!!.jsonObject["layers"]!!.jsonArray
         assertEquals("Half", layers.single().jsonObject["sourceName"]!!.jsonPrimitive.content)
-        val off = ok("apply_template", """{"templateName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
+        assertEquals("PALETTE", layers.single().jsonObject["sourceKind"]!!.jsonPrimitive.content, "Claude reads palette, not the stored kind")
+        val off = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
         assertEquals("removed", off["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(0, 0), listOf(level(1), level(2)))
     }
@@ -304,10 +320,10 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     fun `a per-fixture template with no targets lands on its own heads`() {
         patchRig()
         val templateId = ok(
-            "create_template",
+            "create_palette",
             """{"name":"Special","rows":[{"targetKey":"foh-3","propertyName":"dimmer","value":"pct:100"}]}""",
-        )["templateId"]!!.jsonPrimitive.int
-        ok("apply_template", """{"templateId":$templateId}""")
+        )["paletteId"]!!.jsonPrimitive.int
+        ok("apply_palette", """{"paletteId":$templateId}""")
         assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)))
     }
 

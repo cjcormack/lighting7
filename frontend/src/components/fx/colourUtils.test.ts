@@ -9,7 +9,7 @@ import { isTemplateRef, parseTemplateRefUuid, serializeTemplateRef } from './col
  * **serialises and parses only** — resolving a reference to a colour is per-head arithmetic that
  * `TemplateResolver` must be the single answer to — so these are the only three behaviours to pin.
  */
-describe('template colour references', () => {
+describe('palette colour references', () => {
   const uuid = '2f1c8a3e-0000-4000-8000-000000000001'
 
   it('recognises a reference regardless of case or surrounding space', () => {

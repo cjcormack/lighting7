@@ -76,24 +76,24 @@ afterEach(() => {
 })
 
 describe('useColourTemplates offerability', () => {
-  it('offers a generic single-row colour template', () => {
+  it('offers a generic single-row colour palette', () => {
     templates = [WARM]
     expect(render().result.current.templates.map((t) => t.name)).toEqual(['Warm Key'])
   })
 
-  it('excludes a template that is not the COLOUR family', () => {
+  it('excludes a palette that is not the COLOUR family', () => {
     templates = [template({ family: 'INTENSITY' })]
     expect(render().result.current.templates).toEqual([])
   })
 
-  it('excludes a per-fixture template', () => {
+  it('excludes a per-fixture palette', () => {
     // An effect's colour output is one colour applied to every head it targets, so there is nothing
     // for it to take from a template holding a different colour per head.
     templates = [template({ isGeneric: false })]
     expect(render().result.current.templates).toEqual([])
   })
 
-  it('offers a colour template that also names an emitter', () => {
+  it('offers a colour palette that also names an emitter', () => {
     // The row count used to exclude this, because everything downstream read `rows[0]`. Both halves
     // now fold the whole colour-family row set into one colour — `templateRowsSwatch` here,
     // `resolveColourGeneric` on the desk — so the template means something exact to a single-colour
@@ -113,7 +113,7 @@ describe('useColourTemplates offerability', () => {
     expect(result.current.swatchFor('tmpl:u1')).toBe('#ff9d4a')
   })
 
-  it('excludes an effect template — an effect is not a colour', () => {
+  it('excludes an effect palette — an effect is not a colour', () => {
     // fx-templates D12. This used to pass by accident, through the `rows.length === 1` clause that
     // an effect template fails by holding no rows; that clause is gone and `kind !== 'effect'` is
     // the explicit check its own docblock said to put in its place. An effect template has nothing
@@ -132,7 +132,7 @@ describe('useColourTemplates offerability', () => {
 })
 
 describe('useColourTemplates lookups', () => {
-  it('labels a resolved reference with the template name', () => {
+  it('labels a resolved reference with the palette name', () => {
     templates = [WARM]
     expect(render().result.current.labelFor(REF)).toBe('Warm Key')
   })
@@ -144,7 +144,7 @@ describe('useColourTemplates lookups', () => {
 
   it('says missing once the library has arrived without it', () => {
     templates = [template({ uuid: 'somethingelse' })]
-    expect(render().result.current.labelFor(REF)).toBe('Missing template')
+    expect(render().result.current.labelFor(REF)).toBe('Missing palette')
   })
 
   it('resolves a reference to the swatch of its only row, and a literal to nothing', () => {
@@ -155,7 +155,7 @@ describe('useColourTemplates lookups', () => {
     expect(result.current.templateFor('#123456')).toBeNull()
   })
 
-  it('resolves nothing for a reference to a template that exists but is not offerable', () => {
+  it('resolves nothing for a reference to a palette that exists but is not offerable', () => {
     // The lookups read the *filtered* list, so an excluded template is not reachable by uuid
     // either — a picker cannot draw a reference it would never have offered.
     templates = [template({ isGeneric: false })]

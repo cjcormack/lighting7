@@ -547,8 +547,8 @@ export function SurfaceLibrary({
       out.push({
         key: `template:${template.uuid}`,
         name: template.name,
-        detail: `${template.family?.toLowerCase() ?? "value"} template`,
-        badge: "Template",
+        detail: `${template.family?.toLowerCase() ?? "value"} palette`,
+        badge: "Palette",
         kind: "look",
         strip: null,
         chips: [

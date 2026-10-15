@@ -141,7 +141,7 @@ describe('the FX cue-slot overlay', () => {
     expect(writes(calls).some((c) => c.url.includes('/cues/20/apply'))).toBe(false)
   })
 
-  it('lights a Look tile from the applied feed, and not from a template with the same id', async () => {
+  it('lights a Look tile from the applied feed, and not from a palette with the same id', async () => {
     draw()
     const tile = await screen.findByLabelText('Storm Wash')
     expect(tile.getAttribute('aria-pressed')).toBe('false')

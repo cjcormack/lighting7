@@ -718,7 +718,7 @@ describe('targetFamilies', () => {
     expect(targetFamilies([])).toEqual([])
   })
 
-  it('counts no family for a trigger or a command, which no template can hold', () => {
+  it('counts no family for a trigger or a command, which no palette can hold', () => {
     const reset: CommandPropertyDescriptor = {
       type: 'command', name: 'reset', displayName: 'Reset', category: 'command', description: 'Resets.',
       holdMs: 3000, confirm: true, channel: chan(12), dedicated: true,

@@ -272,13 +272,13 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `aim_fixtures saveAsTemplate keeps the aims as a position template beside the programmer`() {
+    fun `aim_fixtures saveAsPalette keeps the aims as a position template beside the programmer`() {
         seed()
         val result = call(
-            """{"targets":[{"type":"group","key":"spots"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Wall focus"}""",
+            """{"targets":[{"type":"group","key":"spots"}],"x":0,"y":4,"z":0,"saveAsPalette":"Wall focus"}""",
         )
         assertTrue(result.success, result.result)
-        val template = result.json()["template"]!!.jsonObject
+        val template = result.json()["palette"]!!.jsonObject
         assertEquals("Wall focus", template["name"]!!.jsonPrimitive.content)
         assertEquals(2, template["rowCount"]!!.jsonPrimitive.content.toInt())
 
@@ -296,12 +296,12 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `aim_fixtures saveAsTemplate with a taken name moves nothing`() {
+    fun `aim_fixtures saveAsPalette with a taken name moves nothing`() {
         seed()
-        val first = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Focus"}""")
+        val first = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"saveAsPalette":"Focus"}""")
         assertTrue(first.success, first.result)
         state.show.programmerStore.clearAll()
-        val again = call("""{"targets":[{"type":"fixture","key":"spot-coarse"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Focus"}""")
+        val again = call("""{"targets":[{"type":"fixture","key":"spot-coarse"}],"x":0,"y":4,"z":0,"saveAsPalette":"Focus"}""")
         assertFalse(again.success, again.result)
         assertTrue(again.result.contains("already exists"), again.result)
         assertTrue(state.show.programmerStore.entries().isEmpty(), "a refused save writes no aim either")
@@ -310,10 +310,10 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
     @Test
     fun `aim_fixtures dryRun makes no template`() {
         seed()
-        val dry = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"dryRun":true,"saveAsTemplate":"Dry"}""")
+        val dry = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"dryRun":true,"saveAsPalette":"Dry"}""")
         assertTrue(dry.success, dry.result)
-        assertNull(dry.json()["template"])
-        assertNotNull(dry.json()["templateNote"])
+        assertNull(dry.json()["palette"])
+        assertNotNull(dry.json()["paletteNote"])
         assertTrue(transaction(state.database) { DaoTemplate.find { DaoTemplates.name eq "Dry" }.empty() })
     }
 

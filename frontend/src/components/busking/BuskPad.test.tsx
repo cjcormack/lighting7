@@ -75,7 +75,7 @@ function draw(
 
 afterEach(cleanup)
 
-describe('a template or Look pad', () => {
+describe('a palette or Look pad', () => {
   it('draws its name, its detail line and its colour', () => {
     const { container } = draw(templatePad())
     expect(screen.getByText('Amber Key')).toBeTruthy()
@@ -105,7 +105,7 @@ describe('a template or Look pad', () => {
     expect(all.querySelector('button')!.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('marks an effect template with the wave rather than a swatch', () => {
+  it('marks an effect palette with the wave rather than a swatch', () => {
     const { container } = draw(
       templatePad({
         kind: 'effect',

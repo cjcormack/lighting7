@@ -8,7 +8,7 @@ export interface LooksWsApi {
 
 /**
  * Look **CRUD** notifications — created, renamed, copied, deleted. One frame replacing the two
- * (`presetListChanged` + `paletteListChanged`) the merged entities used to need.
+ * (`presetListChanged` and the named palette banks' list frame) the merged entities used to need.
  *
  * Deliberately not fired when a Look's *contents* change: this drives RTK Query cache
  * invalidation, so emitting it per resolution would be an invalidation storm behind an open sheet.

@@ -46,7 +46,7 @@ describe('AddToTargetsButton', () => {
     })
   })
 
-  it('widens a focused template layer too', () => {
+  it('widens a focused palette layer too', () => {
     // Not optional. A template layer's grid is a read, and an untargeted row there is painted
     // dashed and non-editable — so without this the tone names a state with no way out of it, on a
     // surface whose only widening affordance is this button.

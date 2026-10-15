@@ -107,8 +107,8 @@ a version of it is. Two gates carry it:
   operator creates shows on it. On the Projects page an operator sees *Update venue* and *Detach* on a
   show's menu, and neither *Add venue* nor *Extract a venue…*.
 - **MCP** (`mcp/McpProtocol.kt`) holds an operator's tools to the same line on a live venue: the
-  tools that store something are refused, `aim_fixtures` with `saveAsTemplate` among them. Record and
-  Update are off in a venue for both roles (D11), and the Programmer's Update and *New template* are
+  tools that store something are refused, `aim_fixtures` with `saveAsPalette` among them. Record and
+  Update are off in a venue for both roles (D11), and the Programmer's Update and *New palette* are
   withheld there.
 
 The socket stays role-blind (below) and needs nothing new for this: no rig row — a patch, a universe,

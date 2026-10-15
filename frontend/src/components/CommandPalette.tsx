@@ -293,20 +293,20 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     New Patch
                   </Command.Item>
                   {/* Was "New FX Preset", pointing at `/presets?action=new` — a route retired with
-                      the preset tables two sessions ago, so the entry had been dead. A template is
+                      the preset tables two sessions ago, so the entry had been dead. A palette is
                       what that gesture means now: a named value, authored rather than captured,
                       which is why it has a create entry at all where a Look does not. */}
                   <Command.Item
-                    value="New Template"
-                    // `effect` and `chase` because a template can now hold one, and the palette
-                    // keeps a *single* New Template action — the kind is chosen inside the sheet,
+                    value="New Palette"
+                    // `effect` and `chase` because a palette can hold one, and ⌘K keeps a *single*
+                    // New Palette action — the kind is chosen inside the sheet,
                     // so a second entry would offer a choice the sheet then asks for again.
                     keywords={["template", "value", "colour", "palette", "create", "effect", "chase"]}
-                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/templates?action=new`))}
+                    onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/palettes?action=new`))}
                     className={itemClassName}
                   >
                     <Bookmark className="size-4 text-muted-foreground" />
-                    New Template
+                    New Palette
                   </Command.Item>
                   <Command.Item
                     value="New Cue Stack"

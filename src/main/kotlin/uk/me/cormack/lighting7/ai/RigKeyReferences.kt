@@ -43,7 +43,7 @@ import java.util.UUID
  * cells. Scripts are Kotlin source, so they are only ever reported. Inside a transaction.
  */
 internal object RigKeyReferences {
-    /** Who names a key: `CUE | LOOK | TEMPLATE | BINDING | SCRIPT`. */
+    /** Who names a key: `CUE | LOOK | PALETTE | BINDING | SCRIPT`. */
     data class User(val kind: String, val id: Int, val name: String)
 
     /** What a rewrite changed: the records to republish and announce. */
@@ -194,7 +194,7 @@ internal object RigKeyReferences {
             DaoTemplateRow.find { DaoTemplateRows.template inList templates.keys.toList() }.forEach { row ->
                 val templateId = row.readValues[DaoTemplateRows.template].value
                 val template = templates.getValue(templateId)
-                visit(User("TEMPLATE", templateId, template.name), row.targetType, row.targetKey)
+                visit(User("PALETTE", templateId, template.name), row.targetType, row.targetKey)
                     ?.let { row.targetKey = it; touched.templates += template.uuid }
             }
         }

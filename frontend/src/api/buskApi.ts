@@ -220,7 +220,7 @@ export interface AddBuskPadRequest {
  * unlinked. Absent is every attribute. It is tested on the **on** arm only — a press that turns a
  * lit record off answers `removed` under any mask — so a client never pre-refuses a press from
  * the mask it holds: send it, and render the desk's answer. A template outside it is 400
- * `TEMPLATE_OUTSIDE_MASK`, a Look with nothing inside it 400 `LOOK_OUTSIDE_MASK`; a cue ignores it.
+ * `PALETTE_OUTSIDE_MASK`, a Look with nothing inside it 400 `LOOK_OUTSIDE_MASK`; a cue ignores it.
  */
 export interface BuskPressRequest {
   targets: { type: 'group' | 'fixture'; key: string }[]

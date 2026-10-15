@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.state.State
 private const val PAD_NOT_FOUND = "Busk pad not found"
 
 /** 400 code: a generic template's rows take their targets from the press, so with none it asserts nothing. */
-internal const val CODE_TEMPLATE_NEEDS_SELECTION = "TEMPLATE_NEEDS_SELECTION"
+internal const val CODE_TEMPLATE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
 
 /**
  * `POST /projects/{id}/busk/pads/{padId}/press` — the busk view's one gesture.
@@ -31,7 +31,7 @@ internal const val CODE_TEMPLATE_NEEDS_SELECTION = "TEMPLATE_NEEDS_SELECTION"
  * client mid-press cannot release the wrong set. Then, by kind:
  *
  * - a **template** → `ProgrammerLayerStack.toggle` with its derived family mask and the siblings,
- *   refused by name when the selection's mask leaves that family out (`TEMPLATE_OUTSIDE_MASK`) —
+ *   refused by name when the selection's mask leaves that family out (`PALETTE_OUTSIDE_MASK`) —
  *   on the on arm only, an off press coming off under any mask (`pressWouldRelease`);
  * - a **Look** → the same `toggle`, masked to what the Look and the selection's mask share
  *   (`resolveLookMask`, unmasked when the press carries no mask), with the siblings — and the
@@ -46,7 +46,7 @@ internal const val CODE_TEMPLATE_NEEDS_SELECTION = "TEMPLATE_NEEDS_SELECTION"
  * no targets to narrow by. An **off** press releases nothing, whatever the kind. A stacking bank
  * (solo off) has no siblings at all.
  *
- * The engine's rules do not move here: `/templates/{id}/toggle` and `/looks/{id}/toggle` remain
+ * The engine's rules do not move here: `/palettes/{id}/toggle` and `/looks/{id}/toggle` remain
  * for the programmer's ⌥click strip and the AI, always siblingless.
  */
 internal fun Route.routeApiRestBuskPress(state: State) {
@@ -96,7 +96,7 @@ internal data class BuskPadPressResource(val projectId: String, val padId: Int)
 /**
  * The selection and its attribute mask. Both ignored for a cue pad; [targets] may be empty for a
  * Look with no deferred effect. [families] (`PropertyMaskGroup` names) absent is every attribute
- * and an unknown name is 400; a template outside it is `TEMPLATE_OUTSIDE_MASK`, a Look with
+ * and an unknown name is 400; a template outside it is `PALETTE_OUTSIDE_MASK`, a Look with
  * nothing inside it `LOOK_OUTSIDE_MASK` — multi-screen plan D5.
  */
 @Serializable

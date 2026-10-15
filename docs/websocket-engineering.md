@@ -448,7 +448,7 @@ the hand left with no armed timer.
 
 **Project-scoped**, unlike `windows.*`: `State`'s project collector drops the hand, because the ids
 it holds belong to one project's rows. Two other things end a hold — a **five-minute timeout** armed
-on every pick-up, and a **reconcile** run from the `lookListChanged` / `templateListChanged` /
+on every pick-up, and a **reconcile** run from the `lookListChanged` / `paletteListChanged` /
 `cueListChanged` listeners, so a record deleted while held leaves every window's chip. Reconcile is
 about identity, not contents: a record *edited* while held keeps its place and its frozen face.
 Nothing is persisted and nothing is a table, so `SyncCoverageTest` gains no row.
@@ -600,19 +600,20 @@ Outbound-only, and the only frame a client sees before the show-scoped families 
 ### Broadcast — `BroadcastSocket.kt`
 
 Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged`,
-`cueRunStateChanged`, `cuesRecomposed` and `busk.layoutChanged` is a **payload-free cache
+`cueRunStateChanged`, `cuesRecomposed`, `palettePressed` and `busk.layoutChanged` is a **payload-free cache
 invalidation**: the client refetches over REST (`busk.rigChanged` is dotted for the naming rule but
 payload-free, since one project has one rig).
 
 | Message | Payload | Meaning |
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
-| `templateListChanged` | — | A template was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
-| `cuesRecomposed` | `cueIds` | A Look/template **contents** edit, or a forced Look delete that took their layers, changed what these cues compose to |
+| `paletteListChanged` | — | A palette was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
+| `palettePressed` | `templateId`, `lastPressedAt` | A palette was pressed from any door; the client patches the stamp into its cached list rather than refetching. The two palette frames were `templateListChanged` / `templatePressed` until venue-visit plan D2 and have no alias; the payload keeps the stored field name |
+| `cuesRecomposed` | `cueIds` | A Look/palette **contents** edit, or a forced Look delete that took their layers, changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD; also fired (with `cueStackListChanged`) when a forced Look delete took cue layers |
 | `cueStackListChanged` | — | Cue-stack CRUD, a stack's set, and any cue scenery write or element delete that swept scenery — the stack list carries every cue's own changes (`cues[].scenery`, scenery-programmer plan D13/D14) |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
-| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a template / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
+| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a palette / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
 | `busk.rigChanged` | — | The busk **rig** changed: a whole-document write, or a group / patch delete that took tiles off it. Payload-free because there is one rig per project (busk-further plan D1); the client re-reads `GET /busk/rig` |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
@@ -629,7 +630,7 @@ payload-free, since one project has one rig).
 | `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
-happens is not obvious. The backend deliberately does **not** fire `templateListChanged` /
+happens is not obvious. The backend deliberately does **not** fire `paletteListChanged` /
 `lookListChanged` alongside it: those are payload-free, so firing them would refetch the whole
 library on every edit-mode gesture — and that cost is real rather than theoretical, because
 `LibraryPalette` is mounted and subscribed to both lists for the whole of busk edit mode.
@@ -645,7 +646,7 @@ So the client splits it by who caused the change:
   means another desk is editing, and the alternative is a count that is simply wrong.
 
 `cuesRecomposed` is the one broadcast that is keyed rather than payload-free, and the reason is the
-rule its two neighbours state: `lookListChanged` / `templateListChanged` are deliberately **not**
+rule its two neighbours state: `lookListChanged` / `paletteListChanged` are deliberately **not**
 fired for a contents edit, because a client treats them as "drop every cached expansion" and a
 retune would be an invalidation storm. A retune does still change what the cues layering that record
 compose to, so it gets its own frame naming them — a handful of ids, at save cadence, refreshing
@@ -944,7 +945,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.keyStack` | `requestId?`, `targetType`, `targetKey`, `propertyName`, `blind`, `stacks: [{targetKey, layers: [KeyStackLayerDto]}]`, `error?` | Unicast reply — one stack for a fixture, one per member for a group |
 | `programmer.targetCleared` | `requestId?`, `targetType`, `targetKey`, `values: Int`, `effects: Int`, `partial: [{effectId, effectType, targetKey, isGroupTarget, propertyName}]`, `error?` | Unicast reply |
 
-`applied` is the same stack resolved: one entry per Look or template with every target it covers,
+`applied` is the same stack resolved: one entry per Look or palette with every target it covers,
 each group marked `all` or `some` by how many of its heads the record holds
 (`ProgrammerLayerStack.appliedState`). It rides beside `layers` rather than replacing it — the
 Layers pane edits layers, a busk pad's ring reads coverage, and the desk answers the coverage

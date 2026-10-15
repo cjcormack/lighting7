@@ -91,7 +91,8 @@ stageViewpoints/{uuid}.json    # v18+: saved views and seats; a seat view names 
                                # `seatElementUuid`
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline; v20+: `scenery` too
-templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
+templates/{uuid}.json          # palettes — rows embedded inline; one attribute family each (v6+).
+                               # Still `templates` on disk and in the DTOs (venue-visit plan D2)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
                                # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
                                # (busk-view routing and follow — additive nullable fields, no
@@ -512,7 +513,7 @@ is omitted. Three things about the shape:
   in this hall, not the show — `effect_tube_state` is machine-local (§"Machine-local data") — and the
   desk's **arm** is runtime only. Neither travels, and a restart disarms.
 - **An import strips any row naming a trigger.** Until v21 the Twin Shot's `output1`, `output2` and
-  `master` were plain sliders, so a v20 archive may hold a Look, template or cue row (or an effect)
+  `master` were plain sliders, so a v20 archive may hold a Look, palette or cue row (or an effect)
   raising one; every import ends with `stripTriggerRows` over the imported project, the same pass the
   one-off startup strip ran, and logs how many went. A trigger can no longer be stored at all
   (`TRIGGER_NOT_STORABLE`), so the pass has nothing to find in a v21 archive.
@@ -753,7 +754,7 @@ is dead.
 **v10 adds one folder and one field.** `buskPages/{uuid}.json` is the busk layout
 (`docs/plans/completed/busk-layout-plan.md`): one document per page with its columns, banks and pads
 embedded inline the way a Look carries its rows, so a drag changes one file. A pad names its
-template, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
+palette, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
 `CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` joins `cueUuid` on a cue slot: a
 Look with no deferred effect, pressed onto its own fixtures.
 
@@ -763,7 +764,7 @@ layout changes what a busk press *does* on stage (a solo bank releases its sibli
 reader — which would import no pages, never read the folder, and on its next wipe-then-export push
 write none back, deleting every peer's pages — must refuse the repo instead.
 
-Three importer details. Pages import **after** templates, Looks and cues so every pad resolves in
+Three importer details. Pages import **after** palettes, Looks and cues so every pad resolves in
 one pass. A pad whose record the archive does not carry, or which names none or two, **warns and is
 dropped** while the page imports without it, because a pad is an enrichment of its record (a place
 on a page), not content; the stored sort orders are kept as written, and the gap a dropped pad
@@ -790,45 +791,45 @@ unknown now, `ignoreUnknownKeys` drops it, and the slot arrives naming nothing �
 **warns and drops that slot** rather than failing the pull. That is the pad's rule applied to a
 slot, and it is why the arity check splits: two arms aborts, none warns.
 
-### Version 9 — template groups *(removed at v10)*
+### Version 9 — palette groups *(removed at v10)*
 
-> Template groups no longer exist: v10's session 3 deleted the folder, the field and the feature
+> Palette groups no longer exist: v10's session 3 deleted the folder, the field and the feature
 > when the busk page took over ordering and exclusivity. Kept as the record, the way §"Version 7"
 > keeps the retired `palette` story — a reader meeting a v9 archive still imports it, ignoring the
 > folder and the key.
 
 **v9 was a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
-top-level `sortOrder` only), plus one optional reference on the template, `TemplateJson.groupUuid`.
-Membership lives on the template rather than in a member list on the group, so a group document
-never changes when a template joins or leaves it — one record moves per drag, not two.
+top-level `sortOrder` only), plus one optional reference on the palette, `TemplateJson.groupUuid`.
+Membership lives on the palette rather than in a member list on the group, so a group document
+never changes when a palette joins or leaves it — one record moves per drag, not two.
 
 `minReader` stays at **5**: a missing folder reads as empty and the field defaults to null, so every
 older archive imports untouched. Only the writer's number moves, and the reason is the one the v8
 note above frames as the real question — *would an older reader import this record wrong, and then
-write its mistake back?* A v8 reader would import every template ungrouped and never look at the
+write its mistake back?* A v8 reader would import every palette ungrouped and never look at the
 folder; its next push is wipe-then-export, which writes no `templateGroups/` and no `groupUuid`,
 deleting every peer's groups. That is not the SpeedMaster "null is a valid state" case: a group
 changes what a busk press *does* (its siblings release), so silently dropping one changes behaviour
 on stage. Bumping the writer makes a v8 install refuse the repo, which is the only outcome that
 loses nothing.
 
-Two importer details, both deliberate: groups import **before** templates so the reference
+Two importer details, both deliberate: groups import **before** palettes so the reference
 resolves in one pass, and a `groupUuid` naming a group the archive does not carry **warns and
-imports the template ungrouped** rather than aborting the pull — a group is an enrichment of the
-template (its place and its siblings), not its content, so a template that has lost its group is
-still a whole template. Contrast a cue layer, which is nothing without its source and does abort.
+imports the palette ungrouped** rather than aborting the pull — a group is an enrichment of the
+palette (its place and its siblings), not its content, so a palette that has lost its group is
+still a whole palette. Contrast a cue layer, which is nothing without its source and does abort.
 `ExportUuidRemapper` needs no change for the same reason it needed none at v8: `groupUuid` is a
-uuid string, so a clone's templates point at the clone's groups by construction.
+uuid string, so a clone's palettes point at the clone's groups by construction.
 
-### Version 8 — a template may hold an effect
+### Version 8 — a palette may hold an effect
 
 **v8 is the worked example of an optional field that still needs a bump.** `template_effects`
 travels inline as `TemplateJson.effect: TemplateEffectJson? = null` — one new optional field with a
 null default, which the rule of thumb above would wave through.
 
 It bumps anyway, because that field is the *record's whole content* rather than an enrichment. A
-template holds values **or** one effect (fx-templates D1), so an effect template has no rows at all:
-a v7 reader would import it as a hollow, rows-less template — one its own write boundary would
+palette holds values **or** one effect (fx-templates D1), so an effect palette has no rows at all:
+a v7 reader would import it as a hollow, rows-less palette — one its own write boundary would
 refuse — and then write that hollow record back over the effect on its next push. `minReader` stays
 at **5**, since every older archive still imports untouched; only the writer's number moves, which
 is exactly the v6/v7 shape.
@@ -839,9 +840,9 @@ across the JSON text, so the nested `effect.uuid`, both speed-master references,
 colour reference **inside the `parameters` map** are all re-pointed on clone with no field-aware
 code. A new inline child is remapped correctly by construction.
 
-### Version 6 — templates as their own entity
+### Version 6 — palettes as their own entity
 
-**v6 is the worked example of a one-directional break.** Templates got their own tables, so the
+**v6 is the worked example of a one-directional break.** Palettes got their own tables, so the
 export gained a `templates/` folder and `CueLayerJson.lookUuid` became *optional* beside a new
 `templateUuid` — exactly one of the two is set.
 

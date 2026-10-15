@@ -128,7 +128,7 @@ internal val createLookTool = ToolDef(
     name = "create_look",
     description = "Create a look — a named, reusable bundle of static values, beat-synced effects and scenery — and optionally apply it now. " +
             "'values' are the plain states (front wash at 70%, the cyc deep blue, the hazer's fan at 20%): each names its own fixture or group, " +
-            "and is resolved per head the way a template is, so 'pct:70' is 70% of each head's own range and a colour lands on a wheel head's nearest slot. " +
+            "and is resolved per head the way a palette is, so 'pct:70' is 70% of each head's own range and a colour lands on a wheel head's nearest slot. " +
             "A value a head cannot take skips that head and is reported; a value no head of its target can take refuses the call. " +
             "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and property twice is refused. " +
             "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
@@ -349,8 +349,8 @@ internal val aimFixturesTool = ToolDef(
             "each head's pan and tilt from where it hangs (get_patch's `world` position), how its body is mounted " +
             "(its pitchDeg / yawDeg — for a moving head, pitchDeg 0 is standing on the deck and 180 is hung from a bar) " +
             "and its pan/tilt travel, and writes them into the programmer. The programmer is scratch: clearing it " +
-            "loses the aim, so keep it — record_cue or update_from_programmer puts it in a cue, and saveAsTemplate " +
-            "also records it as a position template (a focus palette) that cues, looks and busk pads can use. " +
+            "loses the aim, so keep it — record_cue or update_from_programmer puts it in a cue, and saveAsPalette " +
+            "also records it as a position palette that cues, looks and busk pads can use. " +
             "Coordinates are metres, the frame get_patch and set_stage use: origin the centre of the downstage " +
             "edge at deck level, +x audience-right, +y upstage, +z up. A performer standing in a region is its " +
             "centerX / centerY with z its centerZ plus head height (about 1.7). A head that cannot be aimed is skipped " +
@@ -393,18 +393,18 @@ internal val aimFixturesTool = ToolDef(
                     "Also focus each aimed head on the point: its focus channel set for the distance from its " +
                         "lens, written into the programmer beside the aim (dryRun reports it instead); a head aim " +
                         "skipped is not focused. " +
-                        "saveAsTemplate still saves the position only — a template is one family, and focus " +
+                        "saveAsPalette still saves the position only — a palette is one family, and focus " +
                         "is beam — so keep a focus with record_cue.",
                 )
             })
-            put("saveAsTemplate", buildJsonObject {
+            put("saveAsPalette", buildJsonObject {
                 put("type", "string")
                 put(
                     "description",
-                    "Also save the aims as a new position template with this name: one row per aimed head, " +
+                    "Also save the aims as a new position palette with this name: one row per aimed head, " +
                         "in pan/tilt degrees, so it outlives the programmer. The name must be unused — a taken " +
                         "name refuses the call before any head moves. For heads aimed at different points in " +
-                        "one template, dryRun each aim and pass the positions to create_template " +
+                        "one palette, dryRun each aim and pass the positions to create_palette " +
                         "(value 'deg:<panDeg>,<tiltDeg>', targetKey the fixture).",
                 )
             })
@@ -418,7 +418,7 @@ internal val getCurrentStateTool = ToolDef(
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
             "`cue_run` says what each running stack's next GO will fire; " +
-            "`programmer` is the manual overlay this surface writes through set_programmer, apply_template, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held); " +
+            "`programmer` is the manual overlay this surface writes through set_programmer, apply_palette, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held); " +
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
@@ -433,7 +433,7 @@ internal val getCurrentStateTool = ToolDef(
                     put("type", "string")
                     put("enum", buildJsonArray {
                         add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
-                        add("groups"); add("looks"); add("templates"); add("cues")
+                        add("groups"); add("looks"); add("palettes"); add("cues")
                         add("cue_stacks"); add("cue_run"); add("programmer"); add("selection")
                         add("windows"); add("parked")
                     })
@@ -445,11 +445,10 @@ internal val getCurrentStateTool = ToolDef(
 )
 
 // `set_palette` stood here. It wrote the global positional colour list that effects indexed as
-// `P1` / `P2` — a single mutable list of unnamed slots, and the only thing the word "palette" still
-// meant. Its successor is `create_template` below, and the difference is the point: a colour an
-// effect should follow is a **template**, which has a name and a uuid, so retuning one moves every
-// effect referencing it without a stage-wide mutation. `get_current_state` lists them under
-// `templates`.
+// `P1` / `P2` — a single mutable list of unnamed slots. Its successor is `create_palette` below, and
+// the difference is the point: a colour an effect should follow is a named **palette** (stored as a
+// template) with a uuid, so retuning one moves every effect referencing it without a stage-wide
+// mutation. `get_current_state` lists them under `palettes`.
 private val adHocEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -515,16 +514,16 @@ internal val cueLayerSchema = buildJsonObject {
     put("properties", buildJsonObject {
         put("lookId", buildJsonObject {
             put("type", "integer")
-            put("description", "The look this layer applies. Give exactly one of lookId and templateId.")
+            put("description", "The look this layer applies. Give exactly one of lookId and paletteId.")
         })
-        put("templateId", buildJsonObject {
+        put("paletteId", buildJsonObject {
             put("type", "integer")
-            put("description", "The template this layer applies instead of a look (create_template's id). A generic template — an effect, or values for whatever it is pointed at — needs targets; one naming its own fixtures does not.")
+            put("description", "The palette this layer applies instead of a look (create_palette's id). A generic palette — an effect, or values for whatever it is pointed at — needs targets; one naming its own fixtures does not.")
         })
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies the look or template to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects, or a generic template, needs them.")
+            put("description", "What the layer applies the look or palette to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects, or a generic palette, needs them.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
@@ -566,7 +565,7 @@ internal val cueEventItemSchema = buildJsonObject {
 
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look and template layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
+    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -574,7 +573,7 @@ internal val createCueTool = ToolDef(
             put("layers", buildJsonObject {
                 put("type", "array")
                 put("items", cueLayerSchema)
-                put("description", "Looks or templates to layer, with their targets, in sortOrder. They are read fresh at apply time, so editing one moves every cue that layers it.")
+                put("description", "Looks or palettes to layer, with their targets, in sortOrder. They are read fresh at apply time, so editing one moves every cue that layers it.")
             })
             put("values", buildJsonObject {
                 put("type", "array")
@@ -871,7 +870,7 @@ internal val updateFromProgrammerTool = ToolDef(
  */
 private val templateEffectSchema = buildJsonObject {
     put("type", "object")
-    put("description", "One effect. It has no target — an effect template runs on whatever the layer names.")
+    put("description", "One effect. It has no target — an effect palette runs on whatever the layer names.")
     put("properties", buildJsonObject {
         adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
             if (key != "targetType" && key != "targetKey" && key != "category") put(key, value)
@@ -888,25 +887,24 @@ private val templateEffectSchema = buildJsonObject {
 }
 
 internal val createTemplateTool = ToolDef(
-    name = "create_template",
-    description = "Create a template — a named, referenceable value (a colour, a position, an intensity) " +
-            "or a named effect, that effects and cue layers point at instead of restating it. This is what " +
-            "replaced the old positional colour palette: retuning the template moves everything referencing " +
-            "it. Returns the uuid, which a colour parameter names as 'tmpl:{uuid}'. A template holds one " +
+    name = "create_palette",
+    description = "Create a palette — a named, referenceable value (a colour, a position, an intensity) " +
+            "or a named effect, that effects and cue layers point at instead of restating it: retuning the palette moves " +
+            "everything referencing it. Returns the uuid, which a colour parameter names as 'tmpl:{uuid}'. A palette holds one " +
             "attribute family, and holds values OR one effect, never both — for both together, record a " +
-            "look. Pass 'rows' for a value template (leave every row deferred, the default, to make a " +
-            "generic one that can be aimed at any fixture) or 'effect' for an effect template, which always " +
-            "runs on whatever the applying layer or selection names. An effect template's category must be " +
+            "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
+            "generic one that can be aimed at any fixture) or 'effect' for an effect palette, which always " +
+            "runs on whatever the applying layer or selection names. An effect palette's category must be " +
             "dimmer, colour or position: 'controls' and 'composite' belong to no attribute family, and the " +
             "library has no beam effects.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("name", buildJsonObject { put("type", "string"); put("description", "Unique template name in this project") })
+            put("name", buildJsonObject { put("type", "string"); put("description", "Unique palette name in this project") })
             put("notes", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
             put("fadeDurationMs", buildJsonObject {
                 put("type", "integer")
-                put("description", "Default fade when the template is applied. Omit for a snap.")
+                put("description", "Default fade when the palette is applied. Omit for a snap.")
             })
             put("rows", buildJsonObject {
                 put("type", "array")
@@ -916,7 +914,7 @@ internal val createTemplateTool = ToolDef(
                     put("properties", buildJsonObject {
                         put("propertyName", buildJsonObject {
                             put("type", "string")
-                            put("description", "e.g. colour, dimmer, pan, tilt. Slotted properties (gobo, colour wheel, macros) belong in a look, not a template.")
+                            put("description", "e.g. colour, dimmer, pan, tilt. Slotted properties (gobo, colour wheel, macros) belong in a look, not a palette.")
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
@@ -1003,7 +1001,7 @@ internal val setSceneryTool = ToolDef(
     name = "set_scenery",
     description = "Set the scenery of one cue, cue stack or Look — the scene elements it moves (tabs open or close, a flown piece flies, a piece appears). " +
         "A cue's changes move on GO into it, each on its own clock; a stack's are its set, held while the stack is live, under its cues; a Look's show while it is live (layered in a live cue, or pressed), above every cue. " +
-        SCENERY_TRACKS_NOTE + " Replaces the whole list: send [] to clear it. Everything is checked against each element's kind before anything is written. Templates carry no scenery.",
+        SCENERY_TRACKS_NOTE + " Replaces the whole list: send [] to clear it. Everything is checked against each element's kind before anything is written. Palettes carry no scenery.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -1063,7 +1061,7 @@ internal val moveSceneryTool = ToolDef(
 internal val runFixtureCommandTool = ToolDef(
     name = RUN_FIXTURE_COMMAND,
     description = "Run one fixture command — a reset, a lamp strike or a lamp off — on one fixture. The desk holds the command's level for its declared time (a few seconds) and answers when it ends. " +
-        "describe_rig lists each fixture's commands by name. A command is never a stored value: no look, cue, template or programmer value can hold one, and this is the only way to run one besides the fixture panel. " +
+        "describe_rig lists each fixture's commands by name. A command is never a stored value: no look, cue, palette or programmer value can hold one, and this is the only way to run one besides the fixture panel. " +
         "Commands move heads and can leave a discharge lamp dark for minutes, in a room you cannot see: run one only when the operator asked for that command on that fixture. " +
         "Refused while the programmer is blind, while a channel it holds is parked, while the fixture is running another command, and over remote access unless an admin has allowed fixture commands.",
     inputSchema = buildJsonObject {
@@ -1136,10 +1134,10 @@ internal val setProgrammerTool = ToolDef(
 internal val clearProgrammerTool = ToolDef(
     name = "clear_programmer",
     description = "Clear the programmer, as the desk's Clear does. With no targets: every value, every Look and " +
-            "template layer, every programmer effect and the scenery it holds, so the stage falls back to what " +
+            "palette layer, every programmer effect and the scenery it holds, so the stage falls back to what " +
             "is running. With targets: everything the programmer holds on those fixtures (their heads included) " +
             "and groups, and the effects on just them — an effect that also drives heads outside them is left " +
-            "running and named in `partial`. Layers are not taken off by targets; apply_look or apply_template " +
+            "running and named in `partial`. Layers are not taken off by targets; apply_look or apply_palette " +
             "pressed again takes one off.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -1171,19 +1169,19 @@ internal val setBlindTool = ToolDef(
 )
 
 internal val applyTemplateTool = ToolDef(
-    name = "apply_template",
-    description = "Apply a template (by templateId or templateName) onto targets, as the desk's template chips do. " +
+    name = "apply_palette",
+    description = "Apply a palette (by paletteId or paletteName) onto targets, as the desk's palette chips do. " +
             "mode LITERALS (default) writes the values it resolves to into the programmer — later edits to the " +
-            "template do not move them — or, for an effect template, starts a copy of its effect per target. " +
-            "mode LAYER adds a programmer layer that tracks the template, and toggles: pressing again on the same " +
-            "targets takes it off (get_current_state's `programmer.layers`). A generic template takes its heads " +
-            "from targets and refuses with none (TEMPLATE_NEEDS_SELECTION); a per-fixture one lands on its own " +
-            "heads when targets are omitted. A mask refuses a template outside it (TEMPLATE_OUTSIDE_MASK).",
+            "palette do not move them — or, for an effect palette, starts a copy of its effect per target. " +
+            "mode LAYER adds a programmer layer that tracks the palette, and toggles: pressing again on the same " +
+            "targets takes it off (get_current_state's `programmer.layers`). A generic palette takes its heads " +
+            "from targets and refuses with none (PALETTE_NEEDS_SELECTION); a per-fixture one lands on its own " +
+            "heads when targets are omitted. A mask refuses a palette outside it (PALETTE_OUTSIDE_MASK).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("templateId", buildJsonObject { put("type", "integer") })
-            put("templateName", buildJsonObject { put("type", "string") })
+            put("paletteId", buildJsonObject { put("type", "integer") })
+            put("paletteName", buildJsonObject { put("type", "string") })
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)
@@ -1196,7 +1194,7 @@ internal val applyTemplateTool = ToolDef(
             put("mask", maskSchema)
             put("fadeSeconds", buildJsonObject {
                 put("type", "number")
-                put("description", "LITERALS only: fade the values in over this many seconds (0–600). Default the template's own fade.")
+                put("description", "LITERALS only: fade the values in over this many seconds (0–600). Default the palette's own fade.")
             })
         })
     }

@@ -127,7 +127,7 @@ export function useColourTemplates(): ColourTemplates {
     // A first paint happens before the library query resolves, so an unmatched uuid is not evidence
     // of a dangling reference yet. Saying "Missing template" there reported every perfectly good
     // reference as broken for the width of one round-trip.
-    (value: string) => templateFor(value)?.name ?? (isLoading ? 'Loading…' : 'Missing template'),
+    (value: string) => templateFor(value)?.name ?? (isLoading ? 'Loading…' : 'Missing palette'),
     [templateFor, isLoading],
   )
 
@@ -147,7 +147,7 @@ export function useColourTemplates(): ColourTemplates {
  * just dialled in.
  *
  * The save affordance mirrors `TemplateStrip`'s new-from-selection chip, and for the same reason —
- * it is how the library fills up without anyone visiting `/templates`. It saves **what the picker is
+ * it is how the library fills up without anyone visiting `/palettes`. It saves **what the picker is
  * showing**: the hex, plus a row per emitter the operator has dialled up. That means `policy=rgbonly`
  * rather than the `extract` it used to hard-code — an explicit white row and a policy that derives
  * one are refused together, and here the explicit value is the one the operator can actually see.
@@ -226,7 +226,7 @@ export function FxColourTemplateRow({
 
   return (
     <div className="space-y-1.5 pt-2 border-t border-border">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Templates</p>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Palettes</p>
       {templates.length > 0 && (
         <div className="flex gap-1 flex-wrap">
           {templates.map((template) => {
@@ -258,7 +258,7 @@ export function FxColourTemplateRow({
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Template name"
+            placeholder="Palette name"
             className="h-7 text-xs"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -283,7 +283,7 @@ export function FxColourTemplateRow({
           onClick={() => setNaming(true)}
         >
           <Plus className="size-3" />
-          Save {currentHex} as template…
+          Save {currentHex} as palette…
         </Button>
       ))}
     </div>

@@ -156,7 +156,7 @@ export function CannonPanel({
       </Button>
 
       <p className="text-[11px] leading-snug text-muted-foreground">
-        The fire channels are triggers: no Look, template, effect or Record can hold them. Arming is
+        The fire channels are triggers: no Look, palette, effect or Record can hold them. Arming is
         desk-wide, for every signed-in role at the desk; in Blind, or with this window&apos;s vis
         source on the programmer, a fire is rehearsed — confetti on every window, nothing on the wire.
       </p>

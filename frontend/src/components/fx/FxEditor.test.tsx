@@ -345,13 +345,13 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     arm.spawning = { template: BIG_CIRCLE, projectId: 1 }
   })
 
-  it('is marked edited while it differs from its template, and Reset to template calls W5 in place of Revert', async () => {
+  it('is marked edited while it differs from its palette, and Reset to palette calls W5 in place of Revert', async () => {
     arm.resetAnswer = padCircle()
     render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
     // As spawned, it is the template: no mark, and nothing to update or reset.
     expect(screen.queryByText('edited')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Reset to template' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reset to palette' })).toBeDisabled()
 
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '120' } })
@@ -362,14 +362,14 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     expect(saveTemplate).not.toHaveBeenCalled()
 
     updateFx.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: 'Reset to template' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to palette' }))
     await waitFor(() => expect(resetFx).toHaveBeenCalledWith({ id: 21 }))
     // The desk put the template back on the instance: the draft reads it, and the mark goes.
     await waitFor(() => expect(screen.queryByText('edited')).toBeNull())
     expect(updateFx).not.toHaveBeenCalled()
   })
 
-  it("Update template PUTs the instance's settings as the template's effect, then re-keys the instance", async () => {
+  it("Update palette PUTs the instance's settings as the palette's effect, then re-keys the instance", async () => {
     arm.resetAnswer = { ...padCircle(), parameters: { ...padCircle().parameters, panRadius: '120' }, beatDivision: 2 }
     render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
     const size = screen.getByRole('slider', { name: 'Pan size' })
@@ -377,7 +377,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     fireEvent.pointerUp(size)
     fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Update template' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Update palette' }))
     await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(1))
     expect(saveTemplate.mock.calls[0][0]).toEqual({
       projectId: 1,
@@ -396,6 +396,6 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     arm.spawning = null
     render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('button', { name: 'Revert' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Update template' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Update palette' })).toBeNull()
   })
 })

@@ -134,7 +134,7 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
   const labelLine = empty ? null : (
     <EditorLabelLine
       docked
-      subject={readOnly ? `${scope?.kind === 'output' ? 'Output' : 'Template layer'} · read-only` : headsLine(targets.length, marquee?.scopeLabel ?? 'Local')}
+      subject={readOnly ? `${scope?.kind === 'output' ? 'Output' : 'Palette layer'} · read-only` : headsLine(targets.length, marquee?.scopeLabel ?? 'Local')}
       title={refusal ?? undefined}
       column="Colour"
     />
@@ -155,7 +155,7 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
               className="@container shrink-0 px-3 py-2"
               save={
                 <Button type="button" variant="outline" size="sm" className="h-7 min-w-0 text-xs" disabled>
-                  <Save className="size-3.5" /> <span className="truncate">Save as template…</span>
+                  <Save className="size-3.5" /> <span className="truncate">Save as palette…</span>
                 </Button>
               }
             />

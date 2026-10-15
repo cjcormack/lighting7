@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { Box } from "lucide-react"
 import { navItems, templateFamilyNavItems, filterNavItems, type NavItem, buildWindowCommands, type WindowCommandInputs } from "./navigation"
-import { ATTRIBUTE_FAMILIES, familySlug } from "./lib/attributeFamily"
+import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import { mostSpecificActiveId } from "./lib/navMatch"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
@@ -123,14 +123,14 @@ describe("venue mode's rail", () => {
   it("hides exactly the show's views in a venue, and keeps the Programmer (venue plan §4)", () => {
     const shown = filterNavItems(navItems, true, true, true).map((i) => i.id)
     const all = filterNavItems(navItems, true, true).map((i) => i.id)
-    // Scripts, FX Library, Looks, Templates, Speed Masters, Show, Prompt Book and Busk.
+    // Scripts, FX Library, Looks, Palettes, Speed Masters, Show, Prompt Book and Busk.
     expect(all.filter((id) => !shown.includes(id)).sort()).toEqual(
       ["fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
     )
     for (const kept of ["patches", "fixtures", "groups", "programmer", "stage-view", "channels", "project-settings", "stage", "rigging"]) {
       expect(shown).toContain(kept)
     }
-    // ⌘K's per-family template links go with the Templates row.
+    // ⌘K's per-family palette links go with the Palettes row.
     expect(filterNavItems(templateFamilyNavItems, true, true, true)).toEqual([])
   })
 })
@@ -221,7 +221,7 @@ describe("install navigation", () => {
   })
 })
 
-describe("look and template navigation", () => {
+describe("look and palette navigation", () => {
   it("registers exactly one Looks entry, on the bare path", () => {
     const looks = navItems.filter((i) => i.pathMatch.startsWith("/looks"))
     expect(looks.map((i) => i.id)).toEqual(["looks"])
@@ -246,30 +246,32 @@ describe("look and template navigation", () => {
   })
 
   it("keeps the family deep links on the one route, as query params", () => {
-    // They are `?family=` on `/templates`, not `/templates/colour`. `pathMatch` therefore stays the
+    // They are `?family=` on `/palettes`, not `/palettes/colour`. `pathMatch` therefore stays the
     // bare path so the sidebar highlights its single row whichever family you arrived in — which is
     // what the second half of this pins.
     //
     // The filter and these links moved here from `/looks` in session 3, following the argument that
-    // justifies one: a template is in exactly one family, so a family is an exact partition, while a
+    // justifies one: a palette is in exactly one family, so a family is an exact partition, while a
     // Look spans families and would be hidden from most filters.
     expect(templateFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
     for (const [index, family] of ATTRIBUTE_FAMILIES.entries()) {
       const item = templateFamilyNavItems[index]
-      expect(item.path(1)).toBe(`/projects/1/templates?family=${familySlug(family)}`)
-      expect(item.pathMatch).toBe("/templates")
+      expect(item.path(1)).toBe(`/projects/1/palettes?family=${familySlug(family)}`)
+      expect(item.pathMatch).toBe("/palettes")
+      expect(item.label).toBe(`${FAMILY_LABELS[family].singular} Palettes`)
     }
   })
 
-  it("gives Looks and Templates separate entries that can't shadow each other", () => {
+  it("gives Looks and Palettes separate entries that can't shadow each other", () => {
     // The two libraries are two entities, and their paths are siblings — `/looks` must not match a
-    // template route or vice versa. `lib/navMatch.test.ts` pins the matcher itself.
+    // palette route or vice versa. `lib/navMatch.test.ts` pins the matcher itself.
     const looks = navItems.find((i) => i.id === "looks")
     const templates = navItems.find((i) => i.id === "templates")
     expect(looks?.pathMatch).toBe("/looks")
-    expect(templates?.pathMatch).toBe("/templates")
+    expect(templates?.pathMatch).toBe("/palettes")
+    expect(templates?.label).toBe("Palettes")
     expect(looks?.path(1)).toBe("/projects/1/looks")
-    expect(templates?.path(1)).toBe("/projects/1/templates")
+    expect(templates?.path(1)).toBe("/projects/1/palettes")
   })
 
   it("gives the programmer and Show separate entries that can't shadow each other", () => {
@@ -386,7 +388,7 @@ describe("window commands", () => {
       "Open Busk on another display",
       "Open Stage on another display",
       "Open Looks on another display",
-      "Open Templates on another display",
+      "Open Palettes on another display",
     ])
     expect(buildWindowCommands(base({ canOpenOnDisplay: true, projectId: null })).some((c) => c.id.startsWith("window-open-"))).toBe(false)
   })

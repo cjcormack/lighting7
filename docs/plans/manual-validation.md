@@ -1575,7 +1575,7 @@ and the cache invalidation, but the payoff is a rig behaviour and the path is lo
 invalidation → `TemplateRegistry.versionFor(refs)` → `TypedParams`'s colour caches → the next
 tick's `calculate`. A stale cache looks exactly like "nothing happened".
 
-**The check.** Create a generic colour template on `/templates`. Add a `ColourCycle` ad-hoc effect
+**The check.** Create a generic colour palette on `/palettes`. Add a `ColourCycle` ad-hoc effect
 whose `colours` mixes it with a literal, and confirm the chase runs those colours. Then **retune the
 template** and watch the running chase follow within a tick without re-firing anything.
 

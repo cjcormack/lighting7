@@ -101,7 +101,7 @@ describe('effectsOnSelection', () => {
 })
 
 describe('EffectsSheet', () => {
-  it('marks a pad’s instance edited while it differs from its template, and only then', () => {
+  it('marks a pad’s instance edited while it differs from its palette, and only then', () => {
     state.effects = [padCircle('80'), ownPulse]
     render(<EffectsSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} />)
     expect(screen.getByText('Running on 1 head · 2 effects')).toBeTruthy()

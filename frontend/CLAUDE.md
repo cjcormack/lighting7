@@ -689,7 +689,7 @@ Release folds to its glyph and the scope line drops the fade.
   land on. *Edit <name>* opens the editor.
 - **The live editor** (`components/fx/FxEditor.tsx`, D11, D12, D12a, D15): the old
   `EffectParameterForm`'s inputs rebuilt on the editor kit (its fields are `FxEffectFields`, which
-  `TemplateEditor` mounts too, over a draft — §Looks, templates and layers), **inline under its row** in the tray (Main board B). **No
+  `TemplateEditor` mounts too, over a draft — §Looks, palettes and layers), **inline under its row** in the tray (Main board B). **No
   Apply**: every control writes the draft through `useLivePush` (50 ms floor, deduplicated, the
   release always lands) into `lightingApi.fx.updateFx` — parameters, speed, blend and phase every
   time, a distribution, element field or master only once the operator has set it, since the DTO
@@ -721,16 +721,16 @@ Release folds to its glyph and the scope line drops the fade.
   scrolls inside it. `ActiveEffectSheet`,
   `AddEditFxSheet` and (session 5) `EffectParameterForm` are deleted. A refused write comes back as
   `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
-- **A pad's running effect** (§3.3, D20; session 5): an instance a **programmer** template layer
+- **A pad's running effect** (§3.3, D20; session 5): an instance a **programmer** palette layer
   spawned (`isTemplateLayerInstance` — `templateId` and `programmerLayerId`, no `cueId`) is edited as
-  that running instance only. The editor finds its template in the current project's list
-  (`useSpawningTemplate`), marks itself ***edited*** while the draft differs from the template's
+  that running instance only. The editor finds its palette in the current project's list
+  (`useSpawningTemplate`), marks itself ***edited*** while the draft differs from the palette's
   effect (`differsFromTemplate`: a null master is master 1, an omitted parameter the library's
-  default, a number however spelled), and its footer is **Update template** and **Reset to
-  template** in place of Revert. Update is the template's `PUT {effect}` from the draft **then** W5
+  default, a number however spelled), and its footer is **Update palette** and **Reset to
+  palette** in place of Revert. Update is the palette's `PUT {effect}` from the draft **then** W5
   on this instance — the PUT alone would respawn it at the stack's next recook, phase restarted —
   so it re-keys rather than restarts; Reset is W5 alone (`useResetFxToTemplateMutation`), dropping
-  any move the floor still holds first. Every *other* running instance of that template keeps the
+  any move the floor still holds first. Every *other* running instance of that palette keeps the
   old settings and reads *edited* until reset by hand (`FU-TMPL-FX-EDIT-NO-RETIME`). The editor's ×
   is optional: the busk Effects tab leaves it off a pad's effect, which its pad releases.
 - **A cue's effect is read-only in the tray** (Fx board, *Open*; session 5, `isCueEffect`): it names
@@ -831,26 +831,26 @@ write for a group — beside heads 1–4 of a 12-pixel bar written alone, the ra
 position write's group rule), `rowSource.test.ts`'s merge, `LayerStack.test.tsx`'s group sections and
 `hosts.test.tsx`'s two group hosts.
 
-Session 5's list (the Busk and Programmer views): a new movement template saves `ADDITIVE` + 128
+Session 5's list (the Busk and Programmer views): a new movement palette saves `ADDITIVE` + 128
 (`TemplateEditor.test.tsx`, and a stored Override reading as Absolute); an edited instance is marked
-and Reset calls W5, and Update template PUTs the instance's settings then re-keys
+and Reset calls W5, and Update palette PUTs the instance's settings then re-keys
 (`FxEditor.test.tsx`, `EffectsSheet.test.tsx`); the Effects tab is in every place `LIVE_SHEET_TABS`
 reaches (`SideSheet.test.tsx`, `buskWindow.test.ts`, `ScreensSheet.test.tsx`); Release on row C
 sends one frame per selected row (`FixturesListContainer.test.tsx`), and on the rig row folds with
 the verbs (`RigBand.test.tsx`); the grid dot appears for a held-back cue effect
 (`FixturesTable.test.tsx`, `heldBack.test.ts`); the tile menu opens the sheet (`RigBand.test.tsx`).
 
-### Looks, templates and layers
+### Looks, palettes and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its
-own fixtures, its own effects, added to a cue's stack at a declared position. A **Template** is
+own fixtures, its own effects, added to a cue's stack at a declared position. A **Palette** is
 **one named thing** of exactly one attribute family, with no targets of its own, applied to a
 selection — either a value, *or* one effect, never both (`fx-templates-plan.md` D1). Which of the
 two it holds is `kind`, and it is fixed at creation the way the family is; three rules keep the
 effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
-A **Beam** template holds values only — the effect library has no beam category, and the backend
+A **Beam** palette holds values only — the effect library has no beam category, and the backend
 refuses `beam`, `controls` and `composite` **by name** so a script-registered beam effect cannot
 mint one behind the rule. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
@@ -858,8 +858,8 @@ and `models/templates.kt`; the completed records are
 `desk-simplification-plan.md` §Session 3.
 
 They were one entity until session 3, split on the row's targeting mode: a **bound** Look behaved
-like a palette, a fully-**deferred** one like a preset. That is now two tables, and the reason it
-had to be is the design's own best example — a *per-fixture* template (eight heads aimed at one
+like an old named palette bank, a fully-**deferred** one like a preset. That is now two tables, and the reason it
+had to be is the design's own best example — a *per-fixture* palette (eight heads aimed at one
 spot hold eight different pan/tilts) has only bound rows, so `hasDeferredRows` could never have
 told the two apart. What the split deleted: `editorFixtureType`, `LookEditor`'s synthetic-fixture
 value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `EditorContextValue`'s
@@ -874,13 +874,13 @@ programmer — a deferred one on the desk selection — for Update to write an e
 `LookSummary.hasDeferredEffects` is what says so: that is what makes a Look eligible for a busking
 pad, since a pad supplies the targets on the press.
 
-**A template stores an intent, not a literal**, resolved per head at cook: a colour plus a
+**A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
 white/amber policy, a level or beam role as a percentage of each head's own range, a position in
 **degrees**. `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
 client half serialises and parses only, and **never resolves**, because
 `fx/TemplateResolver.kt` must be the single answer to what the rig will do (§6 of the plan). All
-three consumers go through it: cook, `POST /templates/{id}/apply`, and the editor's resolves-to
-panel via `POST /templates/resolve`. Two deliberate degradations in that grammar are documented in
+three consumers go through it: cook, `POST /palettes/{id}/apply`, and the editor's resolves-to
+panel via `POST /palettes/resolve`. Two deliberate degradations in that grammar are documented in
 `TemplateIntent.kt`; do not "fix" either by teaching the literal parsers about intents.
 
 **The one literal is a bundled emitter — `dmx:180`.** White, amber and UV are rows of the closed
@@ -889,30 +889,30 @@ deliberate: an emitter has no range to be a proportion of and no room to be a po
 is nothing to re-derive per head. Keep the `dmx:` prefix — a bare `180` is what the *literal* parser
 reads, so the two grammars would agree on some rows and silently disagree on others. Rows rather
 than fields on the colour intent, because each then writes only its own channel: that is what lets a
-UV-only template sit **over** an amber wash instead of replacing it, and it is the only way to say
+UV-only palette sit **over** an amber wash instead of replacing it, and it is the only way to say
 "UV at 200" at all, since no `WhitePolicy` has ever driven UV. An explicit `white` or `amber` row
 **forces the colour row to `rgbonly`** — the policy drives the same byte — which the one rows
 builder enforces by rewriting the saved colour row's policy (not just the button's variant: showing
-RGB only while the value still said `extract` produced an editor displaying a template it could not
+RGB only while the value still said `extract` produced an editor displaying a palette it could not
 save) and the write boundary refuses by name. UV is exempt. The builder is `templateRowsFromValues`
 in `components/templates/familyControls/templateRows.ts`, through `effectiveColourPolicy`;
 `ColourControl` reads the same derivation **for display only**, and both hosts of the family
-controls — `TemplateEditor` and the template sheet's Value cell — save through the builder, so
+controls — `TemplateEditor` and the palette sheet's Value cell — save through the builder, so
 neither can send the refused pair (§Library sheets).
 
-**A colour template refuses as a whole**, and this is the one place compatibility is finer than D6.
-A head missing any emitter the template names takes *none* of its colour rows —
+**A colour palette refuses as a whole**, and this is the one place compatibility is finer than D6.
+A head missing any emitter the palette names takes *none* of its colour rows —
 `TemplateResolver.unmetColourRequirement`, folded in by cook, apply and the resolves-to panel alike —
 because the rows are facets of one output and half a colour is a wrong answer, not a partial one.
 Scoped to COLOUR: zoom and frost are independent roles and keep their per-row skip.
 `TemplateSummary.requiredEmitters` is the derived form the client filters on, paired with
 `targetEmitters` in `fixtures-list/rowModel.ts` — a **union** over the selection, like
-`targetFamilies` beside it, so a mixed selection still offers the template and the head that cannot
+`targetFamilies` beside it, so a mixed selection still offers the palette and the head that cannot
 take it reports a skip. `targetEmitters` must read the **colour descriptor's** `whiteChannel` /
 `amberChannel` / `uvChannel`: bundled emitters are omitted from the flat descriptor list, so
 scanning categories the way `targetFamilies` does finds no emitter on any head.
 
-**A template's property vocabulary is closed** (`TemplateProperty`), and that is where "a template
+**A palette's property vocabulary is closed** (`TemplateProperty`), and that is where "a palette
 cannot carry a gobo" actually lives: gobo, colour-wheel and macro slots are per-model, so they are
 refused by name at the write boundary and shown *disabled with the reason* in the beam editor
 rather than omitted. The three emitters are *in* the vocabulary — not slotted, and the only
@@ -920,9 +920,9 @@ per-model question about them is presence. Compatibility is otherwise **capabili
 "does this head have colour at all", never "was this authored against that model".
 
 There is **no stored attribute type on either**. `LookSummary.families` is derived server-side from
-the rows, so a Look spanning colour and position reports both. A template's single family is derived
+the rows, so a Look spanning colour and position reports both. A palette's single family is derived
 the same way and validated to be exactly one at the write boundary. That is why the **family filter
-lives on `/templates`, not `/looks`**: a template is in exactly one family, so a family is an exact
+lives on `/palettes`, not `/looks`**: a palette is in exactly one family, so a family is an exact
 partition; a Look spans families by nature, so filtering by one would hide most of the library from
 most filters.
 
@@ -930,7 +930,7 @@ most filters.
 `PropertyMaskGroup` — `store/programmerOps.ts` exports that name as an *alias* of
 `AttributeFamily`, so the wire keeps its spelling without the two becoming separately-extensible
 types; `maskPicker.test.ts` pins the two lists against each other, and
-`templateIntent.test.ts` pins the template vocabulary the same way. It caught a real divergence
+`templateIntent.test.ts` pins the palette vocabulary the same way. It caught a real divergence
 already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the client read `pct:` as
 0% while the server rejected the row.
 
@@ -989,16 +989,30 @@ takes an `isTemplate` flag since session 3 and swaps the glyph for `Palette` —
 shape, because the two sit in the same list at the same rank and a louder chip would make one look
 more important. **Never mint a `P<n>` short code for either**; display the name.
 
-"Palette" now means **nothing at all** in this codebase, and that is the point. The word's last
-sense — the positional ordered colour list FX parameters indexed as `P1`/`P2`/`P*`, scoped
-`look > cue > global` — is gone, along with `PalettePanel`, `CuePaletteEditor`,
-`ActiveStackPalettes`, `CuePaletteBar`, the `palette` column on cues / stacks / Looks,
-`Cue.updateGlobalPalette`, `FxState.palette` / `stackPalettes`, the whole `PaletteSocket`, the
-`set_palette` AI tool and `isPaletteRef` / `parsePaletteIndex` / `resolveColourWithPalette`. Any
-remaining occurrence is a lucide icon, a 3D material list, or a comment about the *named* palette
-entity that became a Look in session 4. **Don't reintroduce it in either sense.**
+**"Palette" is what this codebase calls the record `models/templates.kt` stores** — a named value or
+one named effect, one attribute family, applied to a selection (venue-visit plan D2). Everything a
+person or Claude reads says palette: the copy, the `/palettes` route (`/templates` redirects, search
+kept), the REST paths, the `paletteListChanged` / `palettePressed` frames, the `PALETTE_*` error
+codes and the `create_palette` / `apply_palette` MCP tools. **Storage and code keep *template*:** the
+`templates` tables, the sync archive's `templates/` folder and its DTO fields, `tmpl:` references,
+JSON field names (`templateId`), stored discriminators (a `pressTemplate` binding, `missingTemplate`
+health, a layer's `TEMPLATE` kind) and every TS and Kotlin identifier. Renaming those would buy a
+`formatVersion` bump, a migration and orphaned surface bindings for no reader's benefit, so
+`TemplateSheet` drawing the palette library is deliberate, not drift — and a new identifier for this
+record still says template, so the two halves never meet mid-name.
 
-**An FX colour parameter names a template instead** — `tmpl:{uuid}`, whose helpers are
+The word had two earlier senses, both gone. One was the positional ordered colour list FX parameters
+indexed as `P1`/`P2`/`P*`, scoped `look > cue > global`, which went with `PalettePanel`,
+`CuePaletteEditor`, `ActiveStackPalettes`, `CuePaletteBar`, the `palette` column on cues / stacks /
+Looks, `Cue.updateGlobalPalette`, `FxState.palette` / `stackPalettes`, the whole `PaletteSocket`, the
+old `set_palette` AI tool and `isPaletteRef` / `parsePaletteIndex` / `resolveColourWithPalette`. The
+other was the *named* palette entity that became a Look in session 4, with its retired `ref:` grammar
+(above). Don't reintroduce either. The busk view's edit-mode library keeps the word in its
+identifiers (`LibraryPalette.tsx`, `RigPalette.tsx`, the `busk-palette` and `palette:` drag ids), but
+its copy says Library and Rig and this document calls it the library. A lucide `Palette` icon, a
+colour picker's swatches and a 3D material list are unrelated.
+
+**An FX colour parameter names a palette instead** — `tmpl:{uuid}`, whose helpers are
 `isTemplateRef` / `parseTemplateRefUuid` / `serializeTemplateRef` in
 `components/fx/colourUtils.ts`, mirroring `fx/TemplateColourSource.kt`. Five things about it:
 
@@ -1006,7 +1020,7 @@ entity that became a Look in session 4. **Don't reintroduce it in either sense.*
   for the same reason: `TemplateResolver` must be the single answer to what the rig will do. The
   backend's `resolveColourGeneric` resolves a colour intent *without a head*, because an effect's
   output is one colour applied to every head it targets — so it resolves as though the head were
-  RGBW, which makes an FX-referenced template identical to the same template applied as a layer on
+  RGBW, which makes an FX-referenced palette identical to the same palette applied as a layer on
   any RGBW/RGBWA head. **A head with no white emitter pays for that**, and by more than a stop:
   the neutral is already out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
   `#B55300` — dimmer *and* more saturated, which is worse than the RGB-only reading rather than
@@ -1015,25 +1029,25 @@ entity that became a Look in session 4. **Don't reintroduce it in either sense.*
   are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
   `tmpl:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
   rather than letting `parseExtendedColour` answer white.
-- **Only generic colour *value* templates are offerable.** `family === 'COLOUR' && isGeneric`
-  holds on both sides — a per-fixture template holds no single colour, so there is nothing for a
+- **Only generic colour *value* palettes are offerable.** `family === 'COLOUR' && isGeneric`
+  holds on both sides — a per-fixture palette holds no single colour, so there is nothing for a
   fixture-agnostic output to take. The third clause was `rows.length === 1` and is now
   `kind === 'value'`, which is exactly the swap that clause's own docblock said to make if it were
-  ever relaxed: it excluded an effect template only by the accident of holding no rows. The count
-  went because a colour template may hold a hex *and* explicit emitters, and both sides now fold the
+  ever relaxed: it excluded an effect palette only by the accident of holding no rows. The count
+  went because a colour palette may hold a hex *and* explicit emitters, and both sides now fold the
   whole colour-family row set into one colour — `templateRowsSwatch` here, `resolveColourGeneric`
-  there. **Never read `rows[0]` for a template's swatch**: row order is authoring order, so a
-  template whose `uv` row sorted first was drawn purple under an amber name. All three exclusions
+  there. **Never read `rows[0]` for a palette's swatch**: row order is authoring order, so a
+  palette whose `uv` row sorted first was drawn purple under an amber name. All three exclusions
   are pinned in `FxColourTemplates.test.tsx`.
-- **There is no successor to `P*`.** A template holds one colour, so there is no set to expand; a
+- **There is no successor to `P*`.** A palette holds one colour, so there is no set to expand; a
   colour list is an explicit ordered mix of literals and references. `FxColourListPicker`'s
-  "Use entire palette" checkbox and its `savedValue` machinery went with it.
+  "Use entire palette" checkbox (the positional sense) and its `savedValue` machinery went with it.
 - **`tmpl:` rather than `ref:`** because `ref:{uuid}` is retired *and* still actively rejected at
   the Look write boundary — reusing it would collide with a live check.
 
 `FxColourTemplates.tsx` owns both halves of the UI: `useColourTemplates()` (the offerable list plus
 the three lookups a picker needs to draw a reference) and `FxColourTemplateRow` (the chips, plus
-**Save `<hex>` as template…**, which fills the library the way `TemplateStrip`'s
+**Save `<hex>` as palette…**, which fills the library the way `TemplateStrip`'s
 new-from-selection chip does). Both pickers read `projectId` from the **route**, not a prop — the
 FX library page has no project, and there the row simply offers nothing and still edits literals.
 
@@ -1095,7 +1109,7 @@ that wrote scenery invalidates every `Cue` entry, as `setCueScenery` does, since
 every later cue tracks.
 
 **All three Make Hard routes are gone, and nothing replaced them.** They existed to swap
-value-level palette references for the literals they resolved to, and the `ref:` grammar retired,
+value-level `ref:` references (the old named-palette sense) for the literals they resolved to, and the `ref:` grammar retired,
 so there is nothing left to harden. A successor gesture — "promote a layer's *cooked* values into
 local rows and delete the layers" — shipped briefly as `POST /{projectId}/cues/{cueId}/flatten`
 and was deleted again in the backend sweep, uncalled. **Do not cite flatten as live**, and do not
@@ -1110,7 +1124,7 @@ promoting a middle layer's values would make them win over the layers above and 
 output, which is the opposite of what flattening promises.
 
 Two things about the record sheet that are not arbitrary. The **mask is prominent** rather than
-incidental — a palette bank implied its attribute, a Look has no type, so an unmasked record of
+incidental — an old palette bank implied its attribute, a Look has no type, so an unmasked record of
 a busked state quietly captures position and beam alongside the colour that was meant; the
 per-family counts (`familyForCategory`, at last with a caller) exist to make that visible
 *before* it happens. And the **selection defaults on**, the opposite of `RecordSheet`: a cue
@@ -1122,7 +1136,7 @@ the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggreg
 cue*. Those fields **must stay in `provenanceSignature`**: a key can move from the cue to one of
 the cue's layers with `source` unchanged, and a cell that didn't wake would keep naming the old
 answer. The signature reads the whole `layerSource` object rather than its id alone, because a
-Look layer and a template layer can share an int PK — that is the reason the entry carries a
+Look layer and a palette layer can share an int PK — that is the reason the entry carries a
 source object at all, and matching on `layerId` would let a swap between the two look like no
 change.
 
@@ -1137,7 +1151,7 @@ for the operator's own hand.
 
 **The pads still go through `POST /looks/{id}/toggle`**, which is `programmerLayerStack.toggle`
 server-side — it adds or removes a layer, matching on the **whole `LayerSource`** + exact `targets`
-(matching on an id alone would let a Look and a template that share an int PK cancel each other).
+(matching on an id alone would let a Look and a palette that share an int PK cancel each other).
 Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
 is the ring: `lookLayerPresence` reads the desk's **resolved applied state** (`programmer.applied`,
 from `useProgrammerAppliedQuery`), not the effect list. The old match was
@@ -1147,10 +1161,10 @@ expanding groups client-side; the desk resolves that now — `ProgrammerLayerSta
 one entry per record naming every target it covers, each group marked `all` or `some` — so all
 these functions do is fold the selection into one ring. Two copies of a coverage rule drift, and the
 copy in the browser is the one no test against the rig can reach. `templateLayerPresence` is its
-twin for templates, and it is the *only* way a template pad can light. That used to be because a template
+twin for palettes, and it is the *only* way a palette pad can light. That used to be because a palette
 held no effects; it holds one now, and the rule is *more* load-bearing rather than less — an
-effect-template pad's ring would look matchable against the running instance, and matching there
-would light for an effect template while leaving every value template's pad dark.
+effect-palette pad's ring would look matchable against the running instance, and matching there
+would light for an effect palette while leaving every value palette's pad dark.
 
 The **busk view**'s pad grid takes both, and takes **cues** besides — but it no longer decides where
 any of them go. A pad sits where the operator put it, in a bank on a page they built (see §The busk
@@ -1159,42 +1173,42 @@ the old automatic layout is the pad *face*: an effect pad is a pad like any othe
 same presence ladder, same long-press — and only its wave glyph says what it holds. The paragraphs
 below describe the pad face only.
 
-**`/templates` is a list ordered by name, grouped by family under *All*, and there is nothing to
+**`/palettes` is a list ordered by name, grouped by family under *All*, and there is nothing to
 drag.** Since the library sheets' session 2 it is a sheet (§Library sheets): under *All* the rows sit
 under family dividers — Intensity · Colour · Position · Beam, `TEMPLATE_FAMILY_ORDER` — and within
 each, as in a filtered view, they are the server's name order. The dividers are a grouping of that
-order, not an order of their own. A template carried an
+order, not an order of their own. A palette carried an
 operator-set position and could sit in a *group* whose pads released each other; both went with the
 automatic layout, because both were things the busk page does better — order is a pad's place in a
 bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
 `lib/templateLayout.ts` are deleted, `/templates/reorder` and the `/template-groups` CRUD with them,
 and `TemplateSummary` carries no `sortOrder` and no `groupId`. **Do not reintroduce a stored library
-order**: the only orders a template has are this page's name order and the programmer row's
+order**: the only orders a palette has are this page's name order and the programmer row's
 recency, and neither is a field. The programmer's `TemplateStrip` drew this same name-ordered list
 until it became a recents row — see §"The two apply gestures", where the row is the eight most
 recently *pressed* and name order is only the fallback for a library nothing has been pressed from.
 
-The **family filter** stays, and is the page's only partition: a template is in exactly one family,
+The **family filter** stays, and is the page's only partition: a palette is in exactly one family,
 so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
 from Cmd+K. It is the library row's `PartitionChips` now, with counts (`LookFamilyFilterBar` is
 gone), and `TemplatePicker` mounts the same chips with state of its own. The footer says how many of
 the whole library the sheet is showing.
 
 A colour pad carries a **swatch**, but only when the
-template is generic and single-row — `templateSwatch` in `components/busking/padFace.ts` makes
+palette is generic and single-row — `templateSwatch` in `components/busking/padFace.ts` makes
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
 `rows[0]` under a name covering several rows states one of them as the whole thing. An effect
-template has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
+palette has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
 (`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller:
 the master's label is a live value, hooks cannot be conditional, and a hook in the loop would make
-every value pad in the library subscribe to the master bank. (The template sheet's Master column
+every value pad in the library subscribe to the master bank. (The palette sheet's Master column
 answers the same question the other way — it names masters from the project's *stored* bank,
 fetched once by the route, so no row subscribes to anything.)
 
-**A movement effect template asks *Centre: Around current position | Absolute*** (fixture-fx-sheets
+**A movement effect palette asks *Centre: Around current position | Absolute*** (fixture-fx-sheets
 plan D16, session 5) — D12's question, through the live editor's own rules (`fx/centreMode.ts`,
 re-exported by `fxEditorModel.ts`) rather than a second copy. `TemplateEditor`'s effect branch
-mounts **`FxEffectFields`** — the live editor's fields over the template's draft (`templateDraftOf`
+mounts **`FxEffectFields`** — the live editor's fields over the palette's draft (`templateDraftOf`
 / `withTemplateDraft`), with no target: distribution under Advanced, no step timing, element mode,
 head filter or degrees (there is no head to read a travel from), and a rate master that can be set
 back to *Unscaled*, which a draft can hold and a live frame cannot. **`EffectParameterForm` is
@@ -1202,13 +1216,13 @@ retired**, not rebuilt: it had been that branch's form and nothing else's since 
 an effect starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement effect
 starts **Around** — `ADDITIVE` with both centres pinned at 128 and the centre hidden — and anything
 else on Override; the hard-coded `blendMode: 'OVERRIDE'` that made every Circle pad circle 128/128 is
-gone. **Stored templates are not migrated** (call 6): one still on Override reads as **Absolute**,
-centre shown, until the operator presses Around. The template sheet's **Value** cell is an
-`OptionCell` over the same two answers on a movement effect template (`centreValue`; `''` presses
-neither for a blend that is neither), landing `withCentreMode` on every movement template in the
-batch, a value template in it named and skipped; any other effect template still reads out. The
+gone. **Stored palettes are not migrated** (call 6): one still on Override reads as **Absolute**,
+centre shown, until the operator presses Around. The palette sheet's **Value** cell is an
+`OptionCell` over the same two answers on a movement effect palette (`centreValue`; `''` presses
+neither for a blend that is neither), landing `withCentreMode` on every movement palette in the
+batch, a value palette in it named and skipped; any other effect palette still reads out. The
 effect library comes from the route, as the masters do. A pad's face says ***around*** for a
-template spelled that way (`isAroundSpelling`, in `EffectPadDetail` and `padFace`'s static line).
+palette spelled that way (`isAroundSpelling`, in `EffectPadDetail` and `padFace`'s static line).
 
 ### The busk layout
 
@@ -1216,13 +1230,13 @@ template spelled that way (`isAroundSpelling`, in `EffectPadDetail` and `padFace
 row is columns, each with a **width share in twelfths**; a column stacks banks top to bottom; a bank
 has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN` | `SCROLL` — the last one line of fixed-width
 pads scrolling sideways, the rig row's own flow, offered to banks since 2026-09-21) and holds ordered **pads**, each a
-reference to exactly one template, Look or cue. One record may sit on several pads, on several
+reference to exactly one palette, Look or cue. One record may sit on several pads, on several
 pages. Backend contract in `lighting7/models/buskLayout.kt` and
 `../docs/lighting-composition-model.md` §"The busk layout"; the plan is
 `../docs/plans/completed/busk-layout-plan.md` and the design authority is `look-groups-design/`.
 
-It replaced an automatic layout — four family columns of templates, a Looks pool, a cue column of
-stack cards and pinned-cue pads. The reason is the one a template group could not meet: a group
+It replaced an automatic layout — four family columns of palettes, a Looks pool, a cue column of
+stack cards and pinned-cue pads. The reason is the one a palette group could not meet: a group
 holds **one family**, and the operator's actual ask (a position palette and a movement pattern that
 must not run together) needs a cluster holding both, plus cues. So order and exclusivity moved to
 the page, and the library went back to being a flat list.
@@ -1287,9 +1301,9 @@ the plan's session 3 needs. The overlay and the busk page coexist by
 **mutual ignorance of ids and of foreign *targets***: `parseBuskDragId` answers null for a `slot-…`
 id, and the slot handler returns for any `over` that is not a slot. It is **not** ignorance of
 *sources* — a drop onto a slot is resolved in the provider whatever lifted it, today a sibling slot
-or a `busk-palette` row from the library palette, because the provider owns the slot droppables
+or a `busk-palette` row from the busk view's library, because the provider owns the slot droppables
 (mounted on every route the app is drawn on — an immersive window takes the cue-slot overlay with
-the other three panels, §Windows, full screen and the hand, so there a palette row has no slot to land on), `projectId` and
+the other three panels, §Windows, full screen and the hand, so there a library row has no slot to land on), `projectId` and
 both slot mutations, while the panel body unmounts with the overlay. The source→assignment mapping is pure in `components/dnd/slotDrop.ts`, imported
 type-only, so the shell still reaches no busk runtime code. Three things about that provider are
 load-bearing:
@@ -1301,10 +1315,10 @@ load-bearing:
 - **One `DragOverlay`, content dispatched** through `dnd/dragOverlayRegistry.ts`. A second overlay is
   not an option — it registers itself on the context and two would fight over one ref. A surface
   registers a renderer at **module scope**, so the app shell draws a busk pad without its import
-  graph ever reaching one. The ghost face is a **frozen snapshot**: an effect template's detail line
+  graph ever reaching one. The ghost face is a **frozen snapshot**: an effect palette's detail line
   reads a live speed-master label through a hook, and the overlay must be hookless.
 
-**The FX cue-slot overlay is filled from the busk view's palette, and edited only while the busk
+**The FX cue-slot overlay is filled from the busk view's library, and edited only while the busk
 view is.** A slot holds a cue or a **Look with no deferred effect** — `itemType` is `'cue' | 'look'`,
 and the cue-*stack* arm is gone. It has no selection, so it can hold only what needs none: a Look
 tile presses `POST /looks/{id}/toggle` with an **empty target list**, and the desk derives the
@@ -1315,22 +1329,22 @@ to undo by accident:
   `lookIsApplied` (`busking/lookPresence.ts`) is a selection-*independent* helper for exactly this:
   the target-scoped folds beside it answer `'none'` for an empty target list by design, so reading a
   slot through one would leave every Look tile dark. It matches on the source being a **LOOK**,
-  because a template layer can carry the same int PK.
+  because a palette layer can carry the same int PK.
 - **Crosses, drags and drop targets follow `useBuskEditMode()`**, the `buskEdit` Redux slice — the
   overlay is a *sibling* of the routed page in `Layout.tsx`, so a context inside the busk view could
   never reach it. The panel's own long-press wiggle mode and its inline assign panel are deleted.
   Outside edit mode the overlay is press-only, with its *View* / *Clear slot* context menu intact.
-- **`slotEligible` is decided at the palette and re-checked in `slotDrop.ts`.** An ineligible row
+- **`slotEligible` is decided at the library and re-checked in `slotDrop.ts`.** An ineligible row
   dims and says *needs a selection* while a slot is the target (`useCueSlotHover`, a `useDndMonitor`
-  rather than provider state, so only the palette re-renders at hover rate), and the drop is a no-op
+  rather than provider state, so only the library re-renders at hover rate), and the drop is a no-op
   if it lands anyway.
 
-Known gap: the slot droppables live inside `CollapsiblePanel`, so with the overlay shut a palette
+Known gap: the slot droppables live inside `CollapsiblePanel`, so with the overlay shut a library
 row dropped at the header lands on nothing, silently — `FU-SLOT-DROP-OVERLAY-HIDDEN` in lighting7's
 follow-ups.
 
 **The preview is a ghosted source plus one dashed slot, and there is no `SortableContext` anywhere
-on this page.** The primary gesture is a *palette* drop, and a palette row is not a member of any
+on this page.** The primary gesture is a *library* drop, and a library row is not a member of any
 sortable list, so the dashed placeholder has to be hand-drawn regardless; the three bank zones are
 not list indices; and the committed artefact is the whole document anyway. Two rules stop the
 classic placeholder oscillation: the dashed slot is **`pointer-events: none` and is not a
@@ -1342,7 +1356,7 @@ hover. The cost is honest — pads snap around the slot rather than sliding. If 
 at once the first time a bank was dragged on a real desk, and each is now stated in code rather than
 assumed:
 
-- **A bank lands on the three bank zones and nothing else; a pad or palette row lands on a pad or a
+- **A bank lands on the three bank zones and nothing else; a pad or library row lands on a pad or a
   bank body and nothing else.** `canLand` in `buskDnd.ts` filters the collisions *before* the
   deepest-wins pick, and the pad and body droppables are `disabled` while a bank is lifted (the
   strips, gutters and new-row zone were already disabled otherwise). Both halves are needed: the
@@ -1639,7 +1653,7 @@ stored**: with the fact `null` the band measures the first `defaultBuskRigRows` 
 layout effect (so the unmeasured first frame never paints) and again when the rows change or the
 column resizes; every other reader of that default is gone. It is drawn for a **one-line rig too**
 and **hidden off the desk board** — below `md` and on the short board, where the band is one row
-with a row chip and the segmented control is the route. **Edit mode forces Split** for its duration, because a palette drag
+with a row chip and the segmented control is the route. **Edit mode forces Split** for its duration, because a library drag
 needs both regions, and restores the window's focus on Done by never having written it; the
 control is disabled while editing rather than hidden, still lighting the stored focus, which is
 what Done returns to. A project with **no pages** forces Split too: its first-open screen lives in
@@ -1678,7 +1692,7 @@ title) — **Colour is `ColourSheet`** and **Spread is `SpreadSheet`** (both bel
 draws a heading**: the tab strip names the tab, the rig band's row carries the mask (the family
 pill and the desk chip), and what is selected is the lit tiles — or, in Pads, the summary in the
 row's gap. **Colour and Spread keep their verbs in a static footer** under the
-tab's one scroller, the save first on both (*Save as template…* / *Save as Look…*), so the two tabs
+tab's one scroller, the save first on both (*Save as palette…* / *Save as Look…*), so the two tabs
 put their save in one place; the Colour footer is its own `@container` and *Pick* and *Spread…* fold
 to icons below `FOOTER_WORDS` (340px — `ColourEditor`'s, applied on the docked host alone), since
 at the sheet's 320px default the worded three wrapped. The Spread footer also carries **Live** beside **Apply** — with its word at every width,
@@ -1698,9 +1712,9 @@ on the busk selection — a pad's effect and the operator's own, never a cue's (
 on a selected fixture or its heads, a cell or its fixture, a group or its members, and any group
 those fixtures are in) — under *Running on 4 heads · 2 effects*, in the tray's two-line rows, and a
 row's name opens `FxEditor` under it. **A pad's effect is edited as the running instance only**:
-the row and the editor say ***edited*** while the instance differs from the template list's summary
-DTO, read once for every row, and the editor's footer is **Update template** and **Reset to
-template** (§The fixture sheet's *A pad's running effect*). A pad's row has pause and no stop — the
+the row and the editor say ***edited*** while the instance differs from the palette list's summary
+DTO, read once for every row, and the editor's footer is **Update palette** and **Reset to
+palette** (§The fixture sheet's *A pad's running effect*). A pad's row has pause and no stop — the
 pad releases it; stopping the instance alone would leave the layer to respawn it — and the operator's
 own keeps both. It is in the docked sheet and the overlay form (*Colour · Spread · Effects · Show*),
 its glyph the effect wave. `EffectsSheet.test.tsx` pins the reach and the mark, `SideSheet.test.tsx`
@@ -1753,7 +1767,7 @@ right-hand sheet where the viewport is short, through `useEditorForm`'s forms �
 the page strip's *Sheet* button onto Colour, carrying **Colour · Spread · Effects · Show** and **still no
 Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the Show
 tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. The
-palette still replaces the whole region while editing.
+library still replaces the whole region while editing.
 
 **Its chrome is the programmer rail's, and both live in `components/sheet/sidePanel.ts`.** The two
 are one instrument in two views — a column against the right edge of a live view, folded to a strip
@@ -1884,9 +1898,9 @@ cells; it is about the busk selection, not the editor), the rig order Pick reads
 hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
 typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, Recent, the footer — is
 `components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
-`programmer.setColour` per selected target, which is what a template pad's click does and what the
+`programmer.setColour` per selected target, which is what a palette pad's click does and what the
 programmer's colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no
-library referent for a layer to follow, and *Save as template…* (`NewTemplateFromSelectionSheet`
+library referent for a layer to follow, and *Save as palette…* (`NewTemplateFromSelectionSheet`
 over the sheet's targets, family Colour) is the route to something trackable. **The family mask is
 not consulted**: the desk's mask gates presses, not value writes, so the sheet does not refuse under
 a Position marquee — the rig band's family pill, one row up, is where the mask is read (the tab's
@@ -1925,7 +1939,7 @@ What is the host's: the busk selection → the request's targets (`lookLayerTarg
 group, a cell by its element key) and the families the heads can take (`targetFamilies` over the
 selection's write targets), the selection's mask, the mutation with the programmer fade read at
 send time (`useSpreadMutation` in `store/programmerOps.ts` — REST for that file's own reason, the
-structured reply), the colour templates an endpoint may name (`isSpreadColourTemplate` in
+structured reply), the colour palettes an endpoint may name (`isSpreadColourTemplate` in
 `fx/FxColourTemplates.tsx`), the *Over: Cells* count (`selectedCells` in `lib/cellsSubSelection.ts`,
 the Cells chip's own expansion, so the chip and the tab cannot count cells two ways), the Colour
 tab's seed hand-over, and *Save as Look…* in the footer's `save` slot. Everything else — the form,
@@ -1934,7 +1948,7 @@ answer read for `skippedFamilies` alone — is the panel's, shared with the prog
 kit), and nothing changed to the eye when it moved. The tab sends two intents of one property's
 shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`; the desk
 interpolates in the intent's own space, resolves one literal per head through the same
-`TemplateResolver` a template click uses, writes each into Local as an ordinary entry (so it rides
+`TemplateResolver` a palette click uses, writes each into Local as an ordinary entry (so it rides
 `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and answers
 what it wrote. Only the desk knows a group's member order, each head's range, which cells a fixture
 has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
@@ -1986,12 +2000,12 @@ takes) for whichever end is being edited, and its `combinedCss` is a **seed** th
 the panel means the knob to move (switching ends, Swap, the Colour tab's hand-over) — never the
 picker's own writes, for the ping-pong reason documented on that prop.
 
-**A spread is a result, not a template** (D10). *Save as Look…* opens `RecordLookSheet` over the
+**A spread is a result, not a palette** (D10). *Save as Look…* opens `RecordLookSheet` over the
 selection — `record-look`, the same gesture every busked state is kept by; the sheet gained an
 optional `targets` prop for an opener whose selection is the desk's rather than the programmer
-list's — and nothing on the tab mints a template. A "spread template" would need a second grammar
+list's — and nothing on the tab mints a palette. A "spread palette" would need a second grammar
 (two intents plus a curve) and a resolver that knows the selection's order at cook time, which no
-template does. The band's *Spread…* verb and its compact menu item open the tab, writing
+palette does. The band's *Spread…* verb and its compact menu item open the tab, writing
 `busk.sheet` and nothing else.
 
 **Short beats narrow.** `BuskingView` draws one of three boards: `md` says desk or narrow, and its
@@ -2003,7 +2017,7 @@ folded, the same pieces and not a third strip — Split shows one row of 48px ti
 (`RigBand compact`), the side sheet **overlays** rather than docks (neither the fold nor the docked
 rail is drawn; `SideSheetOverlay`'s right-hand form, Colour in its compact layout, from the merged
 row's *Sheet* button), and *Edit layout* is withheld as it is below `md` (`editable` on the strip),
-since a palette drag needs both regions on screen. The defaults — Pads, the sheet folded — were
+since a library drag needs both regions on screen. The defaults — Pads, the sheet folded — were
 already the ladder's; only which board is drawn changed.
 
 **The facts ride the announce and the Screens sheet sets them** — see §Windows, full screen and
@@ -2015,10 +2029,10 @@ the hand for `viewOptions`, and `lib/windowViews.ts` for the descriptor the shee
 `PageRow` hands its twelfths → `fr` tracks to the grid through a CSS variable so a container query
 (`@max-[600px]:grid-cols-1`, on `BuskPageBody`'s `@container`) can override them — an inline
 `grid-template-columns` could be overridden by nothing. It is the body's width and not the
-viewport's because the rail or the palette has already taken its share: at `md` the body is ~480px
-beside the rail and ~408px beside the palette, and four quarter-columns need ~600px before each can
+viewport's because the rail or the library has already taken its share: at `md` the body is ~480px
+beside the rail and ~408px beside the library, and four quarter-columns need ~600px before each can
 hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between two stacked columns
-(still "the new column before column N"). Below `md` the palette is not shown and *Edit layout* is
+(still "the new column before column N"). Below `md` the library is not shown and *Edit layout* is
 withheld with it — and on the short board too, through the strip's `editable` — by decision:
 narrow widths get play mode only, and an edit mode with nothing to drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
@@ -2032,7 +2046,7 @@ project, `GET` / `PUT /busk/rig` whole-document with the page write's three refu
 write minted. `api/buskRigApi.ts` is the wire, `lib/buskRig.ts` the document model (addresses
 `rrow:{r}` / `rbody:{r}` / `rgap:{r}` / `rtile:{r}.{t}` / `rpal:{kind}:{key}` / `rnewrow`,
 `applyDrop`, `normaliseRig`, `toRigRequest`, `nextRowName`), `components/busking/RigBand.tsx` the
-band, `RigTile.tsx` the tile, `RigPalette.tsx` the palette's **Rig** tab, `RigEditProvider.tsx` the
+band, `RigTile.tsx` the tile, `RigPalette.tsx` the library's **Rig** tab, `RigEditProvider.tsx` the
 band's half of the one `DndContext`, and `useBuskRigCommit` in `store/busk.ts` the operation queue —
 `useBuskLayoutCommit`'s model over one document, response written when the queue drains, a refusal
 toasted **by code** (`rigWriteFailureMessage`; `saveBuskRig` is in `SILENT_ENDPOINTS` so the
@@ -2292,7 +2306,7 @@ are pinned as orderings, not numbers, by `RigBand.test.tsx` and `BuskPageStrip.t
 
 ### The hand
 
-**The desk holds one record between two screens.** A template, a Look or a cue is *picked up* on
+**The desk holds one record between two screens.** A palette, a Look or a cue is *picked up* on
 any window and *placed* on any other — the cross-window move, deliberately instead of a pointer
 drag, because the window that saw the press keeps the pointer for the whole gesture and the
 neighbour never receives a pointer event of its own. Backend contract in `lighting7`'s
@@ -2338,7 +2352,7 @@ this window silently changing the desk's hand.
 
 **The ghost is frozen and hookless.** The frame carries the record's **own summary DTOs**, exactly
 as `BuskPadDto` does, so `HandChip` builds its face through `padFaceOf` and subscribes to *nothing
-about the held item* — `dragOverlayRegistry`'s rule, for its reason: an effect template's detail line
+about the held item* — `dragOverlayRegistry`'s rule, for its reason: an effect palette's detail line
 reads a live speed-master label through a hook, and a chip that can sit on screen for five minutes
 across every route must not mount one per hold. The cost is `FU-DTO-RECORD-SUMMARY` in lighting7:
 the embedded `usage` and `buskPageCount` were computed at pick-up, so a long hold can read "on 3
@@ -2350,7 +2364,7 @@ an empty list is what found it.** lighting7's **WebSocket and sync converters** 
 `encodeDefaults = false` (the REST `json()` is Ktor's `DefaultJson` and *does* encode defaults — a
 fact the rig row's `flow` / `width` test pins, and which four docblocks had backwards until
 2026-09-21), so on a socket frame a defaulted **empty** collection is not serialised as `[]` — it
-vanishes, and a client that declares the field required reads `undefined`. An *effect* template holds no rows, so
+vanishes, and a client that declares the field required reads `undefined`. An *effect* palette holds no rows, so
 `TemplateDto.rows` did exactly that, and `templateRowsSwatch` threw on `rows.find`. Because this
 chip is mounted in `Layout.tsx` and draws through `padFaceOf`, **every route** sat behind the error
 boundary for as long as the desk held one.
@@ -2362,8 +2376,8 @@ is declared `rows?:` on this side**, and that is not belt-and-braces about the a
 mid-upgrade serves handler bodies without new response fields, which `lastPressedAt`'s own comment
 already records, so the client must not crash on a server that predates the fix. Declaring it
 required was what hid the other unguarded reads from `strict` — `LayerPicker`'s `.length`,
-`seedValues`' `for…of` (then `TemplateEditor`'s, now `familyControls/templateRows.ts`; its `isGeneric` guard lets an effect template through,
-since every effect template is generic), and four more. Making the type honest is what found them;
+`seedValues`' `for…of` (then `TemplateEditor`'s, now `familyControls/templateRows.ts`; its `isGeneric` guard lets an effect palette through,
+since every effect palette is generic), and four more. Making the type honest is what found them;
 each now reads `?? []`, and `templateRowsSwatch` takes an absent list as an empty one.
 
 The rule to carry forward: **a defaulted list or zero on a DTO needs `@EncodeDefault(ALWAYS)` on the
@@ -2390,19 +2404,19 @@ for the same reason the rule is stated the way it is.
 
 **`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds (a pad *is* a
 reference to one of them); a slot takes a cue or a Look with no deferred effect (it has no
-selection, D7); both layer stacks take a Look or a template. So a cue lands only on a bank or a
+selection, D7); both layer stacks take a Look or a palette. So a cue lands only on a bank or a
 slot, which falls out of the table rather than being stated a fifth time. It is eligibility and
 never permission: every place still runs its own mutation.
 
 **`canHandLand(…, 'slot')` is also what `LibraryPalette` sets each row's `slotEligible` from**, and
 that sharing is the fix for a real hole rather than tidiness. The rule used to be written out four
-times — three per-kind literals in the palette, `canHandLand`, and the test's own fixture — and
-`slotAssignmentFor` re-checks only the *template* refusal, so the deferred-effect-Look half rested
+times — three per-kind literals in the library, `canHandLand`, and the test's own fixture — and
+`slotAssignmentFor` re-checks only the *palette* refusal, so the deferred-effect-Look half rested
 on the flag alone. A test that built the flag from its own copy of the formula and then asserted the
-two agreed was comparing two hardcoded copies of one rule: genuine drift in the palette would have
+two agreed was comparing two hardcoded copies of one rule: genuine drift in the library would have
 stayed green. With one statement of it that drift is gone by construction, so `handTargets.test.ts`
 pins what is *still* two independent pieces of code — `slotAssignmentFor`'s kind re-check, fed a
-deliberately wrong `slotEligible`, asserting both that it catches a template and that it does **not**
+deliberately wrong `slotEligible`, asserting both that it catches a palette and that it does **not**
 catch a deferred Look. `slotDrop.ts`'s docblock states that asymmetry; the sentence that stood there
 before implied it covered both.
 
@@ -2423,7 +2437,7 @@ targets withheld it while editing at first, and that was wrong in a way worth re
 reasoning sounded right: dashed means "a drag lands here" on that page, and this band is a button no
 drag can land on — which is an argument about how it is *drawn*. Turning it into a refusal removed
 the gesture in exactly the case the hand exists for, a record picked up on **another** window, which
-this window's palette cannot stand in for. The empty cue slot made it plainer still: an empty tile is
+this window's library cannot stand in for. The empty cue slot made it plainer still: an empty tile is
 not draggable and its click does nothing at all while editing, so the gate prevented no collision and
 cost the place. Reported as confusing by Chris on the desk, 2026-09-16.
 
@@ -2458,19 +2472,19 @@ and has **no Undo**, which is a decision: that op is fire-and-forget and returns
 to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
 window's layer on a live rig is worse than none — the row it just added is one click from its own
 remove. Both layer places send the **desk selection** as `targets`, which *supplies* them for a
-template and *filters* them for a Look, and the family mask is the server's.
+palette and *filters* them for a Look, and the family mask is the server's.
 
 **Five doors pick something up.** A busk pad's hold now opens a **menu** — *Pick up* first, *View*
 second — where it used to navigate straight to the library, because the hand needed a door there and
 a hold cannot mean two things (`CueSlotCell` does the same synthetic-`contextmenu` trick, which
-leaves right-click working on a mouse for free). On `/looks` and `/templates` it is a **bar verb over
+leaves right-click working on a mouse for free). On `/looks` and `/palettes` it is a **bar verb over
 one row** (library-sheets plan D11): the row menus that carried it are gone with the rows, *Pick up*
 sits on the selection bar beside Duplicate and Copy to…, disabled over several rows with the reason,
 and it is drawn only for the project the desk is on — the hand is project-scoped server-side, so a
 pick-up from another project's library resolves nothing.
 `LookStack`'s dense row popover picks up the layer's **referent** and leaves the layer alone; it is
 not a `LayerHandlers` member, because those seven are index-based to address *this host's* layer
-while a pick-up names a library record the row already carries. And the programmer's template chip
+while a pick-up names a library record the row already carries. And the programmer's palette chip
 offers it on **right-click only**: the chip's hold is already ⌥click's touch twin (§"The two apply
 gestures"), so on touch the routes are the library sheet's bar verb and a pad's hold menu.
 
@@ -2497,7 +2511,7 @@ chip per **bank** and `handDrop` on the Desk row; `pickUpPad` is in the picker o
 `Pick up` chip would sit beside the `pressPad` chip for the same pad under the same name.
 
 **A record can also be *dragged* between two screens of one browser, and that gesture ends in the
-hand rather than going around it.** Drag a library palette row off the right (or left) edge of one
+hand rather than going around it.** Drag a library row off the right (or left) edge of one
 window and it arrives on the window beyond that edge, under the pointer. The difficulty is the one
 the hand exists for: the OS delivers a held button's moves to the window that saw the press, so the
 neighbour never receives a pointer event of its own. So the drag is cut in two at the boundary —
@@ -2586,7 +2600,7 @@ things about it:
   source of a real double-place bug of its own. Both places are ordinary mutations the operator sees
   toasts for, and the bank place carries Undo. If it ever matters, the fix is arbitration that
   **waits for an acknowledgement** rather than for a timeout — not the tie-break that was here.
-- **A palette row, and only a palette row.** A `busk-pad` drag carries a `PadFace` and a position
+- **A library row, and only a library row.** A `busk-pad` drag carries a `PadFace` and a position
   and a `slot-item` drag a slot address; neither names a record id, so neither can be handed off
   without widening the busk page's own drag contract. `screenToClient` is an honest heuristic
   (`outerHeight - innerHeight` of chrome, all at the top; half of any side border), exact on
@@ -2642,7 +2656,7 @@ A button can also press a **record**: `applyLook` onto the Look's *own* fixtures
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
 component exists to mount `useTargetProperties` per target — so they are built in `SurfaceLibrary`'s
-`rows` memo from `actionChip`. The **kind row stays at six**: a template files under *Looks*, a busk
+`rows` memo from `actionChip`. The **kind row stays at six**: a palette files under *Looks*, a busk
 page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
 per page reads as page-specific. A **Look with a deferred effect is offered with no chip**, since it
 has no own fixtures and the write boundary refuses it by name. And `describeTarget` **will not
@@ -2659,20 +2673,20 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 
 ### The two apply gestures
 
-A template has **two** presses, and the difference is invisible on screen — only the route called
+A palette has **two** presses, and the difference is invisible on screen — only the route called
 says which happened, so both are stated on the chip's title:
 
-- **click** → `POST /templates/{id}/apply`. Sets **literal** values in Local. Retuning the template
+- **click** → `POST /palettes/{id}/apply`. Sets **literal** values in Local. Retuning the palette
   later does not move them; this is the busking gesture, and it is why the retired `ref:` grammar is
   not missed.
-- **⌥click, or a hold** → `POST /templates/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
-  selection and masked to the template's family — **the server derives the mask** from the
-  template's own rows, because which family a template layer belongs to is a fact about the
-  template, not about the press. This repo sends its `propertyMask` anyway, as the belief it is
+- **⌥click, or a hold** → `POST /palettes/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
+  selection and masked to the palette's family — **the server derives the mask** from the
+  palette's own rows, because which family a palette layer belongs to is a fact about the
+  palette, not about the press. This repo sends its `propertyMask` anyway, as the belief it is
   acting on; the response reports the mask actually applied, so a disagreement surfaces there rather
-  than silently on the rig. Retune the template and every layer moves. The layer *is* the dependency
+  than silently on the rig. Retune the palette and every layer moves. The layer *is* the dependency
   mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
-  want right now" are two gestures on one chip rather than two kinds of template.
+  want right now" are two gestures on one chip rather than two kinds of palette.
 
 **The hold is ⌥click's touch twin — `touch` and `pen` only, never a mouse.** It goes through
 `useLongPress` on the chip, and it is a hold rather than a Set/Track switch in the bar because ⌥ is
@@ -2700,20 +2714,20 @@ the target**, and there is no picker to open or family dropdown to get wrong:
   also the fixture selection; see §One selection, two shapes).
 - **Rows selected, no cells**: the gesture names no attribute, so the filter is what the heads
   *can take* (`targetFamilies`, from descriptors — capability-only, fx-templates D6): a rig of
-  dimmer-only pars is offered no colour template, and nothing with a mover on it offers a position
+  dimmer-only pars is offered no colour palette, and nothing with a mover on it offers a position
   one. The press lands on the rows.
 - **Nothing selected**: the whole library shows, and a press toasts that it has nowhere to land.
 
-**`targetEmitters` narrows it further, in every one of those arms.** A template naming `white`,
+**`targetEmitters` narrows it further, in every one of those arms.** A palette naming `white`,
 `amber` or `uv` is withheld unless some selected head has every emitter it names — the family cannot
-draw that line, since the hex and all three emitters are COLOUR. See §Looks, templates and layers
+draw that line, since the hex and all three emitters are COLOUR. See §Looks, palettes and layers
 for why it is a union and why the probe reads the colour descriptor rather than a category.
 
 `templateTargetsFor` in `rowModel.ts` is the target rule — since venue-visit plan S1 it *is*
 `spreadTargetsFor`'s walk, and not `selectedRowTargets`: a group row lands on its *visible* members
 (the filter rule every group-row action keeps), and an element row lands on its **cell**, `{type: 'fixture', key: element.key}` — dropped under a selected parent, which
 covers it. It folded an element row onto its fixture until venue-visit plan S1, on the belief that the
-template route would drop an element key; it never did, and the fold put a colour pressed on one zone
+palette route would drop an element key; it never did, and the fold put a colour pressed on one zone
 of a Shehds onto a parent with no colour. A whole fixture whose property lives only on its cells is
 fanned to them **by the desk** (lighting7 `docs/lighting-composition-model.md` §"A press is per
 target"), so the client never expands one; `templateTargetsOf` in `ColourCell.tsx` is the same rule
@@ -2731,14 +2745,14 @@ through **`useTemplatePress`**, shared by the chip and the picker's pads, so the
 answer "what does a press do" a chip apart.
 
 **The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
-rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a template
+rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
 — through four doors: the chip's click, ⌥click / hold, a busk pad press, and a MIDI `pressTemplate`
 — so every client and the desk's own hardware agree about what was reached for; a toggle **off** is
 not a press, and neither is a click that reached no head. It arrives as the keyed frame
-`templatePressed { templateId, lastPressedAt }`, which `startTemplatesBridge` **patches** into every
+`palettePressed { templateId, lastPressedAt }`, which `startTemplatesBridge` **patches** into every
 cached `templateList` entry (all `family` args — the filter is a query argument, so the programmer's
-unfiltered list and `/templates?family=` are two entries of one endpoint). It must not be folded
-into `templateListChanged`: that bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press
+unfiltered list and `/palettes?family=` are two entries of one endpoint). It must not be folded
+into `paletteListChanged`: that bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press
 happens at busking rate. `lib/templateRecents.ts` is the one place that orders them, and it orders
 by **parsing** the stamps: `Instant.toString()` omits the fraction on an exact second, so `…:34Z`
 compares *after* `…:34.500Z` as text. With nothing pressed yet the row falls back to the first eight
@@ -2760,9 +2774,9 @@ match nothing, silently.
 count's hover, and both verbs are on the busk target band — which is what gives an iPad portrait two
 recent chips instead of none. Below `@[600px]` the chip scroller is not drawn at all and the library
 is reached through `All · n` alone, with Recent as the sheet's first section. The design authority
-is `../docs/plans/programmer-chrome-design/`, page *Templates*.
+is `../docs/plans/programmer-chrome-design/`, page *Palettes*.
 
-**New from selection** is server-side (`POST /templates/from-programmer`), for the same reason apply
+**New from selection** is server-side (`POST /palettes/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
 with the resolver. It also decides **generic vs per fixture from the data** — one row per property
 where every selected head agrees, one row per head where they do not — rather than from a toggle,
@@ -2774,7 +2788,7 @@ either was driven); it lives in one place, `templateRecord.kt`.
 
 **Every press sends the pair it is acting on — targets and `families` — and the desk decides what
 lands** (multi-screen plan D4, D5; lighting7 af3575a). The four press routes take `families?`
-beside `targets`: `POST /busk/pads/{id}/press`, `/templates/{id}/apply`, `/templates/{id}/toggle`
+beside `targets`: `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`, `/palettes/{id}/toggle`
 and `/looks/{id}/toggle` (`buskApi.ts`, `templatesApi.ts`, `looksApi.ts`). The pair is the desk's
 while the tab follows the desk and the tab's own when unlinked — `usePressFamilies` in
 `store/selection.ts` answers it for the strip and the picker (through `useTemplatePress`'s third
@@ -2787,8 +2801,8 @@ too, so the one state where the two differ (another window's mask landed here as
 the bar rather than discovered from a 400. The kit's bar draws the pill outside its cell block for
 that reason; the plain lists keep the marquee's own reading, never bridging.
 
-What the desk does under a mask, per kind: a **template** is one family, so it lands whole or is
-400 `TEMPLATE_OUTSIDE_MASK` on every door, click and layer alike; a **Look** spans families, so its
+What the desk does under a mask, per kind: a **palette** is one family, so it lands whole or is
+400 `PALETTE_OUTSIDE_MASK` on every door, click and layer alike; a **Look** spans families, so its
 layer lands with `propertyMask = mask ∩ its families`, the cook skips the rows outside, and the
 response names them in `skippedFamilies` — nothing inside is 400 `LOOK_OUTSIDE_MASK`; a **cue**
 ignores it. The two refusals carry a message naming both families and reach the screen through
@@ -2802,7 +2816,7 @@ must still release while a Colour marquee stands. Send it, and render the desk's
 
 **The skip is toasted on the pressing window** (D6): `<Family> rows skipped — the selection is
 <Family>` from `skippedRowsMessage` (`lib/selectionMask.ts`), read off `skippedFamilies` on the busk
-press and Look toggle responses (the template toggle response is unchanged). It says **rows** and
+press and Look toggle responses (the palette toggle response is unchanged). It says **rows** and
 must keep saying rows: the layer's mask filters its rows, not its effects, so a Look's effect in a
 skipped family still runs while being named — promising the whole family was held back would be
 promising more than the desk does. The window that made the marquee learns the way it learns every
@@ -2855,7 +2869,7 @@ same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
 (`SettingCell`'s type-ahead over plain options) and `AddressCell`.
 
 **`SelectionBar` is a shell** — counts · family pill · ⏎/⌫ hints · a `strip` slot · a `verbs`
-slot — and the programmer's `SelectionBar` wraps it with the template strip in the slot.
+slot — and the programmer's `SelectionBar` wraps it with the palette strip in the slot.
 `CellSelectionActions` takes a `permission` of `CellKeyboardPermission`'s shape and a `spread`
 slot, so a disabled button and a refused key always read one object, and each surface hands in its
 own `SpreadPanel` instance. Surface verbs come after Spread; Deselect is always last and ghost.
@@ -2870,7 +2884,7 @@ chooser and keyboard, hosted by the programmer's row C as a popover in the cell 
 (`fixtures-list/SpreadPopover.tsx` builds its plans from the marquee), by the busk view as the
 docked tab (`busking/SpreadSheet.tsx`, §Focus and the side sheet), and by the patch list, the cue
 sheet and the DMX sheet with plans of their own. The kinds: **`intent`** — desk-resolved, the
-template vocabulary: two intents of one property's shape, a curve, an order, parts and an
+palette vocabulary: two intents of one property's shape, a curve, an order, parts and an
 over-switch go to `POST /programmer/spread`, and one literal per head lands in Local (D3: the
 programmer's rows are heads the desk knows better than the browser does — a group's member order,
 each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
@@ -2893,7 +2907,7 @@ Recent reach the store.
 **The marquee answers the panel's first two questions** (D4). Targets are the marquee's heads —
 `spreadTargetsFor` in `rowModel.ts`, which `templateTargetsFor` now delegates to: a
 group row expanded to its **visible** members, an element row as `{type: 'fixture', key:
-element.key}` (the cells contract the desk already takes), a fixture row as itself — the template
+element.key}` (the cells contract the desk already takes), a fixture row as itself — the palette
 rule's answer too since venue-visit plan S1, so `templateTargetsFor` is this walk. It is `expandSelectionToTargets`'s walk read as cue targets (`spreadTargetsOf`), so the
 container's per-column targets and the request cannot name different heads. `families` is the pair
 the press sends (`usePressFamilies`) — on the programmer, the one surface that bridges; the two
@@ -2918,7 +2932,7 @@ reasoning) that `commit` writes through and a mounting panel reads. A panel moun
 one that moved it follows the store into its form and **never pushes**, since its own Live may be
 on over a selection nobody is touching. The popover host applies the **chosen** plan only where it
 has two points (one point is a set), where the docked tab keeps the busk rule and applies one head
-at *from*; a template endpoint is drawn and nudged from the template's swatch colour, on both
+at *from*; a palette endpoint is drawn and nudged from the palette's swatch colour, on both
 hosts. **Live** comes to the programmer too (D7), off by default,
 through the same `useLivePush` with an equality over the whole request; Apply always sends and
 reads *Send again* while Live is on; the release is read from the window. The popover is
@@ -2948,7 +2962,7 @@ resolution is a wheel *slot*, answered as the slot's level under the head's own 
 which a Look row holds and the cook reads back as that slot; and the curve is spread over the heads
 that can take the property, found in a first pass, so a par swept up by a geometric Colour marquee
 is skipped and consumes no position on it — two RGB heads among eight rows land at *from* and
-*to*, not at 0 and ⅐. Output and a focused template layer
+*to*, not at 0 and ⅐. Output and a focused palette layer
 refuse as they always did, with the same words, disabled rather than hidden. The response is read
 for `skippedFamilies` (toasted in `skippedRowsMessage`'s vocabulary, keyed) and, in layer scope,
 for `written[]`; nothing draws a preview from it — the grid is the preview, as the rig is on the
@@ -3256,12 +3270,12 @@ plain lists have row C and a footer now** — reserved (`Nothing selected`) when
 count in the footer — so `SelectionToolbar` draws no count of its own, and `FixturesListContainer`
 has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row plus
 the programmer's own `SelectionBar` with no `projectId`, which is what draws it without the
-template strip — one component, so the two bars cannot count a marquee two ways. The bar's own
+palette strip — one component, so the two bars cannot count a marquee two ways. The bar's own
 `@container` sits above it on those two routes as everywhere. **The strip folds — the verbs' words
 at 1100 and Locate · Highlight at 800 — apply only on a bar that carries a strip**: the kit's
 `SelectionBar` marks itself `group/bar` + `data-strip` (from `foldForStrip`, defaulting to "there
 is a strip"), and `WORD_CLASS` / `STRIP_MID_FOLDED_CLASS` in `toolbarFolds.ts` are gated on it.
-Those folds exist to give the template strip room; on the plain lists, the DMX sheet, the patch
+Those folds exist to give the palette strip room; on the plain lists, the DMX sheet, the patch
 list and the cue sheet nothing needs it, and a 1100 fold there emptied every word at once on an
 ordinary 1160px window.
 `SheetPage.Header` and `.Footer` put their `@container` on an unpadded wrapper, never on the `px-3`
@@ -3274,11 +3288,11 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 
 ### Library sheets
 
-**The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — are sheets on the
+**The five libraries — Scripts, FX Library, Looks, Palettes, Speed Masters — are sheets on the
 sheet kit, each on the route it always had** (`../docs/plans/completed/library-sheets-plan.md`;
 the boards are `../docs/plans/library-sheets-design/`, where the plan won on behaviour and the
 boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
-it (1), **Looks and Templates** (2), a generic value template's **Value** edited in the cell (3), and
+it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited in the cell (3), and
 **Scripts and the FX Library** (4). The rules, which every one of the five keeps:
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
@@ -3287,7 +3301,7 @@ it (1), **Looks and Templates** (2), a generic value template's **Value** edited
   `SelectionBar`, the sheet, the footer. The library row is row B for a library — filter ·
   partition chips · spacer · the create verb, which leaves the page header for it.
 - **Chips filter, dividers group** (D3). Where a library partitions exactly (script type, effect
-  category, template family) the partition is a chip set with counts, and under *All* the sheet is
+  category, palette family) the partition is a chip set with counts, and under *All* the sheet is
   grouped by divider rows in the partition's declared order. Looks and Speed Masters partition
   nothing and draw no chips. The partition is a **view, never a route**: a `?param=` plus a
   remembered value, both the route's.
@@ -3296,7 +3310,7 @@ it (1), **Looks and Templates** (2), a generic value template's **Value** edited
   construction — and the pencil opens the record, as does **⏎ with exactly one row selected and no
   cells**. That ⏎ is the kit's, so the patch list has it too.
 - **What a cell edits** (D5): name and notes everywhere, plus the few values a library holds — a
-  template's Value, Fade and effect Master; a master's live BPM, Start, Follows, Ratio and Usage.
+  palette's Value, Fade and effect Master; a master's live BPM, Start, Follows, Ratio and Usage.
   What a Look holds stays recorded and changed by Include. Every other column is a read-out.
 - **Row verbs on the bar** (D11): after Set · Clear · Spread come Include, Pick up, Duplicate,
   Copy to…, Fork, Compile, Run, Delete, then Deselect. A verb over one record is disabled over
@@ -3342,12 +3356,12 @@ it (1), **Looks and Templates** (2), a generic value template's **Value** edited
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
   generalised (it is gone) and still controlled, folding to a select below its `fold` of its
   **own** `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row.
-  **Two measured folds, chosen per chip set**: **400**, the default — the template family's five
+  **Two measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
   the row leaves them ~430 — and **560** for the FX Library (six categories, 483px; 513 with a
   three-digit *All*) and Scripts (all six types in their short labels, 542). Session 2 wrote "one
   number for every library, re-measured"; measured in session 4, one number moved to 560 would fold
-  the templates on an iPad where they fit, so the fold became a choice of two literal class pairs
+  the palettes on an iPad where they fit, so the fold became a choice of two literal class pairs
   (`FOLD_CLASSES` — Tailwind never emits a class built from `${}`).
 - **`usePartitionView.ts`** (session 4) — the partition as a view, never a route: a `?param=` plus
   a remembered value, the first render reading the stored one and never writing it back on arrival,
@@ -3372,7 +3386,7 @@ it (1), **Looks and Templates** (2), a generic value template's **Value** edited
 - **`LibraryVerb.tsx`** (session 2) — a row verb on the bar, its disabled title the *reason*, and
   `oneRecordReason` for Include and Pick up over several rows. Its word folds below **1100px of
   bar** (`ROW_VERB_WORD_CLASS` in `toolbarFolds.ts`), ungated by a strip and earlier than Set and
-  Clear: measured on the template sheet, Set · Clear · Spread, four row verbs and Deselect are
+  Clear: measured on the palette sheet, Set · Clear · Spread, four row verbs and Deselect are
   769px worded — ~1090 with the counts and hints — and the 1180×820 frame gives the bar 940, so
   Delete and Deselect were clipped.
 - **`CopyToProjectSheet.tsx`** (session 2) — *Copy to…* over a selection: one request per record,
@@ -3418,9 +3432,9 @@ the cell's hover), then the effects glyph; a Look of effects alone names them of
 of every chip (`previewChipsThatFit`, pure in `previewFit.ts`) and re-measured on resize — the
 `flex-wrap` it replaced put a Look's second and third lines of chips over the rows around it. The Scenery column's 120px floor puts the sheet past the 1180×820 iPad
 frame's ~940 with the sidebar open, so there it scrolls sideways under the sticky name, as the plan's
-§4 has it; **the Templates sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
+§4 has it; **the Palettes sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
 Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the route under family dividers
-(§Looks, templates and layers). Session 2's facts:
+(§Looks, palettes and layers). Session 2's facts:
 
 - **A record with busk pads is held for the batch delete's question, unsent.** Pads are a hint the
   desk does not refuse on — `layerCount` alone gates the delete — but they go silently with the
@@ -3435,7 +3449,7 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   answer as `previous`), and only that answer's *Delete anyway* forces.
   Both hooks are also the detail sheets' deletes — `LookDetailSheet` and `TemplateEditor`'s
   Delete — so a single delete asks the same question in the same dialog.
-- **The template in-use line names all three uses the desk counts**, because each fails
+- **The palette in-use line names all three uses the desk counts**, because each fails
   differently under force: cue layers go with it, effect parameters naming it (`fxReferenceCount`)
   are not rewritten and an unresolved colour runs **white**, and programmer layers applying it now
   (`runningCount`) stop at once.
@@ -3445,11 +3459,11 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   Master are inert, **no row opens** (the detail sheet and the editor edit exactly what the scope
   refuses), Pick up is not drawn, and Include, Duplicate and Delete are disabled with the reason.
   It also means a test record copied *into* another project cannot be deleted from here.
-- **Fade is seconds, on value templates only.** A null fade — *default (none)*, which a press
+- **Fade is seconds, on value palettes only.** A null fade — *default (none)*, which a press
   applies at 0 — draws the em-dash and opens its editor at 0; Clear writes null with
   `fadeDurationMsPresent: true`; Spread is the kit's `duration` plan. Set and Spread compare a null
   fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
-  An effect template's Fade is `undefined`: blank, and named when a marquee sweeps it up.
+  An effect palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
 - **Master is one field of `PUT {effect}`, and which field is the effect's timing.**
   `speedMasterUuid` on a `BEAT` effect, `rateSpeedMasterUuid` on a `WALL_CLOCK` one; the body is
   the whole effect with that field changed, since the PUT replaces the effect half — and it
@@ -3462,49 +3476,49 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
 - **Value reads `rows ?? []`** and never resolves (`templateIntent.ts`'s rule): the swatch and
   `describeTemplateRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
 
-**Session 3 put a generic value template's Value in the cell** (D6) — `TemplateValueCell`, on the
-Templates sheet's Value column. What it is and what it learned:
+**Session 3 put a generic value palette's Value in the cell** (D6) — `TemplateValueCell`, on the
+Palettes sheet's Value column. What it is and what it learned:
 
 - **It mounts the editor's own family controls, lifted, not the editor kit's editors.** `FamilyControls`
   and its four (`ColourControl`, `PercentControl`, `PositionControl`, `BeamControls`) moved into
   `components/templates/familyControls/` **with the rows half** — `seedValues`, `withIntent`,
   `colourPolicyLocked`, `effectiveColourPolicy`, `templateRowsFromValues` (the editor's `rows` memo)
   and `templateRowsKey` (its dirty check), all in `templateRows.ts` — and `TemplateEditor` imports
-  them back, so a template's value has one control and one grammar in two hosts. (`valueChanges`,
+  them back, so a palette's value has one control and one grammar in two hosts. (`valueChanges`,
   `applyValueChanges` and `templateValuesEmpty` joined them for the cell.) The rgbonly rule is
-  the builder's, applied to the saved rows (§Looks, templates and layers); a host that built rows any
+  the builder's, applied to the saved rows (§Looks, palettes and layers); a host that built rows any
   other way could send the pair the write boundary refuses by name. The hex field gained
   `type="text"` and an `aria-label` (*Hex colour*) in the move — `useEditorKeyboard`'s selector
   names the type, so without it Enter in the field did nothing in the cell.
-- **Generic value templates only.** A per-fixture template's values were recorded per head and an
-  effect template holds no value, so both keep the read-out — `value: undefined`, blank of any
+- **Generic value palettes only.** A per-fixture palette's values were recorded per head and an
+  effect palette holds no value, so both keep the read-out — `value: undefined`, blank of any
   editor, named when a marquee sweeps them up (*Pulse runs an effect — open to change · skipped*) —
-  and change through the pencil. So does a template whose `family` is null (rows naming no known
+  and change through the pencil. So does a palette whose `family` is null (rows naming no known
   property): there is no control to mount.
 - **The family rule lives in `write`, not in `kind`.** The column has no `kind`, so it takes commits
   from its own editor alone; the commit is `{family, values}` — the origin's family travels with it
   — and `write` drops every row of another family. The **editor names them**, since the kit's skip
   read-out knows only `value: undefined`: the column hands the cell a `landing()` over the batch, and
-  the label line counts the origin's family (*2 templates*, not the marquee's 4) beside *Amber is
+  the label line counts the origin's family (*2 palettes*, not the marquee's 4) beside *Amber is
   Colour · skipped*.
 - **It commits on Enter and Apply, never as the controls move.** A rows PUT republishes every cue
-  layering the template, so a colour drag written per frame would be a republish per frame — the
+  layering the palette, so a colour drag written per frame would be a republish per frame — the
   `NumberCell` / `TextCell` rule, not the level editor's. Three families have no text field, so on a
   desk the **first slider takes focus** (Radix's default is the first button, a *Clear*, which made
   Enter a deletion) and Enter on a focused slider applies.
-- **A commit carries what changed, never the origin's draft.** The PUT replaces a template's rows
-  whole, so the first cut — the origin's rows written to every same-family template in the marquee —
+- **A commit carries what changed, never the origin's draft.** The PUT replaces a palette's rows
+  whole, so the first cut — the origin's rows written to every same-family palette in the marquee —
   deleted a sibling's strobe, white or other beam role on an Enter that changed nothing (found in
   review, the colour editor's unstated-emitter bug again). The cell commits `valueChanges(seed,
-  draft)` — each property set or removed — and `write` applies it over **each template's own**
+  draft)` — each property set or removed — and `write` applies it over **each palette's own**
   `seedValues` (`applyValueChanges`) before the builder, so a property the operator did not touch
-  stays as each template has it. A removal that would leave a sibling with no rows is skipped and
+  stays as each palette has it. A removal that would leave a sibling with no rows is skipped and
   toasted by name. `TemplateSheet.test.tsx` pins it with a dimmer + strobe sibling.
 - **A no-op writes nothing, compared through the builder on both sides.** No change is no change
   anywhere, and `write` builds each target's current rows from `seedValues` rather than reading them
   raw, so a stored lower-case hex or an older row order is the same intent. An empty draft is refused
-  in the editor (the write boundary 400s a value template with no rows); Clear is refused on the
-  column and there is no Spread (plan §7). The draft is cached per template object
+  in the editor (the write boundary 400s a value palette with no rows); Clear is refused on the
+  column and there is no Spread (plan §7). The draft is cached per palette object
   (`templateValueDraft`), so a row's cell sees one identity until the list refetches, and the
   editor reads the batch's landing once, on the open.
 - **Measured in the app on 2026-09-24**: the popover is **288** for Intensity, Position and Beam and
@@ -3591,7 +3605,7 @@ deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read 
   library, listed with what it registers. Deleting it does not unregister them — they stay until the
   desk restarts — so *Delete anyway* is the question; it sends plain (there is no `force`). Every
   other script deletes on the plain pass. `deleteProjectScript` joined `SILENT_ENDPOINTS`.
-- **The form re-reads its script from the list by id**, as the Look and template routes do, so a
+- **The form re-reads its script from the list by id**, as the Look and palette routes do, so a
   rename on the sheet reaches an open form, and a script deleted from another client closes it
   rather than turning it into a create form.
 
@@ -3634,7 +3648,7 @@ each was:
   picker, the typed R/G/B, the emitter rows and the six-channel buffer, **plus everything the busk
   Colour tab had grown around them** — the read-out line (the emitter counts per head from
   `emitterHeadCounts`, *mixed*, the swatch, the hex), **Pick**, **Recent** and the `EditorFooter`
-  with *Save as template… · Pick · Spread…*. The host says which pieces it draws: `targets` (the
+  with *Save as palette… · Pick · Spread…*. The host says which pieces it draws: `targets` (the
   heads, in the host's order — the busk selection expanded in rig order through `headOrder`, the
   programmer's marquee column in row order), `projectId` (what the hidden leaves read the patch
   list of), `recent` (where the chips come from and where a press lands, with `forms` for D11),
@@ -3645,7 +3659,7 @@ each was:
   colour lives on its cells expanded, a head with no RGB colour dropped — a colour-wheel head
   resolves a `colour-setting` cell the batch counts and a colour commit refuses, so the label line
   counts this list rather than `batch.count`, and the two lines say one number), and the container passes `projectId` for the **programmer alone**, since the
-  plain lists draw no template strip and Save records from the programmer. Five hosts: the programmer's colour
+  plain lists draw no palette strip and Save records from the programmer. Five hosts: the programmer's colour
   cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
   in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
   compact width, because the compact body sits its 208px emitter column beside a 256px picker row
@@ -3735,7 +3749,7 @@ beside it from the scope and the Look store's `lookName`. The container's own 33
 goes through `mergePositionCommits`, which keeps `panDeg` / `tiltDeg` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
 silently drop it. `ColourCell` takes the same `CellBatch` since session 2, and `CellBatch`
 gained the **`targets`** themselves beside the count — a count and a resolution list cannot name a
-head, and the colour editor needs the heads for its emitter union, its leaves and the template
+head, and the colour editor needs the heads for its emitter union, its leaves and the palette
 targets its Save and Recent land on.
 
 **The unit is the cell's** (D13). The programmer's dimmer cell reads *80%*, so `SliderCell`'s field
@@ -3743,9 +3757,9 @@ is a percent — `toPct` / `fromPct`, 0 ↔ 0, 50 ↔ 128, 100 ↔ 255, pinned a
 `SliderCell.test.tsx` — and the byte is the read-out (*204 of 255 · 0–255 on every head*, or *on the
 first head · ranges differ*). The slider stays in bytes. The DMX sheet reads *204*, so `LevelCell`
 keeps bytes; the percent is its read-out. Strobe, zoom, focus and iris are slider cells and take the
-percent for the same reason — a template of them is a percent already. The one exception is a
+percent for the same reason — a palette of them is a percent already. The one exception is a
 **stepped zoom** (the Robe ColorSpot 575's, fixture-optics session 5): a setting, so its cell is the
-setting cell listing the steps, and a template's percent on it snaps to the step nearest that
+setting cell listing the steps, and a palette's percent on it snaps to the step nearest that
 proportion of its angles.
 
 **Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
@@ -3826,7 +3840,7 @@ is Set's alone), with no typed seed, and with whatever a click's open resets res
 **only where a single click selects** — in `CueValueGrid` a single click already opens, and two of
 them would toggle the editor shut and back open. And it needs no
 *permission* gate of its own: a `disabled` trigger fires no click and therefore no double click,
-which is how Output scope, a focused template layer and an unreachable desk stay read-only through
+which is how Output scope, a focused palette layer and an unreachable desk stay read-only through
 this door as much as through the other three.
 
 **The handler is withheld while that cell's editor is already open**, because `setOpen(true)` is
@@ -4029,7 +4043,7 @@ display-first cell flatly would leave Enter doing nothing on an ordinary mixed s
 
 **`cellKeyboardPermission` in `cellEntry.ts` is the scope gate**, the fourth place "read-only" is
 said (§The programmer's scoped grid): both keys in Local, neither in Output, entry only into a
-focused Look layer (its draft has no removal), neither on a focused template layer. The container
+focused Look layer (its draft has no removal), neither on a focused palette layer. The container
 reports `cellEntryKey` / `cellClearKey` false where a key is refused, and the grid's hints read
 those rather than restating the rule — so no hint can advertise a key that does nothing. The window
 handler only names a cell, and **not from a focused control** (a button, a link, a menu or menu
@@ -4042,12 +4056,12 @@ own activation and open *that* cell's editor with nothing focused.
 `programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by)
 — **and stops the local effects on them**. That second half is not a new gesture: the programmer's
 whole-desk Clear has always swept values and programmer-band FX together
-(`clearProgrammerCompletely` in lighting7), and three cells under an effect template's press are
+(`clearProgrammerCompletely` in lighting7), and three cells under an effect palette's press are
 three instances that were otherwise removable only one at a time in the rail.
 `components/fixtures-list/cellEffects.ts` owns the rule and `useClearCellEffects.ts` the wiring;
 two clauses keep the key inside the rectangle. **Local means unowned** — `programmerOwned` *and*
 no `lookId` / `templateId` / `programmerLayerId` / `cueId`, since an effect that came out of a
-Look, a template layer or a cue is that thing's, and stopping it here would be undone by the next
+Look, a palette layer or a cue is that thing's, and stopping it here would be undone by the next
 recook or would quietly edit a library record. And **every head, or none**: an effect drives
 whatever its target names (for a group, every member) and there is no "stop it on these heads
 only", so a partly-covered one is left running and toasts that it was, rather than half vanishing
@@ -4068,7 +4082,7 @@ is the kit's copy of the rule for the three surfaces whose row selection is loca
 transient edit scope — and an operator had to hold both in their head to know what the next gesture
 reached. Now `FixturesListContainer` derives one `selectedRowIds` (the cells' rows under a marquee,
 the row selection otherwise) and every consumer reads it: Record's published targets, Locate and
-Highlight, the desk-selection bridge, the template strip and the footer count. A marquee *is* the
+Highlight, the desk-selection bridge, the palette strip and the footer count. A marquee *is* the
 fixture selection, narrowed to some of their attributes. Enforced at the doors, not by an effect:
 the cell door (`selectCells`) clears the rows only when a hit arrives and there are rows to clear,
 and every row door (`selectRow`, `selectAllRows`, `setRows`) clears the cells, whose `clear` bails
@@ -4168,7 +4182,7 @@ family pill in Split and Rig, on the pad row in Pads, on the compact rig strip a
 merged row, and nowhere else — the plain lists never bridge (D1), so a mark there would name a link
 that does not exist. **The badge must never move a control**, so every row it sits on was
 re-measured for it (§The rig): the rig and pad rows' rungs moved by its 29px, and row C gave its
-template `New` word on the phone arm. **On the busk band the chip takes `showSubject` and reads
+palette `New` word on the phone arm. **On the busk band the chip takes `showSubject` and reads
 `Targets: This window`**, because there it has a sibling — the page mark (§The busk layout) — and
 two bare chips a row apart would be worse than either alone; on row C it is alone and stays bare,
 that row being budgeted to the pixel. The pill itself is `components/desk/FollowPill.tsx`, shared
@@ -4207,10 +4221,10 @@ clearing whatever the browser began selecting in the five pixels before the thre
 Locate and Highlight when the selection is cells. Set and Clear are Enter and Backspace with a
 button on them, and take the container's gate (`cellKeyboardPermission`) and words
 (`cellActionCopy`) so a button cannot promise a gesture the keyboard refuses; Output and a focused
-template layer show them disabled with the reason, and Spread makes the same two refusals itself
+palette layer show them disabled with the reason, and Spread makes the same two refusals itself
 (it is also drawn on the two plain routes, which have no scope). There is **one** Set —
 its title names where the value lands (Local, or the focused Look's rows), and that is the scope's
-answer rather than the press's. A "track it" arm the way a template chip has (⌥click) makes no
+answer rather than the press's. A "track it" arm the way a palette chip has (⌥click) makes no
 sense on a value: a typed number has no referent for a layer to follow, and *Make layer* on the
 rail is how local literals become something trackable afterwards. Set and Clear keep their icons
 at every width and only Spread folds on the phone arm, because on a phone Set is the only way into
@@ -4250,7 +4264,7 @@ from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row 
 C (`SelectionBar`), the rail header — a tab strip since the editor kit's session 4, §The rail's
 tabs — and the strip's chevrons, all level. Three control tiers by
 nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
-a control (`h-7`: Update and Revert in the source box, a template chip, `New`), 24 for a toggle
+a control (`h-7`: Update and Revert in the source box, a palette chip, `New`), 24 for a toggle
 item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
 under 500 — it was 48 (`py-2`) until the busk-chrome plan's session B made it the shell's chrome row
 too (D12). 8px
@@ -4316,17 +4330,17 @@ Things that will bite:
   share neither length nor indices. Ownership never noticed because it collapses to one verdict.
 - **Widening a layer's targets is always explicit** — the `AddToTargetsButton` on the row, never a
   side effect of dragging a marquee across the grid.
-- **A focused template layer is a read, never an edit**, and the two kinds read differently. A
-  **value** template shows no rows at all: projecting its generic row onto every targeted row would
-  silently convert it to a per-fixture one on the first edit, which is a change to what the template
-  *is* made by someone adjusting a value. An **effect** template shows the **live** value on the
+- **A focused palette layer is a read, never an edit**, and the two kinds read differently. A
+  **value** palette shows no rows at all: projecting its generic row onto every targeted row would
+  silently convert it to a per-fixture one on the first edit, which is a change to what the palette
+  *is* made by someone adjusting a value. An **effect** palette shows the **live** value on the
   cells it drives — ringed by `layerCellClass`, with the wave and the division in `FixturesTable`'s
   bottom-right corner slot (free there, because ownership is switched off in layer scope) — since an
   effect is one rule for every head and what is worth watching is what it is producing now. Per-element
   Look rows stay out too; all three cases are named in `LayerRowNotices` (`FU-LOOK-ELEMENT-ROWS` for
   the last).
 
-  `LookRowStore` engages **only for a LOOK layer**, so a template layer's answer comes from its
+  `LookRowStore` engages **only for a LOOK layer**, so a palette layer's answer comes from its
   sibling `FocusedTemplateLayer` — one context above the grid, read by `useScopedRowValues`,
   `LayerRowNotices`, `ProgrammerScopeBand`, `AddToTargetsButton` and `SpreadPopover`, because that
   hook runs per row and a query in it would be a subscription per visible row. Until that arm
@@ -4337,25 +4351,25 @@ Things that will bite:
   **"Read-only" has to be said in four places, not one.** `CellState.editable` reaches only the
   pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
   takes `disabled` from it too; `SpreadPopover` — which writes through the desk's spread route or
-  `useCellWriters` from the toolbar, nowhere near a cell — gates on the focused template as well; and the marquee's
+  `useCellWriters` from the toolbar, nowhere near a cell — gates on the focused palette as well; and the marquee's
   **keyboard** (the Enter/character arm of the grid's window handler, §The programmer's keyboard)
   gates on `cellKeyboardPermission`,
   because the marquee itself arms in every scope — its `pointerdown` sits on the rows wrapper and a
   read-only cell's `pointer-events-none` only retargets the press there. A commit through any hole
-  is not dropped: `useCellWriters` has no arm for a template layer, so it falls through to a **live**
-  write and puts literals in Local. The Spread gate is on the *template* case only, not on layer
+  is not dropped: `useCellWriters` has no arm for a palette layer, so it falls through to a **live**
+  write and puts literals in Local. The Spread gate is on the *palette* case only, not on layer
   scope generally: a focused Look layer has a row draft and the spread lands in it through the
   route's `write: false` arm (§Sheet kit) — and the
   keyboard makes the same split, taking a typed value into a Look layer's draft and refusing it on
-  a template layer and in Output.
+  a palette layer and in Output.
 
-  An untargeted row in a template layer is painted dashed like any other, so `AddToTargetsButton`
+  An untargeted row in a palette layer is painted dashed like any other, so `AddToTargetsButton`
   reads whichever layer context is live — it is the only way a layer widens, and a tone with no way
   out of it is worse than no tone.
 
-  `+ Effect` is disabled on a focused template — not D7 any more, but because a template holds
+  `+ Effect` is disabled on a focused palette — not D7 any more, but because a palette holds
   **one** thing, chosen when it was made: there is no second effect to add, and adding a first
-  to a value template would flip its identity.
+  to a value palette would flip its identity.
 - **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
@@ -4381,7 +4395,7 @@ so a group row is the group and an element row that head, by its own key, which 
 one `programmer.clearTarget` per target at the programmer fade, one toast in the desk's summed
 count, a group effect left running named once; on the programmer only, folded on the phone arm with
 Spread, live in Local and Output (a programmer verb, like the action bar's Clear) and refused with
-its reason while a Look or template layer is focused, where writes go to the layer (Chris's call).
+its reason while a Look or palette layer is focused, where writes go to the layer (Chris's call).
 
 **The FX band's row is two lines**, because one could not hold it: name, tempo and division with
 the menu on the first, and property, **target** and home on a wrapping second. It was one flex line
@@ -4422,7 +4436,7 @@ Six rules, each with a reason:
   outside the panel, which a picker over the grid has to survive — so the strip carries
   `@max-[1200px]:hidden`, overlay mode draws the plain face, and the strip writes the tab back to
   Stack when it sees its own box go to zero (`RailHandleFrame`'s trick). The collapsed strip's
-  palette and wave cells, which expand the rail onto their tab, are docked-only the same way; the
+  colour and wave cells, which expand the rail onto their tab, are docked-only the same way; the
   phone's bottom sheet keeps the stack.
 - **The fact rests on Stack and is not persisted** (call 10). `railTab` is plain state beside
   `collapsed` in `RailArm`, a collapse forgets it, and a strip count opens the Stack tab. A rail that
@@ -4446,7 +4460,7 @@ Six rules, each with a reason:
   derivation, extracted — and a value lands in a focused Look layer's draft, not in Local. The
   Colour tab writes through the published commit, which is the container's column commit on its
   ~30 Hz throttle; the Spread tab's plans come from `useMarqueeSpreadPlans`, lifted out of
-  `SpreadPopover` so the two build one plan list. Output and a focused template layer are
+  `SpreadPopover` so the two build one plan list. Output and a focused palette layer are
   read-only in both, with the cell's and the popover's own words (`ColourEditor`'s `readOnly`,
   `SpreadPanel`'s docked refusal); Pick stays live.
 - **The Colour tab's emitters start unstated.** Its buffer is its own and seeded by Pick, as the
@@ -4488,8 +4502,8 @@ scope band's arm: **Local** writes `programmer.setScenery` at the programmer's f
 picker's; at Snap the piece moves at its own `travelS`) and the × sends `programmer.clearScenery`; a
 focused **Look** layer lists and writes that Look's scenery **whole** through `setLookScenery` (the
 Look's own scenery `PUT`, on release, its draft held over a refetch as `SceneryEditor`'s is), and
-its × takes the element out of the Look; **Output** and a focused **template** layer list the
-programmer's holds disabled, with *Output is read-only* or *A template carries no scenery* —
+its × takes the element out of the Look; **Output** and a focused **palette** layer list the
+programmer's holds disabled, with *Output is read-only* or *A palette carries no scenery* —
 disabled, never hidden. A held row wears `ring-primary`; a row that only inherits wears the tracked
 hatch (`scenery/trackedHatch.ts`, shared with the cue card's tracked rows); a row Blind is staging
 wears the `BlindDot` and shows the staged state (`scenery.state`'s `staged`, Local only). The
@@ -4573,8 +4587,8 @@ sheet's Usage, Follows and Ratio columns (§Library sheets):
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
-  everywhere; that invariant does not move. **Its caller is `TemplateEditor`**: an effect template's
-  master is stamped when the effect is chosen, so a Colour effect template picks up the master whose
+  everywhere; that invariant does not move. **Its caller is `TemplateEditor`**: an effect palette's
+  master is stamped when the effect is chosen, so a Colour effect palette picks up the master whose
   usage is `colour` without the operator being asked. The hook spent a while with no caller at all —
   the busk view's ad-hoc effect pads were the original one, and they went when that view was brought
   back onto its design — and was kept for exactly this. Every other half of the rule stands: a master
@@ -5535,7 +5549,8 @@ modules export a page *and* one or two redirects, which reads like drift and is 
    (`ProjectPatches`) and its bare-path redirect.
 3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
    in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
-   all land on `/show`, and `/fx` lands on `/busk`; collecting them keeps `ShowPage.tsx` from
+   all land on `/show`, `/fx` lands on `/busk` and `/templates` on `/palettes` (search kept, for the old
+   `?family=` links); collecting them keeps `ShowPage.tsx` from
    accumulating four unrelated histories, and keeps `/program` out of `ProgrammerPage.tsx`, where
    it reproduced the `/program` vs `/programmer` confusion in the file layout.
 
@@ -5602,7 +5617,7 @@ path may quietly change where it lands.
   Four things about it that are decisions rather than detail:
 
   - **The pads are the *library*, and nothing else.** A busk pad presses a **named thing from the
-    library** — a template, a Look or a cue — and nothing on this page mints one. The view used to
+    library** — a palette, a Look or a cue — and nothing on this page mints one. The view used to
     draw three pools of ad-hoc effect pads besides, a Controls pool of hold-to-slide property pads
     writing straight to the programmer, and a beat-division toggle to parameterise whatever those
     minted; all of it went when the view was brought back onto its design, because a grid minting
@@ -5610,7 +5625,7 @@ path may quietly change where it lands.
     clothes. Three things follow, and none is a bug:
     - **Nothing on this page mints an FX instance.** An ad-hoc effect reaches the stage through a
       Look with deferred effects, a cue, or the Programmer's `+ Effect`; a raw level through an
-      intensity template or the Programmer.
+      intensity palette or the Programmer.
     - **`useSpeedMasterForCategory` lost its caller here.** The effect pads were the only surface
       doing the busking plan's D1 stamping, and it is client-side — the backend serves `usage` but
       does not resolve it. The rail's caption was reworded off the promise it could no longer keep,
@@ -5618,7 +5633,7 @@ path may quietly change where it lands.
       rather than deleted, and `TemplateEditor` is its caller now (see §Speed Masters).
     - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
       fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
-      went with the pads. A template or Look pad reads the programmer's **resolved applied state**
+      went with the pads. A palette or Look pad reads the programmer's **resolved applied state**
       (`useProgrammerAppliedQuery`; the view does not subscribe to the layer stack at all), which
       needs only `{type, key}` per target, so `lookLayerTarget` is the one place the group-name
       convention is applied and the selection has no ceiling. A **cue** pad reads `useActiveCueIds`
@@ -5640,9 +5655,9 @@ path may quietly change where it lands.
     `Projects > Project > <View>`.
   - **There is no empty-selection dim, and re-adding one would be a regression.** The pools used to
     grey themselves out with nothing selected. Three of the things a pad can now hold do not need a
-    selection at all — a **per-fixture** template names its own heads, a Look with **no deferred
+    selection at all — a **per-fixture** palette names its own heads, a Look with **no deferred
     effect** names its own fixtures, and a **cue** has no targets — and the two cases that genuinely
-    need one are refused *by name* server-side (`TEMPLATE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`),
+    need one are refused *by name* server-side (`PALETTE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`),
     which is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim
     has nothing left to be per. **The band does not dim in edit mode either**, any more — it did,
     on the reasoning that pads do not press then and the selection they would press onto is doing
@@ -5658,7 +5673,7 @@ path may quietly change where it lands.
   - **One label, `EditorLabel`** (9px bold uppercase, wide-tracked, muted, **no icon**; it was
     the busk view's `BuskLabel` until the editor kit took it as the label over every control,
     `components/editor/EditorLabel.tsx`), on every
-    region — band, palette, rail. Regions once drew a larger icon-bearing heading, which made three
+    region — band, library, rail. Regions once drew a larger icon-bearing heading, which made three
     parts of one instrument read as three surfaces. It renders a `<div>` deliberately, so a test can
     reach a region's body by walking up from its label.
   - **The target band lives inside the left column**, so the rail's border runs from under the
@@ -5814,21 +5829,21 @@ path may quietly change where it lands.
   `ProgrammerFxList`, closed by default and **mounted only when open**, because it
   builds a second full fixture row model and re-renders on every programmer event.
 - **Two libraries, two entries, and the filter is on the other one now.** `/looks`
-  and `/templates` are separate `navItems` entries and separate routes, because they
-  are separate entities (see §Looks, templates and layers). `/looks` has **no family
+  and `/palettes` are separate `navItems` entries and separate routes, because they
+  are separate entities (see §Looks, palettes and layers). `/looks` has **no family
   filter at all**: a Look's families are *derived* from its rows, so one covering
   colour and position belongs to two banks at once and filtering by one would hide
-  most of the library from most filters. `/templates` has the sticky filter — the
+  most of the library from most filters. `/palettes` has the sticky filter — the
   library row's `PartitionChips` since the library sheets, remembered under
   `looks.family`, kept under its old name as a private storage key nobody reads by
-  name — and there a family **is** an exact partition: a template holds exactly one.
+  name — and there a family **is** an exact partition: a palette holds exactly one.
   `useTemplateFamilyNavItems()` gives Cmd+K four deep links as `?family=` query params
-  on the one route, with `pathMatch` the bare `/templates` so the sidebar highlights its
+  on the one route, with `pathMatch` the bare `/palettes` so the sidebar highlights its
   single row whichever family you arrived in — asserted in `navigation.test.ts`, which
   also pins the two `pathMatch`es apart.
 
   Note this is no longer the "where sibling routes do not apply" exception it was
-  written as: on `/templates` sibling routes *would* partition cleanly, and it is still
+  written as: on `/palettes` sibling routes *would* partition cleanly, and it is still
   one route because the filter is a **view** of a small library rather than a division
   of it. Reach for sibling routes when the sub-views partition the resource *and* the
   operator navigates between them (cards/list, an editor and its diagnostic); reach for

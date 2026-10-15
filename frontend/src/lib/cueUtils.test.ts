@@ -110,7 +110,7 @@ describe('buildCueInput', () => {
     expect('source' in input.layers[0]).toBe(false)
   })
 
-  it('carries a template layer’s id, not just a Look’s', () => {
+  it('carries a palette layer’s id, not just a Look’s', () => {
     // The other half of the polymorphic referent. A cue that layers a template must survive an
     // inline edit of any other field on the cue.
     const cue = cueWithOneLayer()

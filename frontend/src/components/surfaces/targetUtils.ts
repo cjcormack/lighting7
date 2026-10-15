@@ -130,7 +130,7 @@ export function describeTarget(target: BindingTarget): string {
     case "applyLook":
       return `Apply Look ${shortUuid(target.lookUuid)}`
     case "pressTemplate":
-      return `Press template ${shortUuid(target.templateUuid)}`
+      return `Press palette ${shortUuid(target.templateUuid)}`
     case "pressPad":
       return `Press pad ${shortUuid(target.padUuid)}`
     // The hand's three (multi-screen plan §3.5). Same uuid rule as the record variants above.

@@ -140,7 +140,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
     scope?.kind === 'output'
       ? 'Output is a read of the cook — switch to Local to spread values onto these heads'
       : focusedTemplate != null
-        ? 'This layer applies a template — switch to Local to spread values onto these heads'
+        ? 'This layer applies a palette — switch to Local to spread values onto these heads'
         : null
 
   const intentColumns = useMemo(

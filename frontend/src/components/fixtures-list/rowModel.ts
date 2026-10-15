@@ -358,7 +358,7 @@ export function selectedRowTargets(
 
 /**
  * Where a **template** press lands for these rows: the heads they stand for, as
- * `{type: 'fixture', key}` — the shape `POST /templates/{id}/apply` and `/toggle` take.
+ * `{type: 'fixture', key}` — the shape `POST /palettes/{id}/apply` and `/toggle` take.
  *
  * [selectedRowTargets] does not answer this: it keeps a group row *as a group*, which the desk
  * then expands to every member — including the ones an active filter hides, and "editing a group

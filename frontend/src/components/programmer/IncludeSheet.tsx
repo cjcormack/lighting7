@@ -121,7 +121,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter"
-            aria-label="Filter cues and palettes"
+            aria-label="Filter cues and looks"
           />
 
           <MaskPicker value={mask} onChange={setMask} />

@@ -51,7 +51,7 @@ internal object BuskPressService {
         /**
          * A press that could not be made: a generic template or a deferred-effect Look with
          * nothing selected, or a record the selection's mask leaves nothing of
-         * (`TEMPLATE_OUTSIDE_MASK` / `LOOK_OUTSIDE_MASK`).
+         * (`PALETTE_OUTSIDE_MASK` / `LOOK_OUTSIDE_MASK`).
          */
         data class Refused(val message: String, val code: String?) : Outcome
 
@@ -163,7 +163,7 @@ internal object BuskPressService {
                         // its own heads and lands on them.
                         if (record.isGeneric && targets.isEmpty()) {
                             return Outcome.Refused(
-                                "This template needs a selection to press onto",
+                                "This palette needs a selection to press onto",
                                 CODE_TEMPLATE_NEEDS_SELECTION,
                             )
                         }

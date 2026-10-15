@@ -348,8 +348,8 @@ export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { call
 export const buskRigWs: { callback: null | (() => void) } = { callback: null }
 
 /**
- * The template library's two frames: `templateListChanged` (payload-free, invalidates) and
- * `templatePressed` (keyed, patched in place). Spelled out rather than left to the fallback Proxy
+ * The palette library's two frames: `paletteListChanged` (payload-free, invalidates) and
+ * `palettePressed` (keyed, patched in place). Spelled out rather than left to the fallback Proxy
  * because a test has to *fire* the pressed one — the Proxy can only make subscribing safe.
  */
 export const templatesWs: {

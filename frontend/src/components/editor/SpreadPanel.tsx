@@ -1290,9 +1290,9 @@ function ColourEndpoints({
         {/* The library's colours, offered only where the host names a project. */}
         {templates.length > 0 && (
           <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[10px] text-muted-foreground">
-            <span className="shrink-0">or a template</span>
+            <span className="shrink-0">or a palette</span>
             <select
-              aria-label={`${editing === 'from' ? 'From' : 'To'} template`}
+              aria-label={`${editing === 'from' ? 'From' : 'To'} palette`}
               className="h-6 min-w-0 flex-1 rounded-md border bg-background px-1 text-xs text-foreground"
               value={current.kind === 'template' ? current.uuid : ''}
               onChange={(e) => onTemplate(e.target.value === '' ? null : e.target.value)}
@@ -1315,7 +1315,7 @@ function ColourEndpoints({
           aria-label="White policy"
           value={policyFromTemplate ? '' : policy}
           disabled={policyFromTemplate}
-          title={policyFromTemplate ? 'From is a template: the desk takes the white policy from the template’s own colour row' : 'How From’s colour uses a head’s white and amber emitters — the desk interpolates with this policy'}
+          title={policyFromTemplate ? 'From is a palette: the desk takes the white policy from the palette’s own colour row' : 'How From’s colour uses a head’s white and amber emitters — the desk interpolates with this policy'}
           onValueChange={(next) => next && onPolicy(next as WhitePolicy)}
         >
           {WHITE_POLICIES.map((p) => (

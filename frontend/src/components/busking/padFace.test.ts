@@ -43,7 +43,7 @@ describe('describeTemplate — around (fixture-fx-sheets plan D16)', () => {
       },
     }) as unknown as TemplateSummary
 
-  it('says around for a movement template spelled Around, and nothing for an Absolute one', () => {
+  it('says around for a movement palette spelled Around, and nothing for an Absolute one', () => {
     expect(describeTemplate(circle('ADDITIVE', '128'))).toMatch(/· around$/)
     // A stored Override movement template reads as Absolute (call 6): no word.
     expect(describeTemplate(circle('OVERRIDE', '128'))).not.toMatch(/around/)

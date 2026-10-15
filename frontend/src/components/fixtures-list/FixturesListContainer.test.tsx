@@ -533,7 +533,7 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
     expect(releaseFrames.calls.map(([type, key]) => `${type}:${key}`)).toEqual(['fixture:a', 'fixture:b'])
   })
 
-  it('is refused, with its reason, while a Look or template layer is focused — live in Output (Chris’s call)', () => {
+  it('is refused, with its reason, while a Look or palette layer is focused — live in Output (Chris’s call)', () => {
     rowSelection.ids = new Set(['fixture:a'])
     programmerScope.value = { kind: 'layer', layerId: 3 } as ProgrammerScope
     const { unmount } = render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
@@ -553,7 +553,7 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
   })
 })
 
-describe('FixturesListContainer — what a template press lands on (venue-visit plan S1)', () => {
+describe('FixturesListContainer — what a palette press lands on (venue-visit plan S1)', () => {
   const press = (key: string) => fireEvent.keyDown(window, { key })
   type ToolbarParts = { templateTargets: readonly { type: string; key: string }[]; targetFamilies: readonly string[] }
 

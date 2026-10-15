@@ -232,11 +232,11 @@ describe('the read-only arms', () => {
     expect(programmerSetScenery).not.toHaveBeenCalled()
   })
 
-  it('a focused template layer is read-only: a template carries no scenery', () => {
+  it('a focused palette layer is read-only: a palette carries no scenery', () => {
     store.scope = { kind: 'layer', layerId: 4 }
     store.layers = [{ layerId: 4, source: { kind: 'TEMPLATE', id: 2, uuid: 'u2', name: 'Warm' } }]
     draw()
-    expect(screen.getAllByText('A template carries no scenery').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A palette carries no scenery').length).toBeGreaterThan(0)
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
     expect(setLookScenery).not.toHaveBeenCalled()
   })

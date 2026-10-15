@@ -230,8 +230,8 @@ export function TemplatePicker({
     askedFamilies != null && askedFamilies.length > 0 ? formatFamilyList(askedFamilies, ' · ') : null
   const noun =
     askedFamilies != null && askedFamilies.length === 1
-      ? `${FAMILY_LABELS[askedFamilies[0]].singular.toLowerCase()} templates`
-      : 'templates'
+      ? `${FAMILY_LABELS[askedFamilies[0]].singular.toLowerCase()} palettes`
+      : 'palettes'
 
   // D3, as the strip states it: a press needs somewhere to land, so with no targets there is
   // nothing to pick. The New sheet sits outside this guard for the strip's reason — the desk
@@ -248,7 +248,7 @@ export function TemplatePicker({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={`Search ${offerable.length} ${noun}…`}
               className="h-8 pl-8 text-sm"
-              aria-label="Search templates"
+              aria-label="Search palettes"
             />
           </div>
           {rowsOnly ? (
@@ -282,7 +282,7 @@ export function TemplatePicker({
           {shown.length === 0 && (
             <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">
               {offerable.length === 0
-                ? 'No template fits what is selected.'
+                ? 'No palette fits what is selected.'
                 : 'Nothing here matches that.'}
             </p>
           )}
@@ -384,7 +384,7 @@ export function TemplatePicker({
             onOpenAutoFocus={(event) => event.preventDefault()}
           >
             <SheetHeader className="flex-none border-b py-3 pr-10 pl-4">
-              <SheetTitle className="text-base">Templates</SheetTitle>
+              <SheetTitle className="text-base">Palettes</SheetTitle>
             </SheetHeader>
             {/* `SheetBody` even though `body` brings its own scroller: CLAUDE.md's sheet rule names
                 a picker as the case that *overrides* its padding rather than skipping the primitive.

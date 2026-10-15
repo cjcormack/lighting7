@@ -6,7 +6,7 @@ import type { AttributeFamily } from './attributeFamily'
  * A mirror of `fx/TemplateIntent.kt`, and deliberately a narrow one: it builds the string the editor
  * saves and reads the string a library row displays, and it does **not** resolve anything. Resolution
  * — the white/amber policy, the wheel snap and its ΔE, the degrees-to-DMX conversion, the per-head
- * clamp — lives in Kotlin alone, behind `POST /templates/resolve`, because the editor's job is to
+ * clamp — lives in Kotlin alone, behind `POST /palettes/resolve`, because the editor's job is to
  * promise what the rig will actually do and two implementations of that promise would drift. See
  * §6 of `desk-simplification-plan.md`.
  *
@@ -98,7 +98,7 @@ export const TEMPLATE_PROPERTIES: readonly TemplateProperty[] = [
 export const TEMPLATE_EXCLUSIONS: readonly { label: string; reason: string }[] = [
   { label: 'Gobo', reason: 'Wheel slots are per-model — “gobo 3” is a different pattern on every head. Record a look instead.' },
   { label: 'Gobo rotation', reason: 'Tied to the gobo wheel it belongs to, so it cannot travel between models.' },
-  { label: 'Colour wheel slot', reason: 'A colour template already picks the nearest slot per head; naming one would fix it to a single model.' },
+  { label: 'Colour wheel slot', reason: 'A colour palette already picks the nearest slot per head; naming one would fix it to a single model.' },
   { label: 'Macros', reason: 'A macro channel means something different on every fixture.' },
 ]
 

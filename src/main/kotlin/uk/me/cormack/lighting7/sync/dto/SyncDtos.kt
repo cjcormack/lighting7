@@ -469,7 +469,7 @@ data class TemplateEffectJson(
  *
  * A template carries no position and no group. Both were template *groups*, removed at v10 when the
  * busk page took ownership of the layout: order is a pad's place in a bank, and exclusivity is a
- * solo bank's. `GET /templates` lists by name.
+ * solo bank's. `GET /palettes` lists by name.
  */
 @Serializable
 data class TemplateJson(

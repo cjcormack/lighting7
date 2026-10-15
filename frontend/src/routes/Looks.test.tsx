@@ -103,10 +103,10 @@ afterEach(() => {
 })
 
 describe('ProjectLooks', () => {
-  it('draws the sheet, the pointer across to templates, and the footer’s counts', () => {
+  it('draws the sheet, the pointer across to palettes, and the footer’s counts', () => {
     renderAt('/projects/1/looks')
     expect(names()).toEqual(['Warm Wash', 'Cool Fill'])
-    expect(screen.getByRole('link', { name: /Templates/ })).toHaveAttribute('href', '/projects/1/templates')
+    expect(screen.getByRole('link', { name: /Palettes/ })).toHaveAttribute('href', '/projects/1/palettes')
     expect(screen.getByText('2 looks · 8 cue layers')).toBeInTheDocument()
   })
 

@@ -54,7 +54,7 @@ private const val MAX_FADE_SECONDS = 600.0
 
 /**
  * The programmer tools that write it: `set_programmer`, `clear_programmer`, `set_blind`,
- * `apply_template` and `record_look`. Each is a door onto the code a desk gesture already goes
+ * `apply_palette` and `record_look`. Each is a door onto the code a desk gesture already goes
  * through — the picker's WEB write, Clear and Release, the Blind switch, the template chip's click
  * and ⌥click, Record to Look — so a model and the operator cannot get two different answers.
  * All act on the current project.
@@ -218,9 +218,9 @@ internal class ProgrammerTools(private val state: State) {
         val families = maskOf(input)
         val fadeMs = if (input.present("fadeSeconds") == null) null else fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
 
-        val templateId = input.integer("templateId")
-        val templateName = input.text("templateName")?.trim()?.takeIf { it.isNotEmpty() }
-        if ((templateId == null) == (templateName == null)) return errorResult("Give exactly one of templateId or templateName")
+        val templateId = input.integer("paletteId")
+        val templateName = input.text("paletteName")?.trim()?.takeIf { it.isNotEmpty() }
+        if ((templateId == null) == (templateName == null)) return errorResult("Give exactly one of paletteId or paletteName")
 
         val found = transaction(state.database) {
             val template = if (templateId != null) {
@@ -236,7 +236,7 @@ internal class ProgrammerTools(private val state: State) {
                 )
             }
         } ?: return errorResult(
-            if (templateId != null) "Template not found: $templateId" else "No template named '$templateName' in this project",
+            if (templateId != null) "Palette not found: $templateId" else "No palette named '$templateName' in this project",
         )
 
         if (found.isGeneric && requested.isEmpty()) {
@@ -267,7 +267,7 @@ internal class ProgrammerTools(private val state: State) {
         if (outcome.action == "applied") TemplatePressLog.record(state, projectId, found.source.id)
         return ToolExecutionResult(
             success = true,
-            description = "${outcome.action} template '${found.source.name}' as a layer",
+            description = "${outcome.action} palette '${found.source.name}' as a layer",
             result = buildJsonObject {
                 put("mode", "LAYER")
                 put("action", outcome.action)
@@ -286,7 +286,7 @@ internal class ProgrammerTools(private val state: State) {
         fadeMs: Long?,
     ): ToolExecutionResult {
         val snapshot = state.show.templateRegistry.snapshot(found.source.uuid)
-            ?: return errorResult("Template '${found.source.name}' is not loaded yet; try again")
+            ?: return errorResult("Palette '${found.source.name}' is not loaded yet; try again")
         // A per-fixture template with no targets lands on its own heads, as its pad press does.
         val targets = requested.ifEmpty {
             snapshot.rows.mapNotNull { it.target as? TargetRef.Fixture }.distinct()

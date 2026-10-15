@@ -53,7 +53,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     private val engine get() = state.show.fxEngine
     private val stack get() = state.show.programmerLayerStack
 
-    private fun templates() = "/api/rest/projects/$projectId/templates"
+    private fun templates() = "/api/rest/projects/$projectId/palettes"
 
     private val pulse = TemplateEffectDto(
         effectType = "Pulse",

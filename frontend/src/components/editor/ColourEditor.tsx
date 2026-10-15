@@ -693,10 +693,10 @@ export function ColourEditor({
           size="sm"
           className="h-7 min-w-0 text-xs"
           disabled={onSave == null || headCount === 0}
-          title="Record the selection’s colour as a template — the route to something a layer can track"
+          title="Record the selection’s colour as a palette — the route to something a layer can track"
           onClick={onSave}
         >
-          <Save className="size-3.5" /> <span className="truncate">Save as template…</span>
+          <Save className="size-3.5" /> <span className="truncate">Save as palette…</span>
         </Button>
       }
     >
@@ -907,9 +907,9 @@ function RecentTemplates({
 
   return (
     <div data-colour-editor-recent className={cn('border-t pt-2', className)}>
-      <EditorLabel>Recent from templates</EditorLabel>
+      <EditorLabel>Recent from palettes</EditorLabel>
       {shown.length === 0 ? (
-        <p className="mt-1 text-[10px] text-muted-foreground">Colour templates you press show up here</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">Colour palettes you press show up here</p>
       ) : (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {shown.map((template) => (

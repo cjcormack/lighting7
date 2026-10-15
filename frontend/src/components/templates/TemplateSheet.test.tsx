@@ -199,7 +199,7 @@ afterEach(() => {
 })
 
 describe('TemplateSheet — the columns', () => {
-  it('reads Value in the template’s own grammar, from `rows ?? []`, and says which kind each holds', () => {
+  it('reads Value in the palette’s own grammar, from `rows ?? []`, and says which kind each holds', () => {
     draw()
     expect(row(2)).toHaveTextContent('50%')
     expect(row(4)).toHaveTextContent('#FF9D4A · ')
@@ -225,7 +225,7 @@ describe('TemplateSheet — the columns', () => {
 })
 
 describe('TemplateSheet — Fade', () => {
-  it('Set over three rows writes the value templates in ms with the presence flag, and skips the effect by name', async () => {
+  it('Set over three rows writes the value palettes in ms with the presence flag, and skips the effect by name', async () => {
     draw()
     drag('fade', 1, 3)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
@@ -341,7 +341,7 @@ function sentRows(call: number): string[] {
 }
 
 describe('TemplateSheet — Value (session 3)', () => {
-  it('edits a colour template in the editor’s own control, and a white row forces the policy to RGB only', async () => {
+  it('edits a colour palette in the editor’s own control, and a white row forces the policy to RGB only', async () => {
     draw()
     drag('value', 4, 4)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
@@ -411,7 +411,7 @@ describe('TemplateSheet — Value (session 3)', () => {
     expect(within(editor).getByText('Pulse runs an effect — open to change · skipped')).toBeInTheDocument()
     expect(within(editor).getByText('Amber is Colour · skipped')).toBeInTheDocument()
     // The label line counts what the commit reaches, not what the marquee covers.
-    expect(within(editor).getByText('2 templates')).toBeInTheDocument()
+    expect(within(editor).getByText('2 palettes')).toBeInTheDocument()
     const [level] = within(editor).getAllByRole('slider')
     fireEvent.keyDown(level, { key: 'ArrowLeft' })
     fireEvent.keyDown(level, { key: 'Enter' })
@@ -420,7 +420,7 @@ describe('TemplateSheet — Value (session 3)', () => {
     expect(sentRows(1)).toEqual(['dimmer=pct:99'])
   })
 
-  it('lands what changed over each template’s own values — a sibling keeps the properties the operator did not touch', async () => {
+  it('lands what changed over each palette’s own values — a sibling keeps the properties the operator did not touch', async () => {
     // Full holds a level; Strobed holds a level and a strobe. Replacing Strobed's rows with Full's
     // would delete its strobe — on an untouched Enter as much as on an edit.
     const strobed = template(7, {
@@ -468,7 +468,7 @@ describe('TemplateSheet — Value (session 3)', () => {
     expect(toastInfo).toHaveBeenCalledWith('Full would hold no value — skipped', { id: 'sheet-write:templates:value-skip' })
   })
 
-  it('keeps a per-fixture and an effect template as read-outs — no editor, the read-out drawn', () => {
+  it('keeps a per-fixture and an effect palette as read-outs — no editor, the read-out drawn', () => {
     draw()
     for (const id of [3, 5, 6]) {
       expect(row(id).querySelector('[data-cell="value"]')).toBeNull()
@@ -478,28 +478,28 @@ describe('TemplateSheet — Value (session 3)', () => {
     expect(row(4).querySelector('[data-cell="value"] button')).not.toBeNull()
   })
 
-  it('refuses Clear — a template holds a value — and offers no Spread', () => {
+  it('refuses Clear — a palette holds a value — and offers no Spread', () => {
     draw()
     drag('value', 1, 2)
     const clear = screen.getByRole('button', { name: 'Clear cells' })
     expect(clear).toBeDisabled()
-    expect(clear).toHaveAttribute('title', 'A template holds a value — set another one instead')
+    expect(clear).toHaveAttribute('title', 'A palette holds a value — set another one instead')
     expect(screen.getByRole('button', { name: /Spread/ })).toBeDisabled()
   })
 
-  it('is inert in another project’s library — template PUTs are the running project’s', () => {
+  it('is inert in another project’s library — palette PUTs are the running project’s', () => {
     draw({ isCurrentProject: false, projectName: 'Rehearsal Room' })
     expect(row(4).querySelector('[data-cell="value"] button')).toBeDisabled()
   })
 })
 
 describe('TemplateSheet — the row verbs', () => {
-  it('Pick up acts on one template: disabled over two with the reason, the hand over one', () => {
+  it('Pick up acts on one palette: disabled over two with the reason, the hand over one', () => {
     draw()
     selectRows(1, 2)
     const pick = screen.getByRole('button', { name: 'Pick up' })
     expect(pick).toBeDisabled()
-    expect(pick).toHaveAttribute('title', 'Pick up takes one template — select just one')
+    expect(pick).toHaveAttribute('title', 'Pick up takes one palette — select just one')
     selectRows(4)
     fireEvent.click(screen.getByRole('button', { name: 'Pick up' }))
     expect(pickUp).toHaveBeenCalledWith('TEMPLATE', 4)
@@ -524,7 +524,7 @@ describe('TemplateSheet — the row verbs', () => {
           status: 409,
           data: {
             error: 'in use',
-            code: 'TEMPLATE_IN_USE',
+            code: 'PALETTE_IN_USE',
             layerCount: 1,
             cueIds: [4],
             cueNames: ['Q4'],
@@ -562,7 +562,7 @@ describe('TemplateSheet — the row verbs', () => {
   })
 })
 
-describe('TemplateSheet — a padded template that is also in use', () => {
+describe('TemplateSheet — a padded palette that is also in use', () => {
   it('is held for its pads, sent plain on Delete anyway, and forced only once the desk has named its uses', async () => {
     deleteTemplate.mockImplementation((args) => {
       const { force } = args as { force: boolean }
@@ -570,7 +570,7 @@ describe('TemplateSheet — a padded template that is also in use', () => {
         ? Promise.resolve(undefined)
         : Promise.reject({
             status: 409,
-            data: { error: 'in use', code: 'TEMPLATE_IN_USE', layerCount: 0, cueIds: [], cueNames: [], fxReferenceCount: 1, runningCount: 0 },
+            data: { error: 'in use', code: 'PALETTE_IN_USE', layerCount: 0, cueIds: [], cueNames: [], fxReferenceCount: 1, runningCount: 0 },
           })
     })
     const padded = { ...AMBER, buskPageCount: 1 }

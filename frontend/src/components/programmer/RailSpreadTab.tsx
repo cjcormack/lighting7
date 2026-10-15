@@ -54,7 +54,7 @@ export const RailSpreadTab = memo(function RailSpreadTab({ projectId }: { projec
     disabledReason == null ? labelLine : (
       <EditorLabelLine
         docked
-        subject={`${scope?.kind === 'output' ? 'Output' : 'Template layer'} · read-only`}
+        subject={`${scope?.kind === 'output' ? 'Output' : 'Palette layer'} · read-only`}
         title={disabledReason}
         column="Spread"
       />

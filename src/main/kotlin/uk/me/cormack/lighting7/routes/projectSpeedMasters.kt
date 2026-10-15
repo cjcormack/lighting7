@@ -441,7 +441,7 @@ internal fun createSpeedMaster(
     // the live one — reloading it after editing some other project's rows is a wasted
     // transaction against an unrelated bank (same guard rationale as
     // Show.setSpeedMasterBpmIfCurrent). The list broadcast stays unconditional, like
-    // paletteListChanged.
+    // lookListChanged.
     if (state.isCurrentProject(project)) state.show.reloadSpeedMasters()
     state.show.fixtures.speedMasterListChanged()
     return outcome

@@ -99,7 +99,7 @@ export function TemplateResolvesTo({
         <p className="text-[11px] text-muted-foreground">Checking against the patch&hellip;</p>
       ) : entries.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          No patched head has this attribute, so this template would assert nothing.
+          No patched head has this attribute, so this palette would assert nothing.
         </p>
       ) : (
         <div className="rounded-md border divide-y max-h-56 overflow-y-auto">

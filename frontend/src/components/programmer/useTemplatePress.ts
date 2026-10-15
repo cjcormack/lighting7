@@ -22,7 +22,7 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * **Both presses carry [families]** — the selection's attribute mask, beside the targets it is a
  * mask of (multi-screen plan D4): the desk's pair while this tab follows the desk, the tab's own
  * when unlinked (`usePressFamilies`). A template is one family, so under a mask it lands whole or
- * the desk refuses it by name (400 `TEMPLATE_OUTSIDE_MASK`, on the click and the layer alike),
+ * the desk refuses it by name (400 `PALETTE_OUTSIDE_MASK`, on the click and the layer alike),
  * and that refusal is toasted with the desk's own sentence — *'Warm Amber' is a Colour template,
  * and the selection is masked to Position* — by `errorToastMiddleware`, which reports every
  * rejected mutation. **Nothing is pre-refused here from the mask this tab holds**: the mask is

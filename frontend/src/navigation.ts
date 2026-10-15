@@ -78,7 +78,7 @@ export interface NavItem {
   adminOnly?: boolean
   /**
    * Hidden while the viewed project is a **venue** (venue plan §4): a venue holds a rig, so the
-   * views that author or run a show — Scripts, FX Library, Looks, Templates, Speed Masters, Show,
+   * views that author or run a show — Scripts, FX Library, Looks, Palettes, Speed Masters, Show,
    * Prompt Book and Busk — are not its. The Programmer stays, for testing and focus, with Record off.
    */
   hiddenInVenue?: boolean
@@ -151,7 +151,7 @@ export const navItems: NavItem[] = [
     // the programmer, or by promoting a selection — which is why the page has no New button.
     //
     // **One entry, one route, and no family filter.** The filter that used to live here moved to
-    // `/templates` in session 3, where a family really is an exact partition; a Look spans families
+    // `/palettes` in session 3, where a family really is an exact partition; a Look spans families
     // by nature, so filtering by one would hide most of the library from most filters.
     label: "Looks",
     icon: SwatchBook,
@@ -163,19 +163,20 @@ export const navItems: NavItem[] = [
   },
   {
     id: "templates",
-    // Named values you build looks and cues out of: one attribute family each, no targets of their
-    // own, applied to a selection. The other half of what `/looks` used to hold — see
-    // `models/templates.kt` for why the two are separate entities rather than one with a flag.
+    // Palettes: named values you build looks and cues out of, one attribute family each, no targets
+    // of their own, applied to a selection. Stored as templates (`models/templates.kt`, which says
+    // why they are a separate entity from a Look rather than one with a flag), so the id keeps the
+    // stored word while the label and route say palette.
     //
     // **One entry, one route, with a sticky family filter.** Sibling routes would now be legitimate
-    // (a template is in exactly one family, so they would partition it exactly), and this is still
+    // (a palette is in exactly one family, so they would partition it exactly), and this is still
     // one route: the filter is a *view* of a small library rather than a division of it, and
     // `useTemplateFamilyNavItems` gives Cmd+K the four deep links as `?family=` params either way.
-    label: "Templates",
+    label: "Palettes",
     icon: Palette,
-    path: (p) => `/projects/${p}/templates`,
+    path: (p) => `/projects/${p}/palettes`,
     visibility: "always",
-    pathMatch: "/templates",
+    pathMatch: "/palettes",
     group: "program",
     hiddenInVenue: true,
   },
@@ -437,26 +438,26 @@ export function useUniverseNavItems(): NavItem[] {
 }
 
 /**
- * Returns one item per attribute family ("Colour Templates", "Position Templates", …).
+ * Returns one item per attribute family ("Colour Palettes", "Position Palettes", …).
  *
- * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Templates" row
+ * Cmd+K only, on the [useUniverseNavItems] precedent: the sidebar keeps its single "Palettes" row
  * and the in-page filter moves between families, but jumping straight to the position bank is exactly
  * the kind of thing the command palette is for.
  *
  * These moved here from `/looks` in session 3, following the filter itself. They are **query params
- * on one route**, not four routes, and `pathMatch` is the bare `/templates`, so the sidebar
+ * on one route**, not four routes, and `pathMatch` is the bare `/palettes`, so the sidebar
  * highlights the one row whichever family you arrived in.
  */
 export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
   // Prefixed rather than bare, so these can never collide with the static `templates` id.
   id: `templates-${familySlug(family)}`,
-  label: `${FAMILY_LABELS[family].singular} Templates`,
+  label: `${FAMILY_LABELS[family].singular} Palettes`,
   icon: Palette,
-  path: (p: number) => `/projects/${p}/templates?family=${familySlug(family)}`,
+  path: (p: number) => `/projects/${p}/palettes?family=${familySlug(family)}`,
   visibility: "always" as const,
-  // The bare path, not `/templates/${slug}` — see above. `navigation.test.ts` asserts this against
+  // The bare path, not `/palettes/${slug}` — see above. `navigation.test.ts` asserts this against
   // the real array, which is why the array is module-scope rather than built inside the hook.
-  pathMatch: "/templates",
+  pathMatch: "/palettes",
   group: "program" as const,
   hiddenInVenue: true,
 }))

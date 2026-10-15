@@ -18,8 +18,14 @@ import {
  * old `/fx` never answer for a view.
  */
 describe('WINDOW_VIEWS', () => {
-  it('is the four live views in ViewSwitcher order, then Stage, then Looks and Templates', () => {
+  it('is the four live views in ViewSwitcher order, then Stage, then Looks and Palettes', () => {
     expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'templates'])
+  })
+
+  it('names the palette library by its route and its label, keeping the stored word only in the id', () => {
+    expect(windowViewOf('/projects/1/palettes')?.id).toBe('templates')
+    expect(windowViewLabel('/projects/1/palettes')).toBe('Palettes')
+    expect(windowViewOf('/projects/1/templates')).toBeNull()
   })
 
   it('gives Stage its viewpoint, its source and its work lights and nothing else — no immersive, it is not a live view (stage-view plan sessions 1–3, menu plan D8)', () => {

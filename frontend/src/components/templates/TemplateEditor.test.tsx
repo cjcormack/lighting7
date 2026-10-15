@@ -178,7 +178,7 @@ describe('the colour control', () => {
     expect(screen.getByRole('button', { name: 'Extract' })).toHaveAttribute('data-variant', 'outline')
   })
 
-  it('starts a new colour template on Extract, the default a wash wants', () => {
+  it('starts a new colour palette on Extract, the default a wash wants', () => {
     // Distinct from the stored-value case below: a draft with *no* colour row has not been authored
     // yet, so it takes the authoring default rather than the `rgbonly` a token-less stored row
     // parses as. Collapsing the two made every new colour template default to RGB only.
@@ -243,7 +243,7 @@ describe('the colour control', () => {
     expect(screen.getByRole('button', { name: 'Extract' })).toBeEnabled()
   })
 
-  it('clears the colour row, so a UV-only template is authorable', async () => {
+  it('clears the colour row, so a UV-only palette is authorable', async () => {
     // The reason this control needed a Clear at all: without one the colour row cannot be removed,
     // and a template of emitters alone cannot be made.
     const { onSave } = renderEditor({ template: template() })
@@ -277,7 +277,7 @@ describe('the Holds choice', () => {
     expect(screen.getByRole('button', { name: 'Effect' })).toBeEnabled()
   })
 
-  it('is locked once the template exists, as the family is', () => {
+  it('is locked once the palette exists, as the family is', () => {
     // Both halves: the segment itself, and the sentence that says why — a disabled control with no
     // reason reads as breakage rather than as an identity.
     renderEditor({ template: template() })
@@ -330,7 +330,7 @@ describe('validity and the save body', () => {
   it('needs a name and one of the two halves', () => {
     renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
-    const create = screen.getByRole('button', { name: /create template/i })
+    const create = screen.getByRole('button', { name: /create palette/i })
     // A name with no effect is not enough, and an effect with no name is not either.
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Amber Breathe' } })
     expect(create).toBeDisabled()
@@ -348,7 +348,7 @@ describe('validity and the save body', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Amber Breathe' } })
     chooseEffect('Colour Pulse')
-    fireEvent.click(screen.getByRole('button', { name: /create template/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
@@ -365,7 +365,7 @@ describe('validity and the save body', () => {
     expect(body.fadeDurationMs).toBeNull()
   })
 
-  it('sends `rows` and no `effect` for a value template', async () => {
+  it('sends `rows` and no `effect` for a value palette', async () => {
     const { onSave } = renderEditor({ template: template() })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Warm Amber' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -377,8 +377,8 @@ describe('validity and the save body', () => {
   })
 })
 
-describe('Around in templates (fixture-fx-sheets plan D16)', () => {
-  it('saves a new movement template as ADDITIVE with its centre pinned at 128, the centre hidden', async () => {
+describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
+  it('saves a new movement palette as ADDITIVE with its centre pinned at 128, the centre hidden', async () => {
     // The bug that started the plan, in the busk view: a template stored Override, so a Circle pad
     // pressed after a position pad circled 128/128. A new one starts Around.
     const { onSave } = renderEditor()
@@ -392,14 +392,14 @@ describe('Around in templates (fixture-fx-sheets plan D16)', () => {
     expect(screen.queryByRole('slider', { name: 'Pan' })).toBeNull()
     expect(screen.getByRole('slider', { name: 'Pan size' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /create template/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
     expect(body.effect).toMatchObject({ effectType: 'Circle', blendMode: 'ADDITIVE' })
     expect(body.effect?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
   })
 
-  it('reads a stored Override movement template as Absolute, with its centre shown (call 6)', async () => {
+  it('reads a stored Override movement palette as Absolute, with its centre shown (call 6)', async () => {
     const { onSave } = renderEditor({
       template: template({
         name: 'Old circle',

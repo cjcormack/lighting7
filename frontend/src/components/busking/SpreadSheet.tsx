@@ -115,7 +115,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
             size="sm"
             className="h-7 min-w-0 text-xs"
             disabled={selected.length === 0}
-            title="Record the selection’s Local values as a Look — a spread is a result, not a template"
+            title="Record the selection’s Local values as a Look — a spread is a result, not a palette"
             onClick={() => setSaving(true)}
           >
             <Save className="size-3.5" /> <span className="truncate">Save as Look…</span>

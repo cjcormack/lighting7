@@ -891,14 +891,14 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
     for (row in rows) {
         // **A Look row is always bound.** The deferred half of this entity became a template in
         // session 3, and a deferred row here would now be a second, weaker way to express one: no
-        // family constraint, no intent resolution, and invisible to `/templates`. Refusing it at the
+        // family constraint, no intent resolution, and invisible to `/palettes`. Refusing it at the
         // write boundary is what makes "a Look names its own fixtures" true rather than customary.
         //
         // A Look *effect* may still be deferred — see `validateLookEffects` — because fanning an
         // effect over the layer's targets is a different thing from holding a value for nobody.
         if (row.targetType == DEFERRED_TARGET_TYPE) {
             return "A look row must name its own fixture or group. A value you point at a selection " +
-                "is a template — create one in the template library instead."
+                "is a palette — create one in the palette library instead."
         }
         if (TargetRef.ofOrNull(row.targetType, row.targetKey) == null) {
             return "Unknown target type '${row.targetType}' — expected 'fixture' or 'group'"

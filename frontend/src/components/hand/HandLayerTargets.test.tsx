@@ -139,11 +139,11 @@ async function withHold(ui: ReactNode, item: unknown, expectStrip: boolean) {
 }
 
 describe('the programmer’s layer stack', () => {
-  it('offers itself for a Look and a template, and not for a cue', async () => {
+  it('offers itself for a Look and a palette, and not for a cue', async () => {
     await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
   })
 
-  it('draws nothing for a cue — a layer applies a Look or a template', async () => {
+  it('draws nothing for a cue — a layer applies a Look or a palette', async () => {
     await withHold(<HandProgrammerLayerStrip />, hold('CUE'), false)
   })
 

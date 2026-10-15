@@ -115,7 +115,7 @@ export function NewTemplateFromSelectionSheet({
     <Sheet open={open} onOpenChange={onOpenChange} unsavedChanges={name.trim() !== ''}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>New template from selection</SheetTitle>
+          <SheetTitle>New palette from selection</SheetTitle>
         </SheetHeader>
         <SheetBody>
           {error != null && (
@@ -158,7 +158,7 @@ export function NewTemplateFromSelectionSheet({
                 ))}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Your selection covers more than one, and a template holds exactly one.
+                Your selection covers more than one, and a palette holds exactly one.
               </p>
             </div>
           )}
@@ -177,7 +177,7 @@ export function NewTemplateFromSelectionSheet({
           </SheetClose>
           <Button onClick={submit} disabled={!canSubmit}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
-            Create template
+            Create palette
           </Button>
         </SheetFooter>
       </SheetContent>

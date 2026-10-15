@@ -27,9 +27,9 @@ import kotlin.math.sqrt
  * same question and must get the same answer:
  *
  *  1. **cook** — [CueComposer.applyLayer], for a layer tracking a template;
- *  2. **click-apply** — `POST /{projectId}/templates/{id}/apply`, writing literals into the
+ *  2. **click-apply** — `POST /{projectId}/palettes/{id}/apply`, writing literals into the
  *     programmer;
- *  3. **the editor's "resolves to" panel** — `POST /{projectId}/templates/resolve`.
+ *  3. **the editor's "resolves to" panel** — `POST /{projectId}/palettes/resolve`.
  *
  * If (3) computed its own ΔE the editor would be promising something the rig does not do, which is
  * exactly the failure the template idea exists to prevent: the panel's whole job is to let an

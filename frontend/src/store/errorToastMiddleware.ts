@@ -68,7 +68,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // hand-authored, so no client sends `POST /looks`. `errorToastMiddleware.test.ts` is what caught
   // the stale name — it asserts every entry names an endpoint that exists.
   //
-  // The template trio, for exactly the reasons above one entity along. `TEMPLATE_IN_USE` opens the
+  // The template trio, for exactly the reasons above one entity along. `PALETTE_IN_USE` opens the
   // same "delete anyway" guard; a duplicate name and each of the four write-boundary rules (one
   // family, closed vocabulary, right intent shape, no group rows) are 400s the editor renders beside
   // the field. `useTemplateDelete` — the sheet's batch and the editor's Delete — toasts anything

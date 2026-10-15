@@ -176,6 +176,6 @@ class CommandIndex private constructor(
 
         private fun message(where: String, name: String, on: String) =
             "$where: '$name' on $on is a fixture command — it runs from the fixture panel's Commands menu, " +
-                "behind a confirm, and no Look, template, cue, effect or programmer value can hold it"
+                "behind a confirm, and no Look, palette, cue, effect or programmer value can hold it"
     }
 }

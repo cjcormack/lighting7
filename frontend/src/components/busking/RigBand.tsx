@@ -633,7 +633,7 @@ function RigBandBody({
           )}
           {editing ? (
             <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground">
-              Editing · drag targets from the palette, rows reorder by their grip
+              Editing · drag targets from the Rig tab, rows reorder by their grip
             </span>
           ) : (
             <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground" title={summary}>
@@ -715,7 +715,7 @@ function RigBandBody({
             )}
             {editing ? (
               <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-                Editing · drag targets from the palette, rows reorder by their grip
+                Editing · drag targets from the Rig tab, rows reorder by their grip
               </span>
             ) : (
               <span className="flex-1" />

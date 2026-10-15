@@ -240,7 +240,7 @@ function LibraryTab({
         face,
         name: template.name,
         detail: describeTemplate(template),
-        badge: template.family != null ? FAMILY_LABELS[template.family].singular : 'Template',
+        badge: template.family != null ? FAMILY_LABELS[template.family].singular : 'Palette',
         kind: 'template',
         families: template.family != null ? [template.family] : [],
         // The rule is `lib/handTargets.ts`'s, not this row's: a slot takes only what needs no
@@ -349,7 +349,7 @@ function LibraryTab({
               onClick={() => setKind(value)}
               className="flex-1"
             >
-              {value === 'all' ? 'All' : value === 'template' ? 'Templates' : value === 'look' ? 'Looks' : 'Cues'}
+              {value === 'all' ? 'All' : value === 'template' ? 'Palettes' : value === 'look' ? 'Looks' : 'Cues'}
             </SegButton>
           ))}
         </div>

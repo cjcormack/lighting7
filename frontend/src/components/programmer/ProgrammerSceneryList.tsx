@@ -109,7 +109,7 @@ function armOf(scope: ProgrammerScope | null, layers: readonly ProgrammerLayer[]
   const layer = layers?.find((l) => l.layerId === scope.layerId)
   if (layer == null) return { kind: 'readOnly', reason: 'Output is read-only', subject: 'Output' }
   if (layer.source.kind === 'TEMPLATE') {
-    return { kind: 'readOnly', reason: 'A template carries no scenery', subject: layer.source.name }
+    return { kind: 'readOnly', reason: 'A palette carries no scenery', subject: layer.source.name }
   }
   return { kind: 'look', lookId: layer.source.id, name: layer.source.name }
 }

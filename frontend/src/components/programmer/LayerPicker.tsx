@@ -207,7 +207,7 @@ export function LayerPicker({
             </button>
             <div>
               <h3 className="font-medium text-sm">
-                {kind === 'template' ? 'Choose a template' : 'Choose a look'}
+                {kind === 'template' ? 'Choose a palette' : 'Choose a look'}
               </h3>
               <p className="text-xs text-muted-foreground">
                 Layers compose in order — a later one wins over an earlier one.
@@ -223,8 +223,8 @@ export function LayerPicker({
                     {kind === 'look'
                       ? 'No looks yet. Record one from the programmer.'
                       : kind === 'template'
-                        ? 'No templates yet. Create one in the template library.'
-                        : 'Nothing to layer yet. Record a look from the programmer, or create a template.'}
+                        ? 'No palettes yet. Create one in the palette library.'
+                        : 'Nothing to layer yet. Record a look from the programmer, or create a palette.'}
                   </div>
                 )}
               {kind !== 'template' && (
@@ -237,7 +237,7 @@ export function LayerPicker({
               )}
               {kind !== 'look' && (
                 <TemplateGroup
-                  title="Templates"
+                  title="Palettes"
                   hint="One value or effect each. These take their fixtures from the layer."
                   templates={templates ?? []}
                   onSelect={handleSelectTemplate}
@@ -264,7 +264,7 @@ export function LayerPicker({
               <h3 className="font-medium text-sm">{sourceName(source)}</h3>
               <p className="text-xs text-muted-foreground">
                 {source.kind === 'template'
-                  ? 'Choose the fixture or group this template should land on.'
+                  ? 'Choose the fixture or group this palette should land on.'
                   : 'Narrow this look to one fixture or group, or use the ones it already names.'}
               </p>
             </div>

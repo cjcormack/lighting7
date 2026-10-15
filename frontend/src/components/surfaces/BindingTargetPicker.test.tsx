@@ -164,7 +164,7 @@ describe('BindingTargetPicker record targets', () => {
   // unlisted variant shows "Fixture property" and nothing else.
   it.each([
     ['Look — apply', 'Look', { type: 'applyLook', lookUuid: 'look-warm' } as BindingTarget],
-    ['Template — press', 'Template', { type: 'pressTemplate', templateUuid: 'tmpl-red' } as BindingTarget],
+    ['Palette — press', 'Palette', { type: 'pressTemplate', templateUuid: 'tmpl-red' } as BindingTarget],
     ['Busk pad — press', 'Busk pad', { type: 'pressPad', padUuid: 'pad-1' } as BindingTarget],
     ['Busk page — show', 'Page', { type: 'buskPageSet', pageUuid: 'page-verse' } as BindingTarget],
   ])('offers %s and renders its body', (kindLabel, fieldLabel, value) => {

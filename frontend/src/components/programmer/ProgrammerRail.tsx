@@ -689,11 +689,11 @@ function RailFooter({
         variant="outline"
         size="sm"
         className="h-7 flex-1 px-1.5 text-[11px]"
-        aria-label="Add a template layer"
+        aria-label="Add a palette layer"
         onClick={() => onAdd('template')}
       >
         <Plus className="size-3" />
-        Template
+        Palette
       </Button>
       {/* The trigger is a span around the button, not the button: `Button` carries
           `disabled:pointer-events-none`, so a disabled trigger is never hovered and the tooltip —
@@ -823,7 +823,7 @@ function RailStrip({
         onAdd={onAdd}
         addEffect={addEffect}
         label="Add a layer or an effect"
-        title="Add a look, a template or an effect"
+        title="Add a look, a palette or an effect"
         side="left"
         // `h-10`, like the chevrons above it: this is the 40px strip, and the `+` is a cell of it.
         // It was `h-9` — four pixels short, and the one control in the strip the chrome tidy-up
@@ -885,7 +885,7 @@ function AddDoorsMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onAdd('template')}>
           <Palette className="size-3.5" />
-          Template
+          Palette
         </DropdownMenuItem>
         {/* Disabled with the reason *written under it* rather than omitted: a menu that
             silently loses an entry teaches nobody why. Not a `title` — a disabled Radix item
@@ -1002,8 +1002,8 @@ function RailHandle({
       <AddDoorsMenu
         onAdd={onAdd}
         addEffect={addEffect}
-        label="Add a look, a template or an effect"
-        title="Add a look, a template or an effect"
+        label="Add a look, a palette or an effect"
+        title="Add a look, a palette or an effect"
         side="top"
         className="size-8 shrink-0"
       />

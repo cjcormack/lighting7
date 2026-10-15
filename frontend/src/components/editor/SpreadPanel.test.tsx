@@ -357,7 +357,7 @@ describe('the chosen plan', () => {
     expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled()
   })
 
-  it('draws a template endpoint at the template’s colour, so a nudge builds on it rather than on 0/0/0', () => {
+  it('draws a palette endpoint at the palette’s colour, so a nudge builds on it rather than on 0/0/0', () => {
     const seen: { r: number; g: number; b: number; css: string }[] = []
     const Stub = (props: { r: number; g: number; b: number; combinedCss: string }) => {
       seen.push({ r: props.r, g: props.g, b: props.b, css: props.combinedCss })
@@ -371,7 +371,7 @@ describe('the chosen plan', () => {
       ],
     })
     render(<SpreadPanel host="docked" plans={[plan]} colourEditor={Stub as never} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'From template' }), { target: { value: 'u-amber' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'From palette' }), { target: { value: 'u-amber' } })
     const last = seen.at(-1)!
     expect([last.r, last.g, last.b]).toEqual([255, 191, 0])
     expect(last.css).toBe('rgb(255, 191, 0)')

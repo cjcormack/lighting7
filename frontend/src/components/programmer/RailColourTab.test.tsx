@@ -170,12 +170,12 @@ describe('RailColourTab scope arms', () => {
     expect(snap.commit).not.toHaveBeenCalled()
   })
 
-  it('a focused template layer: refused with the cell’s words, the tab open and disabled', () => {
+  it('a focused palette layer: refused with the cell’s words, the tab open and disabled', () => {
     scopeState.scope = { kind: 'layer', layerId: 3 }
     scopeState.template = { id: 3 }
     const snap = snapshot({ permission: { entry: false, clear: false } })
     draw(snap)
-    expect(screen.getByText('This layer applies a template — switch to Local to set these cells')).toBeInTheDocument()
+    expect(screen.getByText('This layer applies a palette — switch to Local to set these cells')).toBeInTheDocument()
     expect(editor.props?.readOnly).toBe(true)
     act(() => editor.props?.onColourChange(1, 2, 3))
     expect(snap.commit).not.toHaveBeenCalled()

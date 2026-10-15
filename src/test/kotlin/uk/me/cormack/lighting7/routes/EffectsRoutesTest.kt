@@ -203,7 +203,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         assertTrue("propertyAssignments[0]: 'output2'" in cueRefused.bodyAsText())
         assertEquals(0L, transaction(state.database) { DaoCue.count() })
 
-        val template = json(client, "templates", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"output1","value":"255"}]}""")
+        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"output1","value":"255"}]}""")
         assertEquals(HttpStatusCode.BadRequest, template.status, template.bodyAsText())
         // Named as a trigger, not as a slotted property a recorded Look could hold.
         assertTrue("one-shot trigger" in template.bodyAsText(), template.bodyAsText())

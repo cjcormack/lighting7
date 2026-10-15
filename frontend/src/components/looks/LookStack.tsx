@@ -617,7 +617,7 @@ function DenseLayerRow({
         ? layer.targets[0].key
         : `${layer.targets.length} targets`
   const detail = [
-    isTemplate ? 'Template' : 'Look',
+    isTemplate ? 'Palette' : 'Look',
     targetsLabel,
     `${amount}%`,
     mask.length > 0 ? `[${formatFamilyList(mask)}]` : null,

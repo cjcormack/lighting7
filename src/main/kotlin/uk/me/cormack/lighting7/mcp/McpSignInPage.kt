@@ -19,7 +19,7 @@ internal object McpSignInPage {
     ): String = page("Allow ${esc(clientName)}?") {
         """
         <h1>Allow <strong>${esc(clientName)}</strong> to control the lights?</h1>
-        <p class="lead">It will be able to run cues, apply looks and templates, set tempo and record
+        <p class="lead">It will be able to run cues, apply looks and palettes, set tempo and record
         into your show on <strong>${esc(deskName)}</strong>, as you. You can revoke it from
         Profile → Devices on the desk.</p>
         ${error?.let { """<p class="error" role="alert">${esc(it)}</p>""" } ?: ""}

@@ -2,7 +2,7 @@ import { InternalApiConnection, InternalEventType } from './internalApi'
 import { Subscription } from './subscription'
 import { createChangeSignalApi, createWsSubscribable } from './wsSubscriptionFactory'
 
-/** What `templatePressed` carries: which template, and the stamp the **server** wrote. */
+/** What `palettePressed` carries: which template, and the stamp the **server** wrote. */
 export interface TemplatePressedEvent {
   templateId: number
   lastPressedAt: string
@@ -11,7 +11,7 @@ export interface TemplatePressedEvent {
 export interface TemplatesWsApi {
   subscribe(fn: () => void): Subscription
   /**
-   * `templatePressed` — a template was applied, from any of its four doors, and now carries
+   * `palettePressed` — a template was applied, from any of its four doors, and now carries
    * `lastPressedAt`.
    *
    * A **second** subscribe rather than a reuse of the change signal above, because the two cost
@@ -29,7 +29,7 @@ export interface TemplatesWsApi {
 }
 
 interface TemplatePressedMessage {
-  type: 'templatePressed'
+  type: 'palettePressed'
   templateId?: number
   lastPressedAt?: string
 }
@@ -48,7 +48,7 @@ interface TemplatePressedMessage {
  * invalidation storm behind an open editor.
  */
 export function createTemplatesWsApi(conn: InternalApiConnection): TemplatesWsApi {
-  const changed = createChangeSignalApi(conn, 'templateListChanged')
+  const changed = createChangeSignalApi(conn, 'paletteListChanged')
   const pressed = createWsSubscribable<TemplatePressedEvent>()
 
   // Hand-written, per `createChangeSignalApi`'s own rule: the moment a bridge needs the body, that
@@ -57,7 +57,7 @@ export function createTemplatesWsApi(conn: InternalApiConnection): TemplatesWsAp
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== InternalEventType.message) return
     const message = frame as TemplatePressedMessage | null
-    if (message?.type !== 'templatePressed') return
+    if (message?.type !== 'palettePressed') return
     if (typeof message.templateId !== 'number' || typeof message.lastPressedAt !== 'string') return
     pressed.notify({ templateId: message.templateId, lastPressedAt: message.lastPressedAt })
   })

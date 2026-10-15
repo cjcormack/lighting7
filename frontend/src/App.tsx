@@ -42,6 +42,7 @@ import {
   LegacyFxRedirect,
   LegacyProgramRedirect,
   LegacyRunRedirect,
+  LegacyTemplatesRedirect,
 } from "./routes/legacyRedirects";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
@@ -200,16 +201,25 @@ function getAppRouter() {
           path: "looks",
           element: <LooksRedirect />,
         },
-        // The template library: **one route**, with the sticky in-page family filter that used to
-        // live on `/looks`. Here a family really is an exact partition — a template is in exactly
+        // The palette library: **one route**, with the sticky in-page family filter that used to
+        // live on `/looks`. Here a family really is an exact partition — a palette is in exactly
         // one — so `?family=` deep-links from Cmd+K land on a filtered view of one page.
         {
-          path: "projects/:projectId/templates",
+          path: "projects/:projectId/palettes",
           element: <ProjectTemplates />,
         },
         {
-          path: "templates",
+          path: "palettes",
           element: <TemplatesRedirect />,
+        },
+        // Legacy `/templates` → `/palettes`, search preserved for the old `?family=` deep links.
+        {
+          path: "projects/:projectId/templates",
+          element: <LegacyTemplatesRedirect />,
+        },
+        {
+          path: "templates",
+          element: <LegacyTemplatesRedirect />,
         },
         {
           path: "projects/:projectId/speed-masters",

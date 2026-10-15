@@ -23,7 +23,7 @@ A **Cue** is a named, project-scoped entity that captures a complete lighting lo
 
 A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
 effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
-gone: an effect parameter names a **colour template** instead (`tmpl:{uuid}`, see
+gone: an effect parameter names a **colour palette** instead (`tmpl:{uuid}`, see
 `fx/TemplateColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
 
 Key behaviours:
@@ -178,12 +178,12 @@ resolveColourSource = templateColourSource(state.show.templateRegistry)
 colourSourceVersion = { state.show.templateRegistry.versionFor(refs) }
 ```
 
-`refs` is the set of template uuids *this* effect's parameters name (including its registration's
+`refs` is the set of palette uuids *this* effect's parameters name (including its registration's
 declared defaults) — `createEffectWithTemplates` computes it once and uses it for both the pre-warm
-and the version. Scoping it is what keeps an edit to one template from re-resolving every colour
-parameter on the desk, and an effect naming no template from re-resolving at all. A template *list*
+and the version. Scoping it is what keeps an edit to one palette from re-resolving every colour
+parameter on the desk, and an effect naming no palette from re-resolving at all. A palette *list*
 change (create / rename / delete) still moves every scoped version by one, because an effect is
-allowed to name a uuid that has no template yet.
+allowed to name a uuid that has no palette yet.
 
 There were two `createEffectInstance` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
@@ -353,7 +353,7 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 ## MCP tools
 
 Three tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
-- `create_cue` — Create a named cue with layers (a Look, or a template by `templateId`), its own
+- `create_cue` — Create a named cue with layers (a Look, or a palette by `paletteId`), its own
   `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
@@ -365,14 +365,14 @@ changed since the Include; `preview=true` returns the checklist without writing)
 same `performProgrammerRecord` / `performProgrammerInclude` / `performProgrammerUpdate` cores in
 `routes/programmerSurface.kt` that the REST routes render — the mode/mask/scope rules and the
 include-target bookkeeping decide which rows get overwritten, so there is exactly one copy of them.
-`create_template` completes the set: the named, referenceable value an effect parameter points at
+`create_palette` completes the set: the named, referenceable value an effect parameter points at
 with `tmpl:{uuid}`.
 
 The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning cue names and counts for the current project.
 
 The MCP `instructions` and `describe_rig` (`ai/RigBriefing.kt`) describe:
 - Multiple concurrent cues, applied alongside one another
-- Colour templates, listed with their uuids under `templates`, and the `tmpl:{uuid}` grammar an
+- Colour palettes, listed with their uuids under `palettes`, and the `tmpl:{uuid}` grammar an
   effect parameter uses to name one
 - Active effects display includes `cueId` for each effect
 

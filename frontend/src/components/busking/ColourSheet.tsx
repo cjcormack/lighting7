@@ -32,7 +32,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * target, which is what a template pad's click does and what the programmer's colour cell does.
  * There is **no layer arm and no ⌥ arm**: a picked colour has no library referent for a layer to
  * follow, so *Save as template…* is the route to something trackable, through the same
- * `POST /templates/from-programmer` the strip uses. The writes go through {@link useLivePush}, the
+ * `POST /palettes/from-programmer` the strip uses. The writes go through {@link useLivePush}, the
  * tempo fader's discipline over six bytes.
  *
  * **The family mask is not consulted.** The desk's mask gates *presses*, and a colour drag is a

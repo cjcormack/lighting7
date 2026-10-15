@@ -215,7 +215,7 @@ export function useHandPlace(): <R>(held: HeldRecord, placement: HandPlacement<R
  * The chip, which wants the whole face, does use `padFaceOf`.
  */
 export function heldName(held: HeldRecord): string {
-  if (held.kind === 'TEMPLATE') return held.template?.name ?? 'this template'
+  if (held.kind === 'TEMPLATE') return held.template?.name ?? 'this palette'
   if (held.kind === 'LOOK') return held.look?.name ?? 'this Look'
   return held.cue?.name ?? 'this cue'
 }

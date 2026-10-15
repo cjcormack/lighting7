@@ -118,7 +118,7 @@ export const TemplateValueCell = memo(function TemplateValueCell({
   }, [])
 
   const empty = templateValuesEmpty(family, draft)
-  const error = empty ? 'A template holds a value — set one, or open it to delete the template' : null
+  const error = empty ? 'A palette holds a value — set one, or open it to delete the palette' : null
 
   const commit = useCallback(() => {
     if (empty) return false
@@ -194,7 +194,7 @@ export const TemplateValueCell = memo(function TemplateValueCell({
         className="flex max-h-[calc(var(--radix-popover-content-available-height)-1.5rem-2px)] flex-col gap-2"
       >
         <EditorLabelLine
-          subject={isOpen && land != null ? batchLabelOf(land.count, 'template') : batchLabel}
+          subject={isOpen && land != null ? batchLabelOf(land.count, 'palette') : batchLabel}
           column={`${label} · ${FAMILY_LABELS[family].singular}`}
         />
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">

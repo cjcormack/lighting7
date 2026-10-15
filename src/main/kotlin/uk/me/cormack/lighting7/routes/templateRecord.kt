@@ -57,7 +57,7 @@ import uk.me.cormack.lighting7.models.asDuration
  * when either emitter was driven, `rgbonly` when neither was. It is the reading that reproduces what
  * the operator was looking at on the head they recorded from, which is the property that matters.
  */
-@Resource("/{projectId}/templates/from-programmer")
+@Resource("/{projectId}/palettes/from-programmer")
 internal data class TemplateFromProgrammerResource(val projectId: String)
 
 @Serializable
@@ -97,7 +97,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
     val request = call.receive<TemplateFromProgrammerRequest>()
     val name = request.name.trim()
     if (name.isEmpty()) {
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse("Template name must not be blank"))
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse("Palette name must not be blank"))
     }
     val source = parseEnumOrNull<RecordSource>(request.source) ?: return call.respond(
         HttpStatusCode.BadRequest, ErrorResponse("Unknown record source '${request.source}'"),
@@ -110,7 +110,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
     if (mask == null || mask.size != 1) {
         return call.respond(
             HttpStatusCode.BadRequest,
-            ErrorResponse("A template holds exactly one attribute family, so mask must name exactly one"),
+            ErrorResponse("A palette holds exactly one attribute family, so mask must name exactly one"),
         )
     }
     if (request.targets.isEmpty()) {
@@ -179,7 +179,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
                 // in the result.
                 skipped += TemplateSkipDto(
                     entry.fixtureKey, entry.propertyName,
-                    "templates hold no ${entry.propertyName} — it lives in a recorded look",
+                    "palettes hold no ${entry.propertyName} — it lives in a recorded look",
                 )
                 continue
             }
@@ -197,7 +197,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
             if (intent == null) {
                 skipped += TemplateSkipDto(
                     entry.fixtureKey, entry.propertyName,
-                    "could not be expressed as a template value",
+                    "could not be expressed as a palette value",
                 )
                 continue
             }
@@ -230,7 +230,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
         if (byProperty.isEmpty()) {
             call.respond(
                 HttpStatusCode.BadRequest,
-                ErrorResponse("None of those values can be held by a template"),
+                ErrorResponse("None of those values can be held by a palette"),
             )
             return@withCurrentProject
         }
@@ -286,7 +286,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
         if (created == null) {
             call.respond(
                 HttpStatusCode.Conflict,
-                ErrorResponse("A template named '$name' already exists in this project"),
+                ErrorResponse("A palette named '$name' already exists in this project"),
             )
             return@withCurrentProject
         }

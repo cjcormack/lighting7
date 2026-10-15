@@ -311,10 +311,10 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `a template layer lands its values on the layer's targets`() {
         patchRig()
         val templateId = ok(
-            "create_template",
+            "create_palette",
             """{"name":"Low","rows":[{"propertyName":"dimmer","value":"pct:40"}]}""",
-        )["templateId"]!!.jsonPrimitive.int
-        val cueId = cue("""{"name":"Q1","layers":[{"templateId":$templateId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
+        )["paletteId"]!!.jsonPrimitive.int
+        val cueId = cue("""{"name":"Q1","layers":[{"paletteId":$templateId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
         transaction(state.database) {
             assertEquals(templateId, DaoCueLayer.find { DaoCueLayers.cue eq cueId }.single().template?.id?.value)
         }
@@ -327,21 +327,21 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `a template layer must say what it applies, and a generic one needs targets`() {
         patchRig()
         val lookId = look("FOH", foh1("dmx:200"))
-        val values = ok("create_template", """{"name":"Low","rows":[{"propertyName":"dimmer","value":"pct:40"}]}""")["templateId"]!!.jsonPrimitive.int
-        val effect = ok("create_template", """{"name":"Throb","effect":$pulse}""")["templateId"]!!.jsonPrimitive.int
+        val values = ok("create_palette", """{"name":"Low","rows":[{"propertyName":"dimmer","value":"pct:40"}]}""")["paletteId"]!!.jsonPrimitive.int
+        val effect = ok("create_palette", """{"name":"Throb","effect":$pulse}""")["paletteId"]!!.jsonPrimitive.int
         val before = transaction(state.database) { DaoCue.all().count() }
 
-        refused("create_cue", """{"name":"Q","layers":[{"templateId":$effect}]}""", "template $effect is generic")
-        refused("create_cue", """{"name":"Q","layers":[{"templateId":$values}]}""", "template $values is generic")
-        refused("create_cue", """{"name":"Q","layers":[{"templateId":9999,"targets":[{"type":"fixture","key":"foh-1"}]}]}""", "no template 9999")
+        refused("create_cue", """{"name":"Q","layers":[{"paletteId":$effect}]}""", "palette $effect is generic")
+        refused("create_cue", """{"name":"Q","layers":[{"paletteId":$values}]}""", "palette $values is generic")
+        refused("create_cue", """{"name":"Q","layers":[{"paletteId":9999,"targets":[{"type":"fixture","key":"foh-1"}]}]}""", "no palette 9999")
         refused("create_cue", """{"name":"Q","layers":[{"lookId":9999}]}""", "no look 9999")
-        refused("create_cue", """{"name":"Q","layers":[{"lookId":$lookId,"templateId":$values}]}""", "exactly one of lookId or templateId")
-        refused("create_cue", """{"name":"Q","layers":[{"targets":[]}]}""", "exactly one of lookId or templateId")
-        refused("build_cue_stack", """{"stackName":"S","cues":[{"name":"Q","layers":[{"templateId":$effect}]}]}""", "template $effect is generic")
-        refused("build_cue_stack", """{"stackName":"S","cues":[{"name":"Q","layers":[{"templateId":9999,"targets":[{"type":"fixture","key":"foh-1"}]}]}]}""", "no template 9999")
+        refused("create_cue", """{"name":"Q","layers":[{"lookId":$lookId,"paletteId":$values}]}""", "exactly one of lookId or paletteId")
+        refused("create_cue", """{"name":"Q","layers":[{"targets":[]}]}""", "exactly one of lookId or paletteId")
+        refused("build_cue_stack", """{"stackName":"S","cues":[{"name":"Q","layers":[{"paletteId":$effect}]}]}""", "palette $effect is generic")
+        refused("build_cue_stack", """{"stackName":"S","cues":[{"name":"Q","layers":[{"paletteId":9999,"targets":[{"type":"fixture","key":"foh-1"}]}]}]}""", "no palette 9999")
         assertEquals(before, transaction(state.database) { DaoCue.all().count() }, "nothing was written")
 
-        ok("create_cue", """{"name":"Q","layers":[{"templateId":$effect,"targets":[{"type":"group","key":"FOH"}]}]}""")
+        ok("create_cue", """{"name":"Q","layers":[{"paletteId":$effect,"targets":[{"type":"group","key":"FOH"}]}]}""")
     }
 
     @Test
@@ -363,7 +363,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
             """{"name":"A","effects":[{"effectType":"Pulse","category":"dimmer","beatDivision":"fast","blendMode":"OVERRIDE"}]}""",
             "effects[0]: 'beatDivision' must be a number",
         )
-        refused("create_template", """{"name":"T","effect":{"category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE"}}""", "effect is missing 'effectType'")
+        refused("create_palette", """{"name":"T","effect":{"category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE"}}""", "effect is missing 'effectType'")
         refused(
             "create_cue",
             """{"name":"Q","adHocEffects":[{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","beatDivision":1.0}]}""",

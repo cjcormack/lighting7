@@ -60,7 +60,7 @@ import org.jetbrains.exposed.v1.json.json
  * *group*, and both moved to the busk page when the operator took ownership of the layout: a pad's
  * place is its position in a bank, and the templates a press releases are the records on that
  * bank's sibling pads when the bank is solo. See `docs/lighting-composition-model.md`
- * §"The busk layout". `GET /templates` therefore lists by name.
+ * §"The busk layout". `GET /palettes` therefore lists by name.
  */
 object DaoTemplates : IntIdTable("templates") {
     val project = reference("project_id", DaoProjects)

@@ -58,7 +58,7 @@ export function BeamControls({
           learn *where* it lives — a recorded look, which names a head and can hold anything that
           head has — not conclude the desk cannot do it. */}
       <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
-        <p className="text-[11px] font-medium text-muted-foreground">Not available on a template</p>
+        <p className="text-[11px] font-medium text-muted-foreground">Not available on a palette</p>
         {TEMPLATE_EXCLUSIONS.map((exclusion) => (
           <div key={exclusion.label} className="flex items-start gap-2 opacity-60">
             <span className="text-xs font-medium shrink-0 w-28 truncate">{exclusion.label}</span>
