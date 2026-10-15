@@ -12,11 +12,14 @@ import {
 import { usePauseGroupFxMutation, useRemoveGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useIsDeskConnected } from '@/store/status'
+import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
+import { isHeldByBlind } from '@/lib/heldBack'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import { FxEditor } from '../fx/FxEditor'
 import { FxPicker, type AuditionedEffect, type FxTarget } from '../fx/FxPicker'
 import { LookTogglePicker } from '../fx/LookTogglePicker'
+import { HELD_BLIND_WORDS, HeldBlindMark } from '../fx/HeldBlindMark'
 import type { PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
@@ -76,7 +79,9 @@ export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, ta
  * states (Fx board): **empty** and **folded** are one 40px row — the count, a chip per running
  * effect (dimmed while paused, *+n* past three) and **+ Effect**; **open** lists the programmer
  * rail's two-line rows with pause and stop, up to half the sheet's height, scrolling itself; and
- * **adding** is `FxPicker` in the open tray.
+ * **adding** is `FxPicker` in the open tray. While the programmer is blind, a programmer effect's
+ * chip takes Blind's amber dot and its row says *held · Blind* (`HeldBlindMark`): the desk holds it,
+ * phase kept, until Blind goes off (show-cue-editing plan D7).
  *
  * A row's name — or a folded chip — opens `FxEditor` **inline**, under its row (Main board B), and
  * *Edit <name>* in the picker does the same for the effect the picker started. The editor is live:
@@ -109,6 +114,9 @@ export function FxTray({
     [all, target, pick],
   )
   const connected = useIsDeskConnected()
+  // One read for the tray: a programmer effect is held while blind (show-cue-editing plan D7), and its
+  // chip and row say *held · Blind* — running, phase kept, painting nothing until Blind goes off.
+  const blind = useProgrammerBlind()
   const finger = useFingerSized()
   const effectDetail = useEffectDetail()
   const cueLabel = useCueLabel()
@@ -243,7 +251,8 @@ export function FxTray({
               <button
                 key={e.id}
                 type="button"
-                title={`${e.effectType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''}${isCueEffect(e) ? ' — the cue’s' : ' — edit'}`}
+                title={`${e.effectType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueEffect(e) ? ' — the cue’s' : ' — edit'}`}
+                data-held-blind={isHeldByBlind(e, blind) || undefined}
                 onClick={() => (isCueEffect(e) ? setOpen(true) : edit(e))}
                 className={cn(
                   'inline-flex h-6 min-w-0 shrink items-center gap-1.5 rounded-full border px-2 text-[11px] whitespace-nowrap',
@@ -253,7 +262,13 @@ export function FxTray({
                     : 'border-border text-muted-foreground',
                 )}
               >
-                <span className={cn('size-[7px] shrink-0 rounded-full', e.isRunning ? 'bg-violet-500' : 'bg-muted-foreground')} />
+                <span
+                  className={cn(
+                    'size-[7px] shrink-0 rounded-full',
+                    // Blind's amber while held: running, but painting nothing.
+                    !e.isRunning ? 'bg-muted-foreground' : isHeldByBlind(e, blind) ? 'bg-amber-500' : 'bg-violet-500',
+                  )}
+                />
                 <span className="truncate">{e.effectType}</span>
                 <span className="truncate text-muted-foreground">· {e.propertyName}</span>
               </button>
@@ -371,6 +386,7 @@ export function FxTray({
                     <span className="inline-flex h-4 items-center rounded border px-1 text-[9.5px] text-muted-foreground">
                       {effectDetail(e)}
                     </span>
+                    {isHeldByBlind(e, blind) && <HeldBlindMark />}
                     <span className="flex-1" />
                     {!cue && (
                       <button

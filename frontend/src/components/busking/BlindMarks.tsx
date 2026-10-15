@@ -42,7 +42,7 @@ export function BlindPill({ className, wordClass }: { className?: string; wordCl
     <Badge
       variant="outline"
       data-busk-blind
-      title="Blind — the programmer is not reaching the stage. Switched on the programmer."
+      title="Blind — values and effects held: the programmer is not reaching the stage. Switched on the programmer."
       className={cn(
         'min-w-0 shrink gap-1 overflow-hidden whitespace-nowrap border-amber-500/60 bg-amber-500/15 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300',
         className,
@@ -69,5 +69,8 @@ export function BlindDot() {
   )
 }
 
-/** The suffix a host appends to the Show tab's or glyph's accessible name while blind. */
-export const BLIND_NAME_SUFFIX = ' — programmer blind'
+/**
+ * The suffix a host appends to the Show tab's or glyph's accessible name while blind. It says what
+ * Blind holds — the programmer's effects as well as its values (show-cue-editing plan D7).
+ */
+export const BLIND_NAME_SUFFIX = ' — programmer blind, values and effects held'

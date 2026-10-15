@@ -696,6 +696,18 @@ Consequences:
   check), both as an optimisation and because the transmit-time parking override would
   discard the composition result anyway.
 
+**Blind holds the band** (show-cue-editing plan D7, §3.6). While the programmer is blind, every
+instance in the band — a busk, Include's children, a programmer layer's — is held: `fx/BlindHold.kt`,
+`blind && isProgrammerFxPriority(priority)`, asked by both tick loops beside `EffectSuppression`
+(whose rule is unchanged) against **one read of blind per pass**, the same read that empties the
+suppression map, so a Blind toggle landing mid-pass cannot pair an empty map with an unheld band. A
+held instance keeps its phase and skips only its apply: a beat effect's phase is its master's tick,
+a wall-clock effect's clock — including a beat effect on *Seconds*, which runs on that loop —
+advances on every pass before anything is applied, and a stateful effect is still computed. Leaving
+Blind paints it on the next tick, in step with what it started beside; the Blind fade does not fade
+it. Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
+with reason `BLIND`.
+
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
 (fixture, property) and the effect — and the tick loops, provenance (`ProvenanceService.compute`)
@@ -1719,6 +1731,10 @@ Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`
 - **Record and Include carry it** with the masters. Both had dropped the masters of a cue's ad-hoc
   effect until S15 — `programmerCapture` recorded none, and `CueAdHocEffectDto.toEffectSpec`
   (Include's adapter) passed none on — so a recorded busk fell back to master 1.
+- **Blind holds it like any programmer effect** (show-cue-editing plan D7): a busk on Seconds runs on
+  the wall-clock loop, whose clocks advance before the pass applies anything, so a held one keeps its
+  place in real time and lands in step when Blind goes off — §"Programmer suppression and the
+  priority band".
 
 **A new effect is one bar** (venue-visit plan D16): four beats, on the master whose `usage` matches
 its family where one is tagged, else master 1. The master is **stamped as a uuid when the effect is

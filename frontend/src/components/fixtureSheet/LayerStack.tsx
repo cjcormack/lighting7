@@ -22,6 +22,28 @@ export function formatAge(ageMs: number | null | undefined): string | null {
   return `${Math.round(ageMs / 60_000)} min ago`
 }
 
+/**
+ * Why an effect on the stack is held back, in the stack's words — the desk's `heldBackReason`. An
+ * older desk sends no reason, and every effect it held back was held by the programmer's value or a
+ * stomp; it reads as the first, as it always did.
+ */
+function heldBackDetail(layer: KeyStackLayer): string | null {
+  if (!layer.heldBack) return null
+  switch (layer.heldBackReason) {
+    case 'BLIND':
+      return 'Blind holds it; it is still running and paints in phase when Blind goes off'
+    case 'STOMP':
+      return 'a layer above stomps it; it is still running and resumes in phase when the stomp goes'
+    default:
+      return 'your value holds it back; it is still running and resumes in phase when you clear'
+  }
+}
+
+/** Is this layer held back by the programmer's own value — the one hold *Clear yours* lets go of? */
+export function heldByYourValue(layer: KeyStackLayer): boolean {
+  return !!layer.heldBack && (layer.heldBackReason == null || layer.heldBackReason === 'PROGRAMMER')
+}
+
 interface LayerLine {
   title: string
   detail: string | null
@@ -44,7 +66,11 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
         value: layer.parkedChannels?.map((c) => String(c.value)).join(', ') ?? null,
       }
     case 'PROGRAMMER_EFFECT':
-      return { title: effectName, detail: ['programmer effect', division, paused].filter(Boolean).join(' · '), value: null }
+      return {
+        title: effectName,
+        detail: ['programmer effect', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
+        value: null,
+      }
     case 'PROGRAMMER': {
       const age = formatAge(layer.ageMs)
       if (layer.owner === 'layers') {
@@ -72,7 +98,7 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
           home,
           division,
           paused,
-          layer.heldBack ? 'your value holds it back; it is still running and resumes in phase when you clear' : null,
+          heldBackDetail(layer),
         ]
           .filter(Boolean)
           .join(' · '),
@@ -118,7 +144,7 @@ export function stackSections(
   const sections = new Map<string, StackSection>()
   for (const stack of stacks) {
     const signature = JSON.stringify(
-      stack.layers.map((l) => [l.kind, describeStackLayer(l, cueLabel), l.onStage, !!l.heldBack]),
+      stack.layers.map((l) => [l.kind, describeStackLayer(l, cueLabel), l.onStage, !!l.heldBack, l.heldBackReason ?? null]),
     )
     const section = sections.get(signature)
     if (section) section.heads.push(nameOf(stack.targetKey))
@@ -240,7 +266,9 @@ export function LayerStack({
   // slots, as the row's × knows (`rowSourceOf`).
   const holding = (stack: KeyStack) => stack.layers.some((l) => l.kind === 'PROGRAMMER' && l.owner !== 'layers')
   const holds = stacks.some(holding)
-  const heldBack = layers.some((l) => l.heldBack)
+  // Only a hold the programmer's value makes is let go by clearing it: one Blind or a stomp holds
+  // stays held, so the button must not promise it runs.
+  const heldBack = layers.some(heldByYourValue)
   const clearYours = () => {
     const fade = getProgrammerFadeMs()
     if (group != null) {
@@ -323,8 +351,11 @@ function StackLayerRow({ layer, cueLabel }: { layer: KeyStackLayer; cueLabel: (c
           </span>
         )}
         {layer.heldBack && (
-          <span className="rounded-full border border-amber-500/55 px-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-            held back
+          <span
+            data-held-back-reason={layer.heldBackReason ?? undefined}
+            className="rounded-full border border-amber-500/55 px-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+          >
+            {layer.heldBackReason === 'BLIND' ? 'held · Blind' : 'held back'}
           </span>
         )}
       </div>

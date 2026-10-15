@@ -47,6 +47,9 @@ describe('ProgrammerIndicator', () => {
     summary.blind = true
     draw()
     expect(screen.getByText('Blind')).toBeTruthy()
+    // It counts values; under Blind the programmer may still hold effects, which are held too —
+    // "empty" would contradict the sentence beside it.
+    expect(screen.getByLabelText(/^Programmer holds no values · Blind — values and effects held/)).toBeTruthy()
   })
 
   it('reports the value count', () => {
@@ -64,7 +67,7 @@ describe('ProgrammerIndicator', () => {
 
     expect(screen.getByText('Blind')).toBeTruthy()
     expect(screen.getByText('5')).toBeTruthy()
-    expect(screen.getByLabelText(/holds 5 values · Blind — the programmer is gated out/)).toBeTruthy()
+    expect(screen.getByLabelText(/holds 5 values · Blind — values and effects held: the programmer is gated out/)).toBeTruthy()
   })
 
   it('has no way to be told to stay quiet about blind', () => {

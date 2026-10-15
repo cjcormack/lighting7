@@ -107,7 +107,10 @@ data class UnderlyingSource(
 data class KeyStack(
     val targetKey: String,
     val propertyName: String,
-    /** The programmer is blind: its slots are listed but none is on stage, and nothing is held back by it. */
+    /**
+     * The programmer is blind: its slots are listed but none is on stage, nothing is held back by its
+     * values, and its own effects are held ([BlindHold]).
+     */
     val blind: Boolean,
     val layers: List<KeyStackLayer>,
 )
@@ -134,20 +137,33 @@ data class KeyStackLayer(
     /** The two effect kinds: the running instance. */
     val effect: FxInstance? = null,
     /**
-     * The two effect kinds: [EffectSuppression.isSuppressed]'s answer for this key, against the
-     * engine's own snapshot — the effect is running but not painting here.
+     * The two effect kinds: running but not painting here — the tick's own answer, [BlindHold] and
+     * [EffectSuppression.isSuppressed] against the engine's snapshot. [heldBackReason] says which.
      */
     val heldBack: Boolean = false,
+    /** Set exactly when [heldBack] is: why the effect is not painting this key. */
+    val heldBackReason: HeldBackReason? = null,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     /** The layer that produced this one: a programmer layer's id, or a cue layer's (`DaoCueLayer`). */
     val layerId: Int? = null,
     val layerSource: LayerSource? = null,
 ) {
+    /**
+     * Why a running effect is not painting a key, in the order they are asked: a layer's
+     * [STOMP] above it, the programmer's value on the key ([PROGRAMMER] — never a band effect), or
+     * Blind holding the programmer band ([BLIND], show-cue-editing plan D7). A stomp is named over
+     * Blind because it outlasts it: a stomped band effect is still held when Blind goes off.
+     */
+    enum class HeldBackReason { STOMP, PROGRAMMER, BLIND }
+
     enum class Kind {
         PARK,
 
-        /** An effect in the programmer priority band — it modulates on top of the programmer. */
+        /**
+         * An effect in the programmer priority band — it modulates on top of the programmer, and is
+         * held while the programmer is blind ([BlindHold]).
+         */
         PROGRAMMER_EFFECT,
 
         /** One owner's programmer slot (or a sideband slot on one of the property's channels). */
@@ -305,9 +321,12 @@ class ProvenanceService internal constructor(
      * suppresses nothing — and the Circle is what is on stage. Before W4 both read *Programmer*.
      */
     fun compute(): List<ProvenanceEntry> {
-        // One snapshot, the engine's own: empty while blind, so neither half below can name the
-        // programmer under blind, exactly as before.
-        val suppressing = programmerSuppression()
+        // One read of blind for the whole compute, and the engine's own suppression snapshot, empty
+        // while blind, so neither half below can name the programmer under blind, exactly as before.
+        // Blind also holds the programmer band ([BlindHold]), so a held band effect is left out of
+        // the winners below: it is running, but it is not what the rig shows.
+        val blind = programmerStore.blind
+        val suppressing = if (blind) emptyMap() else programmerSuppression()
         val propertyKeys: Set<CueAssignmentResolver.Key> = buildSet {
             for ((fixtureKey, properties) in suppressing) {
                 for (propertyName in properties) add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
@@ -318,7 +337,7 @@ class ProvenanceService internal constructor(
         // painting one of them through any key can be found. Channels with no backing property
         // stay unreported — there is no (target, property) to name.
         val sidebandChannels: Map<CueAssignmentResolver.Key, List<Pair<Int, Int>>> =
-            if (programmerStore.blind) {
+            if (blind) {
                 emptyMap()
             } else {
                 val out = HashMap<CueAssignmentResolver.Key, MutableList<Pair<Int, Int>>>()
@@ -336,7 +355,7 @@ class ProvenanceService internal constructor(
         // `getOrNull` guards the window where the stack shrank after its slots were materialised.
         val programmerLayers = programmerStore.layers
         val programmerLayerWinners: Map<CueAssignmentResolver.Key, ProgrammerLayer> =
-            if (programmerStore.blind) {
+            if (blind) {
                 emptyMap()
             } else {
                 buildMap {
@@ -346,7 +365,7 @@ class ProvenanceService internal constructor(
                 }
             }
 
-        val effectByKey = highestPriorityEffectByKey()
+        val effectByKey = highestPriorityEffectByKey { !BlindHold.holds(blind, it) }
 
         // One snapshot for all three maps — this runs outside the publish lock, so
         // reading them as separate fields could straddle a concurrent cue apply. Reads the
@@ -522,6 +541,9 @@ class ProvenanceService internal constructor(
      * [compute] and [underlyingSources] so the two can't disagree about which effect is
      * driving a property.
      *
+     * [include] leaves an effect out of the scan altogether — [compute] passes the ones Blind holds,
+     * [underlyingSources] the whole programmer band.
+     *
      * A **layer-stomped** effect is skipped for the key it is stomped on, and only for that key: it
      * is running, but it is not painting there, so reporting it would name a winner the operator
      * cannot see. Skipping per key rather than per instance is what lets a lower-priority effect on
@@ -598,8 +620,9 @@ class ProvenanceService internal constructor(
      *
      * Each part is asked of the code that decides it, against **one** snapshot of each input:
      * - held back is [EffectSuppression.isSuppressed] over the engine's suppression snapshot and
-     *   its stomp check — the tick's own question, so the sheet cannot mark an effect held back
-     *   that is painting, or the reverse;
+     *   its stomp check, and [BlindHold] over the request's one read of blind — the tick's own
+     *   questions, so the sheet cannot mark an effect held back that is painting, or the reverse —
+     *   with the reason ([heldBackReason]);
      * - the cue contributor is [underlyingSources] against the one Layer 4 snapshot this read
      *   takes, which is also where its value and layer come from, so a cue apply landing mid-read
      *   cannot pair one cue's value with another's attribution;
@@ -626,9 +649,10 @@ class ProvenanceService internal constructor(
      * each painted (key, property) once, not N times. A key naming no fixture is left out.
      */
     fun keyStacks(fixtureKeys: List<String>, propertyName: String): List<KeyStack> {
+        val blind = programmerStore.blind
         val read = KeyStackRead(
-            blind = programmerStore.blind,
-            held = programmerSuppression(),
+            blind = blind,
+            held = if (blind) emptyMap() else programmerSuppression(),
             cueLayer = layerResolver.current,
             now = System.currentTimeMillis(),
             effects = activeEffects().map { it to coverageKeys(it) },
@@ -704,8 +728,8 @@ class ProvenanceService internal constructor(
         }
         paintings.sortWith { a, b -> effectOrder.compare(b.effect, a.effect) }
         val onKey = paintings.map { it.effect }
-        val heldBack = paintings.associate {
-            it.effect to EffectSuppression.isSuppressed(read.held, it.fixtureKey, it.propertyName, it.effect, isLayerStomped)
+        val heldBack: Map<FxInstance, KeyStackLayer.HeldBackReason?> = paintings.associate {
+            it.effect to heldBackReason(read, it)
         }
 
         // ── Programmer: property slots (most recent first) and sideband slots on its channels ──
@@ -727,7 +751,7 @@ class ProvenanceService internal constructor(
         var covered = fullyParked
         val effectOnStage = HashMap<FxInstance, Boolean>()
         for (effect in onKey) {
-            val on = !covered && effect.isRunning && heldBack[effect] != true
+            val on = !covered && effect.isRunning && heldBack[effect] == null
             effectOnStage[effect] = on
             if (on && effect.blendMode == BlendMode.OVERRIDE) covered = true
         }
@@ -757,7 +781,8 @@ class ProvenanceService internal constructor(
             kind = kind,
             onStage = effectOnStage[effect] == true,
             effect = effect,
-            heldBack = heldBack[effect] == true,
+            heldBack = heldBack[effect] != null,
+            heldBackReason = heldBack[effect],
             cueId = effect.cueId,
             cueStackId = effect.cueStackId,
             layerId = effect.programmerLayerId ?: effect.cueLayerId,
@@ -810,6 +835,23 @@ class ProvenanceService internal constructor(
             layers += KeyStackLayer(KeyStackLayer.Kind.BASE, onStage = baseOnStage, value = base)
         }
         return KeyStack(fixtureKey, propertyName, blind, layers)
+    }
+
+    /**
+     * Why [painting]'s effect is not painting its key, or null when it is: the tick's own two
+     * questions — [EffectSuppression.isSuppressed] and [BlindHold] — against the request's snapshot,
+     * asked in [KeyStackLayer.HeldBackReason]'s order. The stomp and the programmer halves are
+     * [EffectSuppression]'s own two, so the reason never disagrees with its answer.
+     */
+    private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? {
+        val effect = painting.effect
+        return when {
+            isLayerStomped(effect, painting.fixtureKey, painting.propertyName) -> KeyStackLayer.HeldBackReason.STOMP
+            EffectSuppression.heldBackByProgrammer(read.held, painting.fixtureKey, painting.propertyName, effect.priority) ->
+                KeyStackLayer.HeldBackReason.PROGRAMMER
+            BlindHold.holds(read.blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
+            else -> null
+        }
     }
 
     /** An [FxOutput] in the literal grammar of [target]'s property. */
