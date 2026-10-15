@@ -358,7 +358,7 @@ It should start from `docs/lighting-composition-model.md`.
 | 18 | R2 Show cue editing | R1 | [`show-cue-editing-plan.md`](show-cue-editing-plan.md) |
 | 19 | R3 Applying to a selection | S1, S14 | [`apply-model-plan.md`](apply-model-plan.md) |
 | 20 | R4 Effects survey | S15 | [`effects-plan.md`](effects-plan.md) |
-| 21 | R5 Project structure | S2 | |
+| 21 | R5 Project structure | S2 | [`navigation-plan.md`](navigation-plan.md), [`venue-attach-plan.md`](venue-attach-plan.md) |
 
 R1 is early because more of the notes wait on it than on anything else. The R sessions can run in
 parallel with the S sessions, since they land only documents.

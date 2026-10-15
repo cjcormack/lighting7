@@ -1,0 +1,599 @@
+<title>Desk Navigation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of plan sections, the same family as the apply-model and venue pages.
+     Colour carries meaning: blue = a way in (a link, a nav row), teal = the venue, amber = an action that
+     lives in one place only, coral = a gap or a mismatch, green = what the plan proposes. */
+  :root {
+    --bg:#f2f3f1; --panel:#ffffff; --fg:#17191c; --muted:#5d636b; --line:#d6d9d6; --soft:#e8eae6;
+    --way:#2b62d6; --venue:#0f7a6e; --only:#a86a00; --gap:#c2462e; --new:#1f8a45;
+    --way-t:rgba(43,98,214,0.10); --only-t:rgba(168,106,0,0.12); --venue-t:rgba(15,122,110,0.10); --new-t:rgba(31,138,69,0.10); --gap-t:rgba(194,70,46,0.10);
+    --sans:"Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --way:#86a9ff; --venue:#5cd1c1; --only:#f2bd4f; --gap:#ff8f78; --new:#5fd38a;
+    --way-t:rgba(134,169,255,0.14); --only-t:rgba(242,189,79,0.14); --venue-t:rgba(92,209,193,0.12); --new-t:rgba(95,211,138,0.12); --gap-t:rgba(255,143,120,0.12); color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --way:#86a9ff; --venue:#5cd1c1; --only:#f2bd4f; --gap:#ff8f78; --new:#5fd38a;
+    --way-t:rgba(134,169,255,0.14); --only-t:rgba(242,189,79,0.14); --venue-t:rgba(92,209,193,0.12); --new-t:rgba(95,211,138,0.12); --gap-t:rgba(255,143,120,0.12); color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:46px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--only); }
+  h1 { margin:0; font-size:clamp(30px, 5.2vw, 48px); line-height:1.05; font-weight:800; letter-spacing:-0.025em; text-wrap:balance; max-width:22ch; }
+  h1 em { font-style:normal; color:var(--venue); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-22px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--way); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:24px; line-height:1.2; font-weight:800; letter-spacing:-0.01em; text-wrap:balance; }
+  h2 small { font:500 11px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:8px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.8em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+
+  .k { display:inline-block; font:500 11px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; border:1px solid currentColor; white-space:nowrap; }
+  .k.way { color:var(--way); } .k.venue { color:var(--venue); } .k.only { color:var(--only); } .k.gap { color:var(--gap); } .k.new { color:var(--new); }
+  .yes { color:var(--new); font-weight:600; } .no { color:var(--gap); font-weight:600; } .part { color:var(--only); font-weight:600; }
+
+  .finds { display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:12px; }
+  .find { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; display:flex; flex-direction:column; gap:6px; }
+  .find b { font-size:15px; }
+  .find .n { font:500 11px var(--mono); color:var(--muted); }
+  .find ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:3px; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.w { min-width:240px; }
+  tr.only td:first-child { box-shadow:inset 3px 0 0 var(--only); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  .fig { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .fig svg { display:block; width:100%; min-width:820px; height:auto; color:var(--fg); fill:currentColor; font-family:var(--sans); }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:78ch; }
+  .svg-way { stroke:var(--way); } .svg-only { fill:var(--only); } .svg-gap { fill:var(--gap); } .svg-venue { fill:var(--venue); }
+
+  .q { background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--only); border-radius:8px; padding:12px 14px; font-size:14px; min-width:0; }
+  .q b { display:block; font-size:15px; margin-bottom:4px; }
+  .q ol { margin:6px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:3px; }
+  .q li.rec { font-weight:600; }
+  .q.done { border-left-color:var(--new); }
+  .qs { display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:12px; }
+
+  .pending { border:1px dashed var(--line); border-radius:8px; padding:16px; color:var(--muted); font-size:14px; background:var(--panel); }
+
+  footer { font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  a { color:var(--way); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>Venue-visit R5</span><span>docs/plans/navigation-plan.md</span><span class="status">Agreed 2026-10-15</span></div>
+    <h1>Find the show, switch the show, and put it back on its <em>venue</em></h1>
+    <p class="lede">Design session R5 of the venue-visit plan surveyed how the desk is organised around projects: how you reach the list of shows, what a project's own screen shows, which actions hide in a card's ⋮ menu, and whether the sidebar's grouping holds up. It also designs re-attach, which is Detach run in reverse. This page is the readable copy of the plan as it forms. The checked-in markdown is the authority.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#survey">Survey</a>
+    <a href="#today">Today's map</a>
+    <a href="#proposed">Proposed map</a>
+    <a href="#decisions">Decisions</a>
+    <a href="#menu">⋮ actions</a>
+    <a href="#install">Install</a>
+    <a href="#grouping">Grouping</a>
+    <a href="#attach">Re-attach</a>
+    <a href="#sessions">Sessions</a>
+    <a href="#questions">Questions</a>
+  </nav>
+
+  <section id="survey">
+    <h2>What the survey found<small>§1 · main at d35463c, after S2</small></h2>
+    <p>The code was read on <code>main</code> after venue-visit S2 (<code>f6b37b3</code>, one sidebar state and the install nav), and the running desk was walked with the Commemoration Hall venue and Sleeping Beauty imported.</p>
+    <div class="finds">
+      <div class="find"><span class="n">1 · Reaching the projects list</span><b>There's no way to it from the sidebar or the header.</b>
+        <ul>
+          <li>The Projects page has no registry entry. You get there from the breadcrumb's root crumb, from ⌘K <i>View All Projects</i>, or by being redirected when no project is current.</li>
+          <li>The sidebar's <code>ProjectSwitcher</code> switches nothing. Its header names the project you're viewing and links to that project's overview.</li>
+          <li>The app bar shows a hard-coded title, "Chris' DMX Controller v7", even though Install Settings already stores a friendly name for the desk.</li>
+        </ul></div>
+      <div class="find"><span class="n">2 · The project's own screen</span><b>The overview is ten shortcut cards, and that's all it is.</b>
+        <ul>
+          <li>It shows a name, an active badge, <i>Configure</i>, and cards for Patch, Scripts and FX Library. Seven more cards appear only on the current project.</li>
+          <li>It leaves out the Programmer, Prompt Book, Stage, Templates, Speed Masters, Regions, Rigging and Sync, and has no live state.</li>
+          <li>It has no way to make the project current and none of the card's actions, and it never mentions the venue (its pin, a newer version, History).</li>
+          <li>It ignores the project's kind, so a venue gets Scripts, FX Library, Busk, Looks and Cues cards that the sidebar hides.</li>
+        </ul></div>
+      <div class="find"><span class="n">3 · The ⋮ menu</span><b>Five actions live only there, and so does switching shows.</b>
+        <ul>
+          <li><span class="k only">Activate</span> <span class="k only">Clone</span> <span class="k only">Export</span> <span class="k only">Detach</span> <span class="k only">Delete</span> exist only on a Projects-page card. <i>Import</i> and <i>Add venue</i> exist only as that page's buttons.</li>
+          <li>⌘K's <i>Go to</i> only opens a project's overview; it never makes the project current. Its <i>Create New Project</i> lands on the list without opening the dialog.</li>
+          <li>A venue's History and Publish appear only on the band across the top of a venue. Extract appears only on the Projects page.</li>
+        </ul></div>
+      <div class="find"><span class="n">4 · Install settings</span><b>All six tabs are in the nav since S2, but two things are off.</b>
+        <ul>
+          <li>The Sync tab is shown to operators, but its nav row is admin-only. The same split shows up again in Project Settings › Sync.</li>
+          <li>Telemetry is a card inside General and has no row of its own.</li>
+          <li>A universe's address is set from a chip on the Patch List, and has no settings home.</li>
+          <li>Account settings (<i>Profile…</i>) live only in the user menu, which is right.</li>
+        </ul></div>
+      <div class="find"><span class="n">5 · The registry's grouping</span><b>Six unlabelled groups, divided by rules.</b>
+        <ul>
+          <li><code>setup · program · live · monitor · settings · install</code> render as separators with no headings.</li>
+          <li>Stage sits with Channels under "monitor", even though it's the most-used view after the four live ones.</li>
+          <li>Regions and Rigging are rig authoring, but they're filed under Project Settings. The nav row says <i>Regions</i> where the tab says <i>Stage</i>.</li>
+          <li>Surfaces is the desk's MIDI hardware, but it's a project-settings child.</li>
+          <li>⌘K lists two rows both labelled <i>Sync</i>, and <i>Project Settings</i> appears twice.</li>
+        </ul></div>
+      <div class="find"><span class="n">6 · Viewing vs current</span><b>Viewing another project quietly shrinks the sidebar.</b>
+        <ul>
+          <li>Opening a show that isn't current hides every <code>active-only</code> row (Fixtures, Groups, the four live views, Stage, Channels, Surfaces). An "Inactive" badge is the only explanation.</li>
+          <li>On the desk, the TCH venue opened beside Sleeping Beauty shows only Patch List and settings. Its Stage and Programmer are out of reach until the venue is made current, which takes the show off the rig.</li>
+          <li><code>ChannelsBreadcrumbs</code> is a second, drifted copy of the breadcrumb: its project crumb links to <code>/projects</code>, and its badge is always "active".</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <section id="today">
+    <h2>Today's map<small>where each way in leads</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 1000 680" role="img" aria-label="Today's navigation: the sidebar lists 25 rows in six unlabelled groups and its header opens the project overview. The Projects page is reached only from the breadcrumb or command palette, and five project actions exist only in its card menu.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <!-- sidebar -->
+          <rect x="20" y="30" width="230" height="625" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="32" y="22" font-size="12" font-weight="700">Sidebar · navigation.ts</text>
+          <rect x="28" y="40" width="214" height="26" rx="5" fill="currentColor" fill-opacity="0.07"/>
+          <text x="38" y="58" font-size="12.5" font-weight="700">▸ Sleeping Beauty</text>
+          <text x="236" y="58" font-size="10" text-anchor="end" opacity="0.6">header</text>
+          <g font-size="12">
+            <text x="34" y="90" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">SETUP</text>
+            <text x="44" y="107">Patch List</text><text x="44" y="124">Fixtures</text><text x="44" y="141">Groups</text>
+            <line x1="34" x2="236" y1="151" y2="151" stroke="currentColor" stroke-opacity="0.2"/>
+            <text x="34" y="167" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">PROGRAM</text>
+            <text x="44" y="184">Scripts</text><text x="44" y="201">FX Library</text><text x="44" y="218">Looks</text><text x="44" y="235">Templates</text><text x="44" y="252">Speed Masters</text>
+            <line x1="34" x2="236" y1="262" y2="262" stroke="currentColor" stroke-opacity="0.2"/>
+            <text x="34" y="278" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">LIVE</text>
+            <text x="44" y="295">Programmer</text><text x="44" y="312">Show</text><text x="44" y="329">Prompt Book</text><text x="44" y="346">Busk</text>
+            <line x1="34" x2="236" y1="356" y2="356" stroke="currentColor" stroke-opacity="0.2"/>
+            <text x="34" y="372" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">MONITOR</text>
+            <text x="44" y="389">Stage</text><text x="44" y="406">Channels</text>
+            <line x1="34" x2="236" y1="416" y2="416" stroke="currentColor" stroke-opacity="0.2"/>
+            <text x="34" y="432" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">SETTINGS</text>
+            <text x="44" y="449">Project Settings</text><text x="58" y="466">Surfaces</text><text x="58" y="483">Regions</text><text x="58" y="500">Rigging</text><text x="58" y="517">Sync</text>
+            <line x1="34" x2="236" y1="527" y2="527" stroke="currentColor" stroke-opacity="0.2"/>
+            <text x="34" y="543" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">INSTALL</text>
+            <text x="44" y="560">Install Settings</text><text x="58" y="577">Users · Sync</text><text x="58" y="594">Remote Access</text><text x="58" y="611">Updates</text><text x="58" y="628">Diagnostics</text>
+          </g>
+          <text x="236" y="483" font-size="10" text-anchor="end" class="svg-gap">tab says Stage</text>
+          <text x="236" y="389" font-size="10" text-anchor="end" opacity="0.6">no Projects row</text>
+
+          <!-- breadcrumb and cmd-k -->
+          <rect x="330" y="30" width="130" height="28" rx="14" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="395" y="49" font-size="12" text-anchor="middle">Breadcrumb · Projects</text>
+          <rect x="480" y="30" width="130" height="28" rx="14" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="545" y="49" font-size="12" text-anchor="middle">⌘K · View all</text>
+
+          <!-- projects page -->
+          <rect x="330" y="96" width="280" height="186" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="344" y="118" font-size="13" font-weight="700">Projects  <tspan font-weight="400" opacity="0.6" font-family="ui-monospace, Menlo, monospace" font-size="11">/projects</tspan></text>
+          <text x="344" y="138" font-size="11.5" class="svg-gap">no sidebar entry</text>
+          <text x="344" y="162" font-size="12">Venues row · Shows grid</text>
+          <text x="344" y="182" font-size="12">Card click → overview (nothing activated)</text>
+          <text x="344" y="206" font-size="12">Buttons:</text>
+          <text x="404" y="206" font-size="12" class="svg-only">Import ★  Add venue ★</text>
+          <text x="404" y="224" font-size="12">Add remote · Create</text>
+          <text x="344" y="248" font-size="12">Venues tile: Extract a venue…</text>
+          <text x="344" y="270" font-size="12">Each card: ⋮ →</text>
+
+          <!-- overview -->
+          <rect x="330" y="322" width="280" height="160" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="344" y="344" font-size="13" font-weight="700">Overview  <tspan font-weight="400" opacity="0.6" font-family="ui-monospace, Menlo, monospace" font-size="11">/projects/:id</tspan></text>
+          <text x="344" y="366" font-size="12">Name · active badge · Configure</text>
+          <text x="344" y="386" font-size="12">3 cards always · 7 more if current</text>
+          <text x="344" y="412" font-size="11.5" class="svg-gap">no Make current · no ⋮ actions</text>
+          <text x="344" y="430" font-size="11.5" class="svg-gap">no venue pin · no live state</text>
+          <text x="344" y="448" font-size="11.5" class="svg-gap">venue gets show-only cards</text>
+          <text x="344" y="470" font-size="11.5" opacity="0.6">reached by: header · crumb · ⌘K Go to · card</text>
+
+          <!-- settings pages -->
+          <rect x="330" y="510" width="280" height="54" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="344" y="532" font-size="13" font-weight="700">Project Settings</text>
+          <text x="344" y="551" font-size="12">General · Surfaces · Stage · Rigging · Sync</text>
+          <rect x="330" y="590" width="280" height="54" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="344" y="612" font-size="13" font-weight="700">Install Settings</text>
+          <text x="344" y="631" font-size="12">General · Users · Sync · Remote · Updates · Diag.</text>
+
+          <!-- menu -->
+          <rect x="690" y="96" width="290" height="236" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="704" y="118" font-size="13" font-weight="700">A card's ⋮ menu</text>
+          <g font-size="12.5">
+            <text x="704" y="142" class="svg-only">★ Activate  (make current)</text>
+            <text x="704" y="162">Scripts · Configure</text>
+            <text x="704" y="182" class="svg-only">★ Clone</text>
+            <text x="704" y="202" class="svg-only">★ Export</text>
+            <text x="704" y="222">Update venue to vN…</text>
+            <text x="704" y="242" class="svg-only">★ Detach from venue…</text>
+            <text x="704" y="262">Extract a venue…</text>
+            <text x="704" y="282" class="svg-only">★ Delete</text>
+          </g>
+          <text x="704" y="314" font-size="11" opacity="0.6">★ = this is the only place it exists</text>
+
+          <!-- venue band -->
+          <rect x="690" y="372" width="290" height="110" rx="8" fill="none" class="svg-venue" fill-opacity="0.06" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="704" y="394" font-size="13" font-weight="700">Venue band <tspan font-weight="400" font-size="11" opacity="0.6">(a venue, admin)</tspan></text>
+          <text x="704" y="418" font-size="12.5" class="svg-only">★ History · Compare</text>
+          <text x="704" y="438" font-size="12.5" class="svg-only">★ Publish vN…</text>
+          <text x="704" y="458" font-size="12.5">Discard draft</text>
+          <text x="704" y="476" font-size="11" opacity="0.6">nowhere else: not nav, ⌘K or ⋮</text>
+
+          <!-- re-attach gap -->
+          <rect x="690" y="520" width="290" height="70" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-dasharray="5 4"/>
+          <text x="704" y="544" font-size="13" font-weight="700" class="svg-gap">Attach to a venue…</text>
+          <text x="704" y="566" font-size="12">does not exist: Detach is one-way</text>
+
+          <!-- arrows -->
+          <g fill="none" stroke="currentColor" stroke-width="1.4" class="svg-way" marker-end="url(#ar)" style="color:var(--way)">
+            <path d="M250,53 C300,53 290,360 328,360"/>
+            <path d="M395,58 L395,94"/>
+            <path d="M545,58 L545,94"/>
+            <path d="M470,282 L470,320"/>
+            <path d="M610,268 C650,268 650,150 688,150"/>
+            <path d="M250,445 C300,445 290,530 328,530"/>
+            <path d="M250,556 C300,556 290,612 328,612"/>
+          </g>
+          <g font-size="10.5" style="fill:var(--way)">
+            <text x="262" y="200">header click</text>
+            <text x="476" y="306">card</text>
+            <text x="622" y="206">⋮</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Blue arrows are the only ways from one place to another. The project overview has no route out to the actions on the right. The Projects page can only be reached from the breadcrumb or ⌘K, and the ★ actions live in a single place each. Re-attach doesn't exist yet.</figcaption>
+    </figure>
+  </section>
+
+  <section id="proposed">
+    <h2>The proposed map<small>navigation plan §3–6</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 1000 640" role="img" aria-label="Proposed navigation: the app bar's switcher opens any project's home or makes it current through one confirmation; every project action is defined once and rendered in the card menu, the home's menu, the switcher and the command palette; the sidebar has five named sections and its off-rig rows open a not-on-the-rig page.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <!-- app bar -->
+          <rect x="20" y="16" width="960" height="40" rx="8" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="36" y="41" font-size="12" opacity="0.6">Hall desk  │</text>
+          <text x="116" y="41" font-size="13.5" font-weight="700">● Sleeping Beauty ▾</text>
+          <text x="262" y="41" font-size="12" opacity="0.75">TCH venue v7 · held</text>
+          <text x="964" y="41" font-size="11" text-anchor="end" opacity="0.6">app bar · D1, D5</text>
+
+          <!-- sidebar -->
+          <rect x="20" y="86" width="210" height="530" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="32" y="78" font-size="12" font-weight="700">Sidebar · five sections (D3)</text>
+          <g font-size="12">
+            <text x="34" y="110" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">RUN</text>
+            <text x="44" y="127">Programmer · Show</text><text x="44" y="144">Prompt Book · Busk</text><text x="44" y="161">Stage</text>
+            <text x="34" y="186" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">RIG</text>
+            <text x="44" y="203">Patch List · Fixtures</text><text x="44" y="220">Groups · Regions</text><text x="44" y="237">Rigging · Channels</text>
+            <text x="34" y="262" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">LIBRARY</text>
+            <text x="44" y="279">Looks · Palettes</text><text x="44" y="296">Effects · Speed Masters</text><text x="44" y="313">Scripts</text>
+            <text x="34" y="338" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">PROJECT</text>
+            <text x="44" y="355">Settings · Surfaces · Sync</text>
+            <text x="34" y="380" font-size="9.5" font-weight="700" letter-spacing="1" opacity="0.55">DESK</text>
+            <text x="44" y="397" style="fill:var(--new)" font-weight="600">Projects</text><text x="44" y="414">Install Settings ›</text><text x="58" y="431" opacity="0.7">Users · Sync · Remote</text><text x="58" y="448" opacity="0.7">Updates · Diagnostics</text>
+          </g>
+          <line x1="34" x2="216" y1="472" y2="472" stroke="currentColor" stroke-opacity="0.2"/>
+          <text x="34" y="494" font-size="11.5" font-weight="600">Off the rig (D4)</text>
+          <text x="44" y="514" font-size="12" opacity="0.55">Stage</text><circle cx="206" cy="510" r="3.5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="44" y="532" font-size="12" opacity="0.55">Fixtures</text><circle cx="206" cy="528" r="3.5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="44" y="550" font-size="12">Patch List</text>
+          <text x="34" y="578" font-size="10.5" opacity="0.6">muted + hollow dot: needs the</text>
+          <text x="34" y="592" font-size="10.5" opacity="0.6">project on the rig</text>
+
+          <!-- switcher menu -->
+          <rect x="290" y="86" width="310" height="122" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="304" y="108" font-size="13" font-weight="700">Switcher menu</text>
+          <text x="304" y="130" font-size="12">Search · On the rig · Shows · Venues</text>
+          <text x="304" y="150" font-size="12">each row: Open · Make current</text>
+          <text x="304" y="170" font-size="12">All projects… · New show… · New venue…</text>
+          <text x="304" y="194" font-size="11" opacity="0.6">the rig group of the actions</text>
+
+          <!-- home -->
+          <rect x="290" y="238" width="310" height="186" rx="8" fill="none" style="stroke:var(--new)" stroke-width="1.5"/>
+          <text x="304" y="260" font-size="13" font-weight="700">Project home  <tspan font-weight="400" opacity="0.6" font-family="ui-monospace, Menlo, monospace" font-size="11">/projects/:id</tspan></text>
+          <text x="304" y="282" font-size="12">On the rig · or Make current · ⋮</text>
+          <text x="304" y="302" font-size="12">Venue: pin, behind, Review update</text>
+          <text x="304" y="322" font-size="12">Sync · Live (on the rig only)</text>
+          <text x="304" y="346" font-size="12">Sections as cards, with counts</text>
+          <text x="304" y="366" font-size="12">Venue home: version, draft,</text>
+          <text x="304" y="384" font-size="12">History, Publish, its shows</text>
+          <text x="304" y="410" font-size="11" opacity="0.6">reached by: switcher · header · crumb · ⌘K · card</text>
+
+          <!-- projects page -->
+          <rect x="290" y="454" width="310" height="70" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="304" y="476" font-size="13" font-weight="700">Projects  <tspan font-weight="400" opacity="0.6" font-family="ui-monospace, Menlo, monospace" font-size="11">/projects</tspan></text>
+          <text x="304" y="496" font-size="12">Venues row · Shows · Import · Add venue</text>
+          <text x="304" y="514" font-size="11" opacity="0.6">a Desk row, and the menu's All projects</text>
+
+          <!-- not on rig -->
+          <rect x="290" y="554" width="310" height="62" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-dasharray="5 4"/>
+          <text x="304" y="576" font-size="13" font-weight="700">Not on the rig</text>
+          <text x="304" y="597" font-size="12">names the show that is · Make current</text>
+
+          <!-- actions hub -->
+          <rect x="670" y="86" width="310" height="262" rx="8" fill="none" style="stroke:var(--new)" stroke-width="1.5"/>
+          <text x="684" y="108" font-size="13" font-weight="700">projectActions <tspan font-weight="400" font-size="11" opacity="0.6">(defined once, P3)</tspan></text>
+          <g font-size="12.5">
+            <text x="684" y="132">Make current · Open · Settings</text>
+            <text x="684" y="152">Clone · Export</text>
+            <text x="684" y="172">Update venue · Detach</text>
+            <text x="684" y="192" style="fill:var(--new)" font-weight="600">Attach to venue…  (new)</text>
+            <text x="684" y="212">Extract a venue…</text>
+            <text x="684" y="232" class="svg-venue">History · Publish vN…</text>
+            <text x="684" y="252">Delete</text>
+          </g>
+          <text x="684" y="282" font-size="11.5" font-weight="600">rendered in four places:</text>
+          <text x="684" y="300" font-size="11.5">card ⋮ · home ⋮ · switcher · ⌘K</text>
+          <text x="684" y="332" font-size="11" opacity="0.6">no action lives in one place only</text>
+
+          <!-- confirmation -->
+          <rect x="670" y="378" width="310" height="76" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="684" y="400" font-size="13" font-weight="700">One confirmation</text>
+          <text x="684" y="420" font-size="12">Put TCH Test on the rig? Blackout but</text>
+          <text x="684" y="438" font-size="12">its parks · warns if it opens held</text>
+
+          <!-- arrows -->
+          <g fill="none" stroke-width="1.4" marker-end="url(#ar2)" style="color:var(--way); stroke:var(--way)">
+            <path d="M190,56 L320,84"/>
+            <path d="M445,208 L445,236"/>
+            <path d="M600,150 C640,150 640,416 668,416"/>
+            <path d="M600,282 L668,240"/>
+            <path d="M600,490 C636,490 636,300 668,300"/>
+            <path d="M216,396 C250,396 250,470 288,470"/>
+            <path d="M216,512 C250,512 250,580 288,580"/>
+            <path d="M600,590 C650,590 650,440 668,440"/>
+          </g>
+          <g font-size="10.5" style="fill:var(--way)">
+            <text x="216" y="70">click</text>
+            <text x="452" y="226">Open</text>
+            <text x="612" y="210">Make current</text>
+            <text x="618" y="262">⋮</text>
+            <text x="606" y="478">card ⋮</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Every project action now comes from one definition, shown in four places, and every Make current goes through one confirmation. The home replaces the overview's ten cards with status and the sidebar's own sections. Green marks what is new: the home, the action set, the Projects row and Attach to venue.</figcaption>
+    </figure>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions<small>agreed 2026-10-15 · three rounds</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Navigation plan</th></tr></thead>
+      <tbody>
+        <tr><td class="n">D1</td><td>The app bar names the show on the rig, as a switcher: search, Shows and Venues, each with <i>Open</i> and <i>Make current</i>, then <i>All projects…</i> and <i>New show…</i>. Projects gets a registry row.</td></tr>
+        <tr><td class="n">D2</td><td><code>/projects/:id</code> is the project's home: status first, every action in its ⋮, then the sidebar's sections as cards with counts. A venue's home leads with its version, draft, History, Publish and shows.</td></tr>
+        <tr><td class="n">D3</td><td>The sidebar is named sections by job: <b>Run · Rig · Library · Project · Desk</b>. Paths don't change.</td></tr>
+        <tr><td class="n">D4</td><td>On a project that isn't on the rig every row stays. A row that needs the rig is muted, with a hollow dot, and opens a page naming the show that is on the rig.</td></tr>
+        <tr><td class="n">D5</td><td>The desk's friendly name sits small, before the switcher, and is hidden below 640 px.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Venue-attach plan</th></tr></thead>
+      <tbody>
+        <tr><td class="n">D1</td><td>Detach records where the show came from (<code>detachedFrom</code>, portable). Matching is three-way where there is an origin: a record the show removed since stays hidden, and one the venue added since comes in. Without an origin, every unmatched venue record comes in, and each can be hidden in the review.</td></tr>
+        <tr><td class="n">D2</td><td>A paired patch whose identity differs (key, type, head number, placement count) keeps the show's by default. The venue's is hidden, and the show's stays under a fresh uuid. <i>Take venue's</i> renames the show's references instead.</td></tr>
+        <tr><td class="n">D3</td><td>Hall structure (riggings, regions, elements, viewpoints) takes the venue's by default. Groups keep the show's. Each row can be flipped.</td></tr>
+        <tr><td class="n">D4</td><td>Both roles may attach, from the project actions and ⌘K, reviewed as Update is. There is an MCP tool, <code>attach_to_venue</code>.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">The plans add their own rules. Navigation: one PR per session; a nav row and its page share one predicate (so Sync goes for operators); every project action is defined once; "on the rig" is the server's <code>isCurrent</code>; nothing stored changes. Attach: a detach and re-attach round trip changes nothing; matching is three-way where it can be; the review is the run rolled back; a kept record never shares a uuid with a visible venue record; universes are never hidden.</p>
+  </section>
+
+  <section id="menu">
+    <h2>Every ⋮ action, and where else it lives<small>§1.3</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Action</th><th>Shown when</th><th>Does</th><th>Also reachable from</th></tr></thead>
+      <tbody>
+        <tr class="only"><td>Activate</td><td>not current · any role</td><td>Confirms, then <code>POST /set-current</code></td><td class="no">nowhere</td></tr>
+        <tr><td>Scripts</td><td>a show</td><td>Opens its scripts</td><td>sidebar, overview card</td></tr>
+        <tr><td>Configure</td><td>always</td><td>Opens Project Settings</td><td>overview button, sidebar, ⌘K</td></tr>
+        <tr class="only"><td>Clone</td><td>a show, or an admin on a venue</td><td><code>POST /clone</code></td><td class="no">nowhere</td></tr>
+        <tr class="only"><td>Export</td><td>admin</td><td><code>POST /export</code></td><td class="no">nowhere</td></tr>
+        <tr><td>Update venue to vN…</td><td>a show that's behind</td><td>Opens the update review</td><td>the behind banner's <i>Review update</i></td></tr>
+        <tr class="only"><td>Detach from venue…</td><td>a show on a venue · any role</td><td>Dry run, then <code>POST /detach</code></td><td class="no">nowhere</td></tr>
+        <tr><td>Extract a venue…</td><td>admin, a standalone show</td><td>Opens the extract sheet</td><td class="part">the Venues tile on the same page</td></tr>
+        <tr class="only"><td>Delete</td><td>a show, or an admin on a venue · disabled when current</td><td>Confirms, then <code>DELETE</code></td><td class="no">nowhere</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">A venue card offers an admin Activate, Configure, Clone, Export and Delete. An operator gets only Activate and Configure. Having a sync repo doesn't change the menu.</p>
+  </section>
+
+  <section id="install">
+    <h2>Install settings against the nav<small>§1.4</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Tab</th><th>Path</th><th>Tab shown to</th><th>Nav row shown to</th><th>Holds</th></tr></thead>
+      <tbody>
+        <tr><td>General</td><td><code>/install</code></td><td>everyone</td><td>everyone</td><td>friendly name, install id · <b>Telemetry card (admin)</b></td></tr>
+        <tr><td>Users</td><td><code>/install/users</code></td><td>admin</td><td>admin</td><td>desk accounts</td></tr>
+        <tr class="only"><td>Sync</td><td><code>/install/sync</code></td><td class="no">everyone</td><td class="no">admin</td><td>GitHub identity, every project's sync row</td></tr>
+        <tr><td>Remote access</td><td><code>/install/remote</code></td><td>admin</td><td>admin</td><td>the ngrok tunnel</td></tr>
+        <tr><td>Updates</td><td><code>/install/updates</code></td><td>everyone</td><td>everyone</td><td>release channel, update</td></tr>
+        <tr><td>Diagnostics</td><td><code>/install/diagnostics</code></td><td>everyone</td><td>everyone</td><td>ArtNet rates, MIDI latency</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="grouping">
+    <h2>Does the grouping hold up?<small>§1.5</small></h2>
+    <ul class="plain">
+      <li><b>Mostly by kind of page, partly by role.</b> <i>live</i> and <i>monitor</i> are about running the show; <i>setup</i>, <i>program</i> and <i>settings</i> are about building it. Stage is the only view used heavily in both modes, and it's filed under <i>monitor</i> next to Channels.</li>
+      <li><b>The rig is split across two groups.</b> Patch, Fixtures and Groups are under <i>setup</i>. Regions and Rigging, which are drawn in the same Stage editor, are under <i>settings</i> as Project Settings children.</li>
+      <li><b>Surfaces is hardware, not show content.</b> Its bindings are per project, but the devices are the desk's. It sits under Project Settings and is hidden on an inactive project.</li>
+      <li><b>Nothing names a group.</b> With 25 rows, rules between unnamed groups make the sidebar a list to read rather than to scan. In a venue, 9 rows vanish and the separators shift.</li>
+      <li><b>S4 renames Templates to Palettes</b> (venue-visit D2). This plan uses the new word.</li>
+    </ul>
+  </section>
+
+  <section id="attach">
+    <h2>Re-attach: Detach in reverse<small>venue-attach-plan.md</small></h2>
+    <p>Detach (<code>venue/VenueDetach.kt</code>) writes the effective rig at the show's pin into the show's own rows. It keeps every uuid, re-points the twelve <code>VenueLinks</code>, copies the venue's machine overrides, and flattens the venue's parks into the show's. Then it clears the hides, the overrides and the pin. Today it keeps no record of where the show came from. Uuids are stable across a venue's versions, so a detached show's rows still pair with the same records in any later version.</p>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 1000 400" role="img" aria-label="Attach pairs the show's own rows with the target version's records, uuid first then key, compares each pair with the origin version where one is recorded, and turns each into an inherited row, a facet override, a kept record with the venue's hidden, a show addition, a hide or a record that comes in.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <!-- inputs -->
+          <rect x="20" y="30" width="200" height="80" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="34" y="54" font-size="13" font-weight="700">S · the show's rows</text>
+          <text x="34" y="76" font-size="12">standalone, its own</text>
+          <text x="34" y="94" font-size="12" opacity="0.6">TCH Test, detached</text>
+          <rect x="20" y="160" width="200" height="80" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5" stroke-dasharray="5 4"/>
+          <text x="34" y="184" font-size="13" font-weight="700">O · origin version</text>
+          <text x="34" y="206" font-size="12">from <tspan font-family="ui-monospace, Menlo, monospace" font-size="11">detachedFrom</tspan></text>
+          <text x="34" y="224" font-size="12" opacity="0.6">TCH venue v7 · optional</text>
+          <rect x="20" y="290" width="200" height="80" rx="8" fill="none" class="svg-venue" fill-opacity="0.07" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="34" y="314" font-size="13" font-weight="700">T · target version</text>
+          <text x="34" y="336" font-size="12">the one picked</text>
+          <text x="34" y="354" font-size="12" opacity="0.6">TCH venue v8 · installed</text>
+
+          <!-- pairing -->
+          <rect x="320" y="120" width="250" height="160" rx="8" fill="none" style="stroke:var(--new)" stroke-width="1.5"/>
+          <text x="336" y="146" font-size="13" font-weight="700">Pair, then compare</text>
+          <text x="336" y="170" font-size="12">S ↔ T by uuid, then by key/name</text>
+          <text x="336" y="190" font-size="12">S = T → inherit</text>
+          <text x="336" y="210" font-size="12">S = O ≠ T → the venue changed it</text>
+          <text x="336" y="230" font-size="12">S ≠ O = T → the show changed it</text>
+          <text x="336" y="250" font-size="12">S ≠ O ≠ T → both: drift</text>
+          <text x="336" y="270" font-size="11" opacity="0.6">no origin: every difference is the show's</text>
+
+          <!-- outcomes -->
+          <g font-size="12.5">
+            <rect x="680" y="20" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="47"><tspan font-weight="700">Inherit</tspan> · the show's row goes, links re-pointed</text>
+            <rect x="680" y="76" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="103"><tspan font-weight="700">Override</tspan> · a patch facet, with its base</text>
+            <rect x="680" y="132" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="159"><tspan font-weight="700">Keep mine</tspan> · venue's hidden, fresh uuid</text>
+            <rect x="680" y="188" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="215"><tspan font-weight="700">Take venue's</tspan> · inherit + rename keys</text>
+            <rect x="680" y="244" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="271"><tspan font-weight="700">Addition</tspan> · a show row with no pair</text>
+            <rect x="680" y="300" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="327"><tspan font-weight="700">Hide</tspan> · in O, missing from S</text>
+            <rect x="680" y="356" width="300" height="34" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="694" y="378"><tspan font-weight="700">Comes in</tspan> · added since O, or no O</text>
+          </g>
+          <g fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#ar3)">
+            <path d="M220,70 C270,70 270,170 318,170"/>
+            <path d="M220,200 L318,200"/>
+            <path d="M220,330 C270,330 270,230 318,230"/>
+            <path d="M570,200 C620,200 630,42 678,42"/>
+            <path d="M570,200 C620,200 630,98 678,98"/>
+            <path d="M570,200 C620,200 630,154 678,154"/>
+            <path d="M570,200 L678,210"/>
+            <path d="M570,200 C620,200 630,266 678,266"/>
+            <path d="M570,200 C620,200 630,322 678,322"/>
+            <path d="M570,200 C620,200 630,372 678,372"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Each of the show's records is paired with at most one record in the target version, uuid first and key or name second. Where Detach recorded an origin, each pair is also compared with it, which tells a change the show made from one the venue made. Every outcome is something a show on a venue can already hold.</figcaption>
+    </figure>
+
+    <h3>Pairing, kind by kind</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>Kind</th><th>First by</th><th>Then by</th><th>When it differs</th></tr></thead>
+      <tbody>
+        <tr><td>Universe</td><td>uuid</td><td><code>subnet:universe</code></td><td>The venue's always: never hidden, never overridden. A different address on this desk is listed as an output change.</td></tr>
+        <tr><td>Patch</td><td>uuid</td><td>key</td><td>Address, Position, Focus or Media become overrides. If the identity differs (key, type, head number, placement count): keep mine, or take venue's and rename.</td></tr>
+        <tr><td>Rigging · region · viewpoint</td><td>uuid</td><td>name</td><td>The venue's by default; keep mine hides the venue's.</td></tr>
+        <tr><td>Scene element</td><td>uuid</td><td>name</td><td>The VENUE layer only; SET elements stay the show's. The venue's by default.</td></tr>
+        <tr><td>Seating</td><td>uuid</td><td>name</td><td>Fixed blocks only. A show's Preset copy never pairs and stays its own.</td></tr>
+        <tr><td>Group</td><td>uuid</td><td>name</td><td>Members are compared through the patch pairs. Keep mine by default.</td></tr>
+        <tr><td>Park</td><td colspan="2"><code>universe:channel</code></td><td>The same value is inherited, and a different one stays as a re-park. A venue park on a channel the show leaves free becomes a release (the show unparked it), or comes in as an output change (the venue added it since).</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>The hard cases</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>Case</th><th>What the plan does</th></tr></thead>
+      <tbody>
+        <tr><td>No origin recorded</td><td>Detach records it from now on (D1). A show detached earlier, or never on a venue, pairs two-way. Every venue record it lacks comes in, with <i>Hide in this show</i> per row.</td></tr>
+        <tr><td>Key or name clash</td><td>The show keeps a record whose key a different venue record holds. The venue's is hidden if it can be, otherwise this is a blocker (rename yours). Head numbers are checked too; Detach's own check misses them.</td></tr>
+        <tr><td>Identity differs</td><td>Keep mine: the venue's is hidden and the show's row takes a fresh uuid, so no uuid is held twice. Take venue's: references in cue, Look and palette rows and bindings are renamed. Scripts are listed, not rewritten.</td></tr>
+        <tr><td>Universe the venue lacks</td><td>It stays the show's own. A paired patch on it becomes an Address override naming the show's universe, which the effective rig holds.</td></tr>
+        <tr><td>Universe the show lacks</td><td>It comes in, since universes can't be hidden. Its patches' address overlaps with the show's are the overlap decisions that Update already makes.</td></tr>
+        <tr><td>A hide that's refused</td><td><code>VENUE_HIDE_IN_USE</code>: the record comes in, with the reason shown.</td></tr>
+        <tr><td>Machine overrides</td><td>The show's copies of paired records go. A kept record's are re-keyed to its fresh uuid.</td></tr>
+        <tr><td>Stage size</td><td>The version's. A difference is listed as drawing only.</td></tr>
+        <tr><td>Attached behind, on the rig</td><td>As a publish does for a running show, it runs against its pin rather than going dark mid-run.</td></tr>
+      </tbody>
+    </table></div>
+    <p>The plan's first test is a round trip. Detaching a show and attaching it back at the same version must leave the effective rig, parks and output unchanged, field for field. The review is the attach run rolled back, as Update's is.</p>
+  </section>
+
+  <section id="sessions">
+    <h2>Sessions, one PR each<small>5 + 3</small></h2>
+    <h3>Navigation plan · frontend only</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Session</th><th>Needs</th></tr></thead>
+      <tbody>
+        <tr><td class="n">N1</td><td><b>Sections and the registry.</b> Five named sections, the Projects row, the <i>Regions</i> tab label, <i>Effects</i>, unique ⌘K labels, Sync tabs for admins only, Surfaces' predicate, one breadcrumb.</td><td>—</td></tr>
+        <tr><td class="n">N2</td><td><b>Off the rig.</b> <code>needsRig</code> rows stay, muted with a hollow dot; <code>NotOnRig</code> on their routes; the header says <i>Not on the rig</i>.</td><td>—</td></tr>
+        <tr><td class="n">N3</td><td><b>The switcher.</b> The desk name, the switcher and pin chip, the menu with search, the reworded confirmation, <code>document.title</code>, and ⌘K's <i>Make … current</i>.</td><td>—</td></tr>
+        <tr><td class="n">N4</td><td><b>One set of project actions, and a show's home.</b> <code>projectActions</code> rendered in four places; the home's status and sections.</td><td>N3</td></tr>
+        <tr><td class="n">N5</td><td><b>A venue's home.</b> Version, draft, History and Publish, its shows, and ⌘K for both.</td><td>N4</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Venue-attach plan</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Session</th><th>Needs</th></tr></thead>
+      <tbody>
+        <tr><td class="n">A1</td><td><b>The origin, and the pairing.</b> The <code>detachedFrom</code> columns and sync field; Detach, Clone and Extract; <code>VenueAttachPairing</code>, a pure function, with the hard cases as tests.</td><td>—</td></tr>
+        <tr><td class="n">A2</td><td><b>The attach.</b> One transaction, review rolled back, <code>GET/POST …/venue/attach</code>, <code>attach_to_venue</code>, the reload, and the round-trip test.</td><td>A1</td></tr>
+        <tr><td class="n">A3</td><td><b>The sheet.</b> <code>AttachVenueSheet</code>, its entry points, and the Detach dialog's line.</td><td>A2, N4 (or the card's ⋮ until N4 lands)</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="questions">
+    <h2>Questions asked<small>three rounds · 2026-10-15</small></h2>
+    <div class="qs">
+      <div class="q done"><b>Reaching and switching projects?</b>An app-bar switcher (D1). <span class="muted">Declined: a sidebar-header switcher; a Projects row alone.</span></div>
+      <div class="q done"><b>What is /projects/:id?</b>A project home (D2). <span class="muted">Declined: no overview; today's cards plus the gaps.</span></div>
+      <div class="q done"><b>Sidebar grouping?</b>Named sections by job (D3). <span class="muted">Declined: today's groups labelled; live views first.</span></div>
+      <div class="q done"><b>A project not on the rig?</b>Rows stay, explained, and look subtly different (D4). <span class="muted">Declined: hide and say so; open views on stored data.</span></div>
+      <div class="q done"><b>The desk's name?</b>Small, before the switcher (D5). <span class="muted">Declined: in the menu's footer; the browser tab only.</span></div>
+      <div class="q done"><b>Off-rig rows?</b>Muted, with a hollow dot (D4). <span class="muted">Declined: muted only; italic.</span></div>
+      <div class="q done"><b>Re-attach's origin?</b>Detach records it; three-way matching (attach D1). <span class="muted">Declined: attach at origin then Update; ask every time.</span></div>
+      <div class="q done"><b>Identity differs?</b>Keep mine by default, Take venue's renames (attach D2). <span class="muted">Declined: always the venue's; block until fixed.</span></div>
+      <div class="q done"><b>Non-patch records differ?</b>Hall structure the venue's, groups the show's (attach D3). <span class="muted">Declined: all venue's; all show's.</span></div>
+      <div class="q done"><b>Who attaches?</b>Both roles, like Detach, with an MCP tool (attach D4). <span class="muted">Declined: admins only.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Venue-visit plan R5 · <code>docs/plans/navigation-plan.md</code> and <code>docs/plans/venue-attach-plan.md</code>, with the boards in <code>docs/plans/navigation-design/</code>. The checked-in markdown is the authority, and this page is a copy for reading.
+  </footer>
+</div>
