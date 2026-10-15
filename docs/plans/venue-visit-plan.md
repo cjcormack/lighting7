@@ -335,7 +335,7 @@ It should start from `docs/lighting-composition-model.md`.
 | # | Session | Needs | Done |
 |---|---|---|---|
 | 1 | S1 Palettes reach cells | — | `4a1a8fb4` |
-| 2 | S2 Chrome and defaults | — | |
+| 2 | S2 Chrome and defaults | — | `f6b37b38` |
 | 3 | S3 Cue list fixes | — | |
 | 4 | S4 Templates → palettes | — | |
 | 5 | R1 Cue model | — | [`cue-model-plan.md`](cue-model-plan.md) |
