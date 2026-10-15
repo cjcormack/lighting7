@@ -163,8 +163,15 @@ fun main() {
     val dead = children.first { !it.isAlive }
     println("${dead.name} exited (code=${dead.exitValue}) — stopping the rest.")
     children.forEach { runCatching { it.stop() } }
-    exitProcess(1)
+    exitProcess(launcherExitCode(dead.exitValue))
 }
+
+/**
+ * The launcher's exit code once its backend has exited on its own. It never restarts the backend:
+ * a backend that ends with 0 was quit from the desk (*Quit desk*, venue-visit plan S6), so the
+ * launcher ends cleanly with it; anything else is a failure and the launcher says so.
+ */
+internal fun launcherExitCode(backendExitCode: Int?): Int = if (backendExitCode == 0) 0 else 1
 
 /**
  * Stop everything and hand the staged MSI to `msiexec` through a detached PowerShell wrapper.

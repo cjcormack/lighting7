@@ -7,6 +7,7 @@ vi.mock('./SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 vi.mock('./effects/ArmedChip', () => ({ ArmedChip: () => null }))
 vi.mock('./GrandMasterOverviewPanel', () => ({ GrandMasterImmersiveChip: () => <div data-testid="grand-master" /> }))
 vi.mock('./venue/VenueHeldChip', () => ({ VenueHeldChip: () => null }))
+vi.mock('./rigSafety/RigSafetyBanner', () => ({ RigSafetyImmersiveChip: () => null }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 const venue = { isVenue: false }

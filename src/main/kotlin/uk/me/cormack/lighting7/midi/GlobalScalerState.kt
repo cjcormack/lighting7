@@ -21,7 +21,9 @@ import kotlin.math.roundToInt
 /**
  * The two global scalers on DMX output, applied at transmit time:
  *
- *  - **Blackout** — when enabled, every scaled channel and every strobe channel outputs 0.
+ *  - **Blackout** — when enabled, every scaled channel and every strobe channel outputs 0. Either
+ *    blackout does it: the persisted one the MIDI `Blackout` target toggles, or *Make rig safe*'s
+ *    runtime one ([GlobalScalerStateHolder.safeBlackout]).
  *  - **Grand Master** — a level, 0–100 %, multiplying every scaled channel. A strobe channel holds
  *    a rate rather than a level, so it passes through unchanged above 0 % and is cut at 0 %.
  *
@@ -169,7 +171,7 @@ class GlobalScalerState(
     }
 
     override fun modify(universe: Universe, channel: Int, value: UByte): UByte {
-        val blackout = holder.blackoutEnabled.value
+        val blackout = holder.blackoutEnabled.value || holder.safeBlackout.value
         val level = holder.grandMasterLevel.value
         if (!blackout && level >= GRAND_MASTER_FULL) return value
         val key = packChannelKey(universe.universe, channel)

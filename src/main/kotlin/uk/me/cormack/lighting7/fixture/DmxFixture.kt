@@ -196,6 +196,8 @@ abstract class DmxFixture(
                     channel = ChannelRef(command.universe, command.channelNo),
                     dedicated = command.dedicated,
                     alongside = command.alongside.map { CommandHoldDto(ChannelRef(command.universe, it.channelNo), it.level.toInt(), it.why) },
+                    role = command.spec.role.takeIf { it != CommandRole.OTHER }?.name,
+                    restrikeMs = command.spec.restrikeMs.takeIf { it > 0 },
                 )
             )
         }

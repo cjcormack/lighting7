@@ -121,6 +121,15 @@ invariant true by construction rather than by convention:
 
 > A non-`.part` file in `updates/staged/` is a verified file.
 
+## When the backend exits on its own
+
+The launcher's poll loop never restarts its backend. When the child exits — *Quit desk*
+(venue-visit plan S6, `POST /install/quit`), a crash, a refused instance lock — the launcher stops
+whatever else it owns and exits too, with `launcherExitCode`: **0 for a backend that exited 0** (a
+quit from the desk, so the tray icon goes and nothing reports a failure), 1 otherwise.
+`LauncherExitTest` pins it; whether the jpackage `lighting7.exe` wrapper stays quiet on that path is
+on the rig (`FU-MANUAL-VENUE-VISIT-S6`).
+
 ## Applying
 
 The backend cannot install the update: it is a *child* of the launcher, and every file `msiexec`

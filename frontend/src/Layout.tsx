@@ -18,6 +18,7 @@ import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher, { useViewedProject } from "./ProjectSwitcher"
 import { VenueBand } from "./components/venue/VenueBand"
 import { VenueBehindBanner } from "./components/venue/VenueBehindBanner"
+import { RigSafetyBanner } from "./components/rigSafety/RigSafetyBanner"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { PositionsPanel } from "./components/positions/PositionsPanel"
@@ -302,6 +303,9 @@ export default function Layout() {
                 banner. The same slot and the same reason as the band above; immersive, the live view's
                 header carries *Blind · venue* instead. */}
             {!immersive && <VenueBehindBanner projectId={viewedProject?.id} />}
+            {/* The end of the night (venue-visit plan S6): a run's progress, *Ready to switch off*, or a
+                blackout that is not ready — on every window, in the band's slot, for its reason. */}
+            {!immersive && <RigSafetyBanner />}
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
                 column rather than above it so it doesn't shift the ShowBar or the panels;

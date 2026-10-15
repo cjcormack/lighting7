@@ -225,6 +225,7 @@ sealed class Fusion100SpotMkIIFixture(
             label = "Reset",
             description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 4, 251u, bandMin = 251u, bandMax = 255u)
     }
@@ -415,6 +416,7 @@ sealed class Fusion100SpotMkIIFixture(
             label = "Reset",
             description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 14, 251u, bandMin = 251u, bandMax = 255u)
     }
