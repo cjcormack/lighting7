@@ -310,8 +310,8 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
             <MenuItem
               icon={<Circle className="size-3.5" />}
               title="An existing cue…"
-              sub="Pick from any stack"
-              onSelect={() => sheets.openRecord()}
+              sub="Pick any cue by name"
+              onSelect={() => sheets.openRecord({ existingCue: true })}
             />
           </DropdownMenuContent>
         </DropdownMenu>

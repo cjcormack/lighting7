@@ -154,8 +154,11 @@ describe('ProgrammerLookStack', () => {
     render(<ProgrammerLookStack />)
 
     openSettings(1)
-    fireEvent.click(await screen.findByLabelText('Colour'))
-    expect(mocks.patchLayer).toHaveBeenCalledWith(40, { propertyMask: 'COLOUR' })
+    // Switched off, all four are ticked and nothing is written; unticking the rest narrows to Colour.
+    fireEvent.click(await screen.findByRole('switch', { name: 'All attributes' }))
+    expect(mocks.patchLayer).not.toHaveBeenCalled()
+    for (const family of ['Intensity', 'Position', 'Beam']) fireEvent.click(screen.getByLabelText(family))
+    expect(mocks.patchLayer).toHaveBeenLastCalledWith(40, { propertyMask: 'COLOUR' })
   })
 
   it('clears a mask with an empty string, because an omitted field means leave alone', async () => {
@@ -165,7 +168,7 @@ describe('ProgrammerLookStack', () => {
     render(<ProgrammerLookStack />)
 
     openSettings(0)
-    fireEvent.click(await screen.findByLabelText('Colour'))
+    fireEvent.click(await screen.findByRole('switch', { name: 'All attributes' }))
     expect(mocks.patchLayer).toHaveBeenCalledWith(40, { propertyMask: '' })
   })
 

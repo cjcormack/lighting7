@@ -19,9 +19,8 @@ import { serializePropertyMask } from '@/lib/attributeFamily'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { programmerAddLayer, programmerClearEntry } from '@/store/programmer'
 import { selectTargetKeys } from '@/store/selectionSlice'
-import { MaskPicker } from './maskPicker'
+import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
-import type { PropertyMaskGroup } from '@/store/programmerOps'
 
 /**
  * Promote what you busked into a shared Look, applied here as a layer, without leaving.
@@ -61,7 +60,7 @@ export function MakeLayerSheet({
   )
 
   const [name, setName] = useState('')
-  const [mask, setMask] = useState<PropertyMaskGroup[]>([])
+  const [mask, setMask] = useState<MaskValue>(null)
   const [partial, setPartial] = useState<string | null>(null)
 
   const openedRef = useRef(false)
@@ -73,7 +72,7 @@ export function MakeLayerSheet({
     if (openedRef.current) return
     openedRef.current = true
     setName('')
-    setMask([])
+    setMask(null)
     setPartial(null)
     reset()
   }, [open, reset])
@@ -81,7 +80,7 @@ export function MakeLayerSheet({
   // The selection is what makes a Look reusable — "Warm Amber" over four named heads rather than
   // over whatever the programmer happened to be holding. Without one there is nothing to promote.
   const targets = selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
-  const canSubmit = name.trim() !== '' && targets.length > 0 && !isLoading
+  const canSubmit = name.trim() !== '' && targets.length > 0 && !isLoading && !maskIsEmpty(mask)
 
   const submit = async () => {
     setPartial(null)
@@ -90,7 +89,7 @@ export function MakeLayerSheet({
         projectId,
         mode: 'CREATE',
         source: 'TOUCHED',
-        mask: mask.length > 0 ? mask : undefined,
+        mask: maskToWire(mask),
         name: name.trim(),
         targets,
       }).unwrap()
@@ -101,7 +100,7 @@ export function MakeLayerSheet({
           targets,
           // The layer asserts exactly what was promoted, so the families left behind in Local
           // still win — they are above every layer.
-          propertyMask: serializePropertyMask(mask) ?? undefined,
+          propertyMask: serializePropertyMask(maskToWire(mask) ?? []) ?? undefined,
         })
         for (const row of response.look.rows) {
           if (row.targetType === 'deferred') continue
@@ -127,7 +126,7 @@ export function MakeLayerSheet({
     <Sheet
       open={open}
       onOpenChange={(next) => !isLoading && onOpenChange(next)}
-      unsavedChanges={name.trim() !== '' || mask.length > 0}
+      unsavedChanges={name.trim() !== '' || mask != null}
     >
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>

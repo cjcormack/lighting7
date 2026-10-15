@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { BLEND_MODE_OPTIONS } from '@/components/fx/fxConstants'
-import { MaskPicker } from '@/components/programmer/maskPicker'
+import { MaskPicker, useMaskDraft } from '@/components/programmer/maskPicker'
 import {
   FAMILY_LABELS,
   formatFamilyList,
@@ -1025,16 +1025,31 @@ function BlendMaskFields({
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Asserts</Label>
-        {/* `MaskPicker` speaks families and the wire speaks a comma-separated string; the
-            adapter normalises both "none selected" and "all four selected" to null, so an
-            unmasked layer has exactly one representation. */}
-        <MaskPicker
-          value={parsePropertyMask(propertyMask)}
-          onChange={(next) => onSetPropertyMask(serializePropertyMask(next))}
-        />
+        <LayerMaskPicker propertyMask={propertyMask} onSetPropertyMask={onSetPropertyMask} />
       </div>
     </>
   )
+}
+
+/**
+ * A layer's mask, written on every change. `MaskPicker` speaks families and the wire a
+ * comma-separated string; `serializePropertyMask` folds both "none" and "all four" to null, so an
+ * unmasked layer has exactly one representation. `useMaskDraft` holds the picker's own state over
+ * that fold — switched off with all four ticked writes nothing and stays off, and nothing ticked
+ * is never written — so *All attributes* does not switch itself back on under the pointer.
+ */
+function LayerMaskPicker({
+  propertyMask,
+  onSetPropertyMask,
+}: {
+  propertyMask: string | null
+  onSetPropertyMask: (propertyMask: string | null) => void
+}) {
+  const stored = parsePropertyMask(propertyMask)
+  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) =>
+    onSetPropertyMask(serializePropertyMask(families ?? [])),
+  )
+  return <MaskPicker value={draft} onChange={setDraft} />
 }
 
 /**

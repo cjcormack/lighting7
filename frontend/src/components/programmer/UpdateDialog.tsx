@@ -20,6 +20,7 @@ import type {
   UpdateChecklist,
   UpdateResponse,
 } from '@/store/programmerOps'
+import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
 
@@ -44,6 +45,10 @@ export interface UpdateDialogProps {
  *   picks which to write.
  *
  * A Dialog rather than a Sheet: both shapes are "confirm what this will overwrite".
+ *
+ * **It takes a mask, like Record and Include** (venue-visit plan S10): the families the write may
+ * touch, sent as `mask`, absent for every attribute. In Mode B the mask also decides which cues the
+ * programmer is over, so changing it fetches the checklist again under the new one.
  */
 export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: UpdateDialogProps) {
   const [update, { isLoading, error, reset }] = useUpdateProgrammerMutation()
@@ -51,18 +56,34 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [result, setResult] = useState<UpdateResponse | null>(null)
   const [conflict, setConflict] = useState<ProgrammerConflict | null>(null)
+  const [mask, setMask] = useState<MaskValue>(null)
+  const maskKey = maskValueKey(mask)
+  // Cues the operator unticked, kept across a checklist re-fetched under a new mask so narrowing
+  // the mask does not tick them again behind their back.
+  const untickedRef = useRef<Set<number>>(new Set())
+  // Each request's turn: a checklist answered after a newer request was sent is stale (the mask
+  // moved while it was in flight) and is dropped rather than drawn over the newer one.
+  const requestSeqRef = useRef(0)
 
   const run = useCallback(
-    async (body: { targets?: number[]; preview?: boolean }) => {
+    async (body: { targets?: number[]; preview?: boolean; mask?: ReturnType<typeof maskToWire> }) => {
       setConflict(null)
+      const seq = ++requestSeqRef.current
       try {
         const response = await update({ projectId, ...body }).unwrap()
         if (response.mode === 'CHECKLIST') {
+          if (seq !== requestSeqRef.current) return response
+          // A fresh checklist supersedes a commit that wrote nothing (`applied: false`).
+          setResult(null)
           setChecklist(response.checklist ?? null)
           // Preselect everything: the operator opened Update meaning to write, and unticking
           // is a smaller gesture than ticking each cue.
           setSelected(
-            new Set((response.checklist?.stacks ?? []).flatMap((s) => s.cues.map((c) => c.cueId))),
+            new Set(
+              (response.checklist?.stacks ?? [])
+                .flatMap((s) => s.cues.map((c) => c.cueId))
+                .filter((cueId) => !untickedRef.current.has(cueId)),
+            ),
           )
         } else {
           setResult(response)
@@ -89,9 +110,16 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const modeB = !includeTarget
   const runKey = open ? includedTargetKey(includeTarget) : null
   const appliedRunKeyRef = useRef<string | null>(null)
+  // The mask the checklist on screen was fetched under — null when none is, so the effect below
+  // fetches it. One request per (open, mode, mask), never one per render.
+  const checklistMaskKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (runKey === null) {
       appliedRunKeyRef.current = null
+      // The mask is this opening's own, like Record's: a closed dialog forgets it. A mode flip
+      // while open keeps it — the operator is still narrowing the same write.
+      setMask(null)
+      untickedRef.current = new Set()
       return
     }
     if (appliedRunKeyRef.current === runKey) return
@@ -100,27 +128,48 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
     setSelected(new Set())
     setResult(null)
     setConflict(null)
+    untickedRef.current = new Set()
+    checklistMaskKeyRef.current = null
     reset()
-    // With no include target there is nothing to confirm yet — fetch the checklist so the
-    // dialog opens onto the actual decision rather than a spinner behind a button press.
-    if (modeB) void run({})
-  }, [runKey, modeB, reset, run])
+  }, [runKey, reset])
+
+  // With no include target there is nothing to confirm yet — fetch the checklist so the dialog
+  // opens onto the actual decision rather than a spinner behind a button press. Fetched again when
+  // the mask changes, since the mask decides which cues the programmer is over; keyed on the mask's
+  // one spelling, so re-picking the same families is no request. Never after a write, whose result
+  // is what the dialog shows.
+  useEffect(() => {
+    // Nothing ticked asks nothing: the checklist on screen stays, and Update is disabled until a
+    // family is ticked again.
+    if (runKey === null || !modeB || result?.applied || maskIsEmpty(mask)) return
+    if (checklistMaskKeyRef.current === maskKey) return
+    checklistMaskKeyRef.current = maskKey
+    void run({ mask: maskToWire(mask) })
+    // `mask` is read for the request; `maskKey` is its identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maskKey, runKey, modeB, result, run])
 
   const toggle = (cueId: number) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(cueId)) next.delete(cueId)
-      else next.add(cueId)
+      if (next.has(cueId)) {
+        next.delete(cueId)
+        untickedRef.current.add(cueId)
+      } else {
+        next.add(cueId)
+        untickedRef.current.delete(cueId)
+      }
       return next
     })
   }
 
-  const canCommit = modeB ? selected.size > 0 : true
+  const canCommit = (modeB ? selected.size > 0 : true) && !maskIsEmpty(mask)
 
   // Nothing is offered as a retry: `INCLUDE_TARGET_GONE` is terminal — the cue or Look Include
   // staged has been deleted, so there is nowhere to write it back to. The recoverable arm was
   // `CUE_EDIT_SESSION_OPEN`, retired with the sessions in backend sweep item D1.
-  const commit = () => void run(modeB ? { targets: [...selected] } : {})
+  const sentMask = maskToWire(mask)
+  const commit = () => void run(modeB ? { targets: [...selected], mask: sentMask } : { mask: sentMask })
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
@@ -135,6 +184,14 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         </DialogHeader>
 
         <div className="max-h-[50vh] space-y-4 overflow-y-auto">
+          {!result?.applied && (
+            <MaskPicker
+              value={mask}
+              onChange={setMask}
+              hint="It narrows the values written back; held scenery goes back whole."
+            />
+          )}
+
           {includeTarget && !result && (
             <p className="text-sm text-muted-foreground">
               Only the values you changed since including are written — anything you left alone
