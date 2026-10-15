@@ -652,7 +652,7 @@ Release folds to its glyph and the scope line drops the fade.
 - **Source marks** (D4): `useRowSource` subscribes per key (`subscribeToKey`) and joins `getKeyState`
   with the active-effect list through `rowSourceOf` (pure) — a 3px edge and a `SourceChip` in the
   grid's colours: *Programmer* (filled once touched), *Night · pressed* for a pressed layer, the effect
-  as *Pulse · ¼ · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
+  as *Pulse · 1 beat · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
   something under the winner is held back, by `lib/heldBack.ts` — the desk's
   `EffectSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
   programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
@@ -681,7 +681,8 @@ Release folds to its glyph and the scope line drops the fade.
   open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement effect starting *Around*. **Another tap swaps it** through `updateFx` — the new
+  it), a movement effect starting *Around*, every effect starting on **one bar** on the master tagged
+  for its family's usage (venue-visit plan D16; a wall-clock effect on four seconds). **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *property* cannot be a swap (an instance keeps
   its target), so it stops the auditioned effect and starts afresh. An effect offered through a
@@ -695,15 +696,19 @@ Release folds to its glyph and the scope line drops the fade.
   time, a distribution, element field or master only once the operator has set it, since the DTO
   leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
   (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
-  (a never-assigned master as master 1's uuid — the frame cannot say null; a rate master once set
-  cannot be put back to *unscaled* the same way, so the chip keeps naming it —
-  `FU-FX-RATE-MASTER-CLEAR`); **Done** comes back
+  (a never-assigned master as master 1's uuid — the frame cannot say null; an effect that opened
+  on *Seconds* gets `seconds: true` back, which is also how a wall-clock effect returns to
+  unscaled, `FU-FX-RATE-MASTER-CLEAR`'s close); **Done** comes back
   to the list, landing any move the floor still held; **×** stops the effect, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
   refetch never pulls a slider back under a finger; hosts key it on the effect's id *and* type, so
-  the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** (⅛ … 16), any other
-  division typed beside it (the chips elsewhere still speak note values, `FU-FE-FX-SPEED-SPELLING`),
-  with the master as a chip; a wall-clock effect types seconds and its chip is the rate master. A movement
+  the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** — `⅛ beat` … `4 bars`,
+  `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too (`FU-FE-FX-SPEED-SPELLING`,
+  settled by venue-visit plan S15) — any other division typed beside it, with the **timing** as a
+  chip: *Seconds* or a master (venue-visit plan D7; `TimingChip`, `timingChoicePatch`). On Seconds the
+  effect types its cycle in seconds and follows no master; a wall-clock effect types seconds either
+  way, its master being its rate master. Moving a beat effect between the two converts the division
+  at the master's live tempo, so its speed holds (`lib/effectTiming.ts`). A movement
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
@@ -1137,6 +1142,47 @@ per-family counts (`familyForCategory`, at last with a caller) exist to make tha
 *before* it happens. And the **selection defaults on**, the opposite of `RecordSheet`: a cue
 usually does want everything you busked, a Look named "Warm Amber" almost never does.
 
+**Every mask a sheet takes is one picker with an *All attributes* switch** (venue-visit plan S10):
+`MaskPicker` in `programmer/maskPicker.tsx` — a label, `MaskToggles`, and a sentence under them — on
+Record, Record Look (the busk Spread sheet's *Save as Look…* included), Include, Make layer, Update and
+a layer's popover in `LookStack`. **The switch is on for every attribute and hides the four family
+checkboxes**; switching it off shows them **all ticked**, which is not yet a narrowing — the operator
+unticks what the write should leave alone. The switch moves only when pressed: unticking the last
+family leaves it off with nothing ticked, and ticking all four back leaves it off too, so nothing
+vanishes under the pointer. Switched on, the families' per-family counts (Record Look, Make layer) are
+hidden, so the sentence names what the programmer holds instead. **The value is a `MaskValue`, not
+the wire's mask**: `null` while switched on, the ticked families while off. Off-with-all-four is the
+same mask as `null` but a different control state, and off-with-none is a state the wire has no word
+for — so a host sends `maskToWire(value)` (`undefined` for every attribute: the desk folds all four to
+none anyway, and the presses' `families` is the same vocabulary under its own name) and **refuses to
+act while `maskIsEmpty(value)`**, its button disabled and the sentence reading *Pick at least one
+attribute.* A host that writes on every change cannot hold that state in what it stores —
+`serializePropertyMask` folds all four to null and has no "none" — so it goes through
+**`useMaskDraft(stored, write)`**: the picker's own draft, writing only a change to the folded mask and
+never an empty one, and following the stored mask only when it changes to something it did not send
+itself (it keeps the keys it has sent and not yet seen back, so its own echoes — even one landing after
+a newer gesture, Colour unticked and ticked straight back — leave the draft alone). `LookStack`'s `LayerMaskPicker` is the one
+today. **`MaskToggles` is the mountable half on purpose** — no label, no sentence, nothing about the
+selection — so the apply-model plan's session 4 can put it in the selection bar's family pill through
+`useMaskDraft`, writing `selection.set` with the targets kept. `UpdateDialog` gained the picker with
+S10: Mode A sends the mask on the write; in Mode B the mask also decides which cues the programmer is
+over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a stale answer dropped by
+a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
+its hint says held scenery goes back whole, which the mask never narrows.
+
+**Record writes into any cue, or into a stack it makes** (S10). The stack select's last item, after a
+separator, is ***New stack…***: a required name field appears under it, and the stack is created
+(`loop: false`, appended to the show order) only when Record is pressed, so a cancelled sheet leaves
+nothing behind; once made it is the selection, so a failed Record is retried into it. A show with no
+stack opens on it. Merge, Replace and Remove are offered from every Record, not only from a cue row,
+and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
+(`cuePickerRows` — markers left out, `Q12 · Act 1` from whatever the `GET /cues` row carries). The
+programmer Record menu's *An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until
+S10 it opened the sheet with only *New cue* to offer. **It reads no stack beyond what the list row
+says** — `CuePickerSource.cueStackName` is optional although every cue has one today — because the cue
+model plan's session 4 makes a cue loose or shared: a row naming no stack is still a cue, and a shared
+cue is one row because it is one cue.
+
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
 `CellOwnership.layer`, so "why is this fixture this colour?" answers *Warm Wash* rather than *a
@@ -1206,7 +1252,7 @@ palette is generic and single-row — `templateSwatch` in `components/busking/pa
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
 `rows[0]` under a name covering several rows states one of them as the whole thing. An effect
 palette has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
-(`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller:
+(`Colour Pulse · ½ beat · M2`). That detail is a **component** and not a string built by the caller:
 the master's label is a live value, hooks cannot be conditional, and a hook in the loop would make
 every value pad in the library subscribe to the master bank. (The palette sheet's Master column
 answers the same question the other way — it names masters from the project's *stored* bank,
@@ -1217,8 +1263,8 @@ plan D16, session 5) — D12's question, through the live editor's own rules (`f
 re-exported by `fxEditorModel.ts`) rather than a second copy. `TemplateEditor`'s effect branch
 mounts **`FxEffectFields`** — the live editor's fields over the palette's draft (`templateDraftOf`
 / `withTemplateDraft`), with no target: distribution under Advanced, no step timing, element mode,
-head filter, and a rate master that can be set
-back to *Unscaled*, which a draft can hold and a live frame cannot. **`EffectParameterForm` is
+head filter, and the same timing chip — *Seconds* or a master — as the live editor.
+**`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an effect starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement effect
 starts **Around** — `ADDITIVE` with both centres pinned at 128 and the centre hidden — and anything
@@ -3470,15 +3516,18 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   `fadeDurationMsPresent: true`; Spread is the kit's `duration` plan. Set and Spread compare a null
   fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
   An effect palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
-- **Master is one field of `PUT {effect}`, and which field is the effect's timing.**
-  `speedMasterUuid` on a `BEAT` effect, `rateSpeedMasterUuid` on a `WALL_CLOCK` one; the body is
-  the whole effect with that field changed, since the PUT replaces the effect half — and it
-  **recreates the effect**, so a running instance restarts (the cell's title says so). A beat
-  effect's null is master 1, compared canonically and written back as null — and it reads as master 1
-  even before the bank has loaded (a `master-1` stand-in, never on the wire), or a marquee over it
-  would skip a row that takes a master; a wall-clock effect's null is **unscaled**, which it alone
-  offers. An effect whose type no longer resolves has no
-  `timingSource`, so which field to write is unknown: its Master is blank and skipped.
+- **Master is the effect's timing in `PUT {effect}`: *Seconds* or a master** (venue-visit plan D7),
+  offered first on every effect. A master is `speedMasterUuid` on a `BEAT` effect,
+  `rateSpeedMasterUuid` on a `WALL_CLOCK` one; Seconds is `seconds: true` with no master on a beat
+  effect (its division converted at the master's **stored** tempo, so its speed holds) and a null rate
+  master on a wall-clock one. The body is the whole effect with the timing changed — the flag only
+  where it moves — since the PUT replaces the effect half, and it **recreates the effect**, so a
+  running instance restarts (the cell's title says so). A beat effect's null is master 1, compared
+  canonically and written back as null — and it reads as master 1 even before the bank has loaded (a
+  `master-1` stand-in, never on the wire), or a marquee over it would skip a row that takes a master.
+  Clear is each kind's default: master 1 on a beat effect, Seconds on a wall-clock one. An effect
+  whose type no longer resolves has no `timingSource`, so which field to write is unknown: its Master
+  is blank and skipped.
 - **Value reads `rows ?? []`** and never resolves (`templateIntent.ts`'s rule): the swatch and
   `describeTemplateRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
 
@@ -3661,11 +3710,17 @@ each was:
   `footer`, `counts`, `labelLine`, `docked` (the busk tab's frame: one scroller, the footer static
   under it), `pickOnTargets` (the busk tab's seed from the rig), `onPick`, `onSave`, `onSpread` (absent
   draws the button inert — session 3 wires the programmer's). The cell hands it the batch's targets
-  **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell, a bar whose
-  colour lives on its cells expanded, a head with no RGB colour dropped — a colour-wheel head
-  resolves a `colour-setting` cell the batch counts and a colour commit refuses, so the label line
-  counts this list rather than `batch.count`, and the two lines say one number), and the container passes `projectId` for the **programmer alone**, since the
-  plain lists draw no palette strip and Save records from the programmer. Five hosts: the programmer's colour
+  **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell or warm/cold
+  white pair, a bar whose colour lives on its cells expanded, a head with neither dropped — a
+  colour-wheel head resolves a `colour-setting` cell the batch counts and a colour commit refuses,
+  so the label line counts this list rather than `batch.count`, and the two lines say one number),
+  and the container passes `projectId` for the **programmer alone**, since the plain lists draw no
+  palette strip and Save records from the programmer. A batch of warm/cold white pairs alone (the
+  blinder's cells, venue-visit plan D8) opens `WarmthCell` instead — a warmth between the pair's
+  declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
+  `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Spread in its footer — and
+  `ColourCell` dispatches between the two. Its controls are `editor/WarmthEditor`, which the fixture
+  sheet's `white-mix` row draws too. Five hosts: the programmer's colour
   cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
   in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
   compact width, because the compact body sits its 208px emitter column beside a 256px picker row
@@ -4679,12 +4734,16 @@ The effect editor gates on the library entry's `timingSource` (as `EffectParamet
 fixture-fx-sheets session 5, did): a wall-clock effect gets its cycle in seconds and the rate
 master, a beat effect beats a cycle and the speed master. Showing both to both was the pre-existing
 bug — a wall-clock effect's "Speed Master" did nothing at all. **The live effect editor keeps that
-gate and draws the master as a chip** (`FxEditor`'s `MasterChip`, fixture-fx-sheets D11): on a beat effect it is
-the speed master (`M2 · 96`, master 1 when none is stored), on a wall-clock one the **rate**
-master (*Rate M2 · 96*, or *Unscaled*), beside the Speed label rather than as a select under it.
-It lists the live bank and always sends a concrete uuid — choosing M1 sends master 1's uuid,
-`SpeedMasterSelect`'s rule, because `updateFx`'s absent field means "keep" — and it reads the live
-BPM, never the stored one.
+gate and draws the timing as a chip** (`FxEffectFields`' `TimingChip`, fixture-fx-sheets D11 and
+venue-visit plan D7): *Seconds* first, then every master — on a beat effect the speed master (`M2 ·
+96`, master 1 when none is stored), on a wall-clock one the **rate** master (*Rate M2 · 96*) —
+beside the Speed label rather than as a select under it. *Seconds* is an effect's own cycle with no
+master (`seconds` on the wire; a wall-clock effect's Seconds is no rate master). It lists the live
+bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
+because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.
+**A new effect is one bar on the master tagged for its family's usage, else master 1** (venue-visit
+plan D16): `FxPicker` and `TemplateEditor` stamp it through `useSpeedMasterForCategory` at creation,
+so `null` still means master 1 everywhere; a wall-clock effect starts on its own Seconds (4 s).
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
 legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the

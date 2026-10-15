@@ -1,6 +1,13 @@
 import { familyForCategory, type AttributeFamily } from '@/lib/attributeFamily'
 import { annotatesDegrees } from '@/lib/axisDegrees'
-import { findDimmerProperty, type ColourPropertyDescriptor, type PropertyDescriptor, type SettingPropertyDescriptor, type SliderPropertyDescriptor } from '@/store/fixtures'
+import {
+  findDimmerProperty,
+  type ColourPropertyDescriptor,
+  type PropertyDescriptor,
+  type SettingPropertyDescriptor,
+  type SliderPropertyDescriptor,
+  type WhiteMixPropertyDescriptor,
+} from '@/store/fixtures'
 import { resolveCell, type CellResolution } from '../fixtures-list/columns'
 
 /**
@@ -37,6 +44,11 @@ export type SheetRow =
   | { kind: 'setting'; id: string; family: SheetFamily; label: string; keys: string[]; property: SettingPropertyDescriptor }
   /** [dimmer] is what its swatch is dimmed by: the set's own dimmer, else the fixture's for a head. */
   | { kind: 'colour'; id: string; family: SheetFamily; label: string; keys: string[]; property: ColourPropertyDescriptor; dimmer?: SliderPropertyDescriptor }
+  /**
+   * A warm/cold white pair's colour (venue-visit plan D8) — the blinder's cells: a warmth and a
+   * level, written as the colour that mix makes. Its two white sliders keep rows of their own.
+   */
+  | { kind: 'white-mix'; id: string; family: SheetFamily; label: string; keys: string[]; property: WhiteMixPropertyDescriptor }
   /**
    * A colour head with no dimmer: one Intensity row reading max(R, G, B) and scaling the colour —
    * `useVirtualDimmer`. Keyed by the colour property, since that is the entry it writes. It used to
@@ -128,6 +140,9 @@ export function buildSheetRows(
           property: p,
           dimmer: ownDimmer ?? options.fallbackDimmer,
         })
+        break
+      case 'whiteMix':
+        rows.push({ kind: 'white-mix', id: p.name, family: 'COLOUR', label: p.displayName, keys: [p.name], property: p })
         break
       case 'slider':
         rows.push({ kind: 'slider', id: p.name, family: familyOf(p), label: p.displayName, keys: [p.name], property: p })

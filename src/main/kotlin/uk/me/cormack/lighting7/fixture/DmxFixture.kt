@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureStrobeSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.routes.*
@@ -39,6 +40,8 @@ abstract class DmxFixture(
                     channelDescriptions[property.blueSlider.channelNo] = "$name Blue"
                 }
                 is DmxFixtureSetting<*> -> channelDescriptions[property.channelNo] = name
+                // Its channels are its two white sliders, which name them.
+                is DmxWhiteMixColour -> {}
 
                 else -> throw Error("Unsupported property type ${property::class}")
             }
@@ -119,6 +122,7 @@ abstract class DmxFixture(
                         compactDisplay = prop.compactDisplay.serialized()
                     )
                 }
+                is DmxWhiteMixColour -> descriptors.add(whiteMixDescriptor(prop, value, displayName))
                 is DmxSlider -> {
                     // Check if this is an extended colour channel to bundle
                     if (prop.bundleWithColour) {
@@ -293,6 +297,22 @@ abstract class DmxFixture(
                         MemberSettingChannel(fixtureKey = elementDescriptors[idx].key, channel = p.channel)
                     }
                 )
+                is WhiteMixPropertyDescriptor -> {
+                    val pairs = allMatching.map { it as WhiteMixPropertyDescriptor }
+                    if (pairs.any { it.warmKelvin != templateProp.warmKelvin || it.coldKelvin != templateProp.coldKelvin }) {
+                        null
+                    } else {
+                        GroupWhiteMixPropertyDescriptor(
+                            name = templateProp.name,
+                            displayName = templateProp.displayName,
+                            warmKelvin = templateProp.warmKelvin,
+                            coldKelvin = templateProp.coldKelvin,
+                            memberChannels = elementDescriptors.mapIndexed { idx, elem ->
+                                MemberWhiteMixChannels(elem.key, pairs[idx].warmChannel, pairs[idx].coldChannel)
+                            },
+                        )
+                    }
+                }
                 // A head never carries a trigger or a command (they are fixture-level), and neither has an "all heads" control.
                 is TriggerPropertyDescriptor -> null
                 is CommandPropertyDescriptor -> null
@@ -322,6 +342,7 @@ abstract class DmxFixture(
                         )
                     )
                 }
+                is DmxWhiteMixColour -> descriptors.add(whiteMixDescriptor(prop, value, displayName))
                 is DmxSlider -> {
                     // Skip bundled colour channels in element properties
                     if (!prop.bundleWithColour) {
@@ -356,6 +377,17 @@ abstract class DmxFixture(
 
         return descriptors
     }
+
+    private fun whiteMixDescriptor(prop: Fixture.Property, value: DmxWhiteMixColour, displayName: String) =
+        WhiteMixPropertyDescriptor(
+            name = prop.name,
+            displayName = displayName,
+            warmChannel = ChannelRef(value.warm.universe.universe, value.warm.channelNo),
+            coldChannel = ChannelRef(value.cold.universe.universe, value.cold.channelNo),
+            warmKelvin = value.mix.warmKelvin,
+            coldKelvin = value.mix.coldKelvin,
+            compactDisplay = prop.compactDisplay.serialized(),
+        )
 
     // One construction site for setting descriptors: fixture-level and
     // element-level properties used to carry two byte-identical copies of this

@@ -80,10 +80,11 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   elementFilter: 'ALL',
   speedMasterUuid: null,
   rateSpeedMasterUuid: null,
+  seconds: false,
   ...over,
 })
 
-function fields(entry: EffectLibraryEntry, d: FxDraft, extra: { allowUnscaledRate?: boolean } = {}) {
+function fields(entry: EffectLibraryEntry, d: FxDraft) {
   const set = vi.fn()
   const setParam = vi.fn()
   render(
@@ -97,7 +98,6 @@ function fields(entry: EffectLibraryEntry, d: FxDraft, extra: { allowUnscaledRat
       readOnly={false}
       set={set}
       setParam={setParam}
-      {...extra}
     />,
   )
   return { set, setParam }
@@ -106,21 +106,37 @@ function fields(entry: EffectLibraryEntry, d: FxDraft, extra: { allowUnscaledRat
 afterEach(cleanup)
 
 describe('FxEffectFields', () => {
-  it('gives a wall-clock effect its cycle in seconds and its rate master, and a beat effect beats and its speed master', () => {
+  it('gives a wall-clock effect with no rate master Seconds, and a beat effect beats and its speed master', () => {
     fields(FLICKER, draft())
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ }).closest('div')).toBeTruthy()
     expect(screen.queryByRole('radiogroup', { name: 'Speed' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Rate master: Unscaled' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
     cleanup()
     fields(PULSE, draft())
     expect(screen.getByRole('radiogroup', { name: 'Speed' })).toBeTruthy()
     expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Speed master: M1 · 120' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Timing: M1 · 120' })).toBeTruthy()
   })
 
-  it('names a stored rate master the bank does not hold as M1, the master the desk runs it on — not Unscaled', () => {
+  it('types a beat effect on Seconds in seconds, with no master named', () => {
+    fields(PULSE, draft({ seconds: true, beatDivision: 10 }))
+    expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ })).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Speed' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
+    expect(screen.getByText('seconds a cycle · follows no master')).toBeTruthy()
+  })
+
+  it('names a stored rate master the bank does not hold as M1, the master the desk runs it on — not Seconds', () => {
     fields(FLICKER, draft({ rateSpeedMasterUuid: 'gone' }))
-    expect(screen.getByRole('button', { name: 'Rate master: M1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Timing: rate M1 · 120' })).toBeTruthy()
+  })
+
+  it('speaks the segment in the one spelling the chips use — beats a cycle, bars from four', () => {
+    fields(PULSE, draft({ beatDivision: 4 }))
+    const segment = screen.getByRole('radiogroup', { name: 'Speed' })
+    const labels = Array.from(segment.querySelectorAll('button')).map((b) => b.textContent)
+    expect(labels).toEqual(['⅛ beat', '¼ beat', '½ beat', '1 beat', '2 beats', '1 bar', '2 bars', '4 bars'])
+    expect(screen.getByRole('radio', { name: '1 bar a cycle' }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('holds an int slider at twice its declared default, and lets the field type past it', () => {

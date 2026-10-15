@@ -1,5 +1,6 @@
 import { parseProgrammerEntryValue, type ProgrammerParsedValue } from './programmerValue'
 import type { ChannelRef, Fixture, PropertyDescriptor } from '../store/fixtures'
+import { whiteLevelsFor } from './whiteMix'
 
 /**
  * Resolve the programmer's *property* entries down to the DMX channels they would drive, so a
@@ -118,6 +119,15 @@ function channelsFor(
         out.push({ key: channelMapKey(descriptor.uvChannel), value: parsed.uv })
       }
       return out
+    }
+    // The colour's nearest mix of the two whites, as the desk writes it (`PropertyChannelWriter`).
+    case 'whiteMix': {
+      if (parsed.kind !== 'colour') return []
+      const levels = whiteLevelsFor(descriptor, [parsed.r, parsed.g, parsed.b])
+      return [
+        { key: channelMapKey(descriptor.warmChannel), value: levels.warm },
+        { key: channelMapKey(descriptor.coldChannel), value: levels.cold },
+      ]
     }
     // Coarse axes only. A position assignment writes no fine channels on the backend either
     // (`PropertyChannelWriter.resolvePosition`), so emitting them here would make the preview

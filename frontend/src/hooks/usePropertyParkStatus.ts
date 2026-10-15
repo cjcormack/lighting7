@@ -15,6 +15,8 @@ export function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] 
       if (property.uvChannel) channels.push(property.uvChannel)
       return channels
     }
+    case "whiteMix":
+      return [property.warmChannel, property.coldChannel]
     case "position":
       return [property.panChannel, property.tiltChannel]
     case "setting":

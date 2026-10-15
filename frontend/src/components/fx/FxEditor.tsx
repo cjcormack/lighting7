@@ -167,17 +167,16 @@ export function FxEditor({
 
   const revert = () => {
     const request = updateRequestOf(snapshot, setFields.current, master1Uuid)
-    // A master the frame could not put back stays drawn as the desk holds it: a rate master has no
-    // spelling for *unscaled*, and a never-assigned speed master needs master 1's uuid, which may not
+    // A revert onto *Seconds* sends `seconds: true`, which clears both masters on the desk — so the
+    // snapshot's (none) is what the rig holds. Otherwise a master the frame could not put back stays
+    // drawn as the desk holds it: a never-assigned speed master needs master 1's uuid, which may not
     // have arrived. Drawing the snapshot there would show a state the rig is not in.
+    const keepsDrawn = (field: 'speedMasterUuid' | 'rateSpeedMasterUuid') =>
+      request.seconds !== true && setFields.current.has(field) && request[field] == null
     setDraft({
       ...snapshot,
-      speedMasterUuid:
-        setFields.current.has('speedMasterUuid') && request.speedMasterUuid == null ? draft.speedMasterUuid : snapshot.speedMasterUuid,
-      rateSpeedMasterUuid:
-        setFields.current.has('rateSpeedMasterUuid') && request.rateSpeedMasterUuid == null
-          ? draft.rateSpeedMasterUuid
-          : snapshot.rateSpeedMasterUuid,
+      speedMasterUuid: keepsDrawn('speedMasterUuid') ? draft.speedMasterUuid : snapshot.speedMasterUuid,
+      rateSpeedMasterUuid: keepsDrawn('rateSpeedMasterUuid') ? draft.rateSpeedMasterUuid : snapshot.rateSpeedMasterUuid,
     })
     latest.current = request
     live.flush(request)

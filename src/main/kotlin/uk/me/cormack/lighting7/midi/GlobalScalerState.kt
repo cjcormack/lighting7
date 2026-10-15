@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
@@ -28,8 +29,9 @@ import kotlin.math.roundToInt
  *    a rate rather than a level, so it passes through unchanged above 0 % and is cut at 0 %.
  *
  * Which channels are scaled (venue-visit plan D12): every DIMMER and UV channel, and, on a head
- * with no dimmer, its colour-mix channels — a `DmxColour`'s red, green and blue and its WHITE and
- * AMBER sliders — so pulling the grand master down dims the whole rig. A head is a fixture, or one
+ * with no dimmer, its colour-mix channels — a `DmxColour`'s red, green and blue, a
+ * `DmxWhiteMixColour`'s two whites, and its WHITE and AMBER sliders — so pulling the grand master
+ * down dims the whole rig. Each channel is in the scaled set once, however many properties cover it. A head is a fixture, or one
  * of a [MultiElementFixture]'s elements; an element is dimmerless only when neither it nor its
  * parent has a dimmer, so a zone under a master dimmer is left to that dimmer. Colour wheels and
  * presets are never scaled: they select a colour, they do not mix one. Position, beam and setting
@@ -151,7 +153,8 @@ class GlobalScalerState(
             when (category) {
                 PropertyCategory.DIMMER, PropertyCategory.UV -> addValueChannels(universe, value, scaled)
                 PropertyCategory.STROBE -> addValueChannels(universe, value, strobe)
-                PropertyCategory.COLOUR -> if (dimmerless && value is DmxColour) addValueChannels(universe, value, scaled)
+                PropertyCategory.COLOUR ->
+                    if (dimmerless && (value is DmxColour || value is DmxWhiteMixColour)) addValueChannels(universe, value, scaled)
                 PropertyCategory.WHITE, PropertyCategory.AMBER ->
                     if (dimmerless && value is DmxSlider) addValueChannels(universe, value, scaled)
                 else -> Unit
@@ -166,6 +169,10 @@ class GlobalScalerState(
                 into += packChannelKey(universe, value.redSlider.channelNo)
                 into += packChannelKey(universe, value.greenSlider.channelNo)
                 into += packChannelKey(universe, value.blueSlider.channelNo)
+            }
+            is DmxWhiteMixColour -> {
+                into += packChannelKey(universe, value.warm.channelNo)
+                into += packChannelKey(universe, value.cold.channelNo)
             }
         }
     }

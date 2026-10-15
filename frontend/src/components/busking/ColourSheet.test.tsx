@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { BuskingTarget } from './buskingTypes'
 import type { Fixture } from '@/store/fixtures'
+import { chan, element, makeFixture, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
 import { resetLiveAppearance } from '@/lib/liveAppearance'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
@@ -227,6 +228,22 @@ describe('writes', () => {
     // Agreeing members: one group write, folded for what they share.
     expect(planColourWrites([reds], white, fixtures)).toEqual([
       { targetType: 'group', targetKey: 'Reds', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined } },
+    ])
+  })
+
+  it('plans a blinder as one write per cell, RGB alone with a white folded in — the desk lands it as each cell’s nearest mix', () => {
+    const cells = [0, 1].map((i) =>
+      element(i, `blinder.cell-${i + 1}`, [
+        sliderProp('warmWhite', 'white', chan(200 + i * 2)),
+        sliderProp('coldWhite', 'white', chan(201 + i * 2)),
+        whiteMixProp(chan(200 + i * 2), chan(201 + i * 2)),
+      ]),
+    )
+    const blinder = makeFixture('blinder', [sliderProp('dimmer', 'dimmer', chan(199))], { elements: cells })
+    const whole: BuskingTarget = { type: 'fixture', key: 'blinder', fixture: blinder }
+    expect(planColourWrites([whole], { r: 0, g: 0, b: 0, w: 255, a: 0, uv: 0 }, [blinder])).toEqual([
+      { targetType: 'fixture', targetKey: 'blinder.cell-1', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'blinder.cell-2', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
     ])
   })
 

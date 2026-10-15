@@ -37,6 +37,13 @@ export interface EffectSummaryData {
    * must carry it, or a wall-clock effect renders as unscaled while it is running scaled.
    */
   rateSpeedMasterUuid: string | null
+  /**
+   * D7's flag (venue-visit plan S15) — with [timingSource], what says the division is seconds. Every
+   * adapter carries it, for [speedMasterUuid]'s reason.
+   */
+  seconds: boolean
+  /** The effect type's timing source from the library, null where the library does not have it. */
+  timingSource: string | null
 }
 
 // ─── Category inference ────────────────────────────────────────────────────
@@ -63,6 +70,11 @@ export function lookupCategory(
     if (entry) return entry.category
   }
   return EFFECT_CATEGORY_MAP[effectType.toLowerCase()] ?? 'dimmer'
+}
+
+/** Look up an effect type's timing source from the effect library. */
+function lookupTimingSource(effectType: string, library?: EffectLibraryEntry[]): string | null {
+  return library?.find((e) => e.name === effectType)?.timingSource ?? null
 }
 
 /** Look up parameter defs from the effect library. */
@@ -93,6 +105,8 @@ export function fromLookEffect(e: LookEffect, library?: EffectLibraryEntry[]): E
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
+    seconds: e.seconds ?? false,
+    timingSource: lookupTimingSource(e.effectType, library),
   }
 }
 
@@ -115,6 +129,8 @@ export function fromCueAdHocEffect(
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
+    seconds: e.seconds ?? false,
+    timingSource: lookupTimingSource(e.effectType, library),
   }
 }
 
@@ -137,6 +153,8 @@ export function fromFixtureDirectEffect(
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
+    seconds: e.seconds ?? false,
+    timingSource: lookupTimingSource(e.effectType, library),
   }
 }
 
@@ -159,6 +177,8 @@ export function fromFixtureIndirectEffect(
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
+    seconds: e.seconds ?? false,
+    timingSource: lookupTimingSource(e.effectType, library),
   }
 }
 
@@ -181,5 +201,7 @@ export function fromGroupActiveEffect(
     parameterDefs: lookupParameterDefs(e.effectType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
+    seconds: e.seconds ?? false,
+    timingSource: lookupTimingSource(e.effectType, library),
   }
 }

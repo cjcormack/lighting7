@@ -138,6 +138,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 parameters = effect.effect.parameters,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
+                seconds = effect.seconds,
             ))
         }
     }
@@ -733,8 +734,10 @@ internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     interval = effect.intervalMs.asDuration()
     randomWindow = effect.randomWindowMs.asDuration()
     sortOrder = effect.sortOrder
-    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
+    speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    seconds = effect.seconds
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */
@@ -939,6 +942,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             parameters = adHoc.parameters,
             speedMasterUuid = adHoc.speedMasterUuid,
             rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
+            seconds = adHoc.seconds,
         )
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)

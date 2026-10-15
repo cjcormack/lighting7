@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
-import { getBeatDivisionLabel } from '@/components/fx/fxConstants'
+import { getBeatDivisionLabel, secondsLabel } from '@/components/fx/fxConstants'
 import { useActiveEffectsQuery, useEffectLibraryQuery, useRemoveFxMutation } from '@/store/fixtureFx'
 import { useRemoveGroupFxMutation } from '@/store/groups'
 import { useProgrammerLayersQuery } from '@/store/programmer'
@@ -264,9 +264,15 @@ function FxRow({
         <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
         <span className="min-w-0 flex-1 truncate font-medium">{effect.effectType}</span>
         {effect.timingSource === 'WALL_CLOCK' ? (
-          // A wall-clock effect has no beat division to show; its rate master is the interesting
-          // number, and `SpeedMasterChip` already knows to stay silent at master 1.
-          <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
+          // Seconds a cycle — a wall-clock effect, or a beat effect on Seconds (D7), whose loop
+          // reads `WALL_CLOCK` too. A rate master, where one scales it, is the chip beside it, which
+          // already stays silent where there is none.
+          <>
+            <SpeedMasterChip speedMasterUuid={effect.rateSpeedMasterUuid} kind="rate" />
+            <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+              {secondsLabel(effect.beatDivision)}
+            </Badge>
+          </>
         ) : (
           <>
             <SpeedMasterChip speedMasterUuid={effect.speedMasterUuid} />

@@ -44,7 +44,9 @@ class LatestWinsWriterTest {
             writer.submit(1, "b")
             writer.submit(2, "c")
             writer.close()
-            assertEquals(setOf(1 to "b", 2 to "c"), synchronized(written) { written.toSet() })
+            // The background pass may already have written "a" before "b" replaced it; what close
+            // promises is that each key's latest value is the last one written.
+            assertEquals(mapOf(1 to "b", 2 to "c"), synchronized(written) { written.toMap() })
         } finally {
             scope.cancel()
         }

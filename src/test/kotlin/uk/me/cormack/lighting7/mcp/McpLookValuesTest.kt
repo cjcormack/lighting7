@@ -401,4 +401,17 @@ class McpLookValuesTest : RouteIntegrationTest() {
         }
         assertEquals(null, plain.json()["fixtureTypes"]!!.jsonArray.single().jsonObject["properties"], "off by default")
     }
+
+    @Test
+    fun `list_fixture_types lists a blinder's cell colour and its whites`() {
+        val listed = runBlocking {
+            SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"china-2-cell","properties":true}""").jsonObject)
+        }
+        assertTrue(listed.success, listed.result)
+        val type = listed.json()["fixtureTypes"]!!.jsonArray.single().jsonObject
+        assertTrue("colour" in type["capabilities"]!!.jsonArray.map { it.jsonPrimitive.content })
+        val colour = type["cellProperties"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "rgbColour" }
+        assertEquals("colour", colour["category"]!!.jsonPrimitive.content)
+        assertTrue("3000 K" in colour["whites"]!!.jsonPrimitive.content)
+    }
 }

@@ -295,7 +295,7 @@ See `docs/fixtures-engineering.md` §"Venue parks".
 | `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `clearFx` | — | Replies `fxChanged(CLEARED)` |
-| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`) | Replies `fxChanged(UPDATED, id)` \| `fxError` |
+| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master) | Replies `fxChanged(UPDATED, id)` \| `fxError` |
 
 Adding effects is REST (`POST /api/rest/fx/add`), not WS. **Updating one is both**: `updateFx` is
 `PUT /api/rest/fx/{id}` as a frame (fixture-fx-sheets plan W3), for a live FX editor whose every

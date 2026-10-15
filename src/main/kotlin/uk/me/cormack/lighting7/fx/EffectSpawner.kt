@@ -151,6 +151,11 @@ internal object EffectSpawner {
                 ?: speedMasterUuidOrNull(effectSpec.speedMasterUuid)
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid
                 ?: speedMasterUuidOrNull(effectSpec.rateSpeedMasterUuid)
+            // D7, after the masters: an effect on Seconds runs its own cycle — a beat effect on the
+            // wall-clock loop — so a layer's master override does not reach it. A wall-clock row that
+            // merely has no rate master (every row before S15) keeps the rule it always had: a
+            // layer's rate override still scales it.
+            applyTimingChoice(timingSource, effectSpec.seconds)
         }
     }
 

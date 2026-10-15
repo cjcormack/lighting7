@@ -555,6 +555,8 @@ class AiTools(private val state: State) {
                             put("propertyName", effect.target.propertyName)
                             put("isGroupTarget", effect.isGroupEffect)
                             put("beatDivision", effect.timing.beatDivision)
+                            // D7: the division is seconds and no master is followed.
+                            if (effect.onSeconds) put("seconds", true)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             effect.cueId?.let { put("cueId", it) }
@@ -1969,6 +1971,7 @@ class AiTools(private val state: State) {
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
+                seconds = spec.seconds,
             )
         }
         // Said here rather than left to the write boundary only because the model reads this
@@ -2020,11 +2023,12 @@ class AiTools(private val state: State) {
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
     private fun parseLookEffect(obj: JsonObject, at: String): LookEffectSpec {
+        val timing = parseEffectTiming(obj, at)
         val spec = LookEffectSpec(
             effectType = obj.requiredString("effectType", at),
             category = obj.requiredString("category", at),
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
-            beatDivision = obj.requiredDouble("beatDivision", at),
+            beatDivision = timing.beatDivision,
             blendMode = obj.requiredString("blendMode", at),
             distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
@@ -2032,8 +2036,9 @@ class AiTools(private val state: State) {
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
-            speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
-            rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
+            speedMasterUuid = timing.speedMasterUuid,
+            rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
+            seconds = timing.seconds,
         )
         EffectSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
@@ -2052,13 +2057,14 @@ class AiTools(private val state: State) {
      * turns that message into a failed result the same way.
      */
     private fun parseAdHocEffectFromJson(obj: JsonObject, at: String): CueAdHocEffectDto {
+        val timing = parseEffectTiming(obj, at)
         return CueAdHocEffectDto(
             targetType = obj.requiredString("targetType", at),
             targetKey = obj.requiredString("targetKey", at),
             effectType = obj.requiredString("effectType", at),
             category = obj.requiredString("category", at),
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
-            beatDivision = obj.requiredDouble("beatDivision", at),
+            beatDivision = timing.beatDivision,
             blendMode = obj.requiredString("blendMode", at),
             distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
@@ -2066,9 +2072,52 @@ class AiTools(private val state: State) {
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
-            speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
-            rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
+            speedMasterUuid = timing.speedMasterUuid,
+            rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
+            seconds = timing.seconds,
         )
+    }
+
+    /** An effect's timing as a tool call gives it, with venue-visit plan D16's defaults filled in. */
+    private data class ParsedEffectTiming(
+        val beatDivision: Double,
+        val speedMasterUuid: String?,
+        val rateSpeedMasterUuid: String?,
+        val seconds: Boolean,
+    )
+
+    /**
+     * The timing fields of one effect out of a tool call (venue-visit plan D7, D16).
+     *
+     * *Seconds* beside a master is refused — two answers to one question. An omitted `beatDivision`
+     * is one bar, and a **beat** effect that names no master and is not on Seconds is stamped with
+     * the master whose `usage` matches its family — the library's category for its type, else the
+     * call's — as the effect editor stamps a new effect. Null keeps meaning master 1 everywhere: the
+     * stamp is a uuid written at creation, never a rule resolved later. A wall-clock effect is left
+     * unscaled, its own Seconds, since "one bar" means nothing to an effect timed in seconds.
+     */
+    private fun parseEffectTiming(obj: JsonObject, at: String): ParsedEffectTiming {
+        val seconds = obj.present("seconds")?.let {
+            it.jsonPrimitive.booleanOrNull ?: throw IllegalArgumentException("$at: 'seconds' must be a boolean")
+        } ?: false
+        val speed = checkedSpeedMasterUuid(obj["speedMasterUuid"])
+        val rate = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"])
+        secondsTimingConflict(seconds, speed, rate)?.let { throw IllegalArgumentException("$at: $it") }
+        val beatDivision = if (obj.present("beatDivision") == null) BeatDivision.ONE_BAR else obj.requiredDouble("beatDivision", at)
+        if (beatDivision <= 0.0) throw IllegalArgumentException("$at: 'beatDivision' must be greater than 0")
+        val stamped = speed ?: if (seconds) null else usageMasterFor(obj)
+        return ParsedEffectTiming(beatDivision, stamped, rate, seconds)
+    }
+
+    /** D16's default master for a beat effect named in [obj]: the one tagged for its family, or null. */
+    private fun usageMasterFor(obj: JsonObject): String? {
+        val effectType = obj["effectType"]?.jsonPrimitive?.contentOrNull ?: return null
+        val registration = state.show.fxRegistry.getRegistration(effectType)
+        if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
+        val family = registration?.category ?: obj["category"]?.jsonPrimitive?.contentOrNull ?: return null
+        return state.show.fxEngine.speedMasters.masterStates()
+            .firstOrNull { it.usage == family }
+            ?.uuid?.toString()
     }
 
     /**
@@ -2097,6 +2146,7 @@ class AiTools(private val state: State) {
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
+                seconds = spec.seconds,
                 sortOrder = index,
             )
         }

@@ -9,6 +9,8 @@ import { resolveSettingOption } from '@/hooks/usePropertyValues'
 import { useGetParkStateListQuery } from '@/store/park'
 import type { ChannelRef, ColourPropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import { ColourEditor } from '../editor/ColourEditor'
+import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
+import { whiteMixColour, type Rgb } from '@/lib/whiteMix'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { AxisControl, LevelControl, OpenToggle, openKey, PositionPad } from './PropertyRow'
@@ -22,6 +24,7 @@ import {
   writePickLevel,
   writePickPosition,
   writePickVirtualDimmer,
+  writePickWhiteMix,
 } from './sheetWrites'
 import type { PickSource } from './rowSource'
 import type { PickRow, PickWrite } from './sheetPick'
@@ -52,6 +55,8 @@ export const PickPropertyRow = memo(function PickPropertyRow({ pickRow, write }:
       return <SettingPickRow pickRow={pickRow} heads={pickRow.heads as HeadsOf<'setting'>} write={write} />
     case 'colour':
       return <ColourPickRow pickRow={pickRow} heads={pickRow.heads as HeadsOf<'colour'>} write={write} />
+    case 'white-mix':
+      return <WhiteMixPickRow pickRow={pickRow} heads={pickRow.heads as HeadsOf<'white-mix'>} write={write} />
     case 'position':
       return <PositionPickRow pickRow={pickRow} heads={pickRow.heads as HeadsOf<'position'>} write={write} />
   }
@@ -70,6 +75,8 @@ function rowChannels(row: SheetRow): ChannelRef[] {
         (c): c is ChannelRef => c != null,
       )
     }
+    case 'white-mix':
+      return [row.property.warmChannel, row.property.coldChannel]
     case 'position':
       return [row.resolution.pan, row.resolution.tilt]
   }
@@ -386,6 +393,59 @@ function ColourPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: Hea
               readOnly={readOnly}
               open
             />
+          </fieldset>
+        )}
+      </div>
+    </PickFrame>
+  )
+}
+
+// ─── Warm/cold white ───────────────────────────────────────────────────────
+
+/**
+ * A warm/cold white pair over a pick: each head's swatch, read from its own two channels, and the
+ * first head's warmth and level in the editor, landing on every picked head as its nearest mix.
+ */
+function WhiteMixPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: HeadsOf<'white-mix'>; write: PickWrite }) {
+  const { openRowId, target } = useFixtureSheet()
+  const noun = target.type === 'group' ? 'member' : 'head'
+  const open = openRowId === openKey(PICK_HEAD, pickRow.row)
+  const { source, parked, readOnly } = usePickRowState(pickRow)
+  const refs = useMemo(() => heads.flatMap((h) => [h.row.property.warmChannel, h.row.property.coldChannel]), [heads])
+  const values = useChannelValues(refs)
+  const colours = useMemo(
+    () => heads.map((h, i) => whiteMixColour(h.row.property, values[i * 2] ?? 0, values[i * 2 + 1] ?? 0)),
+    [heads, values],
+  )
+  const distinct = new Set(colours.map((c) => c.join(','))).size
+  const mix = heads[0].row.property
+  const targets = useMemo(() => heads.map((h) => ({ key: h.key, property: h.row.property })), [heads])
+  const update = useCallback((next: Rgb) => writePickWhiteMix(write, targets, next), [write, targets])
+  const note = `${heads.length} ${noun}${heads.length === 1 ? '' : 's'}${distinct > 1 ? `, ${distinct} colours` : ''}`
+  return (
+    <PickFrame
+      pickRow={pickRow}
+      write={write}
+      source={source}
+      readOnly={readOnly}
+      parked={parked}
+      note={note}
+      trailing={<OpenToggle row={pickRow.row} headKey={PICK_HEAD} label={pickRow.row.label} />}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex h-7 min-w-0 items-center gap-2">
+          <span data-testid="colour-strip" className="flex h-7 min-w-0 flex-1 overflow-hidden rounded-md border">
+            {colours.map((c, i) => (
+              <span key={heads[i].key} className="min-w-0 flex-1" style={{ backgroundColor: `rgb(${c.join(', ')})` }} title={heads[i].name} />
+            ))}
+          </span>
+          <span className="w-[108px] shrink-0 truncate rounded-md border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+            {distinct > 1 ? 'mixed' : warmthReading(mix, colours[0])}
+          </span>
+        </div>
+        {open && (
+          <fieldset disabled={readOnly} className="min-w-0" data-testid="warmth-editor">
+            <WarmthEditor mix={mix} colour={colours[0]} onColourChange={update} />
           </fieldset>
         )}
       </div>

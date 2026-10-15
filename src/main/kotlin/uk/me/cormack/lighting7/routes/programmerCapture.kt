@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
@@ -588,6 +589,11 @@ internal fun fxInstancesToCueChildren(
                     } else null,
                     parameters = effect.effect.parameters,
                     sortOrder = adHocEffects.size,
+                    // The effect's timing (venue-visit plan S15, D7) — its master, or Seconds. The
+                    // masters were left behind here before S15, so a recorded busk fell back to master 1.
+                    speedMasterUuid = effect.speedMasterUuid?.toString(),
+                    rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
+                    seconds = effect.seconds,
                 )
         )
     }
@@ -628,6 +634,14 @@ internal fun readOutputPropertyValue(
     ) {
         is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(
             readOutputColour(state, fixture, raw, universe),
+        )
+        is DmxWhiteMixColour -> CueAssignmentResolver.PropertyValue.Colour(
+            ExtendedColour(
+                raw.mix.colourOf(
+                    channelOutput(state, universe, raw.warm.channelNo),
+                    channelOutput(state, universe, raw.cold.channelNo),
+                ),
+            ),
         )
         is DmxFixtureSetting<*> ->
             CueAssignmentResolver.PropertyValue.Setting(channelOutput(state, universe, raw.channelNo))

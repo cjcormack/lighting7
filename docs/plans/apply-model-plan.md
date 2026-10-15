@@ -313,6 +313,11 @@ showed the strip, now show the band too, since it is the family's offer and the 
 
 - **The selection bar's family pill becomes a picker**:
   - Intensity, Position, Colour and Beam as toggles, and S10's *All attributes*, which clears the mask.
+    S10 built these as `MaskToggles` (`programmer/maskPicker.tsx`): *All attributes* is a switch,
+    and the four family checkboxes show only while it is off, all four ticked when it is first
+    switched off. It knows nothing of the selection, so the pill mounts it as it is, through
+    S10's `useMaskDraft` — the selection's `families` folds all four to none and cannot hold
+    "none ticked", so the draft holds the switch's state and writes only a real change.
   - It writes `selection.set` with the current targets and the new families.
   - The marquee still sets it; a rows-only click still clears it.
 - Record, Record Look, Include, Make layer and Update open their `MaskPicker` on the selection's mask.

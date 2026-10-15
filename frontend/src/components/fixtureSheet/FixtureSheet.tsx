@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ElementType, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { commandsOf, findColourSource, findDimmerProperty, triggersOf, useFixtureTypeListQuery, type Fixture } from '@/store/fixtures'
+import { commandsOf, findColourSource, findDimmerProperty, findWhiteMixProperty, triggersOf, useFixtureTypeListQuery, type Fixture } from '@/store/fixtures'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useGroupQuery } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
@@ -311,7 +311,10 @@ function FixtureValues({
   const { data: fixtureTypes } = useFixtureTypeListQuery()
   const gels = useGelIndex()
   const type = fixtureTypes?.find((t) => t.typeKey === fixture.typeKey)
-  const hasColour = findColourSource(fixture.properties) != null || (fixture.elementGroupProperties ?? []).some((p) => p.type === 'colour')
+  const hasColour =
+    findColourSource(fixture.properties) != null ||
+    findWhiteMixProperty(fixture.properties) != null ||
+    (fixture.elementGroupProperties ?? []).some((p) => p.type === 'colour' || p.type === 'whiteMix')
   const gel = !hasColour && type?.gelCompactDisplay && fixture.gelCode ? findGel(gels, fixture.gelCode) : null
   const empty = groups.length === 0 && heads.length === 0 && triggers.length === 0 && commands.length === 0
 

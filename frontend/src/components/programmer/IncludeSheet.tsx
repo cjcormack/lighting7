@@ -22,8 +22,7 @@ import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
 import { LookPreviewSwatches } from '@/components/looks/lookValueChips'
 import { useInclude } from './useInclude'
-import { MaskPicker } from './maskPicker'
-import type { PropertyMaskGroup } from '@/store/programmerOps'
+import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 
 export interface IncludeSheetProps {
   open: boolean
@@ -47,7 +46,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
   })
 
   const [filter, setFilter] = useState('')
-  const [mask, setMask] = useState<PropertyMaskGroup[]>([])
+  const [mask, setMask] = useState<MaskValue>(null)
 
   // Once per open — `resetInclude` closes over RTK Query's `reset`, whose identity changes
   // with the mutation's state, so re-running on its identity would clear the "Included …"
@@ -61,7 +60,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
     if (openedRef.current) return
     openedRef.current = true
     setFilter('')
-    setMask([])
+    setMask(null)
     resetInclude()
   }, [open, resetInclude])
 
@@ -167,8 +166,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                     <button
                       key={cue.id}
                       type="button"
-                      disabled={isLoading}
-                      onClick={() => include({ kind: 'CUE', cueId: cue.id }, mask)}
+                      disabled={isLoading || maskIsEmpty(mask)}
+                      onClick={() => include({ kind: 'CUE', cueId: cue.id }, maskToWire(mask))}
                       className="flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
                     >
                       {cue.cueNumber && (
@@ -206,8 +205,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                     <button
                       key={look.id}
                       type="button"
-                      disabled={isLoading}
-                      onClick={() => include({ kind: 'LOOK', lookId: look.id }, mask)}
+                      disabled={isLoading || maskIsEmpty(mask)}
+                      onClick={() => include({ kind: 'LOOK', lookId: look.id }, maskToWire(mask))}
                       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
                     >
                       <span className="min-w-0 flex-1 truncate">{look.name}</span>

@@ -99,6 +99,13 @@ data class LookEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
+     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
+     * See `fx/EffectTiming.kt`.
+     */
+    val seconds: Boolean = false,
     val sortOrder: Int = 0,
 ) {
     /** True when this effect takes its targets from the referencing layer rather than naming one. */
@@ -226,6 +233,9 @@ object DaoLookEffects : IntIdTable("look_effects") {
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
+
+    /** D7's *Seconds* for a beat effect; see [LookEffectSpec.seconds]. */
+    val seconds = bool("seconds").default(false)
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -272,7 +282,22 @@ data class LookEffectSpec(
      * timing source keeps both assignments. Uuid, not int id — same import rule.
      */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
+     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
+     * See `fx/EffectTiming.kt`.
+     */
+    val seconds: Boolean = false,
 )
+
+/**
+ * This spec with a layer's beat-division override applied — a busk press's or an AI press's speed.
+ * A spec on *Seconds* (D7) keeps its own cycle: the override is beats, and a Seconds effect follows
+ * no master for a beat to mean anything against.
+ */
+fun LookEffectSpec.withBeatDivisionOverride(override: Double?): LookEffectSpec =
+    if (override == null || seconds) this else copy(beatDivision = override)
 
 class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoLookEffect>(DaoLookEffects)
@@ -293,6 +318,7 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var parameters by DaoLookEffects.parameters
     var speedMasterUuid by DaoLookEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoLookEffects.rateSpeedMasterUuid
+    var seconds by DaoLookEffects.seconds
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 

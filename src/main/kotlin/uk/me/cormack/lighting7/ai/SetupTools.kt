@@ -41,10 +41,12 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.group.GroupPropertyDescriptor
 import uk.me.cormack.lighting7.fixture.group.GroupSettingPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixPropertyDescriptor
 import uk.me.cormack.lighting7.routes.ColourPropertyDescriptor
 import uk.me.cormack.lighting7.routes.PositionPropertyDescriptor
 import uk.me.cormack.lighting7.routes.PropertyDescriptor
 import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.WhiteMixPropertyDescriptor
 import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
@@ -368,6 +370,7 @@ class SetupTools(
         val kind = when (property) {
             is SliderPropertyDescriptor -> "slider"
             is ColourPropertyDescriptor -> "colour"
+            is WhiteMixPropertyDescriptor -> "whiteMix"
             is PositionPropertyDescriptor -> "position"
             is SettingPropertyDescriptor -> "setting"
             else -> return
@@ -377,6 +380,7 @@ class SetupTools(
             put("kind", kind)
             put("category", property.category)
             if (property is SettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
+            if (property is WhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
         }
     }
 
@@ -386,7 +390,13 @@ class SetupTools(
             put("name", property.name)
             put("category", property.category)
             if (property is GroupSettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
+            if (property is GroupWhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
         }
+    }
+
+    /** A warm/cold white pair takes any colour as the nearest mix of its two whites. */
+    private fun JsonObjectBuilder.whiteMix(warmKelvin: Int, coldKelvin: Int) {
+        put("whites", "warm $warmKelvin K, cold $coldKelvin K — a colour lands as their nearest mix")
     }
 
     private fun getPatch(target: ToolProject): ToolExecutionResult {

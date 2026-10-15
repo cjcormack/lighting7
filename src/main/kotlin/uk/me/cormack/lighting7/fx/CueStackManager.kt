@@ -256,6 +256,7 @@ class CueStackManager(
                     parameters = adHoc.parameters,
                     speedMasterUuid = adHoc.speedMasterUuid,
                     rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
+                    seconds = adHoc.seconds,
                 )
                 val fxTarget = try {
                     EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)

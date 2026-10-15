@@ -83,6 +83,8 @@ export interface ApplyFxRequest {
   speedMasterUuid?: string
   /** Wall-clock rate master, as the master's uuid (omitted → unscaled). */
   rateSpeedMasterUuid?: string
+  /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
+  seconds?: boolean
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -114,6 +116,8 @@ export interface GroupActiveEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /** D7's reading: follows no master. */
+  seconds?: boolean
 }
 
 // === Group Property Types ===
@@ -121,6 +125,7 @@ export interface GroupActiveEffect {
 export type GroupPropertyDescriptor =
   | GroupSliderPropertyDescriptor
   | GroupColourPropertyDescriptor
+  | GroupWhiteMixPropertyDescriptor
   | GroupPositionPropertyDescriptor
   | GroupSettingPropertyDescriptor
 
@@ -150,6 +155,23 @@ export interface GroupColourPropertyDescriptor {
   displayName: string
   category: 'colour'
   memberColourChannels: MemberColourChannels[]
+}
+
+export interface MemberWhiteMixChannels {
+  fixtureKey: string
+  warmChannel: ChannelRef
+  coldChannel: ChannelRef
+}
+
+/** The "all heads" form of a warm/cold white pair (venue-visit plan D8) — the blinder's cells. */
+export interface GroupWhiteMixPropertyDescriptor {
+  type: 'whiteMix'
+  name: string
+  displayName: string
+  category: 'colour'
+  warmKelvin: number
+  coldKelvin: number
+  memberChannels: MemberWhiteMixChannels[]
 }
 
 export interface MemberPositionChannels {

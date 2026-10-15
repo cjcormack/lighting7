@@ -160,6 +160,13 @@ data class CueAdHocEffectDto(
     /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     /**
+     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
+     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
+     * See `fx/EffectTiming.kt`.
+     */
+    val seconds: Boolean = false,
+    /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
      * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored on
      * write, like [CueLayerDto.id] — an effect is matched by its target, property and type, and a
@@ -248,6 +255,9 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
+
+    /** D7's *Seconds* for a beat effect; see [CueAdHocEffectDto.seconds]. */
+    val seconds = bool("seconds").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -282,6 +292,7 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoCueAdHocEffects.sortOrder
     var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
+    var seconds by DaoCueAdHocEffects.seconds
     var uuid by DaoCueAdHocEffects.uuid
 }
 
@@ -574,5 +585,6 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     sortOrder = sortOrder,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    seconds = seconds,
     uuid = uuid.toString(),
 )

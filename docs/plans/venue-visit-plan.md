@@ -162,6 +162,7 @@ Grouped by area. §4 gives the order.
 
 - ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
 - ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
+- ~~S9 — Blinder colour (D8)~~ — done, `aeada21c`.
 
 **S7 — Group member order in the Groups views.**
 - Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.
@@ -175,25 +176,10 @@ Grouped by area. §4 gives the order.
   other property keeps its category default.
 - **UI.** *Set locate from current* and *Clear locate* go in the programmer and the patch sheet.
 
-**S9 — Blinder colour (D8).**
-- Each cell exposes a Colour whose writer maps the requested colour to a warm/cold mix and a level.
-  The mapping goes through a small CCT model, with the two whites' temperatures declared on the
-  type.
-- Palettes, the colour picker and the fixtures table then drive it like any colour head.
-- Write the mapping as a reusable helper, in case a second WW/CW type turns up.
-
 ### Programmer
 
-**S10 — Record polish.**
-- **Record can create a new stack** from the Record sheet's stack select.
-- **"All attributes".**
-  - The mask picker gets an explicit *All attributes* toggle, which is on when nothing is narrowed.
-  - It's used everywhere a mask is taken: Record, Record Look, Include and busk.
-  - `UpdateDialog` gains the picker.
-- **Fix the "An existing cue…" menu item.** It only creates a new cue (`RecordSheet.tsx:198`).
-  Give it a cue picker that lists cues by name, whatever stack they're in, so it serves loose cues
-  once the cue model plan's session 4 lands.
-
+- ~~S10 — Record polish~~ — done, `499c0d88` (*All attributes* is a switch that hides the four
+  family checkboxes, `MaskToggles` for R3.4).
 - ~~S11 — Position in −127…+127 (D3, P3)~~ — done, `cb71b335` (the scale is exact, DMX − 128, so
   DMX 0 reads −128; the intent is `pos:`; `formatVersion` 28).
 
@@ -224,14 +210,7 @@ Grouped by area. §4 gives the order.
 
 ### Effects
 
-**S15 — Effect timing (D7) and slower defaults.**
-- An effect's timing source is either a speed master (today's behaviour) or *Seconds*: a cycle time,
-  with no master.
-- It's carried on the effect, the effect palette and cue rows. Check the sync field and whether
-  `formatVersion` needs a bump.
-- **New default (D16):** one bar on the family's `usage` master where one is set, so ad-hoc effects
-  use the per-usage default that only effect templates use today.
-- Read `FU-FE-FX-SPEED-SPELLING` and `FU-FX-RATE-MASTER-CLEAR`.
+- ~~S15 — Effect timing (D7) and slower defaults~~ — done, `6d7ca0cf`.
 
 ### Cues
 

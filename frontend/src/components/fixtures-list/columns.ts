@@ -8,6 +8,7 @@ import {
   findPrismProperty,
   findTiltProperty,
   findWheel,
+  findWhiteMixProperty,
   findZoomProperty,
 } from '../../store/fixtures'
 import { familyForCategory } from '../../lib/attributeFamily'
@@ -20,6 +21,7 @@ import type {
   PropertyDescriptor,
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
+  WhiteMixPropertyDescriptor,
 } from '../../store/fixtures'
 
 /**
@@ -149,6 +151,9 @@ export type CellResolution =
   /** A colour *wheel* — a setting whose options carry colour previews. Takes
    *  option levels, not RGB. */
   | { kind: 'colour-setting'; property: SettingPropertyDescriptor }
+  /** A warm/cold white pair (venue-visit plan D8). Reads and takes a colour like an RGB head —
+   *  the desk lands it as the nearest mix — and its editor is a warmth control. */
+  | { kind: 'white-mix'; property: WhiteMixPropertyDescriptor }
   | {
       kind: 'position'
       pan: ChannelRef
@@ -203,7 +208,10 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
     }
     case 'colour': {
       const source = findColourSource(properties)
-      if (!source) return null
+      if (!source) {
+        const whiteMix = findWhiteMixProperty(properties)
+        return whiteMix ? { kind: 'white-mix', property: whiteMix } : null
+      }
       return source.type === 'colour'
         ? { kind: 'colour', property: source.property }
         : { kind: 'colour-setting', property: source.property }
@@ -295,6 +303,8 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
       if (p.uvChannel) refs.push(p.uvChannel)
       return refs
     }
+    case 'white-mix':
+      return [res.property.warmChannel, res.property.coldChannel]
     case 'colour-setting':
     case 'setting':
       return [res.property.channel]
@@ -319,6 +329,7 @@ export function resolutionPropertyNames(res: CellResolution): string[] {
   switch (res.kind) {
     case 'slider':
     case 'colour':
+    case 'white-mix':
     case 'colour-setting':
     case 'setting':
       return [res.property.name]

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 // `store/fixtures` builds the live API on import; the finders read none of it.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
-import { chan, colourProp, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, positionProp, settingProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
 import type { PropertyDescriptor } from '@/store/fixtures'
 import { buildSheetRows, sheetRowKeys } from './sheetRows'
 
@@ -11,6 +11,20 @@ const ids = (properties: PropertyDescriptor[]) =>
   buildSheetRows(properties).map((g) => `${g.family}: ${g.rows.map((r) => r.id).join(', ')}`)
 
 describe('buildSheetRows', () => {
+  it('gives a warm/cold white pair a Colour row beside its two white sliders', () => {
+    const cell: PropertyDescriptor[] = [
+      sliderProp('warmWhite', 'white', chan(5)),
+      sliderProp('coldWhite', 'white', chan(6)),
+      whiteMixProp(chan(5), chan(6)),
+    ]
+    const colour = buildSheetRows(cell).find((g) => g.family === 'COLOUR')!
+    expect(colour.rows.map((r) => [r.kind, r.id])).toEqual([
+      ['slider', 'warmWhite'],
+      ['slider', 'coldWhite'],
+      ['white-mix', 'rgbColour'],
+    ])
+  })
+
   it('groups rows by family in D3 order, whatever order the desk lists them in', () => {
     const spot: PropertyDescriptor[] = [
       settingProp('gobo', 'gobo', chan(9)),

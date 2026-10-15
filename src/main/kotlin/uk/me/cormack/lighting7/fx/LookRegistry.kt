@@ -61,6 +61,8 @@ data class EffectEntry(
     val parameters: Map<String, String>,
     val speedMasterUuid: UUID?,
     val rateSpeedMasterUuid: UUID?,
+    /** D7's *Seconds* for a beat effect; see [uk.me.cormack.lighting7.models.LookEffectSpec.seconds]. */
+    val seconds: Boolean = false,
 ) {
     val isDeferred: Boolean get() = target == null
 }
@@ -319,6 +321,7 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
         parameters = parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
+        seconds = seconds,
     )
 }
 
@@ -349,4 +352,5 @@ internal fun EffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEff
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    seconds = seconds,
 )

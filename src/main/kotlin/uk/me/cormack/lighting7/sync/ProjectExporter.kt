@@ -543,6 +543,7 @@ class ProjectExporter(private val state: State) {
                             parameters = e.parameters,
                             speedMasterUuid = e.speedMasterUuid?.toString(),
                             rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
+                            seconds = e.seconds,
                             sortOrder = e.sortOrder,
                         )
                     }
@@ -591,6 +592,7 @@ class ProjectExporter(private val state: State) {
                             parameters = e.parameters,
                             speedMasterUuid = e.speedMasterUuid?.toString(),
                             rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
+                            seconds = e.seconds,
                         )
                     },
                 )
@@ -888,6 +890,7 @@ class ProjectExporter(private val state: State) {
                         sortOrder = e.sortOrder,
                         speedMasterUuid = e.speedMasterUuid?.toString(),
                         rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
+                        seconds = e.seconds,
                     ),
                 )
                 liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))
