@@ -1,0 +1,455 @@
+<title>After the Venue Visit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: one reading column; every note traced to a session, four mechanism diagrams, then the run order. Dark first, like the desk in the hall. */
+  :root {
+    --bg:#0f1014; --panel:#17191f; --sunk:#121318; --fg:#eceef2; --muted:#959cab; --line:#2a2d36;
+    --amber:#f2b84b; --teal:#5fcfc6; --done:#7ccf86; --plan:#8fb3ff; --warn:#f08a6c; --lamp:#ffd77a;
+    --display:"IBM Plex Sans Condensed", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+    --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme:dark;
+  }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+    --bg:#f4f4f1; --panel:#ffffff; --sunk:#ecece7; --fg:#17181c; --muted:#5d6370; --line:#d8d9d3;
+    --amber:#9a6400; --teal:#11766f; --done:#2e7d3a; --plan:#2f5fd0; --warn:#b5462b; --lamp:#b07a00; color-scheme:light; } }
+  :root[data-theme="light"] {
+    --bg:#f4f4f1; --panel:#ffffff; --sunk:#ecece7; --fg:#17181c; --muted:#5d6370; --line:#d8d9d3;
+    --amber:#9a6400; --teal:#11766f; --done:#2e7d3a; --plan:#2f5fd0; --warn:#b5462b; --lamp:#b07a00; color-scheme:light; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-inline:20px; padding-block:32px 72px; display:flex; flex-direction:column; gap:44px; }
+  a { color:var(--teal); text-underline-offset:2px; }
+  a:focus-visible, button:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+  code { font-family:var(--mono); font-size:0.86em; background:var(--sunk); border:1px solid var(--line); border-radius:4px; padding:0 4px; overflow-wrap:anywhere; }
+  h1, h2, h3 { font-family:var(--display); text-wrap:balance; margin:0; }
+  h2 { font-size:26px; font-weight:600; letter-spacing:-0.005em; }
+  h3 { font-size:18px; font-weight:600; }
+  p { margin:0; max-width:70ch; }
+  .lede { color:var(--muted); }
+  .label { font:500 11.5px var(--mono); letter-spacing:0.07em; text-transform:uppercase; color:var(--muted); }
+
+  header { display:flex; flex-direction:column; gap:14px; }
+  header .label b { color:var(--amber); font-weight:500; }
+  h1 { font-size:clamp(34px, 5.5vw, 54px); font-weight:700; line-height:1.02; letter-spacing:-0.02em; }
+  h1 span { color:var(--amber); }
+  .meters { display:flex; flex-wrap:wrap; gap:12px 28px; margin-top:6px; }
+  .meter { display:flex; flex-direction:column; gap:6px; min-width:220px; }
+  .meter .bar { display:flex; gap:3px; }
+  .meter .bar i { width:16px; height:10px; border-radius:2px; background:var(--line); }
+  .meter .bar i.on { background:var(--done); }
+  .meter .bar i.pl { background:var(--plan); }
+  .meter .txt { font:500 13px var(--mono); font-variant-numeric:tabular-nums; }
+
+  nav { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; gap:8px; flex-wrap:wrap; margin-block:-24px; }
+  nav a { font:500 13px var(--sans); color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:3px 12px; background:var(--panel); }
+  nav a:hover { border-color:var(--amber); }
+  section { display:flex; flex-direction:column; gap:16px; scroll-margin-top:64px; }
+
+  /* status chips */
+  .chip { display:inline-flex; align-items:center; gap:6px; font:500 11.5px var(--mono); white-space:nowrap; border-radius:999px; padding:1px 9px; border:1px solid var(--line); color:var(--muted); }
+  .chip::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--line); }
+  .chip.done { color:var(--done); border-color:color-mix(in srgb, var(--done) 45%, transparent); }
+  .chip.done::before { background:var(--done); }
+  .chip.plan { color:var(--plan); border-color:color-mix(in srgb, var(--plan) 45%, transparent); }
+  .chip.plan::before { background:var(--plan); }
+  .sid { font:600 12.5px var(--mono); color:var(--amber); white-space:nowrap; }
+  .sid.r { color:var(--teal); }
+
+  /* traceability */
+  .trace { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+  .area { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .area h3 { font-size:16px; }
+  .area ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .area li { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:baseline; font-size:14px; }
+  .area li > span:first-child { min-width:0; }
+  .area li .where { display:flex; gap:6px; align-items:baseline; }
+
+  /* findings */
+  .finds { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:10px 28px; margin:0; padding:0; list-style:none; }
+  .finds li { border-top:1px solid var(--line); padding-top:10px; font-size:14px; min-width:0; }
+  .finds b { display:block; font-family:var(--display); font-size:16px; font-weight:600; }
+
+  /* figures */
+  .fig { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; display:flex; flex-direction:column; gap:14px; }
+  .fig header { gap:4px; }
+  .fig .cap { color:var(--muted); font-size:13.5px; }
+  .scroll { overflow-x:auto; }
+  svg text { font-family:var(--mono); }
+  .s-line { stroke:var(--line); }
+  .s-muted { fill:var(--muted); }
+  .s-fg { fill:var(--fg); }
+  .s-panel { fill:var(--sunk); stroke:var(--line); }
+  .s-amber { fill:var(--amber); }
+  .s-warn { fill:var(--warn); }
+  .s-teal { fill:var(--teal); }
+
+  .cues { display:flex; flex-direction:column; gap:12px; }
+  .cuerow { display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:center; }
+  .cuerow .k { font:500 12.5px var(--mono); color:var(--muted); }
+  .cuerow .cells { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .q { font:600 14px var(--mono); font-variant-numeric:tabular-nums; min-width:46px; text-align:center; padding:5px 6px; border-radius:5px; border:1px solid var(--line); background:var(--sunk); color:var(--muted); }
+  .q.x { color:var(--fg); border-color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, var(--sunk)); }
+  .q.moved { color:var(--fg); border-style:dashed; }
+  .verdict { font-size:13px; color:var(--muted); margin-left:6px; }
+  .banner { font:500 12px var(--mono); color:var(--warn); border:1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius:5px; padding:4px 8px; }
+
+  .flow { display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; }
+  .st { flex:1 1 180px; min-width:0; background:var(--sunk); border:1px solid var(--line); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:4px; font-size:13.5px; }
+  .st b { font-family:var(--display); font-size:15.5px; font-weight:600; }
+  .st.safe { border-color:var(--done); }
+  .st.safe b { color:var(--done); }
+  .st.quit { border-color:var(--warn); }
+  .st.quit b { color:var(--warn); }
+  .arrow { align-self:center; font:500 18px var(--mono); color:var(--muted); }
+  .rules { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; }
+  .rule { font-size:13.5px; border-left:2px solid var(--line); padding-left:10px; min-width:0; }
+  .rule b { color:var(--fg); }
+
+  /* decisions */
+  .dgroups { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:14px; }
+  .dg { display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .dg h3 { font-size:15px; color:var(--muted); font-family:var(--mono); font-weight:500; text-transform:uppercase; letter-spacing:0.06em; }
+  .d { display:grid; grid-template-columns:38px 1fr; gap:8px; font-size:14px; padding-block:6px; border-top:1px solid var(--line); }
+  .d .n { font:600 12.5px var(--mono); color:var(--amber); padding-top:2px; }
+  .d.p .n { color:var(--teal); }
+
+  /* sessions table */
+  .tbl { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; min-width:720px; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  th { font:500 11.5px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); background:var(--sunk); }
+  tr:last-child td { border-bottom:0; }
+  td.n { font:500 12.5px var(--mono); color:var(--muted); font-variant-numeric:tabular-nums; width:28px; }
+  td .what { color:var(--muted); font-size:13px; display:block; margin-top:2px; }
+  td .needs { display:flex; gap:6px; flex-wrap:wrap; }
+
+  /* design sessions */
+  .rgrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+  .rc { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .rc .top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .rc ul { margin:0; padding-left:18px; font-size:13.5px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  .rc .links { display:flex; gap:14px; flex-wrap:wrap; font-size:13.5px; margin-top:auto; padding-top:4px; }
+
+  footer { color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:4px; }
+
+  @media (max-width: 560px) {
+    .cuerow { grid-template-columns:1fr; gap:6px; }
+    .arrow { transform:rotate(90deg); }
+    .flow { flex-direction:column; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">lighting7 · umbrella plan · <b>agreed 2026-10-14</b></div>
+    <h1>After the <span>venue visit</span></h1>
+    <p class="lede">Chris spent an evening in the hall programming a show on the desk. His notes covered groups, fixtures, palettes, lamp control, effects, the programmer, the cue list, cues, the grand master and project navigation. This page traces every note to the session that deals with it, explains the four mechanisms that are easiest to get wrong, and gives the order to run them in.</p>
+    <p class="lede">There are two kinds of session. An <b class="sid">S</b> session lands one PR. An <b class="sid r">R</b> session is research and design. Its output is a new plan, and where that plan disagrees with this one, the new plan wins inside its scope.</p>
+    <div class="meters" aria-label="Progress">
+      <div class="meter">
+        <span class="label">S sessions landed</span>
+        <div class="bar" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <span class="txt">2 of 16 · S1, S2</span>
+      </div>
+      <div class="meter">
+        <span class="label">R plans written</span>
+        <div class="bar" aria-hidden="true"><i class="pl"></i><i class="pl"></i><i class="pl"></i><i class="pl"></i><i></i></div>
+        <span class="txt">4 of 5 · R1, R2, R3, R4</span>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="Sections">
+    <a href="#notes">Notes → sessions</a>
+    <a href="#found">What the code showed</a>
+    <a href="#mechanisms">Four mechanisms</a>
+    <a href="#decisions">Decisions</a>
+    <a href="#order">Run order</a>
+    <a href="#design">Design sessions</a>
+  </nav>
+
+  <section id="notes">
+    <h2>Every note, and where it went</h2>
+    <p class="lede">Grouped as Chris wrote them. A note that needs a model change goes to a design session first; anything a design session won't reshape lands without waiting for it.</p>
+    <div class="trace">
+      <div class="area"><h3>Groups and fixtures</h3><ul>
+        <li><span>Reorder fixtures within a group (it drives FX and spread)</span><span class="where"><span class="sid">S7</span></span></li>
+        <li><span>Per-fixture locate, so tilt runs upstage to downstage</span><span class="where"><span class="sid">S8</span></span></li>
+        <li><span>Table/list view by default, for both</span><span class="where"><span class="sid">S2</span><span class="chip done">done</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Palettes and fixture types</h3><ul>
+        <li><span>Rename templates to palettes</span><span class="where"><span class="sid">S4</span></span></li>
+        <li><span>Blinder warm and cold white driven by Colour</span><span class="where"><span class="sid">S9</span></span></li>
+        <li><span>Colour palettes didn't land on the Shehds</span><span class="where"><span class="sid">S1</span><span class="chip done">done</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Lamps and output</h3><ul>
+        <li><span>Lamp off everything, by selection or the whole rig</span><span class="where"><span class="sid">S6</span></span></li>
+        <li><span>Undo it: lamps back on</span><span class="where"><span class="sid">S6</span></span></li>
+        <li><span>Quit the desk from the web UI</span><span class="where"><span class="sid">S6</span></span></li>
+        <li><span>Grand master in the UI</span><span class="where"><span class="sid">S5</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Effects</h3><ul>
+        <li><span>Survey against other desks (ChamSys and others)</span><span class="where"><span class="sid r">R4</span><span class="chip plan">plan</span></span></li>
+        <li><span>No zoom effects; Colour Cycle lacks direction</span><span class="where"><span class="sid r">R4</span><span class="chip plan">plan</span></span></li>
+        <li><span>An effect's own timing, free of a speed master</span><span class="where"><span class="sid">S15</span></span></li>
+        <li><span>Default timing is far too fast</span><span class="where"><span class="sid">S15</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Programmer</h3><ul>
+        <li><span>Full-width tables of applied FX, Looks and palettes</span><span class="where"><span class="sid">S14</span></span></li>
+        <li><span>Record into a new stack</span><span class="where"><span class="sid">S10</span></span></li>
+        <li><span>Make "no attributes = everything" obvious</span><span class="where"><span class="sid">S10</span></span></li>
+        <li><span>One way to apply Looks, palettes and FX; palettes from the property popup</span><span class="where"><span class="sid r">R3</span><span class="chip plan">plan</span></span></li>
+        <li><span>Position in −127…+127, not degrees</span><span class="where"><span class="sid">S11</span></span></li>
+        <li><span>Easier fan in and fan out</span><span class="where"><span class="sid">S12</span></span></li>
+        <li><span>Aim at a point, picked on the floor plan</span><span class="where"><span class="sid">S13</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Show cue list</h3><ul>
+        <li><span>Losing the stack position after visiting the programmer</span><span class="where"><span class="sid">S3</span></span></li>
+        <li><span>"Edit in programmer" should open the programmer</span><span class="where"><span class="sid">S3</span></span></li>
+        <li><span>Duplicate adds to the end of the stack</span><span class="where"><span class="sid">S3</span></span></li>
+        <li><span>Drop the 2D stage from the cards</span><span class="where"><span class="sid">S3</span></span></li>
+        <li><span>Renumbering an auto cue relabels its neighbours</span><span class="where"><span class="sid">S3</span></span></li>
+        <li><span>Edit a cue's values, Looks and FX in place</span><span class="where"><span class="sid r">R2</span><span class="chip plan">plan</span></span></li>
+        <li><span>Same actions in card and list views; blind edit</span><span class="where"><span class="sid r">R2</span><span class="chip plan">plan</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Cues</h3><ul>
+        <li><span>Cues outside any stack, and a list of all cues</span><span class="where"><span class="sid r">R1</span><span class="chip plan">plan</span></span></li>
+        <li><span>Remove from stack never deletes; delete is explicit</span><span class="where"><span class="sid r">R1</span><span class="chip plan">plan</span></span></li>
+        <li><span>The same cue in several stacks</span><span class="where"><span class="sid r">R1</span><span class="chip plan">plan</span></span></li>
+        <li><span>Copy cues from another show on the venue</span><span class="where"><span class="sid r">R1</span><span class="chip plan">plan</span></span></li>
+        <li><span>A cue sets speed masters, e.g. a song's BPM</span><span class="where"><span class="sid">S16</span></span></li>
+      </ul></div>
+      <div class="area"><h3>Project structure</h3><ul>
+        <li><span>Getting to the projects list is clunky</span><span class="where"><span class="sid r">R5</span><span class="chip plan">plan</span></span></li>
+        <li><span>Actions only in the project ⋮ menu</span><span class="where"><span class="sid r">R5</span><span class="chip plan">plan</span></span></li>
+        <li><span>Install settings missing from the nav</span><span class="where"><span class="sid">S2</span><span class="chip done">done</span></span></li>
+        <li><span>Re-attach a detached show to its venue</span><span class="where"><span class="sid r">R5</span><span class="chip plan">plan</span></span></li>
+        <li><span>Turn off the auto-collapsing nav on live views</span><span class="where"><span class="sid">S2</span><span class="chip done">done</span></span></li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="found">
+    <h2>What the code showed</h2>
+    <p class="lede">Three surveys of the code on 2026-10-14 decided which notes are bugs, which are small, and which change a model.</p>
+    <ul class="finds">
+      <li><b>Every cue belongs to exactly one stack</b><code>cues.cue_stack_id</code> is non-null and numbers are unique per stack. The card's Remove hard-deletes the cue, and deleting a stack deletes its cues. Shared cues are a model change, so R1 designs it first.</li>
+      <li><b>The show position lives only in the URL</b>The view switcher links to bare <code>/show</code>, so a round trip to the programmer drops the stack and <code>?cue=</code>. "Edit in Programmer" is Include and never leaves the page.</li>
+      <li><b>Group order already exists</b><code>fixture_group_members.sort_order</code> drives distribution and spread, but only the Patch list's group sheet can reorder it.</li>
+      <li><b>Locate is per category, not per unit</b>Pan and tilt go to mid-range for every head. Nothing records where this particular unit should point.</li>
+      <li><b>Lamp commands exist, one unit at a time</b>Only the Robe ColorSpot and the MAC 250 declare lamp on/off, and only per patch. There's no bulk run and no command role to ask for "every lamp off".</li>
+      <li><b>The grand master is a switch with no UI</b><code>GlobalScalerState</code> is on/off. The Show bar's DBO tile does nothing (<code>FU-FE-DBO-INERT</code>).</li>
+      <li><b>Effects start at one beat a cycle</b>The picker starts every effect at <code>beatDivision: 1</code> on master 1, one cycle per beat. Only wall-clock effects can run in seconds.</li>
+      <li><b>Seven ways to apply to a selection</b>The palette strip, the picker, busk pads, the add-layer sheet, the FX sheet, the busk side sheets and Include. Only the colour cell offers palettes from its popup.</li>
+    </ul>
+  </section>
+
+  <section id="mechanisms">
+    <h2>Four mechanisms, drawn out</h2>
+
+    <div class="fig">
+      <header><span class="label"><span class="sid">S1</span> · landed in <code>4a1a8fb4</code></span><h3>A palette on a fixture whose colour lives on its cells</h3></header>
+      <p class="cap">In its 24-channel mode the Shehds keeps pan, tilt, dimmer and strobe on the parent and colour on three zones. A palette applied to the parent found no colour there and skipped it, writing nothing. The frontend made it worse by turning a selection of zones back into the parent. The fix fans a parent target out to the elements that carry the property, in the click, the cook, Spread over Heads and busk presses.</p>
+      <div class="scroll">
+        <svg viewBox="0 0 860 220" width="860" height="220" role="img" aria-label="Before: the palette reaches the parent, which has no colour, and is skipped. After: the parent fans out to its three zones, which take the colour.">
+          <text x="20" y="22" class="s-muted" font-size="12" letter-spacing="1">BEFORE</text>
+          <rect x="20" y="40" width="120" height="36" rx="6" class="s-panel"/>
+          <text x="80" y="63" text-anchor="middle" class="s-fg" font-size="13">Red palette</text>
+          <line x1="140" y1="58" x2="190" y2="58" class="s-line" stroke-width="2"/>
+          <polygon points="190,53 200,58 190,63" class="s-muted"/>
+          <rect x="202" y="36" width="190" height="44" rx="6" class="s-panel"/>
+          <text x="297" y="54" text-anchor="middle" class="s-fg" font-size="12.5">Shehds (parent)</text>
+          <text x="297" y="70" text-anchor="middle" class="s-muted" font-size="11">pan · tilt · dimmer · strobe</text>
+          <text x="297" y="102" text-anchor="middle" class="s-warn" font-size="12">✕ skipped: no colour</text>
+          <g>
+            <rect x="215" y="130" width="50" height="36" rx="5" class="s-panel"/><text x="240" y="153" text-anchor="middle" class="s-muted" font-size="11">Z1</text>
+            <rect x="272" y="130" width="50" height="36" rx="5" class="s-panel"/><text x="297" y="153" text-anchor="middle" class="s-muted" font-size="11">Z2</text>
+            <rect x="329" y="130" width="50" height="36" rx="5" class="s-panel"/><text x="354" y="153" text-anchor="middle" class="s-muted" font-size="11">Z3</text>
+            <text x="297" y="190" text-anchor="middle" class="s-muted" font-size="11">colour lives here, never reached</text>
+          </g>
+          <line x1="430" y1="20" x2="430" y2="200" class="s-line" stroke-dasharray="3 4"/>
+          <text x="460" y="22" class="s-muted" font-size="12" letter-spacing="1">AFTER</text>
+          <rect x="460" y="40" width="120" height="36" rx="6" class="s-panel"/>
+          <text x="520" y="63" text-anchor="middle" class="s-fg" font-size="13">Red palette</text>
+          <line x1="580" y1="58" x2="630" y2="58" class="s-line" stroke-width="2"/>
+          <polygon points="630,53 640,58 630,63" class="s-muted"/>
+          <rect x="642" y="36" width="190" height="44" rx="6" class="s-panel"/>
+          <text x="737" y="54" text-anchor="middle" class="s-fg" font-size="12.5">Shehds (parent)</text>
+          <text x="737" y="70" text-anchor="middle" class="s-muted" font-size="11">fans out to its cells</text>
+          <line x1="737" y1="80" x2="680" y2="128" class="s-line" stroke-width="2"/>
+          <line x1="737" y1="80" x2="737" y2="128" class="s-line" stroke-width="2"/>
+          <line x1="737" y1="80" x2="794" y2="128" class="s-line" stroke-width="2"/>
+          <rect x="655" y="130" width="50" height="36" rx="5" class="s-warn"/><text x="680" y="153" text-anchor="middle" class="s-fg" font-size="11">Z1</text>
+          <rect x="712" y="130" width="50" height="36" rx="5" class="s-warn"/><text x="737" y="153" text-anchor="middle" class="s-fg" font-size="11">Z2</text>
+          <rect x="769" y="130" width="50" height="36" rx="5" class="s-warn"/><text x="794" y="153" text-anchor="middle" class="s-fg" font-size="11">Z3</text>
+          <text x="737" y="190" text-anchor="middle" class="s-muted" font-size="11">by parent, by cells or through a group</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="fig">
+      <header><span class="label"><span class="sid">S3</span> · decision D11</span><h3>Renumbering a cue to move it</h3></header>
+      <p class="cap">Today the backend derives every auto number from the nearest explicit one. Auto cues before it count up to it, so the stack is always in order, the out-of-order banner never appears, and the cue never moves. Under D11 a renumber leaves its auto neighbours alone, so the banner appears and <b>Fix Order</b> moves the cue.</p>
+      <div class="cues">
+        <div class="cuerow"><span class="k">Five auto cues</span><div class="cells"><span class="q">1</span><span class="q">2</span><span class="q">3</span><span class="q">4</span><span class="q">5</span></div></div>
+        <div class="cuerow"><span class="k">Today: cue 3 → 10</span><div class="cells"><span class="q moved">8</span><span class="q moved">9</span><span class="q x">10</span><span class="q moved">11</span><span class="q moved">12</span><span class="verdict">every neighbour relabelled · in order, no banner</span></div></div>
+        <div class="cuerow"><span class="k">D11: cue 2 → 4.5</span><div class="cells"><span class="q">1</span><span class="q x">4.5</span><span class="q">3</span><span class="q">4</span><span class="q">5</span><span class="banner">Cues out of order · Fix Order</span></div></div>
+        <div class="cuerow"><span class="k">After Fix Order</span><div class="cells"><span class="q">1</span><span class="q">3</span><span class="q">4</span><span class="q x">4.5</span><span class="q">5</span><span class="verdict">the cue moved between 4 and 5</span></div></div>
+      </div>
+    </div>
+
+    <div class="fig">
+      <header><span class="label"><span class="sid">S11</span> · decisions D3, P3</span><h3>Position as a fraction of travel</h3></header>
+      <p class="cap">Position is read and typed as centre-relative DMX: 0 is the centre of travel (DMX 128) and ±127 are the ends, whatever the head's angle range. The fine channel still rides underneath. A generic position palette therefore means the same fraction of travel on every head rather than the same angle. Old palettes stored in degrees keep resolving as angles, because there are no migrations; one is saved in the new form only when someone edits it.</p>
+      <div class="scroll">
+        <svg viewBox="0 0 860 150" width="860" height="150" role="img" aria-label="A pan travel bar. The left end is minus 127, the centre at DMX 128 is 0, the right end is plus 127. Below, a 540 degree head and a 360 degree head both put plus 64 at the same fraction of their travel.">
+          <text x="20" y="20" class="s-muted" font-size="11" letter-spacing="1">PAN TRAVEL</text>
+          <rect x="60" y="34" width="740" height="14" rx="7" class="s-panel"/>
+          <rect x="430" y="34" width="185" height="14" class="s-amber" opacity="0.55"/>
+          <line x1="430" y1="28" x2="430" y2="56" class="s-line" stroke-width="2"/>
+          <text x="60" y="74" text-anchor="start" class="s-fg" font-size="14">−127</text>
+          <text x="430" y="74" text-anchor="middle" class="s-fg" font-size="14">0</text>
+          <text x="615" y="74" text-anchor="middle" class="s-amber" font-size="14">+64</text>
+          <text x="800" y="74" text-anchor="end" class="s-fg" font-size="14">+127</text>
+          <text x="430" y="92" text-anchor="middle" class="s-muted" font-size="11">centre · DMX 128</text>
+          <text x="60" y="92" text-anchor="start" class="s-muted" font-size="11">one end</text>
+          <text x="800" y="92" text-anchor="end" class="s-muted" font-size="11">other end</text>
+          <text x="20" y="124" class="s-muted" font-size="11.5">+64 is half-way to the end on every head: about +135° on a 540° pan, about +90° on a 360° pan.</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="fig">
+      <header><span class="label"><span class="sid">S6</span> · decisions D9, D13, D14, D18, D19</span><h3>Making the rig safe, undoing it, and quitting</h3></header>
+      <p class="cap">Making the rig safe and quitting are separate actions, because the rig should be safe before the app exits. The desk keeps running once the rig is safe, and says so on every window.</p>
+      <div class="flow">
+        <div class="st"><b>Running</b>Show output, lamps struck.</div>
+        <span class="arrow" aria-hidden="true">→</span>
+        <div class="st"><b>Make rig safe</b>Lamp off every unit with a lamp, or the selection's. Wait out each command's hold, then black out.</div>
+        <span class="arrow" aria-hidden="true">→</span>
+        <div class="st safe"><b>Ready to switch off</b>Shown on every window for as long as it's true.</div>
+        <span class="arrow" aria-hidden="true">→</span>
+        <div class="st quit"><b>Quit desk</b>Admin only, on the desk's own listener. Confirm, with a warning if the rig isn't safe. The Windows launcher exits too.</div>
+      </div>
+      <div class="rules">
+        <div class="rule"><b>Undo</b> strikes the lamps that Make rig safe turned off, then releases the blackout. The desk remembers which ones until it quits.</div>
+        <div class="rule"><b>Staggered strikes</b>: one unit every couple of seconds, to spread the inrush current, whether from Undo or a selection.</div>
+        <div class="rule"><b>Too soon to restrike</b>: a discharge lamp that went off recently is listed with its time left and struck when that time is up. Each lamped type declares its restrike time.</div>
+        <div class="rule"><b>Clears itself</b>: any GO, programmer change, lamp-on or leaving blackout ends "Ready to switch off".</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions</h2>
+    <p class="lede">Agreed with Chris over four rounds of questions on 2026-10-14. D is a product decision; P is how the plan is run.</p>
+    <div class="dgroups">
+      <div class="dg"><h3>Cues and the cue list</h3>
+        <div class="d"><span class="n">D1</span><span>One shared cue. A stack is an ordered list of cues, a cue may be in no stack, and only an explicit delete deletes one.</span></div>
+        <div class="d"><span class="n">D11</span><span>A renumbered cue shows out of order; Fix Order moves it. Auto neighbours keep their numbers.</span></div>
+        <div class="d"><span class="n">D15</span><span>A cue sets its speed masters whenever it becomes live: GO, GO TO or GO BACK. A tap afterwards wins. It doesn't track.</span></div>
+      </div>
+      <div class="dg"><h3>Programmer and palettes</h3>
+        <div class="d"><span class="n">D2</span><span>Templates become palettes in UI, REST, WS, MCP and docs. Tables, the sync folder and <code>tmpl:</code> refs keep the old name, so there's no format bump.</span></div>
+        <div class="d"><span class="n">D3</span><span>Position is −127…+127 around the centre of travel, everywhere an operator types or reads it, palettes included.</span></div>
+        <div class="d"><span class="n">D6</span><span>Locate is stored on the patch, in its Focus facet, so a show can override a venue's.</span></div>
+        <div class="d"><span class="n">D17</span><span>A unit's locate is pan and tilt only. Everything else keeps its category default.</span></div>
+      </div>
+      <div class="dg"><h3>Output and the rig</h3>
+        <div class="d"><span class="n">D5</span><span>The grand master is a continuous 0–100 % fader in the app bar, replacing the inert DBO tile.</span></div>
+        <div class="d"><span class="n">D12</span><span>On a head with no dimmer, the grand master scales the colour channels instead.</span></div>
+        <div class="d"><span class="n">D8</span><span>The blinder takes Colour as a warm/cold white mix per cell. Its two sliders stay.</span></div>
+        <div class="d"><span class="n">D9</span><span>Make rig safe and Quit desk are separate. The app keeps running once the rig is safe.</span></div>
+        <div class="d"><span class="n">D13</span><span>Quit desk is admin-only and never remote.</span></div>
+        <div class="d"><span class="n">D14</span><span>"Ready to switch off" clears as soon as anything sends output.</span></div>
+        <div class="d"><span class="n">D18</span><span>Make rig safe can be undone: lamps back on, then the blackout released.</span></div>
+        <div class="d"><span class="n">D19</span><span>A bulk lamp-on is staggered, with a restrike warning and countdown.</span></div>
+      </div>
+      <div class="dg"><h3>Effects, chrome and pace</h3>
+        <div class="d"><span class="n">D7</span><span>An effect can run on its own cycle time in seconds, with no speed master.</span></div>
+        <div class="d"><span class="n">D16</span><span>A new effect defaults to one bar, on its family's usage master if one is tagged.</span></div>
+        <div class="d"><span class="n">D4</span><span>One sidebar state across all views. Immersive (⌘K) stays.</span></div>
+        <div class="d"><span class="n">D10</span><span>No hard date. The order follows dependencies and what got in the way on the night.</span></div>
+      </div>
+      <div class="dg"><h3>How the plan runs</h3>
+        <div class="d p"><span class="n">P1</span><span>One PR per session. An S session ends with both suites green, its docs written and its row marked; an R session ends with its plan checked in.</span></div>
+        <div class="d p"><span class="n">P2</span><span>Rename before building: S4 lands before sessions that add UI copy.</span></div>
+        <div class="d p"><span class="n">P3</span><span>Old degree-based position palettes keep resolving. New writes are centre-relative.</span></div>
+        <div class="d p"><span class="n">P4</span><span>A design session holds back only what it might reshape.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="order">
+    <h2>Run order</h2>
+    <p class="lede">R1 comes early because more notes wait on the cue model than on anything else. R sessions land only documents, so they can run beside the S sessions.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td><span class="sid">S1</span> Palettes reach a multi-head fixture's cells<span class="what">Fan a parent out to the elements that carry the property.</span></td><td>—</td><td><span class="chip done">4a1a8fb4</span></td></tr>
+          <tr><td class="n">2</td><td><span class="sid">S2</span> Chrome and defaults<span class="what">One sidebar state, list views first, Remote access and Updates in the nav.</span></td><td>—</td><td><span class="chip done">f6b37b38</span></td></tr>
+          <tr><td class="n">3</td><td><span class="sid">S3</span> Cue list fixes<span class="what">Keep the show position, Edit opens the programmer, duplicate to the end, no MiniStage, D11 numbering.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">4</td><td><span class="sid">S4</span> Templates become palettes<span class="what">Copy, REST, WS frames, MCP tools and docs, no aliases.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">5</td><td><span class="sid r">R1</span> The cue model<span class="what">Shared cues, membership, explicit delete, all-cues table, cross-show copy.</span></td><td>—</td><td><span class="chip plan">plan agreed</span></td></tr>
+          <tr><td class="n">6</td><td><span class="sid">S5</span> Grand master<span class="what">Continuous scale, REST/WS, MIDI fader, app-bar fader.</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">7</td><td><span class="sid">S6</span> Make rig safe, Undo, Quit desk<span class="what">Command roles, bulk run, staggered strikes, restrike times, quit.</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">8</td><td><span class="sid">S10</span> Record polish<span class="what">New stack from Record, an "All attributes" toggle, a cue picker for "An existing cue…".</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">9</td><td><span class="sid">S11</span> Position in −127…+127<span class="what">One conversion for display and entry; intents gain a unit.</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">10</td><td><span class="sid">S7</span> Group member order<span class="what">Drag-reorder in the Groups views; show the order FX will use.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">11</td><td><span class="sid">S8</span> Per-patch locate<span class="what">Pan and tilt in the Focus facet; Set locate from current.</span></td><td><div class="needs"><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">12</td><td><span class="sid">S12</span> Fan in and fan out<span class="what">Relative fan around current positions, per axis, symmetric in rig order.</span></td><td><div class="needs"><span class="sid">S7</span><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">13</td><td><span class="sid">S13</span> Aim from the floor plan<span class="what">Click to aim on the Plan camera, height from Z or a region, the room reachable.</span></td><td><div class="needs"><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">14</td><td><span class="sid">S9</span> Blinder colour<span class="what">A warm/cold mix per cell through a small CCT helper.</span></td><td><div class="needs"><span class="sid">S1</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">15</td><td><span class="sid">S15</span> Effect timing<span class="what">Speed master or seconds; one bar by default.</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">16</td><td><span class="sid">S16</span> Speed masters on a cue<span class="what">Master and BPM pairs set whenever the cue becomes live.</span></td><td><div class="needs"><span class="sid">S15</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">17</td><td><span class="sid">S14</span> Full-width applied tables<span class="what">Applied FX, Looks and palettes as window views with query-string state.</span></td><td><div class="needs"><span class="sid">S4</span></div></td><td><span class="chip">to do</span></td></tr>
+          <tr><td class="n">18</td><td><span class="sid r">R2</span> Editing a cue in the Show view<span class="what">In-place tables, one action set, blind edit.</span></td><td><div class="needs"><span class="sid r">R1</span></div></td><td><span class="chip plan">plan agreed</span></td></tr>
+          <tr><td class="n">19</td><td><span class="sid r">R3</span> Applying to a selection<span class="what">One model replacing seven mechanisms.</span></td><td><div class="needs"><span class="sid">S1</span><span class="sid">S14</span></div></td><td><span class="chip plan">plan agreed</span></td></tr>
+          <tr><td class="n">20</td><td><span class="sid r">R4</span> The effects survey<span class="what">MagicQ, grandMA3, Eos and Hog 4 against our 24 built-ins.</span></td><td><div class="needs"><span class="sid">S15</span></div></td><td><span class="chip plan">plan agreed</span></td></tr>
+          <tr><td class="n">21</td><td><span class="sid r">R5</span> Project structure and navigation<span class="what">A navigation survey, and venue re-attach.</span></td><td><div class="needs"><span class="sid">S2</span></div></td><td><span class="chip plan">plans agreed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="design">
+    <h2>Design sessions</h2>
+    <p class="lede">Each one ends with its own plan, and a one-page version like this one.</p>
+    <div class="rgrid">
+      <div class="rc">
+        <div class="top"><h3><span class="sid r">R1</span> The cue model</h3><span class="chip plan">plan agreed</span></div>
+        <ul><li>What a stack membership holds and what the cue holds</li><li>Numbering per membership; a cue live in two stacks</li><li>Everything that names a cue, sync and explicit delete</li><li>The all-cues table and cross-show copy</li></ul>
+        <div class="links"><a href="https://claude.ai/artifact/396mjPfVFE8D6oi2Xh6EHH">One-page plan</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/cue-model-plan.md">cue-model-plan.md</a></div>
+      </div>
+      <div class="rc">
+        <div class="top"><h3><span class="sid r">R2</span> Editing a cue in the Show view</h3><span class="chip plan">plan agreed</span></div>
+        <ul><li>Values, Looks and FX edited in place, sending nothing</li><li>Card and table views</li><li>One action set for both, blind edit included</li></ul>
+        <div class="links"><a href="https://claude.ai/artifact/N3Acyq477Lj9i9r4p6YWzm">One-page plan</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/show-cue-editing-plan.md">show-cue-editing-plan.md</a></div>
+      </div>
+      <div class="rc">
+        <div class="top"><h3><span class="sid r">R3</span> Applying to a selection</h3><span class="chip plan">plan agreed</span></div>
+        <ul><li>One model for Looks, palettes and effects</li><li>Palettes from every property popup</li><li>How the mask, the selection and the layer relate</li></ul>
+        <div class="links"><a href="https://claude.ai/artifact/9cDRZDeBKFiN5un88v7cNJ">One-page plan</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/apply-model-plan.md">apply-model-plan.md</a></div>
+      </div>
+      <div class="rc">
+        <div class="top"><h3><span class="sid r">R4</span> The effects survey</h3><span class="chip plan">plan agreed</span></div>
+        <ul><li>Families, attributes and parameters on four desks</li><li>Size, rate, offset, direction, wings, waveform, fade</li><li>Which gaps matter here: zoom, Colour Cycle direction</li></ul>
+        <div class="links"><a href="https://claude.ai/artifact/LttskDxQVM8upsDYoBj9P5">One-page plan</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/effects-plan.md">effects-plan.md</a></div>
+      </div>
+      <div class="rc">
+        <div class="top"><h3><span class="sid r">R5</span> Project structure and navigation</h3><span class="chip plan">plans agreed</span></div>
+        <ul><li>Reaching the projects list; what the project screen leaves out</li><li>Actions only in the ⋮ menu</li><li>Re-attach: Detach in reverse, matched by uuid then key</li></ul>
+        <div class="links"><a href="https://claude.ai/artifact/56QW1wW5M8HcB7yXCzqbhX">One-page plan</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/navigation-plan.md">navigation-plan.md</a><a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/venue-attach-plan.md">venue-attach-plan.md</a></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>A one-page copy of <a href="https://github.com/cjcormack/lighting7/blob/main/docs/plans/venue-visit-plan.md">docs/plans/venue-visit-plan.md</a> for human readers. Where they differ, the markdown plan wins.</span>
+    <span>Checked in at <code>docs/plans/venue-visit-design/venue-visit.html</code>. Status as of 2026-10-15.</span>
+  </footer>
+</div>

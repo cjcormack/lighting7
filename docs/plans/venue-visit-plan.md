@@ -9,6 +9,10 @@
 >   design record beside it if it needs boards, and lands nothing else.
 >
 > Where a later R plan disagrees with this one, the R plan wins on everything inside its scope.
+>
+> A one-page copy for human readers is
+> [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
+> <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
 
 ## 1. Context
 
@@ -353,7 +357,7 @@ It should start from `docs/lighting-composition-model.md`.
 | 17 | S14 Applied tables | S4 | |
 | 18 | R2 Show cue editing | R1 | [`show-cue-editing-plan.md`](show-cue-editing-plan.md) |
 | 19 | R3 Applying to a selection | S1, S14 | [`apply-model-plan.md`](apply-model-plan.md) |
-| 20 | R4 Effects survey | S15 | |
+| 20 | R4 Effects survey | S15 | [`effects-plan.md`](effects-plan.md) |
 | 21 | R5 Project structure | S2 | [`navigation-plan.md`](navigation-plan.md), [`venue-attach-plan.md`](venue-attach-plan.md) |
 
 R1 is early because more of the notes wait on it than on anything else. The R sessions can run in
