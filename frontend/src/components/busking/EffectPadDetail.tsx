@@ -1,6 +1,7 @@
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isAroundSpelling } from '@/components/fx/centreMode'
+import { isOnSeconds } from '@/lib/effectTiming'
 import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
@@ -19,19 +20,15 @@ export function EffectPadDetail({ template }: { template: TemplateSummary }) {
     isWallClock ? template.effect?.rateSpeedMasterUuid : template.effect?.speedMasterUuid,
   )
   if (template.effect == null) return 'Effect'
-  const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource)
+  const seconds = isOnSeconds(template.effect, template.effect.timingSource)
+  const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource, seconds)
   // A null `timingSource` means the stored `effectType` no longer resolves in this desk's registry.
   // Both clauses go then, not just the speed: `isWallClock` is false for a null as well as for a
   // beat effect, so naming the beat master would state a tempo link a wall-clock effect does not
   // have. Say nothing rather than pick the likelier of two wrong answers.
+  // On Seconds (D7) there is no master to name: `4 s` says what it runs on.
   const masterLabel =
-    template.effect.timingSource == null
-      ? null
-      : master
-        ? `M${master.index}`
-        : isWallClock && template.effect.rateSpeedMasterUuid == null
-          ? 'unscaled'
-          : 'M1'
+    template.effect.timingSource == null || seconds ? null : master ? `M${master.index}` : 'M1'
   // *around* (fixture-fx-sheets plan D16): the movement template orbits whatever holds the position
   // underneath — the one thing about a Circle pad an operator needs before pressing it after a
   // position pad. An Absolute one (every stored Override, call 6) says nothing.

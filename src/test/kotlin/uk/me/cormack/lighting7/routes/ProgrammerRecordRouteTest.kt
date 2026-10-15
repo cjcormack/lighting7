@@ -902,6 +902,47 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertTrue(removed.cue.layers.isEmpty(), "the reordered send still matched and removed the layer")
     }
 
+    @Test
+    fun `a recorded effect keeps its timing — a master, or Seconds`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val stackId = createStack(client, "stack-a")
+        val master = state.show.fxEngine.speedMasters.masterStates().first().uuid!!.toString()
+
+        // A busked effect on a named master, and one on Seconds (venue-visit plan S15, D7). Record
+        // dropped the master before S15, so a recorded busk fell back to master 1.
+        for ((key, request) in listOf(
+            "hex-1" to AddEffectRequest(
+                effectType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
+                speedMasterUuid = master, programmerOwned = true,
+            ),
+            "hex-2" to AddEffectRequest(
+                effectType = "Pulse", fixtureKey = "hex-2", propertyName = "dimmer",
+                beatDivision = 8.0, seconds = true, programmerOwned = true,
+            ),
+        )) {
+            val added = client.post("/api/rest/fx/add") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+            assertEquals(HttpStatusCode.OK, added.status, "adding on $key")
+        }
+
+        val response: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, name = "timed"),
+        ).body()
+
+        val onMaster = response.cue.adHocEffects.single { it.targetKey == "hex-1" }
+        assertEquals(master, onMaster.speedMasterUuid)
+        assertEquals(false, onMaster.seconds)
+        val onSeconds = response.cue.adHocEffects.single { it.targetKey == "hex-2" }
+        assertTrue(onSeconds.seconds)
+        assertEquals(8.0, onSeconds.beatDivision)
+        assertNull(onSeconds.speedMasterUuid)
+    }
+
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
         post("/api/rest/programmer/record") {
             contentType(ContentType.Application.Json)

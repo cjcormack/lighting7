@@ -165,6 +165,38 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * D7's *Seconds* (formatVersion 29) travels on all three stored effect shapes — a Look's effect,
+     * a palette's effect and a cue's ad-hoc effect. Asserted on the export text for the reason the
+     * template test above gives: a field both sides dropped would still round-trip byte for byte.
+     */
+    @Test
+    fun `effects on Seconds export the flag on every stored shape`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun <T> docs(folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                    .map { canonicalDecode(serializer, Files.readString(it)) }
+            }
+
+        val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+            .single { it.name == "warm-pulse" }.effects.single()
+        assertTrue(lookEffect.seconds, "a Look's effect keeps Seconds")
+        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+        assertTrue(templateEffect.seconds, "a palette's effect keeps Seconds")
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 29, "Seconds syncs from v29")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 29, "and this desk reads v29")
+    }
+
+    /**
      * A paired dimmer's other lanterns travel inside their patch's document, in order, with the
      * rigging named by uuid. The byte-for-byte test proves the importer keeps what the exporter
      * writes; this pins what the exporter writes — and that a patch with none carries no key.

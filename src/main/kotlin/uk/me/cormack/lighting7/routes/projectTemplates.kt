@@ -554,6 +554,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                        seconds = effect.seconds
                     }
                 }
                 CopyTemplateOutcome.Copied(
@@ -1297,8 +1298,10 @@ private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDt
         // handler — a 500 on a malformed body. The Look path (`writeLookChildren`) already goes
         // through the tolerant helper, and null here means master 1, which is the documented
         // meaning of an absent master everywhere else.
-        speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-        rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+        speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+        rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+        // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
+        seconds = effect.seconds
     }
 }
 
@@ -1438,6 +1441,7 @@ internal fun DaoTemplateEffect.toDto(registry: FxRegistry) = TemplateEffectDto(
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    seconds = seconds,
     // The registry is the authority, exactly as it is for `category` — which the write boundary
     // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
     // timing source is a property of the *effect type*, so a column would be a second copy that a

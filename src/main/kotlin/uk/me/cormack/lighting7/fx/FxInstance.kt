@@ -192,6 +192,8 @@ data class LookEffectSettings(
     val parameters: Map<String, String>,
     val speedMasterUuid: java.util.UUID?,
     val rateSpeedMasterUuid: java.util.UUID?,
+    /** [FxInstance.seconds] — D7's Seconds for a beat effect. */
+    val seconds: Boolean = false,
 )
 
 /**
@@ -214,6 +216,7 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
         parameters = effect.parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
+        seconds = seconds,
     )
 }
 
@@ -612,6 +615,30 @@ class FxInstance internal constructor(
      * until an unrelated rebuild.
      */
     var timingSource: TimingSource = TimingSource.BEAT
+
+    /**
+     * A **beat** effect on *Seconds* (venue-visit plan D7): its own cycle, [FxTiming.beatDivision]
+     * read as seconds, with no master. Such an instance runs on the wall-clock loop
+     * ([timingSource] is `WALL_CLOCK`) with both masters null, which is exactly an unscaled
+     * wall-clock effect — the engine has nothing new to do for it.
+     *
+     * Always false for a wall-clock effect: its division is seconds already, and its Seconds is
+     * having no rate master. [onSeconds] is the one reading of D7's choice for either kind, and
+     * [applyTimingChoice] the one writer. Set before the instance reaches the engine, as
+     * [timingSource] is.
+     */
+    var seconds: Boolean = false
+
+    /**
+     * D7's reading: this effect follows no master — a beat effect on [seconds], or a wall-clock
+     * effect with no rate master.
+     */
+    val onSeconds: Boolean
+        get() = seconds || (timingSource == TimingSource.WALL_CLOCK && rateSpeedMasterUuid == null)
+
+    /** The timing source of the effect's *type*: [timingSource], except a beat effect on [seconds]. */
+    val registrationTimingSource: TimingSource
+        get() = if (seconds) TimingSource.BEAT else timingSource
 
     /**
      * Speed master this BEAT effect subscribes to, as the persisted master **uuid**

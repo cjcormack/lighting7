@@ -608,6 +608,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // to be remapped for a clone to point at its own master.
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
         sortOrder = 0
     }
 
@@ -651,6 +655,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         parameters = mapOf("colours" to "tmpl:${colourTemplate.uuid}", "depth" to "0.6")
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -755,6 +763,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 3
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.

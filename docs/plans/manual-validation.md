@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
@@ -92,6 +93,41 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S15`
+
+**What it proves**: *an effect can run on its own cycle* — venue-visit plan S15 (D7, D16): an effect
+on *Seconds* follows no master, and a new effect is one bar on the master tagged for its family's
+usage.
+
+**Why it is here**: the tests drive the engine's two loops by hand and render the editor in jsdom.
+Nothing in review watched a breathe on a real rig hold its speed while the operator tapped the tempo,
+or a desk's own masters stamp a new effect.
+
+**Test**, on the hall's rig:
+
+1. **Tag a master.** On Speed Masters give M2 the usage *Dimmer* at 90 BPM.
+2. **A new effect.** On a fixture sheet press *+ Effect* → Pulse: its chip reads `M2 · 90` and its
+   speed `1 bar`. A Colour Cycle on a colour head starts on M1 (none is tagged colour), also one bar.
+3. **Onto Seconds.** Open the Pulse, pick *Seconds* on the chip: the speed reads about `2.67 s` and
+   the light does not jump. Tap M2 up to 150: the Seconds Pulse keeps its speed, a second Pulse on M2
+   speeds up.
+4. **Back.** Pick M2 again: the speed reads in beats and does not jump. *Revert* puts it back as it
+   opened.
+5. **Fluorescent Flicker.** Start one, give its chip M2, then pick *Seconds*: it is unscaled. Revert
+   from M2 lands *Seconds* again (the old `FU-FX-RATE-MASTER-CLEAR`).
+6. **Record and run.** Record the Seconds Pulse into a cue, clear, GO the cue: it runs on Seconds at
+   the same cycle. Include the cue: the editor reads *Seconds*. Make an effect palette from it: the
+   pad reads `Pulse · 2.67 s`.
+7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer rail says the
+   speed as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
+
+If a Seconds effect drifts with the tempo anywhere (a cue layer over it, a busk press), promote it to
+a `FU-` item in `followups.md`.
+
+15 minutes.
 
 ---
 

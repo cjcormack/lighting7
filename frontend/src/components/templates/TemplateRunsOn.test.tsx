@@ -74,7 +74,7 @@ describe('TemplateRunsOn', () => {
         entry={beatEntry}
       />,
     )
-    expect(screen.getByText('One bar · 1/2')).toBeTruthy()
+    expect(screen.getByText('One bar · 2 beats')).toBeTruthy()
     expect(screen.getByText('M2 · Chases · 128 bpm')).toBeTruthy()
   })
 
@@ -94,8 +94,9 @@ describe('TemplateRunsOn', () => {
         entry={{ ...beatEntry, timingSource: 'WALL_CLOCK' }}
       />,
     )
-    expect(screen.getByText('One cycle · 2s')).toBeTruthy()
-    expect(screen.queryByText('One bar · 1/2')).toBeNull()
+    expect(screen.getByText('One cycle · 2 s')).toBeTruthy()
+    expect(screen.getByText('Seconds — no master')).toBeTruthy()
+    expect(screen.queryByText('One bar · 2 beats')).toBeNull()
     expect(screen.queryByText('4')).toBeNull()
   })
 

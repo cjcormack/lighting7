@@ -348,10 +348,12 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `an effect missing a required field is refused by the field's name`() {
         patchRig()
         val lookCount = transaction(state.database) { DaoLook.all().count() }
+        // `beatDivision` is not required since venue-visit plan S15: an omitted one is one bar (D16),
+        // which `McpEffectTimingTest` pins. The category still is.
         refused(
             "create_look",
-            """{"name":"A","effects":[{"effectType":"Pulse","category":"dimmer","blendMode":"OVERRIDE"}]}""",
-            "effects[0] is missing 'beatDivision'",
+            """{"name":"A","effects":[{"effectType":"Pulse","blendMode":"OVERRIDE"}]}""",
+            "effects[0] is missing 'category'",
         )
         refused(
             "create_look",

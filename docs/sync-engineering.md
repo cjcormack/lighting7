@@ -226,7 +226,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 28`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 29`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -279,6 +279,21 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 29 — Seconds
+
+An effect may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
+own cycle, with no speed master. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain
+`seconds` (default false, so omitted), and a beat effect's `beatDivision` is then its cycle in
+**seconds**. `SUPPORTED_FORMAT_VERSION = 29`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field
+defaults to false, so every older archive decodes as before. The writer's number moves by the
+sharp-edge rule, and it is a semantic change on an existing field as much as a new one: a v28 reader
+would import a ten-second breathe as ten beats of master 1 and write the flag away on its next push.
+A row the desk writes holds no master beside the flag (`RichProjectFixture` keeps its masters there,
+dormant, only so the clone test's remap still has a reference to rewrite). A wall-clock effect with no
+rate master is on Seconds with or without the flag, so an older archive's wall-clock rows mean what they
+meant. A project with no effect on Seconds exports byte-for-byte as at v28 (only `formatVersion.json`
+says 29).
 
 ### Version 28 — centre-relative positions
 

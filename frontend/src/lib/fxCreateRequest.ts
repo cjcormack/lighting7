@@ -44,6 +44,8 @@ export interface FxCreateRequest {
   stepTiming?: boolean
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
+  /** On *Seconds* (D7): the division is seconds, no master. */
+  seconds?: boolean
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -76,6 +78,7 @@ export function fxCreateAddition(
     ...(request.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: request.rateSpeedMasterUuid }
       : {}),
+    ...(request.seconds ? { seconds: true } : {}),
   }
 
   if (target.type === 'group') {

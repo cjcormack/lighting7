@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
+import uk.me.cormack.lighting7.models.withBeatDivisionOverride
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
@@ -773,8 +774,7 @@ class ProgrammerLayerStack(
                 "Palette '${source.name}' no longer holds an effect to reset to",
             )
         val st = state() ?: return ResetToTemplateOutcome.NotFound
-        val spec = entry.toEffectSpec()
-            .let { if (layer.beatDivisionOverride == null) it else it.copy(beatDivision = layer.beatDivisionOverride) }
+        val spec = entry.toEffectSpec().withBeatDivisionOverride(layer.beatDivisionOverride)
         // Built the way [build] builds a fresh spawn, on the instance's own target, and read for its
         // settings only — this instance is never added to the engine.
         val fresh = try {
@@ -800,8 +800,9 @@ class ProgrammerLayerStack(
             newElementFilter = fresh.elementFilter,
             newStepTiming = fresh.stepTiming,
             newRegistrationId = fresh.registrationId,
-            newTimingSource = fresh.timingSource,
+            newTimingSource = fresh.registrationTimingSource,
             replaceMasters = FxEngine.MasterAssignment(fresh.speedMasterUuid, fresh.rateSpeedMasterUuid),
+            newSeconds = fresh.onSeconds,
         ) ?: return ResetToTemplateOutcome.NotFound
         updated.programmerLayerEffectKey = key.copy(effect = entry)
         ResetToTemplateOutcome.Reset(updated)
@@ -1009,8 +1010,7 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double?,
     ): FxInstance? {
         val st = state() ?: return null
-        val spec = effect.toEffectSpec()
-            .let { if (beatDivisionOverride == null) it else it.copy(beatDivision = beatDivisionOverride) }
+        val spec = effect.toEffectSpec().withBeatDivisionOverride(beatDivisionOverride)
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(st, CueTargetDto(target), spec)
         } catch (e: Exception) {
