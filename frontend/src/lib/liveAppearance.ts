@@ -96,9 +96,10 @@ export function rigHeadOrder(rows: readonly BuskRigRow[], fixtures: readonly Fix
   return order
 }
 
-const hasColourDescriptor = (properties: readonly { type: string }[]) => properties.some((p) => p.type === 'colour')
+const hasColourDescriptor = (properties: readonly { type: string }[]) =>
+  properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
 
-/** A head the colour picker can *write*: its own colour descriptor, or one on any of its cells. */
+/** A head the colour picker can *write*: its own colour or white-mix descriptor, or one on any of its cells. */
 function hasColour(target: WriteTarget): boolean {
   return hasColourDescriptor(target.properties) || (target.elements ?? []).some((element) => hasColourDescriptor(element.properties))
 }
@@ -113,7 +114,8 @@ function hasColour(target: WriteTarget): boolean {
  * the same fold. A group never reaches here — the hosts expand one to its members first, so a
  * member the rig names sorts by its own rank.
  *
- * **Only heads with a colour descriptor.** The appearance dispatch answers for every head — a
+ * **Only heads with a colour descriptor** — RGB, or a warm/cold white pair the desk lands a colour
+ * on as its nearest mix. The appearance dispatch answers for every head — a
  * gelled or colourless one with its gel or the default tungsten, an unmatched patch with the
  * placeholder grey — and none of those is a colour the editor could write back. Reading them would
  * count a dimmer-only par as a head and flag *mixed* against a real RGB head beside it; the write

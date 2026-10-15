@@ -1922,6 +1922,44 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a colour template pressed on a blinder lands on both cells as their nearest white mix`() = testApplication {
+        mountTestApp(state)
+        // Ch 60 the master dimmer, ch 64–65 and 66–67 the cells' warm and cold whites (D8).
+        LocateTestSupport.seedFixture(state, projectId, "china-2-cell-led-blinder-8ch", "blinder-1", 60)
+        val client = jsonClient()
+        val template = client.amberTemplate()
+        val mix = uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture.WHITE_MIX
+        val levels = mix.levelsFor(java.awt.Color(0xFF, 0x9D, 0x4A))
+
+        val body = client.click(template.id, TemplateTargetDto("fixture", "blinder-1"))
+
+        assertEquals(2, body.written, body.skipped.toString())
+        val cells = listOf("blinder-1.cell-1", "blinder-1.cell-2")
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, cells)
+        // Each cell holds the colour its mix makes, which is what it reads back as.
+        val held = mix.colourOf(levels.warm, levels.cold)
+        for (cell in cells) assertEquals(held, heldColour(cell)?.second, cell)
+        assertNull(state.show.programmerStore.get("blinder-1", "rgbColour"), "the parent has no colour to hold")
+        val out = mix.levelsFor(held)
+        val controller = state.show.fixtures.controllerOrNull(uk.me.cormack.lighting7.dmx.Universe(0, 0)) as uk.me.cormack.lighting7.dmx.MockDmxController
+        for (warm in listOf(64, 66)) assertEquals(out.warm, controller.getEffectiveValue(warm), "ch $warm")
+        for (cold in listOf(65, 67)) assertEquals(out.cold, controller.getEffectiveValue(cold), "ch $cold")
+    }
+
+    @Test
+    fun `a colour template toggled on a blinder cooks onto both cells`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "china-2-cell-led-blinder-8ch", "blinder-1", 60)
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        assertEquals("applied", client.toggle(template.id, TemplateTargetDto("fixture", "blinder-1")).action)
+
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, listOf("blinder-1.cell-1", "blinder-1.cell-2"))
+        assertNull(state.show.programmerStore.get("blinder-1", "rgbColour"))
+    }
+
+    @Test
     fun `a colour template clicked on one Shehds zone changes only that zone`() = testApplication {
         mountTestApp(state)
         seedShehds()

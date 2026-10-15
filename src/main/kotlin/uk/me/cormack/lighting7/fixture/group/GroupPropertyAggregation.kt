@@ -39,6 +39,7 @@ fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescri
             is ColourPropertyDescriptor -> aggregateColourProperty(templateProp, dmxFixtures)
             is PositionPropertyDescriptor -> aggregatePositionProperty(templateProp, dmxFixtures)
             is SettingPropertyDescriptor -> aggregateSettingProperty(templateProp, dmxFixtures)
+            is WhiteMixPropertyDescriptor -> aggregateWhiteMixProperty(templateProp, dmxFixtures)
             // A trigger fires per fixture, from its own panel: a group has no trigger control.
             is TriggerPropertyDescriptor -> null
             // A command runs per fixture, from its own panel and behind its own confirm.
@@ -109,6 +110,11 @@ private fun aggregateElementGroupProperty(
                 memberPositionChannels = allChannels
             )
         }
+        is GroupWhiteMixPropertyDescriptor -> {
+            val matching = allMatching.filterNotNull().filterIsInstance<GroupWhiteMixPropertyDescriptor>()
+            if (matching.any { it.warmKelvin != template.warmKelvin || it.coldKelvin != template.coldKelvin }) return null
+            template.copy(memberChannels = matching.flatMap { it.memberChannels })
+        }
         is GroupSettingPropertyDescriptor -> {
             val matching = allMatching.filterNotNull().filterIsInstance<GroupSettingPropertyDescriptor>()
             // Verify all have matching options
@@ -123,6 +129,20 @@ private fun aggregateElementGroupProperty(
             )
         }
     }
+}
+
+/** A warm/cold white pair across all fixtures, when every one has it with the same whites. */
+private fun aggregateWhiteMixProperty(
+    template: WhiteMixPropertyDescriptor,
+    fixtures: List<DmxFixture>,
+): GroupWhiteMixPropertyDescriptor? {
+    val members = fixtures.mapNotNull { fixture ->
+        fixture.generatePropertyDescriptors().filterIsInstance<WhiteMixPropertyDescriptor>()
+            .find { it.name == template.name && it.warmKelvin == template.warmKelvin && it.coldKelvin == template.coldKelvin }
+            ?.let { MemberWhiteMixChannels(fixture.key, it.warmChannel, it.coldChannel) }
+    }
+    if (members.size != fixtures.size) return null
+    return GroupWhiteMixPropertyDescriptor(template.name, template.displayName, template.warmKelvin, template.coldKelvin, members)
 }
 
 /**

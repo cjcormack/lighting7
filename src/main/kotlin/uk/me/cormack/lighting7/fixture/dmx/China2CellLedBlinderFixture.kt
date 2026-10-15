@@ -6,6 +6,8 @@ import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.property.WhiteMix
+import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
 
@@ -64,22 +66,22 @@ class China2CellLedBlinderFixture(
     }
 
     /**
-     * One of two cells (CH5–6, CH7–8). Each cell exposes a warm-white
-     * and cold-white slider — there is no per-cell dimmer or strobe;
-     * those are shared on the parent fixture.
+     * One of two cells (CH5–6, CH7–8). Each cell has a warm-white and a
+     * cold-white slider, and takes a colour through them as their nearest
+     * mix ([rgbColour], venue-visit plan D8) — there is no per-cell dimmer
+     * or strobe; those are shared on the parent fixture.
      *
      * Both sliders use [PropertyCategory.WHITE] but neither claims
      * [uk.me.cormack.lighting7.fixture.trait.WithWhite] — using that
      * trait for one of the two channels would imply asymmetry that
-     * isn't there. Variable-white blending is done by setting the two
-     * sliders independently.
+     * isn't there. The sliders stay for direct control.
      */
     inner class Cell(
         override val elementIndex: Int,
         cellTransaction: ControllerTransaction?,
         private val warmWhiteChannel: Int,
         private val coldWhiteChannel: Int,
-    ) : FixtureElement<China2CellLedBlinderFixture> {
+    ) : FixtureElement<China2CellLedBlinderFixture>, WithColour {
 
         override val parentFixture: China2CellLedBlinderFixture
             get() = this@China2CellLedBlinderFixture
@@ -88,10 +90,13 @@ class China2CellLedBlinderFixture(
             get() = "${this@China2CellLedBlinderFixture.key}.cell-${elementIndex + 1}"
 
         @FixtureProperty("Warm white", category = PropertyCategory.WHITE)
-        val warmWhite: Slider = DmxSlider(cellTransaction, universe, warmWhiteChannel)
+        val warmWhite = DmxSlider(cellTransaction, universe, warmWhiteChannel)
 
         @FixtureProperty("Cold white", category = PropertyCategory.WHITE)
-        val coldWhite: Slider = DmxSlider(cellTransaction, universe, coldWhiteChannel)
+        val coldWhite = DmxSlider(cellTransaction, universe, coldWhiteChannel)
+
+        @FixtureProperty("Warmth", category = PropertyCategory.COLOUR)
+        override val rgbColour = DmxWhiteMixColour(warmWhite, coldWhite, WHITE_MIX)
 
         override fun withTransaction(transaction: ControllerTransaction): Cell =
             Cell(elementIndex, transaction, warmWhiteChannel, coldWhiteChannel)
@@ -147,5 +152,9 @@ class China2CellLedBlinderFixture(
          */
         const val STROBE_MIN: UByte = 11u
         const val STROBE_MAX: UByte = 255u
+
+        // Estimate: no manual states the whites' temperatures; 3000 K and 6500 K are the usual
+        // warm and cold LEDs in a two-white blinder. Checked on the rig by FU-MANUAL-S9-WHITES.
+        val WHITE_MIX = WhiteMix(warmKelvin = 3000, coldKelvin = 6500)
     }
 }

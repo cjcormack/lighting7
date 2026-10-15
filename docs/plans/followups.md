@@ -65,6 +65,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a template is asked to address a two-wheel head's second wheel |
+| [`FU-TMPL-KELVIN`](#fu-tmpl-kelvin) | Ready | Tmpl | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
@@ -1319,6 +1320,19 @@ Not obviously worth fixing: a colour template asks "be this colour", and answeri
 once is a mixing problem the fixture's own manual barely addresses.
 
 **Trigger**: an operator asks a template for the second wheel by name.
+
+### `FU-TMPL-KELVIN`
+
+**A palette cannot hold a colour temperature** · Ready · venue-visit plan S9, 2026-10-15
+
+A warm/cold white head takes a colour as its nearest mix (D8, `fixture/property/WhiteMix.kt`), and its
+Colour cell edits a warmth — but a palette still stores only a hex. "3200 K" saved from the blinder is
+saved as the colour that mix makes, and lands on an RGB head as that RGB, not as a 3200 K white.
+
+The fix is a kelvin colour intent: stored beside the hex form (a sync and `formatVersion` question,
+`docs/sync-engineering.md`), resolved on a white-mix head straight to the mix at that temperature, and
+on an RGB(W) head through the black body (`WhiteMix.kelvinToLinearRgb`, the Stage view's `lampLinearRgb`),
+with the palette editor offering a warmth beside the picker. Chris chose to leave it out of S9.
 
 ---
 

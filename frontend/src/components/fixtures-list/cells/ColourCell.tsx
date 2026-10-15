@@ -13,6 +13,8 @@ import { useEditorCramped, type CellClickBehaviour } from '../../editor/EditorSu
 import { headsLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { useEditorOpen } from '../../editor/useEditorOpen'
+import { firstWhiteMix, isWarmthOnly, WarmthCell } from './WarmthCell'
+import { warmthReading } from '../../editor/WarmthEditor'
 
 interface ColourCellOwnProps {
   value: Extract<CellValue, { kind: 'colour' }>
@@ -114,14 +116,16 @@ export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarg
 
 const NO_TARGETS: readonly WriteTarget[] = []
 
-const hasColourDescriptor = (properties: readonly { type: string }[]) => properties.some((p) => p.type === 'colour')
+const hasColourDescriptor = (properties: readonly { type: string }[]) =>
+  properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
 
 /**
  * The batch's targets as a **colour commit** lands on them, which is what the editor counts,
  * reads and mounts leaves for: a head with its own colour descriptor as itself, a fixture whose
  * colour lives on its cells as one target per cell (named by its parent and position, the shape
  * `rowWriteTargets` stamps on an element row), and a head with no RGB colour dropped. That is
- * `resolveTargetCells`' fan-out narrowed to what `commitMatchesResolution` accepts: a dimmer-only
+ * `resolveTargetCells`' fan-out narrowed to what `commitMatchesResolution` accepts (an RGB colour or
+ * a warm/cold white pair, which the desk lands as its nearest mix): a dimmer-only
  * par swept up by a geometric marquee resolves nothing and is not counted among the heads that
  * "take RGB only", and a **colour-wheel** head — which the column resolves to a `colour-setting`
  * cell the batch counts, and a colour commit refuses — is not counted either. So this list's
@@ -167,7 +171,19 @@ export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] 
  * the sheet is an outside press to the popover — which closes, as it should, the moment the sheet
  * takes focus.
  */
-export const ColourCell = memo(function ColourCell({
+export const ColourCell = memo(function ColourCell(props: ColourCellProps) {
+  const batchTargets = props.batch?.targets ?? NO_TARGETS
+  const templateTargets = useMemo(() => templateTargetsOf(colourTargetsOf(batchTargets)), [batchTargets])
+  // Heads whose colour is a warm/cold white pair alone get a warmth control; a batch that mixes
+  // them with RGB heads keeps the picker, and the desk lands the colour on each pair as its
+  // nearest mix.
+  if (isWarmthOnly(props.batch?.resolutions ?? props.resolutions)) {
+    return <WarmthCell {...props} templateTargets={templateTargets} />
+  }
+  return <RgbColourCell {...props} />
+})
+
+const RgbColourCell = memo(function RgbColourCell({
   value,
   resolutions,
   label = 'Colour',
@@ -237,6 +253,9 @@ export const ColourCell = memo(function ColourCell({
   const hasUv = heads.resolutions.some((r) => r.kind === 'colour' && r.property.uvChannel != null)
 
   const templateTargets = useMemo(() => templateTargetsOf(targets), [targets])
+  // A white-mix row in a batch with RGB heads opens this picker, but its face still reads as a
+  // warmth, as the same row does outside the batch.
+  const rowMix = isWarmthOnly(resolutions) ? firstWhiteMix(resolutions) : undefined
   const recent = useMemo<ColourRecentSource | undefined>(
     () => (projectId == null ? undefined : { projectId, targets: templateTargets, localFamilies: COLOUR_FAMILY, forms: RECENT_FORMS }),
     [projectId, templateTargets],
@@ -340,7 +359,11 @@ export const ColourCell = memo(function ColourCell({
                 style={{ backgroundColor: value.combinedCss }}
               />
               <span className="mr-1.5 truncate text-xs tabular-nums text-muted-foreground">
-                {value.isUniform ? `${value.r},${value.g},${value.b}` : 'Mixed'}
+                {!value.isUniform
+                  ? 'Mixed'
+                  : rowMix != null
+                    ? warmthReading(rowMix, [value.r, value.g, value.b])
+                    : `${value.r},${value.g},${value.b}`}
               </span>
             </>
           )}

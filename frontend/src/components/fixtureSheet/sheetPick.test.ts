@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { lightingApi } from '@/api/lightingApi'
-import { chan, colourProp, element, makeFixture, makePixelBar, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, element, makeFixture, makePixelBar, settingProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
 import {
   elementFilterFor,
   groupSheetMembers,
@@ -18,7 +18,7 @@ import {
   togglePick,
   type PickHead,
 } from './sheetPick'
-import { writePickColour, writePickPosition } from './sheetWrites'
+import { writePickColour, writePickPosition, writePickWhiteMix } from './sheetWrites'
 import type { PositionResolution } from './sheetRows'
 
 const keys = ['a', 'b', 'c', 'd']
@@ -205,5 +205,25 @@ describe('a position over a pick', () => {
       ['fixture', 'm2', 51, 10, undefined, 'front'],
     ])
     setPosition.mockRestore()
+  })
+})
+
+describe('a warm/cold white pair over a pick', () => {
+  it('is one group entry where the whites match, and each member’s own, carrying the group, where they do not', () => {
+    const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
+    const cells = [
+      { key: 'b.cell-1', property: whiteMixProp(chan(5), chan(6)) },
+      { key: 'b.cell-2', property: whiteMixProp(chan(7), chan(8)) },
+    ]
+    writePickWhiteMix({ kind: 'group', group: 'blinders', keys: ['b.cell-1', 'b.cell-2'] }, cells, [255, 154, 63])
+    expect(setColour.mock.calls.map((c) => [c[0], c[1], c[2], c[3]])).toEqual([['group', 'blinders', 'rgbColour', { r: 255, g: 154, b: 63 }]])
+    setColour.mockClear()
+    const other = [cells[0], { key: 'x.cell-1', property: whiteMixProp(chan(9), chan(10), { warmKelvin: 2700 }) }]
+    writePickWhiteMix({ kind: 'group', group: 'blinders', keys: ['b.cell-1', 'x.cell-1'] }, other, [255, 154, 63])
+    expect(setColour.mock.calls.map((c) => [c[0], c[1], c[5]])).toEqual([
+      ['fixture', 'b.cell-1', 'blinders'],
+      ['fixture', 'x.cell-1', 'blinders'],
+    ])
+    setColour.mockRestore()
   })
 })

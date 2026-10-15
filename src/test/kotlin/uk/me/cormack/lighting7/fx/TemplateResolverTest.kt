@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.HazerFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.MartinMac250Fixture
@@ -10,6 +11,7 @@ import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -99,6 +101,60 @@ class TemplateResolverTest {
         // And the value lands on the property that actually carries the colour on this head — the
         // wheel, not the `rgbColour` the template names and this head does not have.
         assertEquals("colourWheel", r.propertyName)
+    }
+
+    /** Two warm/cold cells under a master dimmer, and no RGB anywhere. */
+    private fun blinder() = China2CellLedBlinderFixture(universe, "blinder-1", "Blinder 1", firstChannel = 120)
+
+    @Test
+    fun `a warm-cold cell takes a colour as its nearest mix and names the mix's temperature`() {
+        val cell = blinder().cell(0)
+        val r = TemplateResolver.resolve(cell, "rgbColour", colour("#FF0000", WhitePolicy.EXTRACT), media = null)
+        val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
+        // The colour the mix makes, not the red asked for: what the cell will read back as.
+        assertEquals(China2CellLedBlinderFixture.WHITE_MIX.colourOf(255u, 0u), value.value.color)
+        val note = assertIs<TemplateResolver.Note.Snapped>(r.note)
+        assertEquals("3000 K", note.slot)
+        assertTrue(note.deltaE > 10.0, "red is far from any white: ${note.deltaE}")
+        assertEquals("rgbColour", r.propertyName)
+    }
+
+    @Test
+    fun `a colour a warm-cold cell can make lands exactly`() {
+        val made = China2CellLedBlinderFixture.WHITE_MIX.colourOf(200u, 90u)
+        val hex = "#%02x%02x%02x".format(made.red, made.green, made.blue)
+        val r = TemplateResolver.resolve(blinder().cell(1), "rgbColour", colour(hex, WhitePolicy.EXTRACT), media = null)
+        assertEquals(TemplateResolver.Note.Exact, r.note)
+        val writes = PropertyChannelWriter.resolve(blinder().cell(1), r.propertyName, assertNotNull(r.value))
+        val levels = writes.map { it.channel to it.value.toInt() }
+        assertEquals(126, levels[0].first)
+        assertEquals(127, levels[1].first)
+        assertTrue(kotlin.math.abs(levels[0].second - 200) <= 2 && kotlin.math.abs(levels[1].second - 90) <= 2, "$levels")
+    }
+
+    @Test
+    fun `a blinder's colour lives on its cells, so the parent has none and its cells fan`() {
+        val fixture = blinder()
+        assertFalse(TemplateResolver.hasColour(fixture, media = null))
+        assertTrue(TemplateResolver.hasColour(fixture.cell(0), media = null))
+        assertEquals(
+            listOf("blinder-1.cell-1", "blinder-1.cell-2"),
+            TemplateFanOut.headsFor(fixture, "rgbColour") { null }.map { it.targetKey },
+        )
+        // The master dimmer is the parent's own, so a dimmer row stays there.
+        assertEquals(listOf("blinder-1"), TemplateFanOut.headsFor(fixture, "dimmer") { null }.map { it.targetKey })
+    }
+
+    @Test
+    fun `a warm-cold cell's colour is its two white channels, each still covered by its own slider`() {
+        val fixture = blinder()
+        val channels = PropertyChannelWriter.channelsFor(fixture.cell(0), "rgbColour").map { it.channel }
+        assertEquals(listOf(124, 125), channels)
+        val covering = PropertyChannelWriter.coveringKeysByChannel(listOf(fixture))
+        assertEquals("warmWhite", covering[0 to 124]?.propertyName)
+        assertEquals("coldWhite", covering[0 to 125]?.propertyName)
+        val all = PropertyChannelWriter.propertyKeysByChannel(listOf(fixture))[0 to 124].orEmpty().map { it.propertyName }
+        assertEquals(setOf("warmWhite", "rgbColour"), all.toSet())
     }
 
     @Test

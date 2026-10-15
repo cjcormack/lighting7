@@ -162,6 +162,7 @@ Grouped by area. §4 gives the order.
 
 - ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
 - ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
+- ~~S9 — Blinder colour (D8)~~ — done, `aeada21c`.
 
 **S7 — Group member order in the Groups views.**
 - Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.
@@ -174,13 +175,6 @@ Grouped by area. §4 gives the order.
 - **Resolver.** `LocateValueResolver` uses a unit's stored pan and tilt where it has them. Every
   other property keeps its category default.
 - **UI.** *Set locate from current* and *Clear locate* go in the programmer and the patch sheet.
-
-**S9 — Blinder colour (D8).**
-- Each cell exposes a Colour whose writer maps the requested colour to a warm/cold mix and a level.
-  The mapping goes through a small CCT model, with the two whites' temperatures declared on the
-  type.
-- Palettes, the colour picker and the fixtures table then drive it like any colour head.
-- Write the mapping as a reusable helper, in case a second WW/CW type turns up.
 
 ### Programmer
 

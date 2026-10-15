@@ -13,7 +13,7 @@ import {
   resolutionPropertyNames,
 } from './columns'
 import { familyForCategory } from '@/lib/attributeFamily'
-import { chan, colourProp, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, positionProp, settingProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
 
 describe('resolveCell', () => {
   it('resolves the dimmer slider, and null when absent', () => {
@@ -28,6 +28,19 @@ describe('resolveCell', () => {
     expect(resolveCell([wheel, rgb], 'colour')).toEqual({ kind: 'colour', property: rgb })
     expect(resolveCell([wheel], 'colour')).toEqual({ kind: 'colour-setting', property: wheel })
     expect(resolveCell([], 'colour')).toBeNull()
+  })
+
+  it('resolves a warm/cold white pair as a white-mix colour, its two whites the channels', () => {
+    const mix = whiteMixProp(chan(5), chan(6))
+    const warm = sliderProp('warmWhite', 'white', chan(5))
+    const cold = sliderProp('coldWhite', 'white', chan(6))
+    const res = resolveCell([warm, cold, mix], 'colour')
+    expect(res).toEqual({ kind: 'white-mix', property: mix })
+    expect(resolutionChannels(res)).toEqual([chan(5), chan(6)])
+    expect(resolutionPropertyNames(res)).toEqual(['rgbColour'])
+    // An RGB colour on the same head still wins.
+    const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
+    expect(resolveCell([mix, rgb], 'colour')).toEqual({ kind: 'colour', property: rgb })
   })
 
   it('prefers a position descriptor, falling back to paired pan/tilt sliders', () => {

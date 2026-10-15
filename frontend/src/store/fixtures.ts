@@ -189,6 +189,7 @@ export type ChannelRef = {
 export type PropertyDescriptor =
   | SliderPropertyDescriptor
   | ColourPropertyDescriptor
+  | WhiteMixPropertyDescriptor
   | PositionPropertyDescriptor
   | SettingPropertyDescriptor
   | TriggerPropertyDescriptor
@@ -323,6 +324,23 @@ export type ColourPropertyDescriptor = {
   whiteChannel?: ChannelRef
   amberChannel?: ChannelRef
   uvChannel?: ChannelRef
+  compactDisplay?: CompactDisplayRole
+}
+
+/**
+ * A colour made by mixing a warm and a cold white (venue-visit plan D8) — the blinder's cells. It
+ * takes any colour as the two whites' nearest mix, and its colour is the one the two channels make
+ * (`lib/whiteMix.ts`). The channels are also the head's own `white` sliders, listed beside it.
+ */
+export type WhiteMixPropertyDescriptor = {
+  type: 'whiteMix'
+  name: string
+  displayName: string
+  category: 'colour'
+  warmChannel: ChannelRef
+  coldChannel: ChannelRef
+  warmKelvin: number
+  coldKelvin: number
   compactDisplay?: CompactDisplayRole
 }
 
@@ -565,6 +583,16 @@ export function findColourSource(properties: PropertyDescriptor[]): ColourSource
   }
 
   return undefined
+}
+
+/**
+ * A head's warm/cold white pair, when its colour is one (`lib/whiteMix.ts`). Kept apart from
+ * [findColourSource]: the views that draw a colour read the pair's two `white` sliders directly.
+ */
+export function findWhiteMixProperty(
+  properties: readonly PropertyDescriptor[] | undefined,
+): WhiteMixPropertyDescriptor | undefined {
+  return properties?.find((p): p is WhiteMixPropertyDescriptor => p.type === 'whiteMix')
 }
 
 /**

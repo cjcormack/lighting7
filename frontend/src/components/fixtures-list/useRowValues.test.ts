@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { buildRows } from './rowModel'
-import { buildRowCells } from './useRowValues'
-import { chan, groupSummary, makeFixture, makePixelBar, sliderProp } from '@/test/fixtureFactories'
+import { aggregateCellValue, buildRowCells } from './useRowValues'
+import { resolveCell } from './columns'
+import { whiteMixColour } from '@/lib/whiteMix'
+import { chan, groupSummary, makeFixture, makePixelBar, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
 import type { Row } from './rowModel'
 
 const soloRow = (fixtures: Parameters<typeof buildRows>[0]['fixtures'], expanded: string[] = []) =>
@@ -103,5 +105,15 @@ describe('buildRowCells targetKeys', () => {
     expect(cell.resolutions).toHaveLength(1)
     expect(cell.targetKeys).toEqual(['m'])
     expect(cell.keys.map((k) => k.propertyName)).toEqual(['pan', 'tilt'])
+  })
+})
+
+describe('aggregateCellValue over a warm/cold white pair', () => {
+  it('reads as the colour its two whites make', () => {
+    const res = resolveCell([whiteMixProp(chan(5), chan(6))], 'colour')!
+    const levels: Record<number, number> = { 5: 200, 6: 60 }
+    const value = aggregateCellValue([res], (ref) => levels[ref.channelNo] ?? 0)
+    const [r, g, b] = whiteMixColour({ warmKelvin: 3000, coldKelvin: 6500 }, 200, 60)
+    expect(value).toMatchObject({ kind: 'colour', isUniform: true, r, g, b })
   })
 })

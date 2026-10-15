@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -235,7 +236,7 @@ class CascadePublisher internal constructor(
         }
         val resolved = PropertyChannelWriter.resolveProperty(fixture, key.propertyName) ?: return null
         return when (resolved.value) {
-            is DmxColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+            is DmxColour, is DmxWhiteMixColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
             is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.propertyName)
             is DmxSlider -> SliderTarget(key.targetKey, key.propertyName)
             else -> null

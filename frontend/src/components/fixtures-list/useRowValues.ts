@@ -11,6 +11,7 @@ import { resolveTargetCells, rowWriteTargets } from './rowModel'
 import type { CellResolution, ColumnKey } from './columns'
 import type { Row } from './rowModel'
 import type { ChannelRef, SettingOption } from '../../store/fixtures'
+import { whiteMixColour } from '../../lib/whiteMix'
 
 /**
  * Aggregated live value for one cell. For a fixture row there's exactly one
@@ -196,6 +197,20 @@ export function aggregateCellValue(
         uv,
         combinedCss: computeCombinedCss(r, g, b, w, a, uv),
       }
+    }
+    // The colour the two whites make, so a white-mix head reads as any colour head does.
+    case 'white-mix': {
+      const members = resolutions
+        .filter((r) => r.kind === 'white-mix')
+        .map((r) =>
+          whiteMixColour(r.property, readChannel(r.property.warmChannel), readChannel(r.property.coldChannel)),
+        )
+      const isUniform = members.every((m) => m[0] === members[0][0] && m[1] === members[0][1] && m[2] === members[0][2])
+      const avg = (i: number) => Math.round(members.reduce((sum, m) => sum + m[i], 0) / members.length)
+      const r = avg(0)
+      const g = avg(1)
+      const b = avg(2)
+      return { kind: 'colour', isUniform, r, g, b, combinedCss: computeCombinedCss(r, g, b, undefined, undefined, undefined) }
     }
     case 'position': {
       const members = resolutions
