@@ -552,3 +552,32 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
     expect(screen.queryByRole('button', { name: /^Release/ })).toBeNull()
   })
 })
+
+describe('FixturesListContainer — what a template press lands on (venue-visit plan S1)', () => {
+  const press = (key: string) => fireEvent.keyDown(window, { key })
+  type ToolbarParts = { templateTargets: readonly { type: string; key: string }[]; targetFamilies: readonly string[] }
+
+  function renderWithToolbar(): { parts: () => ToolbarParts } {
+    let last: ToolbarParts | null = null
+    const renderToolbar = (parts: ToolbarParts) => {
+      last = parts
+      return null
+    }
+    const props = { grouped: false, selectionScope: 'programmer' as const, showOwnership: true, renderToolbar }
+    const { rerender } = render(<FixturesListContainer {...props} />)
+    // Open the pixel bar so its cells have rows, then select one cell alone.
+    rowSelection.ids = new Set(['fixture:c'])
+    rerender(<FixturesListContainer {...props} />)
+    press('ArrowRight')
+    rowSelection.ids = new Set(['element:fixture:c:c.pixel-0'])
+    rerender(<FixturesListContainer {...props} />)
+    return { parts: () => last! }
+  }
+
+  it('sends a cell by its element key and offers the families the cell can take', () => {
+    const { parts } = renderWithToolbar()
+    expect(parts().templateTargets).toEqual([{ type: 'fixture', key: 'c.pixel-0' }])
+    // The cell's own colour: keyed by fixture alone, the map dropped the cell and offered nothing.
+    expect(parts().targetFamilies).toEqual(['COLOUR'])
+  })
+})

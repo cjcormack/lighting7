@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.SpreadCurve
 import uk.me.cormack.lighting7.fx.SpreadOver
 import uk.me.cormack.lighting7.fx.SpreadPlan
+import uk.me.cormack.lighting7.fx.TemplateFanOut
 import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
@@ -202,28 +203,45 @@ internal fun spreadIntoProgrammer(
         }
     }
 
+    // Over HEADS a parent's step lands on its own cells (below), so a cell named beside its parent is
+    // already covered — the parent↔cell rule a press reads (`TargetCoverage.covers`). Kept, it would be
+    // a second step writing the same cell a second value; the client's marquee drops it the same way.
+    if (over == SpreadOver.HEADS) {
+        heads.values.removeIf { it is FixtureElement<*> && it.parentFixture.key in heads }
+    }
+
     // Rig order first (LINEAR); the strategy then says where along the curve each sits.
     val rigOrdered = state.buskRigOrder()
         ?.sort(heads.keys.map { CueTargetDto(TargetRef.Fixture.TYPE, it) })
         ?.map { heads.getValue(it.key) }
         ?: heads.values.toList()
-    // **Two passes: the heads that can take the property are found first, and the curve is spread
+    val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = fixtures::fittedMediaFor
+    fun media(head: GroupableFixture) = TemplateFanOut.mediaOf(head, fittedMediaFor)
+    // **Two passes: the steps that can take the property are found first, and the curve is spread
     // over those alone** (editor-kit session 3 review). A head that resolves nothing — a par in a
     // Position spread, a dimmer-only head in a Colour one — is skipped by name, as before; what
     // changed is that it no longer *consumes a position on the curve*: a marquee on the programmer
     // is geometric and sweeps such heads up with the rest, so two RGB heads among eight rows landed
     // at `0` and `1/7` and *to* never reached the rig. Support is a property of the head and the
     // shape, not of the fraction, so it is asked with `from`.
-    val ordered = rigOrdered.filter { head ->
-        val probe = TemplateResolver.resolve(head, property.propertyName, from, fixtures.fittedMediaFor(head.targetKey))
-        if (probe.value == null) {
+    //
+    // **A step lands on the heads [TemplateFanOut] says it stands for** (venue-visit plan S1): over
+    // HEADS a multi-head fixture whose property lives only on its cells — the Shehds' colour, on its
+    // three zones — is still one step on the curve, and its value lands on every cell that carries
+    // the property, where the parent alone resolved nothing and was skipped. Over CELLS each cell is
+    // already its own step, and stands for itself.
+    val ordered = rigOrdered.mapNotNull { step ->
+        val landing = TemplateFanOut.headsFor(step, property.propertyName, fittedMediaFor)
+            .filter { TemplateResolver.resolve(it, property.propertyName, from, media(it)).isSupported }
+        if (landing.isEmpty()) {
+            val probe = TemplateResolver.resolve(step, property.propertyName, from, media(step))
             skipped += SpreadSkipDto(
-                CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey),
+                CueTargetDto(TargetRef.Fixture.TYPE, step.targetKey),
                 (probe.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported",
             )
-            false
+            null
         } else {
-            true
+            step to landing
         }
     }
     val fractions = SpreadPlan.fractions(ordered.size, order, curve, request.parts)
@@ -231,25 +249,27 @@ internal fun spreadIntoProgrammer(
 
     val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val written = ArrayList<SpreadWriteDto>()
-    ordered.forEachIndexed { index, head ->
-        val target = CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey)
+    ordered.forEachIndexed { index, (step, landing) ->
         val intent = interpolateIntent(from, to, fractions[index])
-        val resolution = TemplateResolver.resolve(head, property.propertyName, intent, fixtures.fittedMediaFor(head.targetKey))
-        val value = resolution.value
-        if (value == null) {
-            skipped += SpreadSkipDto(target, (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
-            return@forEachIndexed
+        for (head in landing) {
+            val target = CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey)
+            val resolution = TemplateResolver.resolve(head, property.propertyName, intent, media(head))
+            val value = resolution.value
+            if (value == null) {
+                skipped += SpreadSkipDto(target, (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
+                continue
+            }
+            // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under its own
+            // property (`colourWheel`), and its literal is the slot's level: the cook reads a level on
+            // a slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`), so both arms land
+            // it — the write arm as a typed entry, the answer-only arm as a Look row.
+            val parentKey = (head as? FixtureElement<*>)?.parentFixture?.key
+            writes += ProgrammerWriter.PropertyWrite(
+                head, resolution.propertyName, value,
+                sourceGroup = hints[head.targetKey] ?: hints[step.targetKey] ?: parentKey?.let { hints[it] },
+            )
+            written += SpreadWriteDto(target, resolution.propertyName, value.serialize())
         }
-        // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under its own
-        // property (`colourWheel`), and its literal is the slot's level: the cook reads a level on
-        // a slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`), so both arms land
-        // it — the write arm as a typed entry, the answer-only arm as a Look row.
-        val parentKey = (head as? FixtureElement<*>)?.parentFixture?.key
-        writes += ProgrammerWriter.PropertyWrite(
-            head, resolution.propertyName, value,
-            sourceGroup = hints[head.targetKey] ?: parentKey?.let { hints[it] },
-        )
-        written += SpreadWriteDto(target, resolution.propertyName, value.serialize())
     }
     // `write = false` answers what *would* land and lands nothing — the Look-layer arm.
     if (request.write && writes.isNotEmpty()) {

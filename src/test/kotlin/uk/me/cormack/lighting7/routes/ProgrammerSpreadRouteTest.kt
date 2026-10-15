@@ -288,7 +288,7 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `over CELLS fans across every cell of a bar, over HEADS treats it as one`() = testApplication {
+    fun `over CELLS fans across every cell of a bar, over HEADS treats it as one step`() = testApplication {
         seed()
         mountTestApp(state)
         val client = jsonClient()
@@ -301,10 +301,19 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         val heads = client.run(
             SpreadRequest(targets = listOf(fixture("bar-1"), fixture("hex-1")), property = "rgbColour", from = "#ff0000", to = "#0000ff", over = "HEADS"),
         )
-        assertEquals(listOf("hex-1"), heads.written.map { it.target.key }, "rig order: every fixture in patch order")
-        // The bar is **one** head over HEADS, and as one head it has no colour of its own in pixel
-        // mode: one skip naming the bar, not twelve naming its cells.
-        assertEquals(listOf("bar-1"), heads.skipped.map { it.target.key })
+        // The bar is **one step** over HEADS. It has no colour of its own in pixel mode, so the step
+        // lands on every cell that carries it — all twelve at the step's one value — where it used to
+        // be skipped by name (venue-visit plan S1). Rig order is patch order, so the hex is the first
+        // step and takes *from*, the bar the last and takes *to*.
+        assertEquals(
+            listOf("hex-1") + (0 until 12).map { "bar-1.pixel-$it" },
+            heads.written.map { it.target.key },
+            "rig order: every fixture in patch order, a bar's cells in element order",
+        )
+        assertTrue(heads.skipped.isEmpty(), heads.skipped.toString())
+        val barValues = heads.written.filter { it.target.key.startsWith("bar-1.") }.map { it.value }.toSet()
+        assertEquals(1, barValues.size, "one step, one value on every cell: $barValues")
+        assertNotEquals(barValues.single(), heads.written.first().value, "the hex is the other end of the curve")
     }
 
     @Test
@@ -331,5 +340,116 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         assertEquals(CODE_SPREAD_NEEDS_SELECTION, empty.body<ErrorResponse>().code)
         val mask = client.post(SpreadRequest(targets = listOf(fixture("hex-1")), families = listOf("WIBBLE"), property = "dimmer", from = "pct:0", to = "pct:1"))
         assertEquals(HttpStatusCode.BadRequest, mask.status)
+    }
+
+    // ─── A fixture whose colour lives on its cells (venue-visit plan S1) ─
+
+    private fun seedShehds() {
+        // 24-channel mode: pan/tilt, dimmer, strobe and zoom on the parent, RGBW on three zones.
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-1", 300)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-2", 330)
+        LocateTestSupport.seedGroup(state, projectId, "washes", "shehds-1", "shehds-2")
+        state.show.fixtures.patchListChanged()
+    }
+
+    private fun zones(key: String) = (1..3).map { "$key.zone-$it" }
+
+    /** Each written cell's literal, by cell key — the value its step landed on it. */
+    private fun SpreadResponse.byKey() = written.associate { it.target.key to it.value }
+
+    @Test
+    fun `over HEADS a Shehds is one step whose colour lands on its three zones`() = testApplication {
+        seedShehds()
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val out = client.run(
+            SpreadRequest(
+                targets = listOf(fixture("shehds-1"), fixture("shehds-2")),
+                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+            ),
+        )
+
+        assertTrue(out.skipped.isEmpty(), out.skipped.toString())
+        assertEquals(zones("shehds-1") + zones("shehds-2"), out.written.map { it.target.key })
+        val values = out.byKey()
+        assertEquals(1, zones("shehds-1").map { values.getValue(it) }.toSet().size, "one step, one value")
+        assertEquals(1, zones("shehds-2").map { values.getValue(it) }.toSet().size, "one step, one value")
+        assertNotEquals(values.getValue("shehds-1.zone-1"), values.getValue("shehds-2.zone-1"), "two steps, two ends")
+        // Landed as programmer entries on the cells, never on the parent, which has no colour.
+        assertTrue(zones("shehds-1").all { (it to "rgbColour") in entries() })
+        assertTrue(("shehds-1" to "rgbColour") !in entries())
+    }
+
+    @Test
+    fun `a group of Shehds spreads in member order onto the zones, carrying the group`() = testApplication {
+        seedShehds()
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val out = client.run(
+            SpreadRequest(targets = listOf(group("washes")), property = "rgbColour", from = "#ff0000", to = "#0000ff"),
+        )
+
+        assertEquals(zones("shehds-1") + zones("shehds-2"), out.written.map { it.target.key })
+        assertTrue(out.skipped.isEmpty(), out.skipped.toString())
+        assertEquals(
+            "washes",
+            state.show.programmerStore.get("shehds-2.zone-3", "rgbColour")?.sourceGroup,
+            "a fanned cell takes the group its parent arrived through",
+        )
+    }
+
+    @Test
+    fun `over HEADS a Shehds' cells named one by one are a step each`() = testApplication {
+        seedShehds()
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val out = client.run(
+            SpreadRequest(
+                targets = listOf(fixture("shehds-1.zone-1"), fixture("shehds-1.zone-3")),
+                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+            ),
+        )
+
+        assertEquals(listOf("shehds-1.zone-1", "shehds-1.zone-3"), out.written.map { it.target.key })
+        assertNotEquals(out.written[0].value, out.written[1].value)
+        assertTrue(("shehds-1.zone-2" to "rgbColour") !in entries(), "a cell the selection does not name")
+    }
+
+    @Test
+    fun `a property the Shehds carries itself stays on the parent over HEADS`() = testApplication {
+        seedShehds()
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val out = client.run(
+            SpreadRequest(
+                targets = listOf(fixture("shehds-1"), fixture("shehds-2")),
+                property = "dimmer", from = "pct:0", to = "pct:100",
+            ),
+        )
+
+        assertEquals(listOf("shehds-1", "shehds-2"), out.written.map { it.target.key })
+    }
+
+    @Test
+    fun `a Shehds named beside one of its zones is one step, writing each zone once`() = testApplication {
+        seedShehds()
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val out = client.run(
+            SpreadRequest(
+                targets = listOf(fixture("shehds-1.zone-2"), fixture("shehds-1"), fixture("shehds-2")),
+                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+            ),
+        )
+
+        // The parent covers the zone named beside it, so the zone is not a step of its own: two
+        // steps, six writes, no cell written twice with two values.
+        assertEquals(zones("shehds-1") + zones("shehds-2"), out.written.map { it.target.key })
+        assertEquals(1, zones("shehds-1").map { out.byKey().getValue(it) }.toSet().size)
     }
 }

@@ -64,12 +64,14 @@ export function SelectionBar({
   const pressFamilies = usePressFamilies(askedFamilies)
   const shownFamilies = projectId != null ? pressFamilies : askedFamilies
 
-  // The fixture count is `templateTargets` — the heads a press actually lands on, which is the
+  // The head count is `templateTargets` — the heads a press actually lands on, which is the
   // cells' heads under a marquee and the selected rows' otherwise — and deliberately not the
   // footer's `selectedCount`, which counts visible *rows* with a group as one. Two numbers, two
   // questions: the footer says how much of the list you have picked, this says how many heads
-  // your next gesture reaches.
-  const fixtures = `${templateTargets.length} fixture${templateTargets.length === 1 ? '' : 's'}`
+  // your next gesture reaches. *Heads*, not fixtures: since venue-visit plan S1 a selected cell is
+  // its own target, so three zones of one Shehds are three heads, and calling them three fixtures
+  // would be wrong.
+  const fixtures = `${templateTargets.length} head${templateTargets.length === 1 ? '' : 's'}`
 
   return (
     <SheetSelectionBar

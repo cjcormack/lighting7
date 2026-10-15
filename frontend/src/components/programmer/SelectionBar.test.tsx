@@ -8,7 +8,7 @@ import type { ColumnKey } from '@/components/fixtures-list/columns'
  * Row C's phone arm (`PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH`).
  *
  * jsdom evaluates no container query, so what is pinned is *which* element carries the fold
- * class — the fixture count and the family badge do, the cell count does not. The Deselect is the
+ * class — the head count and the family badge do, the cell count does not. The Deselect is the
  * toolbar's (`selection`) whichever shape the selection is in, since rows and cells became one
  * selection; this bar drew a second X for the cells-only case until then.
  */
@@ -78,30 +78,30 @@ afterEach(() => {
 })
 
 describe('SelectionBar', () => {
-  it('folds the fixture count at 800 and the family badge at 600, and keeps the cell count', () => {
+  it('folds the head count at 800 and the family badge at 600, and keeps the cell count', () => {
     desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
     render(bar())
     // The count goes early, with Locate and Highlight, because that is what buys the template row
     // its chips on an iPad portrait; the badge is a phone-arm fold like the rest of the bar.
-    expect(screen.getByText('2 fixtures')).toHaveClass(MID_FOLDED_CLASS)
-    expect(screen.getByText('2 fixtures')).not.toHaveClass(PHONE_FOLDED_CLASS)
+    expect(screen.getByText('2 heads')).toHaveClass(MID_FOLDED_CLASS)
+    expect(screen.getByText('2 heads')).not.toHaveClass(PHONE_FOLDED_CLASS)
     expect(screen.getByText('Colour')).toHaveClass(PHONE_FOLDED_CLASS)
     expect(screen.getByText('2 cells')).not.toHaveClass(MID_FOLDED_CLASS)
     expect(screen.getByText('2 cells')).not.toHaveClass(PHONE_FOLDED_CLASS)
   })
 
-  it('keeps the fixture count at every width when it is the only count', () => {
+  it('keeps the head count at every width when it is the only count', () => {
     // Rows selected and no cells: the row toolbar is there, and the count is the only one.
     render(bar({ cells: [], selection: <button type="button">Deselect all</button> }))
-    expect(screen.getByText('2 fixtures')).not.toHaveClass(MID_FOLDED_CLASS)
-    expect(screen.getByText('2 fixtures')).not.toHaveClass(PHONE_FOLDED_CLASS)
+    expect(screen.getByText('2 heads')).not.toHaveClass(MID_FOLDED_CLASS)
+    expect(screen.getByText('2 heads')).not.toHaveClass(PHONE_FOLDED_CLASS)
   })
 
-  it('says the fixture count on the cell count’s hover, since the phone shows it nowhere else', () => {
+  it('says the head count on the cell count’s hover, since the phone shows it nowhere else', () => {
     render(bar())
     expect(screen.getByText('2 cells')).toHaveAttribute(
       'title',
-      expect.stringMatching(/^2 fixtures · /),
+      expect.stringMatching(/^2 heads · /),
     )
   })
 

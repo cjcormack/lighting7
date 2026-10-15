@@ -334,7 +334,7 @@ It should start from `docs/lighting-composition-model.md`.
 
 | # | Session | Needs | Done |
 |---|---|---|---|
-| 1 | S1 Palettes reach cells | — | |
+| 1 | S1 Palettes reach cells | — | `4a1a8fb4` |
 | 2 | S2 Chrome and defaults | — | |
 | 3 | S3 Cue list fixes | — | |
 | 4 | S4 Templates → palettes | — | |

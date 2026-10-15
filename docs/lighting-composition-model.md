@@ -579,6 +579,38 @@ a record still covers a given head. `pressWouldRelease`, `ProgrammerLayerStack.t
 a partly covered parent as *some*) read that rule; the client keeps reading the desk's resolved
 applied state and carries no copy of it.
 
+**A parent stands for the cells that carry the property** (venue-visit plan S1). Where a template
+row's property lives only on a multi-head fixture's cells — the Shehds in 24-channel mode, whose
+colour is RGBW on three `Zone` elements while the parent holds pan, tilt, dimmer, strobe and zoom —
+a target naming the parent, or a group whose member it is, lands that row on the cells that carry
+it, each resolving on its own emitters. `fx/TemplateFanOut.kt` is the one statement of it, asked by
+every consumer that resolves a template row onto a selection: the click (`applyTemplateToProgrammer`),
+the cook (`CueComposer.applyLayer`, so a ⌥click layer and a busk pad alike), Spread over heads (the
+parent stays **one step** on the curve and its value lands on every carrying cell — a pixel bar over
+HEADS too, which used to be skipped by name) and the editor's resolves-to panel (one row per cell,
+`<fixture> · Cell n`). Four rules keep it narrow. **A parent that has the property keeps it**:
+only the rows its cells alone can serve fan, so a beam template's zoom stays on the Shehds' parent
+while a colour template reaches the zones — and *having* is presence, not resolution
+(`TemplateResolver.hasProperty`), so a parent with a pan but no annotated degree range keeps a
+position row and says why rather than handing it to its cells. **Colour is decided as a family** — a colour-family row
+fans when the parent has no colour at all, the `NotACandidate` question; a parent with colour but
+missing an emitter the template names stays put and is refused there as a whole, since fanning would
+put a different colour on the cells under the template's name. **Nothing carries it → the parent**,
+so the skip names the head the operator selected rather than a skip per cell. **A cell resolves
+against its parent's fitted media** (`TemplateFanOut.mediaOf`): media is loaded per patch, and
+`Fixtures.fittedMediaFor` answers nothing for an element key. A layer, a click or a spread naming a
+bar *and* one of its cells writes that cell once, and a fanned cell's programmer entry takes the
+group its parent arrived through as its `sourceGroup` (Record still writes such entries as cell rows:
+collapsing to a group needs every member — the parents — to hold one). It is the value-side twin of the FX engine's
+own expansion (`docs/groups-engineering.md` §"Automatic FX Expansion to Elements"), which is why an
+effect template on a parent never needed it. Before it, a colour template on a Shehds wrote 0 on
+every arm — the parent asked "have you colour?" and said no — and the client folded a cell selection
+back onto that parent besides; the client now sends a cell by its element key
+(`templateTargetsOf`, `templateTargetsFor`), offers a cell selection the templates the cell can take,
+and a whole-fixture target still means every cell. An **effect** template on a mixed group is the
+one gap left in this family, and it is the FX engine's rather than the fan-out's
+(`FU-TMPL-CLICK-GROUP-PARTIAL`).
+
 **A press carries the selection's attribute mask, and lands through the layer's own
 `propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
@@ -794,7 +826,11 @@ under the head's own `colourWheel` — a Look row holds it, and the cook reads a
 slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`); and the curve is spread over
 the heads that can take the property, found in a first pass, so
 a head that cannot — a par in a Position spread — is skipped and consumes no position on it (the
-programmer's marquee is geometric and sweeps such heads up with the rest).
+programmer's marquee is geometric and sweeps such heads up with the rest). Over HEADS a multi-head
+fixture whose property lives only on its cells is still **one step**, and its value lands on every
+cell that carries it (venue-visit plan S1, §"A press is per target"): `written[].target.key` is then
+a cell's element key the request never named, and the fixture no longer appears in `skipped`. A cell
+named beside its parent is dropped, the parent covering it.
 
 ### Applied state is resolved by the desk
 

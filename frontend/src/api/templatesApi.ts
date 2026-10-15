@@ -212,8 +212,15 @@ export interface TemplateInput {
   effect?: TemplateEffect
 }
 
+/**
+ * What a template is pressed on. `type: 'fixture'` names a whole fixture by its key **or one cell
+ * of a multi-head fixture by its element key** (`shehds-1.zone-2`) — the cells contract every press
+ * door resolves, never parsed client-side; `type: 'group'` names a group. A whole fixture whose
+ * property lives only on its cells (the Shehds' colour) lands on those cells, the desk's fan-out.
+ */
 export interface TemplateTarget {
   type: 'fixture' | 'group'
+  /** A fixture key, an element key (`type: 'fixture'`), or a group name. */
   key: string
 }
 

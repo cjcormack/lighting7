@@ -678,7 +678,7 @@ describe('templateTargetsFor', () => {
     ])
   })
 
-  it('lands a lone element row on its fixture — a template cannot address one head', () => {
+  it('lands an element row on its cell, by element key (venue-visit plan S1)', () => {
     const rows = buildRows({
       fixtures,
       groups,
@@ -687,6 +687,20 @@ describe('templateTargetsFor', () => {
       textFilter: '',
     })
     expect(templateTargetsFor(rows, new Set(['element:fixture:bar:bar.pixel-1']))).toEqual([
+      { type: 'fixture', key: 'bar.pixel-1' },
+    ])
+  })
+
+  it('drops an element row under its selected parent — the parent covers its cells', () => {
+    const rows = buildRows({
+      fixtures,
+      groups,
+      expandedGroups: new Set(),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    const parent = rows.find((row) => row.kind === 'fixture' && row.fixture.key === 'bar')!
+    expect(templateTargetsFor(rows, new Set([parent.id, 'element:fixture:bar:bar.pixel-1']))).toEqual([
       { type: 'fixture', key: 'bar' },
     ])
   })

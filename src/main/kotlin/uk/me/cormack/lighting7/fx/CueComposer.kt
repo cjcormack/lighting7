@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -735,8 +734,12 @@ internal object CueComposer {
                     )
                     continue
                 }
+                val fanned = HashSet<Pair<String, String?>>()
                 for (e in layerFixtures) {
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                    for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
+                        if (!fanned.add(head.targetKey to e.groupKey)) continue
+                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                    }
                 }
             } else {
                 val rowFixtures = rowExpansions.getOrPut(rowTarget) {
@@ -746,7 +749,9 @@ internal object CueComposer {
                     // `covers`, not key membership: a bound row spelled as a cell target lands under a
                     // layer on its parent exactly as an `elementKey` row does.
                     if (layerFixtures != null && !layerTargets.covers(e.fixture.targetKey)) continue
-                    pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                    for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
+                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                    }
                 }
             }
         }
@@ -764,7 +769,9 @@ internal object CueComposer {
             pending.groupBy { it.fixture.targetKey }.mapNotNull { (key, forFixture) ->
                 val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
                 val requirement =
-                    TemplateResolver.unmetColourRequirement(forFixture.first().fixture, applicable, fixtures.fittedMediaFor(key))
+                    TemplateResolver.unmetColourRequirement(
+                        forFixture.first().fixture, applicable, TemplateFanOut.mediaOf(forFixture.first().fixture, fixtures::fittedMediaFor),
+                    )
                 // Both arms drop the head's colour rows; the cook has no panel to stay quiet for, so
                 // "no colour at all" and "no amber" are the same answer to it.
                 when (requirement) {
@@ -808,7 +815,7 @@ internal object CueComposer {
                     null
                 } else {
                     val resolution = TemplateResolver.resolve(
-                        p.fixture, p.propertyName, pendingIntent, fixtures.fittedMediaFor(p.fixture.targetKey),
+                        p.fixture, p.propertyName, pendingIntent, TemplateFanOut.mediaOf(p.fixture, fixtures::fittedMediaFor),
                     )
                     if (!resolution.isSupported) {
                         // **Debug, not warn.** A head that cannot take the intent is the normal
@@ -873,6 +880,25 @@ internal object CueComposer {
             )
         }
     }
+
+    /**
+     * Where a row lands on one expanded head. A **template** row fans through [TemplateFanOut]: a
+     * multi-head fixture whose property lives only on its cells — the Shehds' colour, on its three
+     * zones — lands on those cells, where the parent alone would resolve nothing and be skipped
+     * (venue-visit plan S1). A **Look** row (no intent) names the property it holds and lands where
+     * it says, so it never fans.
+     *
+     * The generic arm dedupes by (cell, group), so a layer naming a bar *and* one of its cells
+     * contributes that cell once — two contributions would blend twice under an amount below 1. The
+     * group half of the key keeps the group-origin/fixture-origin pair the sort below relies on.
+     */
+    private fun headsForRow(
+        fixtures: Fixtures,
+        head: GroupableFixture,
+        propertyName: String,
+        intent: TemplateIntent?,
+    ): List<GroupableFixture> =
+        if (intent == null) listOf(head) else TemplateFanOut.headsFor(head, propertyName, fixtures::fittedMediaFor)
 
     /**
      * One expanded target: the fixture, and the group it came through if it came through one.
@@ -965,9 +991,12 @@ internal object CueComposer {
                         logger.warn("cue {}: layer on '{}' — group '{}' missing — skipping", cueId, layer.source.name, target.key)
                         continue
                     }
-                    val members = group.fixtures.filterIsInstance<Fixture>()
+                    // Every member, a cell as much as a whole fixture: a patch-loaded group holds only
+                    // fixtures, but a member that is one head of a bar is still a head, and dropping it
+                    // here would leave that head out of every layer on the group.
+                    val members = group.fixtures
                     if (members.isEmpty()) {
-                        logger.warn("cue {}: layer on '{}' — group '{}' has no Fixture members — skipping", cueId, layer.source.name, target.key)
+                        logger.warn("cue {}: layer on '{}' — group '{}' has no members — skipping", cueId, layer.source.name, target.key)
                         continue
                     }
                     for (member in members) out.add(Expanded(member, target.key))
@@ -1009,7 +1038,7 @@ internal object CueComposer {
         val targetKeys = when (target) {
             is TargetRef.Fixture -> setOf(target.key)
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
-                ?.fixtures?.filterIsInstance<Fixture>()?.mapTo(HashSet()) { it.key }
+                ?.fixtures?.mapTo(HashSet()) { it.targetKey }
                 ?: return false
         }
         if (targetKeys.isEmpty()) return false
