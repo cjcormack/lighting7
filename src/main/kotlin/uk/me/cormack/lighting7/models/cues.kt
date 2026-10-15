@@ -181,8 +181,9 @@ object DaoCues : IntIdTable("cues") {
     val cueNumber = varchar("cue_number", 20).nullable()
     /**
      * True when [cueNumber] was derived from the cue's position rather than typed by the
-     * operator. Auto numbers are rewritten whenever the stack's membership or order changes
-     * (see `renumberAutoCues`); explicit ones are never touched. Clearing an explicit number
+     * operator. An auto number stays put while its cue keeps its place in the stack, and is
+     * derived again when a change to the stack's list moves or shifts the cue (venue-visit plan
+     * D11, see `renumberAutoCues`); explicit ones are never touched. Clearing an explicit number
      * hands the cue back to the auto scheme.
      */
     val cueNumberAuto = bool("cue_number_auto").default(false)

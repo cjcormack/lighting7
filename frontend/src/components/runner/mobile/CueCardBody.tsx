@@ -2,16 +2,18 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Anchor } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProjectCueQuery } from '@/store/cues'
-import { MiniStage } from '@/components/cues/MiniStage'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
-import { collectCueTargets } from '@/components/cues/targetUtils'
 import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { formatFadeText } from '@/lib/cueUtils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 
-export type ExpansionMode = 'stage' | 'details'
+/**
+ * What an expanded card shows. Details only since venue-visit plan S3: the Stage body was a 2D
+ * `MiniStage`, which the cards lost on desktop and phone alike, so the card's toggle is one press.
+ */
+export type ExpansionMode = 'details'
 /** cur = live (green), nxt = the armed next (blue + "Up next"), other = any other cue (blue, no label). */
 export type CueCardKind = 'cur' | 'nxt' | 'other'
 
@@ -31,7 +33,7 @@ interface CueCardBodyProps {
   headerTrailing?: ReactNode
   /** Extra content pinned to the foot of the card (book: Edit cue / Set next / anchor controls). */
   footer?: ReactNode
-  /** Under the cue's identity and position line, above the Stage / Details toggle — the Prompt Book's scenery lines. */
+  /** Under the cue's identity and position line, above the Details toggle — the Prompt Book's scenery lines. */
   afterIdentity?: ReactNode
   /** When set, the Q/name/position area becomes a click target (book: scroll to the cue). */
   onBodyClick?: () => void
@@ -56,7 +58,7 @@ interface CueCardBodyProps {
  * Shared presentational cue card — the Run redesign's card visuals, reused by the
  * Run mobile view (`RunMobileCueCard`) and the Prompt Book rail (`PromptBookCueCard`).
  * Green "Now playing" (cur), blue "Up next" (nxt), blue unlabelled (other): hero Q +
- * name, an optional position line, a Stage / Details toggle, meta strip,
+ * name, an optional position line, a Details toggle, meta strip,
  * notes, and slots for host-specific chrome. The parent owns the expansion state.
  *
  * `[container-type:inline-size]` scopes the hero Q's `16cqw` to the card width, so it
@@ -266,19 +268,13 @@ export function CueCardBody({
 
           {afterIdentity}
 
-          {/* Stage / Details toggle */}
+          {/* Details toggle */}
           <div
             className={cn(
               'mx-3 mt-2 flex rounded-md border bg-muted/20 p-0.5',
               mode == null && 'opacity-65',
             )}
           >
-            <ToggleButton
-              active={mode === 'stage'}
-              onClick={() => onModeChange(mode === 'stage' ? null : 'stage')}
-              label="Stage"
-              accent={isCur ? 'green' : isNxt ? 'blue' : 'neutral'}
-            />
             <ToggleButton
               active={mode === 'details'}
               onClick={() => onModeChange(mode === 'details' ? null : 'details')}
@@ -288,11 +284,6 @@ export function CueCardBody({
           </div>
 
           {/* Expanded body */}
-          {mode === 'stage' && (
-            <div className="mx-3 mt-2.5">
-              <MobileStage cueId={cue.id} projectId={projectId} compact={!isCur} />
-            </div>
-          )}
           {mode === 'details' && (
             <div className="mx-3 mt-2.5 space-y-3">
               <MobileDetails cueId={cue.id} projectId={projectId} />
@@ -405,26 +396,6 @@ function Cell({ label, value }: { label: string; value: string }) {
       </span>
       <span className="text-[11.5px] text-foreground">{value}</span>
     </span>
-  )
-}
-
-function MobileStage({
-  cueId,
-  projectId,
-  compact,
-}: {
-  cueId: number
-  projectId: number
-  compact: boolean
-}) {
-  const { data } = useProjectCueQuery({ projectId, cueId })
-  const targets = data ? collectCueTargets(data) : []
-  return (
-    <MiniStage
-      projectId={projectId}
-      targets={targets}
-      heightClass={compact ? 'h-20' : 'h-24'}
-    />
   )
 }
 

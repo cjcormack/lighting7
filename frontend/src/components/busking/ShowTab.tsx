@@ -27,9 +27,9 @@ const NO_REQUEUE = () => {}
  *    `useShowTransport` instance `routes/Busk.tsx` already holds through `useShowBarProps`, over the
  *    `useRunnerDisplay` both pages call, so the tab and the phone cannot disagree about which cue
  *    is next.
- * 2. **Collapsed by default here, Stage by default on the phone** (D2): `defaultExpansion={null}`.
- *    On the phone the Current card *is* the stage; here the rig band is, and two mini-stages a
- *    column apart would read as two answers. The toggle is still on the card.
+ * 2. **Collapsed by default** (D2), here and — since venue-visit plan S3 took the cards' Stage
+ *    body away — on the phone too, so it is `RunMobile`'s own default and no longer a prop. The
+ *    Details toggle is still on the card.
  * 3. **Always locked.** The phone runner is the always-locked layout: no inline editing,
  *    click-to-arm on the list, nothing a stray press can change. The show-editing lock is not
  *    consulted, as it never was on this view; GO must work from here whatever Show's lock says.
@@ -109,7 +109,6 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
         activeLocation={display.activeCue ? locationByCue.get(display.activeCue.id) ?? null : null}
         standbyLocation={display.standbyCue ? locationByCue.get(display.standbyCue.id) ?? null : null}
         strip={<ProgrammerIndicator />}
-        defaultExpansion={null}
       />
     </div>
   )

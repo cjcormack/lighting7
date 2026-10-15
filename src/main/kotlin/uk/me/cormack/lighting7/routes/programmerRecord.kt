@@ -111,6 +111,7 @@ internal fun createCueFromRecording(
     sortOrder: Int?,
     cueType: CueType,
 ): CueWriteOutcome {
+    val before = standardCueIds(stack)
     val cue = DaoCue.new {
         this.name = name
         this.project = project
@@ -123,7 +124,7 @@ internal fun createCueFromRecording(
         cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
     )
-    renumberAutoCues(stack)
+    renumberAutoCues(stack, before)
 
     return CueWriteOutcome(
         cueId = cue.id.value,

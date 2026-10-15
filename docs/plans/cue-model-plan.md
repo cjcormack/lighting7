@@ -174,7 +174,11 @@ algorithm. The functions take a stack's entries instead of its cues:
 - `releaseAutoNumber` frees a number from an auto entry in the same stack.
 - **Venue-visit S3 lands D11 first**, on `renumberAutoCues`. Session 1 carries its rule and its
   three pinned cases across onto entries unchanged. If S3 has not landed when session 1 starts,
-  session 1 waits for it rather than re-implementing it.
+  session 1 waits for it rather than re-implementing it. (Landed: the rule is an auto number kept while its
+  entry keeps its index, through `renumberAutoCues(stack, before)` and a `standardCueIds` snapshot
+  every handler takes before it changes the list — so `renumberAutoEntries` takes the same
+  `before`, of entry ids — plus an out-of-order explicit number neither anchoring nor bounding a
+  run; `docs/cue-stacks-engineering.md` §"Auto Numbering".)
 - A number is a stack's label, so a shared cue can be Q14 in one stack and Q3 in another. A loose
   cue has no number; it is shown by name.
 

@@ -10,6 +10,7 @@ import {
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 import { parseFamilySlug, type AttributeFamily } from '@/lib/attributeFamily'
+import { useShowViewPath } from '@/lib/showPosition'
 
 export type ShowView = 'programmer' | 'show' | 'prompt-book' | 'busk'
 
@@ -64,6 +65,9 @@ const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Prompt Bo
  * as two — so an icon change belongs in both files or neither.
  */
 export function ViewSwitcher({ current, projectId }: { current: ShowView; projectId: number }) {
+  // Show returns to the stack and cue this window last had open there, not to bare `/show`
+  // (venue-visit plan S3) — the round trip to the programmer to change a cue is the case it is for.
+  const showPath = useShowViewPath(projectId)
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
       <Segment
@@ -76,7 +80,7 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
       <Segment
         labelClass={LABEL_AT_820}
         active={current === 'show'}
-        to={`/projects/${projectId}/show`}
+        to={showPath}
         icon={<Theater className="size-3.5" />}
         label="Show"
       />

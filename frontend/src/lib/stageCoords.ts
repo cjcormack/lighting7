@@ -155,7 +155,7 @@ export function worldPositionFor(
 // Lighting-coords variant of worldPositionFor — same composition logic but
 // returns the FOH-relative (X = stage right, Y = upstage, Z = up) triple
 // instead of the R3F swizzle. Used by everything that reasons in stage metres
-// rather than R3F space: the section edit layer, Positions, the cue cards' MiniStage.
+// rather than R3F space: the section edit layer and Positions.
 //
 // Mirrored on the backend by `worldPosition` (show/StageCoords.kt), which MCP's
 // get_patch reports as each placement's `world` — change the two together.

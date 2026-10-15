@@ -3,7 +3,6 @@ import { Badge } from '@/components/ui/badge'
 import {
   Blinds,
   Flame,
-  Theater,
   Layers,
   AudioWaveform,
   Zap,
@@ -20,8 +19,6 @@ import { useTemplateListQuery } from '@/store/templates'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { LayerRow, describeStackSource } from '@/components/looks/LookStack'
 import { CueValueGrid } from './CueValueGrid'
-import { MiniStage } from './MiniStage'
-import { collectCueTargets } from './targetUtils'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { CueSceneryReadout } from '@/components/scenery/SceneryReadout'
@@ -87,9 +84,6 @@ export const CueDetailContent = memo(function CueDetailContent({
   // from. One cached list, already warm — the programmer and the busk view mount the same entry.
   const { data: templates } = useTemplateListQuery({ projectId }, { skip: !enabled })
 
-  // Same derivation the collapsed row uses for its target chips, so the two cannot disagree about
-  // what the cue touches.
-  const targets = useMemo(() => (cue ? collectCueTargets(cue) : []), [cue])
   const layers = cue?.layers ?? []
   // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
   // hundred Looks was doing twelve hundred comparisons per render.
@@ -142,21 +136,10 @@ export const CueDetailContent = memo(function CueDetailContent({
         </div>
       )}
 
-      {/* ── Stage ──
-          A picture of which heads this cue touches, over the real patch.
-
-          Only Run's Targets pane drew this, and session 2b deleted that pane — so it is here or
-          nowhere. It belongs here rather than in a pane of its own: "which heads" is a reading of
-          the cue, like the values and the layers below, and the chip list that used to sit beside it
-          is already on the collapsed row. Rendered only when the cue actually targets something,
-          because an empty stage map is a large grey rectangle that says nothing. */}
-      {targets.length > 0 && (
-        <div className="space-y-1.5">
-          <SectionHeader icon={Theater} label="Stage" count={targets.length} />
-          <MiniStage projectId={projectId} targets={targets} heightClass="h-32" />
-        </div>
-      )}
-
+      {/* No stage map (venue-visit plan S3). A 2D `MiniStage` of the heads the cue touches stood
+          here; it was the cue's least informative reading — the values below say what the heads
+          do, the collapsed row's chips say which they are, and the Stage view draws the rig in
+          3D — and it went from the cards on desktop and phone alike. */}
       {/* ── Values ──
           The cue's composed output, drawn with the *same* cells as the programmer's grid. Session
           2a's answer to "a cue looks nothing like the programmer that made it": there is now one

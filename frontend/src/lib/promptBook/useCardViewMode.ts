@@ -3,7 +3,7 @@ import type { ExpansionMode } from '../../components/runner/mobile/CueCardBody'
 import type { CueRunStatus } from '../../components/promptbook/AnchorOverlay'
 
 /**
- * What an expanded rail card is showing — Stage or Details — which, unlike whether it is open,
+ * Whether an expanded rail card is showing its Details — which, unlike whether it is open,
  * persists *across* cue changes.
  *
  * `viewMode` is the live card's view and is carried forward on GO, so choosing Details once keeps
@@ -14,7 +14,10 @@ import type { CueRunStatus } from '../../components/promptbook/AnchorOverlay'
  * Per-session and never persisted.
  */
 export function useCardViewMode() {
-  const [viewMode, setViewMode] = useState<ExpansionMode | null>('stage')
+  // Collapsed until the operator opens Details on the live card. It opened in Stage until
+  // venue-visit plan S3 took the cards' `MiniStage` away; Details mounts the cue's whole read
+  // surface, which is not what the rail should open every live card on.
+  const [viewMode, setViewMode] = useState<ExpansionMode | null>(null)
   const [overrides, setOverrides] = useState<Map<number, ExpansionMode | null>>(new Map())
 
   const onCueModeChange = useCallback(

@@ -74,21 +74,51 @@ prefixed number — a stack numbered `S1-1`, `S1-2`, … had *nothing* eligible 
 ### Auto Numbering
 
 A cue with no explicit number is given one derived from its position, flagged with
-`cue_number_auto`. `renumberAutoCues(stack)` recomputes them and is called from every handler that
-changes a stack's membership or order: cue create / delete / copy, `reorder`, `add-cue`,
-`sort-by-cue-number`, and any PATCH/PUT that changes a cue number.
+`cue_number_auto`. `renumberAutoCues(stack, before)` recomputes them and is called from every handler
+that changes a stack's membership, order or numbers: cue create / delete / copy, `reorder`,
+`add-cue`, `sort-by-cue-number`, Record's new cue, the AI's `build_cue_stack`, and any PATCH/PUT that
+changes a cue number.
 
-Each maximal run of auto cues is labelled from the nearest preceding explicit number:
+**An auto number stays put while its cue does** (venue-visit plan D11). Each handler takes
+`standardCueIds(stack)` *before* it changes the list and hands it to `renumberAutoCues`; an auto cue
+still at the same index keeps the number it holds (unless an explicit number has claimed it), and
+only the cues that are new, moved, or shifted by an insert or a delete are labelled again. A number
+edit moves nothing, so it passes the order as it stands and no other auto cue changes: in five auto
+cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, the frontend's out-of-order check sees the descent
+and offers *Fix Order*, and *Fix Order* moves that cue rather than renumbering anything — the cues it
+passed take numbers from where they land (1, 2, 3, 4.5, 5). Cue 3 set to `10` reads 1, 2, 10, 4, 5
+and sorts to 1, 2, 3, 4, 10; cue 3 set to `1` takes cue 1's number, so cue 1 — released by
+`releaseAutoNumber` — takes the highest free integer below its neighbour and the stack reads
+0, 2, 1, 4, 5, sorting to 0, 1, 2, 4, 5. `CueNumberingTest` pins the three on the rule and
+`CueNumberingRouteTest` through the routes; cue-model plan D14 carries them onto stack entries.
+
+The cues that do need a label are labelled in maximal runs, each from the nearest preceding *fixed*
+number — an explicit one, or an auto one being kept:
 
 - **Increment** its trailing decimal — `S1-3` → `S1-4`, `S1-5`.
 - **Decimal-insert** beneath it instead — `S1-3.1`, `S1-3.2` — when incrementing would land on a
-  number used elsewhere in the stack or run past the next explicit cue in the same group.
+  number used elsewhere in the stack or run past the next fixed cue in the same group.
 
-A run with nothing explicit before it borrows the following cue's prefix and counts *up to* it: two
+**An explicit number that reads out of order against the auto numbers beside it in its group** —
+the nearest one before it is not below it, or the nearest one after it is not above it — **neither
+anchors nor bounds a run**: the run passes through it, counting its place. It is a renumber waiting
+for *Fix Order*, and anchoring on it would relabel the cues around it the next time anything in the
+stack changed, which is D11's relabelling one gesture later. Two explicit numbers out of order
+against each other still anchor, as they always did.
+
+A run with nothing fixed before it borrows the following cue's prefix and counts *up to* it: two
 cues before `S1-3` are `S1-1` and `S1-2`, and a lone cue before `S1-1` is `S1-0` — zero itself is
-free, so there is no need to decimal-insert. Only when there isn't room for the whole run below the
-boundary (two cues before `S1-1`, say) does it fall back to `S1-0.1`, `S1-0.2`. With nothing either
-side the run is starting the series, so a fresh stack numbers `1`, `2`, `3`.
+free, so there is no need to decimal-insert. A block a number in it is taken from is tried lower
+down before giving up (a lone cue before `2` whose `1` is taken is `0`). Only when there isn't room
+for the whole run below the boundary (two cues before `S1-1`, say) does it fall back to `S1-0.1`,
+`S1-0.2`. With nothing either side the run is starting the series, so a fresh stack numbers `1`,
+`2`, `3`.
+
+**Nothing renumbers a stored stack on upgrade or import.** Every number the derive-from-scratch rule
+wrote is one the keep rule leaves alone — a stack's kept labels are its own — and the sync importer,
+`copy_to_project` and a clone store `cue_number` and `cue_number_auto` as they arrive, calling no
+renumber at all. A stack's auto numbers move only when an operator next changes that stack's list,
+and then only for the cues that change moves.
 
 Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
 so the edit can't be rejected by `uq_cue_number_per_stack`; clearing the field hands the cue back to
@@ -313,7 +343,9 @@ decimal run to position it by. Cues at or after the insertion point shift down, 
 
 Sorts each prefix group's STANDARD cues among themselves and writes them back into the `sort_order`
 slots that group already occupied, so groups keep their relative placement. MARKERs and unparseable
-numbers never move. Auto numbers are recomputed afterwards from the new positions.
+numbers never move. Afterwards the cues the sort moved take auto numbers from where they landed and
+the rest keep theirs (§"Auto Numbering", D11), so *Fix Order* moves a renumbered cue rather than
+relabelling its neighbours.
 
 Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCount` is the number of
 unparseable numbers left in place. No longer returns 400 when nothing was eligible; a stack that
