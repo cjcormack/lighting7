@@ -659,7 +659,7 @@ class ProgrammerLayerStack(
                     // build may name a blend this one does not know, and Record writes these
                     // layers straight back out again. Canonicalising here means the stack, the
                     // UI and every subsequent write agree on the blend the desk is actually
-                    // playing — and that `createCueChildren`'s strict check, which Record CREATE
+                    // playing — and that `writeCueChildren`'s strict check, which Record CREATE
                     // does not catch, can never see an unrecognised value from this direction.
                     blendMode = EffectSpecCoercion.Lenient.blendMode(layer.blendMode) {
                         "included cue layer ${layer.layerId} on '${layer.source.name}'"

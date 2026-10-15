@@ -251,6 +251,36 @@ class RemoteHardeningTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `bulk commands and make rig safe are held to the commands setting remotely, and quit is never remote`() {
+        seedUser(state, "admin")
+        testApplication {
+            mountPublic()
+            val http = jsonClient()
+            val cookie = http.loginCookieHeader("admin")
+            for (path in listOf("projects/$projectId/commands", "projects/$projectId/rig-safe", "projects/$projectId/rig-safe/undo")) {
+                val refused = http.post("/api/rest/$path") {
+                    header(HttpHeaders.Cookie, cookie)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"role":"LAMP_OFF"}""")
+                }
+                assertEquals(HttpStatusCode.Forbidden, refused.status, "$path: ${refused.bodyAsText()}")
+                assertEquals("REMOTE_COMMANDS_DISABLED", refused.code())
+            }
+            var exited = false
+            state.exitDesk = { exited = true }
+            val quit = http.post("/api/rest/install/quit") {
+                header(HttpHeaders.Cookie, cookie)
+                contentType(ContentType.Application.Json)
+                setBody("""{"force":true}""")
+            }
+            assertEquals(HttpStatusCode.Forbidden, quit.status, quit.bodyAsText())
+            assertEquals("QUIT_LOCAL_ONLY", quit.code())
+            Thread.sleep(700)
+            assertFalse(exited)
+        }
+    }
+
+    @Test
     fun `the tunnel settings keep the authtoken write-only and are admin only`() {
         seedUser(state, "admin")
         seedUser(state, "op", role = UserRole.OPERATOR)

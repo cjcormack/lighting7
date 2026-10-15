@@ -121,6 +121,12 @@ export interface CueAdHocEffect {
    * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
    */
   seconds?: boolean
+  /**
+   * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
+   * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.
+   * Absent from a desk that predates it.
+   */
+  uuid?: string
 }
 
 /**

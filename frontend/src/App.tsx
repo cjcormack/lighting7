@@ -1,5 +1,6 @@
 import React from "react"
 import { Toaster } from "sonner"
+import { DeskQuitScreen } from "./components/rigSafety/DeskQuitScreen"
 import { AuthGate } from "./AuthGate"
 import { BootGate } from "./BootGate"
 import { OnboardingGate } from "./components/onboarding/OnboardingGate"
@@ -496,6 +497,7 @@ function App() {
           </AuthGate>
         </ErrorBoundary>
         <Toaster position="bottom-right" />
+        <DeskQuitScreen />
       </React.StrictMode>
   )
 }

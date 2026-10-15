@@ -465,7 +465,16 @@ sealed class RobeColorSpot575Fixture(
             alongside = listOf(DmxChannelHold(firstChannel + 17, SHUTTER_CLOSED, "Shutter closed")),
         )
 
-        @FixtureCommand(label = "Lamp on", description = "Strikes the discharge lamp, and resets every effect but pan and tilt. A strike draws many times the running current for an instant: strike several heads one at a time.", holdMs = HOLD_MS)
+        // Estimate: a 5-minute restrike and 5 s between strikes — the manual says only that the lamp
+        // must cool. Checked on the rig by FU-MANUAL-VENUE-VISIT-S6.
+        @FixtureCommand(
+            label = "Lamp on",
+            description = "Strikes the discharge lamp, and resets every effect but pan and tilt. A strike draws many times the running current for an instant: strike several heads one at a time.",
+            holdMs = HOLD_MS,
+            role = CommandRole.LAMP_ON,
+            restrikeMs = 300_000,
+            strikeSpacingMs = 5_000,
+        )
         val lampOn = control(LAMP_ON_LEVEL, 130u, 139u)
 
         @FixtureCommand(label = "Reset pan/tilt", description = "Re-homes pan and tilt. The head swings through its travel while it runs.", holdMs = HOLD_MS)
@@ -486,10 +495,10 @@ sealed class RobeColorSpot575Fixture(
         @FixtureCommand(label = "Reset iris/prism", description = "Re-homes the iris and the prism.", holdMs = HOLD_MS)
         val resetIrisPrism = control(IRIS_PRISM_RESET_LEVEL, 190u, 199u)
 
-        @FixtureCommand(label = "Total reset", description = "Re-homes every motor, pan and tilt included. The head swings through its travel and the beam moves while it runs.", holdMs = HOLD_MS)
+        @FixtureCommand(label = "Total reset", description = "Re-homes every motor, pan and tilt included. The head swings through its travel and the beam moves while it runs.", holdMs = HOLD_MS, role = CommandRole.RESET)
         val reset = control(TOTAL_RESET_LEVEL, 200u, 209u)
 
-        @FixtureCommand(label = "Lamp off", description = "Douses the discharge lamp. It is a cold-restrike lamp: it must cool before it can be struck again, so this head is dark until then.", holdMs = HOLD_MS)
+        @FixtureCommand(label = "Lamp off", description = "Douses the discharge lamp. It is a cold-restrike lamp: it must cool before it can be struck again, so this head is dark until then.", holdMs = HOLD_MS, role = CommandRole.LAMP_OFF)
         val lampOff = control(LAMP_OFF_LEVEL, 230u, 239u)
 
         companion object {

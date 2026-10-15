@@ -161,26 +161,7 @@ Grouped by area. §4 gives the order.
 ### Rig and output
 
 - ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
-
-**S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19).**
-- **Command roles.** `@FixtureCommand` gains a role (`LAMP_ON`, `LAMP_OFF`, `RESET`), so a bulk
-  action can ask for "every lamp off" across types.
-- **Bulk run.** A bulk run over the selection, or the whole rig, respects `COMMAND_BUSY`, park and
-  the venue hold, and reports per unit.
-- **Make rig safe.** It lamps off, waits for the holds, blacks out, and then raises a
-  "Ready to switch off" state on every window. Anything that sends output again clears it (D14).
-- **Undo (D18).** Undo strikes the lamps that Make rig safe turned off, then releases the blackout.
-  The desk remembers which units it turned off for as long as the desk runs.
-- **Lamp-on (D19).** A bulk lamp-on, whether from Undo or over a selection, is staggered.
-  - **Restrike times.** Record when each unit's lamp went off, and give each lamped type a declared
-    restrike time on `@FixtureCommand` (the role's metadata), as an estimate from the manuals.
-  - **Too soon.** A unit still inside its restrike time is reported with the time left, and struck
-    when that time is up.
-- **Quit desk (D13).** An admin-only action, on the desk's own listener only, stops the app
-  cleanly after a confirmation, and warns when the rig isn't marked safe.
-  - **Check first:** what the Windows launcher does when the backend exits on its own. It must exit
-    too, not restart the backend. Then check what `./gradlew run` shows the operator.
-  - Remote access applies `requireCommandsAccess` to the bulk run. Quit is never remote.
+- ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
 
 **S7 — Group member order in the Groups views.**
 - Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.

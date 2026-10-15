@@ -969,7 +969,10 @@ conflate them.
 `buildCueInput` rebuilds `layers` and `triggers` **field by field**, and its comment says why. A
 field missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins every
 field of both individually rather than by deep-equal — a deep-equal against a fixture built in the
-test file would pass just as happily with the same field missing from both sides.
+test file would pass just as happily with the same field missing from both sides. `adHocEffects`
+is spread rather than rebuilt, so a read-only field on it has to be stripped by name: the effect's
+`uuid`, which the desk answers so a client can name one effect across writes and ignores on write,
+is, and `cueUtils.test.ts` pins that too.
 
 **The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
 because a client cannot render rows a server still produces. A cue or the programmer depends on
@@ -5112,6 +5115,40 @@ master leaves it.
   `blackout` target is unchanged.
 - **The surfaces picker offers `grandMasterFader`** as a continuous target (`lib/surfaceDrop.ts`,
   the binding picker, a *GM fader* chip on the library's Desk row).
+
+### Make rig safe and Quit desk
+
+**The end of the night** (venue-visit plan S6, D9, D13, D14, D18, D19; lighting7
+`docs/fixtures-engineering.md` §"Bulk commands and Make rig safe" is the contract). Four surfaces, one
+frame:
+
+- **`rigSafety.state`** (`api/rigSafetyApi.ts`, form 3 in `store/rigSafety.ts` — the banner is on the
+  earliest render path) carries the run, *Ready to switch off*, *Make rig safe*'s blackout, what *Undo*
+  would strike, the restrike ledger and this socket's `quitAllowed`. Every operation is REST, and the
+  frame is how every window follows it. Times left are anchored to the frame's arrival
+  (`receivedAt`) and counted down by `lib/rigSafety.ts`'s `remainingAt` — the pure model the banner,
+  the chip and their tests share (`rigBanner`, `runProgress`, `unitLine`, `blackoutReason`).
+- **The Grand Master panel's Rig row** (`components/rigSafety/RigSafetyControls.tsx`, under the fader):
+  *Make rig safe…* (every lamp or the selection's), a *Lamps* menu of bulk Lamp on / Lamp off / Reset
+  over the selection (`useSelectionPair`, this window's pair) or the whole rig, and *Undo rig safe*
+  while there is something to undo. Each asks first; all are inert while a run goes or offline.
+  Refusals toast through `errorToastMiddleware`.
+- **`RigSafetyBanner`**, in `Layout`'s band slot after the venue banners, never on the header (its
+  375px budget is spent): a run's progress, the next lamp waiting on its restrike counted down,
+  *Details* and *Cancel*; green *Ready to switch off* with *Undo* and, where `quitAllowed`, *Quit
+  desk…*; amber *Blacked out by Make rig safe, not ready* with why, *Undo* and *Release blackout*; a
+  run that ended with something not done until this window dismisses it. Immersive, the `ShowHeader`
+  draws `RigSafetyImmersiveChip` instead, a readout. *Undo* asks first everywhere
+  (`UndoRigSafeDialog`): a stray press would strike still-cooling lamps minutes later.
+- **Quit desk** — the user menu's last item and the banner's, both only where the frame's
+  `quitAllowed` holds (an admin on the desk's own listener). `QuitDeskDialog` warns when the rig is
+  not ready and sends `force` only then (*Quit anyway*); it shows refusals inline (`quitDesk` is in
+  `SILENT_ENDPOINTS`). On success `markDeskQuit()` raises `DeskQuitScreen`, mounted in `App` beside
+  the gates so the reconnect screens they draw once the socket closes never cover it.
+
+The fixture panel's *Commands* menu reads the restrike ledger too: a *Lamp on* (`role: 'LAMP_ON'` on
+the descriptor) inside its restrike time says *Still cooling — restrike in 5:54* in the menu and the
+confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
 Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).

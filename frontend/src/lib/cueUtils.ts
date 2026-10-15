@@ -94,7 +94,10 @@ export function buildCueInput(cue: Cue): CueInput {
       intervalMs: layer.intervalMs,
       randomWindowMs: layer.randomWindowMs,
     })),
-    adHocEffects: cue.adHocEffects.map((e) => ({ ...e })),
+    // `uuid` is the response's name for the stored effect, never a write field: the desk matches an
+    // effect by its target, property and type, so a body echoing it back would claim an identity
+    // the write does not read.
+    adHocEffects: cue.adHocEffects.map(({ uuid: _uuid, ...e }) => e),
     propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
     triggers: cue.triggers.map((t) => ({
       triggerType: t.triggerType,

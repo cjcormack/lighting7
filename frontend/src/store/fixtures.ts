@@ -444,6 +444,10 @@ export type CommandPropertyDescriptor = {
   dedicated: boolean
   /** Channels the desk sets for the hold because the manual wants them so. */
   alongside?: { channel: ChannelRef; level: number; why: string }[]
+  /** `LAMP_ON`, `LAMP_OFF` or `RESET` — what a bulk run asks for; absent for any other command. */
+  role?: 'LAMP_ON' | 'LAMP_OFF' | 'RESET' | null
+  /** A lamp strike's restrike time: how long after the lamp went off it can be struck again. */
+  restrikeMs?: number | null
   compactDisplay?: undefined
 }
 

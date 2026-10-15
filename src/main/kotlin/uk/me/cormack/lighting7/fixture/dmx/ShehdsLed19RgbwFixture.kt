@@ -220,6 +220,7 @@ sealed class ShehdsLed19RgbwFixture(
             label = "Reset",
             description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 23, 255u)
     }
@@ -347,6 +348,7 @@ sealed class ShehdsLed19RgbwFixture(
             label = "Reset",
             description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 15, 255u)
     }

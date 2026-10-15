@@ -120,9 +120,10 @@ internal fun createCueFromRecording(
         this.cueType = cueType.name
         this.sortOrder = sortOrder ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
     }
-    createCueChildren(
+    writeCueChildren(
         cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
+        created = true,
     )
     renumberAutoCues(stack, before)
 
@@ -240,7 +241,8 @@ internal fun writeRecordingIntoCue(
         }
 
         RecordMode.UPDATE_EXISTING -> {
-            for (row in cue.propertyAssignments.toList()) {
+            val replaced = ArrayList<DaoCuePropertyAssignment>()
+            for (row in cue.propertyAssignmentsInOrder()) {
                 // Scope first, and checked before the mask so the count the operator sees names
                 // the narrowing they chose. A group row survives unless *every* member is in the
                 // selection — replacing one would rewrite the value for heads outside it.
@@ -256,19 +258,23 @@ internal fun writeRecordingIntoCue(
                     outOfMask++
                     continue
                 }
-                row.delete()
-                removed++
+                replaced += row
             }
-            for (row in recording.rows) {
-                DaoCuePropertyAssignment.new {
-                    this.cue = cue
-                    targetType = row.targetType
-                    targetKey = row.targetKey
-                    propertyName = row.propertyName
-                    value = row.value
-                    fadeDuration = row.fadeDurationMs.asDuration()
-                    sortOrder = row.sortOrder
-                    moveInDark = row.moveInDark
+            // A replaced row recorded again is written over, keeping its uuid; it ends as a fresh
+            // insert would. The rest of the replaced rows go, and every one counts as removed.
+            val pairing = pairByKey(replaced, recording.rows, { it.rowKey }, { it.rowKey })
+            pairing.unmatched.forEach { it.delete() }
+            removed += replaced.size
+            for ((row, stored) in pairing.pairs) {
+                if (stored != null) {
+                    stored.take(row)
+                } else {
+                    DaoCuePropertyAssignment.new {
+                        this.cue = cue
+                        targetType = row.targetType
+                        targetKey = row.targetKey
+                        take(row)
+                    }
                 }
                 written++
             }
@@ -453,41 +459,42 @@ private fun replaceImmediateFxChildren(
     scope: Set<String>? = null,
     warnings: MutableList<String> = ArrayList(),
 ) {
-    for (effect in cue.adHocEffects.toList()) {
-        if (effect.isTimed) continue
-        if (!targetInScope(state.show.fixtures, effect.target, scope)) continue
-        if (mask != null && !maskAllows(mask, maskGroupForAdHocChild(state, effect))) continue
-        effect.delete()
+    // What the recording replaces. A replaced child the recording names again is written over,
+    // keeping its uuid (show-cue-editing plan P3); the rest are deleted once the recording is in.
+    val replacedEffects = cue.adHocEffectsInOrder().filter { effect ->
+        !effect.isTimed &&
+            targetInScope(state.show.fixtures, effect.target, scope) &&
+            (mask == null || maskAllows(mask, maskGroupForAdHocChild(state, effect)))
     }
     // Layers, same rule as preset applications had and for the same reason: a Look can span
     // several attribute families, so there is no single property to mask by. A masked re-record
     // therefore leaves the layer stack alone rather than deleting more than was asked for, and a
     // scoped one strips only the selected targets.
     if (mask == null) {
-        for (layer in cue.layers.toList()) {
+        val replacedLayers = ArrayList<DaoCueLayer>()
+        for (layer in cue.layersInOrder()) {
             if (layer.isTimed) continue
             if (scope == null) {
-                layer.delete()
+                replacedLayers += layer
                 continue
             }
             val kept = layer.targets.filterNot { targetInScope(state.show.fixtures, it.target, scope) }
-            if (kept.isEmpty()) layer.delete() else layer.targets = kept
+            if (kept.isEmpty()) replacedLayers += layer else layer.targets = kept
         }
-        for (layer in recording.layers) {
-            val resolved = resolveCueLayerSource(layer) ?: continue
-            DaoCueLayer.new {
-                this.cue = cue
-                this.look = resolved.look
-                this.template = resolved.template
-                this.sortOrder = layer.sortOrder
-                this.enabled = layer.enabled
-                this.targets = layer.targets
-                this.propertyMask = layer.propertyMask
-                this.blendMode = layer.blendMode
-                this.amount = layer.amount
-                this.stomp = layer.stomp
-                this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
-                this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+        val resolved = recording.layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
+        val pairing = pairByKey(replacedLayers, resolved, { it.layerKey }, { it.second.layerKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((item, stored) in pairing.pairs) {
+            val (layer, source) = item
+            if (stored != null) {
+                stored.take(layer)
+            } else {
+                DaoCueLayer.new {
+                    this.cue = cue
+                    this.look = source.look
+                    this.template = source.template
+                    take(layer)
+                }
             }
         }
     }
@@ -495,6 +502,10 @@ private fun replaceImmediateFxChildren(
     // Two more preset-application blocks stood here — an unmasked-only replace sweep, and an
     // insert loop with the same group-shadow warning the ad-hoc one below still emits. Both had
     // layer equivalents beside them already, and both iterated an always-empty list.
+    val queues = replacedEffects.groupByTo(LinkedHashMap()) { it.effectKey }.mapValues { ArrayDeque(it.value) }
+    // Replaced effects not yet written over: gone as far as the shadow check is concerned, exactly
+    // as if they had been deleted before the recording went in.
+    val pending = replacedEffects.mapTo(HashSet()) { it.id.value }
     for (effect in recording.adHocEffects) {
         // Same hazard, same rule — an ad-hoc child is identified by (effectType, property).
         val shadowed = shadowingCoverage(
@@ -502,7 +513,7 @@ private fun replaceImmediateFxChildren(
             expandTargetsToFixtureKeys(state, listOf(CueTargetDto(effect.targetType, effect.targetKey))),
             cue.adHocEffects
                 .filter {
-                    !it.isTimed && it.effectType == effect.effectType &&
+                    it.id.value !in pending && !it.isTimed && it.effectType == effect.effectType &&
                         it.propertyName == effect.propertyName
                 }
                 .map { listOf(CueTargetDto(it.targetType, it.targetKey)) },
@@ -513,8 +524,15 @@ private fun replaceImmediateFxChildren(
                 "group, or remove that row"
             continue
         }
-        newAdHocChild(cue, effect)
+        val stored = queues[effect.effectKey]?.removeFirstOrNull()
+        if (stored != null) {
+            pending -= stored.id.value
+            stored.take(effect)
+        } else {
+            newAdHocChild(cue, effect)
+        }
     }
+    replacedEffects.filter { it.id.value in pending }.forEach { it.delete() }
 }
 
 /**
@@ -553,21 +571,7 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
         this.cue = cue
         targetType = effect.targetType
         targetKey = effect.targetKey
-        effectType = effect.effectType
-        category = effect.category
-        propertyName = effect.propertyName
-        beatDivision = effect.beatDivision
-        blendMode = effect.blendMode
-        distribution = effect.distribution
-        phaseOffset = effect.phaseOffset
-        elementMode = effect.elementMode
-        elementFilter = effect.elementFilter
-        stepTiming = effect.stepTiming
-        parameters = effect.parameters
-        sortOrder = effect.sortOrder
-        speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-        rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-        seconds = effect.seconds
+        take(effect)
     }
 }
 

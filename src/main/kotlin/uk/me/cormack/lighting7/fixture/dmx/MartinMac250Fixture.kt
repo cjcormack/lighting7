@@ -330,18 +330,22 @@ sealed class MartinMac250Fixture(
                 "beam moves while it runs; the colour wheel, gobo and prism are set to what the fixture needs " +
                 "to accept a reset from the desk.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(
             universe, firstChannel, RESET_LEVEL, bandMin = 208u, bandMax = 217u, alongside = menuSafeCombination,
         )
 
         // Estimate: 5 s, as for the reset — the manual states no hold for a strike. Checked on the rig by
-        // FU-MANUAL-S7-COMMANDS.
+        // FU-MANUAL-S7-COMMANDS. The restrike (8 minutes) and the 5 s between strikes are the manual's.
         @FixtureCommand(
             label = "Lamp on",
             description = "Strikes the discharge lamp. A strike draws many times the running current for an " +
                 "instant, so strike several heads one at a time, 5 seconds apart (the manual's advice).",
             holdMs = 5_000,
+            role = CommandRole.LAMP_ON,
+            restrikeMs = 480_000,
+            strikeSpacingMs = 5_000,
         )
         val lampOn = DmxCommand(universe, firstChannel, LAMP_ON_LEVEL, bandMin = 228u, bandMax = 237u)
 
@@ -351,6 +355,7 @@ sealed class MartinMac250Fixture(
             description = "Douses the discharge lamp. It cannot be struck again for 8 minutes, so this head " +
                 "is dark until then.",
             holdMs = 6_000,
+            role = CommandRole.LAMP_OFF,
         )
         val lampOff = DmxCommand(
             universe, firstChannel, LAMP_OFF_LEVEL, bandMin = 248u, bandMax = 255u, alongside = menuSafeCombination,

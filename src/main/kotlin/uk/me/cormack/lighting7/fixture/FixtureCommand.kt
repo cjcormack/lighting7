@@ -30,6 +30,13 @@ import kotlin.reflect.full.memberProperties
  *   `// Estimate:` where it does not (D15).
  * @param confirm Whether the panel asks first. Every command in the library does; a harmless one may
  *   opt out.
+ * @param role What the command is across types (venue-visit plan S6), so a bulk run can ask for
+ *   "every lamp off" whatever the fixture. At most one command of a type takes each role but
+ *   [CommandRole.OTHER]; a type's partial resets are OTHER, its whole reset RESET.
+ * @param restrikeMs A [CommandRole.LAMP_ON]'s only: how long after the lamp goes off it can be
+ *   struck again reliably — the manual's time, marked `// Estimate:` where it gives none.
+ * @param strikeSpacingMs A [CommandRole.LAMP_ON]'s only: how long a bulk strike waits after striking
+ *   this unit before the next, to spread the inrush current (D19).
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -38,7 +45,13 @@ annotation class FixtureCommand(
     val description: String,
     val holdMs: Long,
     val confirm: Boolean = true,
+    val role: CommandRole = CommandRole.OTHER,
+    val restrikeMs: Long = 0,
+    val strikeSpacingMs: Long = 0,
 )
+
+/** What a fixture command is across types — what a bulk run and Make rig safe ask for. */
+enum class CommandRole { LAMP_ON, LAMP_OFF, RESET, OTHER }
 
 /** One command as its class declares it. */
 data class CommandSpec(
@@ -48,6 +61,9 @@ data class CommandSpec(
     val description: String,
     val holdMs: Long,
     val confirm: Boolean,
+    val role: CommandRole,
+    val restrikeMs: Long,
+    val strikeSpacingMs: Long,
     internal val classProperty: KProperty1<*, *>,
 )
 
@@ -89,7 +105,7 @@ object FixtureCommands {
     private fun scan(klass: KClass<*>): List<CommandSpec> =
         klass.memberProperties.mapNotNull { p ->
             val ann = p.annotations.filterIsInstance<FixtureCommand>().firstOrNull() ?: return@mapNotNull null
-            CommandSpec(p.name, ann.label, ann.description, ann.holdMs, ann.confirm, p)
+            CommandSpec(p.name, ann.label, ann.description, ann.holdMs, ann.confirm, ann.role, ann.restrikeMs, ann.strikeSpacingMs, p)
         }.sortedBy { it.name }
 
     /** [fixture]'s commands with their channels, in name order; empty for every fixture that has none. */

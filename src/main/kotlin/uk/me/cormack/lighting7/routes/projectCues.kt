@@ -96,12 +96,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     sortOrder = newCue.sortOrder
                         ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
-                createCueChildren(
+                writeCueChildren(
                     cue,
                     newCue.adHocEffects,
                     newCue.propertyAssignments,
                     newCue.triggers,
                     newCue.layers,
+                    created = true,
                 )
                 // A cue created without a number gets one derived from where it landed.
                 renumberAutoCues(stack, before)
@@ -173,9 +174,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cue.cueNumberAuto = false
                 }
 
-                // Replace children: delete existing, create new
-                deleteCueChildren(cue)
-                createCueChildren(
+                // Replace children, keeping the uuid of every child the write keeps.
+                writeCueChildren(
                     cue,
                     updatedData.adHocEffects,
                     updatedData.propertyAssignments,
@@ -199,7 +199,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
     // PATCH /{projectId}/cues/{cueId} - Partial update of cue fields (current project only)
     // Only fields present in the JSON body are updated; absent fields are left unchanged.
-    // Children arrays (layers, adHocEffects, propertyAssignments, triggers) are replaced wholesale when present.
+    // Children arrays (layers, adHocEffects, propertyAssignments, triggers) are replaced wholesale when present,
+    // each child the new list keeps keeping its uuid (`writeCueChildren`).
     patch<ProjectCueResource> { resource ->
         withCurrentProject(
             state,
@@ -258,21 +259,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
-                if (hasLayers || hasEffects || hasAssignments || hasTriggers) {
-                    // Delete only the children being replaced
-                    if (hasLayers) cue.layers.forEach { it.delete() }
-                    if (hasEffects) cue.adHocEffects.forEach { it.delete() }
-                    if (hasAssignments) cue.propertyAssignments.forEach { it.delete() }
-                    if (hasTriggers) cue.triggers.forEach { it.delete() }
-
-                    createCueChildren(
-                        cue,
-                        effects ?: emptyList(),
-                        assignments ?: emptyList(),
-                        triggers ?: emptyList(),
-                        layers ?: emptyList(),
-                    )
-                }
+                // Only the lists present are replaced; a null one is left alone.
+                writeCueChildren(cue, effects, assignments, triggers, layers)
 
                 // A number edit moves nothing, so every other auto cue keeps its number (D11).
                 if (numberChanged) renumberAutoCues(cue.cueStack, standardCueIds(cue.cueStack))
@@ -302,8 +290,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val stack = cue.cueStack
                 val before = standardCueIds(stack)
                 deleteCueChildren(cue)
-                // Its scenery and its events die with it, but not with an edit, which
-                // `deleteCueChildren` also serves.
+                // Its scenery and its events die with it, but not with an edit of its children.
                 deleteCueScenery(cue.id)
                 deleteCueEvents(cue.id)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)

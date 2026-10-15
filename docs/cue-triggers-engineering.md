@@ -29,7 +29,7 @@ There are **two** types (`TriggerType` in `models/cueTriggers.kt`). A delayed or
 an `ACTIVATION` hook with timing: `CueTriggerManager` launches a timed coroutine when either timing
 field is positive and runs the script at once otherwise. `DELAYED` and `RECURRING` were types of
 their own once; a write still naming either is normalised to `ACTIVATION` with its timing
-(`createCueChildren`), so an older client keeps working, but neither is ever stored or answered.
+(`writeCueChildren`), so an older client keeps working, but neither is ever stored or answered.
 
 Script hooks are stored in the `cue_triggers` table and always reference a script. The DEACTIVATION type only applies to script hooks (effects are inherently removed on deactivation).
 

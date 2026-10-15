@@ -24,6 +24,7 @@ import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ArmedChip } from './effects/ArmedChip'
 import { GrandMasterImmersiveChip } from './GrandMasterOverviewPanel'
 import { VenueHeldChip } from './venue/VenueHeldChip'
+import { RigSafetyImmersiveChip } from './rigSafety/RigSafetyBanner'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 import { useVenueMode } from '@/store/venues'
 
@@ -192,6 +193,9 @@ export function ShowHeader({
         {/* Blind · venue, while immersive: the app header's chip that says the show is held is not
             drawn, and a held show looks like a working one (venue plan session 6). */}
         {immersive && <VenueHeldChip projectId={projectId} />}
+        {/* Ready to switch off, or blacked out, while immersive: the banner under the app header that
+            says so is not drawn (venue-visit plan S6). */}
+        {immersive && <RigSafetyImmersiveChip />}
         {immersive && !connected && (
           <Badge variant="destructive" className="h-5 shrink-0 px-2 text-[10px] uppercase tracking-wide" title="The desk's socket is down">
             Offline

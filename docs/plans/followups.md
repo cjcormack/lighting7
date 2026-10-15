@@ -41,7 +41,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
 | [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
 | [`FU-HAND-PLACE-SHAPE`](#fu-hand-place-shape) | Trigger | Busk | a third caller of `appendBuskPad`, or `AddPadOutcome.Invalid` needs to mean something at a non-REST door |
-| [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Ready | State | fired 2026-10-01: the desk's arm is a fourth (stage-view session 9) |
+| [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Ready | State | fired 2026-10-01: the desk's arm is a fourth (stage-view session 9); rig safety a fifth (venue-visit S6) |
 | [`FU-DTO-RECORD-SUMMARY`](#fu-dto-record-summary) | Trigger | State | a second `state/` class needs a record summary, or a library-only field reaches a frame that should not carry it |
 | [`FU-MIDI-SHOW-GUARD`](#fu-midi-show-guard) | Trigger | MIDI | a project switch kills a surface's input and it has to be replugged |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
@@ -141,6 +141,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCENERY-FLY-DEPT`](#fu-scenery-fly-dept) | Trigger | Show | fly cues are called separately from LX |
 | [`FU-SENTRY-LAUNCHER-REPORT`](#fu-sentry-launcher-report) | Trigger | Dist | a desk fails before `module()` and nobody can say why |
 | [`FU-SENTRY-PROFILING`](#fu-sentry-profiling) | Trigger | Perf | a Stage view or FX compile slowdown that traces and metrics cannot place |
+| [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
+| [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
+| [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -544,6 +547,9 @@ collector re-binds to the new show, which disarms and cancels what the old show 
 not add a fifth bare clear line, but it is a fourth thing that collector must remember. Promoted to
 Ready rather than built in that session, which touched none of the three classes the interface would
 change; a `ProjectScopedState` should take the two `attach` services as well as the three clears.
+Venue-visit S6 (2026-10-15) added a third, `rigSafety.attach(show)` — a bulk run and *Ready to switch
+off* go with the show, *Undo*'s memory is kept per project — again in the collector beside the other
+two, for the same reason.
 
 ### `FU-DTO-RECORD-SUMMARY`
 
@@ -1804,18 +1810,16 @@ Safari bundle name.
 
 **Child rows keep their uuid across an edit** · Ready · Cloud sync; logged 2026-10-14
 
-A Look's rows and effects are reconciled by natural key on every write (`writeLookChildren` in
-`routes/projectLooks.kt`, `pairByKey`), so a one-value edit is one changed row in the sync diff.
-The same delete-every-child-then-recreate pattern still mints a fresh uuid for every child on:
-
-- a cue's layers, ad-hoc effects, property assignments and triggers (the cue `PUT` in
-  `routes/projectCues.kt`, `deleteCueChildren` in `routes/projectCuesHelpers.kt`);
-- a template's rows (the template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
+A Look's rows and effects (`writeLookChildren` in `routes/projectLooks.kt`) and a cue's layers,
+ad-hoc effects, property assignments and script hooks (`writeCueChildren` in
+`routes/projectCuesHelpers.kt`, venue-visit R2.2) are reconciled by natural key on every write,
+`pairByKey`, so a one-value edit is one changed record in the sync diff. The same
+delete-every-child-then-recreate pattern still mints a fresh uuid for every row of a template (the
+template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
 
 Not a conflict source — the three-way diff hashes whole records — but the git diff, the conflict
-view and the history read every such edit as "all children replaced". Give each the Look's
-treatment with its own natural key; a cue layer has none beyond its position, so it may want
-pairing by `(source, sortOrder)`.
+view and the history read every such edit as "all rows replaced". Give it the Look's treatment
+with its own natural key (`docs/cues-engineering.md` §"Key Design Decisions" has the cue's).
 
 ### `FU-SYNC-TOMBSTONE-GC`
 
@@ -2735,6 +2739,42 @@ slowdown in the Stage view or the FX compile that `app.boot`'s spans, `stage.fps
 `fx.tick.duration` metric cannot place. **Then**: the browser half first (the header on the desk's
 static responses, `browserProfilingIntegration` loaded through `lib/sentryLazy.ts`, sampled per
 session), and the JVM half only for the dev desk, its binaries kept out of the Windows jar.
+
+## End of the night
+
+### `FU-AI-RIG-SAFE`
+
+**No MCP tool for a bulk command or *Make rig safe*** · Trigger · Venue visit S6, 2026-10-15
+
+MCP's `run_fixture_command` runs one command on one unit; the bulk run, *Make rig safe*, *Undo* and
+*Quit desk* (`state/RigSafetyService.kt`) are REST and the UI only. A tool would be thin — the routes
+already answer a run and refuse by code — but it would put "douse every lamp" one prompt away, so it
+waits for someone to ask. **Trigger**: an operator asks Claude to make the rig safe, or to strike or
+douse every lamp. **Then**: one `run_bulk_command` tool over the service (role, optional targets),
+held to `requireCommandsAccess` as `run_fixture_command` is; *Quit desk* stays out of MCP for D13's
+reason.
+
+### `FU-RESTRIKE-ACROSS-RESTART`
+
+**The restrike ledger is runtime only** · Trigger · Venue visit S6, 2026-10-15
+
+`RigSafetyService` records when each lamp went off in memory, so a desk restarted inside a MAC 250's
+8 minutes forgets it and a bulk strike goes at once. Rare — a restart is usually the end of the
+night — and the lamp simply fails to strike. **Trigger**: a desk restarted inside a lamp's restrike
+time strikes it too soon. **Then**: a machine-local table keyed by patch uuid (never synced: a lamp's
+heat is this room's), read at show start like `effect_tube_state`.
+
+### `FU-SCALER-FLUSH-ON-STOP`
+
+**A stop other than Quit loses the scaler writer's last 250 ms** · Trigger · Venue visit S6,
+2026-10-15
+
+`State.flushScalerWrites` says it runs "at shutdown", but only `State.shutdown()` (tests) and *Quit
+desk* call it; Ctrl-C, the launcher's tray Quit and an update's stop exit through the JVM's hooks
+without it, so a grand-master level or the persisted blackout set in the last
+`LatestWinsWriter` interval is not written. **Trigger**: a level or blackout moved just before a stop
+comes back as it was before. **Then**: flush from an `ApplicationStopping` subscription in
+`Application.module()`, before the pool closes.
 
 ## Completed
 
