@@ -2,7 +2,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 <style>
-  /* Layout: one reading column; every note traced to a session, four mechanism diagrams, then one run order across all seven plans. Dark first, like the desk in the hall. */
+  /* Layout: one reading column; every note traced to a session, four mechanism diagrams, then the lanes across all seven plans. Dark first, like the desk in the hall. */
   :root {
     --bg:#0f1014; --panel:#17191f; --sunk:#121318; --fg:#eceef2; --muted:#959cab; --line:#2a2d36;
     --amber:#f2b84b; --teal:#5fcfc6; --done:#7ccf86; --plan:#8fb3ff; --warn:#f08a6c; --lamp:#ffd77a;
@@ -143,6 +143,21 @@
   .track { width:min(100%, 260px); height:10px; border-radius:2px; background:var(--line); overflow:hidden; }
   .track i { display:block; height:100%; background:var(--done); }
 
+  .lanes { display:flex; flex-direction:column; gap:10px; }
+  .lane { display:grid; grid-template-columns:170px 1fr; gap:12px; align-items:start; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .lane .ln { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .lane .ln b { font-family:var(--display); font-size:16px; font-weight:600; }
+  .lane .ln span { font-size:12.5px; color:var(--muted); }
+  .lane .ln .crit { color:var(--amber); font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; }
+  .steps { display:flex; flex-wrap:wrap; gap:6px 4px; align-items:flex-start; min-width:0; }
+  .step { display:flex; flex-direction:column; gap:2px; background:var(--sunk); border:1px solid var(--line); border-radius:6px; padding:5px 8px; max-width:190px; }
+  .step .t { font-size:12.5px; line-height:1.3; }
+  .step .nd { font:500 11px var(--mono); color:var(--teal); }
+  .step.flight { border-color:color-mix(in srgb, var(--plan) 60%, transparent); }
+  .step.flight .st8 { font:500 11px var(--mono); color:var(--plan); }
+  .sep { align-self:center; color:var(--muted); font:500 13px var(--mono); }
+  @media (max-width: 560px) { .lane { grid-template-columns:1fr; } }
+
   footer { color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:4px; }
 
   @media (max-width: 560px) {
@@ -158,12 +173,12 @@
     <div class="label">lighting7 · umbrella plan · <b>agreed 2026-10-14</b> · revised 2026-10-15</div>
     <h1>After the <span>venue visit</span></h1>
     <p class="lede">Chris spent an evening in the hall programming a show on the desk. His notes covered groups, fixtures, palettes, lamp control, effects, the programmer, the cue list, cues, the grand master and project navigation. This page traces every note to the session that deals with it, explains the four mechanisms that are easiest to get wrong, and gives the order to run them in.</p>
-    <p class="lede">There are two kinds of session. An <b class="sid">S</b> session lands one PR. An <b class="sid r">R</b> session is research and design. Its output is a new plan, and where that plan disagrees with this one, the new plan wins inside its scope. All five R sessions are done. Their six plans hold 38 sessions, which now run in one queue with this plan's own.</p>
+    <p class="lede">There are two kinds of session. An <b class="sid">S</b> session lands one PR. An <b class="sid r">R</b> session is research and design. Its output is a new plan, and where that plan disagrees with this one, the new plan wins inside its scope. All five R sessions are done. Their six plans hold 38 sessions, which now run in nine parallel lanes with this plan's own.</p>
     <div class="meters" aria-label="Progress">
       <div class="meter">
         <span class="label">S sessions landed</span>
-        <div class="bar" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <span class="txt">4 of 16 · S1–S4</span>
+        <div class="bar" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <span class="txt">5 of 16 · S1–S5</span>
       </div>
       <div class="meter">
         <span class="label">R plans written</span>
@@ -172,8 +187,8 @@
       </div>
       <div class="meter">
         <span class="label">Whole queue</span>
-        <div class="track" aria-hidden="true"><i style="width:6.6%"></i></div>
-        <span class="txt">4 of 61 sessions landed · 57 to go, seven of them course checks</span>
+        <div class="track" aria-hidden="true"><i style="width:9.3%"></i></div>
+        <span class="txt">5 of 54 sessions landed · 49 to go, plus course checks</span>
       </div>
     </div>
   </header>
@@ -183,7 +198,7 @@
     <a href="#found">What the code showed</a>
     <a href="#mechanisms">Four mechanisms</a>
     <a href="#decisions">Decisions</a>
-    <a href="#order">Run order</a>
+    <a href="#order">Lanes</a>
     <a href="#design">Design sessions</a>
   </nav>
 
@@ -205,7 +220,7 @@
         <li><span>Lamp off everything, by selection or the whole rig</span><span class="where"><span class="sid">S6</span></span></li>
         <li><span>Undo it: lamps back on</span><span class="where"><span class="sid">S6</span></span></li>
         <li><span>Quit the desk from the web UI</span><span class="where"><span class="sid">S6</span></span></li>
-        <li><span>Grand master in the UI</span><span class="where"><span class="sid">S5</span></span></li>
+        <li><span>Grand master in the UI</span><span class="where"><span class="sid">S5</span><span class="chip done">done</span></span></li>
       </ul></div>
       <div class="area"><h3>Effects</h3><ul>
         <li><span>Survey against other desks (ChamSys and others)</span><span class="where"><span class="sid r">R4</span><span class="chip plan">plan</span></span></li>
@@ -392,137 +407,40 @@
         <div class="d"><span class="n">D10</span><span>No hard date. The order follows dependencies and what got in the way on the night.</span></div>
       </div>
       <div class="dg"><h3>How the plan runs</h3>
-        <div class="d p"><span class="n">P1</span><span>One PR per session, with a checklist before it: both suites green, docs and CLAUDE.md, follow-ups closed and recorded, an operator check filed, hand-offs to other plans made, and a second commit marking it done.</span></div>
+        <div class="d p"><span class="n">P1</span><span>One PR per session, on a <code>claude/vv-&lt;id&gt;</code> branch that claims it. Before the PR: main merged in, both suites green, docs and CLAUDE.md, follow-ups, an operator check, hand-offs to other plans, and a second commit marking it done in its own plan.</span></div>
         <div class="d p"><span class="n">P2</span><span>Rename before building: S4 lands before sessions that add UI copy.</span></div>
         <div class="d p"><span class="n">P3</span><span>Old degree-based position palettes keep resolving. New writes are centre-relative.</span></div>
         <div class="d p"><span class="n">P4</span><span>A design session holds back only what it might reshape.</span></div>
         <div class="d p"><span class="n">P5</span><span>No plan names a format version. A session that bumps it takes the next number free when it lands.</span></div>
-        <div class="d p"><span class="n">P6</span><span>One queue across all seven plans. A session's body and its done-marker stay in its own plan.</span></div>
+        <div class="d p"><span class="n">P6</span><span>Lanes across all seven plans, run in parallel. A session's body and its done-marker stay in its own plan, and the lanes carry no status.</span></div>
       </div>
     </div>
   </section>
 
   <section id="order">
-    <h2>Run order</h2>
-    <p class="lede">One queue across this plan and the six plans its R sessions produced. Within a plan, sessions run in that plan's order. A course check closes each wave, and another splits any wave longer than about eight sessions. Each reconciles the plans with what landed and refreshes this page. <b>Needs</b> lists only what a session needs from another plan. The waves are a suggested order; Needs is the constraint.</p>
-    <div class="legend"><span><span class="sid">S</span>this plan</span><span><span class="sid r">R1.n</span>cue model</span><span><span class="sid r">R2.n</span>Show view cue editing</span><span><span class="sid r">R3.n</span>apply model</span><span><span class="sid r">R4.n</span>effects</span><span><span class="sid r">Nav.n</span>navigation</span><span><span class="sid r">Att.n</span>venue attach</span><span><span class="sid">K</span>course check</span></div>
+    <h2>Lanes</h2>
+    <p class="lede">Every session still to run, in nine lanes that run side by side. A lane runs in order; the teal note on a session names what it waits for in another lane. Run three or four lanes at once and keep the critical path moving: Cues, then Cue editor, to R3.8 at the end of Apply, about twelve sessions deep.</p>
+    <p class="lede">A session claims its place with a <code>claude/vv-&lt;id&gt;</code> branch and marks itself done only in its own plan. Course checks fall due after about eight merges, when R1.4 merges, and when every lane is empty.</p>
     <div class="wave">
       <h3>Landed</h3>
-      <div class="landed"><span class="chip done">S1 · 4a1a8fb4</span><span class="chip done">S2 · f6b37b38</span><span class="chip done">S3 · e2153f5c</span><span class="chip done">S4 · b954eee1</span><span class="chip plan">R1–R5 · six plans</span></div>
+      <div class="landed"><span class="chip done">S1 · 4a1a8fb4</span><span class="chip done">S2 · f6b37b38</span><span class="chip done">S3 · e2153f5c</span><span class="chip done">S4 · b954eee1</span><span class="chip done">S5 · 6729e6f9</span><span class="chip plan">R1–R5 · six plans</span></div>
     </div>
-    <div class="wave">
-      <h3><span class="label">Wave A</span>Nothing blocks these</h3>
-      <div class="tbl">
-        <table>
-          <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="n">1</td><td><span class="sid">S5</span> Grand master<span class="what">Continuous scale, REST/WS, MIDI fader, app-bar fader.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">2</td><td><span class="sid">S6</span> Make rig safe, Undo, Quit desk<span class="what">Command roles, bulk run, staggered strikes, restrike times, quit.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">3</td><td><span class="sid">S10</span> Record polish<span class="what">New stack from Record, &quot;All attributes&quot;, a cue picker that lists cues by name.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">4</td><td><span class="sid">S11</span> Position in −127…+127<span class="what">One conversion for display and entry; intents gain a unit.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">5</td><td><span class="sid">S15</span> Effect timing<span class="what">Speed master or seconds; one bar by default.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">6</td><td><span class="sid">S7</span> Group member order<span class="what">Drag-reorder in the Groups views; show the order FX will use.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">7</td><td><span class="sid">S9</span> Blinder colour<span class="what">A warm/cold mix per cell through a small CCT helper.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">8</td><td><span class="sid">S14</span> Full-width applied tables<span class="what">Applied FX, Looks and palettes as window views.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">9</td><td><span class="sid">K1</span> Course check<span class="what">Mid-wave: what S5–S14 changed under the plans still to run.</span></td><td>rows 1–8</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">10</td><td><span class="sid r">R2.1</span> Blind holds the programmer's effects<span class="what">Busk, included and layer effects paint nothing under Blind.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">11</td><td><span class="sid r">R2.2</span> A cue's children keep their uuids<span class="what">Every cue write updates children in place.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">12</td><td><span class="sid r">R3.1</span> The press on the desk<span class="what">Replacement and widening in every palette door; Detach.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">13</td><td><span class="sid r">Nav.1</span> Sections and the registry<span class="what">Run, Rig, Library, Project and Desk headings.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">14</td><td><span class="sid r">Nav.2</span> Off the rig<span class="what">Views that need the rig say so on a non-current project.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">15</td><td><span class="sid r">Nav.3</span> The switcher<span class="what">The app bar names the current show and switches it.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">16</td><td><span class="sid r">Att.1</span> The origin, and the pairing<span class="what">Detach records where a show came from; a pure pairing.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">17</td><td><span class="sid r">Att.2</span> The attach<span class="what">Apply the pairing in one transaction, with a review.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">18</td><td><span class="sid">K2</span> Course check<span class="what">Done-markers against git log, plans against landed code, Needs and waves, this page.</span></td><td>wave A</td><td><span class="chip">to do</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="wave">
-      <h3><span class="label">Wave B</span>The cue model</h3>
-      <p>The long pole: R2.3 onwards waits on it. R1.1 is a startup migration, run on a copy of the desk's database first. K3 matters most, because the plans still to run were written against the old cue model.</p>
-      <div class="tbl">
-        <table>
-          <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="n">19</td><td><span class="sid r">R1.1</span> Entries and the migration<span class="what">Stack entries, one per cue; the migration with a backup.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">20</td><td><span class="sid r">R1.2</span> Holds<span class="what">One registry says what keeps a cue live; loose holds.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">21</td><td><span class="sid r">R1.3</span> Sync<span class="what">Entry files, ordinals, auto numbers derived.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">22</td><td><span class="sid r">R1.4</span> Sharing and explicit delete<span class="what">A cue in several stacks, or none; delete is its own action.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">23</td><td><span class="sid">K3</span> Course check<span class="what">The plans still to run, re-read against the new cue model.</span></td><td>wave B</td><td><span class="chip">to do</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="wave">
-      <h3><span class="label">Wave C</span>On the scale, the timing and the holds</h3>
-      <div class="tbl">
-        <table>
-          <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="n">24</td><td><span class="sid">S8</span> Per-patch locate<span class="what">Pan and tilt in the Focus facet; Set locate from current.</span></td><td><div class="needs"><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">25</td><td><span class="sid">S12</span> Fan in and fan out<span class="what">Relative fan around current positions, per axis.</span></td><td><div class="needs"><span class="sid">S7</span><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">26</td><td><span class="sid">S13</span> Aim from the floor plan<span class="what">Click to aim on the Plan camera.</span></td><td><div class="needs"><span class="sid">S11</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">27</td><td><span class="sid">S16</span> Speed masters on a cue<span class="what">Master and BPM pairs set on every GO into an entry.</span></td><td><div class="needs"><span class="sid">S15</span><span class="sid r">R1.2</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">28</td><td><span class="sid r">R4.1</span> Size, direction and N-shot<span class="what">An effect's size, which way it runs, and how many times.</span></td><td><div class="needs"><span class="sid">S15</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">29</td><td><span class="sid r">R4.2</span> Shaping the spread<span class="what">Blocks, groups, wings and buddying.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">30</td><td><span class="sid r">R4.3</span> One effect over a selection<span class="what">A selection target: one instance across loose fixtures.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">31</td><td><span class="sid r">R1.5</span> The Cues table<span class="what">Every cue in the project, loose ones included.</span></td><td><div class="needs"><span class="sid r">Nav.1</span><small>its Library row; either order</small></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">32</td><td><span class="sid r">R3.2</span> Local effects follow the selection<span class="what">A bare effect per fixture; subset edits split it.</span></td><td><div class="needs"><span class="sid">S15</span><span class="sid r">R4.3</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">33</td><td><span class="sid r">R3.3</span> One press in the client<span class="what">One press hook behind every door.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">34</td><td><span class="sid r">R3.4</span> One mask<span class="what">The selection's attribute mask, in every sheet.</span></td><td><div class="needs"><span class="sid">S10</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">35</td><td><span class="sid">K4</span> Course check<span class="what">What the effects and press sessions changed.</span></td><td>wave C</td><td><span class="chip">to do</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="wave">
-      <h3><span class="label">Wave D</span>Cue editing, the rest of effects, and the project's home</h3>
-      <div class="tbl">
-        <table>
-          <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="n">36</td><td><span class="sid r">R2.3</span> The action set<span class="what">One set of cue actions in cards, table and phone.</span></td><td><div class="needs"><span class="sid r">R1.4</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">37</td><td><span class="sid r">R1.6</span> Copy from another show<span class="what">A cue copied across shows, mapped by key.</span></td><td><div class="needs"><span class="sid r">R2.3</span><small>for Duplicate; else it builds it</small></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">38</td><td><span class="sid r">R1.7</span> The MCP tools<span class="what">Tools for shared and loose cues.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">39</td><td><span class="sid r">R2.4</span> The editor and its two hosts<span class="what">One cue editor in the card and the table's pane.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">40</td><td><span class="sid r">R2.5</span> The Values grid<span class="what">A cue's values edited like the programmer's, sending nothing.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">41</td><td><span class="sid r">R2.6</span> The Looks and FX tables<span class="what">A cue's layers and effects edited in place.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">42</td><td><span class="sid r">R2.7</span> Edited since GO and Update stage<span class="what">A held cue that was edited, and how to send it.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">43</td><td><span class="sid r">R2.8</span> Show on stage<span class="what">The Stage view draws the cue in edit.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">44</td><td><span class="sid">K5</span> Course check<span class="what">Mid-wave: the cue editor, before R3.8 writes into it.</span></td><td>rows 36–43</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">45</td><td><span class="sid r">R4.4</span> Fading by size<span class="what">Effects fade in and out with the cue, on its holds.</span></td><td><div class="needs"><span class="sid r">R1.2</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">46</td><td><span class="sid r">R4.5</span> A stack's effect size<span class="what">A runtime fader per stack, like the grand master.</span></td><td><div class="needs"><span class="sid">S5</span><small>its shape; either order</small></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">47</td><td><span class="sid r">R4.6</span> Beam effects<span class="what">Zoom, iris, frost and focus.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">48</td><td><span class="sid r">R4.7</span> Palette Steps and Slot Steps<span class="what">Step through palettes or wheel slots.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">49</td><td><span class="sid r">Nav.4</span> Project actions and a show's home<span class="what">One set of actions; a home that shows the show.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">50</td><td><span class="sid r">Nav.5</span> A venue's home<span class="what">History, Publish and the shows on it.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">51</td><td><span class="sid r">Att.3</span> The attach sheet<span class="what">Attach to venue… with its review.</span></td><td><div class="needs"><span class="sid r">Nav.4</span><small>else on the card's ⋮</small></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">52</td><td><span class="sid">K6</span> Course check<span class="what">As K2, for wave D.</span></td><td>wave D</td><td><span class="chip">to do</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="wave">
-      <h3><span class="label">Wave E</span>Applying everywhere</h3>
-      <div class="tbl">
-        <table>
-          <thead><tr><th>#</th><th>Session</th><th>Needs</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="n">53</td><td><span class="sid r">R3.5</span> The palette popup and the one picker<span class="what">Palettes from every property cell.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">54</td><td><span class="sid r">R3.6</span> Effects in the popup<span class="what">Add and split effects from the cell.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">55</td><td><span class="sid r">R3.7</span> The busk side sheets<span class="what">Family tabs over the busk selection.</span></td><td>—</td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">56</td><td><span class="sid r">R3.8</span> Into the cue editor<span class="what">Presses land on a stored cue.</span></td><td><div class="needs"><span class="sid r">R2.6</span></div></td><td><span class="chip">to do</span></td></tr>
-            <tr><td class="n">57</td><td><span class="sid">K7</span> Course check and close<span class="what">The last check; all seven plans move to completed/.</span></td><td>wave E</td><td><span class="chip">to do</span></td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="lanes">
+      <div class="lane"><div class="ln"><b>Cues</b><span class="crit">critical path</span><span>R1.1 migrates the database: run it on a copy first.</span></div><div class="steps"><div class="step"><span class="sid r">R2.2</span><span class="t">A cue's children keep their uuids</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.1</span><span class="t">Entries and the migration</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.2</span><span class="t">Holds</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.3</span><span class="t">Sync</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.4</span><span class="t">Sharing and explicit delete</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Cue editor</b><span class="crit">critical path</span><span>Splits from Cues after R1.4.</span></div><div class="steps"><div class="step"><span class="sid r">R2.3</span><span class="t">The action set</span><span class="nd">after R1.4, R2.1</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.4</span><span class="t">The editor and its two hosts</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.5</span><span class="t">The Values grid</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.6</span><span class="t">The Looks and FX tables</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.7</span><span class="t">Edited since GO and Update stage</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.8</span><span class="t">Show on stage</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Cue library</b><span>Splits from Cues after R1.2.</span></div><div class="steps"><div class="step"><span class="sid">S16</span><span class="t">Speed masters on a cue</span><span class="nd">after S15, R1.2</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.5</span><span class="t">The Cues table</span><span class="nd">after R1.4</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.6</span><span class="t">Copy from another show</span><span class="nd">after R2.3</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R1.7</span><span class="t">The MCP tools</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Rig and output</b></div><div class="steps"><div class="step flight"><span class="sid">S6</span><span class="t">Make rig safe, Undo, Quit desk</span><span class="st8">in flight</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S9</span><span class="t">Blinder colour</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S8</span><span class="t">Per-patch locate</span><span class="nd">after S11</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Programmer</b></div><div class="steps"><div class="step"><span class="sid">S11</span><span class="t">Position in −127…+127</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S10</span><span class="t">Record polish</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S7</span><span class="t">Group member order</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S13</span><span class="t">Aim from the floor plan</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S12</span><span class="t">Fan in and fan out</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Effects</b><span>R4.6 and R4.7 run before R4.4; they need only R4.1.</span></div><div class="steps"><div class="step"><span class="sid">S15</span><span class="t">Effect timing</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R2.1</span><span class="t">Blind holds the programmer's effects</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.1</span><span class="t">Size, direction and N-shot</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.2</span><span class="t">Shaping the spread</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.3</span><span class="t">One effect over a selection</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.6</span><span class="t">Beam effects</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.7</span><span class="t">Palette Steps and Slot Steps</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.4</span><span class="t">Fading by size</span><span class="nd">after R1.2</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R4.5</span><span class="t">A stack's effect size</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Apply</b><span class="crit">critical path</span><span>Ends the critical path at R3.8.</span></div><div class="steps"><div class="step"><span class="sid r">R3.1</span><span class="t">The press on the desk</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.2</span><span class="t">Local effects follow the selection</span><span class="nd">after R4.3</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.3</span><span class="t">One press in the client</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.4</span><span class="t">One mask</span><span class="nd">after S10</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.5</span><span class="t">The palette popup and the one picker</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.6</span><span class="t">Effects in the popup</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.7</span><span class="t">The busk side sheets</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">R3.8</span><span class="t">Into the cue editor</span><span class="nd">after R2.6</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Navigation</b></div><div class="steps"><div class="step"><span class="sid r">Nav.1</span><span class="t">Sections and the registry</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Nav.2</span><span class="t">Off the rig</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Nav.3</span><span class="t">The switcher</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid">S14</span><span class="t">Full-width applied tables</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Nav.4</span><span class="t">Project actions and a show's home</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Nav.5</span><span class="t">A venue's home</span></div></div></div>
+      <div class="lane"><div class="ln"><b>Venue attach</b></div><div class="steps"><div class="step"><span class="sid r">Att.1</span><span class="t">The origin, and the pairing</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Att.2</span><span class="t">The attach</span></div><span class="sep" aria-hidden="true">›</span><div class="step"><span class="sid r">Att.3</span><span class="t">The attach sheet</span><span class="nd">after Nav.4</span></div></div></div>
     </div>
   </section>
 
   <section id="design">
     <h2>Design sessions</h2>
-    <p class="lede">Each ended with its own plan and a one-page version like this one. Their sessions are in the run order above.</p>
+    <p class="lede">Each ended with its own plan and a one-page version like this one. Their sessions are in the lanes above.</p>
     <div class="rgrid">
       <div class="rc">
         <div class="top"><h3><span class="sid r">R1</span> The cue model</h3><span class="chip plan">7 sessions</span></div>
