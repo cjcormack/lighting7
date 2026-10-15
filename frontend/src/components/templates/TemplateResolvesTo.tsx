@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 import { useResolveTemplateMutation } from '@/store/templates'
 import { templateIntentSwatch } from '@/lib/templateIntent'
 import type { TemplateResolution, TemplateRow } from '@/api/templatesApi'
+import { parseProgrammerValue } from '@/lib/programmerValue'
+import { dmxToCentre, formatCentre } from '@/lib/positionScale'
 
 /** How long to sit still before asking. A colour drag emits a change per pointer move. */
 const DEBOUNCE_MS = 250
@@ -132,13 +134,24 @@ function ResolutionRow({ entry }: { entry: TemplateResolution }) {
 
       {entry.value != null && swatch == null && (
         <span className="font-mono text-[11px] tabular-nums text-muted-foreground shrink-0">
-          {entry.value}
+          {displayValue(entry.value)}
         </span>
       )}
 
       <OutcomeBadge entry={entry} />
     </div>
   )
+}
+
+/**
+ * A resolved literal as the operator reads it: a position's `pan,tilt` bytes on the centre scale
+ * (venue-visit plan D3), every other literal as the desk wrote it.
+ */
+function displayValue(value: string): string {
+  const parsed = parseProgrammerValue(value)
+  return parsed?.kind === 'position'
+    ? `${formatCentre(dmxToCentre(parsed.pan))},${formatCentre(dmxToCentre(parsed.tilt))}`
+    : value
 }
 
 function OutcomeBadge({ entry }: { entry: TemplateResolution }) {

@@ -33,16 +33,14 @@ export type SpreadEndpoint =
   | { kind: 'colour'; hex: string; policy: WhitePolicy }
   | { kind: 'template'; uuid: string }
   | { kind: 'percent'; value: number }
-  | { kind: 'position'; panDeg: number; tiltDeg: number }
+  | { kind: 'position'; pan: number; tilt: number; unit: 'centre' }
   | { kind: 'level'; value: number }
 
 /**
- * The centre of the position range every editor on this side assumes — half of the 540° / 270°
- * travel `TemplateEditor`'s `PositionControl` runs over. A head with a shorter range is clamped by
- * the desk, which is the resolver's job and not this file's.
+ * How far a fresh position spread swings either side of the centre, in centre-relative steps
+ * (venue-visit plan D3) — a modest fan, the same share of travel on every head.
  */
-export const POSITION_CENTRE_PAN_DEG = 270
-export const POSITION_CENTRE_TILT_DEG = 135
+export const POSITION_DEFAULT_SWING = 16
 
 /** The editor a property's endpoints take — a template reference is a colour editor's choice, not a fifth editor. */
 export type SpreadEditorKind = 'colour' | 'percent' | 'position' | 'level'
@@ -72,11 +70,9 @@ export function spreadEditorKind(property: TemplateProperty): SpreadEditorKind {
 
 /**
  * Where a fresh spread of this property starts: the design's amber → blue for a colour, the full
- * range for a level or a percent, and for a position a modest pan swing about the desk's centre
- * **in absolute degrees** — `deg:` is each head's own annotated range, `0…degMax` with the centre
- * at half of it (`TemplateResolver.degreesToDmx` coerces into it; every fixture annotates pan
- * `degMin = 0`), the same convention `TemplateEditor`'s position control defaults to (270 / 135).
- * A signed value about the centre would clamp to the head's hard stop and read as a sliver.
+ * range for a level or a percent, and for a position a modest pan swing about the centre of
+ * travel — centre-relative (`pos:`, D3), 0 the centre on every head, so it never sits against a
+ * hard stop the way an absolute degree about a guessed centre could.
  */
 export function defaultSpreadEndpoints(property: TemplateProperty): { from: SpreadEndpoint; to: SpreadEndpoint } {
   switch (spreadEditorKind(property)) {
@@ -89,8 +85,8 @@ export function defaultSpreadEndpoints(property: TemplateProperty): { from: Spre
       return { from: { kind: 'percent', value: 0 }, to: { kind: 'percent', value: 100 } }
     case 'position':
       return {
-        from: { kind: 'position', panDeg: POSITION_CENTRE_PAN_DEG - 30, tiltDeg: POSITION_CENTRE_TILT_DEG },
-        to: { kind: 'position', panDeg: POSITION_CENTRE_PAN_DEG + 30, tiltDeg: POSITION_CENTRE_TILT_DEG },
+        from: { kind: 'position', pan: -POSITION_DEFAULT_SWING, tilt: 0, unit: 'centre' },
+        to: { kind: 'position', pan: POSITION_DEFAULT_SWING, tilt: 0, unit: 'centre' },
       }
     case 'level':
       return { from: { kind: 'level', value: 0 }, to: { kind: 'level', value: 255 } }
@@ -123,7 +119,7 @@ export function isCompleteSpreadEndpoint(endpoint: SpreadEndpoint): boolean {
     case 'level':
       return Number.isFinite(endpoint.value)
     case 'position':
-      return Number.isFinite(endpoint.panDeg) && Number.isFinite(endpoint.tiltDeg)
+      return Number.isFinite(endpoint.pan) && Number.isFinite(endpoint.tilt)
   }
 }
 

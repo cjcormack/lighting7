@@ -636,8 +636,8 @@ Release folds to its glyph and the scope line drops the fade.
   row over its colour — no "Virtual" badge — but **a fixture's heads never do** (`headRowOptions`):
   a head has no dimmer channel, and the row only repeated what its colour row sets.
 - **Controls are the editor kit's** (D7): a slider beside an `EditorField` in the row's unit — a
-  **percent** for a level, as the grid reads; **degrees** for a Position whose axes annotate travel,
-  bytes otherwise. A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
+  **percent** for a level, as the grid reads; **centre-relative** for a Position on every head
+  (`lib/positionScale.ts`, §The editor kit). A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
   takes the programmer fade, and `8` on the way to `80` would be a fade of its own; a drag writes as
   it moves, at no fade. A setting row mounts the grid's `SettingCell` — one type-ahead for a step on
   both surfaces. **Colour and Position open inline, one row at a time** (call 5): the colour row
@@ -645,7 +645,7 @@ Release folds to its glyph and the scope line drops the fade.
   The colour row's swatch is how the head **looks** — dimmed by its dimmer (a head's own, else the
   fixture's), with the UV dot — and the text beside it is the value.
 - **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
-  goes through `clampCommitToResolution`'s degree rule, so 270° lands where the programmer's position
+  goes through `clampCommitToResolution`'s centre rule, so `-20` lands where the programmer's position
   cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
   the wire. A raw pan landed in the sideband, held nothing back and read *Programmer* while an effect
   was on stage — the bug that started the plan.
@@ -707,9 +707,9 @@ Release folds to its glyph and the scope line drops the fade.
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
-  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is
-  **degrees of travel** where every head annotates both axes (`positionAxesOf`), bytes elsewhere, and
-  a centre or a sweep's end a position on its axis. Curves, switches and ratios beside levels sit
+  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is a
+  distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
+  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
   behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
   blend (every effect, so nothing is out of reach), and — on a group or a fixture with heads — step
   timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
@@ -875,8 +875,12 @@ programmer — a deferred one on the desk selection — for Update to write an e
 pad, since a pad supplies the targets on the press.
 
 **A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
-white/amber policy, a level or beam role as a percentage of each head's own range, a position in
-**degrees**. `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
+white/amber policy, a level or beam role as a percentage of each head's own range, a position
+**centre-relative** (`pos:pan,tilt`, `-128..127` about the centre of travel, the same fraction of
+travel on every head — venue-visit plan D3). A position stored before D3 is `deg:` travel degrees:
+the desk keeps resolving it as angles, an editor shows it on the centre scale (a generic one through
+the old editor's 540° / 270°, a per-fixture row through its own head — `positionOnScale`) and saves
+it as `pos:` only once it is moved (P3). `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
 client half serialises and parses only, and **never resolves**, because
 `fx/TemplateResolver.kt` must be the single answer to what the rig will do (§6 of the plan). All
 three consumers go through it: cook, `POST /palettes/{id}/apply`, and the editor's resolves-to
@@ -1210,7 +1214,7 @@ plan D16, session 5) — D12's question, through the live editor's own rules (`f
 re-exported by `fxEditorModel.ts`) rather than a second copy. `TemplateEditor`'s effect branch
 mounts **`FxEffectFields`** — the live editor's fields over the palette's draft (`templateDraftOf`
 / `withTemplateDraft`), with no target: distribution under Advanced, no step timing, element mode,
-head filter or degrees (there is no head to read a travel from), and a rate master that can be set
+head filter, and a rate master that can be set
 back to *Unscaled*, which a draft can hold and a live frame cannot. **`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an effect starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement effect
@@ -1954,7 +1958,7 @@ what it wrote. Only the desk knows a group's member order, each head's range, wh
 has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
 serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per family over
 `templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference through
-`colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an emitter) and
+`colourUtils`; `pct:` for a level or a beam role; centre-relative `pos:` for a position; `dmx:` for an emitter) and
 `spreadIntent.test.ts` asserts its import list reaches no resolver — and the panel's and the
 popover's reach no lerp but `rawValues`, from the raw arm alone. **There is no preview strip**
 (2026-09-21): there was one, drawn from `written[]` and `skipped[]` — one bar per head in the desk's
@@ -1973,9 +1977,8 @@ for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row wi
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
 is Rig again), offering it as something it is not would be worse than withholding it, and a
 disabled item in the row wrapped at 288px and read as a control that was merely off. A position
-spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
-convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
-hard stop. *Over: Cells* carries the cell count where a selected fixture has elements, and stays pressable
+spread's defaults are **±16 about the centre of travel**, centre-relative (`pos:`, venue-visit plan
+D3), so they never sit against a hard stop. *Over: Cells* carries the cell count where a selected fixture has elements, and stays pressable
 where none does — the choice survives a change of selection, an empty one included (it is the
 window's, `lib/spreadOver.ts`), and over heads with no cells the request says Heads
 (`effectiveSpreadOver` — the desk would make the same substitution, each fixture without elements
@@ -2888,7 +2891,7 @@ palette vocabulary: two intents of one property's shape, a curve, an order, part
 over-switch go to `POST /programmer/spread`, and one literal per head lands in Local (D3: the
 programmer's rows are heads the desk knows better than the browser does — a group's member order,
 each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
-are intents — a percent, a colour + policy or a `tmpl:` reference, degrees — so a spread from 0 to
+are intents — a percent, a colour + policy or a `tmpl:` reference, a centre-relative position — so a spread from 0 to
 full is *0% → 100%* on every head whatever its range, which the byte form never was, and the old
 position exclusion went with the byte lerp it objected to. **`raw`** — bytes on a column outside
 the vocabulary, Speed alone (D15; `rawValues` in `editor/spreadPlans.ts` is `fanValues` renamed and
@@ -2953,7 +2956,7 @@ resolves exactly as it does for Local and answers without writing, and `SpreadPo
 `"pan,tilt"`), which the route answers since session 3 in place of the interpolated intent — in the
 layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope edit
 does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the intent is
-told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `deg:` / `dmx:` /
+told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `pos:` / `deg:` / `dmx:` /
 `tmpl:` prefix or a `;policy=` tag — `parseProgrammerValue` alone would take a colour intent as a
 colour, since it splits on `;` and tests only the head) and refused with a toast naming the desk
 rather than landing an intent in a Look row; in practice such a desk 400s the request first, its
@@ -3746,7 +3749,7 @@ along with the rest) and the resolutions — from `FixturesListContainer`'s `bat
 editor says about the batch must be that column's, not the marquee's total — summed, the Dimmer
 editor said "1 head has no dimmer · skipped" for a par the *Gobo* column skipped. `scopeLabel` rides
 beside it from the scope and the Look store's `lookName`. The container's own 33 ms position merge
-goes through `mergePositionCommits`, which keeps `panDeg` / `tiltDeg` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
+goes through `mergePositionCommits`, which keeps `panCentre` / `tiltCentre` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
 silently drop it. `ColourCell` takes the same `CellBatch` since session 2, and `CellBatch`
 gained the **`targets`** themselves beside the count — a count and a resolution list cannot name a
 head, and the colour editor needs the heads for its emitter union, its leaves and the palette
@@ -3762,17 +3765,20 @@ percent for the same reason — a palette of them is a percent already. The one 
 setting cell listing the steps, and a palette's percent on it snaps to the step nearest that
 proportion of its angles.
 
-**Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
-draws a 120px XY pad beside Pan · Tilt — a drag writes both axes in one commit — and where **every**
-head in the batch carries `degMin` / `degMax` on both its pan and tilt sliders (the movers, 10 of
-the 28 models; a `position` descriptor carries none of its own, so `resolveCell` attaches the axis
-sliders on its channels beside it), the fields and sliders are in travel degrees and the commit
-carries **`panDeg` / `tiltDeg`** rather than bytes. `clampCommitToResolution`
-resolves a degree to **each head's own byte** — 270° is 128 on a 540° mover and 109 on a 630° one —
-through `lib/axisDegrees.ts`, which is `dmxToDegrees` (moved out of `stageCoords.ts`, re-exported
-there) beside its inverse; a head whose axis carries no annotation is left alone on that axis. A
-batch mixing annotated and silent heads keeps bytes for all of them rather than two units in one
-editor; the cell keeps its byte read-out either way. The field's range is the lead head's.
+**Position is centre-relative DMX on every head** (venue-visit plan D3, which replaced editor-kit
+D14's degrees). `lib/positionScale.ts` is the one conversion every surface takes for display and
+entry — the programmer's cells, the fixture sheet, cue values, Spread, the FX editor and palettes:
+`-128..127` on each axis, 0 at the centre of travel (DMX 128), one unit a coarse step, so DMX 1 reads
+-127, 255 reads +127 and 0 reads -128 (Chris's call: exact, with -128 typeable). The fine channel is
+not part of the scale — no surface but aim writes it, as before. `PositionCell` draws a 120px XY pad
+beside Pan · Tilt — a drag writes both axes in one commit — the cell itself reads `-20,+40`, the
+read-out keeps the DMX bytes underneath, and the commit carries **`panCentre` / `tiltCentre`**, which
+`clampCommitToResolution` resolves to **each head's own byte** as the same fraction of its own axis
+range: `128 + value` on every 0–255 axis this rig has, so a batch never splits into two units and a
+head with no degree annotation takes the same scale. The literal on the wire is unchanged — a
+programmer entry, cue row or Look row is still `"pan,tilt"` bytes. `lib/axisDegrees.ts` is no longer
+for display or entry: it stays for the Stage view, aim (*Aim…* is offered where both axes annotate,
+`sheetRows`' `aimable`) and `positionOnScale`'s one read of a palette stored in degrees.
 
 **Widths by content** (D17): `w-72` for level, position, text and address (the busk endpoint editors'
 two fields plus a gutter, up from `w-64`), `w-64` for the setting and option lists and `w-[352px]`

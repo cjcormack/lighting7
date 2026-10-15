@@ -82,7 +82,7 @@ export interface TemplateSheetProps {
  * family dividers; this draws the columns and the bar.
  *
  * - **Holds** is a read-out. **Value** reads the template's own grammar in one line — the swatch
- *   and `#FF9D4A · Extract white`, `50%`, `270° / 135°` for a generic value; *4 heads · per
+ *   and `#FF9D4A · Extract white`, `50%`, `-20 / +10` (a position, centre-relative) for a generic value; *4 heads · per
  *   fixture*; the effect and its speed — read from `rows ?? []`, since an effect template's empty
  *   list is omitted on the wire. On a **generic value** template it is `TemplateValueCell` (session
  *   3, D6): the editor's own family controls, `PUT {rows}` through the lifted rows builder, the

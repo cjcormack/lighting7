@@ -32,6 +32,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v28: centre-relative positions. A palette's position row may say `pos:<pan>,<tilt>` —
+    // centre-relative coarse DMX, -128..127 about DMX 128 (venue-visit plan D3) — beside the `deg:`
+    // travel degrees every earlier row holds. No field moved (`TemplateRowJson.value` is a string),
+    // but its meaning did: a v27 reader parses a `pos:` row as no intent and runs every new position
+    // palette as nothing. `minReader` stays at **5** — a `deg:` row still resolves as angles. See
+    // `docs/sync-engineering.md` §"Version 28 — centre-relative positions".
+    //
     // v27: venue parks. A venue's `parkedChannels/` were already in its versions; from v27 a show on a
     // venue **inherits** its pinned version's parks, overlaid by its own (a re-park at another value),
     // and gains `showParkReleases/{uuid}.json`, the venue parks it releases for its run, keyed by
@@ -233,7 +240,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 27,
+    val formatVersion: Int = 28,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -419,7 +426,10 @@ data class TemplateRowJson(
     val targetType: String,
     val targetKey: String,
     val propertyName: String,
-    /** A `TemplateIntent` in serialised form — `#FF9D4A;policy=extract`, `pct:75`, `deg:45,12.5`. */
+    /**
+     * A `TemplateIntent` in serialised form — `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (v28; a
+     * centre-relative position), or the `deg:45,12.5` travel degrees a row written before v28 holds.
+     */
     val value: String,
     val sortOrder: Int = 0,
 )

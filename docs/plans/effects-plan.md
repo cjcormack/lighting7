@@ -231,7 +231,8 @@ between them — and the **target** resolves it per head, which is what no outpu
 
 - **Palette Steps** (`category` by the palettes' family). Parameters: `palettes`, a list of value
   palette references (`tmpl:{uuid}`, generic, one family), and `fadeRatio` as Colour Cycle's. The
-  target resolves each step's palette for its head through `TemplateResolver` — degrees to that head's
+  target resolves each step's palette for its head through `TemplateResolver` — a position, whether
+  centre-relative (`pos:`, venue-visit plan D3) or stored in degrees (`deg:`, P3), to that head's own
   pan and tilt, a beam role to its range — and blends between the two by the property's own rule. A
   colour target resolves per head too, so a wheel-less RGBW head and an RGB one each get their own.
 - **Slot Steps** (`category: beam`, a setting). Parameters: `slots`, a list of option names, and no
@@ -399,7 +400,8 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   the two built-ins.
 - Editor parameter types: a palette list (the colour list's picker, any family, generic value palettes
   only) and a slot list (the target's setting options; on an effect palette, typed names).
-- **Tests:** two position palettes in degrees land on each head's own pan and tilt; Slot Steps of
+- **Tests:** two position palettes land on each head's own pan and tilt — one centre-relative
+  (`pos:`) and one stored in degrees (`deg:`), since `TemplateResolver` resolves both; Slot Steps of
   *Gobo 3, Gobo 5* lands each head's own levels; a head without *Gobo 5* holds underneath on that step;
   Bounce runs the steps back.
 - **Docs:** `fx-engineering.md`, `fixtures-engineering.md` (settings as effect targets).

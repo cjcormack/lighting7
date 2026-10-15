@@ -617,8 +617,9 @@ write, never a raw channel:
 - **A subset of members** sends one fixture-targeted op per member, each carrying the group as
   `sourceGroup` (`validateSourceGroup` drops it unless the group really contains the fixture), so
   Record can still tell the values came through the group.
-- A position is resolved per member from the operator's degrees, and stays one group op only where
-  every member lands on the same bytes; a colour head's level with no dimmer scales each member's
+- A position is resolved per member from the operator's centre-relative value (venue-visit plan D3:
+  the same fraction of each member's own travel), and stays one group op only where every member
+  lands on the same bytes; a colour head's level with no dimmer scales each member's
   own colour, so it is always per member.
 
 The rows a group offers are the properties every picked member has, matched by name and type — the

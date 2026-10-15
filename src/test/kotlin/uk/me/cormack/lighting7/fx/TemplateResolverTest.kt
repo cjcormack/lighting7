@@ -348,10 +348,55 @@ class TemplateResolverTest {
     // ─── Position ───────────────────────────────────────────────────────
 
     @Test
+    fun `a centre-relative position is the same fraction of travel on every head`() {
+        // D3: `pos:` is coarse DMX about the centre of travel, so a generic palette lands on the
+        // same bytes on two heads whose tilt ranges differ — the opposite of the degree arm below.
+        val intent = TemplateIntent.Position(-20.0, 40.0)
+        val onMover = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+            TemplateResolver.resolve(mover(), "position", intent, media = null).value,
+        )
+        val onMac = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+            TemplateResolver.resolve(mac(), "position", intent, media = null).value,
+        )
+        assertEquals(108u.toUByte(), onMover.pan, "128 - 20")
+        assertEquals(168u.toUByte(), onMover.tilt, "128 + 40")
+        assertEquals(onMover, onMac)
+    }
+
+    @Test
+    fun `the centre scale meets both ends of travel exactly`() {
+        fun on(pan: Double, tilt: Double) = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+            TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(pan, tilt), media = null).value,
+        )
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 128u), on(0.0, 0.0), "0 is DMX 128")
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(0u, 255u), on(-128.0, 127.0))
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(1u, 129u), on(-127.0, 1.0), "one unit a step")
+    }
+
+    @Test
+    fun `a centre-relative value past the scale is clamped and reported in the scale`() {
+        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(200.0, 0.0), media = null)
+        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value).pan)
+        val note = assertIs<TemplateResolver.Note.Clamped>(r.note)
+        assertEquals("pan +127", note.to)
+    }
+
+    @Test
+    fun `centreIntentOf is the exact inverse of the centre arm`() {
+        for (pan in listOf(0, 1, 64, 127, 128, 200, 255)) {
+            val bytes = CueAssignmentResolver.PropertyValue.Position(pan.toUByte(), (255 - pan).toUByte())
+            val intent = assertNotNull(TemplateResolver.centreIntentOf(mover(), bytes))
+            assertEquals("pos:${pan - 128},${127 - pan}", intent.serialize())
+            assertEquals(bytes, TemplateResolver.resolve(mover(), "position", intent, media = null).value)
+        }
+        assertNull(TemplateResolver.centreIntentOf(hex(), CueAssignmentResolver.PropertyValue.Position(1u, 1u)))
+    }
+
+    @Test
     fun `degrees resolve through each head's own annotated range`() {
-        // The mover's pan is 0–540° and its tilt 0–270°, so the same degrees land on *different*
-        // DMX values per axis — which is the whole reason a template stores degrees rather than DMX.
-        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(270.0, 135.0), media = null)
+        // Stored `deg:` rows keep resolving as angles (venue-visit plan P3). The mover's pan is
+        // 0–540° and its tilt 0–270°, so the same degrees land on *different* DMX values per axis.
+        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(270.0, 135.0, PositionUnit.DEGREES), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
         assertEquals(128u.toUByte(), value.pan, "half of 540°")
         assertEquals(128u.toUByte(), value.tilt, "half of 270°")
@@ -364,10 +409,10 @@ class TemplateResolverTest {
         // A MAC 250 tilts 0–257°, a Shehds 0–270°. 128° is past the middle of one and short of the
         // other, and a template that stored DMX could not express the difference at all.
         val onMover = assertIs<CueAssignmentResolver.PropertyValue.Position>(
-            TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(90.0, 128.0), media = null).value,
+            TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(90.0, 128.0, PositionUnit.DEGREES), media = null).value,
         )
         val onMac = assertIs<CueAssignmentResolver.PropertyValue.Position>(
-            TemplateResolver.resolve(mac(), "position", TemplateIntent.Position(90.0, 128.0), media = null).value,
+            TemplateResolver.resolve(mac(), "position", TemplateIntent.Position(90.0, 128.0, PositionUnit.DEGREES), media = null).value,
         )
         assertEquals(onMover.pan, onMac.pan, "both pan 0–540°, so pan agrees")
         assertTrue(onMover.tilt != onMac.tilt, "but the tilt ranges differ, so the DMX must too")
@@ -377,7 +422,7 @@ class TemplateResolverTest {
     fun `out of range degrees are clamped and the clamp is reported`() {
         // Reported, not silent: an operator pointing a template at a head that cannot reach the spot
         // needs to know it is aimed somewhere else, which is exactly what the panel shows.
-        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(700.0, 135.0), media = null)
+        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(700.0, 135.0, PositionUnit.DEGREES), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
         assertEquals(255u.toUByte(), value.pan)
         val note = assertIs<TemplateResolver.Note.Clamped>(r.note)
@@ -386,9 +431,11 @@ class TemplateResolverTest {
 
     @Test
     fun `a fixed head takes no position at all`() {
-        val r = TemplateResolver.resolve(hex(), "position", TemplateIntent.Position(45.0, 12.0), media = null)
-        assertNull(r.value)
-        assertIs<TemplateResolver.Note.Unsupported>(r.note)
+        for (unit in PositionUnit.entries) {
+            val r = TemplateResolver.resolve(hex(), "position", TemplateIntent.Position(45.0, 12.0, unit), media = null)
+            assertNull(r.value)
+            assertIs<TemplateResolver.Note.Unsupported>(r.note)
+        }
     }
 
     // ─── Beam ───────────────────────────────────────────────────────────

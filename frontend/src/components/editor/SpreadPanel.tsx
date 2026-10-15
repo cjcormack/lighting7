@@ -38,6 +38,7 @@ import { EditorSurface } from './EditorSurface'
 import { rawValues, spreadDurations, spreadFractions, walkAddresses } from './spreadPlans'
 import { useEditorKeyboard } from './useEditorKeyboard'
 import { useLivePush } from './useLivePush'
+import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positionScale'
 
 /**
  * **Spread** — one panel, four plan kinds, every host (editor-kit plan D2–D7; `Spread.dc.html` is
@@ -1245,7 +1246,7 @@ function endpointLabel(endpoint: SpreadEndpoint, templates: readonly TemplateSum
     case 'level':
       return String(endpoint.value)
     case 'position':
-      return `${endpoint.panDeg}° / ${endpoint.tiltDeg}°`
+      return `${formatCentre(endpoint.pan)} / ${formatCentre(endpoint.tilt)}`
   }
 }
 
@@ -1399,15 +1400,18 @@ function NumericEndpoint({
 }) {
   const label = which === 'from' ? 'From' : 'To'
   if (kind === 'position') {
-    const pan = endpoint.kind === 'position' ? endpoint.panDeg : 0
-    const tilt = endpoint.kind === 'position' ? endpoint.tiltDeg : 0
+    // Centre-relative (venue-visit plan D3): -128..127 with 0 the centre of travel on every head.
+    const pan = endpoint.kind === 'position' ? endpoint.pan : 0
+    const tilt = endpoint.kind === 'position' ? endpoint.tilt : 0
+    const set = (next: { pan: number; tilt: number }) =>
+      onChange({ kind: 'position', pan: clampCentre(next.pan), tilt: clampCentre(next.tilt), unit: 'centre' })
     return (
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <EditorLabel>{label}</EditorLabel>
         <div className="flex items-center gap-1">
-          <EditorField label={`${label} pan, degrees`} unit="°" value={pan} onCommit={(next) => onChange({ kind: 'position', panDeg: next, tiltDeg: tilt })} />
+          <EditorField label={`${label} pan`} value={pan} min={CENTRE_MIN} max={CENTRE_MAX} onCommit={(next) => set({ pan: next, tilt })} />
           <span className="text-[10px] text-muted-foreground">/</span>
-          <EditorField label={`${label} tilt, degrees`} unit="°" value={tilt} onCommit={(next) => onChange({ kind: 'position', panDeg: pan, tiltDeg: next })} />
+          <EditorField label={`${label} tilt`} value={tilt} min={CENTRE_MIN} max={CENTRE_MAX} onCommit={(next) => set({ pan, tilt: next })} />
         </div>
       </div>
     )

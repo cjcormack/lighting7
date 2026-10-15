@@ -212,7 +212,7 @@ describe('the request', () => {
     fireEvent.click(radio('Family', 'Position'))
     fireEvent.click(screen.getByRole('button', { name: 'Swap From and To' }))
     apply()
-    expect(lastRequest()).toMatchObject({ from: 'deg:300,135', to: 'deg:240,135' })
+    expect(lastRequest()).toMatchObject({ from: 'pos:16,0', to: 'pos:-16,0' })
   })
 
   it('sends nothing under an empty selection, and toasts as the strip does', () => {

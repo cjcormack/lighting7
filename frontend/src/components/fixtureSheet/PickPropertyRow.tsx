@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { computeAppearanceCss, computeCombinedCss, perceptualBrightness, SWATCH_FLOOR } from '@/lib/colourMath'
-import { dmxToDegrees } from '@/lib/axisDegrees'
+import { dmxToCentre, formatCentre } from '@/lib/positionScale'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { colourFactor } from '@/hooks/useNormalizedIntensity'
 import { resolveSettingOption } from '@/hooks/usePropertyValues'
@@ -397,15 +397,10 @@ function ColourPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: Hea
 
 const norm = (byte: number, min: number, max: number) => (byte - min) / Math.max(1, max - min)
 
-/** An axis over the heads: `90°`, or `10°–90°` — each head in its own degrees where they all annotate them. */
-function rangeText(bytes: readonly number[], sliders: readonly (SliderPropertyDescriptor | undefined)[], degrees: boolean): string {
-  const degs = degrees ? bytes.map((b, i) => (sliders[i] ? dmxToDegrees(b, sliders[i]) : null)) : []
-  if (degrees && degs.every((d): d is number => d != null)) {
-    const { low, high } = lowHigh(degs.map(Math.round))
-    return low === high ? `${low}°` : `${low}°–${high}°`
-  }
-  const { low, high } = lowHigh(bytes)
-  return low === high ? String(low) : `${low}–${high}`
+/** An axis over the heads, centre-relative (D3): `+12`, or `-20–+12` across heads that differ. */
+function rangeText(bytes: readonly number[], ranges: readonly { min: number; max: number }[]): string {
+  const { low, high } = lowHigh(bytes.map((b, i) => dmxToCentre(b, ranges[i] ?? { min: 0, max: 255 })))
+  return low === high ? formatCentre(low) : `${formatCentre(low)}–${formatCentre(high)}`
 }
 
 function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: HeadsOf<'position'>; write: PickWrite }) {
@@ -416,14 +411,10 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
   const values = useChannelValues(refs)
   const pans = heads.map((_, i) => values[i * 2] ?? 0)
   const tilts = heads.map((_, i) => values[i * 2 + 1] ?? 0)
-  // Degrees only where every picked head annotates both axes; a typed degree is resolved per head.
-  const degrees = heads.every((h) => h.row.degrees)
   const lead = heads[0].row.resolution
   const targets = useMemo(() => heads.map((h) => ({ key: h.key, resolution: h.row.resolution })), [heads])
   const write1 = (commit: Extract<CellCommit, { kind: 'position' }> | ((r: PositionResolution) => Extract<CellCommit, { kind: 'position' }>), typed: boolean) =>
     writePickPosition(write, targets, commit, typed ? getProgrammerFadeMs() : undefined)
-  const panDeg = degrees && lead.panProperty ? dmxToDegrees(pans[0], lead.panProperty) : null
-  const tiltDeg = degrees && lead.tiltProperty ? dmxToDegrees(tilts[0], lead.tiltProperty) : null
   const mixed = new Set(pans).size > 1 || new Set(tilts).size > 1
   return (
     <PickFrame
@@ -472,10 +463,8 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
             <AxisControl
               label="Pan"
               byte={pans[0]}
-              deg={panDeg}
               min={lead.panMin}
               max={lead.panMax}
-              slider={lead.panProperty}
               readOnly={readOnly}
               onCommit={(c, typed) => write1(c, typed)}
               axis="pan"
@@ -483,10 +472,8 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
             <AxisControl
               label="Tilt"
               byte={tilts[0]}
-              deg={tiltDeg}
               min={lead.tiltMin}
               max={lead.tiltMax}
-              slider={lead.tiltProperty}
               readOnly={readOnly}
               onCommit={(c, typed) => write1(c, typed)}
               axis="tilt"
@@ -497,11 +484,11 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
           <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
             <span>
               <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
-              {rangeText(pans, heads.map((h) => h.row.resolution.panProperty), degrees)}
+              {rangeText(pans, heads.map((h) => ({ min: h.row.resolution.panMin, max: h.row.resolution.panMax })))}
             </span>
             <span>
               <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
-              {rangeText(tilts, heads.map((h) => h.row.resolution.tiltProperty), degrees)}
+              {rangeText(tilts, heads.map((h) => ({ min: h.row.resolution.tiltMin, max: h.row.resolution.tiltMax })))}
             </span>
           </div>
         )}

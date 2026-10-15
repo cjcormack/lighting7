@@ -276,7 +276,7 @@ describe('FixtureSheet — writes', () => {
     expect(set).toHaveBeenCalledWith('fixture', 'spot-3', 'dimmer', '128', 2000, undefined)
   })
 
-  it('writes Position as one setPosition in degrees — never channels.update', () => {
+  it('writes Position as one setPosition centre-relative — never channels.update', () => {
     const setPosition = vi.spyOn(lightingApi.programmer, 'setPosition')
     const update = vi.fn()
     ;(lightingApi as unknown as { channels: Record<string, unknown> }).channels = {
@@ -285,16 +285,17 @@ describe('FixtureSheet — writes', () => {
     }
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     fireEvent.click(within(row('position')).getByRole('button', { name: 'Open the position editor' }))
-    const pan = within(row('position')).getByLabelText('Pan degrees') as HTMLInputElement
-    expect(pan.value).toBe('271')
-    fireEvent.change(pan, { target: { value: '270' } })
+    const pan = within(row('position')).getByLabelText('Pan value') as HTMLInputElement
+    // The wire's byte 128 reads as the centre of travel (venue-visit plan D3).
+    expect(pan.value).toBe('0')
+    fireEvent.change(pan, { target: { value: '-20' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
-    // 270° of a 540° pan is byte 128; tilt is kept from the wire.
-    expect(setPosition).toHaveBeenCalledWith('fixture', 'spot-3', 128, 64, 0, undefined)
+    // -20 is byte 108 on any 0–255 pan; tilt is kept from the wire.
+    expect(setPosition).toHaveBeenCalledWith('fixture', 'spot-3', 108, 64, 0, undefined)
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('types degrees on a head whose position descriptor sits over annotated axes', () => {
+  it('types centre-relative on a head whose position descriptor sits over annotated axes', () => {
     // The Robe ColorSpot 575's shape: a `position` descriptor beside pan 0–530° and tilt 0–280°.
     const robe = makeFixture(
       'robe-1',
@@ -316,10 +317,10 @@ describe('FixtureSheet — writes', () => {
     }
     render(<FixtureSheet fixture={robe} host="popup" />)
     fireEvent.click(within(row('position')).getByRole('button', { name: 'Open the position editor' }))
-    const pan = within(row('position')).getByLabelText('Pan degrees') as HTMLInputElement
-    fireEvent.change(pan, { target: { value: '265' } })
+    const pan = within(row('position')).getByLabelText('Pan value') as HTMLInputElement
+    fireEvent.change(pan, { target: { value: '0' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
-    // 265° of a 530° pan is byte 128, not 255 — the descriptor's entry, never the axes.
+    // 0 is byte 128, through the descriptor's entry, never the axes.
     expect(setPosition).toHaveBeenCalledWith('fixture', 'robe-1', 128, 0, 0, undefined)
     expect(update).not.toHaveBeenCalled()
   })
