@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import type { CueStack } from '../../api/cueStacksApi'
 import type { PromptBookDetails, Region } from '../../api/promptBooksApi'
 import { regionsOverlap, type FlatCue } from './desync'
-import { nearestAnchoredCue, orderedCueIdsForInsert } from './geometry'
+import { nearestAnchoredCue, orderedEntryIdsForInsert } from './geometry'
 import type { ScriptViewerHandle } from '../../components/promptbook/ScriptViewer'
 import type { NewCueStackChoice } from '../../components/promptbook/CueAnchorPickerSheet'
 import {
@@ -246,11 +246,12 @@ export function useBookAnchors({
         // reorder only when it differs from the natural append the create already performed.
         if (stack.kind === 'existing') {
           const existing = (stacks ?? []).find((s) => s.id === stackId)
-          if (existing) {
-            const cueIds = orderedCueIdsForInsert(existing, anchorByCue, region, newCue.id)
-            const appended = [...existing.cues.map((c) => c.id), newCue.id]
-            const isAppend = cueIds.length === appended.length && cueIds.every((id, i) => id === appended[i])
-            if (!isAppend) await reorderCues({ projectId, stackId, cueIds }).unwrap()
+          // The new cue's own entry is what moves; a desk that predates entries sends none.
+          if (existing && newCue.entryId != null) {
+            const entryIds = orderedEntryIdsForInsert(existing, anchorByCue, region, newCue.entryId)
+            const appended = [...existing.cues.map((c) => c.entryId), newCue.entryId]
+            const isAppend = entryIds.length === appended.length && entryIds.every((id, i) => id === appended[i])
+            if (!isAppend) await reorderCues({ projectId, stackId, entryIds }).unwrap()
           }
         }
         setAnchorPicker(null)

@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fx.buildCombinedCueLayerRows
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.entryInStack
 
 /**
  * "What would this cue look like?" — composes a cue's Layer 4 contribution against what is
@@ -86,10 +87,10 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
     val applyData = transaction(state.database) {
         val cue = DaoCue.findById(cueId)
             ?: throw IllegalArgumentException("Cue not found: $cueId")
-        if (cue.cueStack.id.value != stackId) {
-            throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
-        }
-        buildCueApplyData(cue)
+        // The caller names the stack (cue model plan P7).
+        val entry = entryInStack(stackId, cueId)
+            ?: throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
+        buildCueApplyData(cue, entry)
     }
 
     // What the GO leaves alone: every published cue that isn't this stack's — see

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -63,9 +64,8 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         }
         val cue = DaoCue.new {
             this.project = project
-            name = "cue"; cueStack = stack; sortOrder = 0
-            cueType = CueType.STANDARD.name
-        }
+            name = "cue"
+        }.inStack(stack, sortOrder = 0)
         DaoCuePropertyAssignment.new {
             this.cue = cue
             targetType = "fixture"; targetKey = fixtureKey
@@ -202,9 +202,8 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val next = transaction(state.database) {
             DaoCue.new {
                 this.project = DaoProject.findById(projectId)!!
-                name = "next"; cueStack = DaoCueStack.findById(stackId)!!; sortOrder = 1
-                cueType = CueType.STANDARD.name
-            }.id.value
+                name = "next"
+            }.inStack(DaoCueStack.findById(stackId)!!, sortOrder = 1).id.value
         }
         state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
         state.show.cueStackManager.runState.setStandby(state, stackId, next)

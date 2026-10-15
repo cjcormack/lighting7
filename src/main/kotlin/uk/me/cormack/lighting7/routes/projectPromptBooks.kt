@@ -14,7 +14,9 @@ import kotlinx.io.readByteArray
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
@@ -65,10 +67,14 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
             val locations = transaction(state.database) {
                 val book = project.promptBook
                     ?: return@transaction emptyList<CueLocationDto>()
-                book.anchors.mapNotNull { anchor ->
+                val anchors = book.anchors.toList()
+                val cueByEntry = anchorCueIds(anchors)
+                anchors.mapNotNull { anchor ->
                     val earliest = anchor.region.minWithOrNull(compareBy({ it.page }, { it.y }))
                         ?: return@mapNotNull null
-                    CueLocationDto(cueId = anchor.cueId, page = earliest.page, y = earliest.y)
+                    // A location is a cue's: a marker's anchor has none to report.
+                    val cueId = cueByEntry[anchor.entryId] ?: return@mapNotNull null
+                    CueLocationDto(cueId = cueId, page = earliest.page, y = earliest.y)
                 }
             }
             call.respond(locations)
@@ -174,9 +180,13 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 if (cue == null || cue.project.id != project.id) {
                     return@transaction RouteResult.Error(HttpStatusCode.NotFound, "Cue not found")
                 }
+                // An anchor marks an entry (cue model plan D4). This route still names a cue, and
+                // means its one entry until anchors are addressed by entry (P4).
+                val entry = soleEntryOf(cue)
+                    ?: return@transaction RouteResult.Error(HttpStatusCode.Conflict, "Cue is not in exactly one stack")
 
                 val existing = DaoPromptBookAnchor.find {
-                    (DaoPromptBookAnchors.promptBook eq book.id) and (DaoPromptBookAnchors.cue eq cue.id)
+                    (DaoPromptBookAnchors.promptBook eq book.id) and (DaoPromptBookAnchors.entry eq entry.id)
                 }.firstOrNull()
 
                 val anchor = if (existing != null) {
@@ -186,12 +196,12 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 } else {
                     DaoPromptBookAnchor.new {
                         promptBook = book
-                        this.cue = cue
+                        this.entry = entry
                         region = input.region
                         label = input.label
                     }
                 }
-                RouteResult.Ok(anchor.toDto())
+                RouteResult.Ok(anchor.toDto(cue.id.value))
             }
 
             if (result is RouteResult.Ok) state.show.fixtures.promptBookChanged()
@@ -208,9 +218,10 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         ) { project ->
             val found = transaction(state.database) {
                 val book = project.promptBook ?: return@transaction false
+                val entry = soleEntryOfCueId(resource.cueId) ?: return@transaction false
                 val anchor = DaoPromptBookAnchor.find {
                     (DaoPromptBookAnchors.promptBook eq book.id) and
-                        (DaoPromptBookAnchors.cue eq resource.cueId)
+                        (DaoPromptBookAnchors.entry eq entry.id)
                 }.firstOrNull() ?: return@transaction false
                 anchor.delete()
                 true
@@ -402,18 +413,37 @@ private fun validateAnnotationInput(input: AnnotationRequest, pageCount: Int): S
     return checkPromptBookRegion(input.region, pageCount)
 }
 
-private fun DaoPromptBook.toDetails(isCurrentProject: Boolean) = PromptBookDetails(
-    scriptHash = scriptHash,
-    scriptFileName = scriptFileName,
-    pageCount = pageCount,
-    coverPages = coverPages,
-    anchors = anchors.map { it.toDto() },
-    annotations = annotations.map { it.toDto() },
-    canEdit = isCurrentProject,
-)
+private fun DaoPromptBook.toDetails(isCurrentProject: Boolean): PromptBookDetails {
+    val anchors = anchors.toList()
+    val cueByEntry = anchorCueIds(anchors)
+    return PromptBookDetails(
+        scriptHash = scriptHash,
+        scriptFileName = scriptFileName,
+        pageCount = pageCount,
+        coverPages = coverPages,
+        // The book's anchors are cue-keyed on this route (P4): a marker's anchor has no cue to name.
+        anchors = anchors.mapNotNull { anchor -> cueByEntry[anchor.entryId]?.let { anchor.toDto(it) } },
+        annotations = annotations.map { it.toDto() },
+        canEdit = isCurrentProject,
+    )
+}
 
-private fun DaoPromptBookAnchor.toDto() = PromptBookAnchorDto(
+/**
+ * Each anchor's entry's cue, keyed by entry id, in one query rather than an entry load per anchor.
+ * A marker's entry has no cue and is absent.
+ */
+private fun anchorCueIds(anchors: List<DaoPromptBookAnchor>): Map<Int, Int> {
+    val entryIds = anchors.map { it.entryId }.distinct()
+    if (entryIds.isEmpty()) return emptyMap()
+    return DaoCueStackEntries.select(DaoCueStackEntries.id, DaoCueStackEntries.cue)
+        .where { DaoCueStackEntries.id inList entryIds }
+        .mapNotNull { row -> row[DaoCueStackEntries.cue]?.let { row[DaoCueStackEntries.id].value to it.value } }
+        .toMap()
+}
+
+private fun DaoPromptBookAnchor.toDto(cueId: Int) = PromptBookAnchorDto(
     cueId = cueId,
+    entryId = entryId,
     region = region,
     label = label,
 )
@@ -476,6 +506,8 @@ data class PromptBookDetails(
 @Serializable
 data class PromptBookAnchorDto(
     val cueId: Int,
+    /** The stack entry the anchor marks (cue model plan D4); its cue's one entry while P4 holds. */
+    val entryId: Int,
     val region: List<PromptBookRectDto>,
     val label: String? = null,
 )

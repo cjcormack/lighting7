@@ -678,6 +678,8 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     // And through their owners, for a show on a venue: its cues fire venue patches and its cues,
     // stacks and Looks move venue elements, which the two sweeps above (this project's own rows)
     // never reach.
+    // A stack's entries before its cues and itself: plain FKs onto both, with no cascade.
+    project.cueStacks.forEach { stack -> DaoCueStackEntries.deleteWhere { DaoCueStackEntries.stack eq stack.id } }
     project.cues.forEach { cue ->
         deleteCueEvents(cue.id)
         deleteCueScenery(cue.id)

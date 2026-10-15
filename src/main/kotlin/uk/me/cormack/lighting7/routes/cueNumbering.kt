@@ -1,20 +1,18 @@
 package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.dao.entityCache
-import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
-import org.jetbrains.exposed.v1.core.eq
-import uk.me.cormack.lighting7.models.CueType
-import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoCueStackEntries
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.entriesOf
 
 /**
  * Cue-number model shared by the ordering checks, the group-aware sort, and the auto-numbering
  * engine.
  *
- * A cue number is a free-form display label — `sort_order` remains the authoritative playback
- * order. What this file adds is *structure*: a number is read as a group prefix, a dotted
+ * A cue number is a free-form display label — an entry's `ordinal` remains the authoritative
+ * playback order. What this file adds is *structure*: a number is read as a group prefix, a dotted
  * decimal run, and an optional letter suffix. Numbers are only ever compared against others in
  * the same group, so a stack holding `Pre-show 1`, `Pre-show 2`, `T2-1`, `S-1`, `S-2` is in
  * order even though the groups themselves aren't alphabetical.
@@ -26,7 +24,7 @@ import uk.me.cormack.lighting7.models.DaoCues
 
 // ─── Structural parse ──────────────────────────────────────────────────
 
-/** Longest cue number the `cues.cue_number` column will hold. */
+/** Longest cue number the `cue_stack_entries.cue_number` column will hold. */
 internal const val MAX_CUE_NUMBER_LENGTH = 20
 
 /**
@@ -144,7 +142,7 @@ private fun AutoNumberInput.isExplicit(): Boolean = !auto && !number.isNullOrEmp
 /**
  * Derive a display number for every cue that hasn't got an explicit one.
  *
- * [cues] must be the stack's STANDARD cues in `sortOrder`.
+ * [cues] must be the stack's cue entries in playback order.
  *
  * **An auto number stays put while its cue does** (venue-visit plan D11). A cue flagged [keep] —
  * at the same place in the stack as before the change — keeps the auto number it holds, as long as
@@ -332,94 +330,92 @@ private fun decimalLabels(base: String, count: Int, taken: Set<String>): List<St
 
 // ─── Persistence ───────────────────────────────────────────────────────
 
-private fun DaoCue.hasExplicitNumber(): Boolean = !cueNumberAuto && !cueNumber.isNullOrEmpty()
+private fun DaoCueStackEntry.hasExplicitNumber(): Boolean = !cueNumberAuto && !cueNumber.isNullOrEmpty()
 
 /**
  * Push queued entity writes to the database. Needed twice over in this file: so a following
- * `ORDER BY sort_order` sees sort orders written moments earlier, and so the two-pass renumber's
- * clears land before its assignments (otherwise `uq_cue_number_per_stack` sees both at once).
+ * `ORDER BY ordinal` sees ordinals written moments earlier, and so the two-pass renumber's clears
+ * land before its assignments (otherwise `uq_entry_number_per_stack` sees both at once).
  */
-private fun flushPendingCueWrites() {
-    TransactionManager.current().entityCache.flush(listOf(DaoCues))
+private fun flushPendingEntryWrites() {
+    TransactionManager.current().entityCache.flush(listOf(DaoCueStackEntries))
 }
 
 /**
- * Release [number] from any *auto*-numbered sibling in [stack] (other than [exceptCueId]) so an
+ * Release [number] from any *auto*-numbered cue entry in [stack] (other than [exceptEntryId]) so an
  * operator typing an explicit number can always claim it.
  *
  * Without this, typing "2" onto the third of three auto-numbered cues would collide with the
  * auto "2" the position-derived scheme had already handed to its neighbour, and
- * `uq_cue_number_per_stack` would reject the edit. [renumberAutoCues] relabels the loser
+ * `uq_entry_number_per_stack` would reject the edit. [renumberAutoEntries] relabels the loser
  * afterwards. Explicit numbers are never released — a genuine duplicate still gets its 409.
  */
-internal fun releaseAutoNumber(stack: DaoCueStack, number: String?, exceptCueId: Int) {
+internal fun releaseAutoNumber(stack: DaoCueStack, number: String?, exceptEntryId: Int) {
     if (number.isNullOrEmpty()) return
-    val clashes = DaoCue.find { DaoCues.cueStack eq stack.id }.filter {
-        it.id.value != exceptCueId && it.cueNumberAuto && number.equals(it.cueNumber, ignoreCase = true)
+    val clashes = cueEntriesInOrder(stack).filter {
+        it.id.value != exceptEntryId && it.cueNumberAuto && number.equals(it.cueNumber, ignoreCase = true)
     }
     if (clashes.isEmpty()) return
     clashes.forEach { it.cueNumber = null }
-    flushPendingCueWrites()
+    flushPendingEntryWrites()
 }
 
 /**
- * [stack]'s STANDARD cues in playback order. `id` breaks a `sort_order` tie, so two reads of an
- * unchanged stack always agree — which [renumberAutoCues]'s comparison against a [standardCueIds]
- * snapshot depends on.
+ * [stack]'s **cue** entries in playback order, markers left out. `id` breaks an `ordinal` tie, so
+ * two reads of an unchanged stack always agree — which [renumberAutoEntries]'s comparison against
+ * a [cueEntryIds] snapshot depends on.
  */
-private fun standardCuesInOrder(stack: DaoCueStack): List<DaoCue> =
-    DaoCue.find { DaoCues.cueStack eq stack.id }
-        .orderBy(DaoCues.sortOrder to SortOrder.ASC, DaoCues.id to SortOrder.ASC)
-        .filter { it.cueType == CueType.STANDARD.name }
+internal fun cueEntriesInOrder(stack: DaoCueStack): List<DaoCueStackEntry> = entriesOf(stack).filter { !it.isMarker }
 
 /**
- * The ids of [stack]'s STANDARD cues in playback order: the snapshot a handler takes **before**
- * it changes the stack's list, to hand [renumberAutoCues] afterwards.
+ * The ids of [stack]'s cue entries in playback order: the snapshot a handler takes **before** it
+ * changes the stack's list, to hand [renumberAutoEntries] afterwards.
  */
-internal fun standardCueIds(stack: DaoCueStack): List<Int> {
-    flushPendingCueWrites()
-    return standardCuesInOrder(stack).map { it.id.value }
+internal fun cueEntryIds(stack: DaoCueStack): List<Int> {
+    flushPendingEntryWrites()
+    return cueEntriesInOrder(stack).map { it.id.value }
 }
 
 /**
- * Recompute [stack]'s auto cue numbers in place. Explicit numbers are never touched. Call this
- * from anything that changes the stack's membership, order or numbers.
+ * Recompute [stack]'s auto cue numbers in place, on its entries. Explicit numbers are never
+ * touched. Call this from anything that changes the stack's membership, order or numbers — and,
+ * where an entry leaves a stack for another, on the stack it left as well as the one it joined.
  *
- * [before] is [standardCueIds] as it stood before the change (venue-visit plan D11). A cue still
- * at the same place in it keeps the auto number it holds; every other auto cue is labelled again
- * from its neighbours, so the cues after an insert, a delete or a move follow their new positions
- * while the ones before it stay put. A handler that moves nothing — a number edit — passes the
- * order as it stands, so no auto cue moves but the one whose number was taken or cleared. An empty
- * list relabels every auto cue from scratch.
+ * [before] is [cueEntryIds] as it stood before the change (venue-visit plan D11). An entry still
+ * at the same place in it keeps the auto number it holds; every other auto entry is labelled again
+ * from its neighbours, so the entries after an insert, a delete or a move follow their new
+ * positions while the ones before it stay put. A handler that moves nothing — a number edit —
+ * passes the order as it stands, so no auto entry moves but the one whose number was taken or
+ * cleared. An empty list relabels every auto entry from scratch.
  *
- * Writes in two passes with a flush between them: `uq_cue_number_per_stack` would otherwise
+ * Writes in two passes with a flush between them: `uq_entry_number_per_stack` would otherwise
  * reject the transient duplicate you get when two auto numbers swap places.
  */
-internal fun renumberAutoCues(stack: DaoCueStack, before: List<Int>) {
-    // Callers have almost always just written sort orders; the ORDER BY below has to see them.
-    flushPendingCueWrites()
+internal fun renumberAutoEntries(stack: DaoCueStack, before: List<Int>) {
+    // Callers have almost always just written ordinals; the ORDER BY below has to see them.
+    flushPendingEntryWrites()
 
-    val standard = standardCuesInOrder(stack)
-    if (standard.isEmpty()) return
+    val entries = cueEntriesInOrder(stack)
+    if (entries.isEmpty()) return
 
     val labels = computeAutoCueNumbers(
-        standard.mapIndexed { index, cue ->
-            AutoNumberInput(cue.cueNumber, cue.cueNumberAuto, keep = before.getOrNull(index) == cue.id.value)
+        entries.mapIndexed { index, entry ->
+            AutoNumberInput(entry.cueNumber, entry.cueNumberAuto, keep = before.getOrNull(index) == entry.id.value)
         },
     )
-    val targets = standard.withIndex().filterNot { (_, cue) -> cue.hasExplicitNumber() }
-    if (targets.none { (index, cue) -> cue.cueNumber != labels[index] }) return
+    val targets = entries.withIndex().filterNot { (_, entry) -> entry.hasExplicitNumber() }
+    if (targets.none { (index, entry) -> entry.cueNumber != labels[index] }) return
 
     // Pass 1: release every number that is about to change, so pass 2 can reuse any of them.
-    for ((index, cue) in targets) {
-        if (cue.cueNumber != labels[index]) cue.cueNumber = null
+    for ((index, entry) in targets) {
+        if (entry.cueNumber != labels[index]) entry.cueNumber = null
     }
-    flushPendingCueWrites()
+    flushPendingEntryWrites()
 
     // Pass 2: assign.
-    for ((index, cue) in targets) {
+    for ((index, entry) in targets) {
         val label = labels[index]
-        cue.cueNumber = label
-        cue.cueNumberAuto = label != null
+        entry.cueNumber = label
+        entry.cueNumberAuto = label != null
     }
 }

@@ -258,7 +258,7 @@ class CueNumberingTest {
     fun `an auto number never blocks another auto number`() {
         // The two autos currently hold "2" and "1"; they swap. Only *explicit* numbers are
         // reserved, so nothing blocks the reassignment. This is the case that would trip
-        // uq_cue_number_per_stack without the two-pass write in renumberAutoCues.
+        // uq_entry_number_per_stack without the two-pass write in renumberAutoEntries.
         assertEquals(
             mapOf(0 to "1", 1 to "2", 2 to "3"),
             auto(blank(), "2" as String? to true, "1" as String? to true),

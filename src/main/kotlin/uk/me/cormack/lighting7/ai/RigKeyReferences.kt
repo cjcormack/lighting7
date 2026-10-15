@@ -34,6 +34,8 @@ import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.DaoCueStackEntries
 
 /**
  * Where a project's own stored records name a fixture by key or a group by name — cue rows, ad-hoc
@@ -48,8 +50,8 @@ internal object RigKeyReferences {
 
     /** What a rewrite changed: the records to republish and announce. */
     class Touched {
-        /** Cue id → its stack's id, for `republishCueIfLive`. */
-        val cues = LinkedHashMap<Int, Int>()
+        /** Cue id → its entry's stack id (null for a cue in no stack), for `republishCueIfLive`. */
+        val cues = LinkedHashMap<Int, Int?>()
         val looks = LinkedHashSet<UUID>()
         val templates = LinkedHashSet<UUID>()
         var bindings = 0
@@ -150,10 +152,14 @@ internal object RigKeyReferences {
         val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
         if (cues.isNotEmpty()) {
             val ids = cues.keys.toList()
+            // A cue's number and stack are its entry's — its one entry while every cue has one
+            // (cue model plan P4), read for every cue at once.
+            val entryOf = DaoCueStackEntry.find { DaoCueStackEntries.cue inList ids }.toList()
+                .groupBy { it.cueId!! }.mapValues { (_, e) -> e.singleOrNull() }
             fun cueUser(id: Int) = cues.getValue(id).let { cue ->
-                User("CUE", id, cue.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it ${cue.name}" } ?: cue.name)
+                User("CUE", id, entryOf[id]?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it ${cue.name}" } ?: cue.name)
             }
-            fun touch(id: Int) { touched.cues[id] = cues.getValue(id).readValues[DaoCues.cueStack].value }
+            fun touch(id: Int) { touched.cues[id] = entryOf[id]?.stackId }
             DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList ids }.forEach { row ->
                 val cueId = row.readValues[DaoCuePropertyAssignments.cue].value
                 visit(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }

@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 
 /**
  * The armed standby is server-owned: one definition of "next" that GO, the details DTO and the
@@ -50,7 +51,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
     private suspend fun arm(client: HttpClient, stackId: Int, cueId: Int?) =
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
             contentType(ContentType.Application.Json)
-            setBody(SetStandbyRequest(cueId = cueId))
+            setBody(SetStandbyRequest(entryId = cueId?.let { state.entryIdOf(it) }))
         }
 
     private suspend fun advance(client: HttpClient, stackId: Int, direction: String = "FORWARD") =
@@ -123,16 +124,24 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a MARKER cannot be armed`() = testApplication {
+    fun `a marker cannot be armed`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         val stackId = createStack(client, "Act 1")
         createCue(client, "a1", stackId)
-        val marker = createCue(client, "note", stackId, cueType = "MARKER")
+        // A marker is an entry with no cue (cue model plan D12), made on its stack.
+        val marker = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/markers") {
+            contentType(ContentType.Application.Json)
+            setBody(MarkerEntryRequest(label = "note"))
+        }.body<CueStackCueEntry>().entryId
 
         // Same guard `go-to` applies: arming is a deferred GO.
-        assertEquals(HttpStatusCode.BadRequest, arm(client, stackId, marker).status)
+        val resp = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
+            contentType(ContentType.Application.Json)
+            setBody(SetStandbyRequest(entryId = marker))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
     }
 
     @Test

@@ -385,7 +385,7 @@ the model forces:
 Each session is one PR (P1). Sessions 1–3 change no behaviour an operator can see, except that
 pads, slots and `FireCue` run loose from session 2 (D6).
 
-### Session 1 — entries and the migration (backend + frontend)
+### Session 1 — entries and the migration (backend + frontend) — done, `baf05837`
 
 - **The migration** (D5), `state/CueModelMigration.kt`, called from `State.initDatabase`:
   - It runs when `cues` still has `cue_stack_id` (`PRAGMA table_info`). It runs **before**

@@ -132,6 +132,12 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import java.time.Duration
 import uk.me.cormack.lighting7.models.asDuration
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.DaoCueStackEntries
+import uk.me.cormack.lighting7.models.CueStackEntryKind
+import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.routes.renumberAutoEntries
 
 // v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
 // (busk-further plan §3.7). MIN stays at 5: a missing folder reads as an empty rig.
@@ -448,6 +454,8 @@ class ProjectImporter(private val state: State) {
             deleteCueEventsForPatches(project.fixturePatches.map { it.id })
             // And through their owners, for a show on a venue (v24): its cues fire venue patches and
             // its cues, stacks and Looks move venue elements, which the sweeps above never reach.
+            // A stack's entries before its cues and itself: plain FKs onto both, with no cascade.
+            project.cueStacks.forEach { stack -> DaoCueStackEntries.deleteWhere { DaoCueStackEntries.stack eq stack.id } }
             project.cues.forEach { cue ->
                 deleteCueEvents(cue.id)
                 deleteCueScenery(cue.id)
@@ -607,14 +615,15 @@ class ProjectImporter(private val state: State) {
         // The rig after the groups and patches its tiles name (v12).
         importBuskRig(sourceDir, project, groupMap, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project, elementMap)
-        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap)
+        val markerEntries = HashMap<UUID, DaoCueStackEntry>()
+        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, markerEntries)
         importCuePropertyAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, templateMap)
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
-        importPromptBookAnchors(sourceDir, promptBook, cueMap)
+        importPromptBookAnchors(sourceDir, promptBook, cueMap, markerEntries)
         importPromptBookAnnotations(sourceDir, promptBook)
         importCueSlots(sourceDir, project, cueMap, lookMap)
         // Pages after every record a pad can name.
@@ -1191,6 +1200,7 @@ class ProjectImporter(private val state: State) {
         cueStackMap: Map<UUID, DaoCueStack>,
         elementMap: Map<UUID, DaoStageElement>,
         patchMap: Map<UUID, DaoFixturePatch>,
+        markerEntries: MutableMap<UUID, DaoCueStackEntry>,
     ): Map<UUID, DaoCue> {
         // Every cue belongs to a stack now. Legacy archives may carry standalone cues (null
         // cueStackUuid); those land in a project "Unsorted" stack, created once on demand.
@@ -1209,7 +1219,11 @@ class ProjectImporter(private val state: State) {
             stack
         }
 
-        return readDir(dir.resolve("cues")) { json ->
+        // The archive still carries a stack's list inside its cue files (cue model plan P4, §3.9 is
+        // session 3's): each cue becomes one entry in its stack, and a MARKER cue a marker entry —
+        // not a cue — under the cue's uuid, which is how the exporter writes one. Ordinals are the
+        // archive's sort orders, ties broken by id; numbers and follow are the entry's.
+        val cues = readDir(dir.resolve("cues")) { json ->
         val c = canonicalDecode(CueJson.serializer(), json)
         val uuid = UUID.fromString(c.uuid)
         val stack = c.cueStackUuid?.let {
@@ -1217,21 +1231,35 @@ class ProjectImporter(private val state: State) {
             cueStackMap[stackUuid]
                 ?: throw ImportError.invalidArchive("Cue ${c.uuid} references unknown cue stack $stackUuid")
         } ?: unsorted()
+        if (c.cueType == CueType.MARKER.name) {
+            val marker = DaoCueStackEntry.new {
+                this.stack = stack
+                kind = CueStackEntryKind.MARKER.name
+                label = c.name.take(255)
+                ordinal = c.sortOrder.toDouble()
+                this.uuid = uuid
+            }
+            markerEntries[uuid] = marker
+            return@readDir null
+        }
         val dao = DaoCue.new {
             name = c.name
             this.project = project
-            cueStack = stack
-            sortOrder = c.sortOrder
-            autoAdvance = c.autoAdvance
-            autoAdvanceDelay = c.autoAdvanceDelayMs.asDuration()
             fadeDuration = c.fadeDurationMs.asDuration()
             fadeCurve = c.fadeCurve
-            cueNumber = c.cueNumber
-            cueNumberAuto = c.cueNumberAuto
             notes = c.notes
-            cueType = c.cueType
             stomp = c.stomp
             this.uuid = uuid
+        }
+        DaoCueStackEntry.new {
+            this.stack = stack
+            this.cue = dao
+            kind = CueStackEntryKind.CUE.name
+            ordinal = c.sortOrder.toDouble()
+            cueNumber = c.cueNumber
+            cueNumberAuto = c.cueNumberAuto
+            autoAdvance = c.autoAdvance
+            autoAdvanceDelay = c.autoAdvanceDelayMs.asDuration()
         }
         importScenery(c.scenery, elementMap, "Cue ${c.uuid}") { element, s ->
             DaoCueSceneryRow.new {
@@ -1246,6 +1274,10 @@ class ProjectImporter(private val state: State) {
         importCueEvents(c.events, patchMap, dao, "Cue ${c.uuid}")
         uuid to dao
         }
+        // A cue that lands in "Unsorted" (a pre-stack archive's) arrives with no number, and takes
+        // one from where it landed, as `add-cue` would number it.
+        unsortedStack?.let { renumberAutoEntries(it, emptyList()) }
+        return cues
     }
 
     private fun importCuePropertyAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
@@ -1763,13 +1795,16 @@ class ProjectImporter(private val state: State) {
         dir: Path,
         promptBook: DaoPromptBook?,
         cueMap: Map<UUID, DaoCue>,
+        markerEntries: Map<UUID, DaoCueStackEntry>,
     ) {
         readDir(dir.resolve("promptBookAnchors")) { json ->
             val a = canonicalDecode(PromptBookAnchorJson.serializer(), json)
             val book = promptBook
                 ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} has no prompt book to attach to")
             val cueUuid = UUID.fromString(a.cueUuid)
-            val cue = cueMap[cueUuid]
+            // An anchor marks an entry (cue model plan D4): its cue's one entry, or the marker entry
+            // the archive names by the uuid its MARKER cue file carried.
+            val entry = cueMap[cueUuid]?.let { soleEntryOf(it) } ?: markerEntries[cueUuid]
                 ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} references unknown cue $cueUuid")
             checkPromptBookRegion(a.region, book.pageCount)?.let {
                 throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} has an invalid region: $it")
@@ -1777,7 +1812,7 @@ class ProjectImporter(private val state: State) {
             val uuid = UUID.fromString(a.uuid)
             val dao = DaoPromptBookAnchor.new {
                 this.promptBook = book
-                this.cue = cue
+                this.entry = entry
                 region = a.region
                 label = a.label
                 this.uuid = uuid
@@ -1813,13 +1848,14 @@ class ProjectImporter(private val state: State) {
      * Returns a UUID-keyed map of whatever [block] produces. No-op (empty map) if [dir] doesn't
      * exist — every section is optional, so an export with zero scripts produces no `scripts/`.
      */
-    private fun <T> readDir(dir: Path, block: (String) -> Pair<UUID, T>): Map<UUID, T> {
+    /** Read every record file under [dir]; a null answer from [block] reads the file but keeps nothing. */
+    private fun <T> readDir(dir: Path, block: (String) -> Pair<UUID, T>?): Map<UUID, T> {
         if (!dir.exists() || !dir.isDirectory()) return emptyMap()
         val out = mutableMapOf<UUID, T>()
         Files.list(dir).use { stream ->
             stream.filter { it.fileName.toString().endsWith(".json") && !it.fileName.toString().endsWith(".meta.json") }
                 .forEach { file ->
-                    val (uuid, value) = block(Files.readString(file))
+                    val (uuid, value) = block(Files.readString(file)) ?: return@forEach
                     out[uuid] = value
                 }
         }

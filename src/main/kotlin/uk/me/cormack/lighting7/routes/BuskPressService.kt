@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 /**
  * **A busk pad press, decided once.** The busk view's `POST /busk/pads/{padId}/press` and a
@@ -88,7 +89,11 @@ internal object BuskPressService {
                 )
             }
             BuskPadKind.LOOK -> PressRecord.Look(pad.look!!.toggleSource(state.show.fixtures))
-            BuskPadKind.CUE -> pad.cue!!.let { c -> PressRecord.Cue(c.id.value, c.cueStack.id.value) }
+            // A cue press GOes in its cue's stack: its one entry's until the cue model plan's
+            // session 2 holds it loose, when `PressRecord.Cue` loses its stack.
+            BuskPadKind.CUE -> pad.cue!!.let { c ->
+                PressRecord.Cue(c.id.value, soleEntryOf(c)?.stackId ?: return null)
+            }
             // A malformed pad is absent everywhere it is read, this route included.
             null -> return null
         }
@@ -119,7 +124,7 @@ internal object BuskPressService {
                 .filter { it.kind == BuskPadKind.CUE }
                 .map { it.cue!! }
                 .filter { it.id.value != ownCue }
-                .map { it.id.value to it.cueStack.id.value }
+                .mapNotNull { c -> soleEntryOf(c)?.let { c.id.value to it.stackId } }
                 .distinct(),
         )
     }

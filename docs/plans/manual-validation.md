@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
@@ -95,6 +96,42 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-1`
+
+**What it proves**: *the list moves onto entries without moving anything an operator sees* —
+venue-visit R1.1, cue model plan session 1 (D5, §9): `state/CueModelMigration.kt` turns each cue's
+place in its stack into a `cue_stack_entries` row and each MARKER cue into a marker entry, re-points
+the prompt book's anchors, and rebuilds `cues` and `prompt_book_anchors`.
+
+**Why it is here**: `CueModelMigrationTest` runs it over a frozen copy of the old schema seeded with
+the test fixture. Nothing in review ran it over the desk's own database — its real stacks, gaps in
+sort orders, markers and a marked-up prompt book — and it runs once, at the first start, on the only
+database there is.
+
+**Test**, on a **copy** of the desk's database first (`database.path` in a scratch `local.conf`
+pointing at the copy, the desk itself stopped or on another port):
+
+1. **Before.** On the desk as it is, note for two or three real stacks (Sleeping Beauty's acts, one
+   with a marker) each row's number, name and follow, and screenshot two prompt-book pages with
+   anchors on them.
+2. **Migrate the copy.** Start against the copy. The log says `Cue model migration: …` with the
+   entry, marker and anchor counts, and `<copy>.pre-cue-model-<utc>.db` sits beside it.
+3. **Same lists.** Every stack noted lists the same cues in the same order with the same numbers
+   (auto numbers unchanged, explicit ones unchanged), the same follows, and its markers where they
+   were. GO through a few cues; standby and GO TO work from the cue table.
+4. **Same book.** The prompt book's cue anchors sit where they did. A marker's anchor is kept but
+   not drawn until the prompt book reads anchors by entry (cue model plan D4, a later session), so
+   check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
+   cue_stack_entries e ON e.id = a.entry_id WHERE e.kind = 'MARKER'"` lists each one against its
+   marker. The log's dropped-anchor count should be 0 unless an anchor named a cue already gone.
+5. **Once.** Stop and start again: no migration line, no second backup.
+6. **Sync.** On a show with a repo, the Sync tab may list cue records whose `sortOrder` closed a gap
+   (the archive now writes each cue's position); nothing else should change. Note what it lists.
+7. **The desk itself.** Then the same start on the real desk, keeping the backup file until the
+   next show has run.
 
 ---
 

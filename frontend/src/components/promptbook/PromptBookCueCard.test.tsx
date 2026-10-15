@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
 // The open card's body is the runner's; here it only has to place the two slots the card fills.
@@ -24,8 +24,8 @@ import { PromptBookCueCard } from './PromptBookCueCard'
 afterEach(cleanup)
 
 const noop = () => {}
-const entry: CueStackCueEntry = {
-  id: 2, name: 'Moon rise', sortOrder: 2, layerCount: 0, adHocEffectCount: 0, autoAdvance: false,
+const entry: CueStackCueRow = {
+  id: 2, entryId: 102, name: 'Moon rise', sortOrder: 2, layerCount: 0, adHocEffectCount: 0, autoAdvance: false,
   autoAdvanceDelayMs: null, fadeDurationMs: 3000, fadeCurve: 'LINEAR', cueNumber: '2', cueNumberAuto: false,
   notes: null, cueType: 'STANDARD',
 }

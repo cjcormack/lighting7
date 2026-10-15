@@ -71,8 +71,9 @@ internal fun Route.routeApiRestCueCooked(state: State) {
         withCurrentProject(state, resource.projectId) { project ->
             val applyData = transaction(state.database) {
                 DaoCue.findById(resource.cueId)
-                    ?.takeIf { it.cueStack.project.id == project.id }
-                    ?.let { buildCueApplyData(it) }
+                    ?.takeIf { it.project.id == project.id }
+                    // Content only: what the cue composes to, wherever it plays.
+                    ?.let { buildCueApplyData(it, null) }
             }
             if (applyData == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))

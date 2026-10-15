@@ -806,11 +806,8 @@ internal val recordCueTool = ToolDef(
             put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
             put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number (CREATE). Omit to let the stack number it.") })
             put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (CREATE). Omit to append.") })
-            put("cueType", buildJsonObject {
-                put("type", "string")
-                put("enum", buildJsonArray { add("STANDARD"); add("MARKER") })
-                put("description", "Defaults to STANDARD.")
-            })
+            // No `cueType`: a marker is a stack entry, not a cue, and records nothing (cue model
+            // plan D12). The tool still reads one, so an old caller naming MARKER is refused by name.
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)

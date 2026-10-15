@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 /** 400 code: the layout document is malformed — a bad width or flow, an empty row or column, a pad naming no record or two. */
 internal const val CODE_BUSK_LAYOUT_INVALID = "BUSK_LAYOUT_INVALID"
@@ -344,8 +345,9 @@ internal data class BuskCueDto(
     val uuid: String,
     val name: String,
     val cueNumber: String? = null,
-    val cueStackId: Int,
-    val cueStackName: String,
+    /** The stack of the cue's entry; null for a cue in no stack, which nothing makes before the cue model plan's session 4. */
+    val cueStackId: Int?,
+    val cueStackName: String?,
 )
 
 // ─── Write DTOs ─────────────────────────────────────────────────────────
@@ -704,14 +706,15 @@ internal class BuskRecordCache(private val state: State) {
         }
 
     fun dto(cue: DaoCue): BuskCueDto = cueDtos.getOrPut(cue.id.value) {
-        val stack = cue.cueStack
+        // The pad names the cue; its number and stack are its one entry's (cue model plan P4).
+        val entry = soleEntryOf(cue)
         BuskCueDto(
             id = cue.id.value,
             uuid = cue.uuid.toString(),
             name = cue.name,
-            cueNumber = cue.cueNumber,
-            cueStackId = stack.id.value,
-            cueStackName = stack.name,
+            cueNumber = entry?.cueNumber,
+            cueStackId = entry?.stackId,
+            cueStackName = entry?.stack?.name,
         )
     }
 }

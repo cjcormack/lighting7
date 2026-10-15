@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -135,8 +136,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
-                this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-            }
+                this.project = project; name = "c"
+            }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
@@ -184,8 +185,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
-                this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-            }
+                this.project = project; name = "c"
+            }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 effectType = "CandleFlicker"; category = "dimmer"; beatDivision = 4.0
@@ -226,8 +227,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
-                this.project = project; name = "c"; cueStack = stack; sortOrder = 0
-            }
+                this.project = project; name = "c"
+            }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0

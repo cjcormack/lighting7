@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.ai
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fx.stackCuePriorities
 import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
 import uk.me.cormack.lighting7.dmx.UnparkOutcome
@@ -23,6 +24,7 @@ import uk.me.cormack.lighting7.routes.*
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import org.jetbrains.exposed.v1.core.isNotNull
 
 /**
  * The show-running tools the MCP server offers, and their dispatch.
@@ -658,8 +660,9 @@ class AiTools(private val state: State) {
                         .orderBy(DaoCueStacks.name to SortOrder.ASC)
                         .map { stack ->
                             val activeCueId = manager.getActiveCueId(stack.id.value)
-                            val cueCount = DaoCue.find { DaoCues.cueStack eq stack.id }
-                                .count()
+                            val cueCount = DaoCueStackEntry.find {
+                                (DaoCueStackEntries.stack eq stack.id) and (DaoCueStackEntries.cue.isNotNull())
+                            }.count()
                             buildJsonObject {
                                 put("id", stack.id.value)
                                 put("name", stack.name)
@@ -1146,17 +1149,16 @@ class AiTools(private val state: State) {
             writes
         }.orEmpty()
         val cue = transaction(state.database) {
-            // Every cue must belong to a stack; land AI-created cues in "Unsorted" (created on
-            // demand) so the operator can move them afterwards. Without this the NOT NULL FK on
-            // cue_stack_id fails and the tool call blows up.
+            // Every cue is in a stack until the cue model plan's session 4 lets one be loose; land
+            // AI-created cues in "Unsorted" (created on demand) so the operator can move them
+            // afterwards.
             val stack = getOrCreateUnsortedStack(project)
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
-                this.cueStack = stack
-                this.sortOrder = stack.cues.count().toInt()
             }
             writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
+            placeCueInStack(stack, newCue)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             newCue
@@ -1273,7 +1275,8 @@ class AiTools(private val state: State) {
             // dropped the cue's own property assignments and its triggers, plus every timing and
             // speed-master field on an ad-hoc effect. See `buildCueApplyData`. The GO form, so the
             // cue's events fire through `applyCue`'s hook exactly as a stack GO fires them.
-            buildCueGoData(cue)
+            // In its one entry's stack (cue model plan P4) until the plan's session 2 holds it loose.
+            buildCueGoData(cue, soleEntryOf(cue))
         } ?: return errorResult("Cue not found: $cueId")
 
         val result = applyCue(state, cueData, replaceAll)
@@ -1324,7 +1327,6 @@ class AiTools(private val state: State) {
                 cueId != null -> {
                     val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                         ?: run { problems += "no cue $cueId in project ${project.id.value}"; return@transaction null }
-                    if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never live, so it has no scenery"; return@transaction null }
                     val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.CUE, "scenery", problems)
                     if (problems.isNotEmpty()) null else { replaceCueScenery(cue, writes); "cue '${cue.name}'" to writes.size }
                 }
@@ -1468,7 +1470,6 @@ class AiTools(private val state: State) {
         val written = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                 ?: run { problems += "no cue $cueId in project ${project.id.value}"; return@transaction null }
-            if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never gone to, so it fires nothing"; return@transaction null }
             val writes = parseToolCueEventList(items, cueEventPatchesOf(project), "events", problems)
             if (problems.isNotEmpty()) null else { replaceCueEvents(cue, writes); cue.name to writes.size }
         } ?: return errorResult(problems.joinToString("; "))
@@ -1699,26 +1700,27 @@ class AiTools(private val state: State) {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
         val sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull
 
+        var priorities = emptyMap<Int, Int>()
         val result = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: return@transaction null to "Cue stack not found: $stackId"
             val cue = DaoCue.findById(cueId)
                 ?: return@transaction null to "Cue not found: $cueId"
 
-            val order = sortOrder ?: run {
-                val maxOrder = DaoCue.find { DaoCues.cueStack eq stackId }
-                    .maxByOrNull { it.sortOrder }?.sortOrder ?: -1
-                maxOrder + 1
-            }
-
-            cue.cueStack = stack
-            cue.sortOrder = order
+            // One entry per cue until sharing lands (cue model plan P4): this moves the cue's entry,
+            // to `sortOrder` (a position in the list) or the end, renumbering both stacks.
+            val entry = soleEntryOf(cue) ?: return@transaction null to "Cue $cueId is not in exactly one stack"
+            val left = entry.stack.takeIf { it.id != stack.id }
+            moveEntryTo(stack, entry, sortOrder)?.let { return@transaction null to it }
+            // Both lists' positions moved, and a live cue's priority is its position.
+            priorities = stackCuePriorities(stack) + (left?.let { stackCuePriorities(it) } ?: emptyMap())
 
             cue.name to null
         }
 
         val (cueName, error) = result
         if (error != null) return errorResult(error)
+        state.show.fxEngine.repriorityCues(priorities)
 
         state.show.fixtures.cueStackListChanged()
         state.show.fixtures.cueListChanged()

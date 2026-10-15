@@ -105,9 +105,7 @@ internal fun Route.routeApiRestProjectEffects(state: State) {
             val outcome: Pair<List<CueEventDto>?, Pair<HttpStatusCode, String>?> = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId)?.takeIf { it.project.id == project.id }
                     ?: return@transaction null to (HttpStatusCode.NotFound to "Cue not found")
-                if (cue.cueType == CueType.MARKER.name) {
-                    return@transaction null to (HttpStatusCode.BadRequest to "a MARKER is never gone to, so it fires nothing")
-                }
+                // A marker is an entry, not a cue (cue model plan D12), so no cue id names one.
                 val problems = mutableListOf<String>()
                 val writes = parseCueEventList(items, cueEventPatchesOf(project), "events", problems)
                 if (problems.isNotEmpty()) return@transaction null to (HttpStatusCode.BadRequest to problems.joinToString("; "))

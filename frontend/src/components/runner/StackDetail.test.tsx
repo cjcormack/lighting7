@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+import { cueRow, markerRow } from '@/test/cueEntries'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
 
 /**
  * Characterisation suite written before session 2b (`desk-simplification-plan.md` §Session 2b,
@@ -26,7 +27,7 @@ const rowProps = new Map<
 >()
 vi.mock('./CueCardEditor', () => ({
   CueCardEditor: (p: {
-    cue: CueStackCueEntry
+    cue: CueStackCueRow
     isStandby?: boolean
     isActive?: boolean
     expanded?: boolean
@@ -49,22 +50,16 @@ vi.mock('./ShowMarkerRow', () => ({
 
 import { StackDetail } from './StackDetail'
 
-const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry => ({
-  id,
-  name: `Q${id}`,
-  sortOrder: id,
-  layerCount: 0,
-  adHocEffectCount: 0,
-  autoAdvance: false,
-  autoAdvanceDelayMs: null,
-  fadeDurationMs: 1000,
-  fadeCurve: 'LINEAR',
-  cueNumber: String(id),
-  cueNumberAuto: false,
-  notes: null,
-  cueType: 'STANDARD',
-  ...over,
-})
+/** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
+function cue(id: number, over?: Partial<CueStackCueRow>): CueStackCueRow
+function cue(id: number, over: { cueType: 'MARKER'; name?: string }): CueStackMarkerRow
+function cue(
+  id: number,
+  over: Partial<CueStackCueRow> | { cueType: 'MARKER'; name?: string } = {},
+): CueStackCueEntry {
+  if (over.cueType === 'MARKER') return markerRow(id + 100, over.name ?? `Q${id}`, { sortOrder: id })
+  return cueRow(id, { name: `Q${id}`, sortOrder: id, fadeDurationMs: 1000, cueNumber: String(id), ...(over as Partial<CueStackCueRow>) })
+}
 
 const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   id: 10,
@@ -127,7 +122,8 @@ describe('StackDetail', () => {
   it('renders standard cues as rows and markers as dividers', () => {
     render(view({ stack: mkStack({ cues: [cue(1), cue(2, { cueType: 'MARKER' })] }) }))
     expect(screen.getByTestId('cue-1')).toBeTruthy()
-    expect(screen.getByTestId('marker-2')).toBeTruthy()
+    // A marker row is keyed by its entry id — `2 + 100` in these fixtures.
+    expect(screen.getByTestId('marker-102')).toBeTruthy()
   })
 
   it('scrolls the active cue into view on mount', () => {

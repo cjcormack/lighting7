@@ -34,6 +34,8 @@ import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.ProgrammerScenery
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
+import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 // ── Inbound messages ────────────────────────────────────────────────────────
 
@@ -686,7 +688,13 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
     if (target == null) return null
     val cue = target.cueId?.let { cueId ->
         try {
-            transaction(state.database) { DaoCue.findById(cueId)?.let { it.name to it.cueNumber } }
+            transaction(state.database) {
+                // The number is the entry's in the stack the target names (cue model plan P7).
+                DaoCue.findById(cueId)?.let { cue ->
+                    val entry = target.cueStackId?.let { entryInStack(it, cueId) } ?: soleEntryOf(cue)
+                    cue.name to entry?.cueNumber
+                }
+            }
         } catch (_: Exception) {
             null
         }

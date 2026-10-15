@@ -274,7 +274,7 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
 }
 
 /**
- * Compute the stack's cue-id order after inserting a new cue at the reading position
+ * Compute the stack's entry-id order after inserting a new cue's entry at the reading position
  * of `region` — the ordering to POST to `reorderCueStackCues` when a cue is created
  * from a prompt-book selection. `stack.cues` is the CURRENT list (before the new cue
  * lands in cache); the new cue is spliced in immediately after the last anchored cue
@@ -288,19 +288,20 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
  * slot, and any residual disorder is surfaced by the existing desync warnings — this
  * doesn't attempt a total re-sort of the stack.
  */
-export function orderedCueIdsForInsert(
+export function orderedEntryIdsForInsert(
   stack: CueStack,
   anchorByCue: Map<number, CueAnchorDto>,
   region: Region,
-  newCueId: number,
+  newEntryId: number,
 ): number[] {
   const sel = scriptPosition(region)
-  const ids = stack.cues.map((c) => c.id)
+  // Rows are entries: reorder names entry ids, and a marker (no cue) has no anchor to read.
+  const ids = stack.cues.map((c) => c.entryId)
   const anchored = stack.cues
-    .map((c, i) => ({ i, anchor: anchorByCue.get(c.id) }))
+    .map((c, i) => ({ i, anchor: c.id != null ? anchorByCue.get(c.id) : undefined }))
     .filter((e): e is { i: number; anchor: CueAnchorDto } => e.anchor != null)
   // Nothing to order against → append (natural when anchoring a stack top-to-bottom).
-  if (anchored.length === 0) return [...ids, newCueId]
+  if (anchored.length === 0) return [...ids, newEntryId]
   let insertIndex = 0
   for (const { i, anchor } of anchored) {
     const pos = scriptPosition(anchor.region)
@@ -308,7 +309,7 @@ export function orderedCueIdsForInsert(
       insertIndex = i + 1
     }
   }
-  return [...ids.slice(0, insertIndex), newCueId, ...ids.slice(insertIndex)]
+  return [...ids.slice(0, insertIndex), newEntryId, ...ids.slice(insertIndex)]
 }
 
 /** A borrowed reading position for a cue that has no anchor of its own. */
@@ -404,7 +405,8 @@ export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
     }
     for (const cue of stack.cues) {
       if (cue.cueType === 'MARKER') {
-        out.push({ type: 'separator', source: 'cue', id: cue.id, name: cue.name })
+        // A marker is an entry with no cue, so it is keyed by its entry id.
+        out.push({ type: 'separator', source: 'cue', id: cue.entryId, name: cue.name })
       } else {
         out.push({
           type: 'cue',

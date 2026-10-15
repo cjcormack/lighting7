@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.CueApplyData
+import uk.me.cormack.lighting7.fx.stackCuePriorities
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.CueStackType
@@ -13,6 +14,9 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.entriesOf
 
 /**
  * Record / Include / Update, with no HTTP in them.
@@ -83,6 +87,11 @@ internal fun performProgrammerRecord(
     scenery: Boolean = true,
 ): RecordCoreResult {
     recordShapeProblem(mode, cueStackId, cueId)?.let { return RecordCoreResult.Failure(it) }
+    // A marker is a labelled entry, not a cue (cue model plan D12): nothing can be recorded into
+    // one, so a request for one is refused rather than making a cue of it.
+    if (cueType == CueType.MARKER) {
+        return RecordCoreResult.Failure("A marker is not a cue and records nothing — add one to the stack as a marker")
+    }
 
     val scope = targets?.let { expandTargetsToFixtureKeys(state, it) }
     if (targets != null && scope!!.isEmpty()) {
@@ -94,6 +103,8 @@ internal fun performProgrammerRecord(
 
     data class Written(val outcome: CueWriteOutcome, val details: CueDetails, val stackId: Int?)
 
+    // A CREATE at a position shifts the entries after it, and a live cue's priority is its position.
+    var priorities = emptyMap<Int, Int>()
     val (written, error) = transaction(state.database) {
         if (mode == RecordMode.CREATE) {
             val stack = DaoCueStack.findById(cueStackId!!)
@@ -111,9 +122,10 @@ internal fun performProgrammerRecord(
                 sortOrder = sortOrder,
                 cueType = cueType,
             )
+            priorities = stackCuePriorities(stack)
             val cue = DaoCue.findById(outcome.cueId)!!
             // After the cue exists, so what it would track is read at its own place in the list.
-            val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, held, mode))
+            val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, entryInStack(stack.id.value, cue.id.value), held, mode))
             Written(withScenery, cue.toCueDetails(true, state.show.fixtures), stack.id.value) to null
         } else {
             val cue = DaoCue.findById(cueId!!)
@@ -121,13 +133,16 @@ internal fun performProgrammerRecord(
             if (cue.project.id != project.id) {
                 return@transaction null to "Cue belongs to a different project"
             }
+            // The cue's one entry is where it plays (cue model plan P4), until Record names one.
+            val entry = soleEntryOf(cue)
             val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
-                .withScenery(writeHeldSceneryIntoCue(cue, held, mode))
-            Written(outcome, cue.toCueDetails(true, state.show.fixtures), cue.cueStack.id.value) to null
+                .withScenery(writeHeldSceneryIntoCue(cue, entry, held, mode))
+            Written(outcome, cue.toCueDetails(true, state.show.fixtures), entry?.stackId) to null
         }
     }
 
     if (written == null) return RecordCoreResult.Failure(error ?: "Cue not found", notFound = true)
+    state.show.fxEngine.repriorityCues(priorities)
 
     val republished = republishCueIfLive(state, written.outcome.cueId, written.stackId)
 
@@ -162,7 +177,7 @@ private fun CueWriteOutcome.withScenery(scenery: SceneryRecordOutcome) =
     copy(scenery = scenery, warnings = warnings + scenery.warnings)
 
 internal fun defaultRecordedCueName(stack: DaoCueStack): String =
-    "Cue ${(stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 2}"
+    "Cue ${entriesOf(stack).size + 1}"
 
 // ── Include ─────────────────────────────────────────────────────────────────
 
@@ -230,7 +245,9 @@ internal fun performProgrammerInclude(
     val (cueData, sceneryRows) = transaction(state.database) {
         DaoCue.findById(cueId!!)
             ?.takeIf { it.project.id == project.id }
-            ?.let { buildCueApplyData(it) to cueSceneryForInclude(it) }
+            // The include target names the cue's stack, for the indicator: its one entry's (cue model
+            // plan P4); §3.5's `(cueId, entryId?)` target takes it from the caller.
+            ?.let { buildCueApplyData(it, soleEntryOf(it)) to cueSceneryForInclude(it) }
     } ?: return IncludeCoreResult.Failure("Cue not found in current project", notFound = true)
 
     val sceneryIncluded = state.programmerScenery.include(project.id.value, sceneryRows, fadeMs)
@@ -352,8 +369,9 @@ internal fun performProgrammerUpdate(
         val outcome = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                 ?: return@transaction null
+            val entry = soleEntryOf(cue)
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
-                .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
+                .withScenery(writeHeldSceneryIntoCue(cue, entry, held, RecordMode.MERGE))
             if (modeLabel == "A") {
                 writeLayerStackIntoCue(
                     cue,
@@ -361,7 +379,7 @@ internal fun performProgrammerUpdate(
                     state.show.programmerStore.includedLayerSnapshot,
                 )
             }
-            Triple(written, cue.name, cue.cueStack.id.value)
+            Triple(written, cue.name, entry?.stackId)
         }
 
         if (outcome == null) {
