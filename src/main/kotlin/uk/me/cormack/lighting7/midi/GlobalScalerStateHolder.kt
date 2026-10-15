@@ -33,6 +33,23 @@ class GlobalScalerStateHolder(
     private val _blackoutEnabled = MutableStateFlow(initial.blackout)
     val blackoutEnabled: StateFlow<Boolean> = _blackoutEnabled.asStateFlow()
 
+    private val _safeBlackout = MutableStateFlow(false)
+
+    /**
+     * *Make rig safe*'s blackout (venue-visit plan S6): the same effect on output as [blackoutEnabled],
+     * but runtime only and never persisted, so a desk restarted the next day does not boot dark with
+     * nothing on screen saying why. Independent of the MIDI `Blackout` toggle; *Undo* or *Release*
+     * clears it (`state/RigSafetyService.kt`).
+     */
+    val safeBlackout: StateFlow<Boolean> = _safeBlackout.asStateFlow()
+
+    /** Set [safeBlackout]. Returns true when it changed. */
+    fun setSafeBlackout(enabled: Boolean): Boolean = synchronized(this) {
+        if (_safeBlackout.value == enabled) return false
+        _safeBlackout.value = enabled
+        true
+    }
+
     private val initialLevel = clampLevel(initial.grandMasterLevel) ?: GRAND_MASTER_FULL
 
     private val _grandMasterLevel = MutableStateFlow(initialLevel)

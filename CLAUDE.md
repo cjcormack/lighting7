@@ -22,6 +22,9 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 ./gradlew run
 ```
 
+`./gradlew run` runs the desk alone; the Windows launcher's dev run is `./gradlew :launcher:run`,
+named by path. A desk quit from its own menu (*Quit desk*) ends the build `BUILD SUCCESSFUL`.
+
 **`lighting7.jar` is target-OS-specific.** `shadowJar` keeps native binaries
 (sqlite-jdbc, libremidi, JNA, alsa, coremidi4j) for the host OS only — that's ~18 MB
 of the installer — so a Mac-built fat jar copied to Linux dies at its first DB
@@ -225,6 +228,15 @@ refused in Blind (`COMMAND_BLIND`) or on a parked channel (`COMMAND_PARKED`); a 
 hold short, a project switch does. Stored rows holding one were stripped once at startup
 and are on every sync import. See
 `docs/fixtures-engineering.md` §"@FixtureCommand".
+
+**The end of the night** (venue-visit plan S6): a command declares a `role` (`LAMP_ON`, `LAMP_OFF`,
+`RESET`, else `OTHER`) and a strike its `restrikeMs` and `strikeSpacingMs`, so `state/RigSafetyService.kt`
+can run one role over the selection or the whole rig — a strike staggered and restrike-aware — and
+*Make rig safe*: lamps off, the holds waited out, a **runtime-only** blackout
+(`GlobalScalerStateHolder.safeBlackout`), then *Ready to switch off* on every window until anything
+sends output again (D14). *Undo* strikes those lamps again and releases the blackout, remembered per
+project while the desk runs. *Quit desk* is separate, admin-only and never remote. See
+`docs/fixtures-engineering.md` §"Bulk commands and Make rig safe".
 
 **Travel time** (fixture optics plan session 8, D14) is drawn, never output: `@FixtureType(travel =
 Travel(panDegPerS, tiltDegPerS, beamMs, colourMs))` is how fast a type's mechanics move, and a SPEED
@@ -548,6 +560,7 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 - `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
 - `GET/PUT /api/rest/install/telemetry` - The install's Sentry switch, machine-local. `GET` is open to any caller, signed out included, on both listeners, answering `{enabled, release, environment, tracesSampleRate, browserDsn, replaysSessionSampleRate, replaysOnErrorSampleRate}`; `PUT {enabled}` is admin only and starts or stops Sentry live, the browsers' with it. `sentry.enabled = false` in local.conf wins. See `docs/observability-engineering.md`
 - `POST /api/rest/install/onboarding/finish` `{openProjectId?}` - Admin only. A new desk's onboarding (`routes/installOnboarding.kt`): `installs.onboarding_pending` is set when the first admin is created and `GET /install` answers it as `onboardingPending`; finishing clears it, and with `openProjectId` switches to that project and deletes the project it left if that one is an empty standalone show with no repo (its export holds nothing but the default speed masters) — the `Default` the desk booted on. 409 `ONBOARDING_DONE`. The repo listing's `projectKind` is what lets onboarding import venues before their shows
+- `POST /api/rest/install/quit` `{force?}` - *Quit desk* (venue-visit plan S6, D13): admin only and **never remote** — 403 `QUIT_LOCAL_ONLY` on the public listener whatever the role; 409 `RIG_NOT_SAFE` unless *Ready to switch off* holds or `force`. Answers 202, flushes the scaler writer and exits 0; the Windows launcher exits with it
 - `POST /api/sentry` - The browser SDK's envelope tunnel, open to every caller on both listeners and outside the warm-up and auth gates: spooled to `<appDataDir>/sentry-browser/` only while telemetry is on, at most 1 MB, and only if its header names `sentry.browserDsn`; forwarded byte for byte by a worker only `module()` starts, and deleted when telemetry is turned off. See `docs/observability-engineering.md` §"The tunnel"
 
 ### Cue Stack Run Endpoints
@@ -589,6 +602,8 @@ field names such as `templateId`, the stored `pressTemplate` binding and every c
 
 ### Fixture Command Endpoints
 - `POST /api/rest/projects/{id}/patches/{pid}/commands/{command}` - Run one fixture command (a reset, a lamp strike, a lamp off): the desk holds its level for its declared time and answers when the hold ends (`{completed}` false when cut short). 400 `COMMAND_UNKNOWN`, 409 `COMMAND_BUSY` / `COMMAND_BLIND` / `COMMAND_PARKED` / `VENUE_HOLD`; on the public listener 403 `REMOTE_COMMANDS_DISABLED` unless an admin allows it (`requireCommandsAccess`, Install settings → Remote access). Current project only; both roles locally. No WS frame — the hold is the request. MCP's `run_fixture_command` is the same call, held to the same setting
+- `POST /api/rest/projects/{id}/commands` `{role, targets?}` - A bulk run (venue-visit plan S6): one role's command (`LAMP_ON` / `LAMP_OFF` / `RESET`) over `targets`, or the whole rig without them; a strike staggered by each unit's `strikeSpacingMs` and waiting out its restrike time. Answers the run at once; how it goes streams as `rigSafety.state`. Busy, parked and refused units are reported per unit. 400 `COMMAND_ROLE_UNKNOWN` / `COMMAND_NEEDS_SELECTION`, 409 `COMMAND_NO_UNITS` / `COMMAND_RUN_BUSY` / `COMMAND_BLIND` / `VENUE_HOLD`. `POST .../commands/cancel` stops what has not started (409 `COMMAND_NO_RUN`)
+- `POST /api/rest/projects/{id}/rig-safe` `{targets?}` - *Make rig safe*: every lamp off (the selection's when named), the holds waited out, a runtime-only blackout, then *Ready to switch off* while nothing sends output. `POST .../rig-safe/undo` strikes those lamps, staggered, then releases the blackout (409 `RIG_SAFE_NOTHING_TO_UNDO`); `POST .../rig-safe/release` releases the blackout alone. All three and the bulk run are held to `requireCommandsAccess` remotely, both roles, current project only, runtime gestures on a venue
 
 ### Stage Scene Endpoints
 - `GET/POST /api/rest/projects/{id}/stage-elements` + `GET/PUT/DELETE .../{eid}` - The scene document (stage-view plan session 2): named venue and set elements — `ROOM | PROSCENIUM | FLAT | DRAPE | PLATFORM | SEATING | OBJECT`, layer `VENUE | SET`, a pose (Z is the base, except a platform's, which is its top surface, as a region's `centerZ` is), a size, a finish and `params`, a sealed `ElementParams` per kind (`models/stageScene.kt`) checked at the write boundary with every problem at once. A `PUT` is partial and the merged element is checked whole. A drape's `params.fabric` (`CANVAS | MUSLIN | SHARKSTOOTH | BOBBINET`, absent velour) and a drape's or a flat's `params.paint` (`{front?, back?}`, each a scene image's SHA-256, refused as `params.paint.front names no stored image` unless this project's store holds it or the element already did) are the scrim plan's session 1, drawn by the Stage view since session 2 (only velour pleats; the paint on both faces, its alpha cutting holes — `frontend/docs/stage-vis-engineering.md` §"Painted cloths"). An `OBJECT` with `params.shape: MODEL` is built from `params.parts` — boxes, cylinders and cones, spheres, extruded outlines and lathed profiles, each turned, coloured and optionally textured with a scene image — fitted to the element's box (`models/sceneModel.kt`, the bounds pinned on both sides by `src/test/resources/stage/modelBounds.fixture.json`): how another Claude session builds a set piece no primitive draws, through `set_scene` (whose `modelFrom` places copies). A part's texture is a referenced scene image like paint (`sceneImageHashesOf`), which is why sync is v25 — `docs/fixtures-engineering.md` §"Model objects". `StageElementDto.fullDetail` is this machine's *Full detail* override, never synced. Deleting or reshaping a seating that seat views sit in is 409 `STAGE_ELEMENT_IN_USE`, `?force=true` leaves them dangling. Stored data only, so ungated by the current project, like stage regions. See `docs/fixtures-engineering.md` §"The scene document"
@@ -618,6 +633,7 @@ field names such as `templateId`, the stored `pressTemplate` binding and every c
 - `programmer.keyStack` - What sits under one property, top first (W1): park, programmer-band effects, each owner's slot, other effects with `heldBack`, the cue contributor, the base, each with `onStage`; a group per member. Request/reply on the asking socket with a client `requestId`, never broadcast. `heldBack` is `fx/EffectSuppression.kt` — the one rule the tick and provenance ask too, against the engine's own snapshot. See `docs/lighting-composition-model.md` §"Reading one property's stack"
 - `programmer.clearTarget` / `programmer.targetCleared` - A fixture's (heads included) or group's *Release* (W2): its local effects (`FxInstance.isLocalEffect`) stopped first, then every non-layer slot and the sideband on its channels released in one pass and one republish at `fadeMs`; a local effect that also drives heads outside it is left running and named in `partial`. Unicast reply
 - `fxChanged` - Broadcast on effect add/remove/update
+- `rigSafety.state` - The end of the night (venue-visit plan S6), outbound only and `StateFlow`-backed: `{projectId, ready, readySince?, blackout, undo, notOff, run?, lampsOff, quitAllowed}` — a bulk run's units with their status and time left, *Ready to switch off*, *Make rig safe*'s blackout, what *Undo* would strike, the restrike ledger, and whether this socket may quit the desk. Every operation is REST. See `docs/websocket-engineering.md` §"Rig safety"
 - `groupsState` - Request/receive fixture groups state
 - `clearGroupFx` - Clear all effects for a group
 - `groupFxCleared` - Confirmation of group effect removal

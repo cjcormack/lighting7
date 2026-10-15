@@ -8,6 +8,7 @@ import { GRAND_MASTER_FULL } from '@/api/grandMasterApi'
 import { setGrandMasterLevel, useGrandMasterLevel } from '@/store/grandMaster'
 import { useIsDeskConnected } from '@/store/status'
 import { CollapsiblePanel } from './CollapsiblePanel'
+import { RigSafetyControls } from './rigSafety/RigSafetyControls'
 
 /**
  * The grand master (venue-visit plan S5, D5) as an overview panel: the live project's output level,
@@ -18,11 +19,15 @@ import { CollapsiblePanel } from './CollapsiblePanel'
  * The fader writes as it moves, floored and deduplicated by `useLivePush`, the release always
  * landing — a fader is judged against the rig. A drag shows its own value until the release; after
  * that the desk's frame is the truth, which a MIDI fader or another window may move too.
+ *
+ * Under the fader, the **Rig** row (venue-visit plan S6): *Make rig safe…*, bulk lamp commands and
+ * *Undo* — the panel is where the rig's output as a whole is set.
  */
 export function GrandMasterOverviewPanel({ isVisible }: { isVisible: boolean }) {
   return (
     <CollapsiblePanel isVisible={isVisible}>
       <GrandMasterControl />
+      <RigSafetyControls />
     </CollapsiblePanel>
   )
 }

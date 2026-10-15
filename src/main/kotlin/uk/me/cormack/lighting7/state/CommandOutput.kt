@@ -72,6 +72,10 @@ class CommandOutput(
      * unit on these channels.
      */
     private val venueRefusal: () -> String? = { null },
+    /** A hold began — whichever door ran it (`state/RigSafetyService.kt` clears *Ready to switch off*). */
+    private val onStarted: (Running) -> Unit = {},
+    /** A hold ended, and how — where the restrike ledger learns that a lamp went off. */
+    private val onEnded: (Running, Ended) -> Unit = { _, _ -> },
 ) : ParkSource, FixturesChangeListener, TransmitModifier {
 
     /** A dedicated command channel: whose it is, and the commands on it. */
@@ -127,6 +131,9 @@ class CommandOutput(
     @Volatile private var closed = false
 
     private val controllers = mutableListOf<DmxController>()
+
+    /** How long a command is held: its declared time. A test seam, so a route test need not wait out a real hold. */
+    @Volatile internal var holdMsFor: (ResolvedCommand) -> Long = { it.spec.holdMs }
 
     init {
         rebuild()
@@ -207,11 +214,12 @@ class CommandOutput(
             if (closed) return Outcome.Unknown("The show is closing")
             running[fixtureKey]?.let { return Outcome.Busy(it.first) }
             val now = nowUtc()
-            started = Running(fixtureKey, fixture.fixtureName, command, now, now.plusMillis(command.spec.holdMs), CompletableDeferred())
+            val holdMs = holdMsFor(command)
+            started = Running(fixtureKey, fixture.fixtureName, command, now, now.plusMillis(holdMs), CompletableDeferred())
             val job = scope.launch {
                 // A park beats the hold, so one laid on a held channel mid-hold means the fixture
                 // stopped seeing the command: watch for it rather than report a hold that never landed.
-                val endAt = System.nanoTime() + command.spec.holdMs * 1_000_000
+                val endAt = System.nanoTime() + holdMs * 1_000_000
                 while (true) {
                     val left = (endAt - System.nanoTime()) / 1_000_000
                     if (left <= 0) break
@@ -227,7 +235,8 @@ class CommandOutput(
             running[fixtureKey] = started to job
             rebuildLocked()
         }
-        logger.info("Command '{}' on '{}': holding {} on {}/{} for {} ms", command.name, fixtureKey, command.level, command.universe, command.channelNo, command.spec.holdMs)
+        logger.info("Command '{}' on '{}': holding {} on {}/{} for {} ms", command.name, fixtureKey, command.level, command.universe, command.channelNo, started.endsAt.toEpochMilli() - started.startedAt.toEpochMilli())
+        runCatching { onStarted(started) }.onFailure { logger.warn("Command start hook failed", it) }
         return Outcome.Started(started)
     }
 
@@ -239,7 +248,12 @@ class CommandOutput(
             rebuildLocked()
         }
         which.done.complete(how)
+        notifyEnded(which, how)
         logger.info("Command '{}' on '{}' {}", which.command.name, fixtureKey, if (how == Ended.COMPLETED) "released" else "interrupted")
+    }
+
+    private fun notifyEnded(which: Running, how: Ended) {
+        runCatching { onEnded(which, how) }.onFailure { logger.warn("Command end hook failed", it) }
     }
 
     /** End every hold now — the show is going (a project switch, shutdown). */
@@ -252,7 +266,7 @@ class CommandOutput(
             running.clear()
             rebuildLocked()
         }
-        ended.forEach { it.done.complete(Ended.INTERRUPTED) }
+        ended.forEach { it.done.complete(Ended.INTERRUPTED); notifyEnded(it, Ended.INTERRUPTED) }
         scope.cancel()
         fixtures.unregisterListener(this)
         reattach()
@@ -305,6 +319,7 @@ class CommandOutput(
         }
         interrupted.forEach {
             it.done.complete(Ended.INTERRUPTED)
+            notifyEnded(it, Ended.INTERRUPTED)
             logger.warn("Command '{}' on '{}' interrupted: the fixture was repatched", it.command.name, it.fixtureKey)
         }
     }

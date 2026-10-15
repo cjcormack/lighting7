@@ -176,6 +176,7 @@ sealed class Gear4MusicOrbit70Fixture(
             label = "Reset",
             description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 12, 200u, bandMin = 200u, bandMax = 255u)
 

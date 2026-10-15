@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open lands the Programmer on its phone arm, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
 | [`FU-MANUAL-SENTRY-RELEASE`](#fu-manual-sentry-release) | the first release build uploads its source maps and commits to Sentry and ships none, and a fresh Windows install sends nothing until an admin turns diagnostics on | Sentry S4, 2026-10-13 |
@@ -89,6 +90,44 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S6`
+
+**What it proves**: *the desk can be put to bed and woken again* — venue-visit plan S6 (D9, D13, D14,
+D18, D19): *Make rig safe* lamps off every lamped unit, waits the holds out, blacks out and shows
+*Ready to switch off* on every window; anything that sends output clears it; *Undo* strikes the lamps
+one at a time once each can restrike; and *Quit desk* stops the app without the launcher bringing it
+back.
+
+**Why it is here**: the tests run holds on a mock controller and move a clock past a restrike. The
+MAC 250's restrike (8 minutes) and spacing (5 s) are its manual's; the Robe's (5 minutes, 5 s) are
+estimates, and only a real lamp says whether a strike at that time takes. Whether jpackage's
+`lighting7.exe` wrapper stays quiet when its launcher exits 0 is a Windows box's to say.
+
+**Test**, on the hall's rig, two windows open (the desk and an iPad):
+
+1. **Make rig safe.** With a look up, open the Grand Master panel and press *Make rig safe…* → *Make
+   rig safe*. Both windows show the run, then green *Ready to switch off — n lamps off, blacked out*.
+   The MACs and the Robe douse; the LED heads go dark; a parked channel holds.
+2. **It lasts only while true.** Move a dimmer in the programmer: both banners turn amber (*not ready
+   — output has changed*), the rig stays black. *Undo* asks first.
+3. **Undo inside the restrike.** Press *Undo* straight away: the banner counts each lamp down (*MAC 1
+   in 7:42 — restrike*). Leave it: each strikes in turn, 5 s apart, and the blackout lifts after the
+   last. Note whether the Robe's strike at 5 minutes takes; if not, lengthen its `restrikeMs`.
+4. **A bulk strike over a selection.** Select two MACs, *Lamps* → *Lamp on — Selection*: one strikes,
+   the other 5 s later. *Lamps* → *Lamp off — Whole rig*, then open a MAC's *Commands* menu: *Lamp on*
+   says *Still cooling — restrike in …*.
+5. **Quit** (Windows install). Make the rig safe again, then *Quit desk…* from the banner: the window
+   says *The desk has quit*, the tray icon goes, Task Manager shows no `lighting7` or launcher
+   process, and no error dialog appears. Start it from the Start menu: it comes back, not blacked out.
+6. **Never remote.** Over remote access as an admin, the user menu has no *Quit desk*.
+
+If a strike at its declared restrike does not take, or the wrapper complains on a clean exit, promote
+it to a `FU-` item in `followups.md`.
+
+20 minutes, plus the restrike wait.
 
 ---
 

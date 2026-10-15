@@ -802,8 +802,76 @@ command and `5 commands` for several; a shared one keeps its property's name. It
 /api/rest/projects/{id}/patches/{pid}/commands/{command}`, which answers when the hold ends
 (`completed: false` when it was cut short) — no WS frame, the hold is the request — and from MCP's
 `run_fixture_command` (`docs/mcp-engineering.md`). `describe_rig` lists each fixture's commands with
-their hold. Every hold not in a manual is marked `// Estimate:` and checked on the rig by
+their hold and role. Every hold not in a manual is marked `// Estimate:` and checked on the rig by
 `FU-MANUAL-S7-COMMANDS`.
+
+**Roles** (venue-visit plan S6). A command also declares what it is across types, `role =
+LAMP_ON | LAMP_OFF | RESET | OTHER` (default), so a bulk run can ask for "every lamp off" whatever
+the fixture: each type's lamp strike and lamp off, and its **whole** reset — the Robe's *Total
+reset*, the Revolution's *Reset fixture*, every other type's one reset — while partial resets stay
+`OTHER`. A `LAMP_ON` also declares its `restrikeMs` (how long after the lamp went off it can be
+struck again reliably) and its `strikeSpacingMs` (how long a bulk strike waits after it before the
+next): the MAC 250's 8 minutes and 5 s are its manual's; the Robe's 5 minutes and 5 s are estimates
+(`FU-MANUAL-VENUE-VISIT-S6`). `FixtureCommandsTest` holds every type to one command per role but
+`OTHER`, a strike to a restrike and a spacing (no other role declares either), a lamp that strikes to
+one that douses, and every type in the library to a whole reset. The descriptor carries `role` and
+`restrikeMs`, absent for `OTHER`.
+
+### Bulk commands and Make rig safe
+
+The end of the night (venue-visit plan S6, D9, D14, D18, D19), in `state/RigSafetyService.kt` —
+desk-owned, attached to each show as it starts, like the effects service — and
+`state/BulkCommandRun.kt`.
+
+- **A bulk run** is one role over the selection or the whole rig (`POST /projects/{id}/commands`
+  `{role, targets?}`): the targets' fixtures — a head is its fixture, a group its members' — that have
+  a command of that role, each started through the show's `CommandOutput` exactly as a single command
+  is, so `COMMAND_BUSY`, a parked channel, Blind and the venue hold are met **per unit** and reported,
+  never skipped silently. Blind and the hold also refuse the run whole up front. Lamp-offs and resets
+  start together; a **strike is staggered** — one unit at a time, the next a unit's own
+  `strikeSpacingMs` after it — and a unit still inside its restrike time is `WAITING` with when it can
+  strike, units ready sooner going first; a refused unit spends no spacing. One run at a time on the
+  desk (`COMMAND_RUN_BUSY`); *Cancel* stops what has not started and lets a running hold finish. A
+  project switch drops the run with the show.
+- **The restrike ledger** records when each unit's lamp went off — from every door, a single command
+  and MCP's included, through `CommandOutput`'s end hook, a hold that ran its full time only — and a
+  strike that runs its time clears it. Runtime only: a restart forgets it.
+- **Make rig safe** (`POST …/rig-safe` `{targets?}`) is a lamp-off run over every lamped unit, or the
+  selection's, then *Make rig safe*'s blackout, then **Ready to switch off** — only when every lamped
+  unit **on the rig** is known off, by this run or by an earlier lamp-off the ledger holds. So a
+  selection's run is ready only if the lamps outside it were already off; otherwise the rig is blacked
+  out and not ready, naming the lamps not known off. A park that holds a level stays lit through the
+  blackout and does not keep the rig from ready (Chris, 2026-10-15). The blackout is
+  `GlobalScalerStateHolder.safeBlackout`, a second blackout ORed into the same transmit modifier as
+  the persisted one: per project, **runtime only** (a desk restarted next day must not boot dark with
+  nothing on screen saying why) and independent of the MIDI `Blackout` toggle — a surface's Blackout
+  LED and `surfaceScaler.state` report the persisted blackout alone, and its button toggles only that.
+  Holds and parks bypass it as they bypass the other.
+- **Ready lasts only while it is true** (D14). It clears on anything that sends output again: the
+  provenance revision moving (`ProvenanceService.programmerRevision` — every programmer write, cue
+  layer change, effect start or stop, park and Look republish, never a crossfade tick), any command
+  but a lamp-off starting (`CommandOutput`'s start hook), the blackout released, or another show
+  attached. The blackout itself stays until *Undo* or *Release*.
+- **Undo** (`POST …/rig-safe/undo`, D18) strikes, staggered and restrike-aware, the lamps *Make rig
+  safe* turned off — never a lamp that was already off when it ran — then releases the blackout once
+  the strikes have run (or been refused). Which units is remembered **per project** while the desk runs, so a switch away and back still offers
+  it; a struck unit is forgotten, one that failed stays for another try. Cancelled, it leaves the
+  blackout. *Release* (`POST …/rig-safe/release`) lifts the blackout alone and keeps what Undo would
+  strike. While a run is in flight — until its end has been acted on — another run, *Undo* and
+  *Release* are refused (`COMMAND_RUN_BUSY`).
+- **Quit desk** (`POST /install/quit` `{force?}`, D13) is separate (D9): admin only, refused on the
+  public listener whatever the role (`QUIT_LOCAL_ONLY`), and `RIG_NOT_SAFE` unless the rig is ready
+  or the caller sends `force`. It answers 202, writes the scaler writer's pending rows and exits 0
+  half a second later; the JVM's shutdown hooks stop the server. The Windows launcher exits with a
+  backend that exits — 0 for 0 — and never restarts it (`launcherExitCode`). Under `./gradlew run`
+  the build ends `BUILD SUCCESSFUL`: the launcher's own `run` runs only as `./gradlew :launcher:run`,
+  so a bare `run` no longer goes on to start a second desk after the first quits.
+
+Every operation is REST and answers the run it started; every window follows it on `rigSafety.state`
+(`docs/websocket-engineering.md` §"Rig safety"). Bulk runs, Make rig safe, Undo and Release are held
+to `requireCommandsAccess` on the public listener, and are runtime gestures on a venue
+(`projectWriteGuard.kt`). The UI is the Grand Master panel's **Rig** row and the banner every window
+draws under the app header (`frontend/CLAUDE.md` §"Make rig safe and Quit desk").
 
 ## Transaction Pattern
 

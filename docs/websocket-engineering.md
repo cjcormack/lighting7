@@ -221,6 +221,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 15 | 12 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
+| Rig safety | `RigSafetySocket.kt` | — | 1 | — | `setupRigSafetySubscriptions` |
 | Scenery | `ScenerySocket.kt` | — | 1 | — | `setupScenerySubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
 | Speed masters | `SpeedMasterSocket.kt` | 4 | 4 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
@@ -228,8 +229,8 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Seven families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Effects, Machine, Scenery and Stage render. Channel is the odd one: its three messages are declared in
+Eight families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Effects, Machine, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -866,6 +867,24 @@ has nothing to draw.
 
 Registered in the **show band** beside scenery: the cannons are the current project's, and a project
 switch re-attaches the service to the new show, which disarms.
+
+### Rig safety — `RigSafetySocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `rigSafety.state` | `projectId?`, `ready`, `readySince?`, `blackout`, `undo: [{fixture, fixtureName}]`, `notOff: [name]`, `run?: {id, role, purpose, startedAt, units: [{fixture, fixtureName, command, status, remainingMs?, code?, message?}], withoutCommand, finished, cancelled}`, `lampsOff: [{fixture, offAt, restrikeRemainingMs}]`, `quitAllowed` | Connect snapshot + broadcast |
+
+Bulk fixture commands, *Make rig safe*, its *Undo* and *Ready to switch off* (venue-visit plan S6;
+`state/RigSafetyService.kt`, `docs/fixtures-engineering.md` §"Bulk commands and Make rig safe").
+**Outbound only**: every operation is REST, so the socket gains no operation and
+`FU-AUTH-WS-PER-MESSAGE` stays unfired. `StateFlow`-backed, so the subscription is the snapshot. A
+unit's `status` is `QUEUED`, `WAITING` (a restrike), `RUNNING`, `DONE`, `CUT_SHORT`, `SKIPPED` (with
+the refusal's `code`) or `CANCELLED`; `remainingMs` and `restrikeRemainingMs` are measured when the
+frame is sent, as `effects.armed`'s are, and a client counts down from its receive time. A finished
+run stays on the frame until the next. `quitAllowed` is the receiving socket's own — an admin (or a
+desk with no accounts) on the desk's listener — so no window offers *Quit desk* where the route would
+refuse it; the role is the one resolved at upgrade, as `tunnel.state`'s is. Registered in the show
+band: the run and the ready state are the live show's.
 
 ### Busk page — `BuskSocket.kt`
 
