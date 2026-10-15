@@ -87,7 +87,9 @@ cue_ad_hoc_effects
 ├── delay (Duration, nullable — delayed application; nanoseconds on disk)
 ├── interval (Duration, nullable — recurring application)
 ├── random_window (Duration, nullable — randomisation for recurring)
-└── sort_order (int, default 0)
+├── sort_order (int, default 0)
+├── speed_master_uuid, rate_speed_master_uuid (nullable)
+└── uuid
 
 cue_triggers (script hooks only)
 ├── id (auto-increment PK)
@@ -98,7 +100,8 @@ cue_triggers (script hooks only)
 ├── interval (Duration, nullable — re-fire at this interval)
 ├── random_window (Duration, nullable — randomisation window)
 ├── script_id (FK → scripts — required)
-└── sort_order (int, default 0)
+├── sort_order (int, default 0)
+└── uuid
 
 cue_events (stage-view plan session 9 — see §"Cue events")
 ├── id (auto-increment PK)
@@ -121,6 +124,24 @@ remain unique per stack via the partial index `uq_cue_number_per_stack`.
 - **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the named-palette era could only scan opaque value text — and proper normalization.
 - **Targets stored as JSON** within `cue_layers` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
 - **Parameters stored as JSON**, matching `cue_ad_hoc_effects` and `look_effects`.
+- **A write keeps its children's uuids** (show-cue-editing plan P3, §3.4). Every cue write — the
+  REST `POST`, `PUT` and `PATCH`, Record's `CREATE` and `UPDATE_EXISTING`, and the AI tools'
+  `create_cue` and `build_cue_stack` — goes through `writeCueChildren` (`routes/projectCuesHelpers.kt`),
+  which reconciles each child list against what is stored rather than deleting it and creating it
+  again: a row is matched by `(targetType, targetKey, canonical property)`, a layer by the record it
+  applies (`lookId | templateId`), an effect by `(targetType, targetKey, canonical property,
+  effectType)` and a hook by `(triggerType, scriptId)`. `pairByKey` pairs the n-th incoming item of
+  a key with the n-th stored one in `sortOrder` order, so a key held twice — a Look layered twice at
+  two delays — pairs deterministically. A survivor is updated in place and keeps its `uuid`;
+  everything else about it is the incoming item's, and the rest are inserted or deleted. So a
+  one-value edit is one changed record in the sync diff, and `CueAdHocEffectDto.uuid` (read only,
+  ignored on write) names one effect across writes. An effect swapped for another type on the same
+  property is a removal and an addition, as on a Look (`writeLookChildren`, its twin). A `PATCH`
+  replaces only the lists it carries. Record's `UPDATE_EXISTING` pairs the recording against the
+  rows, effects and layers it replaces (in scope and mask), so a re-recorded value keeps its row;
+  `MERGE`, and with it Update, already upserted in place, and Update's layer diff keeps a layer by
+  its id. `deleteCueChildren` is only for a cue being deleted. A copy into another project, a clone
+  and the importer still mint or carry uuids as they always did.
 
 ## REST API
 

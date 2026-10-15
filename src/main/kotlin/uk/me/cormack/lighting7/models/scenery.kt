@@ -510,7 +510,7 @@ fun deleteSceneryForElements(elementIds: Collection<EntityID<Int>>): Int {
         DaoLookScenery.deleteWhere { DaoLookScenery.element inList elementIds }
 }
 
-/** A cue's scenery, swept with the cue. Not part of `deleteCueChildren`, which also runs on a cue *edit*. */
+/** A cue's scenery, swept with the cue. Not part of `deleteCueChildren` or `writeCueChildren`: a contents edit never touches it. */
 fun deleteCueScenery(cueId: EntityID<Int>): Int = DaoCueScenery.deleteWhere { DaoCueScenery.cue eq cueId }
 
 fun deleteStackScenery(stackId: EntityID<Int>): Int = DaoCueStackScenery.deleteWhere { DaoCueStackScenery.stack eq stackId }

@@ -964,7 +964,10 @@ conflate them.
 `buildCueInput` rebuilds `layers` and `triggers` **field by field**, and its comment says why. A
 field missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins every
 field of both individually rather than by deep-equal — a deep-equal against a fixture built in the
-test file would pass just as happily with the same field missing from both sides.
+test file would pass just as happily with the same field missing from both sides. `adHocEffects`
+is spread rather than rebuilt, so a read-only field on it has to be stripped by name: the effect's
+`uuid`, which the desk answers so a client can name one effect across writes and ignores on write,
+is, and `cueUtils.test.ts` pins that too.
 
 **The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
 because a client cannot render rows a server still produces. A cue or the programmer depends on

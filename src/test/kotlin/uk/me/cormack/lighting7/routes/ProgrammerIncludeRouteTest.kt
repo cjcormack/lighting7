@@ -364,7 +364,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             )
 
             // …and Record then writes that canonical value. Without the coercion this 500s: the
-            // strict check in `createCueChildren` fires on a value Record itself supplied, and the
+            // strict check in `writeCueChildren` fires on a value Record itself supplied, and the
             // Record route has no catch for it.
             val stack = ProgrammerRouteTestSupport.createStack(client, projectId, "recorded")
             val recorded = client.post("/api/rest/programmer/record") {

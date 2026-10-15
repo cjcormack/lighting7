@@ -384,7 +384,7 @@ says palette).
 - **Docs:** `lighting-composition-model.md` §Blind, `fx-engineering.md` §"Programmer suppression and
   the priority band", the frontend CLAUDE.md's Blind paragraphs.
 
-### Session 2 — a cue's children keep their uuids (backend)
+### Session 2 — a cue's children keep their uuids (backend) — done, `626ee21a`
 
 - §3.4: `writeCueChildren` on every cue write (REST PUT and PATCH, Record's CREATE and
   UPDATE_EXISTING, Update, the AI tools), `CueAdHocEffectDto.uuid`.
