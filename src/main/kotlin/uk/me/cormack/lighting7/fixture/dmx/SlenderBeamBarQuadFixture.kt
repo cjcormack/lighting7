@@ -514,6 +514,7 @@ sealed class SlenderBeamBarQuadFixture(
             label = "Reset",
             description = "Re-homes all four heads. They swing through their travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 26, 200u, bandMin = 200u, bandMax = 239u)
 

@@ -52,14 +52,16 @@ class RigBriefing(private val state: State) {
     }
 
     /**
-     * `, commands=reset (Reset, 5.0 s),lampOn (Lamp on, 5.0 s)` for a fixture with fixture commands
-     * (fixture optics plan session 7) — what `run_fixture_command` names.
+     * `, commands=reset (Reset, 5.0 s, RESET),lampOn (Lamp on, 5.0 s, LAMP_ON)` for a fixture with
+     * fixture commands (fixture optics plan session 7) — what `run_fixture_command` names. The role is
+     * left out for a command that has none.
      */
     private fun commandLabel(fixture: uk.me.cormack.lighting7.fixture.Fixture): String {
         val commands = FixtureCommands.of(fixture)
         return if (commands.isEmpty()) "" else ", commands=" + commands.joinToString(",") { c ->
+            val role = c.spec.role.takeIf { it != uk.me.cormack.lighting7.fixture.CommandRole.OTHER }?.let { ", ${it.name}" }.orEmpty()
             val pre = c.alongside.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "; sets ") { it.why }.orEmpty()
-            "${c.name} (${c.spec.label}, ${c.spec.holdMs / 1000.0} s$pre)"
+            "${c.name} (${c.spec.label}, ${c.spec.holdMs / 1000.0} s$role$pre)"
         }
     }
 

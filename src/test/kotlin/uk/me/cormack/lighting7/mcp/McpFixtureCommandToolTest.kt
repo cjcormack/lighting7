@@ -78,9 +78,9 @@ class McpFixtureCommandToolTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `describe_rig lists each fixture's commands, with their hold`() {
+    fun `describe_rig lists each fixture's commands, with their hold and role`() {
         patchVarytec()
         val rig = RigBriefing(state).describeRig()
-        assertTrue("commands=reset (Reset, 5.0 s)" in rig, rig)
+        assertTrue("commands=reset (Reset, 5.0 s, RESET)" in rig, rig)
     }
 }

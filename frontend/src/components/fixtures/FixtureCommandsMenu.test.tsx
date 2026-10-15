@@ -14,6 +14,9 @@ vi.mock('@/store/commands', () => ({ useRunFixtureCommandMutation: () => [run] }
 vi.mock('@/store/projects', () => ({ useCurrentProjectQuery: () => ({ data: { id: 1 } }) }))
 vi.mock('@/store/patches', () => ({ useVisiblePatchListQuery: () => ({ data: [{ id: 7, key: 'rev' }] }) }))
 vi.mock('@/store/park', () => ({ useGetParkStateListQuery: () => ({ data: parks }) }))
+let lampsOff: { fixture: string; offAt: string; restrikeRemainingMs: number }[] = []
+let receivedAt = 0
+vi.mock('@/store/rigSafety', () => ({ useRigSafety: () => ({ lampsOff, receivedAt }) }))
 vi.mock('sonner', () => ({ toast: { success: (...a: unknown[]) => toastSuccess(...a), warning: vi.fn(), error: vi.fn() } }))
 
 import { FixtureCommandsMenu, alongsideSentence, holdLabel, parkedChannelOf } from './FixtureCommandsMenu'
@@ -42,6 +45,7 @@ beforeEach(() => {
   toastSuccess.mockClear()
   resolveRun = null
   parks = []
+  lampsOff = []
 })
 afterEach(() => {
   cleanup()
@@ -101,6 +105,31 @@ describe('FixtureCommandsMenu', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
     // The scroller reset holds only channel 12, which is free.
     expect(screen.getByRole('menuitem', { name: /Reset scroller/ }).getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('warns, and still offers, a lamp strike inside its restrike time, counting it down', () => {
+    const lampOn = command('lampOn', 'Lamp on', { role: 'LAMP_ON', restrikeMs: 480_000 })
+    receivedAt = Date.now()
+    lampsOff = [{ fixture: 'rev', offAt: new Date().toISOString(), restrikeRemainingMs: 252_000 }]
+    render(<FixtureCommandsMenu fixtureKey="rev" fixtureName="Rev 1" commands={[lampOn, COMMANDS[0]]} canRun />)
+    openMenu()
+    const item = screen.getByRole('menuitem', { name: /Lamp on/ })
+    expect(item.textContent).toContain('restrike in 4:12')
+    expect(item.getAttribute('aria-disabled')).toBeNull()
+    expect(screen.getByRole('menuitem', { name: /Reset scroller/ }).textContent).not.toContain('restrike')
+    fireEvent.click(item)
+    expect(screen.getByTestId('restrike-warning').textContent).toContain('4:12 to go')
+    act(() => { vi.advanceTimersByTime(60_000) })
+    expect(screen.getByTestId('restrike-warning').textContent).toContain('3:12 to go')
+  })
+
+  it('says nothing once a lamp is past its restrike time', () => {
+    const lampOn = command('lampOn', 'Lamp on', { role: 'LAMP_ON', restrikeMs: 480_000 })
+    receivedAt = Date.now()
+    lampsOff = [{ fixture: 'rev', offAt: new Date().toISOString(), restrikeRemainingMs: 0 }]
+    render(<FixtureCommandsMenu fixtureKey="rev" fixtureName="Rev 1" commands={[lampOn]} canRun />)
+    openMenu()
+    expect(screen.getByRole('menuitem', { name: /Lamp on/ }).textContent).not.toContain('restrike')
   })
 
   it('finds a parked channel on the command first, then its preconditions, on its own universe', () => {

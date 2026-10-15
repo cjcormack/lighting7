@@ -26,6 +26,7 @@ vi.mock('./components/ProgrammerIndicator', () => ({ ProgrammerIndicator: () => 
 vi.mock('./ProjectSwitcher', () => ({ default: () => <div data-testid="project-switcher" />, useViewedProject: () => undefined }))
 vi.mock('./components/venue/VenueBand', () => ({ VenueBand: () => <div data-testid="venue-band" /> }))
 vi.mock('./components/venue/VenueBehindBanner', () => ({ VenueBehindBanner: () => <div data-testid="venue-behind" /> }))
+vi.mock('./components/rigSafety/RigSafetyBanner', () => ({ RigSafetyBanner: () => <div data-testid="rig-safety" /> }))
 vi.mock('./components/auth/UserMenu', () => ({ UserMenu: () => null }))
 vi.mock('./components/FixtureOverviewPanel', () => ({ FixtureOverviewPanel: () => <div data-testid="panel-fixtures" /> }))
 vi.mock('./components/positions/PositionsPanel', () => ({ PositionsPanel: () => <div data-testid="panel-stage" /> }))

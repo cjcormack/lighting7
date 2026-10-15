@@ -193,6 +193,7 @@ sealed class VarytecEasymoveXl60SpotFixture(
             label = "Reset",
             description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
             holdMs = 5_000,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 10, 255u)
 
