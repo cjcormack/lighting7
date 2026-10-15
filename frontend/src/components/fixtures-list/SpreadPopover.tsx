@@ -41,10 +41,11 @@ const INTENT_TOAST = 'spread-popover-intent-answer'
  * Whether a desk answered the interpolated **intent** rather than a literal — an older desk, plan
  * §6. Asked by shape, not by the literal parser alone: `parseProgrammerValue` splits on `;` and
  * tests only the head, so `#FF0000;policy=extract` would parse as a colour and land the intent in
- * a Look row. `pct:` / `deg:` / `dmx:` / `tmpl:` are the other four spellings the intent grammar has.
+ * a Look row. `pct:` / `pos:` / `deg:` / `dmx:` / `tmpl:` are the other five spellings the intent
+ * grammar has.
  */
 export function isIntentString(value: string): boolean {
-  return /^(pct|deg|dmx|tmpl):/i.test(value.trim()) || /;\s*policy=/i.test(value)
+  return /^(pct|pos|deg|dmx|tmpl):/i.test(value.trim()) || /;\s*policy=/i.test(value)
 }
 
 /**
@@ -289,8 +290,8 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
  * writing, and each `written[].value` — the head's literal, in the Look row grammar — is landed in
  * the layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope
  * edit does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the
- * intent (mid-upgrade, plan §6) is told apart by shape (`isIntentString`: a `pct:` / `deg:` /
- * `dmx:` / `tmpl:` prefix or a `;policy=` tag — the literal parser alone would take a colour
+ * intent (mid-upgrade, plan §6) is told apart by shape (`isIntentString`: a `pct:` / `pos:` /
+ * `deg:` / `dmx:` / `tmpl:` prefix or a `;policy=` tag — the literal parser alone would take a colour
  * intent as a colour) and refused with a toast naming the desk rather than landing an intent in
  * a Look row. In practice such a desk 400s the `write: false` request first, since its Json
  * refuses the unknown key; the guard is for the answer, should one ever arrive.

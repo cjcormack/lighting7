@@ -7,15 +7,15 @@ import type { PositionResolution } from './sheetRows'
 
 /**
  * A Position row's write (D8): **one `programmer.setPosition`**, never the two raw axes and never
- * `channels.update`. The commit is in the row's unit — degrees where both axes annotate travel,
- * bytes elsewhere — and is resolved to this head's own bytes through the grid's
- * `clampCommitToResolution`, so 270° lands where the programmer's position cell would land it.
+ * `channels.update`. The commit is in the row's unit — centre-relative on every head (venue-visit
+ * plan D3) — and is resolved to this head's own bytes through the grid's `clampCommitToResolution`,
+ * so `-20` lands where the programmer's position cell would land it.
  *
  * A one-axis commit (a pan typed, a tilt dragged) is a whole position on the wire, so the other axis
  * is taken from what the programmer already holds on `position`, else from the wire — the grid's
  * `writePosition` rule: an effect moving the untouched axis would otherwise bake in an instant.
  *
- * Returns false when nothing could be written (a degree on a head that does not annotate it).
+ * Returns false when nothing could be written (a commit that names no axis).
  */
 export function writeSheetPosition(
   headKey: string,
@@ -34,7 +34,7 @@ export function writeSheetPosition(
 /**
  * One head's whole position for a commit in the row's unit: the commit through
  * `clampCommitToResolution`, the untouched axis from the held `position` entry, else the wire.
- * Null when nothing resolves (a degree on a head that does not annotate it).
+ * Null when nothing resolves (a commit that names no axis).
  */
 function resolvePosition(
   headKey: string,

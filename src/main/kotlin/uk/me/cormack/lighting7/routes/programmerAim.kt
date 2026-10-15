@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
@@ -105,7 +106,11 @@ internal data class AimWriteDto(
 
 internal sealed interface AimOutcome {
     data class Invalid(val message: String, val code: String = CODE_AIM_INVALID) : AimOutcome
-    data class Done(val response: AimResponse) : AimOutcome
+    /**
+     * [paletteValues] is each aimed head's position as the `pos:` intent that lands back on its
+     * coarse bytes, by target key — what `aim_fixtures`' `saveAsPalette` stores. Never on the wire.
+     */
+    data class Done(val response: AimResponse, val paletteValues: Map<String, String> = emptyMap()) : AimOutcome
 }
 
 /**
@@ -140,6 +145,7 @@ internal fun aimIntoProgrammer(
 
     val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val written = ArrayList<AimWriteDto>()
+    val paletteValues = LinkedHashMap<String, String>()
     for ((key, head) in heads) {
         val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
         when (val aim = aimHead(head, placements[key], point)) {
@@ -149,13 +155,14 @@ internal fun aimIntoProgrammer(
                 writes += ProgrammerWriter.PropertyWrite(head, "position", aim.position, sourceGroup)
                 aim.fines.forEach { (name, value) -> writes += ProgrammerWriter.PropertyWrite(head, name, value, sourceGroup) }
                 written += AimWriteDto(target, aim.position.serialize(), roundTenth(aim.panDeg), roundTenth(aim.tiltDeg))
+                TemplateResolver.centreIntentOf(head, aim.position)?.let { paletteValues[key] = it.serialize() }
             }
         }
     }
     if (write && writes.isNotEmpty()) {
         state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs ?: 0)
     }
-    return AimOutcome.Done(AimResponse(written, skipped))
+    return AimOutcome.Done(AimResponse(written, skipped), paletteValues)
 }
 
 /**

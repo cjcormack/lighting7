@@ -1,11 +1,12 @@
 import type { AttributeFamily } from './attributeFamily'
+import { clampCentre, formatCentre, positionOnScale, type PositionAxes } from './positionScale'
 
 /**
  * The template intent grammar, client side — **serialise and parse only**.
  *
  * A mirror of `fx/TemplateIntent.kt`, and deliberately a narrow one: it builds the string the editor
  * saves and reads the string a library row displays, and it does **not** resolve anything. Resolution
- * — the white/amber policy, the wheel snap and its ΔE, the degrees-to-DMX conversion, the per-head
+ * — the white/amber policy, the wheel snap and its ΔE, the position-to-DMX conversion, the per-head
  * clamp — lives in Kotlin alone, behind `POST /palettes/resolve`, because the editor's job is to
  * promise what the rig will actually do and two implementations of that promise would drift. See
  * §6 of `desk-simplification-plan.md`.
@@ -41,6 +42,9 @@ export const WHITE_POLICY_LABELS: Record<WhitePolicy, { label: string; hint: str
   },
 }
 
+/** A position intent's unit — see the `position` arm of [TemplateIntent]. */
+export type PositionUnit = 'centre' | 'degrees'
+
 export type TemplateIntent =
   | { kind: 'colour'; hex: string; policy: WhitePolicy }
   /**
@@ -54,8 +58,15 @@ export type TemplateIntent =
   | { kind: 'level'; value: number }
   /** A proportion of whatever range the target property has, 0–100. */
   | { kind: 'percent'; value: number }
-  /** Pan and tilt in **degrees**, resolved through each head's own annotated range. */
-  | { kind: 'position'; panDeg: number; tiltDeg: number }
+  /**
+   * Pan and tilt in one of two units (venue-visit plan D3, P3). **`centre`** — `pos:`, what every
+   * write makes — is centre-relative coarse DMX, `-128..127` with 0 at the centre of travel, the
+   * same fraction of travel on every head. **`degrees`** — `deg:` — is the travel degrees palettes
+   * were stored in before it; the desk keeps resolving it as angles, nothing writes it new, and an
+   * editor shows it on the centre scale (`positionOnScale`) and saves it as `centre` only once it
+   * is edited.
+   */
+  | { kind: 'position'; pan: number; tilt: number; unit: PositionUnit }
   /** A two-state beam role — prism in or out. */
   | { kind: 'switch'; on: boolean }
 
@@ -130,7 +141,10 @@ export function serializeTemplateIntent(intent: TemplateIntent): string {
     case 'percent':
       return `pct:${trimNumber(intent.value)}`
     case 'position':
-      return `deg:${trimNumber(intent.panDeg)},${trimNumber(intent.tiltDeg)}`
+      // Whole coarse steps on the scale, clamped on the way out for the `level` arm's reason.
+      return intent.unit === 'centre'
+        ? `pos:${clampCentre(intent.pan)},${clampCentre(intent.tilt)}`
+        : `deg:${trimNumber(intent.pan)},${trimNumber(intent.tilt)}`
     case 'switch':
       return intent.on ? 'on' : 'off'
   }
@@ -173,13 +187,16 @@ export function parseTemplateIntent(raw: string): TemplateIntent | null {
     if (value == null) return null
     return { kind: 'percent', value: Math.min(100, Math.max(0, value)) }
   }
-  if (lower.startsWith('deg:')) {
+  if (lower.startsWith('pos:') || lower.startsWith('deg:')) {
     const axes = lower.slice(4).split(',')
     if (axes.length !== 2) return null
-    const panDeg = strictNumber(axes[0])
-    const tiltDeg = strictNumber(axes[1])
-    if (panDeg == null || tiltDeg == null) return null
-    return { kind: 'position', panDeg, tiltDeg }
+    const pan = strictNumber(axes[0])
+    const tilt = strictNumber(axes[1])
+    if (pan == null || tilt == null) return null
+    // A centre value is whole steps on the scale on the way in too, as Kotlin's `centreStep` does.
+    return lower.startsWith('pos:')
+      ? { kind: 'position', pan: clampCentre(pan), tilt: clampCentre(tilt), unit: 'centre' }
+      : { kind: 'position', pan, tilt, unit: 'degrees' }
   }
   return null
 }
@@ -198,8 +215,13 @@ function strictNumber(raw: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
-/** A one-line operator-facing rendering of an intent, for a library row. */
-export function describeTemplateIntent(raw: string): string {
+/**
+ * A one-line operator-facing rendering of an intent, for a library row.
+ *
+ * [axes] are a per-fixture row's own pan and tilt, so a position stored in degrees converts onto
+ * the centre scale exactly through that head rather than through the old editor's range.
+ */
+export function describeTemplateIntent(raw: string, axes?: PositionAxes): string {
   const intent = parseTemplateIntent(raw)
   if (intent == null) return raw
   switch (intent.kind) {
@@ -209,8 +231,12 @@ export function describeTemplateIntent(raw: string): string {
       return String(intent.value)
     case 'percent':
       return `${trimNumber(intent.value)}%`
-    case 'position':
-      return `${trimNumber(intent.panDeg)}° / ${trimNumber(intent.tiltDeg)}°`
+    case 'position': {
+      // On the centre scale whichever unit is stored — a `deg:` palette through its own head's
+      // annotation where [axes] are given, else the old editor's range (P3).
+      const { pan, tilt } = positionOnScale(intent, axes)
+      return `${formatCentre(pan)} / ${formatCentre(tilt)}`
+    }
     case 'switch':
       return intent.on ? 'On' : 'Off'
   }

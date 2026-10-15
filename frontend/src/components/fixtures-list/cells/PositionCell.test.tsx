@@ -6,9 +6,9 @@ import { chan, sliderProp } from '@/test/fixtureFactories'
 import { PositionCell } from './PositionCell'
 
 /**
- * The position editor types degrees where the head annotates, bytes where it does not, and its
- * XY pad writes both axes (editor-kit plan D14). Every expectation is a literal byte or degree:
- * an expectation built from `dmxToDegrees` would pass with the mapping wrong.
+ * The position editor types centre-relative DMX on every head — `-128..127`, 0 at the centre of
+ * travel (venue-visit plan D3) — and its XY pad writes both axes. Every expectation is a literal
+ * value: an expectation built from `dmxToCentre` would pass with the mapping wrong.
  */
 
 beforeEach(() => {
@@ -79,77 +79,65 @@ function placePad(container: HTMLElement): HTMLElement {
 }
 
 describe('PositionCell', () => {
-  it('types degrees on an annotated head: byte 128 reads 271° of 540, and 270° typed is the degree itself', async () => {
+  it('types centre-relative on an annotated head: byte 128 reads 0, and a typed value is the commit', async () => {
     const { onCommit } = draw([MOVER])
     const pan = await screen.findByRole('spinbutton', { name: 'Pan' })
-    // 128 / 255 × 540 = 271.06, shown whole.
-    expect(pan).toHaveValue(271)
-    expect(screen.getByRole('spinbutton', { name: 'Tilt' })).toHaveValue(136)
-    expect(pan).toHaveAttribute('max', '540')
-    fireEvent.change(pan, { target: { value: '270' } })
-    // The commit carries the degree; each head's byte is resolved where its descriptor is in hand.
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panDeg: 270 })
+    expect(pan).toHaveValue(0)
+    expect(screen.getByRole('spinbutton', { name: 'Tilt' })).toHaveValue(0)
+    expect(pan).toHaveAttribute('min', '-128')
+    expect(pan).toHaveAttribute('max', '127')
+    fireEvent.change(pan, { target: { value: '-20' } })
+    // The commit carries the centre value; each head's byte is resolved where its descriptor is.
+    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panCentre: -20 })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Tilt' }), { target: { value: '300' } })
-    // Clamped to the annotated range on the way out.
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', tiltDeg: 270 })
-    expect(screen.getByText('128 · 128 of 255 · 0–540° · 0–270°')).toBeInTheDocument()
+    // Clamped to the scale on the way out.
+    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', tiltCentre: 127 })
+    // The DMX underneath stays on the read-out.
+    expect(screen.getByText('DMX 128 · 128')).toBeInTheDocument()
   })
 
-  it('keeps bytes on a head with no annotation', async () => {
-    const { onCommit } = draw([SILENT])
+  it('takes the same scale on a head with no annotation, and in a batch mixing the two', async () => {
+    const { onCommit } = draw([SILENT], { batch: { count: 2, skipped: 0, resolutions: [MOVER, SILENT] } })
     const pan = await screen.findByRole('spinbutton', { name: 'Pan' })
-    expect(pan).toHaveValue(128)
-    expect(pan).toHaveAttribute('max', '255')
-    fireEvent.change(pan, { target: { value: '200' } })
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', pan: 200 })
-    expect(screen.getByText('128 · 128 · 0–255 · 0–255')).toBeInTheDocument()
-  })
-
-  it('keeps bytes for every head when the batch mixes annotated and silent ones', async () => {
-    const { onCommit } = draw([MOVER], { batch: { count: 2, skipped: 0, resolutions: [MOVER, SILENT] } })
-    const pan = await screen.findByRole('spinbutton', { name: 'Pan' })
-    // The row's own head annotates; the batch does not, so no degree is offered.
-    expect(pan).toHaveValue(128)
+    expect(pan).toHaveValue(0)
     fireEvent.change(pan, { target: { value: '64' } })
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', pan: 64 })
+    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panCentre: 64 })
   })
 
-  it('writes both axes from the pad, in bytes on a silent head', async () => {
+  it('shows the cell itself on the scale', () => {
+    draw([MOVER], {
+      autoOpen: false,
+      value: { kind: 'position', isUniform: true, pan: 108, tilt: 168, panNormalized: 108 / 255, tiltNormalized: 168 / 255 },
+    })
+    expect(screen.getByText('-20,+40')).toBeInTheDocument()
+  })
+
+  it('writes both axes from the pad, centre-relative', async () => {
     const { onCommit } = draw([SILENT])
     await screen.findByRole('spinbutton', { name: 'Pan' })
     const pad = placePad(document.body)
-    // Halfway across, at the top: pan 50%, tilt 100%.
+    // Halfway across, at the top: the centre of pan, the top of tilt.
     fireEvent.pointerDown(pad, { clientX: 60, clientY: 0, pointerId: 1 })
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', pan: 128, tilt: 255 })
+    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panCentre: 0, tiltCentre: 127 })
     // A move while held writes again; a move after release does not.
     fireEvent.pointerMove(pad, { clientX: 0, clientY: 120, pointerId: 1 })
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', pan: 0, tilt: 0 })
+    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panCentre: -128, tiltCentre: -128 })
     fireEvent.pointerUp(pad, { pointerId: 1 })
     onCommit.mockClear()
     fireEvent.pointerMove(pad, { clientX: 60, clientY: 60, pointerId: 1 })
     expect(onCommit).not.toHaveBeenCalled()
   })
 
-  it('writes both axes from the pad in degrees on an annotated head', async () => {
-    const { onCommit } = draw([MOVER])
-    await screen.findByRole('spinbutton', { name: 'Pan' })
-    const pad = placePad(document.body)
-    fireEvent.pointerDown(pad, { clientX: 60, clientY: 0, pointerId: 1 })
-    // Halfway across 540° is 270°; the top of 270° is 270°.
-    expect(onCommit).toHaveBeenLastCalledWith({ kind: 'position', panDeg: 270, tiltDeg: 270 })
-  })
-
-  it('draws the pad thumb on the degree scale of an inverted axis, where the drag writes', async () => {
+  it('reads an inverted axis as raw DMX — the scale is DMX, not degrees', async () => {
     const inverted: NonNullable<CellResolution> = {
       ...MOVER,
       panProperty: sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540, inverted: true }),
     }
-    // Byte 0 on an inverted pan is 540°: the thumb sits at the right edge, not the left.
     draw([inverted], { value: { kind: 'position', isUniform: true, pan: 0, tilt: 128, panNormalized: 0, tiltNormalized: 128 / 255 } })
     await screen.findByRole('spinbutton', { name: 'Pan' })
-    expect(screen.getByRole('spinbutton', { name: 'Pan' })).toHaveValue(540)
+    expect(screen.getByRole('spinbutton', { name: 'Pan' })).toHaveValue(-128)
     const thumb = document.querySelector<HTMLElement>('[data-editor-xy-pad] > span')
-    expect(thumb?.style.left).toBe('100%')
+    expect(thumb?.style.left).toBe('0%')
   })
 
   it('draws the label line and no count line', async () => {

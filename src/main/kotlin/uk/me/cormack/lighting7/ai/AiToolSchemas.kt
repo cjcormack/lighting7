@@ -402,10 +402,11 @@ internal val aimFixturesTool = ToolDef(
                 put(
                     "description",
                     "Also save the aims as a new position palette with this name: one row per aimed head, " +
-                        "in pan/tilt degrees, so it outlives the programmer. The name must be unused — a taken " +
+                        "centre-relative (pos:), so it outlives the programmer. The name must be unused — a taken " +
                         "name refuses the call before any head moves. For heads aimed at different points in " +
                         "one palette, dryRun each aim and pass the positions to create_palette " +
-                        "(value 'deg:<panDeg>,<tiltDeg>', targetKey the fixture).",
+                        "(value 'pos:<pan>,<tilt>' from each written value 'pan,tilt' as pan − 128, tilt − 128; " +
+                        "targetKey the fixture).",
                 )
             })
         })
@@ -918,7 +919,7 @@ internal val createTemplateTool = ToolDef(
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
-                            put("description", "The value as an intent, not a DMX literal: '#ff8800' for rgbColour, 'pct:75' for dimmer, strobe, zoom, focus, iris or frost, 'deg:<pan>,<tilt>' for position (travel degrees, what aim_fixtures reports), 'dmx:180' for white, amber or uv, 'on' / 'off' for prism.")
+                            put("description", "The value as an intent, not a DMX literal: '#ff8800' for rgbColour, 'pct:75' for dimmer, strobe, zoom, focus, iris or frost, 'pos:<pan>,<tilt>' for position (centre-relative DMX, -128 to 127 on each axis, 0 the centre of travel at DMX 128: the same fraction of travel on every head; 'deg:<pan>,<tilt>', travel degrees, is what older palettes hold and is still read), 'dmx:180' for white, amber or uv, 'on' / 'off' for prism.")
                         })
                         put("targetKey", buildJsonObject {
                             put("type", "string")

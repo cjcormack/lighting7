@@ -1,5 +1,5 @@
 import { memo, useCallback, useRef } from 'react'
-import { annotatesDegrees, dmxToDegrees } from '@/lib/axisDegrees'
+import { CENTRE_MAX, CENTRE_MIN, clampCentre, dmxToCentre, formatCentre } from '@/lib/positionScale'
 import type { CellResolution } from '../columns'
 import type { CellBatch, CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
@@ -77,14 +77,12 @@ const PAD_SIZE = 120
  * pair came here, as the *gesture* rather than the grammar: Pan is focused when the editor is
  * opened from the keyboard, comma steps to Tilt, Enter is done.
  *
- * **Degrees where the head annotates, bytes where it does not** (editor-kit plan D14). The pan
- * and tilt sliders of a mover carry `degMin` / `degMax` (10 of the 28 fixture models), and where
- * **every** head the edit lands on carries both, the fields and the sliders are in travel degrees
- * — the Spread endpoints' unit, so a spread and a set type the same thing — and the commit carries
- * `panDeg` / `tiltDeg` for `clampCommitToResolution` to resolve to **each head's own byte**, since
- * 270° is byte 128 on a 540° mover and 109 on a 630° one. A batch mixing annotated and silent
- * heads keeps bytes for all of them rather than two units in one editor; a head with no
- * annotation keeps bytes; the cell itself keeps its byte read-out either way.
+ * **Centre-relative, on every head** (venue-visit plan D3): the fields, the sliders and the pad
+ * are `-128..127` with 0 at the centre of travel (`lib/positionScale.ts`), and the commit carries
+ * `panCentre` / `tiltCentre` for `clampCommitToResolution` to resolve to **each head's own byte** —
+ * the same fraction of its own travel, which is `128 + value` on every 0–255 axis this rig has. It
+ * needs no degree annotation, so a batch never splits into two units; the read-out keeps the DMX
+ * bytes underneath. It was degrees where every head annotated (editor-kit plan D14) until D3.
  *
  * The popover is 288px (D17). `w-72`, measured in the app at 288px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
@@ -113,71 +111,33 @@ export const PositionCell = memo(function PositionCell({
       ? { panMin: first.panMin, panMax: first.panMax, tiltMin: first.tiltMin, tiltMax: first.tiltMax }
       : { panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }
 
-  // The heads this edit lands on, and whether every one of them annotates both axes.
+  // The heads this edit lands on.
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const positions = heads.resolutions.filter((r): r is PositionResolution => r.kind === 'position')
-  const degrees =
-    positions.length > 0 &&
-    positions.every((r) => annotatesDegrees(r.panProperty) && annotatesDegrees(r.tiltProperty))
-  const lead = positions[0]
+  const panRange = { min: ranges.panMin, max: ranges.panMax }
+  const tiltRange = { min: ranges.tiltMin, max: ranges.tiltMax }
 
   // Per-axis, exactly as the sliders are: sending the row's aggregate for the axis that did not
-  // move would overwrite every batch target's value for it with one number.
+  // move would overwrite every batch target's value for it with one number. The value is clamped
+  // to the scale here (the field's caller-clamp rule) and each head's byte is resolved where the
+  // target descriptor is in hand.
   const commitPan = useCallback(
-    (raw: number) =>
-      onCommit({
-        kind: 'position',
-        pan: Math.max(ranges.panMin, Math.min(ranges.panMax, Math.round(raw))),
-      }),
-    [onCommit, ranges.panMin, ranges.panMax],
+    (raw: number) => onCommit({ kind: 'position', panCentre: clampCentre(raw) }),
+    [onCommit],
   )
   const commitTilt = useCallback(
-    (raw: number) =>
-      onCommit({
-        kind: 'position',
-        tilt: Math.max(ranges.tiltMin, Math.min(ranges.tiltMax, Math.round(raw))),
-      }),
-    [onCommit, ranges.tiltMin, ranges.tiltMax],
+    (raw: number) => onCommit({ kind: 'position', tiltCentre: clampCentre(raw) }),
+    [onCommit],
   )
-
-  // The degree arms: the field's range is the lead head's annotation (a batch of movers may
-  // declare 540° and 630°, and the editor shows one), the commit is the degree itself, and each
-  // head's byte is resolved where the target descriptor is in hand. The clamp here is the field's
-  // caller-clamp rule against the range it draws.
-  const panDeg = degrees && lead ? axisDegrees(lead, 'pan') : null
-  const tiltDeg = degrees && lead ? axisDegrees(lead, 'tilt') : null
-  const commitPanDeg = useCallback(
-    (raw: number) => {
-      if (!panDeg) return
-      onCommit({ kind: 'position', panDeg: Math.max(panDeg.min, Math.min(panDeg.max, Math.round(raw))) })
-    },
-    [onCommit, panDeg],
-  )
-  const commitTiltDeg = useCallback(
-    (raw: number) => {
-      if (!tiltDeg) return
-      onCommit({ kind: 'position', tiltDeg: Math.max(tiltDeg.min, Math.min(tiltDeg.max, Math.round(raw))) })
-    },
-    [onCommit, tiltDeg],
-  )
-  // The pad writes both axes in one commit, in whichever unit the fields are in.
+  // The pad writes both axes in one commit.
   const commitPad = useCallback(
-    (nx: number, ny: number) => {
-      if (panDeg && tiltDeg) {
-        onCommit({
-          kind: 'position',
-          panDeg: Math.round(panDeg.min + nx * (panDeg.max - panDeg.min)),
-          tiltDeg: Math.round(tiltDeg.min + ny * (tiltDeg.max - tiltDeg.min)),
-        })
-        return
-      }
+    (nx: number, ny: number) =>
       onCommit({
         kind: 'position',
-        pan: Math.round(ranges.panMin + nx * (ranges.panMax - ranges.panMin)),
-        tilt: Math.round(ranges.tiltMin + ny * (ranges.tiltMax - ranges.tiltMin)),
-      })
-    },
-    [onCommit, panDeg, tiltDeg, ranges.panMin, ranges.panMax, ranges.tiltMin, ranges.tiltMax],
+        panCentre: clampCentre(CENTRE_MIN + nx * (CENTRE_MAX - CENTRE_MIN)),
+        tiltCentre: clampCentre(CENTRE_MIN + ny * (CENTRE_MAX - CENTRE_MIN)),
+      }),
+    [onCommit],
   )
 
   // Controlled, because the container has to be able to open this from outside — Enter over a
@@ -195,20 +155,18 @@ export const PositionCell = memo(function PositionCell({
     onDone: () => setOpen(false),
   })
 
-  // The fields' values, in the fields' unit.
-  const panShown = panDeg && lead?.panProperty ? Math.round(dmxToDegrees(value.pan, lead.panProperty) ?? value.pan) : value.pan
-  const tiltShown =
-    tiltDeg && lead?.tiltProperty ? Math.round(dmxToDegrees(value.tilt, lead.tiltProperty) ?? value.tilt) : value.tilt
+  // The fields' values, on the scale.
+  const panShown = dmxToCentre(value.pan, panRange)
+  const tiltShown = dmxToCentre(value.tilt, tiltRange)
 
-  // The read-out: the bytes the rig holds, and the ranges they sit in.
+  // The read-out: the DMX bytes underneath the scale, and the ranges they sit in.
   const sameRanges = positions.every(
     (r) => r.panMin === ranges.panMin && r.panMax === ranges.panMax && r.tiltMin === ranges.tiltMin && r.tiltMax === ranges.tiltMax,
   )
-  // Degrees: the bytes the rig holds and the degree range they sit in, both bounds stated, so the
-  // read-out names the same quantities the fields do. Bytes: the bytes and their ranges.
-  const bytesLine = degrees
-    ? `${value.pan} · ${value.tilt} of 255 · ${panDeg?.min}–${panDeg?.max}° · ${tiltDeg?.min}–${tiltDeg?.max}°`
-    : `${value.pan} · ${value.tilt} · ${ranges.panMin}–${ranges.panMax} · ${ranges.tiltMin}–${ranges.tiltMax}`
+  const bytesLine =
+    ranges.panMin === 0 && ranges.panMax === 255 && ranges.tiltMin === 0 && ranges.tiltMax === 255
+      ? `DMX ${value.pan} · ${value.tilt}`
+      : `DMX ${value.pan} · ${value.tilt} · ${ranges.panMin}–${ranges.panMax} · ${ranges.tiltMin}–${ranges.tiltMax}`
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
 
   return (
@@ -250,7 +208,7 @@ export const PositionCell = memo(function PositionCell({
                 />
               </span>
               <span className="mr-1.5 truncate text-xs tabular-nums text-muted-foreground">
-                {value.isUniform ? `${value.pan},${value.tilt}` : 'Mixed'}
+                {value.isUniform ? `${formatCentre(panShown)},${formatCentre(tiltShown)}` : 'Mixed'}
               </span>
             </>
           )}
@@ -266,40 +224,21 @@ export const PositionCell = memo(function PositionCell({
           chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
         />
         <div className="flex items-start gap-3">
-          {/* The thumb sits where the pad's drag would put it: on the degree scale in degree mode,
-              since an annotated axis may run `inverted` and the byte-normalised position would
-              then read the other way from the degree the drag writes. */}
           <XyPad
-            x={panDeg ? (panShown - panDeg.min) / (panDeg.max - panDeg.min) : value.panNormalized}
-            y={tiltDeg ? (tiltShown - tiltDeg.min) / (tiltDeg.max - tiltDeg.min) : value.tiltNormalized}
+            x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+            y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
             onChange={commitPad}
           />
           <div className="min-w-0 flex-1 space-y-2">
-            {panDeg ? (
-              <ValueFieldRow
-                label="Pan"
-                unit="°"
-                min={panDeg.min}
-                max={panDeg.max}
-                value={panShown}
-                onChange={commitPanDeg}
-                seed={numericSeed(keyboardOpen)}
-              />
-            ) : (
-              <ValueFieldRow
-                label="Pan"
-                min={ranges.panMin}
-                max={ranges.panMax}
-                value={value.pan}
-                onChange={commitPan}
-                seed={numericSeed(keyboardOpen)}
-              />
-            )}
-            {tiltDeg ? (
-              <ValueFieldRow label="Tilt" unit="°" min={tiltDeg.min} max={tiltDeg.max} value={tiltShown} onChange={commitTiltDeg} />
-            ) : (
-              <ValueFieldRow label="Tilt" min={ranges.tiltMin} max={ranges.tiltMax} value={value.tilt} onChange={commitTilt} />
-            )}
+            <ValueFieldRow
+              label="Pan"
+              min={CENTRE_MIN}
+              max={CENTRE_MAX}
+              value={panShown}
+              onChange={commitPan}
+              seed={numericSeed(keyboardOpen)}
+            />
+            <ValueFieldRow label="Tilt" min={CENTRE_MIN} max={CENTRE_MAX} value={tiltShown} onChange={commitTilt} />
           </div>
         </div>
         <EditorReadout>
@@ -313,16 +252,9 @@ export const PositionCell = memo(function PositionCell({
   )
 })
 
-/** One annotated axis's degree range, low to high whichever way the descriptor wrote it. */
-function axisDegrees(res: PositionResolution, axis: 'pan' | 'tilt'): { min: number; max: number } | null {
-  const slider = axis === 'pan' ? res.panProperty : res.tiltProperty
-  if (!annotatesDegrees(slider)) return null
-  return { min: Math.min(slider.degMin, slider.degMax), max: Math.max(slider.degMin, slider.degMax) }
-}
-
 /**
  * The 120px pan/tilt pad: a drag writes both axes, as normalised fractions the cell maps into
- * whichever unit its fields are in. The pointer is captured so a drag that runs off the pad still
+ * the scale its fields are in. The pointer is captured so a drag that runs off the pad still
  * follows and still releases; `touch-none` keeps a finger from panning the sheet instead.
  *
  * Not a keyboard control — the two fields beside it are, and a slider apiece under them — so it

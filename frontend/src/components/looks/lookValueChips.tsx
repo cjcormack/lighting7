@@ -4,6 +4,7 @@ import { computeCombinedCss } from '@/lib/colourMath'
 import { hexToRgb, parseExtendedColour } from '@/components/fx/colourUtils'
 import { parseProgrammerValue } from '@/lib/programmerValue'
 import { previewChipsThatFit } from './previewFit'
+import { dmxToCentre, formatCentre } from '@/lib/positionScale'
 
 /**
  * Rendering one *stored Look literal*, which is the canonical assignment grammar and nothing else —
@@ -27,7 +28,7 @@ function lookValueColourCss(value: string): string | null {
 }
 
 /**
- * A short operator-facing rendering of a literal: `128`, `40,215`, `#ff8800`.
+ * A short operator-facing rendering of a literal: `128`, `-88,+87`, `#ff8800`.
  *
  * Levels stay raw 0..255 rather than becoming percentages — the stored value *is* the DMX level,
  * and rounding it to "50%" here would make it impossible to tell 127 from 128 in a Look whose whole
@@ -40,7 +41,9 @@ function describeLookValue(value: string): string {
     case 'level':
       return String(parsed.value)
     case 'position':
-      return `${parsed.pan},${parsed.tilt}`
+      // Centre-relative, as every position reads (venue-visit plan D3). A Look's preview carries no
+      // property names, so a head whose pan and tilt are separate sliders still shows two levels.
+      return `${formatCentre(dmxToCentre(parsed.pan))},${formatCentre(dmxToCentre(parsed.tilt))}`
     case 'colour': {
       const extended = parseExtendedColour(value)
       const { r, g, b } = hexToRgb(extended.hex)

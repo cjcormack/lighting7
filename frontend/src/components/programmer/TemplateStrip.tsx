@@ -420,7 +420,13 @@ function TemplateChip({
         <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
       ) : (
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-          {template.rows?.[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}
+          {/* A per-fixture palette holds one value per head, so no one row describes it — the
+              library sheet's *n heads* rule; a generic one is its row. */}
+          {!template.isGeneric
+            ? `${template.rows?.length ?? 0} heads`
+            : template.rows?.[0] != null
+              ? describeTemplateIntent(template.rows[0].value)
+              : ''}
         </span>
       )}
       <span className="truncate max-w-32">{template.name}</span>

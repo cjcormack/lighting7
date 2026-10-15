@@ -46,7 +46,7 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * The client never interpolates, for the reason `templateIntent.ts` is a serialiser: only the desk
  * knows a group's member order, each head's range, which cells a fixture has and what a colour
  * means on a head with amber. Interpolation happens **in the intent's own space** — Lab for a
- * colour ([TemplateResolver.mixLab]), degrees for a position, percent for a level, a DMX byte for
+ * colour ([TemplateResolver.mixLab]), centre-relative steps for a position, percent for a level, a DMX byte for
  * an emitter — and each head's literal then goes through the same [TemplateResolver] a template
  * click uses, so the far end of a spread is exactly what a template of that hex would have given
  * that head. The write is one batched [ProgrammerWriter.writeProperties] with owner `WEB`: one
@@ -172,6 +172,11 @@ internal fun spreadIntoProgrammer(
         ?: return SpreadOutcome.Invalid("'from' (${request.from}) is not a ${property.label.lowercase()} intent")
     val to = spreadEndpoint(state, request.to, property)
         ?: return SpreadOutcome.Invalid("'to' (${request.to}) is not a ${property.label.lowercase()} intent")
+    // A position spread interpolates in one unit: centre-relative steps and travel degrees mean
+    // different things on a head, so a lerp between the two would be a number in neither.
+    if (from is TemplateIntent.Position && to is TemplateIntent.Position && from.unit != to.unit) {
+        return SpreadOutcome.Invalid("'from' and 'to' must be one position unit (pos: or deg:), not both")
+    }
     if (request.targets.isEmpty()) {
         return SpreadOutcome.Invalid("A spread needs a selection", CODE_SPREAD_NEEDS_SELECTION)
     }
@@ -314,7 +319,7 @@ internal fun interpolateIntent(from: TemplateIntent, to: TemplateIntent, t: Doub
         is TemplateIntent.Percent -> TemplateIntent.Percent(lerp(from.value, (to as TemplateIntent.Percent).value))
         is TemplateIntent.Position -> {
             val target = to as TemplateIntent.Position
-            TemplateIntent.Position(lerp(from.panDeg, target.panDeg), lerp(from.tiltDeg, target.tiltDeg))
+            TemplateIntent.Position(lerp(from.pan, target.pan), lerp(from.tilt, target.tilt), from.unit)
         }
         is TemplateIntent.Level -> TemplateIntent.Level(lerp(from.value.toDouble(), (to as TemplateIntent.Level).value.toDouble()).roundToInt())
         is TemplateIntent.Switch -> if (f < 0.5) from else to

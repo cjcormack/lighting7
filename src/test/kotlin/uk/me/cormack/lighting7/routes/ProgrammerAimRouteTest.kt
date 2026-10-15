@@ -286,11 +286,11 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
             DaoTemplate.find { DaoTemplates.name eq "Wall focus" }.single().rows
                 .associate { it.targetKey to (it.propertyName to it.value) }
         }
-        // One fixture-specific position row per aimed head, in travel degrees: spot-fine hangs
-        // straight above the point, so it is mid-travel.
+        // One fixture-specific position row per aimed head, centre-relative (venue-visit plan P3):
+        // its own coarse bytes about DMX 128 — spot-fine is at 127/127, a step short of mid-travel.
         assertEquals(setOf("spot-fine", "spot-coarse"), rows.keys)
-        assertEquals("position" to "deg:270,105", rows.getValue("spot-fine"))
-        assertTrue(rows.getValue("spot-coarse").second.startsWith("deg:"), rows.toString())
+        assertEquals("position" to "pos:-1,-1", rows.getValue("spot-fine"))
+        assertTrue(rows.getValue("spot-coarse").second.startsWith("pos:"), rows.toString())
         // And the programmer was written, as without it.
         assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
     }

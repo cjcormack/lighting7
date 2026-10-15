@@ -446,8 +446,14 @@ to. The targets-supply-the-row arm of `CueComposer.applyLayer` survives — it i
 layer's now.
 
 **A palette row holds an intent, not a literal**: a colour plus a white/amber policy, a level or
-beam role as a percentage of each head's own range, a position in degrees. `fx/TemplateIntent.kt`
-owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
+beam role as a percentage of each head's own range, a position **centre-relative** — `pos:pan,tilt`,
+coarse DMX `-128..127` with 0 at the centre of travel (DMX 128), the same fraction of travel on
+every head (venue-visit plan D3). A position row stored before D3 holds `deg:` travel degrees, and
+it still resolves as angles through each head's annotated range — there are no migrations, so the
+resolver takes both units (P3), and only an edit makes an old row `pos:`. Record into a palette and
+`aim_fixtures`' `saveAsPalette` write `pos:` (`TemplateResolver.centreIntentOf`, the exact inverse),
+so recording no longer needs a degree annotation, and heads at the same bytes whose degree ranges
+differ now agree and record one generic row. `fx/TemplateIntent.kt` owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
 channels, and it is asked by all three consumers — `CueComposer.applyLayer` at cook,
 `POST /palettes/{id}/apply` for the click gesture, and `POST /palettes/resolve` for the editor's
 resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
@@ -601,8 +607,8 @@ HEADS too, which used to be skipped by name) and the editor's resolves-to panel 
 `<fixture> · Cell n`). Four rules keep it narrow. **A parent that has the property keeps it**:
 only the rows its cells alone can serve fan, so a beam palette's zoom stays on the Shehds' parent
 while a colour palette reaches the zones — and *having* is presence, not resolution
-(`TemplateResolver.hasProperty`), so a parent with a pan but no annotated degree range keeps a
-position row and says why rather than handing it to its cells. **Colour is decided as a family** — a colour-family row
+(`TemplateResolver.hasProperty`), so a parent with a pan keeps a position row — and, for a stored
+degree row with no annotated range, says why — rather than handing it to its cells. **Colour is decided as a family** — a colour-family row
 fans when the parent has no colour at all, the `NotACandidate` question; a parent with colour but
 missing an emitter the palette names stays put and is refused there as a whole, since fanning would
 put a different colour on the cells under the palette's name. **Nothing carries it → the parent**,
@@ -823,7 +829,8 @@ reaches the same `DeskSelection.subselect`, so the chip and the surface cannot d
 (`LINE` · `MIRROR` · `ARROW` · `WINGS` — the last two mirrored fans meeting at the centre, *to* at
 each outer end), an order (a `DistributionStrategy` name, `LINEAR` being rig
 order), `parts` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
-intent's own space — Lab for a colour, degrees for a position, percent for a level — and resolves
+intent's own space — Lab for a colour, centre-relative steps for a position (both ends one unit;
+a `pos:` and a `deg:` end is `SPREAD_INVALID`), percent for a level — and resolves
 each head's literal through the same `TemplateResolver` a palette click uses, writing one batched
 programmer write with owner `WEB`. So Record captures it, Blind previews it and Clear releases it:
 a spread is a result, not a palette — *Save as Look…* is `record-look` over the selection.

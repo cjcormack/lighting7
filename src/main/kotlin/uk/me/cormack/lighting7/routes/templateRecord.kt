@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
+import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -26,7 +27,6 @@ import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.state.State
-import kotlin.math.roundToInt
 import java.time.Duration
 import uk.me.cormack.lighting7.models.asDuration
 
@@ -299,8 +299,8 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
  * A recorded literal, read back as the intent that would reproduce it.
  *
  * [fixture] is needed for everything except colour, because a percentage is only meaningful against
- * the head's own range and degrees only against its annotated one — which is the same asymmetry
- * `TemplateResolver` has in the other direction. Null when the head has gone from the patch since the
+ * the head's own range and a centre-relative position only against its own travel — which is the
+ * same asymmetry `TemplateResolver` has in the other direction. Null when the head has gone from the patch since the
  * value was set.
  */
 private fun intentFor(
@@ -357,17 +357,12 @@ private fun intentFor(
         TemplateIntent.Level(level)
     }
 
+    // Centre-relative, the unit every new position write takes (venue-visit plan P3): the exact
+    // inverse of the resolver's own centre arm, so a recorded palette lands back on these bytes —
+    // and, unlike the degrees it replaced, on a head whose travel carries no degree annotation.
     TemplateProperty.POSITION -> {
         val position = (value as? CueAssignmentResolver.PropertyValue.Position) ?: return null
-        val catalogue = (fixture as? uk.me.cormack.lighting7.fixture.Fixture)?.fixtureProperties
-            ?: return null
-        val pan = catalogue.firstOrNull { it.category == uk.me.cormack.lighting7.fixture.PropertyCategory.PAN }
-        val tilt = catalogue.firstOrNull { it.category == uk.me.cormack.lighting7.fixture.PropertyCategory.TILT }
-        val panDeg = dmxToDegrees(position.pan.toInt(), pan?.degMin, pan?.degMax, pan?.inverted == true)
-            ?: return null
-        val tiltDeg = dmxToDegrees(position.tilt.toInt(), tilt?.degMin, tilt?.degMax, tilt?.inverted == true)
-            ?: return null
-        TemplateIntent.Position(panDeg, tiltDeg)
+        TemplateResolver.centreIntentOf(fixture ?: return null, position) ?: return null
     }
 
     TemplateProperty.PRISM -> {
@@ -395,12 +390,4 @@ private fun intentFor(
         val span = (max - min).takeIf { it > 0 } ?: return null
         TemplateIntent.Percent((((level - min).toDouble() / span) * 100.0).coerceIn(0.0, 100.0))
     }
-}
-
-/** The inverse of [uk.me.cormack.lighting7.fx.TemplateResolver]'s degree mapping. */
-private fun dmxToDegrees(dmx: Int, degMin: Double?, degMax: Double?, inverted: Boolean): Double? {
-    if (degMin == null || degMax == null || degMin == degMax) return null
-    val fraction = (dmx / 255.0).coerceIn(0.0, 1.0)
-    val effective = if (inverted) 1.0 - fraction else fraction
-    return ((degMin + effective * (degMax - degMin)) * 10.0).roundToInt() / 10.0
 }

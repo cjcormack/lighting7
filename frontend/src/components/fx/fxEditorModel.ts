@@ -1,8 +1,5 @@
 import type { UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveEffect, EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
-import type { Fixture, SliderPropertyDescriptor } from '@/store/fixtures'
-import { findPanProperty, findTiltProperty } from '@/store/fixtures'
-import { annotatesDegrees } from '@/lib/axisDegrees'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 
 export {
@@ -20,7 +17,7 @@ export {
  * The live effect editor's rules, pure (fixture-fx-sheets plan D11, D12, D12a; §3.3).
  *
  * `FxEditor` and `FxPicker` only draw: which question an effect asks, what a stored blend reads back
- * as, which parameters are the effect's *shape*, how a size is said in degrees and what one write
+ * as, which parameters are the effect's *shape*, which are a position on its axis and what one write
  * sends are all answered here, where a test can reach them without a store.
  */
 
@@ -59,8 +56,9 @@ export function startingSpec(
  * What a parameter is to the editor, which decides where it is drawn and in what unit.
  *
  * - `centre` — a movement effect's centre: hidden in Around, an absolute position in Absolute.
- * - `size` — a radius or a range on an axis: degrees where the head annotates, else bytes.
- * - `axis` — any other position byte (a sweep's ends): an absolute position on its axis.
+ * - `size` — a radius or a range on an axis: a distance, in coarse DMX steps.
+ * - `axis` — any other position byte (a sweep's ends): a position on its axis, centre-relative
+ *   (`-128..127`, venue-visit plan D3), as the centre is.
  * - `level` — a byte anywhere else: a percent, as the level row reads.
  * - `shape` — a curve, a switch, or a ratio beside levels: behind the Shape disclosure.
  * - `main` — everything else, drawn with the levels.
@@ -89,7 +87,7 @@ export function paramRole(entry: Pick<EffectLibraryEntry, 'category' | 'paramete
 /**
  * Which axis a position parameter moves, from its name — `pan` / `tilt` as a camelCase word
  * (`panCenter`, `startPan`, `pan`), never a substring, so a script's `spanWidth` or `expansion` is
- * not read as a pan axis and drawn in degrees.
+ * not read as a pan axis and drawn on the position scale.
  */
 export function paramAxis(name: string): 'pan' | 'tilt' | null {
   if (/(^pan|Pan)(?![a-z])/.test(name)) return 'pan'
@@ -101,50 +99,6 @@ export function paramAxis(name: string): 'pan' | 'tilt' | null {
 export function isRatioParam(param: EffectParameterDef): boolean {
   const type = param.type.toLowerCase()
   return (type === 'double' || type === 'float') && Number(param.defaultValue) <= 1
-}
-
-// ─── Degrees ────────────────────────────────────────────────────────────────────────────────────
-
-/** The annotated pan and tilt a position effect's degrees are read through. */
-export interface PositionAxes {
-  pan: SliderPropertyDescriptor & { degMin: number; degMax: number }
-  tilt: SliderPropertyDescriptor & { degMin: number; degMax: number }
-}
-
-/**
- * The axes the editor speaks degrees through, or null for bytes (D14's rule, the position cell's):
- * every fixture the effect moves must annotate **both** pan and tilt, and the first one's ranges
- * are the field's. A target mixing an annotated mover and a silent head keeps bytes for all of
- * them rather than two units in one editor.
- */
-export function positionAxesOf(fixtures: readonly Fixture[]): PositionAxes | null {
-  let lead: PositionAxes | null = null
-  for (const fixture of fixtures) {
-    const props = [...(fixture.properties ?? []), ...(fixture.elementGroupProperties ?? [])] as Fixture['properties']
-    const pan = findPanProperty(props)
-    const tilt = findTiltProperty(props)
-    if (pan == null && tilt == null) continue
-    if (!annotatesDegrees(pan) || !annotatesDegrees(tilt)) return null
-    lead ??= { pan, tilt }
-  }
-  return lead
-}
-
-/**
- * A size in bytes as degrees of travel — 28 of 255 is 59° on a 540° pan (Fx board, note 3). A size
- * is a distance, so it is the byte's share of the axis's span, never a position on it.
- */
-export function sizeToDegrees(bytes: number, axis: SliderPropertyDescriptor & { degMin: number; degMax: number }): number {
-  const span = axis.max - axis.min
-  if (span <= 0) return 0
-  return (bytes * Math.abs(axis.degMax - axis.degMin)) / span
-}
-
-/** The inverse, rounded to a whole byte and held to 0–255. */
-export function degreesToSize(deg: number, axis: SliderPropertyDescriptor & { degMin: number; degMax: number }): number {
-  const degSpan = Math.abs(axis.degMax - axis.degMin)
-  if (degSpan === 0) return 0
-  return clampByte(Math.round((deg * (axis.max - axis.min)) / degSpan))
 }
 
 export function clampByte(n: number): number {

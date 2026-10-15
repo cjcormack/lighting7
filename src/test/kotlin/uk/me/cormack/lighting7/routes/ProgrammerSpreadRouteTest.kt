@@ -150,11 +150,11 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         val mixed = client.run(
             SpreadRequest(
                 targets = listOf(fixture("hex-1"), fixture("spot-1"), fixture("hex-2"), fixture("spot-2")),
-                property = "position", from = "deg:0,0", to = "deg:540,210",
+                property = "position", from = "pos:-128,-128", to = "pos:127,127",
             ),
         )
         val alone = client.run(
-            SpreadRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "deg:0,0", to = "deg:540,210"),
+            SpreadRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "pos:-128,-128", to = "pos:127,127"),
         )
         assertEquals(listOf("spot-1", "spot-2"), mixed.written.map { it.target.key })
         assertEquals(alone.written.map { it.value }, mixed.written.map { it.value })
@@ -317,6 +317,19 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a centre-relative position spread lands the same steps on heads whose degree ranges differ`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        // D3: a pos: spread is a fraction of each head's own travel, so two movers take the same
+        // bytes — one unit a DMX step about 128 — whatever their annotated degrees.
+        val out = client.run(
+            SpreadRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "pos:-20,0", to = "pos:20,10"),
+        )
+        assertEquals(listOf("108,128", "148,138"), out.written.map { it.value })
+    }
+
+    @Test
     fun `malformed requests are refused by code`() = testApplication {
         seed()
         mountTestApp(state)
@@ -329,6 +342,8 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", over = "PIXELS"),
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", parts = 0),
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "rgbColour", from = "tmpl:00000000-0000-0000-0000-000000000000", to = "#000000"),
+            // One position unit per spread: a lerp from a step to a degree is a number in neither.
+            SpreadRequest(targets = listOf(fixture("spot-1")), property = "position", from = "pos:0,0", to = "deg:540,210"),
         )
         for (bad in cases) {
             val resp = client.post(bad)

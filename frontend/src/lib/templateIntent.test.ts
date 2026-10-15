@@ -31,10 +31,25 @@ describe('templateIntent', () => {
     [{ kind: 'colour', hex: '#FF9D4A', policy: 'rgbonly' }, '#FF9D4A;policy=rgbonly'],
     [{ kind: 'percent', value: 75 }, 'pct:75'],
     [{ kind: 'percent', value: 12.5 }, 'pct:12.5'],
-    [{ kind: 'position', panDeg: 45, tiltDeg: -12.5 }, 'deg:45,-12.5'],
+    [{ kind: 'position', pan: -12, tilt: 30, unit: 'centre' }, 'pos:-12,30'],
+    [{ kind: 'position', pan: -128, tilt: 127, unit: 'centre' }, 'pos:-128,127'],
+    [{ kind: 'position', pan: 45, tilt: -12.5, unit: 'degrees' }, 'deg:45,-12.5'],
     [{ kind: 'switch', on: true }, 'on'],
     [{ kind: 'switch', on: false }, 'off'],
   ]
+
+  it('takes a centre position as whole steps on the scale, both ways, as Kotlin does', () => {
+    expect(parseTemplateIntent(' POS: 12.6 , -400 ')).toEqual({ kind: 'position', pan: 13, tilt: -128, unit: 'centre' })
+    expect(serializeTemplateIntent({ kind: 'position', pan: 300, tilt: -2.4, unit: 'centre' })).toBe('pos:127,-2')
+  })
+
+  it('reads a per-fixture degree row through its own head where the axes are given', () => {
+    // A 630° pan reads 315° as its centre, where the old editor's 540° would read it past centre.
+    const pan = { type: 'slider', name: 'pan', min: 0, max: 255, degMin: 0, degMax: 630 } as never
+    const tilt = { type: 'slider', name: 'tilt', min: 0, max: 255, degMin: 0, degMax: 270 } as never
+    expect(describeTemplateIntent('deg:315,135', { pan, tilt })).toBe('0 / 0')
+    expect(describeTemplateIntent('deg:315,135')).not.toBe('0 / 0')
+  })
 
   it('serialises to exactly the strings the backend writes', () => {
     for (const [intent, serialised] of cases) {
@@ -68,7 +83,7 @@ describe('templateIntent', () => {
   })
 
   it('answers null for anything that is not an intent', () => {
-    for (const raw of ['', '   ', '#GGGGGG', 'pct:', 'deg:45', 'deg:a,b', '#12345', 'maybe', '128']) {
+    for (const raw of ['', '   ', '#GGGGGG', 'pct:', 'deg:45', 'deg:a,b', 'pos:12', 'pos:,', 'pos:1,2,3', '#12345', 'maybe', '128']) {
       expect(parseTemplateIntent(raw), raw).toBeNull()
     }
   })
@@ -88,7 +103,11 @@ describe('templateIntent', () => {
   it('describes each arm in the language a row shows', () => {
     expect(describeTemplateIntent('#FF9D4A;policy=extract')).toBe('#FF9D4A · Extract')
     expect(describeTemplateIntent('pct:75')).toBe('75%')
-    expect(describeTemplateIntent('deg:45,-12.5')).toBe('45° / -12.5°')
+    // Every position reads centre-relative (venue-visit plan D3, P3). A stored degree has no head,
+    // so it reads through the old editor's 540° / 270°: 270° / 135° is the centre.
+    expect(describeTemplateIntent('pos:-12,30')).toBe('-12 / +30')
+    expect(describeTemplateIntent('deg:270,135')).toBe('0 / 0')
+    expect(describeTemplateIntent('deg:0,270')).toBe('-128 / +127')
     expect(describeTemplateIntent('on')).toBe('On')
     // A value it cannot parse is shown as-is rather than as an empty cell: a row that renders blank
     // reads as "no value", which is the one thing it definitely is not.

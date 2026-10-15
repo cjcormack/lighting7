@@ -226,7 +226,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 27`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 28`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -279,6 +279,22 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 28 — centre-relative positions
+
+A palette's position row gains a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
+centre-relative coarse DMX — `-128..127` on each axis, 0 the centre of travel (DMX 128), the same
+fraction of travel on every head — beside the `deg:` travel degrees every earlier row holds. **No
+field moved**: `TemplateRowJson.value` is a string the importer stores verbatim, and a `deg:` row
+exports byte-for-byte as before. What moved is the value's meaning, which is the sharp-edge rule's
+semantic-change arm: a v27 reader parses a `pos:` row as no intent, so `CueComposer`, a press and
+the resolves-to panel skip it with a warn — it would run every new position palette, and every aim
+saved as one, as nothing — while its next push wrote the row back unchanged. `SUPPORTED_FORMAT_VERSION
+= 28` so a v27 install refuses the repo instead; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because
+a `deg:` row still resolves as angles (`TemplateResolver.resolvePosition` takes both units) and there
+are no migrations — a stored row becomes `pos:` only when an editor saves a moved position.
+`RichProjectFixture`'s per-fixture position palette holds one row in each unit, so a round trip that
+rewrote either would show.
 
 ### Version 27 — venue parks
 
