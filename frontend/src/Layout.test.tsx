@@ -7,9 +7,9 @@ import { createMemoryRouter } from 'react-router'
 /**
  * `Layout`'s one immersive boolean (busk-chrome plan D7, D10): the window's fact *and* a live
  * view. Everything the shell mounts around the routed page is mocked to a marker — this is a test
- * of what `Layout` draws and skips, not of the forty things it hosts (`useSidebarOpen.test.tsx`
- * argues the same about the sidebar preference and tests the hook instead; here the boolean has
- * no hook of its own to test, because the skipping *is* the behaviour).
+ * of what `Layout` draws and skips, not of the forty things it hosts. The sidebar's one state
+ * (venue-visit plan D4) is driven here too, through its own toggle and the router, because the
+ * defect it removes only showed on a navigation; `useSidebarOpen.test.tsx` pins the storage half.
  */
 
 const media = { desktop: true }
@@ -108,8 +108,8 @@ describe('the app around a live view', () => {
       expect(appHeader(container)).not.toBeNull()
       expect(screen.getByTestId('panel-stage')).toBeInTheDocument()
       expect(screen.getByTestId('panel-slots')).toBeInTheDocument()
-      // The 64px rail: the sidebar starts collapsed on a live view.
-      expect(content(container).style.marginLeft).toBe('64px')
+      // Open, as everywhere else: there is one sidebar state, not a live-view rail (D4).
+      expect(content(container).style.marginLeft).toBe('240px')
       unmount()
     }
   })
@@ -187,6 +187,83 @@ describe('the app around a live view', () => {
       await router.navigate('/projects/1/show')
     })
     expect(appHeader(container)).toBeNull()
+  })
+})
+
+/**
+ * Venue-visit plan D4: one sidebar state across every view. Driven through the gesture — the
+ * sidebar's own toggle button, then the router moving between a live view and the lists — because
+ * the defect it removes only showed on a navigation: the sidebar changed shape as the route did.
+ */
+describe('the sidebar’s one state', () => {
+  const toggleButton = (c: HTMLElement) => sidebar(c)!.querySelector('button')!
+  const margin = (c: HTMLElement) => content(c).style.marginLeft
+
+  it('keeps the shape it was given when the window moves between a live view and the lists', async () => {
+    const { container, router } = draw('/projects/1/programmer')
+    await screen.findByTestId('page')
+    expect(margin(container)).toBe('240px')
+
+    fireEvent.click(toggleButton(container))
+    expect(margin(container)).toBe('64px')
+    for (const path of ['/projects/1/fixtures', '/projects/1/show', '/install/diagnostics', '/projects/1/busk']) {
+      await act(async () => {
+        await router.navigate(path)
+      })
+      expect(margin(container)).toBe('64px')
+    }
+
+    // …and a toggle on the lists reaches the live views too.
+    await act(async () => {
+      await router.navigate('/projects/1/fixtures')
+    })
+    fireEvent.click(toggleButton(container))
+    expect(margin(container)).toBe('240px')
+    await act(async () => {
+      await router.navigate('/projects/1/prompt-book')
+    })
+    expect(margin(container)).toBe('240px')
+  })
+
+  it('is hidden by immersive, not collapsed, and comes back as it was', async () => {
+    const { container, router } = draw('/projects/1/fixtures')
+    await screen.findByTestId('page')
+    fireEvent.click(toggleButton(container))
+    expect(margin(container)).toBe('64px')
+
+    await act(async () => {
+      await router.navigate('/projects/1/busk')
+    })
+    act(() => setImmersive(true))
+    expect(sidebar(container)).toBeNull()
+    expect(margin(container)).toBe('0px')
+    // The preference is not written while immersive holds.
+    expect(window.localStorage.getItem('layout.sidebarOpen')).toBe('false')
+
+    act(() => setImmersive(false))
+    expect(sidebar(container)).not.toBeNull()
+    expect(margin(container)).toBe('64px')
+  })
+
+  it('comes back as it was on the lists too, with immersive still waiting on the live view', async () => {
+    const { container, router } = draw('/projects/1/busk')
+    await screen.findByTestId('page')
+    act(() => setImmersive(true))
+    expect(sidebar(container)).toBeNull()
+
+    await act(async () => {
+      await router.navigate('/projects/1/groups')
+    })
+    // Open by default, and immersive left it alone.
+    expect(margin(container)).toBe('240px')
+  })
+
+  it('starts from a desk’s pre-D4 answer for the lists, on a live view too', async () => {
+    window.localStorage.setItem('layout.sidebarOpen.other', 'false')
+    window.localStorage.setItem('layout.sidebarOpen.live', 'true')
+    const { container } = draw('/projects/1/show')
+    await screen.findByTestId('page')
+    expect(margin(container)).toBe('64px')
   })
 })
 

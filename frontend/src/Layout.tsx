@@ -68,9 +68,8 @@ function RouteFallback() {
 }
 
 export default function Layout() {
-  // Two persisted preferences, one per route group, and the hook decides which the toggle writes.
-  // See `hooks/useSidebarOpen.ts`: the four live views start on the 64px rail, the rest of the app
-  // starts open.
+  // One persisted preference for every route (venue-visit plan D4; `hooks/useSidebarOpen.ts`).
+  // Immersive below hides the sidebar without touching it, so it comes back as it was.
   const { open, toggle: toggleDrawer } = useSidebarOpen()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)

@@ -173,8 +173,9 @@ function useRailGeometry(): RailGeometry {
  *   eighth of the value columns for two badges.
  *
  * **704px is the workspace's width, not the viewport's**, because that is what a container query
- * can ask. With the sidebar on its 64px rail — which is where D7 starts every live view — 704 of
- * workspace is a **768px viewport**, i.e. Tailwind's `md`, which is what the plan says. Below
+ * can ask. With the sidebar on its 64px rail — where space plan D7 started every live view, until
+ * venue-visit plan D4 made it one state that starts open — 704 of workspace is a **768px
+ * viewport**, i.e. Tailwind's `md`, which is what the plan says; open, it is 944. Below
  * `md` the sidebar is off-canvas and the workspace *is* the viewport, so on a phone the same
  * number is read directly: 393 and 852 land either side of it exactly as the `Phone` and
  * `PhoneLandscape` artboards do.

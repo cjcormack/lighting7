@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open lands the Programmer on its phone arm, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
 | [`FU-MANUAL-SENTRY-RELEASE`](#fu-manual-sentry-release) | the first release build uploads its source maps and commits to Sentry and ships none, and a fresh Windows install sends nothing until an admin turns diagnostics on | Sentry S4, 2026-10-13 |
 | [`FU-MANUAL-SCRIM-S1`](#fu-manual-scrim-s1) | a painted cloth's images travel with its show — through the repo to a second desk, and into a clone | Scrim S1, 2026-10-09 |
 | [`FU-MANUAL-VENUE-PARKS`](#fu-manual-venue-parks) | a park made on a trial venue reaches its shows only when published and taken, holds its level through a switch between two shows on it, and a show re-parks and releases it for itself without the rig dipping — on a trial venue, since it publishes | Venue parks, 2026-10-13 |
@@ -87,6 +88,34 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S2`
+
+**What it proves**: *the sidebar keeps one shape, and that shape suits the screens the desk runs
+on* — venue-visit plan S2 (D4): the live views no longer start on the 64px rail, so the one state
+defaults open everywhere. Chris chose open over the rail on 2026-10-15, knowing that at a 768–943px
+window the Programmer's workspace is under 704px and takes its phone arm (stacked, a bottom handle)
+where the rail left it the overlay.
+
+**Why it is here**: PR review drove a real Chromium at 1440×900 from the programmer to the lists and
+back, and through immersive; no tablet or narrow desk window was ever in front of it.
+
+**Test**, on the desk's own screens and an iPad in portrait:
+
+1. **Fresh.** In a browser that has never opened the desk, open the Programmer: the sidebar is open.
+   On the iPad the Programmer is stacked with the layers behind the bottom handle — usable, or not?
+2. **Collapse once.** Collapse the sidebar there, then visit Fixtures, Show, the Prompt Book, Busk
+   and Install Settings: the rail on every one, and the Programmer back on its overlay arm.
+3. **Immersive.** On Busk, expand over the app and come back: the sidebar returns collapsed.
+4. **An upgraded desk.** On the desk's own browser (which held the old two preferences), the
+   sidebar comes up as the lists had it.
+
+If step 1 reads wrong on the iPad, the call is between defaulting to the rail and auto-collapsing
+below ~944px; promote it to a `FU-` item in `followups.md`.
+
+10 minutes.
 
 ---
 
