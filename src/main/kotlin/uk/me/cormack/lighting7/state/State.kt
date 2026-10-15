@@ -848,10 +848,23 @@ class State(val config: ApplicationConfig) {
      * reads through to it. A previously-toggled project retains its state across an
      * A → B → A switch.
      *
-     * Each holder is write-through to `project_scaler_states` so state also survives a
-     * backend restart.
+     * Each holder writes through to `project_scaler_states` so state also survives a
+     * backend restart — through [scalerWrites], because a grand-master fader moves at frame rate.
      */
     private val scalerHolders = java.util.concurrent.ConcurrentHashMap<Int, GlobalScalerStateHolder>()
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private val scalerWritesLazy = lazy {
+        LatestWinsWriter<Int, ProjectScalerStateSnapshot>(GlobalScope) { projectId, snapshot ->
+            saveProjectScalerState(database, projectId, snapshot)
+        }
+    }
+    private val scalerWrites by scalerWritesLazy
+
+    /** Write every pending scaler change now: at shutdown, and in tests, which read the row back. */
+    internal fun flushScalerWrites() {
+        if (scalerWritesLazy.isInitialized()) scalerWritesLazy.value.flush()
+    }
 
     /**
      * Return the [GlobalScalerStateHolder] for [projectId], creating one on first access.
@@ -862,37 +875,10 @@ class State(val config: ApplicationConfig) {
     fun scalerHolderFor(projectId: Int): GlobalScalerStateHolder =
         scalerHolders.computeIfAbsent(projectId) {
             GlobalScalerStateHolder(
-                initial = loadProjectScalerState(projectId),
-                persist = { snapshot -> saveProjectScalerState(projectId, snapshot) },
+                initial = loadProjectScalerState(database, projectId),
+                persist = { snapshot -> scalerWrites.submit(projectId, snapshot) },
             )
         }
-
-    private fun loadProjectScalerState(projectId: Int): ProjectScalerStateSnapshot =
-        transaction(database) {
-            DaoProjectScalerState.find { DaoProjectScalerStates.project eq projectId }
-                .firstOrNull()
-                ?.toSnapshot()
-                ?: ProjectScalerStateSnapshot()
-        }
-
-    private fun saveProjectScalerState(projectId: Int, snapshot: ProjectScalerStateSnapshot) {
-        transaction(database) {
-            val project = DaoProject.findById(projectId) ?: return@transaction
-            val existing = DaoProjectScalerState
-                .find { DaoProjectScalerStates.project eq projectId }
-                .firstOrNull()
-            if (existing != null) {
-                existing.blackout = snapshot.blackout
-                existing.grandMaster = snapshot.grandMaster
-            } else {
-                DaoProjectScalerState.new {
-                    this.project = project
-                    this.blackout = snapshot.blackout
-                    this.grandMaster = snapshot.grandMaster
-                }
-            }
-        }
-    }
 
     /**
      * Per-process MIDI surface hot-path histogram registry. Buckets covering ingress (router →
@@ -1066,6 +1052,9 @@ class State(val config: ApplicationConfig) {
      */
     fun shutdown() {
         val ds = dataSource ?: return
+        // Before the pool closes: a level moved inside the writer's last interval is still pending.
+        // Closing also ends the writer's GlobalScope coroutine, which holds the database.
+        runCatching { if (scalerWritesLazy.isInitialized()) scalerWritesLazy.value.close() }
         dataSource = null
 
         runCatching { autoSyncScheduler.stop() }

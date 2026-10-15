@@ -35,6 +35,7 @@ import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
 import { HandChip } from "./components/hand/HandChip"
 import { ArmedChip } from "./components/effects/ArmedChip"
+import { GrandMasterOverviewPanel } from "./components/GrandMasterOverviewPanel"
 import { EffectsAnnouncer } from "./components/effects/EffectsAnnouncer"
 import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
@@ -80,7 +81,7 @@ export default function Layout() {
   const isDesktop = useMediaQuery(MD_BREAKPOINT)
 
   // **Immersive** (busk-chrome plan D7; `Immersive.dc.html`): one boolean, the window's fact
-  // *and* a live view. While it holds, the desktop sidebar, the app header, the four overview
+  // *and* a live view. While it holds, the desktop sidebar, the app header, the five overview
   // panels and the sidebar's margin are not drawn — hidden, not collapsed, and the panels'
   // visibility is untouched so they come back on exit. On every other route the app is drawn
   // whatever the fact says: the fixtures list is navigated *from* the sidebar, and a window that
@@ -241,8 +242,13 @@ export default function Layout() {
                 {/* The desk's arm, first: red, counting down, a tap disarms (stage-view session 9). */}
                 <ArmedChip />
                 <ConnectionStatus />
-                <ProgrammerIndicator />
-                {panels.map((panel) => (
+                {/* Every chip on this row is 28px (`h-7`, the ARMED chip's), the icon toggles 36. */}
+                <ProgrammerIndicator className="h-7" />
+                {/* A panel whose toggle is a chip (the grand master's) sits with the chips. */}
+                {panels.filter((panel) => panel.toggleChip).map((panel) => (
+                  <OverviewToggle key={panel.id} panel={panel} />
+                ))}
+                {panels.filter((panel) => !panel.toggleChip).map((panel) => (
                   <OverviewToggle key={panel.id} panel={panel} />
                 ))}
                 {/* The theme control is inside this menu, not beside it — see `ThemeMenuItem`.
@@ -255,11 +261,11 @@ export default function Layout() {
           </header>
           )}
 
-          {/* The four overview panels, stacked in `DESCRIPTORS`' order so the toolbar reads left
+          {/* The five overview panels, stacked in `DESCRIPTORS`' order so the toolbar reads left
               to right as these read top to bottom. Each is always rendered — but only its animated
               wrapper is: every one of them puts its live body behind `CollapsiblePanel`, which
               unmounts it once the collapse has finished. Adding a panel here means doing the same,
-              or the rig pays for it on every route the operator is on. None of the four is drawn
+              or the rig pays for it on every route the operator is on. None of the five is drawn
               while immersive (D7): their toggles — on the header above and in the palette's View
               group — are withheld with them, and their stored visibility is left alone so they
               return on exit. */}
@@ -277,6 +283,9 @@ export default function Layout() {
                   busk-page drag must reach, and this panel has no drag at all — nothing in it is
                   draggable and nothing may be dropped on it. */}
               <SpeedMasterOverviewPanel isVisible={byId.speedMasters.isVisible} />
+
+              {/* The grand master, summoned rather than resident (venue-visit plan S5). */}
+              <GrandMasterOverviewPanel isVisible={byId.grandMaster.isVisible} />
             </>
           )}
 
@@ -339,7 +348,7 @@ export default function Layout() {
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
-            // The same four panels the toolbar renders, from the same array — the palette used to
+            // The same five panels the toolbar renders, from the same array — the palette used to
             // declare its own copy, which is how the Stage entry drifted onto a second icon. None
             // of them while immersive: the panels are not mounted then, and a row reading "On"
             // for a panel that is not on screen, whose press draws nothing, is a control

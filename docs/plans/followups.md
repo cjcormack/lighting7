@@ -27,7 +27,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
 | [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
-| [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-MIDI-RING-STYLE-MIXED`](#fu-midi-ring-style-mixed) | Trigger | MIDI | a second profile declares a `FAN` or `PAN` encoder ring |
 | [`FU-AI-SET-SELECTION`](#fu-ai-set-selection) | Trigger | AI | a conversation asks the AI to select fixtures rather than act on them |
@@ -2166,32 +2165,6 @@ five summary lines, not two — and the two wall-clock windows are the jittery o
 `docs/testing-engineering.md` §"Recorded baselines"; note `[beat]` already reads ~45% faster than
 the 2026-04-22 capture on unchanged code, which is itself the argument for the variance study.
 
-### `FU-FE-DBO-INERT`
-
-**Blackout is a cosmetic toggle sitting beside a functional one** · Ready · desk-simplification
-session 2b, 2026-08-23
-
-`ShowBar`'s DBO tile is local `useState` with no side effect in every host that mounts it, and
-`grep -i blackout` over `src/` finds no API call — the only real blackout is a MIDI/OSC surface
-binding target (`api/surfacesApi.ts`, `BlackoutTarget`). It has always been inert, which was
-survivable while it was the only control in that cluster.
-
-Session 2b put a **BLIND** tile immediately beside it — Blind being a real gate on what reaches the
-rig, wired to `programmer.setBlind`. So the bar now draws two identically-styled tiles, adjacent, of
-which one works. An operator who trusts DBO mid-show because Blind next to it plainly does something
-is the failure this predicts.
-
-**Fix**: a backend blackout route (grand-master-zero, or a Layer-0 gate), and `ShowBar`'s DBO wired
-to it the way Blind is. Out of 2b's scope because it needs backend surface area, and 2b was
-deliberately frontend-only.
-
-**Alternative if that is not wanted**: draw DBO differently from Blind, or remove it. Two peers where
-one is a placeholder is the part that must not stand.
-
-**2026-09-11**: the Blind tile left the bar — `PD-BLIND-ON-PROGRAMMER` made Blind the programmer's
-action bar's control, reported elsewhere by `ProgrammerIndicator`. DBO now stands alone in the bar, so
-the "two peers" framing no longer applies; a tile that does nothing still does. Not resolved.
-
 ### `FU-FE-SHARED-LOOK-EDIT-GUARD`
 
 **The shared-Look edit guard was never implemented** · Ready · Noticed during desk-simplification
@@ -2838,6 +2811,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-FE-DBO-INERT` — the inert DBO tile is gone from the ShowBar, the phone runner and the Prompt
+  Book's drawer; a Grand Master overview panel summoned from the header replaced it (venue-visit plan
+  S5, D5), with REST, WS and a MIDI `grandMasterFader` target. The MIDI `blackout` target is unchanged.
 - `FU-STAGE-VENUE-SHARED` — a venue is a project of its own (`kind = VENUE`) with published versions,
   and a show sits on one at a pinned version: the rig scope, venue mode and Publish, shows on a venue
   with hides and Extract, the venue repo, facet overrides, the hold and Update, and the Projects page

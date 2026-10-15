@@ -160,13 +160,7 @@ Grouped by area. §4 gives the order.
 
 ### Rig and output
 
-**S5 — Grand master (D5).**
-- `GlobalScalerState` becomes a continuous scale. It still persists in
-  `project_scaler_states`, which needs a new real column (an additive change).
-- REST and WS set and stream it. A MIDI `GrandMasterFader` target is added beside the toggle.
-- The app-bar fader replaces the DBO tile. Closes `FU-FE-DBO-INERT`.
-- **Scope (D12).** It keeps scaling DIMMER, UV and STROBE. On a head with no dimmer channel it
-  scales the colour-mix channels instead.
+- ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
 
 **S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19).**
 - **Command roles.** `@FixtureCommand` gains a role (`LAMP_ON`, `LAMP_OFF`, `RESET`), so a bulk
@@ -361,7 +355,6 @@ first. After R1.4 the lane splits into Cue editor and Cue library.
 
 | Session | From other lanes |
 |---|---|
-| S5 Grand master | — |
 | S6 Make rig safe, Undo / Quit desk | — |
 | S9 Blinder colour | — |
 | S8 Per-patch locate | S11 |
@@ -388,7 +381,7 @@ first. After R1.4 the lane splits into Cue editor and Cue library.
 | R4.6 Beam effects | — |
 | R4.7 Palette Steps and Slot Steps | — |
 | R4.4 Fading by size | R1.2 |
-| R4.5 A stack's effect size | S5's shape, either order |
+| R4.5 A stack's effect size | — |
 
 **Apply.**
 

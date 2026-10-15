@@ -378,8 +378,7 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
         side={form === 'bottom-sheet' ? 'bottom' : 'right'}
         // The right-hand form is the sheet's own 320 floor (`SHEET_MIN_WIDTH`), not the 288 it was
         // while it held only Colour and Spread: the Show tab's strip — name, list, programmer chip,
-        // tempo chip, DBO — fits at 320 with the name truncated to its minimum and not at 288,
-        // where DBO, the last item, was clipped.
+        // tempo chip — was measured at 320 with the name truncated to its minimum.
         className={cn('flex flex-col gap-0 p-0', form === 'bottom-sheet' ? 'h-[66vh] rounded-t-xl' : 'w-80')}
         style={{ maxWidth: 'none' }}
       >

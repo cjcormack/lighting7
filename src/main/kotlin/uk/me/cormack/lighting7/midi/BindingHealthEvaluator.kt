@@ -192,6 +192,7 @@ object BindingHealthEvaluator {
         is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
         BindingTarget.Blackout -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
+        BindingTarget.GrandMasterFader -> AssignmentHealth.Ok
     }
 
     /** A [BindingTarget.FireTrigger]'s fixture must be patched and carry that trigger (by name or label). */

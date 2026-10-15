@@ -102,6 +102,15 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `GrandMasterFader serializes as an object`() {
+        val fader: BindingTarget = BindingTarget.GrandMasterFader
+        val encoded = BindingTargetJson.encodeToString(fader)
+        assertTrue(encoded.contains("\"type\":\"grandMasterFader\""))
+        assertEquals(fader, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        assertEquals(ControlKind.CONTINUOUS, targetControlKind(fader))
+    }
+
+    @Test
     fun `SetBank round trips`() {
         val target: BindingTarget = BindingTarget.SetBank(deviceTypeKey = "x-touch-compact-standard", bank = "layer-b")
         val encoded = BindingTargetJson.encodeToString(target)

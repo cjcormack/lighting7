@@ -15,8 +15,9 @@ import uk.me.cormack.lighting7.state.SubselectMode
  * lives in a `type` field set by [SerialName] on each subtype.
  *
  * Targets fall into three rough families:
- *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm]) — fader /
- *     encoder movements map to a Layer 2 property write (Phase 3) or a tempo write.
+ *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm], [GrandMasterFader]) —
+ *     fader / encoder movements map to a Layer 2 property write (Phase 3), a tempo write or the
+ *     grand master's level.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
  *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
@@ -136,10 +137,15 @@ sealed class BindingTarget {
     @SerialName("blackout")
     data object Blackout : BindingTarget()
 
-    /** Toggle Grand Master (global intensity scaler) on press. */
+    /** Toggle Grand Master (global intensity scaler) on press: to 0, and back to its last level. */
     @Serializable
     @SerialName("grandMasterToggle")
     data object GrandMasterToggle : BindingTarget()
+
+    /** Set the grand master's level from a fader / encoder: 0..127 across 0–100 %. */
+    @Serializable
+    @SerialName("grandMasterFader")
+    data object GrandMasterFader : BindingTarget()
 
     /**
      * Switch the active bank for the given device on press. Device-side bank buttons

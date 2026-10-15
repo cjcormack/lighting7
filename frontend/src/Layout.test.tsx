@@ -34,7 +34,7 @@ vi.mock('./components/CueSlotOverviewPanel', () => ({ CueSlotOverviewPanel: () =
 vi.mock('./components/groups/FixtureDetailModal', () => ({ FixtureDetailModal: () => null }))
 vi.mock('./components/overviewPanels', () => {
   const panel = (id: string) => ({ id, label: id, noun: id, icon: () => null, storageKey: id, isVisible: false, toggle: () => {} })
-  const panels = ['stage', 'fixtures', 'speedMasters', 'cueSlots'].map(panel)
+  const panels = ['stage', 'fixtures', 'speedMasters', 'grandMaster', 'cueSlots'].map(panel)
   return {
     useOverviewPanels: () => ({ panels, byId: Object.fromEntries(panels.map((p) => [p.id, p])) }),
     OverviewToggle: () => null,
@@ -54,6 +54,7 @@ vi.mock('./components/cloudSync/SyncReauthBanner', () => ({ SyncReauthBanner: ()
 vi.mock('./components/screens/ReturnToFullscreenBanner', () => ({ ReturnToFullscreenBanner: () => null }))
 vi.mock('./components/hand/HandChip', () => ({ HandChip: () => <div data-testid="hand-chip" /> }))
 vi.mock('./components/effects/ArmedChip', () => ({ ArmedChip: () => null }))
+vi.mock('./components/GrandMasterOverviewPanel', () => ({ GrandMasterOverviewPanel: () => <div data-testid="panel-grand-master" /> }))
 vi.mock('./components/effects/EffectsAnnouncer', () => ({ EffectsAnnouncer: () => null }))
 vi.mock('./components/screens/ScreensSheet', () => ({ ScreensSheet: () => null }))
 vi.mock('./components/stageRender/StageRenderHost', () => ({ StageRenderHost: () => null }))
@@ -106,6 +107,8 @@ describe('the app around a live view', () => {
       expect(await screen.findByTestId('page')).toBeInTheDocument()
       expect(sidebar(container)).not.toBeNull()
       expect(appHeader(container)).not.toBeNull()
+      // The grand master, summoned from the header like the others (venue-visit plan S5).
+      expect(screen.getByTestId('panel-grand-master')).toBeInTheDocument()
       expect(screen.getByTestId('panel-stage')).toBeInTheDocument()
       expect(screen.getByTestId('panel-slots')).toBeInTheDocument()
       // Open, as everywhere else: there is one sidebar state, not a live-view rail (D4).
@@ -132,10 +135,10 @@ describe('the app around a live view', () => {
     }
   })
 
-  it('withholds the four panel toggles from the palette while immersive', async () => {
+  it('withholds the five panel toggles from the palette while immersive', async () => {
     const { unmount } = draw('/projects/1/busk')
     await screen.findByTestId('page')
-    expect(screen.getByTestId('palette-toggles')).toHaveTextContent(/^stage\|fixtures\|speedMasters\|cueSlots$/)
+    expect(screen.getByTestId('palette-toggles')).toHaveTextContent(/^stage\|fixtures\|speedMasters\|grandMaster\|cueSlots$/)
     act(() => setImmersive(true))
     // A row reading "On" for a panel that is not mounted would be a control reporting a state
     // it is not in.

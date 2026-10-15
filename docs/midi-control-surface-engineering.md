@@ -17,8 +17,8 @@ Related:
 Control surfaces are *another client of the composition model* — not a parallel pipeline.
 A fader bound to a fixture dimmer writes the **programmer** (Layer 2 — the same `ProgrammerStore` the web UI
 `updateChannel` message uses). A button bound to cue-stack GO dispatches through the same
-`CueStackManager` the REST API does. Blackout and Grand Master are applied as `TransmitModifier`s
-on the ArtNet controller, alongside parking. There is no "surface mode" in the engine.
+`CueStackManager` the REST API does. Blackout and the Grand Master's level are applied as a
+`TransmitModifier` on the ArtNet controller, beside parking. There is no "surface mode" in the engine.
 
 The implementation follows four separable concerns, mirroring the phase breakdown in
 [control-surface-plan.md](plans/completed/control-surface-plan.md):
@@ -65,7 +65,8 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │         │    (uuid first; a bare int only for a pre-v11 row)             │
   │         ├─ FireTrigger → EffectsService.fireFromSurface (needs the arm)  │
   │         ├─ Flash → L4 write on press, clear on release                   │
-  │         ├─ Blackout / GrandMasterToggle → GlobalScalerState              │
+  │         ├─ Blackout / GrandMasterToggle / GrandMasterFader               │
+  │         │    → GlobalScalerState                                         │
   │         └─ SetBank → ActiveBankState.setBank                             │
   │                                                                          │
   └─────────────────────────────────────────────────────────────────────────┘
@@ -91,6 +92,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │  Parallel subscribers feed other LEDs:                                   │
   │    FlashStateTracker.changes → flash LEDs                                │
   │    GlobalScalerState.blackoutEnabled + grandMasterEnabled → toggle LEDs  │
+  │    GlobalScalerState.grandMasterLevel → grand-master faders              │
   │    DeskSelection.targets → rebuild + resync (select LEDs, selection      │
   │      entries' channel sets)                                              │
   │    LocateManager.activeTargets → locate LEDs                             │
@@ -152,8 +154,8 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | `PropertyChannelResolver.kt` | `object` owning what a continuous control **means** on a property, in both directions — the write (`toPropertyValue`, a 7-bit value → the programmer's `PropertyValue`) and the read (`describePropertyRead` + `readHead`, the property's current channels → a 7-bit feedback position). Sliders scale through their own `min..max`. **Colour is one of four HSV axes** (`ColourAxis`), **hue unless the binding says otherwise**: every axis writes a whole colour built from the head's current one, moving only its own component, and reads that component back. *Hue* keeps the head's saturation and value, the saturation floored at `MIN_SATURATION` (a quarter) so a turn on a white is visible; the ring reads the head's hue, and a head under `HUE_READ_MIN_SATURATION` — black, grey, a warm white — reads as no value rather than lighting for a colour the rig is not showing. *Hue fine* is a centred trim of ±½ coarse step — 64 leaves the head on its step, and the coarse read (which rounds) is unmoved by any fine position; the read is the offset within the step and is **circular**, because the offset is taken from the *nearest* coarse step and at the ends of the trim channel rounding decides which step that is — so a head written at 0 reads back as 0 or as 127 for one colour, and read linearly those are the whole travel apart and a group at 0 would darken its own ring. What circularity cannot fix is the value a single head reports: a motor fader let go at the very bottom can be driven to the top on touch-off — the same colour, the other spelling — which is the trim's one documented flip, confined to its extremes. It sits at the centre *within the head's tolerance* (11 at full chroma, where a written step lands a hair off it). *Saturation* is `v/127` at the head's hue and value — 0 is a white at the head's level, after which the hue and fine rings darken and the next hue turn lifts it back to the floor. *Brightness* is HSV value at the head's hue and saturation; 0 is black, and since the programmer stores RGB the hue and saturation go with it — bind the dimmer on a head that has one. A black or unread head starts from red (hue, fine, saturation) or grey (brightness). Every colour-axis write **carries the head's current white, amber and UV** rather than zeroing them: those emitters are faders of their own now (`white` / `amber` / `uv` dispatch as sliders by name), and a hue turn that zeroed the white set beside it would be a control fighting its neighbour. A slider asked for an axis answers null in both directions, so a mixed selection reaches the heads it can and the feedback fold skips the same ones (`findHeads`). A read carries a tolerance from its **chroma** (not its value: a bright pastel holds hue as coarsely as a dim saturated head), and `commonValue` requires **every pair** of heads to agree, since a tolerance test is not transitive and anchoring on the first head would make the answer depend on enumeration order. The two directions live in one file so a ring can never claim a position a move would not reproduce; the old rule (one value fanned to R/G/B, red read back) is `FU-MIDI-SELECTION-COLOUR-RED-ONLY` / `FU-MIDI-ENCODER-HUE`. A flash on a colour is still grey at the binding's max — a flash is a level. Settings return null (enum bindings are button-only — Open Question 7). For property-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/PropertyChannelWriter` which accepts full-range `CueAssignmentResolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
-| `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout + Grand Master. Walks fixtures on `fixturesChanged` to classify intensity-category channels into a packed-`Long` `AtomicReference<Set<Long>>` for allocation-free hot-path lookup. A toggle only flips the modifier's own state — output is a continuous stream, so the next frame of each universe carries it (see [dmx-engineering.md §Change latency](dmx-engineering.md#change-latency)). The `blackoutEnabled` / `grandMasterEnabled` flags read through to a project-scoped `GlobalScalerStateHolder` so state survives project switches within a session. |
-| `GlobalScalerStateHolder.kt` | Per-project holder for the `MutableStateFlow<Boolean>` backing Blackout and Grand Master. Lives on `State.scalerHolderFor(projectId)`, outside the `Show` lifecycle; a fresh `GlobalScalerState` facade is constructed against the same holder on every project activation. Phase 9 of [control-surface-plan.md](plans/completed/control-surface-plan.md) — option A (ephemeral per-session); DB persistence deferred. |
+| `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout and the Grand Master (venue-visit plan S5, D5, D12). Walks fixtures on `fixturesChanged` and classifies channels into two packed-`Long` sets in one `AtomicReference`: **scaled** — every DIMMER and UV channel, and on a head with no dimmer its colour mix (a `DmxColour`'s RGB, WHITE and AMBER sliders), a head being a fixture or one of its elements, dimmerless only when neither it nor its parent has a dimmer — and **strobe**. The grand master multiplies a scaled channel by its level and cuts a strobe channel only at 0 (a strobe holds a rate, so scaling it would change its speed); blackout zeroes both. Colour wheels and presets are never scaled. A change only moves the modifier's own state — output is a continuous stream, so the next frame of each universe carries it (see [dmx-engineering.md §Change latency](dmx-engineering.md#change-latency)). Reads through to a project-scoped `GlobalScalerStateHolder`. `grandMasterLevelOf7Bit` / `grandMasterLevelTo7Bit` are a control's 0..127 both ways. |
+| `GlobalScalerStateHolder.kt` | Per-project holder for blackout and the grand master's level (0–100 %, `grandMasterLevel`), with `grandMasterEnabled` the level read as `> 0`: turning it off takes the level to 0 and back on restores the last level above 0 this holder saw, or full. Lives on `State.scalerHolderFor(projectId)`, outside the `Show` lifecycle; a fresh `GlobalScalerState` facade is constructed against the same holder on every project activation. Writes through to `project_scaler_states` (machine-local, never synced) through `State`'s `LatestWinsWriter`, which writes the latest row per project at most every 250 ms — a fader dragged from a browser moves the level at frame rate. |
 
 ### Feedback and reconciliation
 
@@ -357,7 +359,8 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `FireTrigger(fixtureKey, trigger)` | Button | Fire one tube of a one-shot fixture — the Twin Shot's `output1`, or its label `A` — through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**, like every fire: an unarmed press sends nothing and is announced on every window (`effects.skipped`, source `surface`), as is a spent tube; a blind programmer rehearses it. Fixture-keyed, as `FixtureProperty` is. Health: `missingFixture` with no such patch, `missingProperty` when the fixture has no such trigger — the arm is a fact about this second, never a dead binding. No LED |
 | `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the property cascades to the surviving owner / cue layer / baseline in one publish |
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
-| `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
+| `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` — to 0, and back to the last level above 0; LED lit while the level is above 0 |
+| `GrandMasterFader` | Continuous | `GlobalScalerState.setGrandMasterLevel` — 0..127 across 0–100 %. Health always `ok`. Fed back like a tempo control (`GrandMasterEntry`, not a `ContinuousEntry`: its value lives in the holder, not on a channel): the motor or ring follows the level whichever door moved it, a touched motor is spared and catches up on release, and the entry is what arms PICKUP |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
 | `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
 | `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
@@ -573,6 +576,7 @@ Parallel coroutines collect from:
 
 - `FlashStateTracker.changes` → flash LED on/off
 - `GlobalScalerState.blackoutEnabled.combine(grandMasterEnabled)` → scaler LEDs
+- `GlobalScalerState.grandMasterLevel` → grand-master faders (per show, re-armed with the scaler)
 - `ActiveBankState.changes` → bank-button LEDs + trigger full resync for affected device
 - `ControlSurfaceBindingService.bindingChanges` → rebuild index + resync every device
 - `DeskSelection.targets` → rebuild index (selection entries' channel sets) + resync every device
@@ -605,8 +609,8 @@ can show. It is the one place in this class where the compiler is not the safety
 | Fader → FixtureProperty | `ProgrammerWriter.writeProperty` | **Layer 2 (programmer)** | Sticky; wins over cues and suppresses effects on the property |
 | Fader → GroupProperty | `ProgrammerWriter.writeProperties` | **Layer 2 (programmer)** | Fanned to members, slots tagged with the source group |
 | Flash press | `ProgrammerWriter.writeProperty` (owner `flash`) | **Layer 2 (programmer)** | Cleared on release; cascade republished |
-| Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Only affects intensity categories |
-| Grand Master toggle | Same as Blackout | **post-composition mask** | Binary in v1; continuous fader deferred |
+| Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Dimmer, UV, strobe, and a dimmerless head's colour mix |
+| Grand Master fader / toggle | Same as Blackout | **post-composition scale** | The level multiplies the same channels; a strobe is cut only at 0 |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
 | Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI; uuid resolved to the project's row first |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
@@ -754,8 +758,9 @@ From `State.kt`:
 | `surfaceEncoderBank.set` | `{ deviceTypeKey, propertyName, colourAxis? }` — the axis absent for hue |
 | `surfaceEncoderBank.state` | *(request encoder banks)* |
 | `surfaceScaler.setBlackout` | `{ enabled }` |
-| `surfaceScaler.setGrandMaster` | `{ enabled }` |
+| `surfaceScaler.setGrandMaster` | `{ enabled }` — off is level 0, on the last level |
 | `surfaceScaler.state` | *(request scaler state)* |
+| `grandMaster.set` | `{ level }` — the grand master's level, 0–100 (`GrandMasterSocket.kt`) |
 | `surfaceLearn.begin` | `{ sessionId, targetContext }` |
 | `surfaceLearn.cancel` | `{ sessionId }` |
 | `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
@@ -770,7 +775,8 @@ From `State.kt`:
 | `surfaceBank.state` | `{ banks: Map<deviceTypeKey, bank> }` |
 | `surfaceBank.changed` | Single delta event |
 | `surfaceEncoderBank.state` | `{ properties: Map<deviceTypeKey, { propertyName, colourAxis? }> }` — one frame type: it is a StateFlow, so the subscription is snapshot and broadcast both, and there is no delta frame |
-| `surfaceScaler.state` | `{ blackout, grandMaster }` |
+| `surfaceScaler.state` | `{ blackoutEnabled, grandMasterEnabled }` |
+| `grandMaster.state` | `{ projectId, level }` — connect snapshot + broadcast (`GrandMasterSocket.kt`) |
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
 | `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |
@@ -793,7 +799,7 @@ From `State.kt`:
 
 1. **`PropertyChannelResolver` is reflective and fixture-aware.** Bindings store `(fixtureKey, propertyName)`. If a fixture type is refactored (property renamed, mode changed), existing bindings silently fail to resolve at dispatch time. There is no compile-time or load-time validation today. See Open Question 9 in [control-surface-plan.md](plans/completed/control-surface-plan.md) — proposed fix (binding reconciliation diagnostic) is tracked as Phase 7 of that plan.
 
-2. **Blackout / Grand Master state is in-memory per project.** State survives show tear-down on project switch (the `GlobalScalerStateHolder` lives on `State`, keyed by `projectId`), so toggling Blackout on project A → switching to B → switching back to A keeps Blackout on. Cross-restart persistence is **not** implemented in v1 — a backend restart resets every project's scalers to default. If operators need restart persistence, add a `project_scaler_state` DB table (option B of Phase 9 in [control-surface-plan.md](plans/completed/control-surface-plan.md)).
+2. **Blackout and the grand master are per project and machine-local.** State survives show tear-down on project switch (the `GlobalScalerStateHolder` lives on `State`, keyed by `projectId`), so blackout on project A → switch to B → switch back to A keeps blackout on, and the level a project was left at comes back with it. Each change is written through to `project_scaler_states` (at most every 250 ms), so it also survives a restart. The table is excluded from sync: another desk opening the project starts at full.
 
 3. **Soft-takeover only applies to faders.** Encoders always use `IMMEDIATE` policy. If an encoder's logical value drifts (e.g. a cue changed it), the next encoder turn snaps the hardware to the new value. This matches industry practice but is worth knowing.
 
@@ -823,7 +829,6 @@ From `State.kt`:
 - USB HID / vendor protocols (Stream Deck, Loupedeck)
 - Relative encoder encodings (Mackie, binary offset, two's complement)
 - SysEx-driven LCD text
-- Continuous Grand Master via a bound fader (v1 is binary toggle)
 - Submasters
 - Multi-operator concurrent surface editing
 

@@ -112,8 +112,6 @@ vi.mock('../hooks/useShowBarProps', () => ({
     barPropsOpts.onBeforeGo = opts.onBeforeGo
     return ({
     showBarProps: {
-      dbo: false,
-      onDbo: vi.fn(),
       goDisabled: false,
       stackName: 'Act 1',
       fade: null,

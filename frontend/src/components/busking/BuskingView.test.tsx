@@ -64,7 +64,6 @@ vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="pal
 // The route's bar state, threaded to the (mocked) side sheet for its Show tab; nothing here reads it.
 const showStub = {
   transport: { activeStack: undefined, serverActiveCueId: null, activeCueId: null, standbyCueId: null, completedCueIds: [] },
-  showBarProps: { dbo: false, onDbo: () => {} },
   activeCue: null,
   standbyCue: null,
   nextStack: null,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   useActivateProgramMutation,
   useDeactivateProgramMutation,
@@ -18,16 +18,15 @@ import { ignoreReportedError } from '../store/errorToastMiddleware'
  * had no Blind tile and derived the stack name its own way; Show suppressed the stack name beside
  * the tab strip. The Prompt Book also called `useShowTransport` directly, so adopting this hook
  * there collapsed that page from two transport instances to one. The busk view was the third host
- * until the busk-chrome plan's session A: it still calls this hook, for the transport and the
- * `dbo` pair, and hands the result to its side sheet's Show tab (`components/busking/ShowTab.tsx`)
+ * until the busk-chrome plan's session A: it still calls this hook, for the transport, and hands the result to its side sheet's Show tab (`components/busking/ShowTab.tsx`)
  * instead of drawing a bar. The programmer never had one.
  *
  * `canOperate` and `onBeforeGo` are parameters for the two things that genuinely are per-host:
  * book-level permission, and re-locking on GO.
  *
  * `isShowActive` is returned rather than applied here because the *caller* decides what an inactive
- * show looks like. No current host hides the bar on it — blackout and the speed masters both mean
- * something with the show down — but that is their call, not the hook's.
+ * show looks like. No current host hides the bar on it — the speed masters mean something with the
+ * show down — but that is their call, not the hook's.
  *
  * **Blind is not supplied from here, for any host.** It was, from session 2b until
  * `PD-BLIND-ON-PROGRAMMER`: the bar drew a BLIND tile beside blackout on every view that had a bar,
@@ -73,11 +72,6 @@ export function useShowBarProps(
     onBeforeGo,
     frameRateProgress,
   })
-  const [dbo, setDbo] = useState(false)
-  // Stable so the memoized `ShowBar` can bail on the frame-rate re-renders this hook's host takes
-  // during a fade — a per-render arrow here would defeat that memo on every frame.
-  const onDbo = useCallback(() => setDbo((d) => !d), [])
-
   const activeCue = transport.activeStack?.cues.find((c) => c.id === transport.activeCueId) ?? null
   const standbyCue =
     transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
@@ -124,8 +118,6 @@ export function useShowBarProps(
     transport,
     showBarProps: {
       stackName: transport.activeStack?.name ?? null,
-      dbo,
-      onDbo,
       activeNumber: activeCue?.cueNumber ? `Q${activeCue.cueNumber}` : null,
       activeName: activeCue?.name ?? null,
       standbyNumber: standbyCue?.cueNumber ? `Q${standbyCue.cueNumber}` : null,

@@ -107,6 +107,9 @@ interface SurfaceActions {
     fun toggleBlackout(): Boolean
     fun toggleGrandMaster(): Boolean
 
+    /** Set the grand master's level from a continuous control, 0..127 across 0–100 %. */
+    fun writeGrandMaster(midiValue7Bit: UByte)
+
     /**
      * Set a speed master's tempo from a continuous control, scaling 0..127 across
      * [minBpm]..[maxBpm]. [masterUuid] null → master 1.
@@ -349,6 +352,9 @@ class DefaultSurfaceActions(
 
     override fun toggleBlackout(): Boolean = globalScalerState.toggleBlackout()
     override fun toggleGrandMaster(): Boolean = globalScalerState.toggleGrandMaster()
+
+    override fun writeGrandMaster(midiValue7Bit: UByte) =
+        globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
 
     /**
      * Uuid first, and never the int when a uuid is present: a binding cloned from another project

@@ -95,8 +95,7 @@ export function PromptBookViewerPage() {
   // ── Runtime view state — NEVER persisted. ──
   const [tool, setTool] = useState<PromptBookTool>('move')
   const [showWarnings, setShowWarnings] = useState(true)
-  // Local blackout toggle (parity with the Run view) + tablet/phone drawer.
-  const [dbo, setDbo] = useState(false)
+  // Tablet/phone drawer.
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Below this container width the side rail becomes a drawer + bottom transport.
   const [bodyRef, isNarrow] = useNarrowContainer(1040)
@@ -488,8 +487,6 @@ export function PromptBookViewerPage() {
     goDisabled,
     showActive: isShowActive,
     stackName: railStackName,
-    dbo,
-    onDbo: () => setDbo((d) => !d),
     projectId: projectIdNum,
     coverPages: book.coverPages,
     onGo,

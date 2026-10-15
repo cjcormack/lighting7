@@ -267,6 +267,51 @@ class SurfaceFeedbackPublisherTest {
     }
 
     /**
+     * A grand-master fader follows the level wherever it is set from — a browser, REST, another
+     * surface — and arms soft takeover from it, as a tempo encoder does; a touched motor is spared
+     * and catches up on release.
+     */
+    @Test
+    fun `a grand-master fader follows the level, spares a touched motor and arms takeover`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.GrandMasterFader),
+            binding(2, "enc-1", BindingTarget.GrandMasterFader, policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun motor() = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 1 }
+            assertEquals(127u.toUByte(), motor().last().value, "attach: the fader sits at full")
+            h.recordingController.feedback.clear()
+
+            h.scaler.setGrandMasterLevel(50.0)
+            yield()
+            assertEquals(64u.toUByte(), motor().last().value)
+            val ring = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 10 }
+            assertEquals(64u.toUByte(), ring.last().value)
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 5u),
+                "a PICKUP control far from the level must not jump it",
+            )
+
+            h.publisher.onTouch("x-touch-compact", "fader-1", down = true)
+            h.recordingController.feedback.clear()
+            h.scaler.setGrandMasterLevel(25.0)
+            yield()
+            assertTrue(motor().isEmpty(), "a touched motor is not driven: ${h.recordingController.feedback}")
+            h.publisher.onTouch("x-touch-compact", "fader-1", down = false)
+            assertEquals(32u.toUByte(), motor().last().value, "released: the motor catches up")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
      * Pins the deliberate v1 cut: every other LED entry reflects a steady boolean the
      * publisher can read back, and a tap has no "on" state to hold. If tap LEDs are added
      * later this test is the thing that should be updated, not silently deleted.
@@ -357,6 +402,7 @@ class SurfaceFeedbackPublisherTest {
                 override fun locateSelection() {}
                 override fun toggleBlackout(): Boolean = h.scaler.toggleBlackout()
                 override fun toggleGrandMaster(): Boolean = h.scaler.toggleGrandMaster()
+                override fun writeGrandMaster(midiValue7Bit: UByte) {}
                 override fun writeSpeedMasterBpm(
                     masterUuid: String?,
                     minBpm: Double,
