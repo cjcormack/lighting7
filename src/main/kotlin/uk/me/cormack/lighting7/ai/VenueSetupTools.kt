@@ -156,7 +156,7 @@ internal class VenueSetupTools(private val state: State) {
             else "Extracted venue '$name' (id=${result.venueId}) as v1; project $from now sits on it",
             JsonObject(
                 body + ("note" to JsonPrimitive(
-                    "The show keeps its own set (SET-layer elements), cues, Looks, templates and prompt book, and now reads the room and rig " +
+                    "The show keeps its own set (SET-layer elements), cues, Looks, palettes and prompt book, and now reads the room and rig " +
                         "from the venue at v1, so nothing it draws or outputs changes. Preset seating stays the show's own copy; a new show " +
                         "on the venue copies one with create_project's seatingPreset. New shows: create_project with venueId.",
                 )),
@@ -297,7 +297,7 @@ internal class VenueSetupTools(private val state: State) {
         }
         return success(
             "${if (dryRun) "Checked" else "Copied"}: ${report.elements.size} element(s), ${report.looks.size} Look(s), " +
-                "${report.templates.size} template(s), ${report.stacks.size} stack(s) into project ${to.project.id.value}" +
+                "${report.templates.size} palette(s), ${report.stacks.size} stack(s) into project ${to.project.id.value}" +
                 if (report.unresolved.isEmpty()) "" else "; ${report.unresolved.size} reference(s) did not resolve",
             buildJsonObject {
                 put("dryRun", dryRun)
@@ -305,8 +305,8 @@ internal class VenueSetupTools(private val state: State) {
                 putJsonArray("elements") { report.elements.forEach { add(it) } }
                 putJsonArray("looks") { report.looks.forEach { add(it) } }
                 if (report.looksLinked.isNotEmpty()) putJsonArray("looksLinked") { report.looksLinked.forEach { add(it) } }
-                if (report.templates.isNotEmpty()) putJsonArray("templates") { report.templates.forEach { add(it) } }
-                if (report.templatesLinked.isNotEmpty()) putJsonArray("templatesLinked") { report.templatesLinked.forEach { add(it) } }
+                if (report.templates.isNotEmpty()) putJsonArray("palettes") { report.templates.forEach { add(it) } }
+                if (report.templatesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.templatesLinked.forEach { add(it) } }
                 putJsonArray("stacks") {
                     report.stacks.forEach { (name, cues) -> addJsonObject { put("name", name); put("cues", cues) } }
                 }
@@ -318,7 +318,7 @@ internal class VenueSetupTools(private val state: State) {
                 }
                 put(
                     "note",
-                    "Copies are new records with new ids, named as the source names them. A Look or template a copied cue layers is " +
+                    "Copies are new records with new ids, named as the source names them. A Look or palette a copied cue layers is " +
                         "copied with it, or — when the target already has one of that name — linked to the target's (looksLinked). " +
                         "Rows naming a fixture or group the target lacks are kept and read as missing; a scenery change, cue event " +
                         "or script trigger that cannot resolve is left out. Prompt-book anchors are never copied: anchor the cues " +
@@ -516,7 +516,7 @@ internal class VenueSetupTools(private val state: State) {
         val templateMap = mutableMapOf<Int, DaoTemplate>()
         for (t in layerTemplates) targetTemplates[t.name]?.let { templateMap[t.id.value] = it; report.templatesLinked += t.name }
         for (t in templatesToCopy) {
-            val by = "template '${t.name}'"
+            val by = "palette '${t.name}'"
             val copy = DaoTemplate.new {
                 project = target
                 name = t.name

@@ -6,7 +6,7 @@ import { useDeleteTemplateMutation } from '@/store/templates'
 import type { TemplateInUseError, TemplateSummary } from '@/api/templatesApi'
 
 /**
- * What the batch-delete dialog knows about one template it held back: the desk's `TEMPLATE_IN_USE`
+ * What the batch-delete dialog knows about one template it held back: the desk's `PALETTE_IN_USE`
  * body, or nothing but its pads (`body: null`) — `useLookDelete`'s rule, for its reason.
  */
 export interface TemplateInUse {
@@ -47,7 +47,7 @@ export function describeTemplateInUse(summary: TemplateInUse): string {
 /**
  * The template delete on `useBatchDelete` (library-sheets plan D13) — the sheet's batch and
  * `TemplateEditor`'s Delete, one question in one dialog. It replaced the route's confirm +
- * `TEMPLATE_IN_USE` guard pair.
+ * `PALETTE_IN_USE` guard pair.
  *
  * A template with **busk pads** is held for the question without being sent, as a Look is, and its
  * *Delete anyway* is sent plain, forcing only once the desk has named its uses (`useLookDelete`
@@ -83,7 +83,7 @@ export function useTemplateDelete({
         return { kind: 'ok' }
       } catch (err) {
         const body = (err as { data?: TemplateInUseError } | null)?.data
-        if (body?.code === 'TEMPLATE_IN_USE') return { kind: 'inUse', summary: { body, buskPageCount: template.buskPageCount } }
+        if (body?.code === 'PALETTE_IN_USE') return { kind: 'inUse', summary: { body, buskPageCount: template.buskPageCount } }
         return { kind: 'refused', reason: formatError(err) }
       }
     },
@@ -92,7 +92,7 @@ export function useTemplateDelete({
   const batch = useBatchDelete<TemplateSummary, TemplateInUse>({
     remove,
     name: templateName,
-    noun: 'template',
+    noun: 'palette',
     onDeleted,
     onKept,
     toastKey: 'templates',
@@ -100,7 +100,7 @@ export function useTemplateDelete({
   const dialog = (
     <BatchDeleteDialog<TemplateSummary, TemplateInUse>
       state={batch.state}
-      noun="template"
+      noun="palette"
       name={templateName}
       describe={(_template, summary) => describeTemplateInUse(summary)}
       consequence="deleting them anyway removes what uses them — a layer applying one goes, the programmer stops it, an effect naming it points at nothing (repoint that first), a pad leaves its busk page:"

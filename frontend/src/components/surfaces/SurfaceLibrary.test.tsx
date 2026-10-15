@@ -190,7 +190,7 @@ describe('SurfaceLibrary', () => {
     expect(chipsOf('busk-page:page-verse')).not.toContain('Next page')
   })
 
-  it('files a template under Looks and a busk page under Desk', () => {
+  it('files a palette under Looks and a busk page under Desk', () => {
     // The kind row stays at the artboard's six, so the two record kinds fold into it rather than
     // widening a 360px segmented control to seven.
     draw()
@@ -251,7 +251,7 @@ describe('SurfaceLibrary', () => {
     expect(chips).toContain('Strip')
   })
 
-  it('scopes a template row to the family it holds', () => {
+  it('scopes a palette row to the family it holds', () => {
     // `tmpl-red` is `family: 'COLOUR'`. Unlike a Look's Apply chip (family-agnostic, since a Look
     // can span several families), a template is exactly one family, so its Press chip should be
     // scoped like any property chip rather than surviving every filter as an `actionChip` would.

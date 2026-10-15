@@ -59,7 +59,7 @@ The console-style programmer: a sparse per-(fixture, property) overlay of sticky
 
 Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
 
-The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look`, `apply_template`'s `LAYER` mode and `create_look`'s `applyToTargets` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
+The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look`, `apply_palette`'s `LAYER` mode and `create_look`'s `applyToTargets` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
 
 **There is exactly one programmer, and it is shared by every client — by design, not by omission.** A second device is a second *window onto one desk*, not a second seat: whoever signs in elsewhere sees this state and may edit it, and the three broadcast frames (`provenanceState`, `programmer.includeTarget`, `programmer.layerState`) exist to keep those windows honest. Concurrent authorship is explicitly not a scenario this desk designs for, which is what spares it a merge rule: `LayerResolver.fallbackFor` returns **one** value per (fixture, property) because DMX is one byte per channel, so two authors would force a "whose value wins?" policy that nothing here expresses — HTP cannot be it (see the line above), and the `Slot.seq` bands are the only extensible axis. Decided 2026-08-23; the reasoning, and two places the cost of the alternative was previously misjudged, are in [`FU-PROG-PER-USER`](plans/followups.md#fu-prog-per-user).
 
@@ -109,7 +109,7 @@ Clears, blind transitions, and sets accept an optional `fadeMs`, driving the per
 ### Clearing
 
 - `programmer.clearEntry { target, propertyName, fadeMs? }` — releases every owner's slot on one property.
-- `programmer.clearTarget { target, fadeMs? }` — a fixture's or group's *Release* (fixture-fx-sheets plan W2): every owner's slot but a layer's, on every property of the fixture and its heads (or every member of the group, and theirs), the sideband on their channels, and the **local** effects on it (`FxInstance.isLocalEffect`: programmer band, owned by no Look, template, layer or cue). The effects are stopped first and the values then released in one sweep with one republish at `fadeMs` — `clearAll`'s order, so a key an effect was painting fades rather than snapping. A local effect that also drives heads outside the target is left running and named (`partial`) — there is no "stop it on these heads only". Locate's bookkeeping is pruned as `clearEntry` prunes it.
+- `programmer.clearTarget { target, fadeMs? }` — a fixture's or group's *Release* (fixture-fx-sheets plan W2): every owner's slot but a layer's, on every property of the fixture and its heads (or every member of the group, and theirs), the sideband on their channels, and the **local** effects on it (`FxInstance.isLocalEffect`: programmer band, owned by no Look, palette, layer or cue). The effects are stopped first and the values then released in one sweep with one republish at `fadeMs` — `clearAll`'s order, so a key an effect was painting fades rather than snapping. A local effect that also drives heads outside the target is left running and named (`partial`) — there is no "stop it on these heads only". Locate's bookkeeping is pruned as `clearEntry` prunes it.
 - `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the operator's Clear: sweeps every owner's entries (property + sideband) **and removes every effect in the programmer priority band**, then republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them). Both counts come back — `cleared` (entries) and `effectsCleared` (band FX). Band effects are removed *before* the store sweep so the single cascade republish that follows covers both.
 
 Deterministic release: clearing a programmer entry re-resolves the cascade below it — the property lands on the surviving owner, the cue layer, or baseline, never on a stale snapshot.
@@ -165,7 +165,7 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
   row**: `targetType` fixture, `targetKey` the element key — the spelling a cell has as a press
   target, and the one `buildCueAssignmentsForCue` resolves through `untypedGroupableFixture`. No
   column is involved, so the sync layout is unchanged. Update writes cells back the same way; only
-  a template, which names no targets, still skips them as `ELEMENT_TARGET`.
+  a palette, which names no targets, still skips them as `ELEMENT_TARGET`.
 - **Group shape** — a `sourceGroup` hint only *nominates* a group row. It is emitted iff every
   member of the named group holds an entry for that property with an identical value. A stale or
   missing hint therefore degrades to per-fixture rows — verbose, never wrong.
@@ -398,7 +398,7 @@ rule at its two edges:
   Look carrying both rows puts them at one seq; `SliderTarget` and `ColourTarget.extendedComponent`
   both break that tie for the emitter.
 - **One gesture is one contributor.** `ProgrammerWriter.writeProperties` stores a batch's emitters
-  after its colours, so Include of a cue (or a template apply) holding both leaves the emitter as
+  after its colours, so Include of a cue (or a palette apply) holding both leaves the emitter as
   the newer write — the programmer shows what the cue plays back, whatever order its rows were in.
 
 **Record writes the on-stage value into both rows** (`reconcileBundledEmitterEntries` in
@@ -411,17 +411,27 @@ whose rows disagree is not rewritten by an Update that did not touch them; and w
 newer colour overrode an included emitter, the emitter row goes back too, carrying the colour's
 component — otherwise the cue would play back the old W.
 
-## Looks, templates and layers
+## Looks, palettes and layers
 
 A **Look** is a named, reusable bundle of property values and effects over *named fixtures*. A
-**Template** is a named value **or a single named effect** for exactly *one attribute family*, with
+**Palette** is a named value **or a single named effect** for exactly *one attribute family*, with
 no targets of its own. A **Layer** applies either, inside a cue at a declared position in that
 cue's stack — `DaoCueLayers` carries two nullable FKs (`look_id` / `template_id`) with exactly one
 set, and `DaoCueLayer.source` is the only reader.
 
+**Storage still says template.** Palettes were called templates until venue-visit plan D2 renamed
+everything a person or Claude reads: the copy, the `/palettes` paths, the `paletteListChanged` /
+`palettePressed` frames, the `PALETTE_*` codes and the `create_palette` / `apply_palette` tools. The
+tables (`templates`, `template_rows`, `template_effects`, `cue_layers.template_id`), the sync
+archive's `templates/` folder and its DTO fields, `tmpl:` references, JSON field names, the stored
+`pressTemplate` binding and the Kotlin and TypeScript identifiers kept the old word. Renaming them
+would have cost a `formatVersion` bump and a migration (there are none, see CLAUDE.md §Database) and
+orphaned every saved surface binding, to rename something no operator sees. So `TemplateResolver`
+resolving a palette is the arrangement, not drift.
+
 These were one entity until session 3, distinguished by the row's targeting mode: a **bound** row
 named its own fixture, a **deferred** one took its targets from the applying layer, and one entity
-served both of its predecessors' jobs. What forced the split is the most useful kind of template — a
+served both of its predecessors' jobs. What forced the split is the most useful kind of palette — a
 focus position, where eight heads aimed at one spot hold eight *different* pan/tilts, so its rows are
 bound and `hasDeferredRows` could not tell it from a recorded Look.
 
@@ -432,14 +442,14 @@ holding a value for nobody — and it is what makes a Look usable from a busking
 Sweep item B6 removed the row-side plumbing that outlived the rule: there is no `isDeferred` on a
 Look row at any layer any more, `LookRowEntry.target` is non-null, and `loadLookSnapshot` drops a
 `deferred` row an older database wrote rather than handing the composer a row with nothing to apply
-to. The targets-supply-the-row arm of `CueComposer.applyLayer` survives — it is a *template*
+to. The targets-supply-the-row arm of `CueComposer.applyLayer` survives — it is a *palette*
 layer's now.
 
-**A template row holds an intent, not a literal**: a colour plus a white/amber policy, a level or
+**A palette row holds an intent, not a literal**: a colour plus a white/amber policy, a level or
 beam role as a percentage of each head's own range, a position in degrees. `fx/TemplateIntent.kt`
 owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
 channels, and it is asked by all three consumers — `CueComposer.applyLayer` at cook,
-`POST /templates/{id}/apply` for the click gesture, and `POST /templates/resolve` for the editor's
+`POST /palettes/{id}/apply` for the click gesture, and `POST /palettes/resolve` for the editor's
 resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
 that computed its own ΔE would promise what the rig does not do.
 
@@ -454,35 +464,35 @@ parser reads, so the two grammars would agree on some rows and silently disagree
 
 Rows rather than fields on the colour intent, because each then writes only its own channel:
 `ColourTarget.composeProgrammerOver` already arbitrates the bundled emitters per component, so a
-UV-only template sits **over** an amber wash instead of replacing it. It is also the only way to say
+UV-only palette sits **over** an amber wash instead of replacing it. It is also the only way to say
 "UV at 200" at all — no `WhitePolicy` has ever driven UV. Two rules keep the derived and the explicit
 halves from fighting over one byte: an explicit `white` or `amber` row **forces the colour row to
 `rgbonly`**, refused by name at the write boundary, and UV is exempt because no policy touches it.
 
-**A colour template refuses as a whole.** If any of its colour rows is `Unsupported` on a head, that
+**A colour palette refuses as a whole.** If any of its colour rows is `Unsupported` on a head, that
 head takes *none* of them — `TemplateResolver.unmetColourRequirement`, folded in by cook, apply and
-the resolves-to panel alike. The rows are facets of one output: an explicit amber is in the template
+the resolves-to panel alike. The rows are facets of one output: an explicit amber is in the palette
 because the hex alone did not get where the operator wanted, so a head without amber taking just the
-hex would put a *different* colour on stage under that template's name. Scoped to colour on purpose
+hex would put a *different* colour on stage under that palette's name. Scoped to colour on purpose
 — zoom and frost are independent roles and keep their per-row skip. `TemplateDto.requiredEmitters`
-is the derived form of the same fact, and what the client filters its offers on; a template naming
+is the derived form of the same fact, and what the client filters its offers on; a palette naming
 no emitter requires none, so the type-agnostic degradation across an RGBWA hex, a white-only head
 and a colour wheel is untouched.
 
-A template's property vocabulary is **closed** (`TemplateProperty`), which is where "a template
+A palette's property vocabulary is **closed** (`TemplateProperty`), which is where "a palette
 cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
 recorded Look, which names a head and can hold anything that head has. The three bundled emitters
 are *in* that vocabulary — they are not slotted, they mean the same thing on every head that has
 one, and the only per-model question about them is presence. It has always held no
 positional colour list either — and now nothing does, because that grammar is gone: an effect
-parameter names a colour template rather than indexing a list, so a template *is* the named colour
+parameter names a colour palette rather than indexing a list, so a palette *is* the named colour
 instead of being one more scope that holds several.
 
 **Both records copy through one route shape**: `POST /projects/{id}/looks/{lookId}/copy` and
-`POST /projects/{id}/templates/{templateId}/copy`, each `{targetProjectId, newName?}` — the same
+`POST /projects/{id}/palettes/{templateId}/copy`, each `{targetProjectId, newName?}` — the same
 project under a new name is *Duplicate*, another project is *Copy to…*, and a name taken in the
 target is a 409. The source is `withProject`, so a library that is not the live show can be copied
-out of. A copy is a new entity (fresh uuids on the record and every child row; a template's
+out of. A copy is a new entity (fresh uuids on the record and every child row; a palette's
 `lastPressedAt` starts null), but what its rows and effects *name* travels verbatim: a fixture key,
 a speed-master uuid, a `tmpl:` colour reference. Into another project that can land a row that
 reads as unhealthy there, or an effect on a master that is not there and so runs on master 1 —
@@ -491,8 +501,8 @@ re-validates contents, which already crossed the write boundary once.
 
 ### A press is recorded, so the desk knows what you reach for
 
-`DaoTemplates.last_pressed_at` is stamped on every press that **applies** a template, and the
-programmer's row of template chips is "the templates that fit the selection and have a stamp,
+`DaoTemplates.last_pressed_at` is stamped on every press that **applies** a palette, and the
+programmer's row of palette chips is "the palettes that fit the selection and have a stamp,
 newest first, up to eight". One nullable column and no second table: the family is already derived
 from the rows, so a list filtered by family is a history filtered by family; a delete takes the
 stamp with it; and nothing needs sweeping.
@@ -502,26 +512,26 @@ because the gestures genuinely differ, and they share a recorder because "was th
 not get four answers:
 
 1. `applyTemplateToProgrammer` — the chip's click, both the value and the effect arm.
-2. The **toggle-on** arm of `POST /templates/{id}/toggle` — ⌥click, or a hold on a touchscreen.
-3. `BuskPressService.apply`, for a template pad that ended **on**.
+2. The **toggle-on** arm of `POST /palettes/{id}/toggle` — ⌥click, or a hold on a touchscreen.
+3. `BuskPressService.apply`, for a palette pad that ended **on**.
 4. `SurfaceActions.pressTemplate`, from a MIDI button.
 
 Two rules run through all four. **A release is not a press**: both toggle doors stamp only on the
 arm that puts the layer on, because what you reached for is not undone by putting it down. And **a
-refusal is not a press**: a generic template pressed with nothing selected, a template that is not
+refusal is not a press**: a generic palette pressed with nothing selected, a palette that is not
 this project's, and a click that reached no head all leave the stamp where it was — the last of
 those being the one door that cannot say so with a status code, since it answers 200 with
 `written = 0` and a skip per head.
 
-The frame is **`templatePressed { templateId, lastPressedAt }`**, and it is keyed rather than a
-reuse of `templateListChanged` for `cuesRecomposed`'s reason: that signal's client bridge drops the
+The frame is **`palettePressed { templateId, lastPressedAt }`**, and it is keyed rather than a
+reuse of `paletteListChanged` for `cuesRecomposed`'s reason: that signal's client bridge drops the
 `TemplateList`, `Cue` and `CueList` caches, and a press happens at busking rate. This one carries
 the whole of what moved, so a client patches its cached list and makes no request at all. It is
 fired to **every** socket including the acting one, which is what makes the server's stamp the value
 every client ends up holding — two clients reading their own clocks would order a burst of presses
 differently from each other and from the next refetch. Flat rather than dotted, against the "new
 messages take the dotted form" rule in `docs/websocket-engineering.md`, because the failure that
-rule prevents is a *mixed* family and `templateListChanged` beside it is flat.
+rule prevents is a *mixed* family and `paletteListChanged` beside it is flat.
 
 The column is deliberately **absent from the sync export** (`TemplateJson` names every field it
 carries and this is not one): a desk's press history is not show content, and carrying it would hand
@@ -564,10 +574,10 @@ and takes a sibling's off outright, there being nothing to narrow it to.
 **A cell is a target, and a parent covers its cells.** A multi-head fixture's element is pressed as
 an ordinary fixture-typed target whose key is its element key (`{type:'fixture', key:<elementKey>}`,
 the shape the programmer's element row already publishes), resolved only through
-`Fixtures.untypedGroupableFixture` and never parsed. Every press door lands on one: a template's
+`Fixtures.untypedGroupableFixture` and never parsed. Every press door lands on one: a palette's
 generic rows fan over the pressed cells and resolve on each cell's own emitters, a Look records
 element rows from a cell selection (`targetKey` the parent, `elementKey` the cell) and composes them
-onto those cells, an effect template runs on the cell, and a colour's white / amber / UV half reaches
+onto those cells, an effect palette runs on the cell, and a colour's white / amber / UV half reaches
 the cell's bundled emitter. The one coverage question a cell raises has one answer, stated once in
 `TargetCoverage.covers` (busk-further plan D11): **a layer on the whole bar covers a press on its
 cells; a layer on cells never covers the whole bar**, however many cells it holds, because the parent
@@ -579,23 +589,23 @@ a record still covers a given head. `pressWouldRelease`, `ProgrammerLayerStack.t
 a partly covered parent as *some*) read that rule; the client keeps reading the desk's resolved
 applied state and carries no copy of it.
 
-**A parent stands for the cells that carry the property** (venue-visit plan S1). Where a template
+**A parent stands for the cells that carry the property** (venue-visit plan S1). Where a palette
 row's property lives only on a multi-head fixture's cells — the Shehds in 24-channel mode, whose
 colour is RGBW on three `Zone` elements while the parent holds pan, tilt, dimmer, strobe and zoom —
 a target naming the parent, or a group whose member it is, lands that row on the cells that carry
 it, each resolving on its own emitters. `fx/TemplateFanOut.kt` is the one statement of it, asked by
-every consumer that resolves a template row onto a selection: the click (`applyTemplateToProgrammer`),
+every consumer that resolves a palette row onto a selection: the click (`applyTemplateToProgrammer`),
 the cook (`CueComposer.applyLayer`, so a ⌥click layer and a busk pad alike), Spread over heads (the
 parent stays **one step** on the curve and its value lands on every carrying cell — a pixel bar over
 HEADS too, which used to be skipped by name) and the editor's resolves-to panel (one row per cell,
 `<fixture> · Cell n`). Four rules keep it narrow. **A parent that has the property keeps it**:
-only the rows its cells alone can serve fan, so a beam template's zoom stays on the Shehds' parent
-while a colour template reaches the zones — and *having* is presence, not resolution
+only the rows its cells alone can serve fan, so a beam palette's zoom stays on the Shehds' parent
+while a colour palette reaches the zones — and *having* is presence, not resolution
 (`TemplateResolver.hasProperty`), so a parent with a pan but no annotated degree range keeps a
 position row and says why rather than handing it to its cells. **Colour is decided as a family** — a colour-family row
 fans when the parent has no colour at all, the `NotACandidate` question; a parent with colour but
-missing an emitter the template names stays put and is refused there as a whole, since fanning would
-put a different colour on the cells under the template's name. **Nothing carries it → the parent**,
+missing an emitter the palette names stays put and is refused there as a whole, since fanning would
+put a different colour on the cells under the palette's name. **Nothing carries it → the parent**,
 so the skip names the head the operator selected rather than a skip per cell. **A cell resolves
 against its parent's fitted media** (`TemplateFanOut.mediaOf`): media is loaded per patch, and
 `Fixtures.fittedMediaFor` answers nothing for an element key. A layer, a click or a spread naming a
@@ -603,24 +613,24 @@ bar *and* one of its cells writes that cell once, and a fanned cell's programmer
 group its parent arrived through as its `sourceGroup` (Record still writes such entries as cell rows:
 collapsing to a group needs every member — the parents — to hold one). It is the value-side twin of the FX engine's
 own expansion (`docs/groups-engineering.md` §"Automatic FX Expansion to Elements"), which is why an
-effect template on a parent never needed it. Before it, a colour template on a Shehds wrote 0 on
+effect palette on a parent never needed it. Before it, a colour palette on a Shehds wrote 0 on
 every arm — the parent asked "have you colour?" and said no — and the client folded a cell selection
 back onto that parent besides; the client now sends a cell by its element key
-(`templateTargetsOf`, `templateTargetsFor`), offers a cell selection the templates the cell can take,
-and a whole-fixture target still means every cell. An **effect** template on a mixed group is the
+(`templateTargetsOf`, `templateTargetsFor`), offers a cell selection the palettes the cell can take,
+and a whole-fixture target still means every cell. An **effect** palette on a mixed group is the
 one gap left in this family, and it is the FX engine's rather than the fan-out's
 (`FU-TMPL-CLICK-GROUP-PARTIAL`).
 
 **A press carries the selection's attribute mask, and lands through the layer's own
 `propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
-the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/templates/{id}/apply`,
-`/templates/{id}/toggle` and `/looks/{id}/toggle`; the MIDI `PressPad` and `PressTemplate` doors
+the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`,
+`/palettes/{id}/toggle` and `/looks/{id}/toggle`; the MIDI `PressPad` and `PressTemplate` doors
 pass the desk's — `ApplyLook` reads no selection at all, so there is no mask for it to honour). Null
 is every
-attribute, today's press. Under a mask, by kind: a **template** is one family, so it either lands
-whole or not at all — family ∉ mask is refused by name, `TEMPLATE_OUTSIDE_MASK`, on every door,
-the same dead-pad reading as `TEMPLATE_NEEDS_SELECTION`; inside the mask its layer is masked to
+attribute, today's press. Under a mask, by kind: a **palette** is one family, so it either lands
+whole or not at all — family ∉ mask is refused by name, `PALETTE_OUTSIDE_MASK`, on every door,
+the same dead-pad reading as `PALETTE_NEEDS_SELECTION`; inside the mask its layer is masked to
 its own family exactly as before, the intersection being the family itself. A **Look** spans
 families, so its layer goes on with `propertyMask = mask ∩ look.families`, the cook skips the rows
 outside it, and the response names them (`skippedFamilies`) so the pressing window can toast
@@ -638,7 +648,7 @@ comes **off** rather than widening; pressing twice still means off. One limit wo
 press), so a Look's *effect* in a skipped family still runs — it is still named in
 `skippedFamilies`, which is the honest report.
 
-> **The library has no order and no groups.** Templates and Looks list by name, and nothing but a
+> **The library has no order and no groups.** Palettes and Looks list by name, and nothing but a
 > create assigns a position, because there is no position to assign. `template_groups`,
 > `templates.sort_order`, `looks.sort_order` and `POST /templates/reorder` all existed to give the
 > library an operator-set order and to make a cluster of pads mutually exclusive; the busk page took
@@ -651,13 +661,13 @@ press), so a Look's *effect* in a skipped family still runs — it is still name
 The busk page is a thing the operator **builds**, not a view the library lays out
 (`docs/plans/completed/busk-layout-plan.md`, D1–D2): a page is rows, a row is columns each with a width share
 in twelfths, a column stacks banks top to bottom, and a bank holds ordered **pads** — each a
-reference to exactly one template, Look or cue (`busk_pages` → `busk_columns` → `busk_banks` →
+reference to exactly one palette, Look or cue (`busk_pages` → `busk_columns` → `busk_banks` →
 `busk_pads`, `models/buskLayout.kt`). One record may sit on several pads. Nothing is positioned by
 hand, so nothing overlaps.
 
-**A pad is an enrichment, never content and never a guard.** Deleting a template, Look or cue
+**A pad is an enrichment, never content and never a guard.** Deleting a palette, Look or cue
 deletes its pads inside the same transaction — the record's route sweeps them by hand, since SQLite
-enforces no cascade — and the template and Look delete guards do not count pads as a use. Sync
+enforces no cascade — and the palette and Look delete guards do not count pads as a use. Sync
 reads a pad whose record the archive lacks as absent, with a warning, for the same reason.
 
 That is why the **"on *n* pages" count** on `TemplateDto` and `LookDto` is a *hint* and nothing
@@ -671,7 +681,7 @@ because the pads go silently otherwise; neither stands between a record and its 
 pad to one bank and answers the whole page — the additive exception to the whole-page write below.
 D10's argument is about *editing* a layout ("a partial document cannot say *this column is now
 empty*"), and an append can never empty anything. It exists because the surfaces that place a pad
-from elsewhere — a cue's properties, the template editor, the Look sheet, the programmer's create
+from elsewhere — a cue's properties, the palette editor, the Look sheet, the programmer's create
 sheets — hold no page document to splice and re-`PUT`, and re-`PUT`ing a stale one would clobber a
 concurrent edit. The bank is addressed by **id** rather than by a position, so the address survives
 any reshuffle of the page that keeps the bank alive.
@@ -680,7 +690,7 @@ any reshuffle of the page that keeps the bank alive.
 `routes/BuskPressService.kt`). `POST /busk/pads/{id}/press` reads the pad, its record and — when the
 bank is **solo** — the records on its sibling pads in one transaction, then calls the same
 `ProgrammerLayerStack.toggle`
-the `/templates/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
+the `/palettes/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
 `releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, always
 siblingless. A **cue** pad is apply / stop through `CueStackManager`, exactly as a cue slot
 presses: a toggle, lit from its stack's `activeCueId`, live without being the playhead.
@@ -702,9 +712,9 @@ which has no selection, presses a Look (D7). A Look with a deferred effect and n
 nothing and is refused (`LOOK_NEEDS_SELECTION`), as is a Look none of whose fixtures are patched
 (`LOOK_NO_TARGETS`): a toggle that applied nothing and reported success would read as a dead pad.
 The derived targets are passed to the layer explicitly, so the applied state below lights the tile.
-The busk press applies the same reading to a **generic** template — its rows take their targets
-from the press, so with none it is refused (`TEMPLATE_NEEDS_SELECTION`) — while a per-fixture
-template names its own heads and lands on them.
+The busk press applies the same reading to a **generic** palette — its rows take their targets
+from the press, so with none it is refused (`PALETTE_NEEDS_SELECTION`) — while a per-fixture
+palette names its own heads and lands on them.
 
 **A pad has a second door, and it is the same press.** A MIDI control surface can hold a
 `PressPad(padUuid)` binding, which runs the whole of the above through `BuskPressService` with the
@@ -716,7 +726,7 @@ rather than responding, because a MIDI press has nowhere to put a 400. See
 
 **The hand: one held record, picked up on any window and placed on any other.** The busk page is
 where most places land, so it is documented here (multi-screen plan §3.5, D12). `state/HandState.kt`
-holds a template, a Look or a cue — never two, never a cue *stack* — and `hand.state` /
+holds a palette, a Look or a cue — never two, never a cue *stack* — and `hand.state` /
 `hand.pickUp` / `hand.drop` are the whole wire. It exists because a pointer drag cannot cross an OS
 window boundary: the window that saw the press keeps the pointer for the whole gesture, so the
 neighbour never receives a pointer event of its own.
@@ -744,7 +754,7 @@ Escape — lets go of whatever is there.
 project's rows, so `State`'s project collector drops it — the opposite of the windows registry,
 which outlives a switch. Besides a place: a **five-minute timeout** armed on every pick-up, because
 an item held for the rest of the night is a chip nobody meant to leave lit; and a **reconcile** run
-from the `lookListChanged` / `templateListChanged` / `cueListChanged` listeners, so a record deleted
+from the `lookListChanged` / `paletteListChanged` / `cueListChanged` listeners, so a record deleted
 while held leaves every window's chip rather than naming a row that has gone. Reconcile asks whether
 the record *exists*, never whether it still looks the way it did: an edit is not a delete, and the
 held face is frozen for the same reason a pad's is. A second pick-up **replaces**, and is not an
@@ -814,9 +824,9 @@ reaches the same `DeskSelection.subselect`, so the chip and the surface cannot d
 each outer end), an order (a `DistributionStrategy` name, `LINEAR` being rig
 order), `parts` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
 intent's own space — Lab for a colour, degrees for a position, percent for a level — and resolves
-each head's literal through the same `TemplateResolver` a template click uses, writing one batched
+each head's literal through the same `TemplateResolver` a palette click uses, writing one batched
 programmer write with owner `WEB`. So Record captures it, Blind previews it and Clear releases it:
-a spread is a result, not a template — *Save as Look…* is `record-look` over the selection.
+a spread is a result, not a palette — *Save as Look…* is `record-look` over the selection.
 Since the editor-kit plan's session 3 the request carries `write` (default true): `false` runs the
 same resolve and **answers without writing** — the programmer's focused-Look-layer arm, whose
 client lands `written[].value` in the layer's draft through the ordinary Look save — and
@@ -836,7 +846,7 @@ named beside its parent is dropped, the parent covering it.
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk
 answers it. `ProgrammerLayerStack.appliedState` folds the layer stack into one entry per Look or
-template listing **every target it covers**: each covered fixture, and each group marked `all` or
+palette listing **every target it covers**: each covered fixture, and each group marked `all` or
 `some` by how many of its heads the record holds. It rides on the `programmer.layerState` frame and
 the connect snapshot as `applied`, beside the layer list rather than instead of it — the Layers pane
 edits layers, the pads read coverage, and those are two questions about one stack.
@@ -860,32 +870,32 @@ and that no test on the rig can reach. The blind spot the desk keeps for itself 
 so such a layer contributes no applied state. Enabled-ness is ignored: a disabled layer is still on
 the stack and a press still takes it off, so its ring stays lit.
 
-### A template holds a value *or* an effect
+### A palette holds a value *or* an effect
 
-D7 used to say a template holds **no** effects at all — "effects live in a Look or on a cue, never
+D7 used to say a palette holds **no** effects at all — "effects live in a Look or on a cue, never
 on a layer". The fx-templates plan reverses that, because it left the most useful busking gesture
 homeless: "a slow amber breathe on whatever I have selected" is one named thing, of one family,
-with no targets of its own — the definition of a template — and it was reachable only as a Look
+with no targets of its own — the definition of a palette — and it was reachable only as a Look
 with zero rows and one deferred effect, which lands in the Looks pool rather than the family column.
 
 Three rules keep the reversal narrow, and each removes a way for it to complicate the cook:
 
 - **A value *or* an effect, never both** (`template_effects` has a unique `template_id`, and the
   write boundary refuses a mix). A colour *and* a chase is a Look, which already holds rows plus
-  deferred effects. Which one a template holds is its identity, like its family: `validateTemplateContents`
-  refuses a PUT that would flip it, so the cook's template arm never needs both halves.
+  deferred effects. Which one a palette holds is its identity, like its family: `validateTemplateContents`
+  refuses a PUT that would flip it, so the cook's palette arm never needs both halves.
 - **One effect.** Several together is, again, what a Look with deferred effects already is.
 - **Always generic** — no `target_type` / `target_key`, unlike `look_effects`, whose
   deferred/bound split survives for a reason that does not apply here. An effect fans over whatever
   the layer names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
   snapshots on the argument that nothing patch-shaped is in the cache, so a repatch cannot make an
-  entry stale — and a bound, group-targeted template effect would be exactly that.
+  entry stale — and a bound, group-targeted palette effect would be exactly that.
 
 The family is then **derived from the effect's library `category`**, through the same
 `familyForEffectCategory` map a Look's derived families use (`dimmer` → Intensity, `colour` →
 Colour, `position` → Position). `controls` has no tempo and `composite` spans families, so both
 answer null and are refused by name; so is `beam`, deliberately by name rather than by the library
-happening to ship no beam effect, so a script-registered one cannot mint a Beam effect template
+happening to ship no beam effect, so a script-registered one cannot mint a Beam effect palette
 behind the rule.
 
 Two things about the effect are the **registry's** answer rather than the author's, and both are
@@ -899,39 +909,39 @@ tell a two-beat pulse from a two-second one.
 
 **The cook gained no new path.** `CueComposer.effectsForLayer` was already the single fan-out shared
 by `cookEffects` and `cookAll`; it now takes `LayerContent.effects` rather than a `LookSnapshot`, so
-a template's one target-less effect goes down the same *deferred* arm a Look's does. The
+a palette's one target-less effect goes down the same *deferred* arm a Look's does. The
 `isTemplate` skip and the `is OfLook` cast are gone — they *were* the old rule — and layer
-numbering is untouched, which the three deleted comments were all protecting: a template layer takes
+numbering is untouched, which the three deleted comments were all protecting: a palette layer takes
 a rank whether it contributes rows or an effect.
 
-The two **gestures** are the value template's two, unchanged in meaning. ⌥click (and the busk pad)
-posts to `toggle`, which adds a programmer layer that *tracks* the template: the effect is spawned by
-the cook, carries the template as its `LayerSource`, and Record files it as a template layer. A plain
+The two **gestures** are the value palette's two, unchanged in meaning. ⌥click (and the busk pad)
+posts to `toggle`, which adds a programmer layer that *tracks* the palette: the effect is spawned by
+the cook, carries the palette as its `LayerSource`, and Record files it as a palette layer. A plain
 click posts to `apply`, whose effect arm mints one detached programmer-band copy per target the click
 names — the effect twin of the value arm's literals. That copy deliberately carries **no**
 `LayerSource` and no `programmerLayerEffectKey`: without the key no recook can retract or retime it,
-so retuning the template afterwards cannot move it, and without the source both Record paths file it
+so retuning the palette afterwards cannot move it, and without the source both Record paths file it
 as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templateApply.kt` holds the
 four-point version of that reasoning.
 
 **An edit to a pad's running effect is the instance's alone** (fixture-fx-sheets plan D20, sessions
 1 and 5). The busk view's Effects tab, the fixture sheet's tray and the rail's *Edit…* all edit the
 **instance** the layer spawned, through `updateFx` (`FxEngine.updateEffect`: id and phase kept), and
-never the template. The layer stack keys that instance by the `EffectEntry` it was spawned from
+never the palette. The layer stack keys that instance by the `EffectEntry` it was spawned from
 (`ProgrammerLayerEffectKey`), and `updateEffect` carries the key across its swap, so the edit
-**survives** every recook that leaves the template alone — a patch, a move, an unrelated add — and
-goes when the pad goes: pressing it off and on spawns the template's settings again. The client marks
-such an instance ***edited*** by comparing it with the template's effect, and offers two ways back
-to agreement. **Reset to template** is `POST /fx/{id}/reset` (W5): the template's current effect
-re-applied to the instance in place, phase kept, and the instance **re-keyed** to the template's
-current entry under the stack's effects lock. **Update template** is the template's `PUT {effect}`
+**survives** every recook that leaves the palette alone — a patch, a move, an unrelated add — and
+goes when the pad goes: pressing it off and on spawns the palette's settings again. The client marks
+such an instance ***edited*** by comparing it with the palette's effect, and offers two ways back
+to agreement. **Reset to palette** is `POST /fx/{id}/reset` (W5): the palette's current effect
+re-applied to the instance in place, phase kept, and the instance **re-keyed** to the palette's
+current entry under the stack's effects lock. **Update palette** is the palette's `PUT {effect}`
 from the instance's settings **then** W5 on that instance — the PUT alone recooks values only and
-leaves applied instances, but the next recook for any reason reads the edited template, finds the
+leaves applied instances, but the next recook for any reason reads the edited palette, finds the
 instance's key stale and respawns it, phase restarted; the reset re-keys it first, so it keeps
-running. Every *other* applied instance of that template still holds the old settings and still
+running. Every *other* applied instance of that palette still holds the old settings and still
 carries the old key: it reads *edited*, and is respawned at its stack's next recook unless reset by
-hand (`FU-TMPL-FX-EDIT-NO-RETIME`). A **cue's** template-layer instance is refused by W5
-(`FX_NOT_FROM_TEMPLATE`, 409) — the next GO respawns it — and the fixture sheet's tray shows a cue's
+hand (`FU-TMPL-FX-EDIT-NO-RETIME`). A **cue's** palette-layer instance is refused by W5
+(`FX_NOT_FROM_PALETTE`, 409) — the next GO respawns it — and the fixture sheet's tray shows a cue's
 effect read-only.
 
 Fan-out is the same on both gestures: `CueComposer.effectsForLayer` spawns over a layer's targets *as
@@ -1060,7 +1070,7 @@ stomp suppression are derived from that same shared rank. Overlaying would inver
 
 The memo's one hazard is staleness, and it is closed by a stamp rather than a listener: the patch
 register's `Fixtures.structureVersion`, `LookRegistry.version`, and `TemplateRegistry.versionFor`
-scoped to the templates the cue actually names. A Look edit republishes the cue *and* bumps that
+scoped to the palettes the cue actually names. A Look edit republishes the cue *and* bumps that
 version, so the next fire re-cooks instead of replaying a pre-edit result over the operator's save.
 That is also why `LookRegistry` bumps its counter on *both* sides of an eviction: between a
 single pre-eviction bump and the eviction itself the registry reports the new version while still
@@ -1085,13 +1095,14 @@ disappearing programmer entry mid-show is worse than a stale one the sheet marks
 ### What replaced the positional palette
 
 There used to be an ordered-colour-list palette here, referenced positionally as `P1` / `P2` / `P*`
-and scoped global → stack → cue by a `PaletteCascade`. It was a third, unrelated thing also called
-"palette": it parameterised *effects* rather than describing a look, and Looks, cues and stacks each
+and scoped global → stack → cue by a `PaletteCascade`. It was an earlier, unrelated sense of
+"palette" — the named palette banks that became Looks were another: it parameterised *effects*
+rather than describing a look, and Looks, cues and stacks each
 carried a column for it.
 
 **It is gone**, and what replaced it inverts the arrangement. An effect's colour parameter names a
-**colour template** by uuid — `tmpl:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
-identity and a name instead of a slot number, and retuning the template moves every running effect
+**colour palette** by uuid — `tmpl:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
+identity and a name instead of a slot number, and retuning the palette moves every running effect
 that follows it. There is no cascade, because there is nothing left to scope: a reference has one
 answer wherever it is read.
 
@@ -1101,24 +1112,24 @@ Two rules that fall out of that, both enforced rather than conventional:
   entry — is a literal, and a *value's* dependency mechanism is a layer.
   `parseAssignmentValue` returns null for a `tmpl:`-shaped value and `validateLookRows` rejects one,
   beside its `ref:` rejection.
-- **Only a generic colour template can be named.** An effect's output is one colour applied to every
+- **Only a generic colour palette can be named.** An effect's output is one colour applied to every
   head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
-  as though the head were RGBW, which makes it identical to the same template applied as a layer on
-  any RGBW/RGBWA head. A per-fixture template holds no single colour and is refused, and so is an
-  **effect** template, which has no rows at all. The generic test is **per row** — no row naming a
-  head — and not "exactly one row": a colour template may hold a hex *and* explicit emitters, and
+  as though the head were RGBW, which makes it identical to the same palette applied as a layer on
+  any RGBW/RGBWA head. A per-fixture palette holds no single colour and is refused, and so is an
+  **effect** palette, which has no rows at all. The generic test is **per row** — no row naming a
+  head — and not "exactly one row": a colour palette may hold a hex *and* explicit emitters, and
   both halves fold the whole colour-family row set into one colour (`resolveColourGeneric` over the
   set on the desk, `templateRowsSwatch` in the client), so it means something exact rather than "one
   of these". An explicit emitter row overwrites what the policy derived, which cannot collide while
-  the write boundary refuses that pair but is stated rather than left to argument order. A template
+  the write boundary refuses that pair but is stated rather than left to argument order. A palette
   of emitters alone resolves against **black**, which is the honest reading of what an effect output
   can express: one colour per frame, and no way to say "leave RGB alone" — the layer path keeps that
-  distinction, a reference cannot. The write boundary also refuses a template's effect naming *its
+  distinction, a reference cannot. The write boundary also refuses a palette's effect naming *its
   own* uuid, the one shape that would recurse in `createEffectWithTemplates`.
 
-  The other direction is allowed and useful: an **effect template's** colour parameter may name a
-  *value* colour template, which is how "Amber Breathe" follows "Amber Key". `template_effects` is
-  therefore the third table `templateFxReferenceCount` scans, or that value template would stay
+  The other direction is allowed and useful: an **effect palette's** colour parameter may name a
+  *value* colour palette, which is how "Amber Breathe" follows "Amber Key". `template_effects` is
+  therefore the third table `templateFxReferenceCount` scans, or that value palette would stay
   deletable out from under a running effect — the exact failure the delete guard exists to prevent.
 
   **The cost lands on heads with no white emitter, and it is sharper than "one emitter short".**
@@ -1165,7 +1176,7 @@ not be a virtual fixture"):
   scenery too* row and the requests' `scenery` flag do. Include loads a cue's or Look's own rows back
   into the programmer, with a cue row's clock, and Update writes them back (D8). §"Record / Include /
   Update" has the rules.
-- **A template never carries it** (D11, reaffirmed as the scenery-programmer plan's D9): a template
+- **A palette never carries it** (D11, reaffirmed as the scenery-programmer plan's D9): a palette
   names no targets of its own, so it has nothing to say about a particular sofa. A Look that holds
   only scenery is the busk vehicle.
 - A Look that lights nothing and carries scenery is still pressable with no selection, as a layer
@@ -1191,17 +1202,17 @@ Two different things are called a fade here, and they operate at different scope
 
 - The **cue-level** fade time drives the crossfade above: a weight in `[0, 1]` per cue, blending
   whole cues against each other. Everything in this section so far is that one.
-- A **per-row** fade — `fadeDurationMs` on a Look row, on a template, or on a cue's own property
+- A **per-row** fade — `fadeDurationMs` on a Look row, on a palette, or on a cue's own property
   assignment — is a *transmit-time* instruction on one `(fixture, property)`: how long that value
   should take to arrive, driving the same per-channel `DmxController` ramp the programmer's
   [Fades](#fades) use.
 
 The per-row fade survives the cook (`CueComposer`), which is what makes a **tracked** source behave
-like an **applied** one: clicking a template chip writes literals into the programmer with the
-template's fade, and ⌥clicking the same chip adds a layer — which used to snap, because the field
+like an **applied** one: clicking a palette chip writes literals into the programmer with the
+palette's fade, and ⌥clicking the same chip adds a layer — which used to snap, because the field
 stopped at `SourceRow`. It belongs to the row that **won** the key, alongside `CookWinner`: one
-winning row supplies the value, the attribution and the fade. A template's fade sits on the template
-rather than the row, so every row of one template moves together.
+winning row supplies the value, the attribution and the fade. A palette's fade sits on the palette
+rather than the row, so every row of one palette moves together.
 
 **Arrival, not every publish.** Only a publish that puts a source *on stage* may ramp: a cue GO
 (`applyCue`, and `CueStackManager` on the snap path), a timed layer firing
@@ -1233,7 +1244,7 @@ Settings (discrete wheels) always snap, as they do for every other fade. On the 
 publish carries the whole gesture — `ProgrammerWriter.republishKeys` takes a per-key fade map, so a
 Look whose colour row fades over 2 s beside a snapping dimmer row still lands in one
 `ControllerTransaction`. An explicit `fadeMs` from the caller (Include's, say) overrides the source's
-stored default, exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
+stored default, exactly as `POST /palettes/{id}/apply` does with `request.fadeMs`.
 
 ## Stomp
 

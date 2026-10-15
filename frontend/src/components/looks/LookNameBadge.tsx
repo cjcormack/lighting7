@@ -11,7 +11,7 @@ export interface LookNameBadgeProps {
    *
    * Only the glyph and the wording change, not the shape. The two are different entities and a row
    * should say which — an operator wanting to retune "Amber Key" needs to know it lives at
-   * `/templates` — but they occupy the same position in the same list, so a differently-sized or
+   * `/palettes` — but they occupy the same position in the same list, so a differently-sized or
    * differently-coloured chip would make one look more important than the other.
    */
   isTemplate?: boolean
@@ -55,8 +55,8 @@ export function LookNameBadge({
   className,
 }: LookNameBadgeProps) {
   const effectTemplate = isTemplate === true && isEffect === true
-  const noun = effectTemplate ? 'effect template' : isTemplate === true ? 'template' : 'look'
-  const Noun = effectTemplate ? 'Effect template' : isTemplate === true ? 'Template' : 'Look'
+  const noun = effectTemplate ? 'effect palette' : isTemplate === true ? 'palette' : 'look'
+  const Noun = effectTemplate ? 'Effect palette' : isTemplate === true ? 'Palette' : 'Look'
   const Glyph = isTemplate === true ? Palette : Layers
   // `missing` alone, not `name == null`: a caller can legitimately know a layer names a Look while
   // not yet knowing which one (the list is still loading). Painting that destructive-red would

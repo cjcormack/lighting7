@@ -309,7 +309,7 @@ const BUSK_COUNT_TAGS: ('TemplateList' | 'LookList')[] = ['TemplateList', 'LookL
 /**
  * Refresh the library rows' `buskPageCount`, but **only when the set of records on the page moved**.
  *
- * A layout write fires `busk.layoutChanged` and never `templateListChanged` / `lookListChanged` —
+ * A layout write fires `busk.layoutChanged` and never `paletteListChanged` / `lookListChanged` —
  * firing those would be a whole-library refetch per gesture, and `LibraryPalette` *is* mounted and
  * subscribed to both lists throughout busk edit mode, so that cost is real rather than theoretical.
  * Most edit-mode gestures are moves and resizes, which change no count at all.

@@ -643,7 +643,7 @@ export function BuskPageStrip({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{active?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its banks and pads go with it. The templates, Looks and cues they pointed at are not
+              Its banks and pads go with it. The palettes, Looks and cues they pointed at are not
               touched.
             </AlertDialogDescription>
           </AlertDialogHeader>

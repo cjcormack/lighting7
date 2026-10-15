@@ -154,8 +154,8 @@ describe('the pieces, and which host draws which', () => {
     // Recent asks for the bottom sheet alone, and this is a popover: row C's strip is one row up.
     expect(recent()).toBeNull()
     const verbs = [...footer()!.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
-    expect(verbs).toEqual(['Save as template…', 'Pick', 'Spread to a second colour…'])
-    expect(screen.getByRole('button', { name: /Save as template/ })).toBeEnabled()
+    expect(verbs).toEqual(['Save as palette…', 'Pick', 'Spread to a second colour…'])
+    expect(screen.getByRole('button', { name: /Save as palette/ })).toBeEnabled()
   })
 
   it('programmer bottom sheet: Recent is drawn there, and only there of the two sheets', () => {
@@ -179,7 +179,7 @@ describe('the pieces, and which host draws which', () => {
     expect(within(scroller as HTMLElement).queryByRole('spinbutton', { name: 'R' })).not.toBeNull()
     expect(scroller.querySelector('[data-editor-readout]')).not.toBeNull()
     expect(scroller.querySelector('[data-colour-editor-recent]')).not.toBeNull()
-    expect(screen.getByText('Colour templates you press show up here')).toBeInTheDocument()
+    expect(screen.getByText('Colour palettes you press show up here')).toBeInTheDocument()
     // The footer is outside the scroller and does not scroll with it.
     expect(scroller.querySelector('[data-editor-footer]')).toBeNull()
     expect(footer()!.className).toContain('shrink-0')
@@ -350,7 +350,7 @@ describe('the footer', () => {
   it('disables Save without a handler or with no heads, and hands Spread… the current channels or draws it inert', () => {
     const onSpread = vi.fn()
     const { unmount } = draw({ targets: FOUR, onSpread })
-    expect(screen.getByRole('button', { name: /Save as template/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
     expect(screen.queryByRole('switch')).toBeNull()
     fireEvent.change(field('B'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
@@ -358,11 +358,11 @@ describe('the footer', () => {
     unmount()
     const onSave = vi.fn()
     draw({ targets: [], onSave })
-    expect(screen.getByRole('button', { name: /Save as template/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
   })
 
-  it('Recent draws the colour recents most recent first, the selection’s emitters filtering, and a tap is a template apply', () => {
+  it('Recent draws the colour recents most recent first, the selection’s emitters filtering, and a tap is a palette apply', () => {
     templates = [
       template(1, 'Deep Blue', { lastPressedAt: '2026-09-18T09:00:00Z' }),
       template(2, 'Warm Amber'),
@@ -380,7 +380,7 @@ describe('the footer', () => {
   })
 })
 
-describe('read-only — the programmer rail’s tab in Output or on a template layer', () => {
+describe('read-only — the programmer rail’s tab in Output or on a palette layer', () => {
   it('takes no input on the picker, the fields or the emitters, and leaves Pick and the label line live', () => {
     // A scope that takes no value must not be written by any control of the editor, and Pick is a
     // read: it moves the fields and writes nothing, so it stays live (editor-kit plan session 4).

@@ -105,14 +105,14 @@ describe('cells (busk-further plan D11)', () => {
 })
 
 describe('templateLayerPresence', () => {
-  it('lights the ring from the applied state, whatever the template holds', () => {
+  it('lights the ring from the applied state, whatever the palette holds', () => {
     // The rule that matters since a template can hold an **effect**: presence is read from the
     // layer, never from the running instance. Matching on the instance would light for an effect
     // template and leave every value template's pad dark — the worst of both answers.
     expect(templateLayerPresence([templateApplied(FRONT_ALL)], [FRONT], 4)).toBe('all')
   })
 
-  it('does not confuse a Look and a template sharing an int PK', () => {
+  it('does not confuse a Look and a palette sharing an int PK', () => {
     // Two tables, two id spaces — so the Look here carries the *template's* id, or the assertion
     // would pass on `7 !== 4` and never reach the kind check it exists to pin.
     const lookWithTemplateId = applied(FRONT_ALL, {
@@ -146,7 +146,7 @@ describe('lookIsApplied', () => {
     expect(lookIsApplied(on, 7)).toBe(true)
   })
 
-  it('does not answer for a template carrying the same int PK', () => {
+  it('does not answer for a palette carrying the same int PK', () => {
     // Two tables, two id spaces — the collision `lookLayerPresence` guards, asked of a surface
     // that has no targets to disambiguate with.
     const template = applied(FRONT_ALL, {

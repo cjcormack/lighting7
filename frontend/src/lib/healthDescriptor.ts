@@ -40,7 +40,7 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     case "missingLook":
       return "The Look this button presses no longer exists"
     case "missingTemplate":
-      return "The template this button presses no longer exists"
+      return "The palette this button presses no longer exists"
     case "missingPad":
       return "The busk pad this button presses is no longer on any page"
     // A **busk** bank, not the device profile's `unknownBank` above — the two share only the word,

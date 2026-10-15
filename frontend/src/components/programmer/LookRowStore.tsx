@@ -112,7 +112,7 @@ export function LookRowStoreProvider({
   // rows in the grid: a template is one family of intents edited in its own family-native editor, and
   // projecting its generic row onto every targeted row would silently convert it to a per-fixture one
   // on the first edit — the same argument 2a made for deferred Look rows. `LayerRowNotices` names it
-  // and points at `/templates` instead.
+  // and points at `/palettes` instead.
   const lookId = layer?.source.kind === 'LOOK' ? layer.source.id : undefined
   const { data: look, isSuccess } = useLookQuery(
     { projectId, lookId: lookId ?? 0 },

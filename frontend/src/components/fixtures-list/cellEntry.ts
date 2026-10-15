@@ -97,7 +97,7 @@ export function cellActionCopy(
   }
   if (scope?.kind === 'layer') {
     if (focusedTemplate) {
-      const reason = 'This layer applies a template — switch to Local to set these cells'
+      const reason = 'This layer applies a palette — switch to Local to set these cells'
       return { setTitle: reason, clearTitle: reason }
     }
     return {

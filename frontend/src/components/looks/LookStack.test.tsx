@@ -353,7 +353,7 @@ describe('LookStack', () => {
  * The template arm, which had no coverage at all: every existing case passes a LOOK source and
  * `undefined` for the template library, so neither the `isTemplate` badge nor the kind was pinned.
  */
-describe('describeStackSource — template layers', () => {
+describe('describeStackSource — palette layers', () => {
   const templates = new Map<number, TemplateSummary>([
     [4, templateSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
     [5, templateSummary({ id: 5, name: 'Amber Breathe', kind: 'effect', rows: [] })],
@@ -371,7 +371,7 @@ describe('describeStackSource — template layers', () => {
     })
   })
 
-  it('leaves the kind undefined when the caller has no template library', () => {
+  it('leaves the kind undefined when the caller has no palette library', () => {
     // A surface that did not load the list knows a layer names a template but not which kind, and
     // it must not be painted as missing on that account either.
     const info = describeStackSource(source(5, 'Amber Breathe'), LOOKS, undefined, true)
@@ -380,7 +380,7 @@ describe('describeStackSource — template layers', () => {
     expect(info.isTemplate).toBe(true)
   })
 
-  it('draws the wave beside the palette only for an effect template', () => {
+  it('draws the wave beside the palette only for an effect palette', () => {
     const { container, unmount } = render(
       <LayerRow
         layer={layer({ source: source(5, 'Amber Breathe') })}

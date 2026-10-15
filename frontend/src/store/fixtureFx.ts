@@ -260,10 +260,10 @@ export const fixtureFxApi = restApi.injectEndpoints({
     }),
 
     /**
-     * Put a template layer's current effect back on the instance it spawned, keeping the id and
+     * Put a palette layer's current effect back on the instance it spawned, keeping the id and
      * the phase — `POST /fx/{id}/reset` (fixture-fx-sheets plan W5), the busk Effects tab's *Reset
-     * to template*. 409 `FX_NOT_FROM_TEMPLATE` for an instance no programmer template layer
-     * started, 409 `FX_TEMPLATE_GONE` when its template no longer holds an effect.
+     * to palette*. 409 `FX_NOT_FROM_PALETTE` for an instance no programmer palette layer
+     * started, 409 `FX_PALETTE_GONE` when its palette no longer holds an effect.
      */
     resetFxToTemplate: build.mutation<ActiveEffect, { id: number }>({
       query: ({ id }) => ({

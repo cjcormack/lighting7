@@ -224,7 +224,7 @@ export interface TemplateTarget {
   key: string
 }
 
-/** `POST …/templates/{id}/copy` — `CopyLookRequest`'s shape (library-sheets plan D10). */
+/** `POST …/palettes/{id}/copy` — `CopyLookRequest`'s shape (library-sheets plan D10). */
 export interface CopyTemplateRequest {
   targetProjectId: number
   /** Blank or absent keeps the source's name. */
@@ -242,7 +242,7 @@ export interface CopyTemplateResponse {
 /** 409 body when a template is still applied by a layer. Rendered inline; offers "delete anyway". */
 export interface TemplateInUseError {
   error: string
-  code: 'TEMPLATE_IN_USE'
+  code: 'PALETTE_IN_USE'
   layerCount: number
   cueIds: number[]
   cueNames: string[]
@@ -282,7 +282,7 @@ export interface ApplyTemplateResponse {
 /**
  * The click: literal values into Local. `families` is the selection's attribute mask (multi-screen
  * plan D4) — a template is one family, so under a mask it lands whole or is refused by name, 400
- * `TEMPLATE_OUTSIDE_MASK`, on both the value and the effect arm. Absent is every attribute.
+ * `PALETTE_OUTSIDE_MASK`, on both the value and the effect arm. Absent is every attribute.
  */
 export interface ApplyTemplateRequest {
   targets: TemplateTarget[]

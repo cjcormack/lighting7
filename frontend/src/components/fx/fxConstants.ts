@@ -75,7 +75,7 @@ export const EFFECT_DESCRIPTIONS: Record<string, string> = {
   strobe: 'Fast on/off flashing',
   flicker: 'Random candle-like flicker',
   breathe: 'Gentle slow breathing rhythm',
-  colourcycle: 'Step through a palette of colours',
+  colourcycle: 'Step through a list of colours',
   rainbowcycle: 'Smooth rainbow hue rotation',
   colourstrobe: 'Flash between two colours',
   colourpulse: 'Pulse between two colours',

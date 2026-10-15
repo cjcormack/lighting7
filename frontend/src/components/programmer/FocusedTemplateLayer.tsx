@@ -69,7 +69,7 @@ export function FocusedTemplateLayerProvider({
   const templateId = layer?.source.kind === 'TEMPLATE' ? layer.source.id : undefined
 
   // The whole library rather than one template: it is the same cache entry the stack rail and the
-  // strip already hold, so this costs a subscription and no request. There is no `templates/{id}`
+  // strip already hold, so this costs a subscription and no request. There is no `palettes/{id}`
   // query to prefer anyway.
   const { data: templates } = useTemplateListQuery(
     { projectId },

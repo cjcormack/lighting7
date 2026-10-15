@@ -151,9 +151,9 @@ describe('ColourCell', () => {
     expect(document.querySelector('[data-colour-editor-recent]')).toBeNull()
   })
 
-  it('Save as template… opens the sheet with Colour answered over the marquee’s heads — a cell by its own key', () => {
+  it('Save as palette… opens the sheet with Colour answered over the marquee’s heads — a cell by its own key', () => {
     draw()
-    fireEvent.click(screen.getByRole('button', { name: /Save as template/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save as palette/ }))
     const sheet = screen.getByTestId('new-template')
     expect(sheet).toHaveAttribute('data-families', 'COLOUR')
     expect(JSON.parse(sheet.getAttribute('data-targets')!)).toEqual([
@@ -222,7 +222,7 @@ describe('ColourCell', () => {
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
     cleanup()
     draw({ projectId: undefined })
-    expect(screen.getByRole('button', { name: /Save as template/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
     expect(document.querySelector('[data-colour-editor-leaves]')).toBeNull()
   })
 

@@ -368,8 +368,8 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `Strip(target)` | — (a strip slot) | Never dispatched: `resolve` derives it to the target of the control the event arrived on. See [Strips](#strips) |
 | `EncoderBankSet(propertyName, colourAxis?)` | Button | `EncoderBankState.set` for the device the button is on; LED lit while that property **and** axis are the device's encoder bank. Health `unknownProperty` when no patched fixture can take it |
 | `ApplyLook(lookUuid)` | Button | `ProgrammerLayerStack.toggle` on the Look's **own fixtures** — `resolveLookToggleTargets` with no targets, never the desk selection. LED lit while the Look has any layer on the stack (selection-independent, `AppliedSource.targets.isNotEmpty()`). A Look with a **deferred effect** has no own targets, so it is refused at bind time (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one after |
-| `PressTemplate(templateUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the template's own derived family, siblingless. A *generic* template with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
-| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring: `appliedState` for a template or Look pad, the stack's live cue for a cue pad |
+| `PressTemplate(templateUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, siblingless. A *generic* palette with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
+| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring: `appliedState` for a palette or Look pad, the stack's live cue for a cue pad |
 | `PickUpPad(padUuid)` | Button | The record on that pad into the desk's **hand**, stamped `SelectionSource.SURFACE` — the surface door of `hand.pickUp` (multi-screen plan §3.5). A pad, not a record, because a pad is the address a button already carries and what it picks up is exactly what it would otherwise press. The pick-up replaces whatever was held. Health `missingPad`. No LED |
 | `HandPlaceInBank(bankUuid)` | Button | Place whatever the hand holds as a pad on that bank, through the **same append** `POST /busk/banks/{bankId}/pads` makes, then let go. An empty hand is a dropped press. The drop is conditional on the append succeeding, so a refused place leaves the item in the hand. Health `missingBank`. No LED |
 | `HandDrop` | Button | `HandState.drop()`; a no-op on an empty hand. Addresses nothing, so it can never be dead. No LED |
@@ -393,7 +393,7 @@ by its int. This is what makes a cloned or imported project keep its cue binding
 The **record** variants are uuid-addressed for the same reason and with no int beside them: they
 were minted after v11, so there is no pre-uuid form to fall back to. Each has **exactly one
 behaviour**, which is the whole design rule (`docs/plans/completed/midi-surface-plan.md` D6): a Look always
-onto its own fixtures, a template always onto the selection, a pad always its own bank's plan. A
+onto its own fixtures, a palette always onto the selection, a pad always its own bank's plan. A
 button that meant different things depending on what was selected is what a fixed binding exists not
 to be.
 
@@ -581,7 +581,7 @@ Parallel coroutines collect from:
 - `ProgrammerLayerStack.layersFlow` (per show, re-armed the same way) → record LEDs
 - `BuskPageState.pageId` → `BuskPageSet` LEDs
 - `FixturesChangeListener.cueRunStateChanged` → record LEDs, for the cue pads among them
-- `lookListChanged` / `templateListChanged` / `buskLayoutChanged` → **rebuild** the index, not just
+- `lookListChanged` / `paletteListChanged` / `buskLayoutChanged` → **rebuild** the index, not just
   the LEDs: a `PressPad` entry carries its pad's *resolved record*, so a delete or a layout write
   stales the index itself
 
@@ -614,7 +614,7 @@ can show. It is the one place in this class where the compiler is not the safety
 | Fader → SelectionProperty | `ProgrammerWriter.writeProperties` (owner `surface`) | **Layer 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
 | Select / Clear button | `State.deskSelection` | *(no layer — the desk's selection)* | What the next selection-relative move acts on |
 | Locate button | `LocateManager.toggle` (owner `locate`) | **Layer 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |
-| Apply Look / Press template | `ProgrammerLayerStack.toggle` | **Layer 2 (a programmer layer)** | The Look onto its own fixtures, the template onto the selection; the same `toggle` a busk pad makes |
+| Apply Look / Press palette | `ProgrammerLayerStack.toggle` | **Layer 2 (a programmer layer)** | The Look onto its own fixtures, the palette onto the selection; the same `toggle` a busk pad makes |
 | Press pad | `BuskPressService` | **Layer 2, or Layer 4 for a cue pad** | The pad's whole plan — solo siblings included — through the one implementation `POST /busk/pads/{id}/press` also uses |
 | Busk page buttons | `State.buskPageState` | *(no layer — a screen position)* | Moves the desk's page; every window *following* it moves too (a window may hold its own — `lib/buskPageFollow.ts`) |
 

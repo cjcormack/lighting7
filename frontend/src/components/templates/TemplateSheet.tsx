@@ -101,7 +101,7 @@ export interface TemplateSheetProps {
  *   has no `timingSource`, so which field to write is unknown: its Master is blank and skipped.
  * - **Notes** writes `{notes, notesPresent: true}`; the name `PUT {name}`. Both metadata only.
  * - **Layers**, **Pages** and **Pressed** are read-outs; Pressed is `lastPressedAt`, which
- *   `templatePressed` patches into the list live.
+ *   `palettePressed` patches into the list live.
  *
  * The verbs, the read-only scope and the refusals are `LookSheet`'s rules (D11, D12, D14), with
  * **Spread** added and **Include** dropped: a template is applied, never included.
@@ -251,7 +251,7 @@ export function TemplateSheet({
               put(row.template, 'value', { effect: { ...effect, ...withCentreMode(effect, value) } })
             }
             if (values.length > 0) {
-              toast.info(`${listNames(values, 'template')} ${values.length === 1 ? 'holds a value' : 'hold values'} — no centre to set · skipped`, {
+              toast.info(`${listNames(values, 'palette')} ${values.length === 1 ? 'holds a value' : 'hold values'} — no centre to set · skipped`, {
                 id: 'sheet-write:templates:value-skip',
               })
             }
@@ -283,13 +283,13 @@ export function TemplateSheet({
             }
           }
           if (emptied.length > 0) {
-            toast.info(`${listNames(emptied, 'template')} would hold no value — skipped`, {
+            toast.info(`${listNames(emptied, 'palette')} would hold no value — skipped`, {
               id: 'sheet-write:templates:value-skip',
             })
           }
           return true
         },
-        clearRefusal: 'A template holds a value — set another one instead',
+        clearRefusal: 'A palette holds a value — set another one instead',
         skipNote: (skipped) => {
           const one = skipped.length === 1
           const effect = (row: TemplateSheetRow) => row.template?.kind === 'effect'
@@ -301,7 +301,7 @@ export function TemplateSheet({
               : skipped.every((row) => effect(row) || perHead(row))
                 ? 'hold effects or per-head values'
                 : 'cannot be set here'
-          return `${listNames(skipped.map(templateRowName), 'template')} ${reason} — open to change · skipped`
+          return `${listNames(skipped.map(templateRowName), 'palette')} ${reason} — open to change · skipped`
         },
       },
       {
@@ -349,7 +349,7 @@ export function TemplateSheet({
           }
         },
         skipNote: (skipped) =>
-          `${listNames(skipped.map(templateRowName), 'template')} ${skipped.length === 1 ? 'runs an effect' : 'run effects'} — no fade to time · skipped`,
+          `${listNames(skipped.map(templateRowName), 'palette')} ${skipped.length === 1 ? 'runs an effect' : 'run effects'} — no fade to time · skipped`,
         spread: (batch): SpreadPlan | null =>
           batch.length === 0
             ? null
@@ -415,7 +415,7 @@ export function TemplateSheet({
           }
           if (refused.length > 0) {
             toast.info(
-              `${listNames(refused, 'template')} skipped — a beat effect always runs on a master, so it cannot be unscaled`,
+              `${listNames(refused, 'palette')} skipped — a beat effect always runs on a master, so it cannot be unscaled`,
               { id: 'sheet-write:templates:master-skip' },
             )
           }
@@ -440,8 +440,8 @@ export function TemplateSheet({
         skipNote: (skipped) => {
           const values = skipped.filter((row) => row.template?.kind === 'value')
           return values.length === skipped.length
-            ? `${listNames(skipped.map(templateRowName), 'template')} ${skipped.length === 1 ? 'holds a value' : 'hold values'} — no master · skipped`
-            : `${listNames(skipped.map(templateRowName), 'template')} · no master to set · skipped`
+            ? `${listNames(skipped.map(templateRowName), 'palette')} ${skipped.length === 1 ? 'holds a value' : 'hold values'} — no master · skipped`
+            : `${listNames(skipped.map(templateRowName), 'palette')} · no master to set · skipped`
         },
       },
       {
@@ -528,7 +528,7 @@ export function TemplateSheet({
     permission: scope.permission,
     copy: scope.copy,
     cellDisabled: scope.readOnly ? cellsInert : undefined,
-    noun: 'template',
+    noun: 'palette',
     rowName: templateRowName,
     onOpenRow: isCurrentProject ? openRow : undefined,
   })
@@ -560,7 +560,7 @@ export function TemplateSheet({
   })
 
   const count = selected.length
-  const noun = count === 1 ? 'template' : 'templates'
+  const noun = count === 1 ? 'palette' : 'palettes'
   const verbs =
     count > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -586,8 +586,8 @@ export function TemplateSheet({
           <LibraryVerb
             icon={Hand}
             label="Pick up"
-            title={`Pick up ${selected[0]?.name ?? 'this template'} — place it on another screen`}
-            disabledReason={oneRecordReason('Pick up', 'template', count)}
+            title={`Pick up ${selected[0]?.name ?? 'this palette'} — place it on another screen`}
+            disabledReason={oneRecordReason('Pick up', 'palette', count)}
             onClick={() => handPickUp('TEMPLATE', selected[0].id)}
           />
         )}
@@ -625,16 +625,16 @@ export function TemplateSheet({
   const firstColumn = useMemo(
     () =>
       libraryNameColumn<TemplateSheetRow>({
-        label: 'Template',
+        label: 'Palette',
         width: `${NAME_WIDTH}px`,
-        noun: 'template',
+        noun: 'palette',
         name: (row) => row.template?.name ?? '',
         rename: (row, next) => {
           if (row.template) put(row.template, 'name', { name: next })
         },
         renameDisabled: scope.readOnly ? () => true : undefined,
         onOpen: isCurrentProject ? openRow : undefined,
-        openLabel: (row) => `Edit ${row.template?.name ?? 'template'}`,
+        openLabel: (row) => `Edit ${row.template?.name ?? 'palette'}`,
       }),
     [isCurrentProject, openRow, put, scope.readOnly],
   )
@@ -664,7 +664,7 @@ export function TemplateSheet({
         open={copyOpen}
         onOpenChange={setCopyOpen}
         items={copying}
-        noun="template"
+        noun="palette"
         name={(t) => t.name}
         sourceProjectId={projectId}
         copy={(t, targetProjectId, newName) =>
@@ -740,10 +740,10 @@ function valueLanding(family: AttributeFamily, batch: readonly TemplateSheetRow[
   const parts = [
     other.length === 0
       ? null
-      : `${listNames(other.map(templateRowName), 'template')} ${other.length === 1 ? 'is' : 'are'} ${formatFamilyList(families, ' and ')}`,
+      : `${listNames(other.map(templateRowName), 'palette')} ${other.length === 1 ? 'is' : 'are'} ${formatFamilyList(families, ' and ')}`,
     effects.length === 0
       ? null
-      : `${listNames(effects.map(templateRowName), 'template')} ${effects.length === 1 ? 'runs an effect' : 'run effects'}`,
+      : `${listNames(effects.map(templateRowName), 'palette')} ${effects.length === 1 ? 'runs an effect' : 'run effects'}`,
   ].filter(Boolean)
   return {
     count: batch.length - other.length - effects.length,

@@ -281,7 +281,7 @@ describe('the scope arm (D6)', () => {
     expect(button).toHaveAttribute('title', expect.stringContaining('read of the cook'))
   })
 
-  it('refuses onto a focused template layer, and says why', () => {
+  it('refuses onto a focused palette layer, and says why', () => {
     focusedTemplate.current = { layerId: 7, templateId: 4, kind: 'effect' }
     draw([column('dimmer', ['group:Front wash'])])
     const button = screen.getByRole('button', { name: 'Spread' })

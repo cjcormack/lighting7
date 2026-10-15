@@ -158,7 +158,7 @@ function saveAsTemplateOffer(
       reason:
         effect.sourceName != null
           ? `Already named — this is “${effect.sourceName}” running. Edit that instead.`
-          : 'Only an effect the programmer owns can become a template. This one belongs to a cue or the show.',
+          : 'Only an effect the programmer owns can become a palette. This one belongs to a cue or the show.',
     }
   }
   // Two different absences, and telling them apart is the point: a library that has not arrived is
@@ -170,14 +170,14 @@ function saveAsTemplateOffer(
   if (entry == null) {
     return {
       enabled: false,
-      reason: `“${effect.effectType}” is not in this desk's effect library, so its category — and so the template's family — cannot be read.`,
+      reason: `“${effect.effectType}” is not in this desk's effect library, so its category — and so the palette's family — cannot be read.`,
     }
   }
   const family = familyForEffectCategory(entry.category)
   if (family == null || !familyCanHoldEffect(family)) {
     return {
       enabled: false,
-      reason: `A “${entry.category}” effect is not banked by family, so it cannot be a template. It can live in a recorded look.`,
+      reason: `A “${entry.category}” effect is not banked by family, so it cannot be a palette. It can live in a recorded look.`,
     }
   }
   return { enabled: true }
@@ -302,7 +302,7 @@ function FxRow({
               title={saveAsTemplate.reason}
             >
               <Plus className="size-3.5" />
-              Save as template…
+              Save as palette…
             </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onClick={onStop}>
               <Square className="size-3.5" />

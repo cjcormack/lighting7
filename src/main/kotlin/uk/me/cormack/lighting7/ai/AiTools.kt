@@ -109,9 +109,9 @@ class AiTools(private val state: State) {
                 "set_programmer" -> programmer.setProgrammer(input)
                 "clear_programmer" -> programmer.clearProgrammer(input)
                 "set_blind" -> programmer.setBlind(input)
-                "apply_template" -> programmer.applyTemplate(input)
+                "apply_palette" -> programmer.applyTemplate(input)
                 "record_look" -> programmer.recordLook(input)
-                "create_template" -> executeCreateTemplate(input)
+                "create_palette" -> executeCreateTemplate(input)
                 "set_scenery" -> executeSetScenery(input)
                 "move_scenery" -> executeMoveScenery(input)
                 "set_cue_events" -> executeSetCueEvents(input)
@@ -501,7 +501,7 @@ class AiTools(private val state: State) {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             ?: setOf(
                 "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
-                "templates", "cues", "cue_stacks", "cue_run", "programmer", "selection", "windows",
+                "palettes", "cues", "cue_stacks", "cue_run", "programmer", "selection", "windows",
                 "parked",
             )
 
@@ -611,7 +611,7 @@ class AiTools(private val state: State) {
                 })
             }
 
-            if ("templates" in include) {
+            if ("palettes" in include) {
                 // Generic colour templates only: they are the ones a `tmpl:` colour parameter can
                 // name, and the uuid is what it names them by.
                 val project = state.projectManager.currentProject
@@ -629,7 +629,7 @@ class AiTools(private val state: State) {
                         }
                     }
                 }
-                put("templates", buildJsonArray { templates.forEach { add(it) } })
+                put("palettes", buildJsonArray { templates.forEach { add(it) } })
             }
 
             if ("cues" in include) {
@@ -700,7 +700,7 @@ class AiTools(private val state: State) {
             }
 
             if ("programmer" in include) {
-                // The AI mutates the programmer itself — and `apply_look`, `apply_template`'s LAYER
+                // The AI mutates the programmer itself — and `apply_look`, `apply_palette`'s LAYER
                 // mode and `create_look`'s `applyToTargets` go through `programmerLayerStack.toggle`,
                 // which *toggles*: without being able to read the stack back, a model asked to "add
                 // the wash" a second time takes it off stage instead.
@@ -711,7 +711,8 @@ class AiTools(private val state: State) {
                         for (layer in store.layers) {
                             addJsonObject {
                                 put("layerId", layer.layerId)
-                                put("sourceKind", layer.source.kind.name)
+                                // A palette layer's stored kind is TEMPLATE; Claude reads it as PALETTE.
+                                put("sourceKind", if (layer.source.kind == LayerSourceKind.TEMPLATE) "PALETTE" else layer.source.kind.name)
                                 put("sourceId", layer.source.id)
                                 put("sourceName", layer.source.name)
                                 put("sortOrder", layer.sortOrder)
@@ -880,10 +881,10 @@ class AiTools(private val state: State) {
         val fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull
         val dryRun = input["dryRun"]?.jsonPrimitive?.booleanOrNull ?: false
         val focus = input["focus"]?.jsonPrimitive?.booleanOrNull ?: false
-        val saveAs = when (val raw = input["saveAsTemplate"]) {
+        val saveAs = when (val raw = input["saveAsPalette"]) {
             null, JsonNull -> null
             else -> (raw as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return errorResult("saveAsTemplate must be a template name")
+                ?: return errorResult("saveAsPalette must be a palette name")
         }
 
         val project = state.projectManager.currentProject
@@ -910,7 +911,7 @@ class AiTools(private val state: State) {
                 is TemplateCreateResult.Invalid -> return errorResult(created.message)
                 is TemplateCreateResult.Duplicate -> return errorResult(
                     "${created.message} — nothing was aimed. Pick another name, or combine several aims in one " +
-                        "template by running each with dryRun and passing their positions to create_template.",
+                        "palette by running each with dryRun and passing their positions to create_palette.",
                 )
                 is TemplateCreateResult.Ok -> savedTemplate = created.template
             }
@@ -940,7 +941,7 @@ class AiTools(private val state: State) {
             description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
                 (if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}") +
                 (focused?.let { ", ${if (dryRun) "would focus" else "focused"} ${it.written.size}" } ?: "") +
-                (savedTemplate?.let { " and saved them as template '${it.name}'" } ?: ""),
+                (savedTemplate?.let { " and saved them as palette '${it.name}'" } ?: ""),
             result = buildJsonObject {
                 put("dryRun", dryRun)
                 focused?.let { f ->
@@ -963,8 +964,8 @@ class AiTools(private val state: State) {
                     })
                 }
                 savedTemplate?.let { t ->
-                    putJsonObject("template") {
-                        put("templateId", t.id)
+                    putJsonObject("palette") {
+                        put("paletteId", t.id)
                         put("uuid", t.uuid)
                         put("name", t.name)
                         put("rowCount", t.rows.size)
@@ -972,9 +973,9 @@ class AiTools(private val state: State) {
                 }
                 if (saveAs != null && savedTemplate == null) {
                     put(
-                        "templateNote",
-                        if (dryRun) "dryRun: template '$saveAs' was not created"
-                        else "no head could be aimed, so template '$saveAs' was not created",
+                        "paletteNote",
+                        if (dryRun) "dryRun: palette '$saveAs' was not created"
+                        else "no head could be aimed, so palette '$saveAs' was not created",
                     )
                 }
                 put("aimed", buildJsonArray {
@@ -1184,9 +1185,9 @@ class AiTools(private val state: State) {
         layersArray?.mapIndexed { index, layer ->
             val obj = layer as? JsonObject ?: throw IllegalArgumentException("layers[$index] must be an object")
             val lookId = obj.present("lookId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: lookId must be an integer") }
-            val templateId = obj.present("templateId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: templateId must be an integer") }
+            val templateId = obj.present("paletteId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: paletteId must be an integer") }
             if ((lookId == null) == (templateId == null)) {
-                throw IllegalArgumentException("layers[$index]: give exactly one of lookId or templateId")
+                throw IllegalArgumentException("layers[$index]: give exactly one of lookId or paletteId")
             }
             CueLayerDto(
                 lookId = lookId,
@@ -1230,7 +1231,7 @@ class AiTools(private val state: State) {
                 layer.lookId in lookNeeding ->
                     "layers[$index]: look ${layer.lookId} has effects that run on the layer's targets — give targets"
                 layer.templateId in templateNeeding ->
-                    "layers[$index]: template ${layer.templateId} is generic — its effect or values land on the layer's targets, so give targets"
+                    "layers[$index]: palette ${layer.templateId} is generic — its effect or values land on the layer's targets, so give targets"
                 else -> null
             }
         }
@@ -1254,7 +1255,7 @@ class AiTools(private val state: State) {
             looks to templates
         }
         return (lookIds - looks).sorted().map { "layers: no look $it in this project (see describe_rig)" } +
-            (templateIds - templates).sorted().map { "layers: no template $it in this project (see describe_rig)" }
+            (templateIds - templates).sorted().map { "layers: no palette $it in this project (see describe_rig)" }
     }
 
     private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
@@ -1938,9 +1939,9 @@ class AiTools(private val state: State) {
                 targetType = if (targetKey == null) DEFERRED_TARGET_TYPE else TargetRef.Fixture.TYPE,
                 targetKey = targetKey.orEmpty(),
                 propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull
-                    ?: return errorResult("A template row is missing 'propertyName'"),
+                    ?: return errorResult("A palette row is missing 'propertyName'"),
                 value = obj["value"]?.jsonPrimitive?.contentOrNull
-                    ?: return errorResult("A template row is missing 'value'"),
+                    ?: return errorResult("A palette row is missing 'value'"),
             )
         } ?: emptyList()
 
@@ -1986,13 +1987,13 @@ class AiTools(private val state: State) {
             is TemplateCreateResult.Duplicate -> errorResult(result.message)
             is TemplateCreateResult.Ok -> ToolExecutionResult(
                 success = true,
-                description = "Created template '${result.template.name}' " +
+                description = "Created palette '${result.template.name}' " +
                     (result.template.effect
                         ?.let { "(effect: ${it.effectType})" }
                         ?: "(${result.template.rows.size} row(s))") +
                     " — reference it as tmpl:${result.template.uuid}",
                 result = buildJsonObject {
-                    put("templateId", result.template.id)
+                    put("paletteId", result.template.id)
                     put("uuid", result.template.uuid)
                     put("name", result.template.name)
                     put("family", result.template.family)

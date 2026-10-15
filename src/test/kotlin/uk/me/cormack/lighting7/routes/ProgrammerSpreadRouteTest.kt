@@ -72,7 +72,7 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.createTemplate(name: String, hex: String): String {
-        val resp = post("/api/rest/projects/$projectId/templates") {
+        val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "$hex;policy=extract"))))
         }

@@ -287,7 +287,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, cue.status, cue.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, cue.code())
 
-        val template = json(client, "templates", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"reset","value":"255"}]}""")
+        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"reset","value":"255"}]}""")
         assertEquals(HttpStatusCode.BadRequest, template.status, template.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, template.code())
 

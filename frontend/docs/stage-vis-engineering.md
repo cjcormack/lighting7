@@ -332,7 +332,7 @@ all three on both sides. Only where the colour source is itself a **wheel**: bes
 property a COLOUR setting is a preset or macro on the same emitters (the Hex's, the Orbit's), not
 glass, and is left out. `colourDispatchParity.test.tsx` holds the 2D and 3D answers to one result for
 a two-wheel head (yellow through cyan is green), a scroll band on wheel 2 (below), and an RGB head
-with a preset setting. A **template** still cannot address the second wheel
+with a preset setting. A **palette** still cannot address the second wheel
 (`FU-TMPL-SECOND-COLOUR-WHEEL`).
 
 ### Animated colour bands

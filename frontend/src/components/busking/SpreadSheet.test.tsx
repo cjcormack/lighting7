@@ -155,7 +155,7 @@ describe('the request', () => {
     })
   })
 
-  it('sends a tmpl: reference for a colour endpoint chosen from the library, and only offers generic value colour templates', () => {
+  it('sends a tmpl: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
     templates = [
       { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] },
       { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'effect', isGeneric: true, rows: [], requiredEmitters: [] },
@@ -168,7 +168,7 @@ describe('the request', () => {
     draw([group])
     fireEvent.click(radio('Family', 'Colour'))
     fireEvent.click(document.querySelector('[data-spread-endpoint="to"]')!)
-    const picker = screen.getByRole('combobox', { name: 'To template' }) as HTMLSelectElement
+    const picker = screen.getByRole('combobox', { name: 'To palette' }) as HTMLSelectElement
     expect([...picker.options].map((o) => o.textContent)).toEqual(['— a colour —', 'Amber'])
     fireEvent.change(picker, { target: { value: 'u-amber' } })
     apply()
@@ -178,9 +178,9 @@ describe('the request', () => {
     const policies = () => within(screen.getByRole('radiogroup', { name: 'White policy' })).getAllByRole('radio')
     expect(policies().every((r) => !(r as HTMLButtonElement).disabled)).toBe(true)
     fireEvent.click(document.querySelector('[data-spread-endpoint="from"]')!)
-    fireEvent.change(screen.getByRole('combobox', { name: 'From template' }), { target: { value: 'u-amber' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'From palette' }), { target: { value: 'u-amber' } })
     expect(policies().every((r) => (r as HTMLButtonElement).disabled)).toBe(true)
-    expect(screen.getByRole('radiogroup', { name: 'White policy' })).toHaveAttribute('title', expect.stringMatching(/From is a template/))
+    expect(screen.getByRole('radiogroup', { name: 'White policy' })).toHaveAttribute('title', expect.stringMatching(/From is a palette/))
   })
 
   it('lands on the first family the mask names once the selection can take it — even when the selection arrives after mount', () => {
@@ -284,7 +284,7 @@ describe('Over', () => {
 })
 
 describe('Save as Look…', () => {
-  it('opens RecordLookSheet over the selection — record-look, never a template (D10)', () => {
+  it('opens RecordLookSheet over the selection — record-look, never a palette (D10)', () => {
     draw([group, cell])
     fireEvent.click(screen.getByRole('button', { name: 'Save as Look…' }))
     expect(screen.getByTestId('record-look')).toHaveAttribute(

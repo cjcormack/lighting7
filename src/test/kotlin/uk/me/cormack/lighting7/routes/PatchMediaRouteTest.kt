@@ -197,7 +197,7 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
             rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ee5b5e")),
             targets = listOf(TemplateTargetDto("fixture", "rev-1")),
         )
-        suspend fun resolve(): TemplateResolutionDto = client.post("/api/rest/projects/$projectId/templates/resolve") {
+        suspend fun resolve(): TemplateResolutionDto = client.post("/api/rest/projects/$projectId/palettes/resolve") {
             contentType(ContentType.Application.Json); setBody(request)
         }.body<TemplateResolveResponse>().entries.single()
 

@@ -78,7 +78,7 @@ export function useProgrammerAddEffect(): AddEffectOffer {
     scope == null || scope.kind === 'output'
       ? 'Output is a read of everything composed together, so it owns nothing. Switch to Local for an effect on this cue, or focus a layer to put one in its look.'
       : templateFocused
-        ? 'A template holds one thing — a value, or one effect chosen when it was made. Edit it in the template library, switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
+        ? 'A palette holds one thing — a value, or one effect chosen when it was made. Edit it in the palette library, switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
         : target == null
           ? 'Select the heads the effect should drive first.'
           : scope.kind === 'layer'

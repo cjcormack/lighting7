@@ -74,7 +74,7 @@ describe('canHandLand', () => {
     }
   })
 
-  it('lets both layer stacks take a Look or a template, and neither take a cue', () => {
+  it('lets both layer stacks take a Look or a palette, and neither take a cue', () => {
     for (const target of ['layer-stack', 'cue-stack'] as const) {
       expect(canHandLand({ kind: 'LOOK' }, target)).toBe(true)
       expect(canHandLand({ kind: 'LOOK', hasDeferredEffects: true }, target)).toBe(true)
@@ -100,7 +100,7 @@ describe('canHandLand', () => {
  * a drag whose `slotEligible` is wrong on purpose — which no amount of sharing the rule can produce.
  */
 describe('slotAssignmentFor against a wrongly-eligible drag', () => {
-  it('still refuses a template, because it re-checks the kind itself', () => {
+  it('still refuses a palette, because it re-checks the kind itself', () => {
     expect(slotAssignmentFor(paletteDrag('TEMPLATE', false, true))).toBeNull()
   })
 

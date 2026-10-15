@@ -143,10 +143,10 @@ All are buttons. Five things about them on this side:
 
 - **The library rows are not `TargetRowItem`s.** That component exists to mount
   `useTargetProperties` per group or fixture and is memoized on primitive target props for exactly
-  that reason; a template, Look or busk page has no per-target property lookup, so its row is built
+  that reason; a palette, Look or busk page has no per-target property lookup, so its row is built
   in `SurfaceLibrary`'s `rows` memo from `actionChip` beside Selection and Desk.
 - **The kind row stays at the artboard's six.** *All · Groups · Fixtures · Looks · Cues · Desk* — a
-  template files under **Looks** (the row of named recallable records) and a busk page under
+  palette files under **Looks** (the row of named recallable records) and a busk page under
   **Desk** (which already holds the encoder bank), rather than widening a 360px segmented control to
   seven. *Next page* / *Prev page* sit on the Desk row **once**: they are page-agnostic, and a chip
   repeated per page reads as page-specific.
@@ -154,7 +154,7 @@ All are buttons. Five things about them on this side:
   the same reason. `applyLook` presses onto the Look's *own* fixtures, and one with a deferred
   effect has none — the write boundary refuses it by name (`BINDING_LOOK_NEEDS_SELECTION`). The
   row's detail line says *needs a selection*, which is a better answer than a chip that 400s.
-- **A template's *Press* chip carries its family; a Look's *Apply* does not.** A template is in
+- **A palette's *Press* chip carries its family; a Look's *Apply* does not.** A palette is in
   exactly one family, so the palette's family filter can hide it honestly; a Look spans families by
   nature, so its chip is built by `actionChip` with `family: null` and survives every filter.
 - **`describeTarget` will not resolve a uuid, and `recordOptions.ts` is where the name comes from.**

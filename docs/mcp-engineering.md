@@ -262,7 +262,7 @@ desk's JVM, so reaching it through a tunnel would make a leaked token a shell on
 every tool here is a bounded operation on the show.
 
 `describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the effect
-library, what is running and parked, speed masters, Looks, colour templates, cues and stacks. An MCP
+library, what is running and parked, speed masters, Looks, colour palettes, cues and stacks. An MCP
 client gets nothing it does not ask for, so the `instructions` sent at `initialize` tell the model
 to call it first, along with the composition rules (`RigBriefing.keyConcepts()`).
 
@@ -298,10 +298,10 @@ venue's at `venueValue` standing again). In a venue both are admin-only, as ever
 
 `create_look` authors a Look's **values** as well as its deferred effects and scenery (`ai/LookValues.kt`):
 `values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
-always is. The model states an intent — the template grammar (`pct:`, `#rrggbb`, `deg:`, `dmx:`,
+always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `deg:`, `dmx:`,
 `on`/`off`), or a setting's option name for a gobo or a wheel slot — and each is resolved per head
-through `TemplateResolver`, the resolver a template press uses, into the literal a Look row stores;
-`pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the template vocabulary. A
+through `TemplateResolver`, the resolver a palette press uses, into the literal a Look row stores;
+`pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the palette vocabulary. A
 group stays one group row while its members agree on the literal, and becomes a row per head when they
 do not (a wheel head and an RGB head given one colour). A head that cannot take a value is reported
 under `skipped`; a value no head of its target can take, or the same target and property twice,
@@ -327,7 +327,7 @@ wherever a cue or Include spawns it (`EffectSpawner.createEffectInstanceOrNull`)
 A colour value may carry the head's own emitter levels as the desk's colour literal does —
 `#ff0000;w128;a64;uv32`, each token at most once, any other token refused rather than dropped — laid over
 the resolved mix only where the head bundles that emitter with its colour (`bundleWithColour`). A
-`;policy=extract|additive|rgbonly` token is the template grammar's white policy (`TemplateResolver.mixColour`),
+`;policy=extract|additive|rgbonly` token is the palette grammar's white policy (`TemplateResolver.mixColour`),
 absent reading as `rgbonly`, so a colour with neither sets W/A/UV to zero; a named level wins over the
 policy's; pan and
 tilt take `pct:` / `dmx:` on their own, which is how a head with no annotated degree range is
@@ -350,9 +350,9 @@ A cue's **own values** — `create_cue`'s and each `build_cue_stack` cue's `valu
 `create_look`'s grammar and resolve the same way, stored as the cue's property assignments (a cell by
 its own key, as Record stores one). They beat every layer of the cue whatever its order. They are
 resolved against the loaded rig, so `build_cue_stack` refuses them in a project that is not current,
-as it refuses `at`. A cue **layer** names a Look or, with `templateId`, a template — exactly one. A
+as it refuses `at`. A cue **layer** names a Look or, with `paletteId`, a palette — exactly one. A
 layer naming a record the project lacks is refused by both tools (`layerSourceProblems`), where
-`createCueChildren` would drop it silently; a generic template (an effect template, or rows for
+`createCueChildren` would drop it silently; a generic palette (an effect palette, or rows for
 whatever it is pointed at) with no layer targets is refused as the busk pad refuses it with nothing
 selected. An effect missing a required field is refused by the field's name.
 
@@ -363,7 +363,7 @@ the code the desk's own gesture goes through, on the current project:
   `create_look`'s grammar, resolved per head by `resolveProgrammerValues` (the same parse and
   `TemplateResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
   rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeProperties` batch with each
-  head's `sourceGroup` from `groupHintsForTargets` — the template click's value arm — so Record
+  head's `sourceGroup` from `groupHintsForTargets` — the palette click's value arm — so Record
   collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
   write resolves to no channel, is in `skipped`; a value no selected head can take, an unknown target,
   or a trigger or command name refuses the call before anything is written. A colour write carries the
@@ -375,11 +375,11 @@ the code the desk's own gesture goes through, on the current project:
   `programmer.clearTarget`, the grid's *Release*), all checked before any is cleared.
 - `set_blind` `{blind, fadeSeconds?}` — the WS `programmer.setBlind` branch, call for call:
   `programmer.setBlind`, `sceneryService.onBlindChanged`, `effectsService.onBlindChanged`.
-- `apply_template` `{templateId | templateName, targets?, mode?, mask?, fadeSeconds?}` — `LITERALS`
+- `apply_palette` `{paletteId | paletteName, targets?, mode?, mask?, fadeSeconds?}` — `LITERALS`
   is `applyTemplateToProgrammer` (the chip's click), `LAYER` the toggle route's siblingless
-  `programmerLayerStack.toggle` (⌥click). A generic template with no targets is `TEMPLATE_NEEDS_SELECTION`;
-  a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a template
-  outside it (`TEMPLATE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
+  `programmerLayerStack.toggle` (⌥click). A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
+  a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a palette
+  outside it (`PALETTE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
   as the desk's doors do.
 - `record_look` — `performProgrammerRecordLook`, which `POST …/programmer/record-look` now calls too
   (extracted from the route as Record into a cue's `performProgrammerRecord` was), with record_cue's
@@ -388,10 +388,18 @@ the code the desk's own gesture goes through, on the current project:
 
 Every fade on these is `fadeSeconds`, 0–600.
 
+**The palette tools were the template tools** until venue-visit plan D2: `create_template` and
+`apply_template`, with `templateId` / `templateName`, a cue layer's `templateId`, `aim_fixtures`'
+`saveAsTemplate`, `get_current_state`'s `templates` section and a programmer layer's `TEMPLATE`
+`sourceKind`. All of them say palette now, with no alias, because Claude reads them and the desk
+stores none of them. A client connected before the rename holds a stale `tools/list` and must
+reconnect to see the new names; a call to an old name is refused as an unknown tool. The stored side
+— the tables, `tmpl:` references, the `templates/` archive folder — keeps the old word.
+
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
-`dryRun` that answers each head's degrees and writes nothing, and a `saveAsTemplate` that also
-records the aims as a new position template (one fixture row per head, in degrees), since an aim
+`dryRun` that answers each head's degrees and writes nothing, and a `saveAsPalette` that also
+records the aims as a new position palette (one fixture row per head, in degrees), since an aim
 left only in the programmer is lost at the operator's next Clear. It is the setup-time answer to "focus
 the specials on DSC": a model reading a plot knows where a region or a mark is in stage metres (from
 `get_patch`) and has no way to turn that into DMX itself. Heads it cannot aim come back by name
@@ -403,8 +411,8 @@ FOCUS channel solved for its distance from its lens through its declared range, 
 aim. A head aim skipped is not focused, since it is not pointing there. The answer adds `focused`
 (each head's focus literal and the distance it was solved for) and `focusSkipped` (a head that was
 not aimed, has no focus channel or range, or a point outside it, by name); `dryRun` answers both and
-writes neither. `saveAsTemplate` still saves the position only: the template
-grammar holds focus, but a template is one family and focus is beam, so a focus is kept with
+writes neither. `saveAsPalette` still saves the position only: the palette
+grammar holds focus, but a palette is one family and focus is beam, so a focus is kept with
 `record_cue` (`docs/fixtures-engineering.md` §"Focusing a head on a point"). With `render_view`,
 that is the plan's MCP check: aim and focus a Revolution on the back wall, then look at it.
 
@@ -445,8 +453,8 @@ prompt-book markup from a script and lighting notes.
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
-| `unpatch_fixtures` | Remove fixtures by key, and whole universes (`{universe, subnet?}`) with every patch on them, `dryRun` (`ai/PatchEditTools.kt`). Shares `deleteOwnPatch` / `deleteOwnUniverse` with the REST deletes, so memberships, busk rig tiles, extra placements, cue events and the universe's machine overrides go as there; the groups stay. Never refused for a reference: `namedBy` lists every cue, Look, template, surface binding and script still naming a removed key (`ai/RigKeyReferences.kt`), whose rows stay and show as a missing fixture |
-| `rename_fixtures` | Change keys, `{key, newKey}` rows, `dryRun`. `patch_fixtures` cannot, since the key is its identity. Unlike the REST `PUT`, which sweeps a renamed patch's busk cell tiles and leaves every other reference dangling, it **rewrites** the project's own references — cue rows, ad-hoc effects and layer targets, Look rows (their cell `elementKey` too) and effects, template rows, surface bindings and busk cell tiles — a cell's `<key>.<cell>` by its prefix, so `foh-1` never matches `foh-10`, and a stored key that is itself a patched fixture's is never read as another's cell; scripts are only named (`scriptsNotRewritten`). Keys go through a temporary value first, so a swap passes the unique index. A new key may not hold a `.` |
+| `unpatch_fixtures` | Remove fixtures by key, and whole universes (`{universe, subnet?}`) with every patch on them, `dryRun` (`ai/PatchEditTools.kt`). Shares `deleteOwnPatch` / `deleteOwnUniverse` with the REST deletes, so memberships, busk rig tiles, extra placements, cue events and the universe's machine overrides go as there; the groups stay. Never refused for a reference: `namedBy` lists every cue, Look, palette, surface binding and script still naming a removed key (`ai/RigKeyReferences.kt`), whose rows stay and show as a missing fixture |
+| `rename_fixtures` | Change keys, `{key, newKey}` rows, `dryRun`. `patch_fixtures` cannot, since the key is its identity. Unlike the REST `PUT`, which sweeps a renamed patch's busk cell tiles and leaves every other reference dangling, it **rewrites** the project's own references — cue rows, ad-hoc effects and layer targets, Look rows (their cell `elementKey` too) and effects, palette rows, surface bindings and busk cell tiles — a cell's `<key>.<cell>` by its prefix, so `foh-1` never matches `foh-10`, and a stored key that is itself a patched fixture's is never read as another's cell; scripts are only named (`scriptsNotRewritten`). Keys go through a temporary value first, so a swap passes the unique index. A new key may not hold a `.` |
 | `edit_groups` | A group's membership (`members`, the whole ordered list; or `add` / `remove`), name (`newName`, references rewritten as `rename_fixtures` does, scripts named in `scriptsNotRewritten`) or a new group, `dryRun`. A venue fixture the show hides stays in a show group whose members are replaced |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
 | `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. In a show on a venue a row of exactly `{name, hidden}` naming a venue element is a **hide** (`ShowHides.setHiddenByUuid`, `HideKind.ELEMENT`) — `true` hides it for the show's run, `false` brings back one the show hides — checked first with `ShowHides.hideRefusal`, so `VENUE_HIDE_IN_USE`'s holders are listed with every other problem; any other row naming a venue element is `VENUE_OWNED`, with a hint naming the hide row, a stack set for a part-show move, and the venue's draft for a change for every show. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things. **Models** (`docs/fixtures-engineering.md` §"Model objects"): an `OBJECT` with `shape: MODEL` and `params.parts` is how another Claude session makes a set piece no primitive draws — the schema's `MODEL_PARTS_NOTE` is the whole vocabulary — and a row that sends parts but leaves a size out is sized to the parts' bounds; `modelFrom` copies a model (its parts, and its size and finish unless the row states them) from a stored element or an earlier row of the same call |
@@ -456,7 +464,7 @@ prompt-book markup from a script and lighting notes.
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set. On a show on a venue, a venue fixture's row writes through the facets the show owns (§"Tools on a show on a venue") |
 | `override_venue_fixtures` | A show's venue fixtures by key: each facet `SHOW` / `VENUE` / `KEEP_MINE`, an `address` override, and `hidden`; `dryRun`. The fixture sheet's switches (§"Tools on a show on a venue") |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
-| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or template layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or palette layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
 
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
@@ -469,7 +477,7 @@ with the cue's fade). Each is checked against the element's kind exactly as the 
 …/scenery` routes check it (`parseToolSceneryList` beside `parseSceneryList`, `models/scenery.kt`):
 `open` only on a drawn drape, `trimM` only on a flown piece, an element named twice refused, every
 problem at once and nothing written. The schema text says scenery **tracks** — list only what
-changes — and that a Look's scenery shows while it is live, above every cue; templates carry none.
+changes — and that a Look's scenery shows while it is live, above every cue; palettes carry none.
 
 **Moving scenery now** (scenery-programmer plan D15). `move_scenery` is the live counterpart: `{element,
 visible?, open?, trimM?, fadeSeconds?, release?}` holds one element's states in the **programmer's
@@ -533,7 +541,7 @@ Three decisions shape them:
   the gel (`Fixtures.setPatchMetadata`, which `GET /fixtures` reads).
   A rename (`rename_fixtures`, `edit_groups`' `newName`) also fires the list signal of every kind it
   rewrote, `cuesRecomposed` for the cues, and invalidates the surface bindings; on the current project
-  it republishes each rewritten Look and template (`republishForLookEdit` / `republishForTemplateEdit`)
+  it republishes each rewritten Look and palette (`republishForLookEdit` / `republishForTemplateEdit`)
   and each live cue (`republishCueIfLive`) after the reload, so what is on stage keeps its fixtures.
   The programmer's own slots and effects already running are runtime state keyed by the old key, and
   are left to the operator.
@@ -591,14 +599,14 @@ already uses (an element in its scene, a hidden venue element included; a Look; 
 with every clash at once. Everything is re-resolved **by name in the target**: a scenery change
 finds the target's element of that name — its own, the venue version's row, or one copied in the
 same call — a cue event its patch by key and type, a script trigger its script by name, a speed
-master by index, a platform's region by name; a cue layer's Look or template is the target's of
+master by index, a platform's region by name; a cue layer's Look or palette is the target's of
 that name (`looksLinked`) or is copied along. What cannot resolve is listed in `unresolved` rather
 than guessed: rows naming a fixture or group the target lacks are kept, reading as missing, as a
 venue Update's dead references do; a scenery change, event or trigger that cannot resolve is left
 out; prompt-book anchors are never copied. Painted elements bring their images into the target's
 store (`SceneImageStore.hydrate`), on a real run only. The copier is hand-written rather than an
 export/import subset because the importer only ever populates a whole project; when a portable
-column is added to a cue, Look, template, stack or element, add it here too.
+column is added to a cue, Look, palette, stack or element, add it here too.
 
 ### Tools on a live venue
 
@@ -610,8 +618,8 @@ no route in between. `extract_venue` and `publish_venue` are an admin's wherever
 venue, `record_cue`, `record_look` and `update_from_programmer` are refused for everyone — Record and Update are off in a
 venue (D11) — and an **operator's** stored write is refused, as `VENUE_ADMIN_ONLY` refuses it over
 REST (D3): the tools in `VENUE_STORED_WRITE_TOOLS` (patching, the scene, the stage, Looks, cues,
-templates, park) and `aim_fixtures` when it is told to `saveAsTemplate`. Tools that act on the rig as
-it stands — apply, GO, aim, tempo, and the programmer's set, clear, Blind and template apply — and the
+palettes, park) and `aim_fixtures` when it is told to `saveAsPalette`. Tools that act on the rig as
+it stands — apply, GO, aim, tempo, and the programmer's set, clear, Blind and palette apply — and the
 reads pass. A venue version needs no rule: it is never
 live, `list_projects` leaves versions out, and `switch_project` and every `projectId` answer one as
 not found.

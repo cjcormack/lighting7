@@ -242,12 +242,12 @@ describe('the scope arms', () => {
     expect(within(band()).queryByRole('button', { name: /Release/ })).toBeNull()
   })
 
-  it('a focused template layer is read-only: a template carries no scenery', () => {
+  it('a focused palette layer is read-only: a palette carries no scenery', () => {
     store.scope = { kind: 'layer', layerId: 4 }
     store.layers = [{ layerId: 4, source: { kind: 'TEMPLATE', id: 2, uuid: 'u2', name: 'Warm' } }]
     store.programmer = { projectId: 6, elements: [{ elementUuid: 'tabs', state: { open: 1 } }] }
     draw()
-    expect(within(band()).getByText('A template carries no scenery')).toBeTruthy()
+    expect(within(band()).getByText('A palette carries no scenery')).toBeTruthy()
     for (const radio of within(band()).getAllByRole('radio')) expect(radio).toBeDisabled()
   })
 })

@@ -67,14 +67,14 @@ import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.models.asDuration
 
 /** Error code the client keys the "this template is still applied somewhere" flow off. */
-internal const val CODE_TEMPLATE_IN_USE = "TEMPLATE_IN_USE"
+internal const val CODE_TEMPLATE_IN_USE = "PALETTE_IN_USE"
 
 /**
  * 400 code: the selection is masked to families the template's own is not in (multi-screen plan
  * D5). Every door — click, ⌥click, pad, button — refuses by this name rather than landing a layer
- * the cook would skip whole, which is the same dead-pad reading `TEMPLATE_NEEDS_SELECTION` refuses.
+ * the cook would skip whole, which is the same dead-pad reading `PALETTE_NEEDS_SELECTION` refuses.
  */
-internal const val CODE_TEMPLATE_OUTSIDE_MASK = "TEMPLATE_OUTSIDE_MASK"
+internal const val CODE_TEMPLATE_OUTSIDE_MASK = "PALETTE_OUTSIDE_MASK"
 
 /** The refusal's text, shared by every door so a button's log line and a pad's toast agree. */
 internal fun templateOutsideMaskMessage(name: String, family: PropertyMaskGroup?, mask: Set<PropertyMaskGroup>): String {
@@ -82,11 +82,11 @@ internal fun templateOutsideMaskMessage(name: String, family: PropertyMaskGroup?
     return if (family == null) {
         "'$name' names no known attribute, so it cannot land on a selection masked to $masked"
     } else {
-        "'$name' is a ${describeFamilies(setOf(family))} template, and the selection is masked to $masked"
+        "'$name' is a ${describeFamilies(setOf(family))} palette, and the selection is masked to $masked"
     }
 }
 
-private const val TEMPLATE_NOT_FOUND = "Template not found"
+private const val TEMPLATE_NOT_FOUND = "Palette not found"
 
 /**
  * The template library: CRUD, the two apply gestures, and the editor's resolves-to panel.
@@ -108,7 +108,7 @@ private const val TEMPLATE_NOT_FOUND = "Template not found"
  *    property where every target agrees and keeping per-fixture rows where they do not.
  */
 internal fun Route.routeApiRestProjectTemplates(state: State) {
-    // GET /projects/{id}/templates?family=COLOUR
+    // GET /projects/{id}/palettes?family=COLOUR
     get<ProjectTemplatesResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
@@ -141,7 +141,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // GET /projects/{id}/templates/{templateId}
+    // GET /projects/{id}/palettes/{templateId}
     get<ProjectTemplateResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val dto = transaction(state.database) {
@@ -157,7 +157,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates
+    // POST /projects/{id}/palettes
     post<ProjectTemplatesResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
             when (val result = performTemplateCreate(state, project, call.receive())) {
@@ -171,7 +171,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // PUT /projects/{id}/templates/{templateId}
+    // PUT /projects/{id}/palettes/{templateId}
     //
     // Unlike the Look PUT this takes a typed body rather than a raw `JsonObject`. The
     // absent-versus-empty distinction that forced the raw decode there does not arise for either
@@ -198,13 +198,13 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 val holdsEffect = template.effect != null
                 if (request.rows?.isNotEmpty() == true && holdsEffect) {
                     return@transaction TemplateWriteOutcome.Invalid(
-                        "'${template.name}' holds an effect — a template cannot hold values as " +
+                        "'${template.name}' holds an effect — a palette cannot hold values as " +
                             "well, and what it holds is fixed when it is created",
                     )
                 }
                 if (request.effect != null && !holdsEffect && !template.rows.empty()) {
                     return@transaction TemplateWriteOutcome.Invalid(
-                        "'${template.name}' holds values — a template cannot hold an effect as " +
+                        "'${template.name}' holds values — a palette cannot hold an effect as " +
                             "well, and what it holds is fixed when it is created",
                     )
                 }
@@ -270,7 +270,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
                 is TemplateWriteOutcome.NameTaken -> call.respond(
                     HttpStatusCode.Conflict,
-                    ErrorResponse("A template named '${outcome.name}' already exists in this project"),
+                    ErrorResponse("A palette named '${outcome.name}' already exists in this project"),
                 )
                 is TemplateWriteOutcome.Invalid ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message))
@@ -289,7 +289,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // DELETE /projects/{id}/templates/{templateId}?force=true
+    // DELETE /projects/{id}/palettes/{templateId}?force=true
     delete<ProjectTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val outcome = transaction(state.database) {
@@ -331,7 +331,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 is TemplateDeleteOutcome.InUse -> call.respond(
                     HttpStatusCode.Conflict,
                     TemplateInUseResponse(
-                        error = "This template is still in use by " +
+                        error = "This palette is still in use by " +
                             describeTemplateUse(
                                 outcome.usage, outcome.fxReferenceCount, outcome.runningCount,
                             ),
@@ -360,7 +360,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates/resolve — the editor's "resolves to" panel.
+    // POST /projects/{id}/palettes/resolve — the editor's "resolves to" panel.
     post<TemplateResolveResource> { resource ->
         withProject(state, resource.parent.projectId) { _ ->
             val request = call.receive<TemplateResolveRequest>()
@@ -376,7 +376,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates/{templateId}/apply — click: literals into the programmer.
+    // POST /projects/{id}/palettes/{templateId}/apply — click: literals into the programmer.
     post<ApplyTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ApplyTemplateRequest>()
@@ -412,7 +412,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates/{templateId}/toggle — ⌥click and the busking pads.
+    // POST /projects/{id}/palettes/{templateId}/toggle — ⌥click and the busking pads.
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()
@@ -480,7 +480,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates/{templateId}/copy
+    // POST /projects/{id}/palettes/{templateId}/copy
     //
     // Duplicate (the same project, a new name) and Copy to… (another project) in one route —
     // `copyLook`'s shape, renamed (library-sheets plan D10). `withProject`, not
@@ -571,7 +571,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse(result.message))
                 is CopyTemplateOutcome.NameTaken -> call.respond(
                     HttpStatusCode.Conflict,
-                    ErrorResponse("A template named '${result.name}' already exists in the target project"),
+                    ErrorResponse("A palette named '${result.name}' already exists in the target project"),
                 )
                 is CopyTemplateOutcome.Copied -> {
                     // After the commit, unconditionally, as `copyLook` does: the frame carries no
@@ -588,7 +588,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
 
 // ─── Resources ──────────────────────────────────────────────────────────
 
-@Resource("/{projectId}/templates")
+@Resource("/{projectId}/palettes")
 internal data class ProjectTemplatesResource(val projectId: String, val family: String? = null)
 
 @Resource("/{templateId}")
@@ -797,7 +797,7 @@ internal data class ApplyTemplateRequest(
     /**
      * The selection's attribute mask (`PropertyMaskGroup` names); absent is every attribute, an
      * unknown name is 400. A template whose family is outside it is refused
-     * (`TEMPLATE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
+     * (`PALETTE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
      */
     val families: List<String>? = null,
 )
@@ -964,8 +964,8 @@ internal sealed interface TemplateCreateResult {
 }
 
 /**
- * Create a template — the shared body behind `POST /templates` and the AI surface's
- * `create_template`.
+ * Create a template — the shared body behind `POST /palettes` and the AI surface's
+ * `create_palette`.
  *
  * Shared rather than copied because the validation *is* the feature: [validateTemplateContents]
  * enforces one attribute family per template, rejects slotted properties, and refuses an effect
@@ -978,7 +978,7 @@ internal fun performTemplateCreate(
     input: TemplateInput,
 ): TemplateCreateResult {
     val name = input.name?.trim().orEmpty()
-    if (name.isEmpty()) return TemplateCreateResult.Invalid("Template name must not be blank")
+    if (name.isEmpty()) return TemplateCreateResult.Invalid("Palette name must not be blank")
 
     val rows = input.rows ?: emptyList()
     val effect = input.effect
@@ -993,7 +993,7 @@ internal fun performTemplateCreate(
         }.firstOrNull()
         if (duplicate != null) {
             return@transaction TemplateCreateResult.Duplicate(
-                "A template named '$name' already exists in this project",
+                "A palette named '$name' already exists in this project",
             )
         }
         val template = DaoTemplate.new {
@@ -1026,14 +1026,14 @@ internal fun contentsFamily(rows: List<TemplateRowDto>, effect: TemplateEffectDt
  */
 private fun triggerTemplateRefusal(propertyName: String): String? =
     FixtureTriggers.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
-        "A template cannot hold '$it' — it is a one-shot trigger or its arm, which fires as an event " +
+        "A palette cannot hold '$it' — it is a one-shot trigger or its arm, which fires as an event " +
             "(a cue's Events, the cannon's panel, a MIDI FireTrigger) while the desk is armed, and is never a stored value"
     }
 
 /** A fixture command's name, refused as a command (fixture optics plan session 7) — [triggerTemplateRefusal]'s twin. */
 private fun commandTemplateRefusal(propertyName: String): String? =
     FixtureCommands.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
-        "A template cannot hold '$it' — it is a fixture command, which runs from the fixture panel's " +
+        "A palette cannot hold '$it' — it is a fixture command, which runs from the fixture panel's " +
             "Commands menu behind a confirm, and is never a stored value"
     }
 
@@ -1056,9 +1056,9 @@ internal fun validateTemplateContents(
     // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
     // which already holds rows plus deferred effects and has its own busk pool.
     if (rows.isNotEmpty() && effect != null) {
-        return "A template holds a value or an effect, never both — for both together, record a look"
+        return "A palette holds a value or an effect, never both — for both together, record a look"
     }
-    if (rows.isEmpty() && effect == null) return "A template must hold at least one value"
+    if (rows.isEmpty() && effect == null) return "A palette must hold at least one value"
     if (effect != null) return validateTemplateEffect(effect, registry, ownUuid)
 
     val families = LinkedHashSet<PropertyMaskGroup>()
@@ -1066,25 +1066,25 @@ internal fun validateTemplateContents(
         if (row.targetType != DEFERRED_TARGET_TYPE) {
             val target = TargetRef.ofOrNull(row.targetType, row.targetKey)
             if (target !is TargetRef.Fixture) {
-                return "A template row targets a fixture or nothing at all, not '${row.targetType}'"
+                return "A palette row targets a fixture or nothing at all, not '${row.targetType}'"
             }
         }
         val property = TemplateProperty.ofOrNull(row.propertyName)
             ?: triggerTemplateRefusal(row.propertyName)?.let { throw TriggerNotStorableException(it) }
             ?: commandTemplateRefusal(row.propertyName)?.let { throw CommandNotStorableException(it) }
-            ?: return "A template cannot hold '${row.propertyName}' — " +
+            ?: return "A palette cannot hold '${row.propertyName}' — " +
                 "slotted properties (gobo, colour wheel, macros) are per-model, so they live in a " +
-                "recorded look. Templates hold: " +
+                "recorded look. Palettes hold: " +
                 TemplateProperty.entries.joinToString { it.propertyName }
         val intent = parseTemplateIntent(row.value)
-            ?: return "'${row.value}' is not a template value for ${property.propertyName}"
+            ?: return "'${row.value}' is not a palette value for ${property.propertyName}"
         if (!property.accepts(intent)) {
             return "'${row.value}' is the wrong kind of value for ${property.propertyName}"
         }
         families.add(property.family)
     }
     if (families.size > 1) {
-        return "A template holds exactly one attribute family, but these rows span " +
+        return "A palette holds exactly one attribute family, but these rows span " +
             families.joinToString { it.name }
     }
     duplicateRow(rows)?.let { return it }
@@ -1110,9 +1110,9 @@ private fun duplicateRow(rows: List<TemplateRowDto>): String? {
         val property = TemplateProperty.ofOrNull(row.propertyName) ?: continue
         val target = if (row.isDeferred) "" else row.targetKey
         if (!seen.add(property.propertyName to target)) {
-            return "This template sets ${property.propertyName} twice" +
+            return "This palette sets ${property.propertyName} twice" +
                 (if (target.isEmpty()) "" else " on '$target'") +
-                " — a template holds one value per property, and the second would silently lose."
+                " — a palette holds one value per property, and the second would silently lose."
         }
     }
     return null
@@ -1150,7 +1150,7 @@ private fun conflictingWhitePolicy(rows: List<TemplateRowDto>): String? {
     // one. Grouping by target key instead put deferred rows in a bucket of their own, so a deferred
     // `extract` colour beside a per-fixture `white` row passed validation and then drove that head's
     // white channel from two unarbitrated sources at cook time: exactly the ambiguity this rule
-    // exists to forbid, and a shape `POST /templates/from-programmer` can genuinely record (the
+    // exists to forbid, and a shape `POST /palettes/from-programmer` can genuinely record (the
     // generic/per-fixture collapse is decided *per property*, so one row can be deferred while
     // another is not).
     for (emitter in emitters) {
@@ -1158,7 +1158,7 @@ private fun conflictingWhitePolicy(rows: List<TemplateRowDto>): String? {
             if (!emitter.isDeferred && !colour.isDeferred && emitter.targetKey != colour.targetKey) continue
             val policy = (parseTemplateIntent(colour.value) as? TemplateIntent.Colour)?.policy ?: continue
             val name = TemplateProperty.ofOrNull(emitter.propertyName)?.propertyName ?: emitter.propertyName
-            return "This template sets $name directly, so the colour's '${policy.token}' policy has " +
+            return "This palette sets $name directly, so the colour's '${policy.token}' policy has " +
                 "nothing left to do — it drives the same emitter. Set the colour to 'rgbonly', or " +
                 "drop the $name row."
         }
@@ -1183,11 +1183,11 @@ private fun validateTemplateEffect(
     // refused by name rather than by the library happening to ship no beam effect — a
     // script-registered one must not be able to mint a Beam effect template behind this rule.
     val family = familyForEffectCategory(effect.category)
-        ?: return "A template cannot hold a '${effect.category}' effect — an effect template is " +
-            "banked by family, and that category has none. Effect templates are: " +
+        ?: return "A palette cannot hold a '${effect.category}' effect — an effect palette is " +
+            "banked by family, and that category has none. Effect palettes are: " +
             TEMPLATE_EFFECT_FAMILIES.joinToString { it.name }
     if (family !in TEMPLATE_EFFECT_FAMILIES) {
-        return "A ${family.name} template cannot hold an effect — the effect library has no " +
+        return "A ${family.name} palette cannot hold an effect — the effect library has no " +
             "${family.name.lowercase()} category. A beam effect lives in a recorded look."
     }
 
@@ -1220,7 +1220,7 @@ private fun validateTemplateEffect(
         val namesSelf = effect.parameters.values.any { value ->
             value.split(",").any { it.trim().equals(selfRef, ignoreCase = true) }
         }
-        if (namesSelf) return "A template's effect cannot reference the template itself"
+        if (namesSelf) return "A palette's effect cannot reference the palette itself"
     }
     return null
 }

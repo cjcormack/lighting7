@@ -32,7 +32,7 @@ const FAMILY_TINT: Record<AttributeFamily, [string, string]> = {
  * *how fast it goes*.
  *
  * **It asks the server nothing**, and that is the second difference. `TemplateResolvesTo` posts the
- * draft to `/templates/resolve` because colour degradation and wheel snapping are arithmetic the
+ * draft to `/palettes/resolve` because colour degradation and wheel snapping are arithmetic the
  * resolver must own. Here there is no such arithmetic: the head count is a capability filter over
  * the patch, and the strip is a drawing of the division against the tempo. It is a **preview, not a
  * promise** — the caption says so, and nothing here should grow into a simulation of the effect.

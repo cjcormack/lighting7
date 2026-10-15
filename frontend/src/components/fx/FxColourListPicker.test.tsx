@@ -100,7 +100,7 @@ describe('FxColourListPicker', () => {
   // A list is a mix of literals and references, and an edit to one entry must leave the other's
   // *text* alone. Serialising a reference back as a literal is the failure this guards: it would
   // silently sever the effect from the template it was told to follow.
-  it('keeps a template reference verbatim through an edit elsewhere in the list', () => {
+  it('keeps a palette reference verbatim through an edit elsewhere in the list', () => {
     const onEmit = vi.fn()
     render(withStore(<ControlledPicker initial={`${WARM},#00ff00`} onEmit={onEmit} />))
 

@@ -169,7 +169,7 @@ afterEach(cleanup)
 
 /** The `All · n` trigger, by its stable title rather than by its shifting label. */
 function allButton(): HTMLElement {
-  return screen.getByTitle('Every template that fits the selection, searchable')
+  return screen.getByTitle('Every palette that fits the selection, searchable')
 }
 
 /** The chip labels, in the order the scroller draws them. */
@@ -181,13 +181,13 @@ function chipNames(): (string | null)[] {
 }
 
 describe('TemplateStrip', () => {
-  it('offers no New template in a venue, where Record is off (venue plan D11)', () => {
+  it('offers no New palette in a venue, where Record is off (venue plan D11)', () => {
     render(strip(COLOUR_CELL))
-    expect(screen.getByRole('button', { name: 'New template' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New palette' })).toBeTruthy()
     cleanup()
     venue.isVenue = true
     render(strip(COLOUR_CELL))
-    expect(screen.queryByRole('button', { name: 'New template' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New palette' })).toBeNull()
   })
 
   it('offers only the families the selected cells name', () => {
@@ -217,7 +217,7 @@ describe('TemplateStrip', () => {
     expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
   })
 
-  it('withholds a template naming an emitter the selection does not have', () => {
+  it('withholds a palette naming an emitter the selection does not have', () => {
     // The family cannot draw this line — the hex, white, amber and UV are all COLOUR. A template
     // that names an emitter refuses on a head without it *whole*, not row by row, so offering it
     // to an RGB-only par would be offering a press that does nothing.
@@ -245,7 +245,7 @@ describe('TemplateStrip', () => {
     // Targets but no fitting template is a *statement*, not a blank bar — and `New` stays beside
     // it, because recording one is how the operator answers it.
     render(strip([], HEX_1, ['POSITION']))
-    expect(screen.getByText('No template fits what is selected.')).toBeInTheDocument()
+    expect(screen.getByText('No palette fits what is selected.')).toBeInTheDocument()
     expect(screen.getByText('New')).toBeInTheDocument()
   })
 
@@ -253,7 +253,7 @@ describe('TemplateStrip', () => {
     // Space plan D3, and a reversal: the strip used to show the *whole* library with nothing
     // selected, for a press that could only toast. That was the most expensive line on the page —
     // a row of chips wrapping to four rows on a real library — and the library is browsed on
-    // `/templates`. Nothing renders here at all now, `New` included.
+    // `/palettes`. Nothing renders here at all now, `New` included.
     // `toBeEmptyDOMElement` and not merely "no chips": the whole band has to cost nothing, which
     // is the point of D3. The sheet below the guard renders null while closed, so it adds no node.
     const { container } = render(strip([], [], []))
@@ -298,7 +298,7 @@ describe('TemplateStrip', () => {
     expect(toggleTemplate).not.toHaveBeenCalled()
   })
 
-  it('⌥click adds a tracking layer, masked to the template’s family', () => {
+  it('⌥click adds a tracking layer, masked to the palette’s family', () => {
     // The server derives the applied mask from the template's rows; this send is the belief this
     // client is acting on, which is what lets a disagreement surface in the response rather than
     // silently on the rig. Pinned because sending nothing would make that check unavailable.
@@ -335,7 +335,7 @@ describe('TemplateStrip', () => {
     })
   })
 
-  it('keeps the half-typed template when the selection is pulled out from under it', () => {
+  it('keeps the half-typed palette when the selection is pulled out from under it', () => {
     // The sheet is rendered OUTSIDE the D3 guard, and this is why. The desk selection is
     // server-owned and shared — another client, a MIDI select button, a group whose membership
     // changed — so `targets` can empty while the operator is mid-name. Unmounting the sheet with
@@ -457,7 +457,7 @@ describe('TemplateStrip', () => {
     expect(allButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('click on an effect template mints copies, and says how many started', async () => {
+  it('click on an effect palette mints copies, and says how many started', async () => {
     // The effect arm writes no literals at all: `written` stays 0 and `effectIds` is the whole
     // result, so without this the one gesture that reaches the rig hardest would say nothing.
     templates = [BREATHE]
@@ -501,7 +501,7 @@ describe('TemplateStrip', () => {
     )
   })
 
-  it('⌥click on an effect template adds a tracking layer like any other', () => {
+  it('⌥click on an effect palette adds a tracking layer like any other', () => {
     templates = [BREATHE]
     render(strip(COLOUR_CELL))
     fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
@@ -523,7 +523,7 @@ describe('TemplateStrip', () => {
     )
   })
 
-  it('opens the new-template sheet from the pinned New chip', () => {
+  it('opens the new-palette sheet from the pinned New chip', () => {
     // `New` is outside the chip scroller on purpose: the control that *fills* the library must not
     // be the one that scrolls off the end of it.
     render(strip([]))

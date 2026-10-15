@@ -280,13 +280,13 @@ describe('the footer’s verbs reach the editor', () => {
     expect(footer.className).toContain('shrink-0')
     expect(scroller.contains(footer)).toBe(false)
     const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
-    expect(names[0]).toMatch(/Save as template/)
+    expect(names[0]).toMatch(/Save as palette/)
     expect(names).toContain('Spread to a second colour…')
   })
 
-  it('opens the new-template sheet over the selection as colour', () => {
+  it('opens the new-palette sheet over the selection as colour', () => {
     draw([group, cell])
-    fireEvent.click(screen.getByRole('button', { name: /Save as template/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save as palette/ }))
     const sheet = screen.getByTestId('new-template')
     expect(sheet).toHaveAttribute('data-families', 'COLOUR')
     expect(JSON.parse(sheet.getAttribute('data-targets')!)).toEqual([

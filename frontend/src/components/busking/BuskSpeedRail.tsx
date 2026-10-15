@@ -349,7 +349,7 @@ function MasterCard({
               className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[9px] font-bold tracking-[0.06em]"
               // The rail's old caption, on the badge it was about: what a usage *means*, not what a
               // press here does — nothing on this page stamps a master; `TemplateEditor` does.
-              title="Usage: effect templates of this family default to this master"
+              title="Usage: effect palettes of this family default to this master"
             >
               {usage}
             </span>

@@ -15,7 +15,7 @@ import { pathHasSegment } from './navMatch'
  * the four move between each other.
  *
  * Deliberately **not** derived from `navigation.ts`. A nav entry's `pathMatch` answers "which
- * sidebar row is lit", and the two questions have already diverged once — `/templates` carries
+ * sidebar row is lit", and the two questions have already diverged once — `/palettes` carries
  * four Cmd+K entries sharing one `pathMatch`. Four literals that a test pins are cheaper than a
  * coupling that would make adding a nav entry silently change where immersive applies.
  */

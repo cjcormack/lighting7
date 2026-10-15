@@ -335,7 +335,7 @@ export function EditedMark({ template }: { template?: string }) {
   return (
     <span
       data-edited
-      title={template ? `Differs from “${template}” — this running instance only` : 'Differs from its template'}
+      title={template ? `Differs from “${template}” — this running instance only` : 'Differs from its palette'}
       className="inline-flex h-4 shrink-0 items-center rounded border border-amber-500/55 px-1 text-[9.5px] font-medium text-amber-700 dark:text-amber-400"
     >
       edited
@@ -417,7 +417,7 @@ function TemplateArm({
         title={`Write these settings to “${template.name}” — every pad and cue layering it follows`}
         onClick={() => void update()}
       >
-        Update template
+        Update palette
       </Button>
       <Button
         variant="outline"
@@ -427,7 +427,7 @@ function TemplateArm({
         title={`Put “${template.name}”'s settings back on this instance, phase kept`}
         onClick={() => void reset()}
       >
-        Reset to template
+        Reset to palette
       </Button>
     </div>
   )

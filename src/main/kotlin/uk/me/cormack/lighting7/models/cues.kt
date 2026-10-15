@@ -348,7 +348,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      * What this layer applies: **exactly one** of [look] / [template] is set.
      *
      * Two nullable FKs rather than a `(kind, uuid)` pair, because the FKs are what make a layer
-     * pointing at a deleted record impossible and what let `LOOK_IN_USE` / `TEMPLATE_IN_USE` be a
+     * pointing at a deleted record impossible and what let `LOOK_IN_USE` / `PALETTE_IN_USE` be a
      * count rather than a scan.
      *
      * The invariant now has a single decision behind it — [layerSourceShape] — and a CHECK
@@ -456,8 +456,8 @@ enum class LayerSourceShape {
      */
     val problem: String? get() = when (this) {
         LOOK, TEMPLATE -> null
-        NEITHER -> "neither a look nor a template"
-        BOTH -> "both a look and a template"
+        NEITHER -> "neither a look nor a palette"
+        BOTH -> "both a look and a palette"
     }
 }
 

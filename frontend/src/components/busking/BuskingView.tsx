@@ -140,7 +140,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * which is now wrong in three ways: a per-fixture template names its own heads, a Look with no
  * deferred effect names its own fixtures, and a cue has no targets at all — so all three are
  * legitimately pressable with an empty selection. The two that genuinely need one are refused *by
- * name* server-side (`TEMPLATE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`), and a sentence saying so
+ * name* server-side (`PALETTE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`), and a sentence saying so
  * is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
  * nothing left to be per.
  *
@@ -388,7 +388,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
         // The pair a press acts on — the desk's while following, this tab's own when unlinked
         // (multi-screen plan D4) — and never pre-refused from the mask held here: the mask is
         // tested on the on arm only, so a lit pad still comes off under a mask that excludes it,
-        // and only the desk knows which arm this is. A refusal (`TEMPLATE_OUTSIDE_MASK`,
+        // and only the desk knows which arm this is. A refusal (`PALETTE_OUTSIDE_MASK`,
         // `LOOK_OUTSIDE_MASK`) arrives as a 400 whose message names both families, and
         // `errorToastMiddleware` toasts it as it toasts every rejected mutation.
         void pressPad({
@@ -409,7 +409,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           .catch(ignoreReportedError)
       },
       onInspect: (pad) => {
-        if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/templates`)
+        if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
         else if (pad.cue != null) {
           navigate(`/projects/${projectId}/show/stacks/${pad.cue.cueStackId}?cue=${pad.cue.id}`)

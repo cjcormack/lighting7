@@ -46,7 +46,7 @@ class EffectSpawnerElementTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.createEffectTemplate(name: String): Int {
-        val resp = post("/api/rest/projects/$projectId/templates") {
+        val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(
                 TemplateInput(
@@ -63,7 +63,7 @@ class EffectSpawnerElementTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.toggle(templateId: Int, vararg keys: String): ToggleTemplateResponse {
-        val resp = post("/api/rest/projects/$projectId/templates/$templateId/toggle") {
+        val resp = post("/api/rest/projects/$projectId/palettes/$templateId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleTemplateRequest(targets = keys.map { TemplateTargetDto("fixture", it) }))
         }

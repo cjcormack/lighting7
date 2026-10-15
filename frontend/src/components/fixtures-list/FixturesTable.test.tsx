@@ -724,7 +724,7 @@ describe('FixturesTable scopes', () => {
     expect(cellWrapper().className).toContain('pointer-events-none')
   })
 
-  it('shows the live value, ringed and with the wave, on an effect template layer', () => {
+  it('shows the live value, ringed and with the wave, on an effect palette layer', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
     focusedTemplate.current = templateLayer()
     const { container } = render(<Harness />)
@@ -737,7 +737,7 @@ describe('FixturesTable scopes', () => {
     expect(screen.getAllByText('1/8').length).toBeGreaterThan(0)
   })
 
-  it('shows nothing per fixture on a value template layer', () => {
+  it('shows nothing per fixture on a value palette layer', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
     focusedTemplate.current = templateLayer({ kind: 'value', template: { kind: 'value', effect: null } })
     const { container } = render(<Harness />)

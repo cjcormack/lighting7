@@ -468,7 +468,7 @@ internal fun appendBuskPad(
     when (kind) {
         BuskPadKind.TEMPLATE -> {
             val id = templateId!!
-            newTemplate = records.template(project, id) ?: return AddPadOutcome.Ref("template", id)
+            newTemplate = records.template(project, id) ?: return AddPadOutcome.Ref("palette", id)
         }
         BuskPadKind.LOOK -> {
             val id = lookId!!
@@ -562,7 +562,7 @@ internal fun applyBuskLayout(
     val templates = allPads.mapNotNull { it.templateId }.toSet().associateWith { records.template(project, it) }
     val looks = allPads.mapNotNull { it.lookId }.toSet().associateWith { records.look(project, it) }
     val cues = allPads.mapNotNull { it.cueId }.toSet().associateWith { records.cue(project, it) }
-    val missing = listOf("templates" to templates, "looks" to looks, "cues" to cues)
+    val missing = listOf("palettes" to templates, "looks" to looks, "cues" to cues)
         .map { (what, found) -> what to found.filterValues { it == null }.keys }
         .filter { it.second.isNotEmpty() }
     if (missing.isNotEmpty()) {

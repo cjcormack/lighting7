@@ -29,7 +29,7 @@ one, so this does not shadow `/projects/{id}` — but it does mean an entity who
 
 **Actions on a resource are a trailing verb segment on that resource**, POSTed:
 `/projects/{id}/clone`, `/cues/{cueId}/apply`, `/cue-stacks/{stackId}/standby`,
-`/templates/{templateId}/toggle`. Not a top-level `/doThing` endpoint carrying the id in a body.
+`/palettes/{templateId}/toggle`. Not a top-level `/doThing` endpoint carrying the id in a body.
 
 ## Vocabulary enumerations
 
@@ -68,14 +68,14 @@ does, because a bare `findById` would otherwise let one project's id reach anoth
 
 **Persisted project data is project-scoped**, under `/projects/{projectId}/…`, where `{projectId}`
 is a numeric id or the literal `current`. Everything an operator authors and the desk stores lives
-here: cues, cue stacks, looks, templates, scripts, patches, riggings, stage regions, scene elements and viewpoints, universe
+here: cues, cue stacks, looks, palettes, scripts, patches, riggings, stage regions, scene elements and viewpoints, universe
 configs, surface bindings, speed masters, prompt books.
 
 Inside that second side, mutations split again, on **whether the write is also a live-show
 mutation**:
 
 * **409 `Cannot modify - not current project`** when the handler changes the running show as part
-  of the write — cues, cue stacks, looks, templates, scripts, `/show`, prompt books. There is no
+  of the write — cues, cue stacks, looks, palettes, scripts, `/show`, prompt books. There is no
   coherent way to apply a cue belonging to a project that isn't loaded, so the request is refused
   rather than half-performed. Use `withCurrentProject`.
 * **Ungated** when the write is DB-only and the running show is re-synced afterwards *if it
@@ -87,7 +87,7 @@ mutation**:
   what keeps it working.
 
 **The copy routes are the ungated exception inside the first group.** `POST …/{id}/copy` on cues,
-looks, templates and scripts resolves its *source* with `withProject` (or `resolveProject`), not
+looks, palettes and scripts resolves its *source* with `withProject` (or `resolveProject`), not
 `withCurrentProject`: copying out of a library that is not the live show is the point of *Copy
 to…*, and the write only inserts rows into the target — nothing is applied to the running show, so
 there is nothing to half-perform. The target is any project, current or not.
@@ -109,7 +109,7 @@ still points at — answers 409 with a machine-readable `code` and a usage summa
 `?force=true` as the operator's "yes, I meant it". The forced path is allowed to leave dangling
 references on purpose; the resolver treats a dangling reference as absent.
 
-Current users: three deletes, `/projects/{id}/templates/{templateId}`,
+Current users: three deletes, `/projects/{id}/palettes/{templateId}`,
 `/projects/{id}/looks/{lookId}`, `/projects/{id}/speed-masters/{masterId}`, and
 `/projects/{id}/stage-elements/{elementId}` for both its `DELETE` and its `PUT` — a seating that seat
 views still sit in answers `STAGE_ELEMENT_IN_USE` naming them, whether the write would delete it or
@@ -177,7 +177,7 @@ The exception is a route whose input is a body too shaped to live in a query str
 script, or an unsaved draft with its own list of rows — because there is no clean way to spell
 that as `?rows=...` and no cache key worth building around it anyway. `fx/definitions/compile`,
 `fx/definitions/{id}/compile` and `templates/resolve` all stay `POST` for this reason:
-`templates/resolve` in particular answers "resolve *this* body", not "resolve the template", so
+`palettes/resolve` in particular answers "resolve *this* body", not "resolve the palette", so
 even though it has no side effect, there is no stable resource behind it for a `GET` to name.
 
 ---

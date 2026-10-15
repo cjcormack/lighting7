@@ -790,7 +790,7 @@ class VenueUpdate(private val state: State) {
     private fun UsedByDto.label() = when (kind) {
         "CUE" -> name
         "LOOK" -> "Look $name"
-        else -> "template $name"
+        else -> "palette $name"
     }
 
     companion object {

@@ -1027,7 +1027,7 @@ const RowView = React.memo(function RowView({
             {effectDriven && state?.value != null && (
               <span
                 className="pointer-events-none absolute bottom-0.5 right-1 flex items-center gap-0.5 text-[9px] leading-none text-muted-foreground"
-                title={`Driven by “${focusedTemplate?.name ?? 'this template'}”`}
+                title={`Driven by “${focusedTemplate?.name ?? 'this palette'}”`}
               >
                 <AudioWaveform className="size-2.5" />
                 {effectDivision}

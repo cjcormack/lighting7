@@ -204,7 +204,7 @@ dropped tail then misses on the tick, so the cap is a trade rather than a fix.
 
 Template groups (2026-09-03) widened the trigger's surface without changing its shape: every
 drop on `/templates` — a reorder, a move into or out of a group — and every group create, rename
-and ungroup fires `templateListChanged`, which is this re-warm. A drag-heavy tidy-up of a large
+and ungroup fires `Fixtures.templateListChanged()`, which is this re-warm. A drag-heavy tidy-up of a large
 library is now the likeliest way to make it visible. The reorder itself is metadata (no recook),
 so the cost is only ever the re-warm.
 
@@ -882,7 +882,7 @@ layer was added. Two of its three fields are immutable identity (`id`, `uuid`); 
 renaming a record leaves every already-added layer and already-spawned effect reporting the *old*
 name — visible in the layer stack (`ProgrammerLayerDto.source`) and in `FX running`
 (`EffectDto.sourceName`). Nothing refreshes it: a rename-only PUT is not a contents change, so it
-takes the `templateListChanged` / `lookListChanged` branch and never reaches the layer stack.
+takes the `Fixtures.templateListChanged()` / `lookListChanged()` branch and never reaches the layer stack.
 
 This is display-only now. The *functional* half of the same root cause — `toggle` comparing whole
 `LayerSource` values, so a rename stopped a pad turning its own layer off — is fixed: it matches on

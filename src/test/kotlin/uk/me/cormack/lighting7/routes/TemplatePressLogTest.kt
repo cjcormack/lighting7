@@ -44,7 +44,7 @@ class TemplatePressLogTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.createTemplate(name: String, value: String = "#ff8800"): Int {
-        val resp = post("/api/rest/projects/$projectId/templates") {
+        val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(
                 TemplateInput(
@@ -58,12 +58,12 @@ class TemplatePressLogTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.template(id: Int): TemplateDto =
-        get("/api/rest/projects/$projectId/templates/$id").body()
+        get("/api/rest/projects/$projectId/palettes/$id").body()
 
     private suspend fun HttpClient.stamp(id: Int): String? = template(id).lastPressedAt
 
     private suspend fun HttpClient.apply(id: Int, vararg fixtureKeys: String): ApplyTemplateResponse {
-        val resp = post("/api/rest/projects/$projectId/templates/$id/apply") {
+        val resp = post("/api/rest/projects/$projectId/palettes/$id/apply") {
             contentType(ContentType.Application.Json)
             setBody(ApplyTemplateRequest(targets = fixtureKeys.map { TemplateTargetDto("fixture", it) }))
         }
@@ -72,7 +72,7 @@ class TemplatePressLogTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.toggle(id: Int, vararg fixtureKeys: String): ToggleTemplateResponse {
-        val resp = post("/api/rest/projects/$projectId/templates/$id/toggle") {
+        val resp = post("/api/rest/projects/$projectId/palettes/$id/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleTemplateRequest(targets = fixtureKeys.map { TemplateTargetDto("fixture", it) }))
         }
@@ -242,12 +242,12 @@ class TemplatePressLogTest : RouteIntegrationTest() {
 
         assertEquals(
             HttpStatusCode.NoContent,
-            client.delete("/api/rest/projects/$projectId/templates/$amber").status,
+            client.delete("/api/rest/projects/$projectId/palettes/$amber").status,
         )
 
         // No second table to sweep: the stamp is a column on the row that just went, which is the
         // whole reason recents needed no storage of its own.
-        val remaining: List<TemplateDto> = client.get("/api/rest/projects/$projectId/templates").body()
+        val remaining: List<TemplateDto> = client.get("/api/rest/projects/$projectId/palettes").body()
         assertTrue(remaining.none { it.id == amber })
     }
 }

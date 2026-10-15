@@ -9,7 +9,7 @@ import type { TemplateSummary } from '@/api/templatesApi'
  * sticky view, deep-linked by `?family=` — and under *All* the sheet is **grouped by family
  * dividers** (library-sheets plan D3), name-ordered within each and in the plan's family order.
  *
- * The chips moved here from `/looks` in session 3 along with the argument for them: on `/templates` a
+ * The chips moved here from `/looks` in session 3 along with the argument for them: on `/palettes` a
  * family really is an exact partition of the library. The sheet's own columns and verbs are
  * `TemplateSheet.test.tsx`'s.
  */
@@ -72,7 +72,7 @@ function renderAt(url: string) {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <Routes>
-        <Route path="/projects/:projectId/templates" element={<ProjectTemplates />} />
+        <Route path="/projects/:projectId/palettes" element={<ProjectTemplates />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -126,9 +126,9 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ProjectTemplates', () => {
-  it('groups every template under family dividers under All, in the plan’s order', () => {
+  it('groups every palette under family dividers under All, in the plan’s order', () => {
     templates = [...templates, template({ id: 4, uuid: 'u4', name: 'Deep Blue' })]
-    renderAt('/projects/1/templates')
+    renderAt('/projects/1/palettes')
     // Intensity · Colour · Position · Beam — not `ATTRIBUTE_FAMILIES`' declaration order — and the
     // server's name order within each. No stored order either way.
     expect(sheetRows()).toEqual([
@@ -145,65 +145,65 @@ describe('ProjectTemplates', () => {
   it('lands filtered from a ?family= deep link, with no dividers', () => {
     // Cmd+K's four per-family entries are query params on this one route, so arriving by link has to
     // filter — `navigation.test.ts` pins the links themselves.
-    renderAt('/projects/1/templates?family=colour')
+    renderAt('/projects/1/palettes?family=colour')
     expect(sheetRows()).toEqual(['Amber Key'])
   })
 
-  it('partitions exactly — every template is in one family and no other', () => {
-    renderAt('/projects/1/templates?family=position')
+  it('partitions exactly — every palette is in one family and no other', () => {
+    renderAt('/projects/1/palettes?family=position')
     expect(sheetRows()).toEqual(['Downstage Centre'])
   })
 
   it('filters on a chip and remembers the choice for next time; All brings the dividers back', () => {
-    const { unmount } = renderAt('/projects/1/templates')
+    const { unmount } = renderAt('/projects/1/palettes')
     fireEvent.click(screen.getByRole('button', { name: /^Intensity/ }))
     expect(sheetRows()).toEqual(['Half Up'])
     unmount()
 
     // Sticky, so the sidebar's single row lands where you left it.
-    renderAt('/projects/1/templates')
+    renderAt('/projects/1/palettes')
     expect(sheetRows()).toEqual(['Half Up'])
     fireEvent.click(screen.getByRole('button', { name: /^All/ }))
     expect(sheetRows()[0]).toBe('— Intensity · 1')
   })
 
   it('counts each family on its chip', () => {
-    renderAt('/projects/1/templates')
+    renderAt('/projects/1/palettes')
     expect(screen.getByRole('button', { name: /^All/ })).toHaveTextContent('All3')
     expect(screen.getByRole('button', { name: /^Colour/ })).toHaveTextContent('Colour1')
     expect(screen.getByRole('button', { name: /^Beam/ })).toHaveTextContent('Beam0')
   })
 
-  it('says which shape each template is, because applying them differs', () => {
+  it('says which shape each palette is, because applying them differs', () => {
     // A per-fixture template applied to a head it holds no entry for asserts nothing for that head,
     // so the Value column has to say which it is.
-    renderAt('/projects/1/templates')
+    renderAt('/projects/1/palettes')
     expect(screen.getByText('2 heads · per fixture')).toBeInTheDocument()
     expect(screen.getByText(/^#FF9D4A · /)).toBeInTheDocument()
   })
 
-  it('offers New template — a template is authored, not captured', () => {
+  it('offers New palette — a palette is authored, not captured', () => {
     // The line D9 draws: cues and Looks are recorded and so have no create button; templates,
     // separators and stacks are not captured states and keep theirs.
-    renderAt('/projects/1/templates')
-    fireEvent.click(screen.getByText('New template'))
+    renderAt('/projects/1/palettes')
+    fireEvent.click(screen.getByText('New palette'))
     expect(screen.getByTestId('editor')).toBeInTheDocument()
   })
 
   it('opens the editor from ?action=new, for the command palette', () => {
-    renderAt('/projects/1/templates?action=new')
+    renderAt('/projects/1/palettes?action=new')
     expect(screen.getByTestId('editor')).toBeInTheDocument()
   })
 
   it('shows the empty state rather than a blank page', () => {
     templates = []
-    renderAt('/projects/1/templates')
-    expect(screen.getByText(/No templates yet/)).toBeInTheDocument()
+    renderAt('/projects/1/palettes')
+    expect(screen.getByText(/No palettes yet/)).toBeInTheDocument()
   })
 
   it('narrows by the library row’s filter, on name or notes', () => {
     templates = [...templates, template({ id: 4, uuid: 'u4', name: 'Wash', notes: 'amber-ish' })]
-    renderAt('/projects/1/templates')
+    renderAt('/projects/1/palettes')
     fireEvent.change(screen.getByLabelText('Filter by name or notes'), { target: { value: 'amber' } })
     expect(sheetRows()).toEqual(['— Colour · 2', 'Amber Key', 'Wash'])
   })

@@ -91,11 +91,11 @@ export function handRefusalReason(
 ): string | null {
   if (canHandLand(candidate, target)) return null
   if (target === 'slot') {
-    if (candidate.kind === 'TEMPLATE') return 'A slot has no selection, and a template needs one'
+    if (candidate.kind === 'TEMPLATE') return 'A slot has no selection, and a palette needs one'
     return 'This Look has a deferred effect, so it needs a selection — a slot has none to give'
   }
   if (target === 'rig-row') return 'A rig row takes a group, a fixture or a cell, and the hand cannot hold one yet'
-  return 'A layer applies a Look or a template, never a cue'
+  return 'A layer applies a Look or a palette, never a cue'
 }
 
 /**

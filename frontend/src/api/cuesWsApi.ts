@@ -9,7 +9,7 @@ export interface CuesWsApi {
   /**
    * `cuesRecomposed` — a Look or template **contents** edit changed what these cues compose to.
    *
-   * The keyed counterpart to `lookListChanged` / `templateListChanged`, which deliberately do not
+   * The keyed counterpart to `lookListChanged` / `paletteListChanged`, which deliberately do not
    * fire for a contents edit because they invalidate every cached expansion. A retune moves a
    * handful of cues, so this frame names them and the subscriber re-reads exactly those.
    *

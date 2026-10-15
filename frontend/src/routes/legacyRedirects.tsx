@@ -1,5 +1,6 @@
 import { useLocation, useParams, Navigate } from 'react-router'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
+import { TemplatesRedirect } from './Templates'
 
 /**
  * Redirects for paths that no longer name a view.
@@ -14,9 +15,10 @@ import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
  * the destination is how `LegacyProgramRedirect` ended up in `ProgrammerPage.tsx` — reproducing the
  * exact `/program` vs `/programmer` confusion in the file layout.
  *
- * Every target here is byte-identical to what it was before the collection. `?cue=` deep links are
- * an external contract, minted by the Prompt Book's "Edit cue" rail card, so the search string is
- * carried across wherever the original did.
+ * Every target collected here is byte-identical to what it was before the collection;
+ * `LegacyTemplatesRedirect` was added after it. `?cue=` deep links are an external contract, minted
+ * by the Prompt Book's "Edit cue" rail card, so the search string is carried across wherever the
+ * original did.
  *
  * The project-less spellings delegate to `CurrentProjectRedirect` rather than re-implementing the
  * wait-then-navigate body, for the reason its own doc comment gives (FS-DUP-REDIRECTS): it is the
@@ -108,4 +110,20 @@ export function LegacyProgramRedirect() {
     ? `/projects/${projectId}/show/stacks/${stackId}`
     : `/projects/${projectId}/show`
   return <Navigate to={`${base}${search}`} replace />
+}
+
+/**
+ * `/projects/:id/templates` → `/projects/:id/palettes`, and bare `/templates` → the current
+ * project's palettes.
+ *
+ * The palette library used to live at `/templates`. The search string is carried because the
+ * old `?family=` deep links — Cmd+K's four family entries — named that path.
+ */
+export function LegacyTemplatesRedirect() {
+  const { projectId } = useParams()
+  const { search } = useLocation()
+  if (projectId) {
+    return <Navigate to={`/projects/${projectId}/palettes${search}`} replace />
+  }
+  return <TemplatesRedirect />
 }

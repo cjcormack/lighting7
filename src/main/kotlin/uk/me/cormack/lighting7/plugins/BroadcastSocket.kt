@@ -19,27 +19,27 @@ sealed class BroadcastOutMessage : OutMessage()
  * would be an invalidation storm. A contents change publishes `provenanceState` instead (see
  * `routes/lookRepublish.kt`), which is what drives the programmer sheet to re-read resolved values.
  *
- * Replaces the two messages this collapses — `presetListChanged` and `paletteListChanged` — now
- * that FX presets and the old named palette banks are one entity, the Look.
+ * Replaces `presetListChanged` and the named palette banks' list frame, now that both are one
+ * entity, the Look.
  */
 @Serializable
 @SerialName("lookListChanged")
 data object LookListChangedOutMessage : BroadcastOutMessage()
 
 /**
- * A template was created, renamed or deleted.
+ * A palette (a `templates` row) was created, renamed or deleted.
  *
  * Its own message rather than a reuse of [LookListChangedOutMessage], for the same reason the
  * backend signals are separate: the two invalidate different client caches, and one message would
- * make every Look edit re-read the template library and vice versa. Contents changes ride the
+ * make every Look edit re-read the palette library and vice versa. Contents changes ride the
  * provenance / layer-state frames the edit itself produces.
  */
 @Serializable
-@SerialName("templateListChanged")
+@SerialName("paletteListChanged")
 data object TemplateListChangedOutMessage : BroadcastOutMessage()
 
 /**
- * A template was **pressed** — applied, from any of the four doors — and now carries [lastPressedAt].
+ * A palette was **pressed** — applied, from any of the four doors — and now carries [lastPressedAt].
  *
  * Keyed, and deliberately **not** a reuse of [TemplateListChangedOutMessage]: that frame's client
  * bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press happens at busking rate. This
@@ -48,14 +48,14 @@ data object TemplateListChangedOutMessage : BroadcastOutMessage()
  *
  * Flat rather than dotted, against the "new messages take the dotted form" rule in
  * `docs/websocket-engineering.md`, because the failure that rule exists to prevent is a *mixed*
- * family: `templateListChanged` is flat, and `templates.pressed` beside it would leave a reader
+ * family: `paletteListChanged` is flat, and `palettes.pressed` beside it would leave a reader
  * unable to tell which convention this family follows. If the family is ever renamed, both move.
  *
  * [lastPressedAt] is the stamp the server wrote, ISO-8601, not "now": two clients reading their own
  * clocks would order a burst of presses differently from each other and from a refetch.
  */
 @Serializable
-@SerialName("templatePressed")
+@SerialName("palettePressed")
 data class TemplatePressedOutMessage(
     val templateId: Int,
     val lastPressedAt: String,

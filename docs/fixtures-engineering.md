@@ -370,7 +370,7 @@ null, and reflects as null:
   575's is the one stepped zoom: 15°, 18° and 22°, each again with focus correction, which a slider
   would have drawn as a sweep through angles the lens never takes. Its readers make sense of a
   setting: Locate parks it at the step nearest its middle angle (18°, the plain band before its
-  focus-corrected twin), a template's `pct:` runs across its angles from DMX min's (0% → 15°,
+  focus-corrected twin), a palette's `pct:` runs across its angles from DMX min's (0% → 15°,
   50% → 18°, 100% → 22°), and the programmer's grid and fixture cards draw it as a setting.
 - `activeMin` / `activeMax`: the DMX range of a slider's **proportional band**, where the rest of the
   channel is something else — the Robe's iris and frost are 0 open, 1–179 proportional, then
@@ -437,7 +437,7 @@ standing head is a hung one turned over. Which side of the real head each frame 
 estimate (`FU-MANUAL-S4REV-OPTICS` step 4).
 
 Both categories are LTP and in the BEAM mask group, and stored and recorded like any other slider;
-neither is in the template grammar or Spread's vocabulary, so neither can be spread. **Locate** takes every blade out
+neither is in the palette grammar or Spread's vocabulary, so neither can be spread. **Locate** takes every blade out
 (the DMX for depth 0: DMX min, or max where inverted) and squares every rotation (the DMX for 0°,
 solved through its degree range — 128 on the Revolution's ±45°), as ChamSys locates them.
 
@@ -494,7 +494,7 @@ is the beam's colour — a colour wheel, or the Robe's second wheel as a filter 
 **animates a no-colour band through the wheel's own previews** on both colour dispatches
 (`frontend/src/lib/colourBands.ts`); beside an RGB property the setting is a preset on the same
 emitters and the view never reads it. A blackout band is a black preview (`#000000`, the Slender
-bar's), which the view draws dark and a template never snaps to.
+bar's), which the view draws dark and a palette never snaps to.
 
 **On a slider** — `SliderPropertyDescriptor`, each null when unset:
 
@@ -558,7 +558,7 @@ rate than the intensity below it.
 listed in `FU-MANUAL-S6-STROBE` — a mechanical shutter at 1–10 Hz, an LED strobe at 1–20 Hz, a pulse
 at 0.5–2 Hz. The Stage view draws closed dark and flashes a strobe at its rate up to 3 Hz, faster
 reading as a shimmer (WCAG 2.3.1's three-flash limit; `frontend/docs/stage-vis-engineering.md`
-§"Strobe and closed shutters"). A template's strobe is still a percentage of each head's own channel:
+§"Strobe and closed shutters"). A palette's strobe is still a percentage of each head's own channel:
 the `Hertz` arm is `FU-TMPL-STROBE-HZ`.
 
 **On the type** — `@FixtureType`: `body` (archetype, mover head, lens diameter), `depthOfField`
@@ -664,7 +664,7 @@ A **one-shot trigger** (stage-view plan session 9, D15) is an output that spends
 when it fires — a confetti tube — so it is **its own property kind, not a `@FixtureProperty`**. A
 `DmxTrigger` is a channel and its **arm** channel, nothing more: it is not a `Slider` and carries no
 transaction, so nothing that resolves a property by name — the programmer, a cue row, a Look row, a
-template, an effect target, Record, a surface fader — finds one, and nothing composes or crossfades
+palette, an effect target, Record, a surface fader — finds one, and nothing composes or crossfades
 it. The Equinox Twin Shot MKII is the one fixture with triggers: `output1` (A) and `output2` (B),
 armed by its shared `master`, which is no property either.
 
@@ -689,7 +689,7 @@ armed by its shared `master`, which is no property either.
   trigger, `spent_at`): a fire marks its tube spent, `POST …/patches/{id}/reload` loads it again, and
   firing a spent tube warns (409 `TRIGGER_SPENT`) and sends nothing.
 - **Refused by name at every write boundary** (`fixture/TriggerGuard.kt`'s `TriggerIndex`): a Look
-  row or effect, a template row or effect, a cue row or ad-hoc effect, a programmer value, a live
+  row or effect, a palette row or effect, a cue row or ad-hoc effect, a programmer value, a live
   effect (`FxTargetFactory`, every door an effect is spawned through) and a surface binding naming a
   trigger or its arm — on a fixture, on a group with a cannon in it, or, for a row with no target
   of its own, by any trigger's name — answer 400 `TRIGGER_NOT_STORABLE` naming every refused row.
@@ -773,7 +773,7 @@ The library's commands:
   one a level inside a command's band. A park at idle on a dedicated channel is a lock-out and
   allowed. A reload seeds every dedicated command channel idle (`DbFixtureLoader`).
 - **Refused by name at every write boundary**, beside the trigger refusal and on its three rules
-  (`fixture/CommandGuard.kt`'s `CommandIndex`): a Look row or effect, a template row or effect, a cue
+  (`fixture/CommandGuard.kt`'s `CommandIndex`): a Look row or effect, a palette row or effect, a cue
   row or ad-hoc effect, a programmer value, a live effect (`FxTargetFactory`), a group effect and a
   surface binding naming a command — on a fixture, on a group with such a fixture in it, or, for a row
   with no target of its own, by any command's name — answer 400 `COMMAND_NOT_STORABLE` naming every
@@ -789,7 +789,7 @@ The library's commands:
   (`models/commandRows.kt`'s `stripCommandRows`): by name (the Varytec's and the Shehds' old `reset = 255`), and by level — a
   Look or cue row on a property sharing a command's channel holding a level in its band (the Fusion's
   motor mode at 251, the Orbit's program at 200, the Slender's special function at 200, a MAC 250
-  strobe row at 208–255), a group row judged by every member's type. Template rows hold intents and
+  strobe row at 208–255), a group row judged by every member's type. Palette rows hold intents and
   effects their own parameters, so neither is judged by level; the band guard covers whatever they
   produce. A removed option is stored as a level, never a name, so nothing failed to load before the
   pass: a level in a band went out as idle.
@@ -1133,7 +1133,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 ## Existing Fixture Implementations
 
 Every type `FixtureTypeRegistry` serves, as `GET /fixture-types` answered it at the fixture optics
-plan's session 5 (2026-10-04). **Capabilities** is the type's `capabilities` list — what a template
+plan's session 5 (2026-10-04). **Capabilities** is the type's `capabilities` list — what a palette
 or an effect can find on it — and a type's full beam vocabulary is in its descriptors
 (§"Beam vocabulary"). Classes are in `fixture/dmx/`; a multi-mode family is a sealed class with one
 `@FixtureType` per mode.
@@ -1205,7 +1205,7 @@ Where the rule lives:
 | `Fixtures.FixturePatchMetadata.infrastructure` / `isInfrastructure` / `operatorFixtures` / `infrastructureKeys()` | The running show's copy, set by `DbFixtureLoader`. Every `setPatchMetadata` caller passes the flag through, or a metadata-only edit (a gel) would reset it. `operatorFixtures` is the register minus infrastructure under one read lock — what a server-side "every fixture" that *offers* reads. |
 | `DmxFixtureDetails.infrastructure` (`GET /fixtures`) | What the frontend filters on. The list still **carries** the fixture, so a key a cue or group holds still resolves. |
 | `BuskRigOrder` / `DeskSelection` | The empty rig's *steps* leave it out (`operatorFixtures`), mirrored by the client's `effectiveRig`, so *All* / *Next* / *Invert* never reach a power dimmer. A group that contains one still steps as the group; a tile placed before the flag was set stays. `positions()` still ranks it: ordering a head a caller already named (a spread) is not offering one. |
-| `POST /templates/resolve` | Empty `targets` ("the whole patch", the template editor's *Resolves to* panel) is `operatorFixtures`; a target that names one still resolves it. |
+| `POST /palettes/resolve` | Empty `targets` ("the whole patch", the palette editor's *Resolves to* panel) is `operatorFixtures`; a target that names one still resolves it. |
 | `RigBriefing` (`describe_rig`), `get_current_state` | The briefing lists it under its own *Infrastructure* heading; `get_current_state`'s fixture list marks it `infrastructure: true`. |
 | MCP `patch_fixtures` / `get_patch` | Take and report `infrastructure`; a row that omits it leaves an existing fixture's flag alone. |
 | Sync | `FixturePatchJson.infrastructure`, an optional field with a false default — no `formatVersion` bump. |
@@ -1567,9 +1567,9 @@ holds survives a round trip; such a slot draws as its stock.
 
 `media` is in **`METADATA_ONLY_PUT_KEYS`**: `DbFixtureLoader` never builds a fixture from it, so a
 media write never rebuilds the rig — but the runtime patch metadata (`Fixtures.FixturePatchMetadata`)
-carries the patch's media for the template resolver, and the metadata-only path refreshes it there
+carries the patch's media for the palette resolver, and the metadata-only path refreshes it there
 as it refreshes `gelCode`. That is also what lets the Stage view's Focus tab and the bulk route
-write it. **It recomposes nothing**: a live cue, or a programmer layer, whose colour template snapped
+write it. **It recomposes nothing**: a live cue, or a programmer layer, whose colour palette snapped
 a scroller or wheel frame keeps that frame until it is next composed (its next GO, or a recook), as
 with every metadata edit — a loaded-media change is a between-shows job, and a scroller moving under
 a live cue unasked is a visible jump. Re-snapping live consumers on a media write is
@@ -1909,12 +1909,12 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
 - **It aims from the placement point.** The drawn head pivots a few centimetres along the body axis
   from it, so the drawn beam passes that close to the point; a real head is as close as its
   placement and mount were measured.
-- **An aim can be kept as a position template.** The programmer is scratch — Clear releases an aim
-  like any other entry — so `aim_fixtures` takes `saveAsTemplate`: a new template with one
-  fixture-specific `position` row per aimed head, in travel degrees (`deg:pan,tilt`, the template
+- **An aim can be kept as a position palette.** The programmer is scratch — Clear releases an aim
+  like any other entry — so `aim_fixtures` takes `saveAsPalette`: a new palette with one
+  fixture-specific `position` row per aimed head, in travel degrees (`deg:pan,tilt`, the palette
   grammar), which `TemplateResolver` turns back into each head's aim to within that tenth of a degree
   (the grammar's precision; the programmer write is exact, fine channels included). It is a focus
-  palette cues, Looks and busk pads can reference, and it outlives the programmer. The template is
+  palette cues, Looks and busk pads can reference, and it outlives the programmer. The palette is
   created before the programmer is written, so a taken name refuses the call with no head moved;
   `dryRun` creates nothing.
 
@@ -1953,9 +1953,9 @@ aim skipped is not pointing there, and is listed as not focused.
   range (the reason gives the distance and the range). An empty selection is 400
   `FOCUS_NEEDS_SELECTION`; a missing point or one off any stage (`checkStageCoord`'s ±500 m) is 400
   `FOCUS_INVALID` — aim's two refusals, the selection checked first.
-- **A focus is not saved as a template by aim.** The template grammar holds focus (`pct:`), but a
-  template is one family, and focus is beam where an aim is position, so `aim_fixtures`'
-  `saveAsTemplate` stays position-only; `record_cue` keeps a focus.
+- **A focus is not saved as a palette by aim.** The palette grammar holds focus (`pct:`), but a
+  palette is one family, and focus is beam where an aim is position, so `aim_fixtures`'
+  `saveAsPalette` stays position-only; `record_cue` keeps a focus.
 
 
 ## The rig scope
@@ -2160,7 +2160,7 @@ it): a show row that links to it by id — read through `VenueLinks`, so a busk 
 a scenery change, a show patch or lantern hung on the rigging — and, from the venue's side, a rigging
 a visible venue fixture or lantern hangs on and seating a visible seat view sits in. A show group's
 membership of a hidden patch is the one exception: `RigScope.members` filters it out, and it is back
-when the patch is. Rows that name a hidden patch by **key** — cue, Look and template rows — stay, and
+when the patch is. Rows that name a hidden patch by **key** — cue, Look and palette rows — stay, and
 read as *Missing fixture* as any dead key does. The routes are `PUT /projects/{id}/patches/{pid}/hidden
 {hidden}` (the Patch list's), `GET …/patches/hidden` (the hidden ones as Patch list rows), and for all
 six kinds `GET /projects/{id}/hides` and `PUT /projects/{id}/hides/{KIND}/{uuid} {hidden}`.
@@ -2371,7 +2371,7 @@ or a facet override is). One transaction:
    `HIDE_VENUES` or `REMOVE_MINE` (deletes an own patch; reverts an Address override). An open one is
    `VENUE_UPDATE_UNDECIDED`, an unknown or unfitting answer 400 `VENUE_UPDATE_INVALID`.
 5. **Dead references**: every fixture key and group name the update takes out of the rig that the
-   show's cue, Look or template rows still name, with who names them. The rows stay and read as
+   show's cue, Look or palette rows still name, with who names them. The rows stay and read as
    *Missing fixture*, as a deleted fixture's do.
 6. **Parks** follow by themselves: the show's own parks and its releases are keyed by channel, so the
    pin moving is all an Update does to them. The review's `carryOver` lists each as `PARK` or

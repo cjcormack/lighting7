@@ -439,7 +439,7 @@ internal class PatchEditTools(private val state: State) {
         putJsonObject("rewritten") {
             put("cues", touched.cues.size)
             put("looks", touched.looks.size)
-            put("templates", touched.templates.size)
+            put("palettes", touched.templates.size)
             put("bindings", touched.bindings)
             put("buskRigCells", touched.buskTiles)
         }

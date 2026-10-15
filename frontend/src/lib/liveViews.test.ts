@@ -31,7 +31,7 @@ describe('the live views', () => {
 
   it('are nothing else', () => {
     expect(isLiveViewPath('/projects/6/fixtures')).toBe(false)
-    expect(isLiveViewPath('/projects/6/templates')).toBe(false)
+    expect(isLiveViewPath('/projects/6/palettes')).toBe(false)
     expect(isLiveViewPath('/install/diagnostics')).toBe(false)
     expect(isLiveViewPath('/')).toBe(false)
   })

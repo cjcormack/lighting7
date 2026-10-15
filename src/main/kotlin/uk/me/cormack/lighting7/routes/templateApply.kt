@@ -27,7 +27,7 @@ private val logger = LoggerFactory.getLogger("templateApply")
 internal sealed interface ApplyTemplateOutcome {
     data class Applied(val response: ApplyTemplateResponse) : ApplyTemplateOutcome
 
-    /** The selection is masked to families this template's is outside (`TEMPLATE_OUTSIDE_MASK`). */
+    /** The selection is masked to families this template's is outside (`PALETTE_OUTSIDE_MASK`). */
     data class Refused(val message: String, val code: String) : ApplyTemplateOutcome
 }
 

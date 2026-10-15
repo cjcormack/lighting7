@@ -39,7 +39,7 @@ import kotlin.test.assertTrue
  */
 class TemplateRoutesTest : RouteIntegrationTest() {
 
-    private fun base() = "/api/rest/projects/$projectId/templates"
+    private fun base() = "/api/rest/projects/$projectId/palettes"
 
     private fun colourRow(value: String = "#FF9D4A;policy=extract") = TemplateRowDto(
         targetType = DEFERRED_TARGET_TYPE, targetKey = "",
@@ -95,6 +95,26 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             client.delete("${base()}/${created.id}").status,
         )
         assertTrue(client.get(base()).body<List<TemplateDto>>().isEmpty())
+    }
+
+    @Test
+    fun `the library is served under palettes, and the template paths are gone`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        assertEquals(HttpStatusCode.OK, client.get(base()).status)
+        // The SPA fallback answers any GET, so "gone" is: no JSON library there, and nothing to POST to.
+        val old = client.get("/api/rest/projects/$projectId/templates")
+        assertTrue(old.contentType()?.match(ContentType.Application.Json) != true, old.bodyAsText().take(80))
+        val create = client.post("/api/rest/projects/$projectId/templates") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "x", rows = listOf(colourRow())))
+        }
+        assertTrue(create.status != HttpStatusCode.Created, create.status.toString())
+        assertEquals(
+            listOf("PALETTE_IN_USE", "PALETTE_OUTSIDE_MASK", "PALETTE_NEEDS_SELECTION"),
+            listOf(CODE_TEMPLATE_IN_USE, CODE_TEMPLATE_OUTSIDE_MASK, CODE_TEMPLATE_NEEDS_SELECTION),
+            "codes reach Claude through MCP results, so they say palette",
+        )
     }
 
     @Test
@@ -1138,7 +1158,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             )
         }
         assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
-        assertTrue(resp.bodyAsText().contains("is a template"), resp.bodyAsText())
+        assertTrue(resp.bodyAsText().contains("is a palette"), resp.bodyAsText())
         assertNull(client.get("/api/rest/projects/$projectId/looks").body<List<LookDto>>()
             .firstOrNull { it.name == "should-not-exist" })
     }
@@ -1433,7 +1453,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             )
         }
         assertEquals(HttpStatusCode.BadRequest, resp.status)
-        assertTrue(resp.bodyAsText().contains("BEAM template cannot hold an effect"), resp.bodyAsText())
+        assertTrue(resp.bodyAsText().contains("BEAM palette cannot hold an effect"), resp.bodyAsText())
     }
 
     @Test
@@ -1500,7 +1520,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             )
         }
         assertEquals(HttpStatusCode.BadRequest, selfRef.status)
-        assertTrue(selfRef.bodyAsText().contains("reference the template itself"), selfRef.bodyAsText())
+        assertTrue(selfRef.bodyAsText().contains("reference the palette itself"), selfRef.bodyAsText())
     }
 
     /**

@@ -76,7 +76,7 @@ describe('the library palette', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'projects/1/templates': templates,
+      'projects/1/palettes': templates,
       'projects/1/looks': looks,
       'projects/1/cue-stacks': stacks,
     })
@@ -88,7 +88,7 @@ describe('the library palette', () => {
     vi.unstubAllGlobals()
   })
 
-  it('lists templates, Looks and cues together', async () => {
+  it('lists palettes, Looks and cues together', async () => {
     draw()
     // Three separate queries, which settle in no guaranteed order — await each.
     expect(await screen.findByText('Amber Key')).toBeTruthy()
@@ -163,7 +163,7 @@ describe('the palette while a slot is the drop target', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     installRecordingFetch({
-      'projects/1/templates': templates,
+      'projects/1/palettes': templates,
       'projects/1/looks': looks,
       'projects/1/cue-stacks': stacks,
     })

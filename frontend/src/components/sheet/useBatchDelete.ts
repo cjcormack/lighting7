@@ -54,7 +54,7 @@ export interface UseBatchDeleteOptions<Item, S> {
 
 /**
  * **One delete for a batch** (library-sheets plan D13), for any library whose delete answers an
- * in-use refusal (`LOOK_IN_USE`, `TEMPLATE_IN_USE`, `SPEED_MASTER_IN_USE`) and takes `?force=true`.
+ * in-use refusal (`LOOK_IN_USE`, `PALETTE_IN_USE`, `SPEED_MASTER_IN_USE`) and takes `?force=true`.
  *
  * Sends each record **plain**, gathers the in-use refusals and asks **once**, listing what each is
  * used by (`BatchDeleteDialog`); *Delete anyway* forces only those, *Keep them* leaves them to the

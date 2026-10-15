@@ -17,7 +17,7 @@ import type {
 } from '../api/templatesApi'
 
 /**
- * Bridge `templateListChanged` into cache invalidation.
+ * Bridge `paletteListChanged` into cache invalidation.
  *
  * Called from `main.tsx`, **not** on import — the same trap `startLooksBridge` documents: this slice
  * is imported from the earliest render path (the nav registry, and the programmer's template strip),
@@ -32,7 +32,7 @@ import type {
  * those two lists.
  */
 export function startTemplatesBridge() {
-  // `templatePressed` — a press somewhere on this desk. Patched, never invalidated: the frame
+  // `palettePressed` — a press somewhere on this desk. Patched, never invalidated: the frame
   // carries the whole of what changed, a press happens at busking rate, and the sibling signal
   // below drops three caches. Zero network, which is the point of the frame being keyed at all.
   //
@@ -56,7 +56,7 @@ export function startTemplatesBridge() {
 /**
  * Write `lastPressedAt` into every cached `templateList` entry holding this template.
  *
- * **Every entry, because the family filter is a query argument**: `/templates?family=colour` and
+ * **Every entry, because the family filter is a query argument**: `/palettes?family=colour` and
  * the programmer's unfiltered list are two cache entries of one endpoint, and a press seen through
  * one of them has to move the other or the two disagree about the order of the same library.
  * `selectCachedArgsForQuery` is what enumerates them without this module having to know which
@@ -93,8 +93,8 @@ export const templatesApi = restApi.injectEndpoints({
     templateList: build.query<TemplateSummary[], { projectId: number; family?: AttributeFamily }>({
       query: ({ projectId, family }) =>
         family
-          ? `projects/${projectId}/templates?family=${family}`
-          : `projects/${projectId}/templates`,
+          ? `projects/${projectId}/palettes?family=${family}`
+          : `projects/${projectId}/palettes`,
       providesTags: (_result, _error, { projectId }) => [
         { type: 'TemplateList', id: projectId },
         'TemplateList',
@@ -106,7 +106,7 @@ export const templatesApi = restApi.injectEndpoints({
 
     createTemplate: build.mutation<TemplateSummary, { projectId: number } & TemplateInput>({
       query: ({ projectId, ...body }) => ({
-        url: `projects/${projectId}/templates`,
+        url: `projects/${projectId}/palettes`,
         method: 'POST',
         body,
       }),
@@ -128,7 +128,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number } & TemplateInput
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `projects/${projectId}/templates/${templateId}`,
+        url: `projects/${projectId}/palettes/${templateId}`,
         method: 'PUT',
         body,
       }),
@@ -141,10 +141,10 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number; force?: boolean }
     >({
       query: ({ projectId, templateId, force }) => ({
-        url: `projects/${projectId}/templates/${templateId}${force ? '?force=true' : ''}`,
+        url: `projects/${projectId}/palettes/${templateId}${force ? '?force=true' : ''}`,
         method: 'DELETE',
       }),
-      // Guarded on the *error*, not the result: a 204 carries no body. A TEMPLATE_IN_USE 409 is an
+      // Guarded on the *error*, not the result: a 204 carries no body. A PALETTE_IN_USE 409 is an
       // ordinary step (it opens "delete anyway") and nothing was deleted. A forced delete does
       // remove cue layers, hence the cue tags.
       invalidatesTags: (_result, error) =>
@@ -158,12 +158,12 @@ export const templatesApi = restApi.injectEndpoints({
      *
      * The copy lands in the **target** project's library, so only that list is invalidated. Unlike
      * `copyLook` there is no `Fixture` / `GroupList` beside it: those carry Look compatibility, and a
-     * template has none (capability-only, D6). The server also fires `templateListChanged`, which
+     * template has none (capability-only, D6). The server also fires `paletteListChanged`, which
      * the bridge turns into the same invalidation for every other window.
      */
     copyTemplate: build.mutation<CopyTemplateResponse, { projectId: number; templateId: number } & CopyTemplateRequest>({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `projects/${projectId}/templates/${templateId}/copy`,
+        url: `projects/${projectId}/palettes/${templateId}/copy`,
         method: 'POST',
         body,
       }),
@@ -182,7 +182,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number } & TemplateResolveRequest
     >({
       query: ({ projectId, ...body }) => ({
-        url: `projects/${projectId}/templates/resolve`,
+        url: `projects/${projectId}/palettes/resolve`,
         method: 'POST',
         body,
       }),
@@ -202,12 +202,12 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number } & ApplyTemplateRequest
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `projects/${projectId}/templates/${templateId}/apply`,
+        url: `projects/${projectId}/palettes/${templateId}/apply`,
         method: 'POST',
         body,
       }),
       // The acting tab's own fast path onto the recents row. The server stamps this press and
-      // broadcasts `templatePressed`, so this is belt as well as braces — but the frame is a
+      // broadcasts `palettePressed`, so this is belt as well as braces — but the frame is a
       // round trip away and the chips the operator just pressed are under their hand.
       //
       // **After the response, not before it, and gated on the same rule the server applies**: a
@@ -250,7 +250,7 @@ export const templatesApi = restApi.injectEndpoints({
       }
     >({
       query: ({ projectId, ...body }) => ({
-        url: `projects/${projectId}/templates/from-programmer`,
+        url: `projects/${projectId}/palettes/from-programmer`,
         method: 'POST',
         body,
       }),
@@ -270,7 +270,7 @@ export const templatesApi = restApi.injectEndpoints({
       { projectId: number; templateId: number } & ToggleTemplateRequest
     >({
       query: ({ projectId, templateId, ...body }) => ({
-        url: `projects/${projectId}/templates/${templateId}/toggle`,
+        url: `projects/${projectId}/palettes/${templateId}/toggle`,
         method: 'POST',
         body,
       }),

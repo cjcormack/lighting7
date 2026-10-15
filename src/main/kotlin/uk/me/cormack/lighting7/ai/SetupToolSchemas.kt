@@ -295,7 +295,7 @@ internal val deleteGroupsTool = ToolDef(
 
 /** What a patch edit leaves naming a key, said once for every tool that reports it. */
 private const val NAMED_BY_NOTE =
-    "The answer's `namedBy` lists every cue, Look, template, surface binding and script that names a removed key or group. " +
+    "The answer's `namedBy` lists every cue, Look, palette, surface binding and script that names a removed key or group. " +
         "Nothing is refused for it: those rows stay and show as a missing fixture, as a fixture deleted on the desk does."
 
 private val universeRefSchema = objectSchema(required = listOf("universe")) {
@@ -326,7 +326,7 @@ internal val renameFixturesTool = ToolDef(
     name = "rename_fixtures",
     description = "Change patched fixtures' keys in a project (the current one unless projectId names another) — every other tool names a fixture by its key, so this is how a key typed wrong at patch time is put right. " +
         "patch_fixtures cannot do it: there the key is the fixture's identity, and a new key patches a new fixture. " +
-        "The project's cues, Looks, templates, surface bindings and busk rig cells that name the old key (or one of its cells) are rewritten to the new one; scripts are Kotlin source and are not — the answer's `scriptsNotRewritten` names any that mention an old key. " +
+        "The project's cues, Looks, palettes, surface bindings and busk rig cells that name the old key (or one of its cells) are rewritten to the new one; scripts are Kotlin source and are not — the answer's `scriptsNotRewritten` names any that mention an old key. " +
         "Keys can be swapped in one call. On a show on a venue only the show's own fixtures can be renamed, and a new key may not be a venue fixture's. " +
         "On the current project a cue or Look already running is recomposed under the new key; the programmer's own values and effects already running are not, so clear and re-apply them. " +
         "Everything is checked first and nothing is written if anything fails; dryRun answers what would change.",
@@ -689,7 +689,7 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
     prop("fadeCurve", "string", "LINEAR (default), SINE_IN_OUT, CUBIC_IN_OUT, … — an EasingCurve name.")
     prop("followSeconds", "number", "Auto-follow: the stack fires the next cue this many seconds after this one fires.")
     prop("marker", "boolean", "A section divider ('Act 1', 'Interval') rather than a cue: name is its label; GO skips it.")
-    arrayProp("layers", cueLayerSchema, "Looks or templates this cue applies, with their targets — the same shape as create_cue's layers.")
+    arrayProp("layers", cueLayerSchema, "Looks or palettes this cue applies, with their targets — the same shape as create_cue's layers.")
     arrayProp("values", lookValueSchema, "The cue's own values, in create_look's values shape — $CUE_VALUES_NOTE Current project only: they are resolved against the live rig.")
     arrayProp("scenery", sceneryItemSchema(forCue = true), "Scene elements this cue moves on GO — the same shape as create_cue's scenery. $SCENERY_TRACKS_NOTE")
     arrayProp("events", cueEventItemSchema, "One-shot triggers this cue fires after GO — the same shape as create_cue's events. $CUE_EVENTS_NOTE")
@@ -757,7 +757,7 @@ internal val extractVenueTool = ToolDef(
     name = "extract_venue",
     description = "Turn the room and house rig of an existing show into a venue, publish it as v1, and put that show on it — in one step, all or nothing. " +
         "Moved into the venue (each record keeps its identity, so nothing the show's cues and Looks name breaks): the VENUE-layer scene elements, Fixed seating, camera viewpoints and seat views in Fixed seating, and — unless include leaves them out — the universes, patch, riggings, regions and groups. " +
-        "The show keeps its SET-layer elements, cues, Looks, templates and prompt book, and draws and outputs exactly as before, now reading the room from the venue. Preset seating is copied into the venue and also stays the show's. " +
+        "The show keeps its SET-layer elements, cues, Looks, palettes and prompt book, and draws and outputs exactly as before, now reading the room from the venue. Preset seating is copied into the venue and also stays the show's. " +
         "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run effects come back, restarting every effect — so that needs reloadLiveShow.",
     inputSchema = objectSchema(required = listOf("fromProjectId", "name")) {
         prop("fromProjectId", "integer", "The show whose room and rig become the venue (list_projects). It must not already be on a venue.")
@@ -785,7 +785,7 @@ internal val publishVenueTool = ToolDef(
 internal val copyToProjectTool = ToolDef(
     name = "copy_to_project",
     description = "Copy show content from one project into another, without switching to either: scene elements by name, cue stacks by id with all their cues, and Looks by id. " +
-        "Everything is matched by name in the target: a cue's scenery finds the target's element of the same name (or one copied in the same call), a cue event its fixture by key, a cue layer's Look or template the target's of the same name — copied along when the target has none. " +
+        "Everything is matched by name in the target: a cue's scenery finds the target's element of the same name (or one copied in the same call), a cue event its fixture by key, a cue layer's Look or palette the target's of the same name — copied along when the target has none. " +
         "Painted cloths bring their images. Copies get new ids and keep their names; a name the target already uses is refused. " +
         "Anything that does not resolve in the target is listed in `unresolved` rather than guessed: rows naming a fixture or group the target lacks are kept (they read as missing), a scenery change, event or script trigger that cannot resolve is left out. Prompt-book anchors are not copied. " +
         "All or nothing; run it with dryRun first. Stored data only — it changes no output.",
@@ -814,7 +814,7 @@ internal val copyToProjectTool = ToolDef(
 internal val deleteCueStacksTool = ToolDef(
     name = "delete_cue_stacks",
     description = "Delete cue stacks with all their cues, their scenery and events, and their prompt-book anchors. A running stack is refused: deactivate it first. " +
-        "Looks and templates the cues layered stay. Everything is checked before anything is deleted; use dryRun to see what would go.",
+        "Looks and palettes the cues layered stay. Everything is checked before anything is deleted; use dryRun to see what would go.",
     inputSchema = objectSchema(required = listOf("stackIds")) {
         put("stackIds", buildJsonObject {
             put("type", "array")

@@ -127,7 +127,7 @@ export function NewTemplateFromEffectSheet({
       await placeAfterCreate(
         buskTarget,
         { kind: 'TEMPLATE', id: created.id, name: created.name },
-        `“${created.name}” saved to the template library`,
+        `“${created.name}” saved to the palette library`,
       )
       onOpenChange(false)
     } catch {
@@ -144,7 +144,7 @@ export function NewTemplateFromEffectSheet({
     <Sheet open={open} onOpenChange={onOpenChange} unsavedChanges={name.trim() !== ''}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Save as template</SheetTitle>
+          <SheetTitle>Save as palette</SheetTitle>
         </SheetHeader>
         <SheetBody>
           {error != null && (
@@ -156,7 +156,7 @@ export function NewTemplateFromEffectSheet({
           <p className="text-[11px] text-muted-foreground">
             Keeps this effect&rsquo;s settings under a name, so a busk pad or a layer can run it on
             whatever is selected. The effect running now is left exactly where it is — this is a
-            copy into the library, so retuning the template later will not move it.
+            copy into the library, so retuning the palette later will not move it.
           </p>
 
           {effect != null && (
@@ -203,7 +203,7 @@ export function NewTemplateFromEffectSheet({
           {effect != null && library != null && entry == null && (
             <p className="text-[11px] text-destructive">
               &ldquo;{effect.effectType}&rdquo; is not in this desk&rsquo;s effect library, so its
-              category — and so the template&rsquo;s family — cannot be read.
+              category — and so the palette&rsquo;s family — cannot be read.
             </p>
           )}
           {Number.isFinite(projectIdNum) && (
@@ -212,7 +212,7 @@ export function NewTemplateFromEffectSheet({
 
           {entry != null && (family == null || !familyCanHoldEffect(family)) && (
             <p className="text-[11px] text-destructive">
-              A “{category}” effect cannot be a template — an effect template is banked by family,
+              A “{category}” effect cannot be a palette — an effect palette is banked by family,
               and that category has none. It can live in a recorded look instead.
             </p>
           )}
@@ -223,7 +223,7 @@ export function NewTemplateFromEffectSheet({
           </SheetClose>
           <Button onClick={submit} disabled={!canSubmit}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
-            Create template
+            Create palette
           </Button>
         </SheetFooter>
       </SheetContent>

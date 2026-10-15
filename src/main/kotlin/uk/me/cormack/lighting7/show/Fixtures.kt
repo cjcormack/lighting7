@@ -25,9 +25,9 @@ interface FixturesChangeListener {
     fun fixturesChanged() {}
     /**
      * A Look was created, renamed or deleted. Collapses what used to be two separate signals
-     * (`presetListChanged` + `paletteListChanged`) now that FX presets and named palettes are one
-     * entity. A Look's *contents* changing goes through `republishForLookEdit` instead, which
-     * invalidates the one Look directly rather than dropping every expansion.
+     * (`presetListChanged` and the named palette banks' list frame) now that FX presets and those
+     * banks are one entity. A Look's *contents* changing goes through `republishForLookEdit`
+     * instead, which invalidates the one Look directly rather than dropping every expansion.
      */
     fun lookListChanged() {}
 

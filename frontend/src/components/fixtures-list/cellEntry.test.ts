@@ -72,7 +72,7 @@ describe('cellKeyboardPermission', () => {
     })
   })
 
-  it('refuses both on a focused template layer — a read, never an edit', () => {
+  it('refuses both on a focused palette layer — a read, never an edit', () => {
     expect(cellKeyboardPermission({ kind: 'layer', layerId: 4 }, true)).toEqual({
       entry: false,
       clear: false,
@@ -159,9 +159,9 @@ describe('cellActionCopy', () => {
     expect(copy.clearTitle).toMatch(/switch to Local/)
   })
 
-  it("uses Spread's own template wording on a focused template layer", () => {
+  it("uses Spread's own palette wording on a focused palette layer", () => {
     const copy = cellActionCopy({ kind: 'layer', layerId: 7 }, true, 2)
-    expect(copy.setTitle).toMatch(/applies a template/)
+    expect(copy.setTitle).toMatch(/applies a palette/)
     expect(copy.clearTitle).toBe(copy.setTitle)
   })
 })

@@ -109,7 +109,7 @@ export function ColourControl({
         </div>
         <p className="text-[11px] text-muted-foreground">
           {policyLocked
-            ? 'This template sets an emitter directly, so there is nothing left for the policy to derive — it would drive the same channel.'
+            ? 'This palette sets an emitter directly, so there is nothing left for the policy to derive — it would drive the same channel.'
             : WHITE_POLICY_LABELS[policy].hint}
         </p>
       </div>
@@ -118,8 +118,8 @@ export function ColourControl({
         <div className="space-y-0.5">
           <Label>Emitters set directly</Label>
           <p className="text-[11px] text-muted-foreground">
-            Switch one on and this template can only be applied to heads that have it — the whole
-            template, not just that value.
+            Switch one on and this palette can only be applied to heads that have it — the whole
+            palette, not just that value.
           </p>
         </div>
         {/* Set / Clear beside the value, and the slider only once set — `PercentControl`'s shape,

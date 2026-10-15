@@ -62,7 +62,7 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * the strip showed the *whole* library with nothing selected and a press toasted "select the
  * fixtures this should land on first". That was the single most expensive line on the page: a row
  * of chips — wrapping to four rows on a real library — spending 43px of a grid's height on a
- * gesture that could only fail. The library is browsed on `/templates`; this strip is where a
+ * gesture that could only fail. The library is browsed on `/palettes`; this strip is where a
  * template is *pressed*, and a press needs a target (space plan D3). The `targets.length === 0`
  * guard in `press` stays as defence in depth, and so does `New`'s disabled arm — neither is
  * reachable through the UI now, and both are one careless host away from being reachable again.
@@ -140,7 +140,7 @@ export function TemplateStrip({
   }, [askedFamilies, targets.length, targetFamilies])
 
   const visible = useMemo(() => {
-    // The library's own order, which is by name — the same list `/templates` draws. There is no
+    // The library's own order, which is by name — the same list `/palettes` draws. There is no
     // operator-set order to honour any more: order belongs to a pad's place in a busk bank.
     const all = templates ?? []
     if (families == null) return all
@@ -245,7 +245,7 @@ export function TemplateStrip({
         >
           {visible.length === 0 && (templates?.length ?? 0) > 0 && (
             <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-              No template fits what is selected.
+              No palette fits what is selected.
             </span>
           )}
 
@@ -285,7 +285,7 @@ export function TemplateStrip({
           size="sm"
           className="h-7 shrink-0 gap-1.5 px-2 text-xs"
           aria-expanded={pickerOpen}
-          title="Every template that fits the selection, searchable"
+          title="Every palette that fits the selection, searchable"
           onClick={() => setPickerOpen((wasOpen) => !wasOpen)}
         >
           <LayoutGrid className="size-3.5" />
@@ -309,8 +309,8 @@ export function TemplateStrip({
           variant="outline"
           size="sm"
           className="h-7 shrink-0 gap-1 border-dashed px-2 text-xs"
-          title="Record what you have selected as a new template"
-          aria-label="New template"
+          title="Record what you have selected as a new palette"
+          aria-label="New palette"
           onClick={() => setNewOpen(true)}
         >
           <Plus className="size-3.5" />
@@ -365,7 +365,7 @@ const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
  * **Its *Pick up* is a right-click, not a hold**, and that is forced rather than chosen: the chip's
  * hold is already ⌥click's touch twin (§"The two apply gestures"), and a control cannot answer one
  * gesture two ways. On touch the routes to picking a template up are the library row on
- * `/templates` and a busk pad's own hold menu, both of which have a free hold.
+ * `/palettes` and a busk pad's own hold menu, both of which have a free hold.
  *
  * **Which is why this is a `Popover` opened from `onContextMenu`, and not a `ContextMenu`.**
  * Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`

@@ -131,7 +131,7 @@ describe('fxEditorModel', () => {
   })
 })
 
-describe("a pad's instance against its template (§3.3, D20)", () => {
+describe("a pad's instance against its palette (§3.3, D20)", () => {
   const template = {
     effectType: 'Circle',
     category: 'position',
@@ -158,7 +158,7 @@ describe("a pad's instance against its template (§3.3, D20)", () => {
     expect(differsFromTemplate({ ...instance, speedMasterUuid: 'm1' }, template, 'm1', {}, { distribution: false })).toBe(false)
   })
 
-  it('keeps the template’s own distribution on Update where the instance said none', () => {
+  it('keeps the palette’s own distribution on Update where the instance said none', () => {
     expect(withTemplateDraft(template, instance, { distribution: false }).distribution).toBe('CENTER_OUT')
     expect(withTemplateDraft(template, { ...instance, distributionStrategy: 'RANDOM' }).distribution).toBe('RANDOM')
   })

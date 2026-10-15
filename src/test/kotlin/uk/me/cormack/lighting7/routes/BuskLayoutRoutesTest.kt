@@ -76,7 +76,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
     private suspend fun HttpClient.page(pageId: Int): BuskPageDto = get("${pages()}/$pageId").body()
 
     private suspend fun HttpClient.createTemplate(name: String): Int {
-        val resp = post("/api/rest/projects/$projectId/templates") {
+        val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ff8800"))))
         }
@@ -488,7 +488,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber), look(warm), cue(opening), tpl(blue), tpl(amber))))))
         assertEquals(5, padCount())
 
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/templates/$amber").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/palettes/$amber").status)
         assertEquals(listOf("LOOK", "CUE", "TEMPLATE"), client.page(page.id).pads.map { it.kind })
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/looks/$warm").status)
@@ -549,7 +549,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
             assertEquals(listOf(page.id), awaitOfType<BuskLayoutChangedOutMessage>().pageIds)
 
             // The delete is on the template's route, not the busk's; the page still hears about it.
-            assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/templates/$amber").status)
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/palettes/$amber").status)
             assertEquals(listOf(page.id), awaitOfType<BuskLayoutChangedOutMessage>().pageIds)
 
             // A page delete names the survivors too: their positions moved, and the deleted id
@@ -668,7 +668,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         val one = client.createPage("One")
         val two = client.createPage("Two")
 
-        suspend fun templateCount() = client.get("/api/rest/projects/$projectId/templates")
+        suspend fun templateCount() = client.get("/api/rest/projects/$projectId/palettes")
             .body<List<TemplateDto>>().single { it.id == amber }.buskPageCount
         suspend fun lookCount() = client.get("/api/rest/projects/$projectId/looks")
             .body<List<LookDto>>().single { it.id == warm }.buskPageCount
@@ -703,7 +703,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         // D3: a pad is an enrichment, never a guard. Three pads do not stand between a template and
         // its delete — they go with it, and the count is only ever something to *say* beforehand.
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber), tpl(amber), tpl(amber))))))
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/templates/$amber").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/palettes/$amber").status)
         assertEquals(0, padCount())
     }
 }

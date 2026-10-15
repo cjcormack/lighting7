@@ -11,7 +11,7 @@ import { VIEW_OPTION_WORK_LIGHTS, WORK_LIGHTS } from '../components/stage3d/scen
  *
  * Seven literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
  * entry's `pathMatch` answers "which sidebar row is lit" and has already diverged from "what is
- * this view called" once (`/templates` carries four ⌘K entries on one `pathMatch`). The order is
+ * this view called" once (`/palettes` carries four ⌘K entries on one `pathMatch`). The order is
  * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
  * viewpoint), then the two libraries. Stage is not a live view — it has no `ShowHeader` and no
  * immersive — so it carries its viewpoint, its source and its work lights, and nothing else.
@@ -179,7 +179,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
-  { id: 'templates', label: 'Templates', segment: '/templates' },
+  { id: 'templates', label: 'Palettes', segment: '/palettes' },
 ]
 
 /**

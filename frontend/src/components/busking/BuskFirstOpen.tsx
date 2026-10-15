@@ -22,7 +22,7 @@ export function BuskFirstOpen({
       <div className="max-w-md rounded-lg border bg-card p-6 text-center">
         <h2 className="text-base font-semibold">Build a busk page</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          A page is rows of banks, and a bank holds pads — templates, Looks and cues, in whatever
+          A page is rows of banks, and a bank holds pads — palettes, Looks and cues, in whatever
           order suits the show. Start from what is already in the library, or from nothing.
         </p>
         <div className="mt-5 flex justify-center gap-2">

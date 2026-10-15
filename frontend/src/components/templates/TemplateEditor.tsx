@@ -296,7 +296,7 @@ export function TemplateEditor({
     <Sheet open={open} onOpenChange={onOpenChange} unsavedChanges={isDirty}>
       <SheetContent className="flex flex-col sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{template == null ? 'New template' : template.name}</SheetTitle>
+          <SheetTitle>{template == null ? 'New palette' : template.name}</SheetTitle>
         </SheetHeader>
         <SheetBody>
           {saveError != null && (
@@ -338,7 +338,7 @@ export function TemplateEditor({
             </div>
             {template != null && (
               <p className="text-[11px] text-muted-foreground">
-                A template&rsquo;s family is its identity — create a new one to hold a different
+                A palette&rsquo;s family is its identity — create a new one to hold a different
                 attribute.
               </p>
             )}
@@ -375,12 +375,12 @@ export function TemplateEditor({
                   exclusions block takes, and for the same reason: an operator looking for a beam
                   chase needs to learn where it lives rather than conclude the desk cannot do it. */}
               {!familyCanHoldEffect(family)
-                ? 'The effect library has no beam category — dimmer, colour and position are the three that have one — so a Beam template holds values only. A beam chase lives in a recorded look.'
+                ? 'The effect library has no beam category — dimmer, colour and position are the three that have one — so a Beam palette holds values only. A beam chase lives in a recorded look.'
                 : 'A value is resolved per head; an effect runs on every head the layer names. For a value and an effect together, record a Look.'}
             </p>
             {template != null && (
               <p className="text-[11px] text-muted-foreground">
-                Like the family, this is the template&rsquo;s identity and cannot change afterwards.
+                Like the family, this is the palette&rsquo;s identity and cannot change afterwards.
               </p>
             )}
           </div>
@@ -469,7 +469,7 @@ export function TemplateEditor({
             </SheetClose>
             <Button onClick={handleSave} disabled={!isValid || isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
-              {template == null ? 'Create template' : 'Save'}
+              {template == null ? 'Create palette' : 'Save'}
             </Button>
           </div>
         </SheetFooter>
@@ -588,7 +588,7 @@ function EffectControls({
           {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
           <EditorReadout>
             The master defaults to the one whose usage matches this family, and is stored on the
-            template — every layer applying it follows the same tempo.
+            palette — every layer applying it follows the same tempo.
           </EditorReadout>
         </div>
       )}
@@ -613,7 +613,7 @@ function PerFixtureValues({ template }: { template: TemplateSummary | null }) {
       <Label>Recorded values</Label>
       <p className="text-[11px] text-muted-foreground">
         Recorded per head. Re-record from the programmer to change them &mdash; each head holds its
-        own value, which is the point of a per-fixture template.
+        own value, which is the point of a per-fixture palette.
       </p>
       <div className="rounded-md border divide-y">
         {rows.map((row) => (

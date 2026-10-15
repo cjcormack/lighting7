@@ -23,7 +23,7 @@ describe('isLocalEffect', () => {
 })
 
 describe('effectsToStop', () => {
-  it('stops one instance per cleared cell — the effect-template press this exists for', () => {
+  it('stops one instance per cleared cell — the effect-palette press this exists for', () => {
     const effects = [
       effect({ id: 1, targetKey: 'hex-1', propertyName: 'rgbColour' }),
       effect({ id: 2, targetKey: 'hex-2', propertyName: 'rgbColour' }),

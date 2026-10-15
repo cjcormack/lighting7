@@ -252,7 +252,7 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 
 A step "merge cue palette into stack palette" used to sit at 4, and the stack carried a positional
 colour list its cues inherited. That whole grammar is gone — an effect parameter names a colour
-template (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack now
+palette (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack now
 carries no colour state at all, and `removeEffectsForCueStackKeepPalette` folded back into
 `removeEffectsForCueStack`.
 
@@ -368,7 +368,7 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 `POST /{stackId}/preview` answers "what would this cue look like?" — the channel values a cue
 *would* produce, with nothing published. It backs the Next GO stage view (lighting-react
 `docs/stage-vis-engineering.md` §"The fourth source: Next GO"): composing a cue in the browser
-would otherwise mean reimplementing specificity, HTP/LTP, template resolution and move-in-dark
+would otherwise mean reimplementing specificity, HTP/LTP, palette resolution and move-in-dark
 arming client-side.
 
 `routes/cuePreview.kt`, and it is reuse end to end:
@@ -412,7 +412,7 @@ the states it takes (`visible`, a drawn drape's `open`, a flown piece's `trimM`)
 `cue_scenery`, `cue_stack_scenery` and `look_scenery` (`models/scenery.kt`; stage-view plan session 8,
 D11–D13). Scenery sits **beside** the composition model, not in it: nothing here is a DMX channel,
 Record captures only what the programmer **holds** (the scenery-programmer plan's D7, its session 3;
-below), and a template never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
+below), and a palette never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
 hands hold now (scenery-programmer plan D1). See `docs/lighting-composition-model.md`
 §"Scenery — beside the layers".
 

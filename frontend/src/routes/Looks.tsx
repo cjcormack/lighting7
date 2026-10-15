@@ -36,7 +36,7 @@ export function LooksRedirect() {
  *
  * **No family chips** (D3). A Look's families are *derived* and one may span several, so filtering by
  * a family would hide most of the library from most filters; a template is in exactly one family,
- * which is the case chips partition cleanly — on `/templates`.
+ * which is the case chips partition cleanly — on `/palettes`.
  */
 export function ProjectLooks() {
   const { projectId } = useParams()
@@ -132,11 +132,11 @@ export function ProjectLooks() {
           // it used to live here, and a single value is a template now.
           <div className="flex min-w-0 flex-1 justify-end">
             <Link
-              to={`/projects/${projectIdNum}/templates`}
+              to={`/projects/${projectIdNum}/palettes`}
               className="hidden items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground sm:inline-flex"
-              title="A single value or effect — Amber Key, Slow Breathe — is a template, applied to a selection"
+              title="A single value or effect — Amber Key, Slow Breathe — is a palette, applied to a selection"
             >
-              Templates
+              Palettes
               <ArrowRight className="size-3" />
             </Link>
           </div>

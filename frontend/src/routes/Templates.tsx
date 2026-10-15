@@ -24,9 +24,9 @@ import {
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
-/** Redirect `/templates` → `/projects/:projectId/templates`. */
+/** Redirect `/palettes` → `/projects/:projectId/palettes`. */
 export function TemplatesRedirect() {
-  return <CurrentProjectRedirect to="templates" />
+  return <CurrentProjectRedirect to="palettes" preserveSearch />
 }
 
 /**
@@ -193,7 +193,7 @@ export function ProjectTemplates() {
   return (
     <SheetPage>
       <SheetPage.Header>
-        <Breadcrumbs projectName={project.name} currentPage="Templates" />
+        <Breadcrumbs projectName={project.name} currentPage="Palettes" />
       </SheetPage.Header>
       <LibraryRow
         filter={filter}
@@ -223,7 +223,7 @@ export function ProjectTemplates() {
               }}
             >
               <Plus className="size-3.5" />
-              <span className="hidden sm:inline">New template</span>
+              <span className="hidden sm:inline">New palette</span>
             </Button>
           ) : undefined
         }
@@ -233,11 +233,11 @@ export function ProjectTemplates() {
       ) : library.length === 0 ? (
         <SheetPage.Empty>
           {isCurrentProject
-            ? 'No templates yet. Create one here, or record what you have selected from the programmer’s template strip — or save a running effect as one.'
-            : 'No templates in this project.'}
+            ? 'No palettes yet. Create one here, or record what you have selected from the programmer’s palette strip — or save a running effect as one.'
+            : 'No palettes in this project.'}
         </SheetPage.Empty>
       ) : memberCount === 0 ? (
-        <SheetPage.Empty>No templates match.</SheetPage.Empty>
+        <SheetPage.Empty>No palettes match.</SheetPage.Empty>
       ) : (
         <TemplateSheet
           projectId={projectIdNum}
@@ -252,13 +252,13 @@ export function ProjectTemplates() {
       )}
       <SheetPage.Footer>
         <span className="tabular-nums">
-          {library.length} template{library.length === 1 ? '' : 's'}
+          {library.length} palette{library.length === 1 ? '' : 's'}
           {family === 'ALL' && filter.trim() === '' ? ' · showing all' : ` · showing ${memberCount}`}
         </span>
         <span className="ml-auto">
           {isCurrentProject
             ? 'Value edits the intent — the desk resolves it per head'
-            : 'Not the running project · copy a template here to use it'}
+            : 'Not the running project · copy a palette here to use it'}
         </span>
       </SheetPage.Footer>
 

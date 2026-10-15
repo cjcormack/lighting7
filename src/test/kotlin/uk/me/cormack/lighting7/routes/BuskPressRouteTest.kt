@@ -51,7 +51,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     private fun pages() = "/api/rest/projects/$projectId/busk/pages"
 
     private suspend fun HttpClient.createTemplate(name: String, value: String = "#ff8800"): Int {
-        val resp = post("/api/rest/projects/$projectId/templates") {
+        val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", value))))
         }
@@ -261,7 +261,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val amber = client.createTemplate("amber")
-        val focus = client.post("/api/rest/projects/$projectId/templates") {
+        val focus = client.post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(TemplateInput(name = "focus", rows = listOf(TemplateRowDto("fixture", "hex-1", "position", "deg:12,-8"))))
         }.body<TemplateDto>().id
@@ -599,7 +599,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val focus = client.post("/api/rest/projects/$projectId/templates") {
+        val focus = client.post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
             setBody(TemplateInput(name = "focus", rows = listOf(TemplateRowDto("fixture", "hex-1", "position", "deg:12,-8"))))
         }.body<TemplateDto>().id
@@ -671,7 +671,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         get("/api/rest/projects/$projectId/looks/$id").body<LookDetails>().uuid
 
     private suspend fun HttpClient.templateUuid(id: Int): String =
-        get("/api/rest/projects/$projectId/templates/$id").body<TemplateDto>().uuid
+        get("/api/rest/projects/$projectId/palettes/$id").body<TemplateDto>().uuid
 
     private suspend fun HttpClient.padUuid(padId: Int): String =
         get(pages()).body<List<BuskPageDto>>()

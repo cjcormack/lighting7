@@ -101,10 +101,10 @@ sealed interface ResetToTemplateOutcome {
 
     companion object {
         /** No template layer in the programmer spawned this instance. */
-        const val NOT_FROM_TEMPLATE = "FX_NOT_FROM_TEMPLATE"
+        const val NOT_FROM_TEMPLATE = "FX_NOT_FROM_PALETTE"
 
         /** Its template no longer resolves — deleted, or emptied of its effect. */
-        const val TEMPLATE_GONE = "FX_TEMPLATE_GONE"
+        const val TEMPLATE_GONE = "FX_PALETTE_GONE"
     }
 }
 
@@ -357,7 +357,7 @@ class ProgrammerLayerStack(
      * rigs. The off arm ignores it entirely: turning a pad off never lights a sibling. Matched on
      * uuid like the pad itself, so a Look's layer can never be released by a template press even
      * where the two share an int PK — and a bank mixes kinds, so the set may hold both. Empty (the
-     * default) is a stacking bank, and is what the `/templates/{id}/toggle` and `/looks/{id}/toggle`
+     * default) is a stacking bank, and is what the `/palettes/{id}/toggle` and `/looks/{id}/toggle`
      * routes always pass; `routes/buskPress.kt` resolves the set, this class only applies it.
      *
      * This used to be a **template group's** exclusivity — the other templates in the pressed one's
@@ -764,13 +764,13 @@ class ProgrammerLayerStack(
         if (key == null || source == null || !source.isTemplate || layer == null) {
             return ResetToTemplateOutcome.Refused(
                 ResetToTemplateOutcome.NOT_FROM_TEMPLATE,
-                "Effect $effectId was not started by a template layer in the programmer",
+                "Effect $effectId was not started by a palette layer in the programmer",
             )
         }
         val entry = templateRegistry().snapshot(source.uuid)?.effect
             ?: return ResetToTemplateOutcome.Refused(
                 ResetToTemplateOutcome.TEMPLATE_GONE,
-                "Template '${source.name}' no longer holds an effect to reset to",
+                "Palette '${source.name}' no longer holds an effect to reset to",
             )
         val st = state() ?: return ResetToTemplateOutcome.NotFound
         val spec = entry.toEffectSpec()
@@ -786,7 +786,7 @@ class ProgrammerLayerStack(
         } catch (e: Exception) {
             return ResetToTemplateOutcome.Refused(
                 ResetToTemplateOutcome.TEMPLATE_GONE,
-                "Template '${source.name}''s effect could not be created: ${e.message}",
+                "Palette '${source.name}''s effect could not be created: ${e.message}",
             )
         }
         val updated = eng.updateEffect(
@@ -833,7 +833,7 @@ class ProgrammerLayerStack(
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
                 // A caller-supplied `fadeMs` covers every key and wins outright: an explicit fade on
                 // Include is the operator's instruction, and it overrides the source's stored
-                // default exactly as `POST /templates/{id}/apply` does with `request.fadeMs`.
+                // default exactly as `POST /palettes/{id}/apply` does with `request.fadeMs`.
                 eng.programmer.republishKeys(moved, fadeMs)
             } else {
                 eng.programmer.republishKeys(moved, rowFades)

@@ -10,7 +10,7 @@ import { restApi } from './restApi'
 import { fixtureFxApi } from './fixtureFx'
 
 /** The reset mutation's contract with the desk: `POST /fx/{id}/reset` (fixture-fx-sheets plan W5). */
-describe('fixtureFx reset to template', () => {
+describe('fixtureFx reset to palette', () => {
   let fetchMock: ReturnType<typeof installRecordingFetch>
 
   beforeEach(() => {

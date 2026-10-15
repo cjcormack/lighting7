@@ -47,7 +47,7 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
         <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
-          template
+          palette
         </Badge>
         <span className="text-muted-foreground">
           {focusedTemplate?.kind === 'effect'
@@ -55,12 +55,12 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
             : `“${layer.source.name}” holds one value for the whole family, resolved per head — so there is nothing to show per fixture.`}
         </span>
         {/* `projectId` from the host, not from the row store: the store does not engage for a
-            template layer at all, so reading it here would build `/projects//templates`. */}
+            template layer at all, so reading it here would build `/projects//palettes`. */}
         <Link
-          to={`/projects/${projectId}/templates`}
+          to={`/projects/${projectId}/palettes`}
           className="underline underline-offset-2 hover:text-foreground"
         >
-          Edit template
+          Edit palette
         </Link>
       </div>
     )
@@ -83,8 +83,8 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
           </Badge>
           <span className="text-muted-foreground">
             {fullyDeferred
-              ? 'Every row in this look takes its target from the layer, so there is nothing to show per fixture. A value you point at a selection is a template now — re-create it there.'
-              : 'Rows that take their target from the layer. They apply, but belong to no one head; a value like this belongs in a template.'}
+              ? 'Every row in this look takes its target from the layer, so there is nothing to show per fixture. A value you point at a selection is a palette now — re-create it there.'
+              : 'Rows that take their target from the layer. They apply, but belong to no one head; a value like this belongs in a palette.'}
           </span>
         </>
       )}

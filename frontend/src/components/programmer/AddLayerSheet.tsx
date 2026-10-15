@@ -37,7 +37,7 @@ export function AddLayerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="sm:max-w-lg flex flex-col p-0">
         <SheetHeader className="sr-only">
-          <SheetTitle>{kind === 'template' ? 'Add template layer' : 'Add layer'}</SheetTitle>
+          <SheetTitle>{kind === 'template' ? 'Add palette layer' : 'Add layer'}</SheetTitle>
         </SheetHeader>
         {open && (
           <LayerPicker

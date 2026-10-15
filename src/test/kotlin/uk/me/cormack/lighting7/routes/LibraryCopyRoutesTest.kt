@@ -46,7 +46,7 @@ import kotlin.test.assertTrue
  */
 class LibraryCopyRoutesTest : RouteIntegrationTest() {
 
-    private fun templates(project: Int = projectId) = "/api/rest/projects/$project/templates"
+    private fun templates(project: Int = projectId) = "/api/rest/projects/$project/palettes"
 
     private fun otherProject(name: String = "other"): Int = transaction(state.database) {
         DaoProject.new { this.name = name; isCurrent = false }.id.value

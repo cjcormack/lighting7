@@ -125,11 +125,11 @@ describe('RailSpreadTab scope arms', () => {
     expect(screen.getByText('Output · read-only')).toBeInTheDocument()
   })
 
-  it('a focused template layer: refused with the popover’s words', () => {
+  it('a focused palette layer: refused with the popover’s words', () => {
     scopeState.scope = { kind: 'layer', layerId: 4 }
     scopeState.template = { id: 4 }
     draw(snapshot({ permission: { entry: false, clear: false } }))
-    expect(panel.props!.disabledReason).toBe('This layer applies a template — switch to Local to spread values onto these heads')
+    expect(panel.props!.disabledReason).toBe('This layer applies a palette — switch to Local to spread values onto these heads')
   })
 })
 

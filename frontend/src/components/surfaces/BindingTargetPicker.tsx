@@ -133,7 +133,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
   applyLook: "Look — apply",
-  pressTemplate: "Template — press",
+  pressTemplate: "Palette — press",
   pressPad: "Busk pad — press",
   pickUpPad: "Hand — pick up pad",
   handPlaceInBank: "Hand — place in bank",
@@ -719,14 +719,14 @@ function TargetBody({
     return (
       <div className="space-y-2">
         <RecordField
-          label="Template"
+          label="Palette"
           value={value.templateUuid}
           onChange={(templateUuid) => onChange({ ...value, templateUuid })}
           options={records.templates}
         />
         <p className="text-xs text-muted-foreground">
-          Presses onto the desk selection as a layer that tracks the template. With nothing
-          selected a generic template&rsquo;s press is dropped.
+          Presses onto the desk selection as a layer that tracks the palette. With nothing
+          selected a generic palette&rsquo;s press is dropped.
         </p>
       </div>
     )
