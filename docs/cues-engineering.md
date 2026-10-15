@@ -40,14 +40,22 @@ Key behaviours:
 ### Database Tables
 
 ```
-cues
+cues — what a cue *is*; where it sits in a stack is its entry's (cue model plan, session 1)
 ├── id (auto-increment PK)
 ├── name (varchar 255)
 ├── project_id (FK → projects)
-├── cue_stack_id (FK → cue_stacks — NOT NULL: every cue belongs to a stack)
-├── sort_order, cue_number, cue_number_auto, cue_type (STANDARD | MARKER)
-├── fade_duration, fade_curve, auto_advance, auto_advance_delay (Durations; nanoseconds on disk)
+├── fade_duration, fade_curve (Duration; nanoseconds on disk)
 ├── notes, stomp
+└── uuid
+
+cue_stack_entries — one row of a stack's list (cue-stacks-engineering.md §"Database Tables")
+├── id (auto-increment PK)
+├── stack_id (FK → cue_stacks)
+├── cue_id (FK → cues, nullable — null exactly when kind is MARKER)
+├── kind (CUE | MARKER), label (a marker's text)
+├── ordinal (double — the list's order, ties by id)
+├── cue_number, cue_number_auto
+├── auto_advance, auto_advance_delay (the follow; Duration, nanoseconds on disk)
 └── uuid
 
 cue_layers
@@ -117,7 +125,9 @@ cue_events (stage-view plan session 9 — see §"Cue events")
 Cue names are free-form and **not** unique. The old `unique(project_id, name)` index predated
 cue stacks; with a project owning many stacks, two stacks may legitimately both hold a
 "Blackout". Cues are identified by `id` locally and by `uuid` across cloud sync. Cue *numbers*
-remain unique per stack via the partial index `uq_cue_number_per_stack`.
+are an entry's and remain unique per stack via the partial index `uq_entry_number_per_stack` (a
+marker entry takes none); it replaced `uq_cue_number_per_stack` when the startup migration moved
+the list onto entries (`state/CueModelMigration.kt`).
 
 ### Key Design Decisions
 
@@ -228,15 +238,37 @@ When a Look is referenced by any cue layer (via FK), it cannot be deleted. The d
 
 ## Cue Stack Membership
 
-**Every cue belongs to a cue stack** — `cues.cue_stack_id` is `NOT NULL` (`models/cues.kt`), and
-there are no standalone cues any more. See `cue-stacks-engineering.md` for the stack itself.
+**A stack's list is its entries** (`cue_stack_entries`, `models/cueStackEntries.kt`, cue model plan
+session 1). An entry is either a **cue entry**, which places one cue at one point in one stack and
+carries everything about it that is a matter of the list — its order, its number and auto flag, its
+follow — or a **marker entry**, a labelled divider with no cue behind it. The cue keeps only what it
+*is*: its name, fade, notes, stomp and children. See `cue-stacks-engineering.md` for the stack itself.
 
-- `cue_stack_id` (FK → `cue_stacks`) — the stack the cue belongs to
-- `sort_order` (int, default 0) — position within the stack's ordered sequence
+- **One entry per cue** (plan P4), for now: every cue has exactly one cue entry, so a cue is still in
+  exactly one stack and `add-cue` still *moves* it. Session 2 lets a cue be in more than one.
+- **The caller names the stack** (P7). Every route that runs or edits a cue's place in a list takes
+  the stack (and, for reorder, standby and go-to, the **entry** id), and no code path picks a "home"
+  stack for a cue. The callers that only hold a cue id — a busk pad, a cue slot, MIDI `FireCue`,
+  `POST /cues/{id}/apply`, the AI's `apply_cue`, `CueDetails`, the rig briefing and the prompt book's
+  cue-keyed routes — go through `soleEntryOf(cue)`, which answers the cue's entry only while it has
+  exactly one. It is the P4 bridge, not a home-stack rule: session 2 turns those callers into loose
+  holds that need no entry at all.
+- **A marker is an entry, never a cue.** `POST /cues` refuses `cueType: "MARKER"` (400, naming the
+  markers route); markers are made, renamed and removed through
+  `POST/PUT/DELETE /cue-stacks/{id}/markers[/{entryId}]`, and can be neither armed nor fired.
+  `CueType` survives only as the wire's word for a row's kind: `CueStackCueEntry.cueType` and the
+  archive's cue record.
 
-`CueDetails` carries `cueStackId` and `cueStackName`; `NewCue` requires `cueStackId` (a create without
-one is a 400) and takes an optional `sortOrder` (appended to the end if omitted). An archive from
-before stacks were mandatory imports its stack-less cues into an "Unsorted" stack.
+`CueDetails` carries `cueStackId`, `cueStackName` and `entryId` (all from the cue's one entry), and
+`sortOrder` is the entry's **position** in its list, markers counted. `NewCue` requires `cueStackId`
+(a create without one is a 400) and takes an optional `sortOrder`, a position (appended to the end if
+omitted). An archive from before stacks were mandatory imports its stack-less cues into an
+"Unsorted" stack.
+
+**The archive is unchanged** (no `formatVersion` change): the exporter writes each cue as it always
+did, its `cueStackUuid`, `sortOrder` (the entry's position), number and follow read from its one
+entry, and a marker entry as a MARKER cue whose uuid is the entry's — which is why the migration
+gives a marker entry its marker cue's uuid. The importer reads a MARKER cue back as a marker entry.
 
 Two ways put a cue on stage, and both go through the stack:
 
@@ -257,16 +289,19 @@ The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerI
 
 Cue-owned `FxInstance`s receive a derived `priority` at apply time via `cueDerivedPriority`
 in [`projectCues.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt):
-`stackId * 1_000_000 + sortOrder * 1_000 + 1`. Manual (uncued) effects keep priority `0`.
+`stackId * 1_000_000 + position * 1_000 + 1`, where `position` is the cue's entry's place in the
+stack's list, markers counted (`entryPlacement` in `fx/CueApply.kt`). Manual (uncued) effects keep priority `0`.
 
 The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
 priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
 earlier cues on the same property. See
 [lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects". Note that a property held by the programmer (Layer 2) suppresses cue-owned effects on it entirely.
 
-Because priority is derived from `sortOrder`, **reordering a stack changes precedence**. Priority
-is stamped at apply time, so the reorder / `add-cue` / `sort-by-cue-number` handlers call
-`FxEngine.repriorityCues(cueId → priority)` after writing sort orders. That restamps both layers a
+Because priority is derived from the entry's position, **reordering a stack changes precedence**. Priority
+is stamped at apply time, so every write that moves an entry's position — reorder, `add-cue`
+(and the AI's `add_cue_to_stack`), `sort-by-cue-number`, a cue created or recorded mid-list, a cue
+deleted, a marker added or removed (a marker counts in the positions) — calls
+`FxEngine.repriorityCues(cueId → priority)` after writing the entries' order. That restamps both layers a
 cue can own — `FxInstance.priority` and the Layer 4 `Assignment.priority` rows — so cues already on
 stage compose in the new order without needing to be re-applied. Crossfade weights are left
 untouched, and cues whose derived priority didn't change are skipped, which makes the ordinary

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -81,9 +82,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         DaoCue.new {
             this.project = project
             this.name = name
-            cueStack = stack
-            sortOrder = 0
-        }
+        }.inStack(stack, sortOrder = 0)
     }
 
     /** Assert [block] fails the DB's CHECK constraint rather than being written. */

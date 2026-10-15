@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import org.jetbrains.exposed.v1.core.JoinType
+
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.request.*
@@ -54,9 +56,7 @@ internal fun Route.routeApiRestProjectScenery(state: State) {
             val outcome = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId)?.takeIf { it.project.id == project.id }
                     ?: return@transaction SceneryOutcome.NotFound("Cue not found")
-                if (cue.cueType == CueType.MARKER.name) {
-                    return@transaction SceneryOutcome.Invalid(listOf("a MARKER is never live, so it has no scenery"))
-                }
+                // A marker is an entry, not a cue (cue model plan D12), so no cue id names one.
                 writeScenery(project, items, SceneryOwnerKind.CUE) { writes ->
                     replaceCueScenery(cue, writes)
                     cueSceneryOf(cue.id).map { it.toDto() }
@@ -167,25 +167,28 @@ internal data class LookSceneryResource(val parent: ProjectLooksResource, val lo
  * by the stack's set ([SceneryResolver.trackedAt]). One entry per element, named by where its newest
  * tracked state came from. Must run inside a transaction.
  */
-internal fun trackedSceneryAt(cue: DaoCue): List<TrackedSceneryDto> {
-    val stack = cue.cueStack
+internal fun trackedSceneryAt(entry: DaoCueStackEntry): List<TrackedSceneryDto> {
+    val cue = entry.cue ?: return emptyList()
+    val stack = entry.stack
     // Read for every cue of a cue list, so a stack with no scenery at all costs two small queries
-    // and nothing more: its set, and its cues' changes through one join.
+    // and nothing more: its set, and its entries' cues' changes through one join. Tracking walks
+    // the stack the caller named, down its entries to this one (cue model plan §3.4).
     val set = stackSceneryOf(stack.id)
     val stackRows = DaoCueSceneryRow.wrapRows(
-        (DaoCueScenery innerJoin DaoCues).select(DaoCueScenery.columns).where { DaoCues.cueStack eq stack.id },
-    ).toList()
+        DaoCueScenery.join(DaoCueStackEntries, JoinType.INNER, DaoCueScenery.cue, DaoCueStackEntries.cue)
+            .select(DaoCueScenery.columns)
+            .where { DaoCueStackEntries.stack eq stack.id },
+    ).toList().distinctBy { it.id.value }
     if (set.isEmpty() && stackRows.isEmpty()) return emptyList()
-    val cues = DaoCue.find { DaoCues.cueStack eq stack.id }
-        .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-        .filter { it.cueType == CueType.STANDARD.name || it.id == cue.id }
+    val cueEntries = entriesOf(stack).filter { !it.isMarker }
+    val cues = cueEntries.mapNotNull { it.cue }
     val rows = stackRows
         .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
         .groupBy { it.cue.id.value }
     val elements = (set.map { it.element } + rows.values.flatten().map { it.element })
         .distinctBy { it.id.value }
         .map { it.toSceneryElement() }
-    val labels = cues.associate { it.id.value to (it.cueNumber?.takeIf { n -> n.isNotBlank() } ?: it.name) }
+    val labels = cueEntries.associate { e -> e.cueId!! to (e.cueNumber?.takeIf { n -> n.isNotBlank() } ?: e.cue!!.name) }
     val tracked = SceneryResolver.trackedAt(
         elements,
         set.map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) },
@@ -234,19 +237,22 @@ internal fun sceneryOwnersChanged(state: State) {
  * order, Looks by name. Must run inside a transaction.
  */
 internal fun elementSceneryOf(element: DaoStageElement): ElementSceneryDto {
+    // A cue row is listed at each of its cue's entries, in show order — the stack's place, then the
+    // entry's (cue model plan P7: the entry names the stack, never the cue).
     val cueRows = DaoCueSceneryRow.find { DaoCueScenery.element eq element.id }.toList()
-        .sortedWith(compareBy({ it.cue.cueStack.sortOrder }, { it.cue.cueStack.id.value }, { it.cue.sortOrder }, { it.cue.id.value }))
+        .flatMap { row -> entriesOfCue(row.cue).map { entry -> row to entry } }
+        .sortedWith(compareBy({ it.second.stack.sortOrder }, { it.second.stackId }, { it.second.ordinal }, { it.second.id.value }))
     val setRows = DaoCueStackSceneryRow.find { DaoCueStackScenery.element eq element.id }.toList()
         .sortedWith(compareBy({ it.stack.sortOrder }, { it.stack.id.value }))
     val lookRows = DaoLookSceneryRow.find { DaoLookScenery.element eq element.id }.toList()
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.look.name })
     return ElementSceneryDto(
-        cues = cueRows.map { row ->
+        cues = cueRows.map { (row, entry) ->
             ElementCueSceneryDto(
-                stackId = row.cue.cueStack.id.value,
+                stackId = entry.stackId,
                 cueId = row.cue.id.value,
-                // The cue's number where it has one, else its name — `trackedSceneryAt`'s label.
-                label = row.cue.cueNumber?.takeIf { it.isNotBlank() } ?: row.cue.name,
+                // The entry's number where it has one, else the cue's name — `trackedSceneryAt`'s label.
+                label = entry.cueNumber?.takeIf { it.isNotBlank() } ?: row.cue.name,
                 state = storedParamsObject(row.stateJson),
                 transitionMs = row.transition?.toMillis(),
             )

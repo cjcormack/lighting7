@@ -59,8 +59,10 @@ import uk.me.cormack.lighting7.routes.lamplessRefusal
 import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
-import uk.me.cormack.lighting7.routes.renumberAutoCues
-import uk.me.cormack.lighting7.routes.standardCueIds
+import uk.me.cormack.lighting7.routes.placeCueInStack
+import uk.me.cormack.lighting7.routes.cueEntriesInOrder
+import uk.me.cormack.lighting7.routes.cueEntryIds
+import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.routes.unlinkRegionFromPlatforms
 import uk.me.cormack.lighting7.routes.validateCueChildren
 import uk.me.cormack.lighting7.routes.validateRiggingPose
@@ -1457,8 +1459,10 @@ class SetupTools(
         val body = transaction(state.database) {
             val book = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()
                 ?: return@transaction null
-            val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
-            val stackNames = DaoCueStack.find { DaoCueStacks.project eq project.id }.associate { it.id.value to it.name }
+            val stacks = DaoCueStack.find { DaoCueStacks.project eq project.id }.toList()
+            val stackNames = stacks.associate { it.id.value to it.name }
+            // An anchor marks an entry (cue model plan D4): its cue, its number and its stack.
+            val entries = stacks.flatMap { entriesOf(it) }.associateBy { it.id.value }
             val anchors = book.anchors.toList()
             buildJsonObject {
                 book.scriptFileName?.let { put("fileName", it) }
@@ -1466,13 +1470,13 @@ class SetupTools(
                 put("coverPages", book.coverPages)
                 putJsonArray("anchors") {
                     anchors.sortedWith(compareBy({ it.region.firstOrNull()?.page }, { it.region.firstOrNull()?.y })).forEach { a ->
-                        val cue = cues[a.cueId]
+                        val entry = entries[a.entryId]
                         addJsonObject {
-                            put("cueId", a.cueId)
-                            cue?.let {
+                            entry?.cueId?.let { put("cueId", it) }
+                            entry?.let {
                                 it.cueNumber?.let { n -> put("cueNumber", n) }
-                                put("cueName", it.name)
-                                stackNames[it.readValues[DaoCues.cueStack].value]?.let { s -> put("stack", s) }
+                                put("cueName", it.displayName)
+                                stackNames[it.stackId]?.let { s -> put("stack", s) }
                             }
                             a.region.firstOrNull()?.let { putPlace(it) }
                         }
@@ -1488,8 +1492,8 @@ class SetupTools(
                         }
                     }
                 }
-                val anchored = anchors.map { it.cueId }.toSet()
-                put("unanchoredCueCount", cues.values.count { it.cueType == CueType.STANDARD.name && it.id.value !in anchored })
+                val anchored = anchors.map { it.entryId }.toSet()
+                put("unanchoredCueCount", entries.values.count { !it.isMarker && it.id.value !in anchored })
             }
         } ?: return success(noPromptBookMessage(), buildJsonObject {
             put("hasPromptBook", false)
@@ -1577,7 +1581,7 @@ class SetupTools(
                     stack.type != CueStackType.STACK.name -> "cue stack $stackId is a separator, not a stack"
                     else -> null
                 }
-                val numbers = stack?.cues?.filter { it.cueType == CueType.STANDARD.name }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
+                val numbers = stack?.let { cueEntriesInOrder(it) }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
                 Context(error, numbers, pageCount, elements, patches)
             } else {
                 val clash = !DaoCueStack.find {
@@ -1664,7 +1668,8 @@ class SetupTools(
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
-        data class BuiltCue(val id: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>)
+        /** One row built: a cue entry ([id] its cue's) or a marker entry ([id] null — a marker is no cue). */
+        data class BuiltCue(val id: Int?, val entryId: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>)
         data class Built(val stackId: Int, val stackName: String, val cues: List<BuiltCue>, val anchors: Int)
         val built = transaction(state.database) {
             val stack = stackId?.let { DaoCueStack.findById(it)!! } ?: DaoCueStack.new {
@@ -1674,48 +1679,62 @@ class SetupTools(
                 type = CueStackType.STACK.name
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
-            val before = standardCueIds(stack)
-            var sortOrder = (stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            // Each row is an entry appended to the stack: a marker entry labelled with its name (a
+            // marker is no cue — cue model plan D12), or a new cue placed by `placeCueInStack`, which
+            // takes its number from its numbered neighbours when it has none.
+            val before = cueEntryIds(stack)
             val created = cues.map { spec ->
+                if (spec.marker) {
+                    val marker = DaoCueStackEntry.new {
+                        this.stack = stack
+                        kind = CueStackEntryKind.MARKER.name
+                        label = spec.name.take(255)
+                        ordinal = nextOrdinal(stack)
+                    }
+                    return@map Triple(null, marker, spec)
+                }
                 val cue = DaoCue.new {
                     name = spec.name
                     this.project = project
-                    cueStack = stack
-                    this.sortOrder = sortOrder++
-                    cueType = if (spec.marker) CueType.MARKER.name else CueType.STANDARD.name
-                    cueNumber = spec.number
                     notes = spec.notes
                     fadeDuration = spec.fade
                     fadeCurve = spec.fadeCurve
-                    autoAdvance = spec.follow != null
-                    autoAdvanceDelay = spec.follow
                 }
                 writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
                 replaceCueScenery(cue, spec.scenery)
                 replaceCueEvents(cue, spec.events)
-                cue to spec
+                val entry = placeCueInStack(
+                    stack, cue,
+                    cueNumber = spec.number,
+                    autoAdvance = spec.follow != null,
+                    autoAdvanceDelay = spec.follow,
+                    renumber = false,
+                )
+                Triple(cue, entry, spec)
             }
             stackSet?.let { replaceStackScenery(stack, it) }
             // Unnumbered cues take their labels from their numbered neighbours.
-            renumberAutoCues(stack, before)
+            renumberAutoEntries(stack, before)
 
             var anchors = 0
-            val book = if (created.any { it.second.place != null }) {
+            val book = if (created.any { it.third.place != null }) {
                 DaoPromptBook.find { DaoPromptBooks.project eq project.id }.first()
             } else null
-            for ((cue, spec) in created) {
+            for ((_, entry, spec) in created) {
                 val place = spec.place ?: continue
                 DaoPromptBookAnchor.new {
                     promptBook = book!!
-                    this.cue = cue
+                    this.entry = entry
                     region = listOf(place)
-                    label = anchorLabel(cue)
+                    label = anchorLabel(entry)
                 }
                 anchors++
             }
             Built(
                 stack.id.value, stack.name,
-                created.map { (cue, spec) -> BuiltCue(cue.id.value, cue.cueNumber, cue.name, spec.values?.skipped.orEmpty()) },
+                created.map { (cue, entry, spec) ->
+                    BuiltCue(cue?.id?.value, entry.id.value, entry.cueNumber, entry.displayName, spec.values?.skipped.orEmpty())
+                },
                 anchors,
             )
         }
@@ -1733,7 +1752,8 @@ class SetupTools(
                 putJsonArray("cues") {
                     built.cues.forEach { cue ->
                         addJsonObject {
-                            put("cueId", cue.id)
+                            cue.id?.let { put("cueId", it) } ?: put("marker", true)
+                            put("entryId", cue.entryId)
                             cue.number?.let { put("number", it) }
                             put("name", cue.name)
                             with(aiTools) { putValueSkips(cue.skipped) }
@@ -1747,9 +1767,13 @@ class SetupTools(
     private fun markUpPromptBook(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
         data class Book(val id: Int, val pageCount: Int)
-        val (book, cueIds) = transaction(state.database) {
+        // An anchor marks an entry (cue model plan D4), and a cue id names its one entry (P4): each
+        // project cue's entry, when it has exactly one, read here so a cue without one is refused
+        // with the rest rather than skipped while counted as anchored.
+        val (book, entryByCue) = transaction(state.database) {
+            val cueIds = DaoCue.find { DaoCues.project eq project.id }.map { it.id.value }
             DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.let { Book(it.id.value, it.pageCount) } to
-                DaoCue.find { DaoCues.project eq project.id }.map { it.id.value }.toSet()
+                cueIds.associateWith { cueId -> soleEntryOfCueId(cueId)?.id?.value }
         }
         if (book == null) return failure(noPromptBookMessage())
 
@@ -1761,8 +1785,12 @@ class SetupTools(
         val anchors = (input["anchors"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
             val row = element as? JsonObject ?: run { problems += "anchors[$index]: not an object"; return@mapIndexedNotNull null }
             val cueId = row.int("cueId")
-            if (cueId == null || cueId !in cueIds) {
+            if (cueId == null || cueId !in entryByCue) {
                 problems += "anchors[$index]: no cue $cueId in this project"
+                return@mapIndexedNotNull null
+            }
+            if (entryByCue[cueId] == null) {
+                problems += "anchors[$index]: cue $cueId is not in exactly one stack"
                 return@mapIndexedNotNull null
             }
             parsePlace(row["at"], book.pageCount, "anchors[$index] (cue $cueId)", problems)?.let { cueId to it }
@@ -1794,16 +1822,16 @@ class SetupTools(
             val dao = DaoPromptBook.findById(book.id)!!
             coverPages?.let { dao.coverPages = it }
             for ((cueId, place) in anchors) {
-                val cue = DaoCue.findById(cueId)!!
+                val entry = DaoCueStackEntry[entryByCue.getValue(cueId)!!]
                 val anchor = DaoPromptBookAnchor.find {
-                    (DaoPromptBookAnchors.promptBook eq dao.id) and (DaoPromptBookAnchors.cue eq cue.id)
+                    (DaoPromptBookAnchors.promptBook eq dao.id) and (DaoPromptBookAnchors.entry eq entry.id)
                 }.firstOrNull() ?: DaoPromptBookAnchor.new {
                     promptBook = dao
-                    this.cue = cue
+                    this.entry = entry
                     region = listOf(place)
                 }
                 anchor.region = listOf(place)
-                anchor.label = anchorLabel(cue)
+                anchor.label = anchorLabel(entry)
             }
             for ((note, place) in notes) {
                 DaoPromptBookAnnotation.new {
@@ -1828,8 +1856,8 @@ class SetupTools(
     }
 
     /** The anchor's cached label, as the Prompt Book view writes it: `Q<number>`, else the name. */
-    private fun anchorLabel(cue: DaoCue): String =
-        (cue.cueNumber?.let { "Q$it" } ?: cue.name).take(64)
+    private fun anchorLabel(entry: DaoCueStackEntry): String =
+        (entry.cueNumber?.let { "Q$it" } ?: entry.displayName).take(64)
 
     private fun seconds(row: JsonObject, name: String, problems: MutableList<String>): Duration? {
         val element = row[name] ?: return null

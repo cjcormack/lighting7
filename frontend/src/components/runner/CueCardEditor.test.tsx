@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
  * The cue row serves a show being *run* and a show being *edited*, and which of those it is doing
@@ -50,8 +50,9 @@ vi.mock('@/components/SaveStatusIndicator', () => ({ SaveStatusIndicator: () => 
 
 import { CueCardEditor } from './CueCardEditor'
 
-const cue: CueStackCueEntry = {
+const cue: CueStackCueRow = {
   id: 1,
+  entryId: 101,
   name: 'Q1',
   sortOrder: 1,
   layerCount: 0,

@@ -11,9 +11,12 @@ import type { CueStack } from '@/api/cueStacksApi'
 
 vi.mock('@/store/cues', () => ({
   useProjectCueListQuery: () => ({ data: [] }),
-  useCreateProjectCueMutation: () => [vi.fn()],
-  useDeleteProjectCueMutation: () => [vi.fn()],
-  usePatchProjectCueMutation: () => [vi.fn()],
+}))
+// A separator is a marker entry, made on its stack (lighting7 cue model plan D12).
+vi.mock('@/store/cueStacks', () => ({
+  useCreateMarkerEntryMutation: () => [vi.fn()],
+  useRenameMarkerEntryMutation: () => [vi.fn()],
+  useDeleteMarkerEntryMutation: () => [vi.fn()],
 }))
 
 const detail: { props?: Record<string, unknown> } = {}

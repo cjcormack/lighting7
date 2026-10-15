@@ -292,7 +292,8 @@ class RigBriefing(private val state: State) {
         val cues = transaction(state.database) {
             DaoCue.find { DaoCues.project eq project.id }
                 .map {
-                    val stackInfo = " [stack: ${it.cueStack.name}]"
+                    // Its one entry's stack while every cue has one (cue model plan P4).
+                    val stackInfo = soleEntryOf(it)?.let { e -> " [stack: ${e.stack.name}]" }.orEmpty()
                     "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
                 }
         }
@@ -309,9 +310,8 @@ class RigBriefing(private val state: State) {
                 .orderBy(DaoCueStacks.name to SortOrder.ASC)
                 .map { stack ->
                     val activeCueId = manager.getActiveCueId(stack.id.value)
-                    val stackCues = DaoCue.find { DaoCues.cueStack eq stack.id }
-                        .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                        .map { "${it.name} (id=${it.id.value})" }
+                    val stackCues = entriesOf(stack)
+                        .mapNotNull { e -> e.cue?.let { "${it.name} (id=${it.id.value})" } }
                     val activeStr = if (activeCueId != null) " [ACTIVE, cueId=$activeCueId]" else ""
                     "**${stack.name}** (id=${stack.id.value}, ${stackCues.size} cues, loop=${stack.loop})$activeStr → ${stackCues.joinToString(" → ").ifEmpty { "(empty)" }}"
                 }

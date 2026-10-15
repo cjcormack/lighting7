@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import uk.me.cormack.lighting7.models.LayerSource
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -25,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import uk.me.cormack.lighting7.fx.buildCueApplyData
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 /**
  * The touring feature: editing a Look moves every live cue that depends on it, without re-firing a
@@ -76,7 +78,10 @@ class LookRepublishTest : RouteIntegrationTest() {
      */
     private fun applyCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
         val cueId = seedCueReferencing(fixtureKey, lookUuid, hex)
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
+        val applyData = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)!!
+            buildCueApplyData(cue, soleEntryOf(cue))
+        }
         applyCue(state, applyData, replaceAll = false)
         return cueId
     }
@@ -96,9 +101,8 @@ class LookRepublishTest : RouteIntegrationTest() {
             }
             val cue = DaoCue.new {
                 this.project = project
-                name = "cue-$fixtureKey"; cueStack = stack; sortOrder = 0
-                cueType = CueType.STANDARD.name
-            }
+                name = "cue-$fixtureKey"
+            }.inStack(stack, sortOrder = 0)
             if (lookUuid == null) {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue

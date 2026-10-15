@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.fx.stackCuePriorities
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
@@ -31,17 +32,19 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         withProject(state, resource.projectId) { project ->
             val isCurrentProject = state.isCurrentProject(project)
             val cues = transaction(state.database) {
-                DaoCue.find { DaoCues.project eq project.id }
+                val cues = DaoCue.find { DaoCues.project eq project.id }
                     .orderBy(DaoCues.name to SortOrder.ASC)
                     .with(
                         DaoCue::layers,
                         DaoCue::adHocEffects,
                         DaoCue::propertyAssignments,
                         DaoCue::triggers,
-                        DaoCue::cueStack,
                         DaoCueTrigger::script,
                     )
-                    .map { it.toCueDetails(isCurrentProject, state.show.fixtures) }
+                    .toList()
+                // Every cue's entry and place in one go, not a stack's list per cue.
+                val slots = soleEntrySlotsOf(cues.map { it.id.value })
+                cues.map { it.toCueDetails(isCurrentProject, state.show.fixtures, slots[it.id.value]) }
             }
             call.respond(cues)
         }
@@ -56,10 +59,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot create cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val newCue = call.receive<NewCue>()
-            val validatedCueType = try {
-                CueType.valueOf(newCue.cueType).name
-            } catch (_: IllegalArgumentException) {
+            val validatedCueType = CueType.entries.firstOrNull { it.name == newCue.cueType }
+            if (validatedCueType == null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid cueType: '${newCue.cueType}'. Valid values: ${CueType.entries.joinToString()}"))
+                return@withCurrentProject
+            }
+            // A marker is an entry, not a cue (cue model plan D12): it is made on its stack.
+            if (validatedCueType == CueType.MARKER) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse("A marker is not a cue — add it with POST /cue-stacks/{stackId}/markers"),
+                )
                 return@withCurrentProject
             }
             // Every cue belongs to a stack — standalone cues no longer exist.
@@ -72,29 +82,21 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
+            // An insert shifts the positions after it, and a live cue's priority is its position.
+            var priorities = emptyMap<Int, Int>()
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(cueStackId)
                     ?: return@transaction null to "Cue stack not found"
                 if (stack.project.id != project.id) return@transaction null to "Cue stack does not belong to project"
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
-                val before = standardCueIds(stack)
 
                 val cue = DaoCue.new {
                     name = newCue.name
                     this.project = project
-                    autoAdvance = newCue.autoAdvance
-                    autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration()
                     fadeDuration = newCue.fadeDurationMs.asDuration()
                     fadeCurve = newCue.fadeCurve
-                    cueNumber = newCue.cueNumber
                     notes = newCue.notes
-                    cueType = validatedCueType
                     stomp = newCue.stomp
-                    cueStack = stack
-                    // max+1, not count: sort orders may have gaps, so counting can hand out a
-                    // value an existing cue already holds.
-                    sortOrder = newCue.sortOrder
-                        ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
                 writeCueChildren(
                     cue,
@@ -104,8 +106,16 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.layers,
                     created = true,
                 )
+                // Its place is its entry's: at `sortOrder` (a position in the list), else appended.
                 // A cue created without a number gets one derived from where it landed.
-                renumberAutoCues(stack, before)
+                placeCueInStack(
+                    stack, cue,
+                    cueNumber = newCue.cueNumber,
+                    position = newCue.sortOrder,
+                    autoAdvance = newCue.autoAdvance,
+                    autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration(),
+                )
+                priorities = stackCuePriorities(stack)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
             }
             val (cueDetails, error) = result
@@ -113,6 +123,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to create cue"))
                 return@withCurrentProject
             }
+            state.show.fxEngine.repriorityCues(priorities)
             state.show.fixtures.cueListChanged()
             state.show.fixtures.cueStackListChanged()
             call.respond(HttpStatusCode.Created, cueDetails)
@@ -154,8 +165,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (cue.project.id != project.id) return@transaction null
 
                 cue.name = updatedData.name
-                cue.autoAdvance = updatedData.autoAdvance
-                cue.autoAdvanceDelay = updatedData.autoAdvanceDelayMs.asDuration()
+                // A cue's place — its number and follow — is its entry's: the one it has until
+                // sharing lands (cue model plan P4).
+                val entry = soleEntryOf(cue)
+                entry?.autoAdvance = updatedData.autoAdvance
+                entry?.autoAdvanceDelay = updatedData.autoAdvanceDelayMs.asDuration()
                 cue.fadeDuration = updatedData.fadeDurationMs.asDuration()
                 cue.fadeCurve = updatedData.fadeCurve
                 cue.notes = updatedData.notes
@@ -167,12 +181,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // the current number (a properties PUT) can't silently freeze an auto
                 // number as explicit.
                 val incomingNumber = updatedData.cueNumber?.takeIf { it.isNotEmpty() }
-                val numberChanged = incomingNumber != cue.cueNumber
-                if (numberChanged) {
-                    releaseAutoNumber(cue.cueStack, incomingNumber, cue.id.value)
-                    cue.cueNumber = incomingNumber
-                    cue.cueNumberAuto = false
-                }
+                if (entry != null && incomingNumber != entry.cueNumber) setEntryNumber(entry, incomingNumber)
 
                 // Replace children, keeping the uuid of every child the write keeps.
                 writeCueChildren(
@@ -183,8 +192,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.layers,
                 )
 
-                // A number edit moves nothing, so every other auto cue keeps its number (D11).
-                if (numberChanged) renumberAutoCues(cue.cueStack, standardCueIds(cue.cueStack))
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -245,25 +252,20 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // clearing the field hands this cue back to the auto scheme, which fills it in
                 // again from position. `""` is normalised to null so the unique index and the
                 // "is it numbered?" checks agree on what blank means.
-                val numberChanged = "cueNumber" in body
-                if (numberChanged) {
-                    val next = body["cueNumber"].nullableString()?.takeIf { it.isNotEmpty() }
-                    releaseAutoNumber(cue.cueStack, next, cue.id.value)
-                    cue.cueNumber = next
-                    cue.cueNumberAuto = false
-                }
+                // The number and follow are the cue's entry's — its one entry until sharing lands
+                // (cue model plan P4).
+                val entry = soleEntryOf(cue)
+                if ("cueNumber" in body && entry != null) setEntryNumber(entry, body["cueNumber"].nullableString())
                 if ("fadeDurationMs" in body) cue.fadeDuration = body["fadeDurationMs"].nullableLong().asDuration()
                 if ("fadeCurve" in body) cue.fadeCurve = body["fadeCurve"]!!.jsonPrimitive.content
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
-                if ("autoAdvance" in body) cue.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
-                if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
+                if ("autoAdvance" in body) entry?.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
+                if ("autoAdvanceDelayMs" in body) entry?.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
                 // Only the lists present are replaced; a null one is left alone.
                 writeCueChildren(cue, effects, assignments, triggers, layers)
 
-                // A number edit moves nothing, so every other auto cue keeps its number (D11).
-                if (numberChanged) renumberAutoCues(cue.cueStack, standardCueIds(cue.cueStack))
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -287,22 +289,23 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val result = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                val stack = cue.cueStack
-                val before = standardCueIds(stack)
                 deleteCueChildren(cue)
                 // Its scenery and its events die with it, but not with an edit of its children.
                 deleteCueScenery(cue.id)
                 deleteCueEvents(cue.id)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)
                 val pageIds = deleteCueReferences(cue)
+                // Its entry goes with it, and the entries that followed shift up the derived
+                // sequence (`deleteCueEntries` renumbers the stack it left) — and so do the
+                // priorities of those already on stage, which are their positions.
+                val stacks = deleteCueEntries(cue)
                 cue.delete()
-                // The cues that followed have shifted up the derived sequence.
-                renumberAutoCues(stack, before)
-                removedAnchors to pageIds
+                Triple(removedAnchors, pageIds, stacks.fold(emptyMap<Int, Int>()) { acc, s -> acc + stackCuePriorities(s) })
             }
 
             if (result != null) {
-                val (removedAnchors, pageIds) = result
+                val (removedAnchors, pageIds, priorities) = result
+                state.show.fxEngine.repriorityCues(priorities)
                 // A deleted cue can't be Updated into. Update re-validates its target anyway,
                 // but dropping it here keeps the programmer indicator from offering a cue that
                 // no longer exists.
@@ -360,18 +363,15 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             // Every cue must live in a stack. A cross-project copy lands in the target project's
             // "Unsorted" stack (created on demand); the operator can move it afterwards.
             val targetStack = getOrCreateUnsortedStack(targetProject)
-            val before = standardCueIds(targetStack)
             val newCue = DaoCue.new {
                 name = cueName
                 project = targetProject
-                autoAdvance = sourceCue.autoAdvance
-                autoAdvanceDelay = sourceCue.autoAdvanceDelay
                 fadeDuration = sourceCue.fadeDuration
                 fadeCurve = sourceCue.fadeCurve
                 stomp = sourceCue.stomp
-                cueStack = targetStack
-                sortOrder = (targetStack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
+            // The source's follow travels with the copy, as it did while it was the cue's.
+            val sourceEntry = soleEntryOf(sourceCue)
 
             // Copy child entities.
             //
@@ -455,8 +455,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 copyCueEvents(sourceCue, newCue)
             }
 
-            // The copy carries no cue number, so it picks one up from where it landed.
-            renumberAutoCues(targetStack, before)
+            // Appended to the target's "Unsorted" stack. The copy carries no cue number, so it
+            // picks one up from where it landed.
+            placeCueInStack(
+                targetStack, newCue,
+                autoAdvance = sourceEntry?.autoAdvance ?: false,
+                autoAdvanceDelay = sourceEntry?.autoAdvanceDelay,
+            )
 
             CopyCueResponse(
                 cueId = newCue.id.value,
@@ -489,12 +494,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             resource.parent.projectId,
             { p -> "Cannot apply cues from project '${p.name}' - only the current project's cues can be applied" },
         ) { project ->
-            // Read the cue's stack membership. Every cue belongs to a stack, so applying a cue is
-            // just activating that cue within its stack (activates the stack if needed).
+            // Applying a cue activates it within its stack (activating the stack if needed): the
+            // stack of its one entry (cue model plan P4), until the plan's session 2 holds it loose.
             val cueStackId = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
-                cue.cueStack.id.value
+                soleEntryOf(cue)?.stackId
             }
 
             if (cueStackId == null) {
@@ -525,7 +530,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         ) { _ ->
             // Check if this cue belongs to an active stack
             val cueStackId = transaction(state.database) {
-                DaoCue.findById(resource.cueId)?.cueStack?.id?.value
+                DaoCue.findById(resource.cueId)?.let(::soleEntryOf)?.stackId
             }
             val manager = state.show.cueStackManager
             if (cueStackId != null && manager.isStackActive(cueStackId)) {
@@ -606,8 +611,13 @@ data class CueDetails(
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDetailDto> = emptyList(),
+    /**
+     * The cue's place: its one entry's stack, id, position, follow and number (cue model plan P4).
+     * Null / defaults for a cue in no stack, which nothing makes until the plan's session 4.
+     */
     val cueStackId: Int? = null,
     val cueStackName: String? = null,
+    val entryId: Int? = null,
     val sortOrder: Int = 0,
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,

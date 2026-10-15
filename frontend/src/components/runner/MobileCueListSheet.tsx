@@ -58,14 +58,14 @@ export function MobileCueListSheet({
           ) : (
             cues.map((cue) => {
               if (cue.cueType === 'MARKER') {
-                return <MarkerRow key={cue.id} name={cue.name} />
+                return <MarkerRow key={`entry-${cue.entryId}`} name={cue.name} />
               }
               const isActive = cue.id === activeCueId
               const isStandby = cue.id === standbyCueId
               const isDone = completedSet.has(cue.id)
               return (
                 <MobileCueRow
-                  key={cue.id}
+                  key={`entry-${cue.entryId}`}
                   cueId={cue.id}
                   cueNumber={cue.cueNumber}
                   cueNumberAuto={cue.cueNumberAuto}

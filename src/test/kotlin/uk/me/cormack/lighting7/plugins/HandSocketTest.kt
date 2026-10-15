@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.plugins
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import io.ktor.client.plugins.websocket.sendSerialized
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.server.testing.testApplication
@@ -64,9 +65,7 @@ class HandSocketTest : RouteIntegrationTest() {
         DaoCue.new {
             this.project = project
             this.name = name
-            cueStack = stack
-            sortOrder = 0
-        }.id.value
+        }.inStack(stack, sortOrder = 0).id.value
     }
 
     private fun announce(name: String = "Screen 1") =

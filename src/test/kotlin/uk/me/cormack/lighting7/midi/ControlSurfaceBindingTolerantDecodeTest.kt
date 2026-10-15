@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -84,8 +85,8 @@ class ControlSurfaceBindingTolerantDecodeTest : RouteIntegrationTest() {
                 this.project = project; name = "s"; loop = false; type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new {
-                this.project = project; name = "c"; cueStack = stack; sortOrder = 0; cueType = CueType.STANDARD.name
-            }
+                this.project = project; name = "c"
+            }.inStack(stack, sortOrder = 0)
             listOf(cue.id.value.toString(), cue.uuid.toString(), stack.id.value.toString(), stack.uuid.toString())
         }
         val service = state.controlSurfaceBindingService

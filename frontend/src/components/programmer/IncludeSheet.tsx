@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { formatError } from '@/lib/formatError'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { isCueRow } from '@/api/cueStacksApi'
 import { useLookListQuery } from '@/store/looks'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
@@ -71,7 +72,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
       .filter((stack) => stack.type !== 'SEPARATOR')
       .map((stack) => ({
         stack,
-        cues: (stack.cues ?? []).filter(
+        // A marker is a row of the stack's list, not a cue, so there is nothing to include.
+        cues: (stack.cues ?? []).filter(isCueRow).filter(
           (cue) =>
             needle === '' ||
             cue.name.toLowerCase().includes(needle) ||

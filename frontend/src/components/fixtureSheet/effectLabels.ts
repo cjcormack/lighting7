@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { isCueRow } from '@/api/cueStacksApi'
 import { effectSpeedLabel } from '../fx/fxConstants'
 import type { ActiveEffect } from '@/store/fixtureFx'
 
@@ -36,7 +37,7 @@ export function useCueLabel(): (cueId: number) => string | undefined {
   const byId = useMemo(() => {
     const map = new Map<number, string>()
     for (const stack of stacks ?? []) {
-      for (const cue of stack.cues ?? []) map.set(cue.id, cue.cueNumber ? `Q${cue.cueNumber}` : cue.name)
+      for (const cue of (stack.cues ?? []).filter(isCueRow)) map.set(cue.id, cue.cueNumber ? `Q${cue.cueNumber}` : cue.name)
     }
     return map
   }, [stacks])

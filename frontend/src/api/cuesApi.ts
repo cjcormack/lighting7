@@ -197,9 +197,14 @@ export interface Cue {
   adHocEffects: CueAdHocEffect[]
   propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
-  // Every cue belongs to a stack — standalone cues no longer exist.
+  // The cue's place is its stack entry's (lighting7 cue model plan): every cue has exactly one
+  // until sharing lands, so these describe that entry. The desk answers null for a cue in no
+  // stack, which nothing makes before the plan's session 4.
   cueStackId: number
   cueStackName: string
+  /** The entry that places the cue in its stack. Optional: a desk that predates entries omits it. */
+  entryId?: number
+  /** The entry's position in its stack's list, from 0, markers counted. */
   sortOrder: number
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null

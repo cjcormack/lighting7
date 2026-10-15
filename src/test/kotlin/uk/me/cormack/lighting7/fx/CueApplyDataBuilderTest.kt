@@ -24,6 +24,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import uk.me.cormack.lighting7.routes.applyCue
 import java.time.Duration
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.CueStackEntryKind
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 /**
  * `CueApplyData` has exactly one builder.
@@ -86,13 +89,20 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             }
             val cue = DaoCue.new {
                 this.project = project
-                name = "rich cue"; cueStack = stack; sortOrder = 7
-                cueType = CueType.STANDARD.name
-                autoAdvance = true
-                autoAdvanceDelay = Duration.ofMillis(2_500L)
+                name = "rich cue"
                 fadeDuration = Duration.ofMillis(1_250L)
                 fadeCurve = "SINE_IN_OUT"
                 stomp = true
+            }
+            // Seven markers ahead of it, so the entry's position — what the priority is derived
+            // from — is a non-default 7, and the follow on the entry.
+            repeat(7) { i ->
+                DaoCueStackEntry.new { this.stack = stack; kind = CueStackEntryKind.MARKER.name; label = "m$i"; ordinal = i + 1.0 }
+            }
+            DaoCueStackEntry.new {
+                this.stack = stack; this.cue = cue; ordinal = 8.0
+                autoAdvance = true
+                autoAdvanceDelay = Duration.ofMillis(2_500L)
             }
             DaoCueLayer.new {
                 this.cue = cue
@@ -123,7 +133,10 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             cue.id.value
         }
 
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
+        val applyData = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)!!
+            buildCueApplyData(cue, soleEntryOf(cue))
+        }
 
         assertEquals("rich cue", applyData.cueName)
         assertEquals(7, applyData.sortOrder)
@@ -165,9 +178,9 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             }
             val cue = DaoCue.new {
                 this.project = project
-                name = "layered cue"; cueStack = stack; sortOrder = 0
-                cueType = CueType.STANDARD.name
+                name = "layered cue"
             }
+            DaoCueStackEntry.new { this.stack = stack; this.cue = cue; ordinal = 1.0 }
             DaoCueLayer.new {
                 this.cue = cue
                 this.look = look
@@ -181,7 +194,10 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         assertEquals("#ff8800", viaGo, "the GO path composed the cue's Look layer")
 
         state.show.fxEngine.cueLayer.removeAssignments(cueId)
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
+        val applyData = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)!!
+            buildCueApplyData(cue, soleEntryOf(cue))
+        }
         applyCue(state, applyData, replaceAll = false)
 
         assertEquals(viaGo, cueColour("hex-1").value.toSerializedString())

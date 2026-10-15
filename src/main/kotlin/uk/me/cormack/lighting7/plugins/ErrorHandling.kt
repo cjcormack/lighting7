@@ -192,7 +192,8 @@ private fun ExposedSQLException.isUniqueConstraintViolation(): Boolean {
 }
 
 /**
- * Turns a raw driver message — `UNIQUE constraint failed: cues.cue_stack_id, cues.cue_number` —
+ * Turns a raw driver message — `UNIQUE constraint failed: cue_stack_entries.stack_id,
+ * cue_stack_entries.cue_number` —
  * into something an operator can act on. Additive by design: unmatched constraints fall through
  * to a generic message, which alongside a correct 409 is already far better than a bodyless 500.
  */
@@ -202,9 +203,9 @@ private fun ExposedSQLException.friendlyConstraintMessage(): String {
         .joinToString(" ")
 
     return when {
-        text.contains("cues.cue_stack_id") && text.contains("cues.cue_number") ->
+        text.contains("cue_stack_entries.stack_id") && text.contains("cue_stack_entries.cue_number") ->
             "That cue number is already used in this stack."
-        text.contains("uq_cue_number_per_stack") ->
+        text.contains("uq_entry_number_per_stack") ->
             "That cue number is already used in this stack."
         text.contains("uq_cue_stack_name_per_project") || text.contains("cue_stacks.name") ->
             "A cue stack with that name already exists in this project."

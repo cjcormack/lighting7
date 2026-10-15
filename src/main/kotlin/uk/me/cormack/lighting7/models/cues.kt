@@ -173,30 +173,28 @@ data class CueAdHocEffectDto(
 
 // ─── Cue types ──────────────────────────────────────────────────────────
 
+/**
+ * The wire vocabulary for a row of a stack's list: `STANDARD` is a cue entry, `MARKER` a marker
+ * entry. A cue itself has no type since the cue model plan's session 1 — a marker is an entry, not
+ * a cue (D12) — but the stack list, the cue forms and today's sync archive all still say it this
+ * way, so the word survives as how an entry's kind is read out (`CueStackEntryKind`).
+ */
 enum class CueType { STANDARD, MARKER }
 
 // ─── Cues table ─────────────────────────────────────────────────────────
 
+/**
+ * What a cue *is* (cue model plan D2): its name, fade, notes and stomp, with its layers, values,
+ * effects, hooks, scenery and events as children. Where it plays — its stack, position, number
+ * and follow — is its entry's (`DaoCueStackEntries`), since the startup migration
+ * `state/CueModelMigration.kt` moved those columns off this table.
+ */
 object DaoCues : IntIdTable("cues") {
     val name = varchar("name", 255)
     val project = reference("project_id", DaoProjects)
-    val cueStack = reference("cue_stack_id", DaoCueStacks)
-    val sortOrder = integer("sort_order").default(0)
-    val autoAdvance = bool("auto_advance").default(false)
-    val autoAdvanceDelay = duration("auto_advance_delay").nullable()
     val fadeDuration = duration("fade_duration").nullable()
     val fadeCurve = varchar("fade_curve", 50).default("LINEAR")
-    val cueNumber = varchar("cue_number", 20).nullable()
-    /**
-     * True when [cueNumber] was derived from the cue's position rather than typed by the
-     * operator. An auto number stays put while its cue keeps its place in the stack, and is
-     * derived again when a change to the stack's list moves or shifts the cue (venue-visit plan
-     * D11, see `renumberAutoCues`); explicit ones are never touched. Clearing an explicit number
-     * hands the cue back to the auto scheme.
-     */
-    val cueNumberAuto = bool("cue_number_auto").default(false)
     val notes = text("notes").nullable()
-    val cueType = varchar("cue_type", 20).default("STANDARD")
     /**
      * When true, applying this cue removes ad-hoc effects owned by *other* cues that target
      * properties covered by this cue's Layer 4 assignments. Mirrors grandMA3's `Stomp`.
@@ -205,11 +203,9 @@ object DaoCues : IntIdTable("cues") {
     val stomp = bool("stomp").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 
-    // Cue names are deliberately *not* unique. The old uniqueIndex(project, name) predates cue
-    // stacks; with a project owning many stacks, two stacks may legitimately both hold a
-    // "Blackout". Cues are identified by id (and by uuid across sync). The legacy index is
-    // dropped in State.initDatabase. Cue *numbers* remain unique per stack via
-    // uq_cue_number_per_stack.
+    // Cue names are deliberately *not* unique: two stacks may both hold a "Blackout". Cues are
+    // identified by id (and by uuid across sync); numbers are an entry's, unique per stack through
+    // `uq_entry_number_per_stack`.
 }
 
 class DaoCue(id: EntityID<Int>) : IntEntity(id) {
@@ -217,16 +213,9 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
 
     var name by DaoCues.name
     var project by DaoProject referencedOn DaoCues.project
-    var cueStack by DaoCueStack referencedOn DaoCues.cueStack
-    var sortOrder by DaoCues.sortOrder
-    var autoAdvance by DaoCues.autoAdvance
-    var autoAdvanceDelay by DaoCues.autoAdvanceDelay
     var fadeDuration by DaoCues.fadeDuration
     var fadeCurve by DaoCues.fadeCurve
-    var cueNumber by DaoCues.cueNumber
-    var cueNumberAuto by DaoCues.cueNumberAuto
     var notes by DaoCues.notes
-    var cueType by DaoCues.cueType
     var stomp by DaoCues.stomp
     var uuid by DaoCues.uuid
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue

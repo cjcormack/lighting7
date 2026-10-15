@@ -146,10 +146,10 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         assertEquals(listOf("Q1", "Q0", "Q3", "Q4", "Q5"), names(client, stackId))
         assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))
 
-        val reversed = cues(client, stackId).map { it.id }.reversed()
+        val reversed = cues(client, stackId).map { it.entryId }.reversed()
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/reorder") {
             contentType(ContentType.Application.Json)
-            setBody(ReorderCuesRequest(cueIds = reversed))
+            setBody(ReorderCuesRequest(entryIds = reversed))
         }
         assertEquals(listOf("Q5", "Q4", "Q3", "Q0", "Q1"), names(client, stackId))
         assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.models
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.select
@@ -79,7 +80,7 @@ class VenueLinksRepointTest {
         DaoBuskRigTile.new { this.row = row; this.group = venueGroup; sortOrder = 0 }
         DaoBuskRigTile.new { this.row = row; this.patch = venuePatch; sortOrder = 1 }
         val stack = DaoCueStack.new { this.project = project; name = "Show stack"; type = CueStackType.STACK.name }
-        val cue = DaoCue.new { this.project = project; cueStack = stack; name = "Show cue" }
+        val cue = DaoCue.new { this.project = project;  name = "Show cue" }.inStack(stack)
         DaoCueEvent.new { this.cue = cue; this.patch = cannon; trigger = "output1"; offset = Duration.ZERO }
         DaoCueSceneryRow.new { this.cue = cue; element = elements[0]; stateJson = "{}" }
         DaoCueStackSceneryRow.new { this.stack = stack; element = elements[1]; stateJson = "{}" }

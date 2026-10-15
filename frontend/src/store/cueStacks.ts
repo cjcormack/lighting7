@@ -2,11 +2,13 @@ import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import { applyServerRunState } from './runnerSlice'
+import { isCueRow } from '../api/cueStacksApi'
 import type {
   CueStack,
   CueStackInput,
   CueStackCueEntry,
   ReorderCuesRequest,
+  MarkerEntryRequest,
   ReorderCueStacksRequest,
   ActivateCueStackRequest,
   AdvanceCueStackRequest,
@@ -144,20 +146,21 @@ export const cueStacksApi = restApi.injectEndpoints({
       // from (`StackDetail` reads `stack.cues`). An earlier version patched
       // `cuesApi.projectCueList`, which nothing in Program reads, so the drag had no optimism
       // at all. Mirrors `reorderCueStacks` above.
-      async onQueryStarted({ projectId, stackId, cueIds }, { dispatch, queryFulfilled }) {
+      async onQueryStarted({ projectId, stackId, entryIds }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
             if (!stack) return
-            const byId = new Map(stack.cues.map((cue) => [cue.id, cue]))
-            const reordered = cueIds
+            // Rows are entries, keyed by entry id — a marker has no cue id at all.
+            const byId = new Map(stack.cues.map((cue) => [cue.entryId, cue]))
+            const reordered = entryIds
               .map((id) => byId.get(id))
               .filter((cue): cue is CueStackCueEntry => cue != null)
             // Anything the request didn't name keeps its relative order at the end, matching
-            // the server, which only rewrites sortOrder for the ids it was given.
-            const named = new Set(cueIds)
+            // the server, which appends the entries a request leaves out.
+            const named = new Set(entryIds)
             for (const cue of stack.cues) {
-              if (!named.has(cue.id)) reordered.push(cue)
+              if (!named.has(cue.entryId)) reordered.push(cue)
             }
             reordered.forEach((cue, index) => {
               cue.sortOrder = index
@@ -176,6 +179,52 @@ export const cueStacksApi = restApi.injectEndpoints({
         'CueStackList',
         { type: 'CueList', id: projectId },
         'CueList',
+      ],
+    }),
+
+    /**
+     * A marker entry — a labelled divider in a stack's list, not a cue (lighting7 cue model plan
+     * D12). Created, renamed and removed on the stack, never through the cue routes.
+     */
+    createMarkerEntry: build.mutation<
+      CueStackCueEntry,
+      { projectId: number; stackId: number } & MarkerEntryRequest
+    >({
+      query: ({ projectId, stackId, ...body }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/markers`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+      ],
+    }),
+
+    renameMarkerEntry: build.mutation<
+      CueStackCueEntry,
+      { projectId: number; stackId: number; entryId: number; label: string }
+    >({
+      query: ({ projectId, stackId, entryId, label }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/markers/${entryId}`,
+        method: 'PUT',
+        body: { label },
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+      ],
+    }),
+
+    deleteMarkerEntry: build.mutation<void, { projectId: number; stackId: number; entryId: number }>({
+      query: ({ projectId, stackId, entryId }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/markers/${entryId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'PromptBook', id: projectId },
       ],
     }),
 
@@ -198,7 +247,7 @@ export const cueStacksApi = restApi.injectEndpoints({
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
             if (stack) {
-              stack.activeCueId = cueId ?? stack.cues[0]?.id ?? null
+              stack.activeCueId = cueId ?? stack.cues.find(isCueRow)?.id ?? null
             }
           }),
         )
@@ -263,15 +312,18 @@ export const cueStacksApi = restApi.injectEndpoints({
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
             if (!stack || stack.cues.length === 0) return
-            const currentIdx = stack.cues.findIndex((c) => c.id === stack.activeCueId)
+            // Markers are never gone to, so the walk is over the cue entries alone.
+            const cues = stack.cues.filter(isCueRow)
+            if (cues.length === 0) return
+            const currentIdx = cues.findIndex((c) => c.id === stack.activeCueId)
             const delta = direction === 'FORWARD' ? 1 : -1
             let nextIdx = currentIdx + delta
             if (stack.loop) {
-              nextIdx = ((nextIdx % stack.cues.length) + stack.cues.length) % stack.cues.length
+              nextIdx = ((nextIdx % cues.length) + cues.length) % cues.length
             } else {
-              nextIdx = Math.max(0, Math.min(stack.cues.length - 1, nextIdx))
+              nextIdx = Math.max(0, Math.min(cues.length - 1, nextIdx))
             }
-            stack.activeCueId = stack.cues[nextIdx]?.id ?? stack.activeCueId
+            stack.activeCueId = cues[nextIdx]?.id ?? stack.activeCueId
           }),
         )
         try {
@@ -301,14 +353,15 @@ export const cueStacksApi = restApi.injectEndpoints({
      * `setStandby` dispatch in `useShowTransport`, and the server's `cueRunStateChanged` frame is
      * what every session (this one included) ends up believing.
      */
+    /** `entryId` names the stack entry to arm (lighting7 cue model plan P2); null disarms. */
     setCueStackStandby: build.mutation<
       CueStackRunState,
-      { projectId: number; stackId: number; cueId: number | null }
+      { projectId: number; stackId: number; entryId: number | null }
     >({
-      query: ({ projectId, stackId, cueId }) => ({
+      query: ({ projectId, stackId, entryId }) => ({
         url: `projects/${projectId}/cue-stacks/${stackId}/standby`,
         method: 'POST',
-        body: { cueId },
+        body: { entryId },
       }),
     }),
 
@@ -500,6 +553,9 @@ export const {
   useDeactivateCueStackMutation,
   useAdvanceCueStackMutation,
   useSetCueStackStandbyMutation,
+  useCreateMarkerEntryMutation,
+  useRenameMarkerEntryMutation,
+  useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
   useSortCueStackByCueNumberMutation,
   useActivateProgramMutation,

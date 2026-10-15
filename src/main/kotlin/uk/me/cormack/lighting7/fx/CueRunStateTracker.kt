@@ -1,13 +1,12 @@
 package uk.me.cormack.lighting7.fx
 
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.models.entriesOfStack
+import uk.me.cormack.lighting7.models.entryInStack
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -93,12 +92,13 @@ class CueRunStateTracker internal constructor(
      */
     private val standbyCueIds = ConcurrentHashMap<Int, Int>()
 
-    /** Ordered STANDARD cue ids for [stackId]. Must be called inside a transaction. */
+    /**
+     * [stackId]'s cue ids in its entries' order, markers left out. Must be called inside a
+     * transaction. Positions here are cue ids, which is unambiguous while every cue has one entry
+     * (cue model plan P4); the plan's session 2 walks entries instead (`orderedCueEntries`).
+     */
     internal fun orderedStandardCueIds(stackId: Int): List<Int> =
-        DaoCue.find {
-            (DaoCues.cueStack eq stackId) and (DaoCues.cueType eq CueType.STANDARD.name)
-        }.orderBy(DaoCues.sortOrder to SortOrder.ASC)
-            .map { it.id.value }
+        entriesOfStack(EntityID(stackId, DaoCueStacks)).mapNotNull { it.cueId }
 
     /**
      * The cue [direction] from [fromCueId] within [ordered], honouring [loop].
@@ -185,14 +185,11 @@ class CueRunStateTracker internal constructor(
      */
     fun setStandby(state: State, stackId: Int, cueId: Int) {
         transaction(state.database) {
-            val cue = DaoCue.findById(cueId)
-                ?: throw IllegalArgumentException("Cue not found: $cueId")
-            if (cue.cueStack.id.value != stackId) {
-                throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
-            }
-            if (cue.cueType != CueType.STANDARD.name) {
-                throw IllegalArgumentException("Cannot arm a ${cue.cueType} cue")
-            }
+            DaoCue.findById(cueId) ?: throw IllegalArgumentException("Cue not found: $cueId")
+            // The stack is the caller's (cue model plan P7). A marker is an entry with no cue, so a
+            // cue id can never name one.
+            entryInStack(stackId, cueId)
+                ?: throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
         }
         standbyCueIds[stackId] = cueId
         publishRunState(state, stackId)

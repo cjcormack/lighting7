@@ -31,8 +31,8 @@ class PromptBookRoutesTest {
             pageCount = 42,
             coverPages = 2,
             anchors = listOf(
-                PromptBookAnchorDto(cueId = 3, region = listOf(rect), label = "LX 12"),
-                PromptBookAnchorDto(cueId = 4, region = listOf(rect, rect.copy(page = 1, y = 0.0))),
+                PromptBookAnchorDto(cueId = 3, entryId = 103, region = listOf(rect), label = "LX 12"),
+                PromptBookAnchorDto(cueId = 4, entryId = 104, region = listOf(rect, rect.copy(page = 1, y = 0.0))),
             ),
             annotations = listOf(
                 PromptBookAnnotationDto(id = 1, kind = "STRIKETHROUGH", region = listOf(rect)),

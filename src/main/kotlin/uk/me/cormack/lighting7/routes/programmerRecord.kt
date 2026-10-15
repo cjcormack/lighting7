@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.asDuration
+import uk.me.cormack.lighting7.models.entryInStack
 
 /**
  * How a recording lands on the target cue.
@@ -96,9 +97,9 @@ private fun DaoCuePropertyAssignment.matchKey() = assignmentKey(targetType, targ
 private fun CuePropertyAssignmentDto.matchKey() = assignmentKey(targetType, targetKey, propertyName)
 
 /**
- * Create a cue in [stack] from [recording]. Mirrors the `POST /cues` create path — including
- * `sortOrder = max + 1` rather than `count`, since sort orders may have gaps — so a recorded
- * cue is indistinguishable from a hand-made one.
+ * Create a cue in [stack] from [recording]. Mirrors the `POST /cues` create path — a new entry at
+ * [sortOrder] (a position in the list) or appended, through `placeCueInStack` — so a recorded cue
+ * is indistinguishable from a hand-made one.
  *
  * Must run inside a transaction.
  */
@@ -111,21 +112,19 @@ internal fun createCueFromRecording(
     sortOrder: Int?,
     cueType: CueType,
 ): CueWriteOutcome {
-    val before = standardCueIds(stack)
+    check(cueType == CueType.STANDARD) { "A marker is not a cue — `performProgrammerRecord` refuses one first" }
     val cue = DaoCue.new {
         this.name = name
         this.project = project
-        this.cueStack = stack
-        this.cueNumber = cueNumber
-        this.cueType = cueType.name
-        this.sortOrder = sortOrder ?: ((stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
     }
     writeCueChildren(
         cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
         created = true,
     )
-    renumberAutoCues(stack, before)
+    // Its place is a new entry: at `sortOrder` (a position in the list), else appended; an
+    // unnumbered cue takes its number from where it landed.
+    placeCueInStack(stack, cue, cueNumber = cueNumber, position = sortOrder)
 
     return CueWriteOutcome(
         cueId = cue.id.value,
@@ -587,14 +586,15 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
 internal fun republishCueIfLive(state: State, cueId: Int, cueStackId: Int?): Boolean {
     if (cueStackId == null) return false
     if (state.show.cueStackManager.getActiveCueId(cueStackId) != cueId) return false
-    val applyData = loadCueApplyDataForRepublish(state, cueId) ?: return false
+    val applyData = loadCueApplyDataForRepublish(state, cueId, cueStackId) ?: return false
     republishCueLayer(state, cueId, applyData)
     return true
 }
 
-private fun loadCueApplyDataForRepublish(state: State, cueId: Int): CueApplyData? =
+private fun loadCueApplyDataForRepublish(state: State, cueId: Int, cueStackId: Int): CueApplyData? =
     org.jetbrains.exposed.v1.jdbc.transactions.transaction(state.database) {
-        DaoCue.findById(cueId)?.let { buildCueApplyData(it) }
+        // A republish keeps the live cue where it plays: the stack the caller checked it is live in.
+        DaoCue.findById(cueId)?.let { buildCueApplyData(it, entryInStack(cueStackId, cueId)) }
     }
 
 /** Targets a preset application already covers, for dedupe. */
