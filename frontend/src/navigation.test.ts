@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from "vitest"
 import { Box } from "lucide-react"
 import { navItems, templateFamilyNavItems, filterNavItems, type NavItem, buildWindowCommands, type WindowCommandInputs } from "./navigation"
 import { ATTRIBUTE_FAMILIES, familySlug } from "./lib/attributeFamily"
+import { mostSpecificActiveId } from "./lib/navMatch"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
 function makeItem(id: string, visibility: NavItem["visibility"]): NavItem {
@@ -135,9 +136,9 @@ describe("venue mode's rail", () => {
 })
 
 describe("admin-only navigation", () => {
-  // Every entry whose destination is behind the backend's admin gate
-  // (ADMIN_ONLY_PREFIXES / the per-project sync subtree in lighting7's auth/AuthGate.kt).
-  const adminOnlyIds = ["users", "sync", "project-sync"]
+  // Every entry whose destination's API is admin only on the backend: `adminOnly {}` in
+  // lighting7's auth/AuthGate.kt, or `requireAdmin()` on every handler (Remote access's tunnel).
+  const adminOnlyIds = ["users", "sync", "project-sync", "remote-access"]
 
   it("marks the entries whose APIs are admin-gated", () => {
     for (const id of adminOnlyIds) {
@@ -151,6 +152,8 @@ describe("admin-only navigation", () => {
     // The parent they hang off stays: an operator can still read install settings.
     expect(ids).toContain("install-settings")
     expect(ids).toContain("diagnostics")
+    // Updates is readable by anyone — only its actions are admin-only, and the panel disables them.
+    expect(ids).toContain("updates")
   })
 
   it("shows them to admins, and to callers that don't pass a role at all", () => {
@@ -159,6 +162,61 @@ describe("admin-only navigation", () => {
     for (const id of adminOnlyIds) {
       expect(asAdmin).toContain(id)
       expect(roleUnknown).toContain(id)
+    }
+  })
+})
+
+/**
+ * Venue-visit plan S2: Remote access and Updates join the install nav, mirroring their
+ * `InstallSettings` tabs. Neither is its own route — `/install/:tab` serves both — so what the
+ * registry has to get right is the path, the row it lights and the role rule.
+ */
+describe("install navigation", () => {
+  const item = (id: string) => navItems.find((i) => i.id === id)!
+
+  it("lists every install tab but General under Install Settings, in the tabs' order", () => {
+    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, updates, diagnostics.
+    // General is the parent row itself.
+    expect(navItems.filter((i) => i.parent === "install-settings").map((i) => i.path(1))).toEqual([
+      "/install/users",
+      "/install/sync",
+      "/install/remote",
+      "/install/updates",
+      "/install/diagnostics",
+    ])
+  })
+
+  it("lights Remote Access and Updates on their own tabs, and the parent on General", () => {
+    const visible = filterNavItems(navItems, true, true)
+    expect(mostSpecificActiveId(visible, "/install/remote")).toBe("remote-access")
+    expect(mostSpecificActiveId(visible, "/install/updates")).toBe("updates")
+    expect(mostSpecificActiveId(visible, "/install")).toBe("install-settings")
+    expect(item("remote-access").group).toBe("install")
+    expect(item("updates").group).toBe("install")
+  })
+
+  it("keeps Remote Access from operators and shows Updates to everyone", () => {
+    expect(item("remote-access").adminOnly).toBe(true)
+    expect(item("updates").adminOnly).toBeFalsy()
+
+    const operator = filterNavItems(navItems, true, false).map((i) => i.id)
+    expect(operator).not.toContain("remote-access")
+    expect(operator).toContain("updates")
+    // With the row gone, an operator who reaches `/install/remote` by URL sees the parent lit.
+    expect(mostSpecificActiveId(filterNavItems(navItems, true, false), "/install/remote")).toBe("install-settings")
+
+    const admin = filterNavItems(navItems, true, true).map((i) => i.id)
+    expect(admin).toContain("remote-access")
+    expect(admin).toContain("updates")
+  })
+
+  it("offers both whatever project is viewed, and in a venue", () => {
+    for (const ids of [
+      filterNavItems(navItems, false, true).map((i) => i.id),
+      filterNavItems(navItems, true, true, true).map((i) => i.id),
+    ]) {
+      expect(ids).toContain("remote-access")
+      expect(ids).toContain("updates")
     }
   })
 })

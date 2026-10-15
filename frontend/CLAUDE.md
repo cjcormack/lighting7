@@ -3217,7 +3217,13 @@ Three surface rules, each pinned by its test:
 Groups keep the word *List*; Channels and Show say *Table* (their second view is a table and their
 first genuinely is cards). The stored value is `'list'` for all four keys, so `getStoredCardsListView`
 answers every pair and a rename can never reset a desk's remembered view; `stickyRedirectsToList`
-is the one redirect decision, called by all four cards routes (`ViewSwitcher.test.ts`).
+is the one redirect decision, called by all four cards routes (`ViewSwitcher.test.ts`). **A first
+visit lands Fixtures and Groups on their lists**, Channels and Show on their cards (venue-visit plan
+S2, `CARDS_LIST_DEFAULTS`): only an absent or unreadable value reads the default, so a stored
+`'cards'` or `'list'` means what it always did, and a read never writes the default back. The Cards
+segment still writes `'cards'` before it navigates and carries `CARDS_LINK_STATE`, so it reaches the
+cards even where storage refuses the write (`routes/cardsListDefault.test.tsx` drives the round
+trip from a first visit).
 
 ### List shell
 
@@ -4803,6 +4809,19 @@ and finds immersive waiting when it returns. Banners, `HandChip` and `DeskDndPro
 are untouched. Full screen and immersive **compose** (D8): neither flips the other, and a windowed
 browser can be immersive while a full-screen one shows the app.
 
+**The sidebar has one state on every route, and immersive never writes it** (venue-visit plan D4,
+`hooks/useSidebarOpen.ts`). One `localStorage` preference, `layout.sidebarOpen`, default open. The
+live views used to start on the 64px rail with a preference of their own (space plan D7), which
+read as a sidebar changing shape on every move between the programmer and the lists; immersive is
+the deliberate way to hide chrome now, and because it hides the `<aside>` rather than collapsing
+it, the sidebar comes back exactly as open or collapsed as it went. A desk upgraded from the split
+starts from its old `layout.sidebarOpen.other`, read once; `.live` is not consulted, because
+`Layout` wrote both keys with their defaults on every route, chosen or not. `isLiveViewPath` now
+answers only where immersive applies, and the mobile drawer is untouched — its open state was never
+persisted. Open costs the live views width: at a 768–943px window the Programmer's workspace is
+under 704px and takes its phone arm, where the rail left it the overlay; an operator on a tablet
+collapses the sidebar once and it stays collapsed everywhere (`FU-MANUAL-VENUE-VISIT-S2`).
+
 **The `ShowHeader` is the row immersive leaves standing, and it carries the way back** (D11, D12).
 It is a 40px chrome row on all four live views now — it takes `CHROME_ROW_CLASS` itself, `h-10
 px-3` with its 1px border inside the 40, the shell's 32px controls; it was 48, and the programmer
@@ -5770,19 +5789,25 @@ path may quietly change where it lands.
   of it. Reach for sibling routes when the sub-views partition the resource *and* the
   operator navigates between them (cards/list, an editor and its diagnostic); reach for
   a filter when the whole library is worth seeing at once.
-- **Role filtering**: set `adminOnly: true` on any entry whose destination is
-  behind the backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync
-  subtree in lighting7's `auth/AuthGate.kt`) — currently `users`, `sync` and
-  `project-sync`. `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
+- **Role filtering**: set `adminOnly: true` on any entry whose destination's API
+  is admin only on the backend — `adminOnly {}` in lighting7's `auth/AuthGate.kt`,
+  or `requireAdmin()` on every handler the page reads — currently `users`, `sync`,
+  `project-sync` and `remote-access` (`/install/tunnel`). Not on a page an operator
+  can read whose *actions* are admin-only: **Updates** is shown to everyone, as its
+  tab is, and the panel disables what an operator cannot do.
+  `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
   them for operators so neither the sidebar nor Cmd+K offers a page that can only
   answer 403. `useIsNavAdmin()` supplies the flag and treats *anything but a
   resolved OPERATOR* as admin: during the `auth/status` round-trip, and on a
   bootstrap-open desk, the API really is reachable, and the backend refuses the
   call either way. This is presentation, never permission.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
-  `InstallSettings`' `:tab` route, like `sync` and `diagnostics`. Adding a tab
-  means touching `TABS` + a `TabsTrigger` in `routes/InstallSettings.tsx`, not
-  `App.tsx`.
+  `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
+  `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in
+  `routes/InstallSettings.tsx`, not `App.tsx` — and a `navItems` entry under
+  `install-settings` with the tab's role rule, in `TABS` order, so the sidebar and
+  Cmd+K offer it (`navigation.test.ts`' install cases pin every tab but General,
+  which is the parent row).
 
 ### Sheets vs Dialogs
 

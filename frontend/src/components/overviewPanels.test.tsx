@@ -11,8 +11,8 @@ import { OverviewToggle, useOverviewPanels } from './overviewPanels'
  *
  * `Harness` is `Layout` reduced to exactly that: the toolbar maps `panels` to `OverviewToggle`s,
  * and the palette maps the same `panels` to its own `{label, icon, isVisible, onToggle}` rows.
- * Rendering `Layout` itself would mount the whole desk to assert this, which is what
- * `useSidebarOpen.test.tsx` says not to do.
+ * Rendering `Layout` itself would mount the whole desk to assert this — `Layout.test.tsx` can only
+ * afford it by mocking everything `Layout` hosts down to a marker, these panels included.
  */
 function Harness() {
   const { panels } = useOverviewPanels()

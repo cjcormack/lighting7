@@ -115,6 +115,23 @@ export const GROUPS_VIEW_KEY = 'groups.view'
 export const CHANNELS_VIEW_KEY = 'channels.view'
 export const SHOW_VIEW_KEY = 'show.view'
 
+/**
+ * Where a first visit lands, before anything is stored (venue-visit plan S2): Fixtures and Groups on
+ * the list, which is where the work is done; Channels and Show on their cards, which genuinely are
+ * the first view of each. Only the *absence* of a stored value reads this — a stored `'cards'` or
+ * `'list'` means what it always did, so no desk's remembered view changes.
+ */
+const CARDS_LIST_DEFAULTS: Readonly<Record<string, CardsListView>> = {
+  [FIXTURES_VIEW_KEY]: 'list',
+  [GROUPS_VIEW_KEY]: 'list',
+  [CHANNELS_VIEW_KEY]: 'cards',
+  [SHOW_VIEW_KEY]: 'cards',
+}
+
+function defaultCardsListView(key: string): CardsListView {
+  return CARDS_LIST_DEFAULTS[key] ?? 'cards'
+}
+
 export function setStoredCardsListView(key: string, view: CardsListView) {
   try {
     localStorage.setItem(key, JSON.stringify(view))
@@ -125,13 +142,21 @@ export function setStoredCardsListView(key: string, view: CardsListView) {
 
 /** Read-only counterpart for the cards routes' sticky redirect. Deliberately
  *  not usePersistentState: that hook writes the value back on every mount,
- *  and the redirect only needs a one-shot read. */
+ *  and the redirect only needs a one-shot read.
+ *
+ *  A stored `'cards'` or `'list'` is the answer; nothing stored, or anything
+ *  else stored, is the key's first-visit default ([CARDS_LIST_DEFAULTS]). */
 export function getStoredCardsListView(key: string): CardsListView {
   try {
-    return JSON.parse(localStorage.getItem(key) ?? '"cards"') === 'list' ? 'list' : 'cards'
+    const raw = localStorage.getItem(key)
+    if (raw != null) {
+      const stored: unknown = JSON.parse(raw)
+      if (stored === 'list' || stored === 'cards') return stored
+    }
   } catch {
-    return 'cards'
+    // Unparseable, or storage unavailable — the default below.
   }
+  return defaultCardsListView(key)
 }
 
 /**

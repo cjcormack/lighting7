@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { isLiveViewPath } from '@/lib/liveViews'
 
 /**
- * The sidebar's default, per route group (space plan D7).
+ * Which routes are live views — where immersive hides the app (busk-chrome plan D7). They also
+ * set the sidebar's default until venue-visit plan D4 made the sidebar one state everywhere.
  *
  * `Layout` mounts the whole desk — every panel, the command palette, the DnD provider — so the
  * rule lives in `lib/liveViews.ts` and is pinned here rather than driven through a render: what
@@ -13,10 +14,9 @@ import { isLiveViewPath } from '@/lib/liveViews'
  * The matching is `pathHasSegment`, and the near-miss cases below are the ones this tree has
  * actually shipped: `/program` prefixes `/programmer`, and `/fx-library` contains `/fx`.
  */
-describe('the sidebar default per route group', () => {
-  it('starts collapsed on the four live views', () => {
-    // 176px of width, on the four surfaces where it is worth more than a list of destinations —
-    // and `ShowHeader`'s pill switcher is how those four move between each other anyway.
+describe('the live views', () => {
+  it('are the four show surfaces', () => {
+    // The four `ShowHeader`'s pill switcher moves between, and the four immersive applies to.
     expect(isLiveViewPath('/projects/6/programmer')).toBe(true)
     expect(isLiveViewPath('/projects/6/show')).toBe(true)
     expect(isLiveViewPath('/projects/6/prompt-book')).toBe(true)
@@ -24,12 +24,12 @@ describe('the sidebar default per route group', () => {
   })
 
   it('follows a live view into its sub-routes', () => {
-    // Drilling into a stack must not pop the sidebar back open mid-show.
+    // Drilling into a stack must not bring the app back over an immersive window mid-show.
     expect(isLiveViewPath('/projects/6/show/stacks/3')).toBe(true)
     expect(isLiveViewPath('/projects/6/programmer/fx')).toBe(true)
   })
 
-  it('starts open everywhere else', () => {
+  it('are nothing else', () => {
     expect(isLiveViewPath('/projects/6/fixtures')).toBe(false)
     expect(isLiveViewPath('/projects/6/templates')).toBe(false)
     expect(isLiveViewPath('/install/diagnostics')).toBe(false)

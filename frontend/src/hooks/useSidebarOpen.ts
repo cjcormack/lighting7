@@ -1,41 +1,52 @@
-import { useCallback } from 'react'
-import { useLocation } from 'react-router'
+import { useCallback, useState } from 'react'
 import { usePersistentState } from './usePersistentState'
-import { isLiveViewPath } from '@/lib/liveViews'
 
 /**
- * The app sidebar's open state, remembered **twice** — once for the four live views, once for
- * everywhere else (space plan D7; `lib/liveViews.ts` owns which routes are which, and why).
+ * The app sidebar's open state: **one** preference for the whole app (venue-visit plan D4).
  *
- * Two preferences rather than one, because the two answers genuinely differ: on the Programmer,
- * Show, the Prompt Book and Busk, 176px of width is worth more than a list of destinations, and
- * `ShowHeader`'s pill switcher is how those four move between each other anyway. Everywhere else
- * the sidebar *is* the navigation. So they default apart — collapsed and open — and an operator who
- * opens it on the Programmer keeps it there without also forcing it shut on the fixtures list.
+ * It used to be two — the four live views on the 64px rail, everywhere else open, each remembered
+ * apart (space plan D7). On the night that read as a sidebar changing shape every time the operator
+ * moved between the programmer and the fixtures list, so the split went. What hides chrome on
+ * purpose is **immersive** (`lib/immersive.ts`, ⌘K and the `ShowHeader`'s expand glyph), which
+ * `Layout` applies by *not drawing* the sidebar on a live view. It never writes this preference, so
+ * a sidebar hidden by immersive comes back exactly as open or as collapsed as it was.
  *
- * A hook of its own rather than two `usePersistentState` calls inline in `Layout`, so the wiring
- * that actually matters — **which of the two the toggle writes** — is reachable by a test without
- * mounting the whole desk. Getting it wrong is silent: the sidebar would still open and close, it
- * would just forget on the next navigation, or forget on the wrong half of the app.
+ * Default open, as the rest of the app always was: off the live views the sidebar *is* the
+ * navigation.
  *
- * Two keys rather than one object under one key, unlike `useStageView`'s flags: only one of the two
- * is ever read at a time, so there is nothing to read together, and keeping them apart means a
- * value written by an older build for one route group cannot change how the other is read.
+ * **The old keys migrate by reading, once.** With nothing stored under the new key, the first mount
+ * starts from `layout.sidebarOpen.other`, the half of the app where the sidebar is the navigation;
+ * `usePersistentState` then writes the new key, so the old one is never read again. The live
+ * half's answer is not consulted: `Layout` mounted both preferences on every route, so both keys
+ * were written with their defaults whether or not anyone chose them, and the live default
+ * (collapsed) is exactly the shape D4 removes. The old keys are left where they are, so a desk
+ * rolled back to an older build finds its two answers intact.
+ *
+ * A hook of its own rather than a `usePersistentState` call inline in `Layout`, so the key and the
+ * migration are reachable by a test without mounting the whole desk.
  */
-const SIDEBAR_KEY_LIVE = 'layout.sidebarOpen.live'
-const SIDEBAR_KEY_OTHER = 'layout.sidebarOpen.other'
+const SIDEBAR_KEY = 'layout.sidebarOpen'
+const LEGACY_SIDEBAR_KEY_OTHER = 'layout.sidebarOpen.other'
+
+/** The pre-D4 non-live preference, if one is stored as a boolean; else open. */
+function legacyOpen(): boolean {
+  try {
+    const raw = window.localStorage.getItem(LEGACY_SIDEBAR_KEY_OTHER)
+    if (raw == null) return true
+    const parsed: unknown = JSON.parse(raw)
+    return typeof parsed === 'boolean' ? parsed : true
+  } catch {
+    return true
+  }
+}
 
 export function useSidebarOpen(): { open: boolean; toggle: () => void } {
-  const location = useLocation()
-  const [liveOpen, setLiveOpen] = usePersistentState<boolean>(SIDEBAR_KEY_LIVE, false)
-  const [otherOpen, setOtherOpen] = usePersistentState<boolean>(SIDEBAR_KEY_OTHER, true)
+  // Read once: `usePersistentState` only consults its fallback in its own initialiser, and a
+  // storage read on every `Layout` render would be paid for nothing.
+  const [fallback] = useState(legacyOpen)
+  const [open, setOpen] = usePersistentState<boolean>(SIDEBAR_KEY, fallback)
 
-  const onLiveView = isLiveViewPath(location.pathname)
+  const toggle = useCallback(() => setOpen(prev => !prev), [setOpen])
 
-  const toggle = useCallback(() => {
-    if (onLiveView) setLiveOpen(prev => !prev)
-    else setOtherOpen(prev => !prev)
-  }, [onLiveView, setLiveOpen, setOtherOpen])
-
-  return { open: onLiveView ? liveOpen : otherOpen, toggle }
+  return { open, toggle }
 }

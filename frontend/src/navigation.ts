@@ -23,6 +23,8 @@ import {
   Palette,
   Activity,
   Users,
+  Globe,
+  Download,
   Maximize2,
   Minimize2,
   MonitorSmartphone,
@@ -66,10 +68,11 @@ export interface NavItem {
   /** Optional parent item id; sub-items render indented beneath their parent. */
   parent?: string
   /**
-   * Hidden from OPERATOR accounts. Set it wherever the destination's API is behind the
-   * backend's admin gate (`ADMIN_ONLY_PREFIXES` / the per-project sync subtree in
-   * `auth/AuthGate.kt`), so neither the sidebar nor Cmd+K offers a page that can only
-   * answer 403. Not a permission check — the backend is that.
+   * Hidden from OPERATOR accounts. Set it wherever the destination's API is admin only on the
+   * backend — `adminOnly {}` (`auth/AuthGate.kt`), or `requireAdmin()` on every handler a page
+   * reads, as Remote access's `/install/tunnel` does — so neither the sidebar nor Cmd+K offers a
+   * page that can only answer 403. Not on a page an operator can read whose *actions* are
+   * admin-only (Updates). Not a permission check — the backend is that.
    */
   adminOnly?: boolean
   /**
@@ -363,6 +366,31 @@ export const navItems: NavItem[] = [
     group: "install",
     parent: "install-settings",
     adminOnly: true,
+  },
+  // Remote access and Updates mirror their `InstallSettings` tabs' role rules: Remote access is
+  // hidden from operators (every `/install/tunnel` call is `requireAdmin`); Updates is shown to
+  // everyone, because the version and a pending restart are anyone's to read and the panel
+  // disables its admin-only actions itself.
+  {
+    id: "remote-access",
+    label: "Remote Access",
+    icon: Globe,
+    path: () => "/install/remote",
+    visibility: "always",
+    pathMatch: "/install/remote",
+    group: "install",
+    parent: "install-settings",
+    adminOnly: true,
+  },
+  {
+    id: "updates",
+    label: "Updates",
+    icon: Download,
+    path: () => "/install/updates",
+    visibility: "always",
+    pathMatch: "/install/updates",
+    group: "install",
+    parent: "install-settings",
   },
   {
     id: "diagnostics",
