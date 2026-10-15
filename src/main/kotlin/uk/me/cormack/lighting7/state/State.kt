@@ -956,7 +956,11 @@ class State(val config: ApplicationConfig) {
                     when (pad.kind) {
                         BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.template!!.uuid, isLook = false)
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
-                        BuskPadKind.CUE -> pad.cue!!.let { c -> pad.uuid to PadRef.Cue(c.id.value, c.cueStack.id.value) }
+                        // The pad names the cue; its stack is the cue's one entry's until a press holds it
+                        // loose (cue model plan session 2). A cue in no stack lights nothing.
+                        BuskPadKind.CUE -> pad.cue!!.let { c ->
+                            soleEntryOf(c)?.let { entry -> pad.uuid to PadRef.Cue(c.id.value, entry.stackId) }
+                        }
                         // A malformed pad is absent everywhere it is read, an LED included.
                         null -> null
                     }
@@ -1289,6 +1293,10 @@ class State(val config: ApplicationConfig) {
         dataSource = ds
         val database = Database.connect(DbTracing.dataSource(ds))
 
+        // The cue model plan's startup migration (D5) — before the schema is reconciled, which is
+        // the exception its KDoc explains. A no-op on a fresh or already-converted database.
+        CueModelMigration.runIfNeeded(ds, database, dbPath)
+
         transaction(database) {
             // Create tables - order matters for FK constraints
             // DaoProjects now includes all columns (FK columns as plain integers)
@@ -1327,11 +1335,12 @@ class State(val config: ApplicationConfig) {
             """.trimIndent())
 
             // Cue *names* are not unique — with a project owning many stacks, two stacks may both
-            // hold a "Blackout" — but cue numbers are, per stack, for STANDARD cues.
+            // hold a "Blackout" — but cue numbers are, per stack, among its cue entries (cue model
+            // plan §3.2; it replaced `uq_cue_number_per_stack` on `cues`, which the migration drops).
             exec("""
-                CREATE UNIQUE INDEX IF NOT EXISTS uq_cue_number_per_stack
-                    ON cues (cue_stack_id, cue_number)
-                    WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_entry_number_per_stack
+                    ON cue_stack_entries (stack_id, cue_number)
+                    WHERE cue_number IS NOT NULL AND kind = 'CUE'
             """.trimIndent())
 
             ensureInstallRow()

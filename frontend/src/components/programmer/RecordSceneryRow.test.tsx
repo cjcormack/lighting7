@@ -40,7 +40,9 @@ vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => store.program
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: store.elements }) }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: [{ id: 4, name: 'Main', type: 'STANDARD' }] }),
+  useCreateProjectCueStackMutation: () => [vi.fn(), { isLoading: false, error: undefined, reset: () => {} }],
 }))
+vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalFamilyCounts: () => undefined }))

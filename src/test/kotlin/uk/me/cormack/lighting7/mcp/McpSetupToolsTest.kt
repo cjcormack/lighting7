@@ -825,17 +825,19 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         val stackId = result.json()["stackId"]!!.jsonPrimitive.int
 
         transaction(state.database) {
-            val cues = DaoCue.find { DaoCues.cueStack eq stackId }.sortedBy { it.sortOrder }
-            assertEquals(listOf("Act 1", "Preset", "House to half", "Blackout", "Dawn"), cues.map { it.name })
-            assertEquals(CueType.MARKER.name, cues[0].cueType)
-            assertNull(cues[0].cueNumber)
-            assertEquals("Warm preset on the house curtain", cues[1].notes)
-            assertEquals(Duration.ofSeconds(5), cues[2].fadeDuration)
+            val entries = entriesOf(DaoCueStack[stackId])
+            assertEquals(listOf("Act 1", "Preset", "House to half", "Blackout", "Dawn"), entries.map { it.displayName })
+            // A marker row is a marker entry, not a cue (cue model plan D12).
+            assertTrue(entries[0].isMarker)
+            assertNull(entries[0].cue)
+            assertNull(entries[0].cueNumber)
+            assertEquals("Warm preset on the house curtain", entries[1].cue!!.notes)
+            assertEquals(Duration.ofSeconds(5), entries[2].cue!!.fadeDuration)
             // The unnumbered cue is numbered from its neighbours, as the desk does.
-            assertEquals("2.1", cues[3].cueNumber)
-            assertTrue(cues[3].autoAdvance)
-            assertEquals(Duration.ofMillis(1500), cues[3].autoAdvanceDelay)
-            assertEquals("SINE_IN_OUT", cues[4].fadeCurve)
+            assertEquals("2.1", entries[3].cueNumber)
+            assertTrue(entries[3].autoAdvance)
+            assertEquals(Duration.ofMillis(1500), entries[3].autoAdvanceDelay)
+            assertEquals("SINE_IN_OUT", entries[4].cue!!.fadeCurve)
         }
 
         // Retrying the same call is refused rather than duplicating the show.
@@ -919,7 +921,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         transaction(state.database) {
             val book = DaoPromptBook.find { DaoPromptBooks.project eq projectId }.single()
             assertEquals(1, book.coverPages)
-            val anchors = book.anchors.associateBy { it.cueId }
+            val anchors = book.anchors.associateBy { it.entry.cueId }
             val first = anchors.getValue(cueIds[0])
             assertEquals("Q1", first.label)
             assertEquals(1, first.region.single().page, "pdfPage counts from 1")

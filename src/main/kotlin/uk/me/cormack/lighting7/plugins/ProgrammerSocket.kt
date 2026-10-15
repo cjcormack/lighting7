@@ -34,6 +34,8 @@ import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.ProgrammerScenery
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
+import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 // ── Inbound messages ────────────────────────────────────────────────────────
 
@@ -519,6 +521,13 @@ data class KeyStackLayerDto(
     val seconds: Boolean? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
+    /**
+     * Present exactly when [heldBack] is true: `STOMP` (a layer above stomps it), `PROGRAMMER` (the
+     * programmer's value on the key) or `BLIND` (Blind holds the programmer's effects — show-cue-editing
+     * plan D7). Absent from a desk that predates it, where a held-back effect was held by one of the
+     * first two.
+     */
+    val heldBackReason: String? = null,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     /** A programmer layer's id or a cue layer's — whichever produced this layer. */
@@ -679,7 +688,13 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
     if (target == null) return null
     val cue = target.cueId?.let { cueId ->
         try {
-            transaction(state.database) { DaoCue.findById(cueId)?.let { it.name to it.cueNumber } }
+            transaction(state.database) {
+                // The number is the entry's in the stack the target names (cue model plan P7).
+                DaoCue.findById(cueId)?.let { cue ->
+                    val entry = target.cueStackId?.let { entryInStack(it, cueId) } ?: soleEntryOf(cue)
+                    cue.name to entry?.cueNumber
+                }
+            }
         } catch (_: Exception) {
             null
         }
@@ -1355,6 +1370,7 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             timingSource = dto?.timingSource,
             seconds = dto?.seconds,
             heldBack = if (effect != null) layer.heldBack else null,
+            heldBackReason = layer.heldBackReason?.name,
             cueId = layer.cueId,
             cueStackId = layer.cueStackId,
             layerId = layer.layerId,

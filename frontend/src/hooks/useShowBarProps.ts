@@ -7,6 +7,7 @@ import {
 } from '../store/cueStacks'
 import { useShowTransport } from './useShowTransport'
 import { ignoreReportedError } from '../store/errorToastMiddleware'
+import { cueRowById } from '@/api/cueStacksApi'
 
 /**
  * Everything `ShowBar` needs, derived from a project id.
@@ -72,9 +73,8 @@ export function useShowBarProps(
     onBeforeGo,
     frameRateProgress,
   })
-  const activeCue = transport.activeStack?.cues.find((c) => c.id === transport.activeCueId) ?? null
-  const standbyCue =
-    transport.activeStack?.cues.find((c) => c.id === transport.standbyCueId) ?? null
+  const activeCue = cueRowById(transport.activeStack?.cues, transport.activeCueId)
+  const standbyCue = cueRowById(transport.activeStack?.cues, transport.standbyCueId)
 
   /**
    * The stack a boundary GO will move to, when this one has nothing left on deck. Lifted out of

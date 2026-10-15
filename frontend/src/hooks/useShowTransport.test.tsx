@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { cueRow, markerRow } from '@/test/cueEntries'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import type { ReactNode } from 'react'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
 import { installRecordingFetch, installRelativeUrlRequest } from '@/test/backendMock'
 
 // lightingApi opens a real WebSocket at import; mock it before the store pulls it in.
@@ -32,22 +33,16 @@ import { useShowTransport } from './useShowTransport'
  * the mid-fade `stackCueSig` reset, and what a merged view derives from `activeCueId`.
  */
 
-const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry => ({
-  id,
-  name: `Q${id}`,
-  sortOrder: id,
-  layerCount: 0,
-  adHocEffectCount: 0,
-  autoAdvance: false,
-  autoAdvanceDelayMs: null,
-  fadeDurationMs: 2000,
-  fadeCurve: 'LINEAR',
-  cueNumber: String(id),
-  cueNumberAuto: false,
-  notes: null,
-  cueType: 'STANDARD',
-  ...over,
-})
+/** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
+function cue(id: number, over?: Partial<CueStackCueRow>): CueStackCueRow
+function cue(id: number, over: { cueType: 'MARKER'; name?: string }): CueStackMarkerRow
+function cue(
+  id: number,
+  over: Partial<CueStackCueRow> | { cueType: 'MARKER'; name?: string } = {},
+): CueStackCueEntry {
+  if (over.cueType === 'MARKER') return markerRow(id + 100, over.name ?? `Q${id}`, { sortOrder: id })
+  return cueRow(id, { name: `Q${id}`, sortOrder: id, fadeDurationMs: 2000, cueNumber: String(id), ...(over as Partial<CueStackCueRow>) })
+}
 
 const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   id: 10,

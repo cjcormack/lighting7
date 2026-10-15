@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { CueStack, CueStackCueEntry } from '../../api/cueStacksApi'
+import { isCueRow, type CueStack, type CueStackCueRow } from '../../api/cueStacksApi'
 import type { FlatCue } from './desync'
 import { flattenCueOrder, flattenShowRows } from './geometry'
 
@@ -31,8 +31,8 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
   // Full stack entries by cue id — each expanded rail card renders the shared Run
   // card, which needs the entry's cueNumber/notes/auto (FlatCue carries only a label).
   const cueEntryByCue = useMemo(() => {
-    const m = new Map<number, CueStackCueEntry>()
-    for (const s of stacks ?? []) for (const c of s.cues) m.set(c.id, c)
+    const m = new Map<number, CueStackCueRow>()
+    for (const s of stacks ?? []) for (const c of s.cues) if (isCueRow(c)) m.set(c.id, c)
     return m
   }, [stacks])
 

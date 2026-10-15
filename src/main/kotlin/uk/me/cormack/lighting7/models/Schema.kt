@@ -18,6 +18,8 @@ val ALL_TABLES: List<Table> = listOf(
     DaoTemplates, DaoTemplateRows, DaoTemplateEffects,
     DaoSpeedMasters,
     DaoCueStacks, DaoCues,
+    // After the stacks and cues it places (cue model plan session 1).
+    DaoCueStackEntries,
     DaoCueLayers,
     DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
     DaoCueSlots,

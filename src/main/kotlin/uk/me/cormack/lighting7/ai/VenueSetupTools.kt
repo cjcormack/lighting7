@@ -25,6 +25,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.announceCueStacksDeleted
+import uk.me.cormack.lighting7.routes.cueEntriesInOrder
 import uk.me.cormack.lighting7.routes.deleteCueStackRows
 import uk.me.cormack.lighting7.routes.listedProjects
 import uk.me.cormack.lighting7.routes.sceneImageStoresOf
@@ -214,7 +215,7 @@ internal class VenueSetupTools(private val state: State) {
                         problems += "cue stack $id ('${stack.name}') is running: deactivate_cue_stack it first"
                         null
                     }
-                    else -> Found(id, stack.name, stack.cues.count().toInt())
+                    else -> Found(id, stack.name, cueEntriesInOrder(stack).size)
                 }
             }
         }
@@ -352,7 +353,10 @@ internal class VenueSetupTools(private val state: State) {
             DaoLook.findById(id)?.takeIf { it.project.id == source.id }
                 ?: run { problems += "looks: no Look $id in project ${source.id.value}"; null }
         }
-        val cues = stacks.associateWith { s -> s.cues.sortedBy { it.sortOrder } }
+        // Each stack's list is its entries, markers included (cue model plan §3.2); its cues are the
+        // ones its entries place.
+        val entriesByStack = stacks.associateWith { s -> entriesOf(s) }
+        val cues = entriesByStack.mapValues { (_, entries) -> entries.mapNotNull { it.cue } }
         val layers = cues.values.flatten().associateWith { it.layers.sortedBy { l -> l.sortOrder } }
 
         // ── The target's names ──
@@ -578,24 +582,31 @@ internal class VenueSetupTools(private val state: State) {
                     sortOrder = row.sortOrder
                 }
             }
-            val stackCues = cues.getValue(s)
-            for (c in stackCues) {
-                val by = "cue ${c.cueNumber ?: c.name} of '${s.name}'"
+            val stackEntries = entriesByStack.getValue(s)
+            for (sourceEntry in stackEntries) {
+                // The entry is copied as it stands — its place, number and follow — and a marker
+                // entry is nothing more.
+                val placed = DaoCueStackEntry.new {
+                    stack = copy
+                    kind = sourceEntry.kind
+                    label = sourceEntry.label
+                    ordinal = sourceEntry.ordinal
+                    cueNumber = sourceEntry.cueNumber
+                    cueNumberAuto = sourceEntry.cueNumberAuto
+                    autoAdvance = sourceEntry.autoAdvance
+                    autoAdvanceDelay = sourceEntry.autoAdvanceDelay
+                }
+                val c = sourceEntry.cue ?: continue
+                val by = "cue ${sourceEntry.cueNumber ?: c.name} of '${s.name}'"
                 val cue = DaoCue.new {
                     name = c.name
                     project = target
-                    cueStack = copy
-                    sortOrder = c.sortOrder
-                    autoAdvance = c.autoAdvance
-                    autoAdvanceDelay = c.autoAdvanceDelay
                     fadeDuration = c.fadeDuration
                     fadeCurve = c.fadeCurve
-                    cueNumber = c.cueNumber
-                    cueNumberAuto = c.cueNumberAuto
                     notes = c.notes
-                    cueType = c.cueType
                     stomp = c.stomp
                 }
+                placed.cue = cue
                 for (l in layers.getValue(c)) {
                     l.targets.forEach { t -> checkTarget(t.type, t.key, by) }
                     DaoCueLayer.new {
@@ -695,10 +706,10 @@ internal class VenueSetupTools(private val state: State) {
                         sortOrder = ev.sortOrder
                     }
                 }
-                val anchors = DaoPromptBookAnchor.find { DaoPromptBookAnchors.cue eq c.id }.count()
+                val anchors = DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq sourceEntry.id }.count()
                 if (anchors > 0) report.unresolved("prompt-book anchors are not copied", "stack '${s.name}'")
             }
-            report.stacks += s.name to stackCues.size
+            report.stacks += s.name to stackEntries.count { !it.isMarker }
         }
     }
 

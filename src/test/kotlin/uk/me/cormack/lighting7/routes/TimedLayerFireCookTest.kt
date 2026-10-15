@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.delay
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -84,9 +85,8 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
             }
             val cue = DaoCue.new {
                 this.project = project
-                name = "timed cue"; cueStack = stack; sortOrder = 0
-                cueType = CueType.STANDARD.name
-            }
+                name = "timed cue"
+            }.inStack(stack, sortOrder = 0)
             DaoCueLayer.new {
                 this.cue = cue
                 look = DaoLook.all().single { it.uuid == lookUuid }

@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 import { useCueFade } from '@/hooks/useCueFade'
 import { CueCardBody, type ExpansionMode } from './CueCardBody'
 
@@ -12,7 +12,7 @@ export interface MobileExpansion {
 
 interface RunMobileCueCardProps {
   kind: CardKind
-  cue: CueStackCueEntry | null
+  cue: CueStackCueRow | null
   projectId: number
   /** Mutually-exclusive expansion across the two cards. null = both collapsed. */
   expansion: MobileExpansion | null

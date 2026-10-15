@@ -40,6 +40,7 @@ import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 
 /**
  * Scenery on cues, stacks and Looks (stage-view plan session 8), end to end over a real desk: the
@@ -231,7 +232,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$s/go-to") {
             contentType(ContentType.Application.Json)
-            setBody(GoToCueRequest(cueId = q4))
+            setBody(GoToCueRequest(entryId = state.entryIdOf(q4)))
         }
         assertEquals(1.0, entry(tabs).state.open, "Q4 leaves the tabs where Q2 put them")
         assertEquals(3.0, entry(moon).state.trimM, "GO TO Q4 lands Q3's moon")

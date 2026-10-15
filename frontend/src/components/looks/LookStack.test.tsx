@@ -261,7 +261,7 @@ describe('LookStack', () => {
     // The load-bearing half of `serializePropertyMask`: a mask naming all four families composes
     // identically to no mask, so storing one would render a badge that says nothing.
     //
-    // Only the *mask* half of the popover is driven here. `MaskPicker` is plain checkboxes, but the
+    // Only the *mask* half of the popover is driven here. `MaskPicker` is a switch and checkboxes, but the
     // blend control is a portalled Radix Select, and nothing in this repo opens one — the same call
     // dnd-kit gets, where the pointer sequence isn't drivable so the handle and the pure helper are
     // asserted instead. Here that means the trigger's read-out below plus `attributeFamily`'s own

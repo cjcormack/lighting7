@@ -50,6 +50,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-PROG-FX-HELDBACK-COUNT`](#fu-prog-fx-heldback-count) | Trigger | Prog | an operator misses a held-back effect the grid's dot and the strike-through both show |
+| [`FU-BLIND-FX-DRAWN`](#fu-blind-fx-drawn) | Trigger | Stage | an operator previews a Blind busk or Blind edit with an effect on the Stage view and expects to see it move |
 | [`FU-PROG-LAYER-ROW-STACK`](#fu-prog-layer-row-stack) | Trigger | Prog | an operator asks what sits under a focused Look layer's own row |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
@@ -959,6 +960,29 @@ a tap on it should open the stack (`LayerStack`) for one of the keys, never clea
 
 **Trigger**: an operator, on the rig, misses that an effect is held back while the dot and the
 strike-through are both on screen.
+
+---
+
+### `FU-BLIND-FX-DRAWN`
+
+**The Stage view's programmer sources do not draw an effect Blind holds** · Trigger ·
+show-cue-editing plan §9, recorded at session 1 (venue-visit R2.1), 2026-10-15
+
+Blind holds the programmer's effects (D7, `fx/BlindHold.kt`): a busk, Include's children and a
+programmer layer's effects keep running, phase kept, and paint nothing until Blind goes off. The
+Stage view's *Output + Programmer* and *Programmer* sources preview Blind for **values** — they read
+the programmer's entries (`frontend/docs/stage-vis-engineering.md`) — but an effect exists only as
+output: nothing on the wire says what a held instance would paint, so those sources draw the key as
+the rig has it, without the effect. A Blind edit of a cue with a Pulse previews the cue's values and
+not the Pulse.
+
+If it fires, the desk is the one that can answer: the tick already computes a held instance's output
+every pass (it skips only the apply), so a held instance's would-be values per key could ride a
+programmer-only frame the two sources read, at a capped rate. Not a client-side re-run of the
+effect — the client has no tick, no master phase and no registry.
+
+**Trigger**: an operator previews a Blind busk or a Blind edit with an effect on the Stage view and
+expects to see it move.
 
 ---
 

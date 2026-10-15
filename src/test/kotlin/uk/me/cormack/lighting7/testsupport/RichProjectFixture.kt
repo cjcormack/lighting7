@@ -95,6 +95,8 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
 import java.time.Duration
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.CueStackEntryKind
 
 /** Name of the project [seedRichProject] creates. */
 const val RICH_PROJECT_NAME = "round-trip-rich"
@@ -694,16 +696,20 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         type = CueStackType.STACK.name; sortOrder = 2
     }
     val cue1 = DaoCue.new {
-        this.project = project; name = "open"; cueStack = stack1; sortOrder = 0
+        this.project = project; name = "open"
         // Every optional cue field set, so a copier that skips one is caught.
         fadeDuration = Duration.ofMillis(1000L)
-        cueNumber = "1.5"
         notes = "house to half, then go"
-        cueType = CueType.STANDARD.name
         stomp = true
+        fadeCurve = "SINE_IN_OUT"
+    }
+    // Its place in show-1 is its entry's (cue model plan session 1): every optional entry field
+    // set too — an explicit number and a follow.
+    val cue1Entry = DaoCueStackEntry.new {
+        stack = stack1; cue = cue1; ordinal = 1.0
+        cueNumber = "1.5"
         autoAdvance = true
         autoAdvanceDelay = Duration.ofMillis(2500L)
-        fadeCurve = "SINE_IN_OUT"
     }
     // v20: scenery on a cue, a stack and a Look (stage-view plan session 8). Two rows each, so
     // the second carries a non-default sort order; the cue's carry a transition, which only a cue
@@ -812,12 +818,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         interval = Duration.ofMillis(800L)
         randomWindow = Duration.ofMillis(200L)
     }
-    DaoCue.new {
-        this.project = project; name = "build"; cueStack = stack1; sortOrder = 1
+    val build = DaoCue.new {
+        this.project = project; name = "build"
     }
-    DaoCue.new {
-        this.project = project; name = "finale"; cueStack = stack2; sortOrder = 0
-        cueType = CueType.MARKER.name
+    DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
+    // A marker entry: a labelled divider, no cue (cue model plan D12).
+    DaoCueStackEntry.new {
+        stack = stack2; kind = CueStackEntryKind.MARKER.name; label = "finale"; ordinal = 1.0
     }
 
     // separator between the two stacks (replaces the old show MARKER entry); the stacks'
@@ -895,7 +902,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         coverPages = 3
     }
     DaoPromptBookAnchor.new {
-        this.promptBook = promptBook; cue = cue1
+        this.promptBook = promptBook; entry = cue1Entry
         region = listOf(PromptBookRectDto(page = 0, x = 0.1, y = 0.2, w = 0.8, h = 0.05))
         label = "LX 1"
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import type { CueStack } from '../api/cueStacksApi'
+import { cueRowById, type CueStack } from '../api/cueStacksApi'
 import {
   useAdvanceCueStackMutation,
   useActivateCueStackMutation,
@@ -158,7 +158,7 @@ export function useShowTransport({
   // Memoized on the stack object: this hook re-renders at frame rate through a fade, and the
   // signature only ever changes when the cache hands back a new stack.
   const stackCueSig = useMemo(
-    () => (activeStack ? activeStack.cues.map((c) => c.id).join(',') : ''),
+    () => (activeStack ? activeStack.cues.map((c) => c.entryId).join(',') : ''),
     [activeStack],
   )
   /**
@@ -311,12 +311,16 @@ export function useShowTransport({
   const setStandby = useCallback(
     (cueId: number) => {
       if (activeStackId == null || cueId === activeCueId) return
+      // The desk arms an *entry* (lighting7 cue model plan P2): the row in this stack that places
+      // the cue — its one entry while every cue has one.
+      const entryId = cueRowById(activeStack?.cues, cueId)?.entryId
+      if (entryId == null) return
       // Local dispatch for an instant highlight; the POST is what makes the desk, the tablet and
       // the MIDI surface agree on what GO will fire.
       dispatch(setStandbyAction({ stackId: activeStackId, cueId }))
-      setCueStackStandby({ projectId, stackId: activeStackId, cueId })
+      setCueStackStandby({ projectId, stackId: activeStackId, entryId })
     },
-    [activeStackId, activeCueId, dispatch, setCueStackStandby, projectId],
+    [activeStackId, activeStack, activeCueId, dispatch, setCueStackStandby, projectId],
   )
 
   const goDisabled = !isShowActive || !(canOperate ?? true)

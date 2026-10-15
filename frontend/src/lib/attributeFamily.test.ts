@@ -60,8 +60,8 @@ describe('propertyMask round-trip', () => {
   })
 
   it('answers "every family" for all three spellings of no mask', () => {
-    // null, undefined and '' all mean unmasked, and `MaskPicker` reads [] as "All attributes" —
-    // so the three agree without a translation step.
+    // null, undefined and '' all mean unmasked, as the backend reads them — and `LookStack`'s layer
+    // picker maps this [] to a `MaskValue` of null, *All attributes*.
     expect(parsePropertyMask(null)).toEqual([])
     expect(parsePropertyMask(undefined)).toEqual([])
     expect(parsePropertyMask('')).toEqual([])

@@ -224,8 +224,9 @@ export function parseFamilySlug(raw: string | undefined): AttributeFamily | null
  * Parse a layer's `propertyMask` — the comma-separated wire form — into families.
  *
  * `null` / `undefined` / empty means **no mask**, i.e. every family, and this returns `[]` for all
- * three. That is the same convention `MaskPicker` uses (an empty selection is "All attributes") and
- * the same one the backend applies, so the three agree without a translation step.
+ * three. That is the convention the backend applies, so the two agree without a translation step.
+ * `MaskPicker` holds a `MaskValue` instead, where `null` is every attribute and `[]` is nothing
+ * ticked; `LookStack`'s layer picker maps an empty parse to `null` on the way in.
  *
  * Unrecognised names are dropped rather than rejected: the mask is a display and editing input, and
  * a stored value naming a family this client has never heard of should still let the operator edit

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { cueRow, markerRow } from '@/test/cueEntries'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
 
 /**
  * The cue sheet's own rules on the kit (CLAUDE.md §Sheet kit), and above all **the lock as the
@@ -43,22 +44,16 @@ vi.mock('@tanstack/react-virtual', () => ({
 import { CueSheet } from './CueSheet'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
-const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry => ({
-  id,
-  name: `Cue ${id}`,
-  sortOrder: id,
-  layerCount: 0,
-  adHocEffectCount: 0,
-  autoAdvance: false,
-  autoAdvanceDelayMs: null,
-  fadeDurationMs: 1000,
-  fadeCurve: 'LINEAR',
-  cueNumber: String(id),
-  cueNumberAuto: false,
-  notes: null,
-  cueType: 'STANDARD',
-  ...over,
-})
+/** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
+function cue(id: number, over?: Partial<CueStackCueRow>): CueStackCueRow
+function cue(id: number, over: { cueType: 'MARKER'; name?: string }): CueStackMarkerRow
+function cue(
+  id: number,
+  over: Partial<CueStackCueRow> | { cueType: 'MARKER'; name?: string } = {},
+): CueStackCueEntry {
+  if (over.cueType === 'MARKER') return markerRow(id + 100, over.name ?? `Cue ${id}`, { sortOrder: id })
+  return cueRow(id, { name: `Cue ${id}`, sortOrder: id, fadeDurationMs: 1000, cueNumber: String(id), ...(over as Partial<CueStackCueRow>) })
+}
 
 /** The reason a locked, unliftable sheet gives on its disabled verbs. */
 const LOCKED_TITLE = 'Locked — cells are read-only · L to edit'
@@ -103,8 +98,9 @@ function stubFlatLayout() {
   })
 }
 
+/** The row of cue (or marker) `cueId` — keyed by its entry, `cueId + 100` in these fixtures. */
 function row(cueId: number): HTMLElement {
-  return document.querySelector(`[data-row-id="cue:${cueId}"]`) as HTMLElement
+  return document.querySelector(`[data-row-id="entry:${cueId + 100}"]`) as HTMLElement
 }
 function fadeCell(cueId: number): HTMLElement {
   return within(row(cueId)).getAllByRole('button').find((b) => b.closest('[data-cell="fade"]'))!
@@ -112,7 +108,7 @@ function fadeCell(cueId: number): HTMLElement {
 
 /** A marquee down the Fade column over the drawn rows `from`..`to`. */
 function dragFade(from: number, to: number) {
-  const cell = fadeCell(STACK.cues[from].id)
+  const cell = fadeCell(STACK.cues[from].entryId - 100)
   fireEvent.pointerDown(cell, { button: 0, clientX: 340, clientY: from * 36 + 10 })
   fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 350, clientY: to * 36 + 26 })
   fireEvent.pointerUp(cell, { button: 0, clientX: 350, clientY: to * 36 + 26 })

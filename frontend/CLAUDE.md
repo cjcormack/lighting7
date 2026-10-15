@@ -668,11 +668,16 @@ Release folds to its glyph and the scope line drops the fade.
   `EffectSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
   programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
   head). `FxSheet`'s strike-through reads the same function. A dashed amber *Staged* sits beside the
-  chip while blind and held.
+  chip while blind and held. **Blind holds the programmer's own effects instead** (show-cue-editing
+  plan D7): `isHeldByBlind` beside it (the desk's `fx/BlindHold.kt` — blind and in the band, which
+  `programmerOwned` is), never true of an effect `isHeldBack` holds, read by the tray and the rail's
+  FX band (below) for their *held · Blind* mark (`fx/HeldBlindMark.tsx`).
 - **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
   asked on open and **again whenever the key's provenance moves** while open, every layer top first,
-  the one on stage ticked, held-back layers struck through and said out loud. The client never works
-  out what is underneath.
+  the one on stage ticked, held-back layers struck through and said out loud — *why* from the desk's
+  `heldBackReason`: your value, a stomp, or Blind (*held · Blind*, show-cue-editing plan D7); an
+  older desk's unreasoned hold reads as your value. *Clear yours — let it run* is offered only over a
+  hold your value makes (`heldByYourValue`). The client never works out what is underneath.
 - **Clearing** (D6): a row's × is drawn only while the programmer holds the row by an owner
   `clearEntry` releases (a slot only a pressed layer holds is not the operator's to clear), and sends
   `programmer.clearEntry` per held key at the programmer fade. **Release n** (`useRelease`) is one
@@ -683,7 +688,9 @@ Release folds to its glyph and the scope line drops the fade.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
   count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ Effect**);
   **open**, the rail's two-line rows with pause and stop, up to half the sheet, scrolling itself; and
-  **adding**, `FxPicker` in the open tray. A group's effect on the fixture reads *via <group>* (with
+  **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer effect's chip
+  takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
+  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's effect on the fixture reads *via <group>* (with
   its element mode), and its stop **asks first** — the editor's × too — since it stops the effect on
   every member. A fixture's head row sees an effect on the fixture, which the desk paints onto the
   heads (`effectsReaching`, the one filter the rows and the tray share).
@@ -1153,6 +1160,47 @@ per-family counts (`familyForCategory`, at last with a caller) exist to make tha
 *before* it happens. And the **selection defaults on**, the opposite of `RecordSheet`: a cue
 usually does want everything you busked, a Look named "Warm Amber" almost never does.
 
+**Every mask a sheet takes is one picker with an *All attributes* switch** (venue-visit plan S10):
+`MaskPicker` in `programmer/maskPicker.tsx` — a label, `MaskToggles`, and a sentence under them — on
+Record, Record Look (the busk Spread sheet's *Save as Look…* included), Include, Make layer, Update and
+a layer's popover in `LookStack`. **The switch is on for every attribute and hides the four family
+checkboxes**; switching it off shows them **all ticked**, which is not yet a narrowing — the operator
+unticks what the write should leave alone. The switch moves only when pressed: unticking the last
+family leaves it off with nothing ticked, and ticking all four back leaves it off too, so nothing
+vanishes under the pointer. Switched on, the families' per-family counts (Record Look, Make layer) are
+hidden, so the sentence names what the programmer holds instead. **The value is a `MaskValue`, not
+the wire's mask**: `null` while switched on, the ticked families while off. Off-with-all-four is the
+same mask as `null` but a different control state, and off-with-none is a state the wire has no word
+for — so a host sends `maskToWire(value)` (`undefined` for every attribute: the desk folds all four to
+none anyway, and the presses' `families` is the same vocabulary under its own name) and **refuses to
+act while `maskIsEmpty(value)`**, its button disabled and the sentence reading *Pick at least one
+attribute.* A host that writes on every change cannot hold that state in what it stores —
+`serializePropertyMask` folds all four to null and has no "none" — so it goes through
+**`useMaskDraft(stored, write)`**: the picker's own draft, writing only a change to the folded mask and
+never an empty one, and following the stored mask only when it changes to something it did not send
+itself (it keeps the keys it has sent and not yet seen back, so its own echoes — even one landing after
+a newer gesture, Colour unticked and ticked straight back — leave the draft alone). `LookStack`'s `LayerMaskPicker` is the one
+today. **`MaskToggles` is the mountable half on purpose** — no label, no sentence, nothing about the
+selection — so the apply-model plan's session 4 can put it in the selection bar's family pill through
+`useMaskDraft`, writing `selection.set` with the targets kept. `UpdateDialog` gained the picker with
+S10: Mode A sends the mask on the write; in Mode B the mask also decides which cues the programmer is
+over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a stale answer dropped by
+a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
+its hint says held scenery goes back whole, which the mask never narrows.
+
+**Record writes into any cue, or into a stack it makes** (S10). The stack select's last item, after a
+separator, is ***New stack…***: a required name field appears under it, and the stack is created
+(`loop: false`, appended to the show order) only when Record is pressed, so a cancelled sheet leaves
+nothing behind; once made it is the selection, so a failed Record is retried into it. A show with no
+stack opens on it. Merge, Replace and Remove are offered from every Record, not only from a cue row,
+and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
+(`cuePickerRows` — markers left out, `Q12 · Act 1` from whatever the `GET /cues` row carries). The
+programmer Record menu's *An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until
+S10 it opened the sheet with only *New cue* to offer. **It reads no stack beyond what the list row
+says** — `CuePickerSource.cueStackName` is optional although every cue has one today — because the cue
+model plan's session 4 makes a cue loose or shared: a row naming no stack is still a cue, and a shared
+cue is one row because it is one cue.
+
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
 `CellOwnership.layer`, so "why is this fixture this colour?" answers *Warm Wash* rather than *a
@@ -1611,7 +1659,8 @@ verbs**, the gap, and the host's `controls` — `BuskFocusControl` and `EditLayo
 `BuskingView` — right-anchored, in Split and Rig. The blind pill (`busking/BlindMarks.tsx`) is a
 **reporter, never a toggle** — Blind is switched on the programmer's action bar and nowhere else —
 drawn in the indicator's amber only while `ProgrammerSummary.blind` holds, on the family pill's
-terms (absent means nothing to say), read through `hooks/useProgrammerBlind.ts`'s narrowed
+terms (absent means nothing to say), its hover saying *values and effects held* — Blind holds the
+programmer's effects as well as its values (show-cue-editing plan D7), read through `hooks/useProgrammerBlind.ts`'s narrowed
 subscription so the band does not re-render on the programmer's entry churn; in Pads the pad row
 carries it in the same place, and off the desk board `RigStripContent` — the compact strip and the
 short board's merged row — does, since Pads is the resting focus there and the sheet is an overlay
@@ -1781,7 +1830,8 @@ subscribes to nothing for it. **The Show glyph also carries an amber dot while t
 blind** (`BlindDot` in `busking/BlindMarks.tsx`), in the tab strip — docked and overlay — and on
 the fold: the sheet's one programmer report is the Show tab's strip, so the glyph says there is
 something to open it for. A mark only, `aria-hidden`, never a control — the word rides the tab's
-and the fold button's accessible names (*Show — programmer blind*), because an `sr-only` span inside
+and the fold button's accessible names (*Show — programmer blind, values and effects held*,
+`BLIND_NAME_SUFFIX`), because an `sr-only` span inside
 those buttons was silent on the fold, whose `aria-label` wins the name, and *became* the name in the
 strip below 460px of sheet, where a non-open tab's word is `display: none`; the pill on the band
 (§The rig) is the louder half of the same answer.
@@ -4431,7 +4481,8 @@ count, a group effect left running named once; on the programmer only, folded on
 Spread, live in Local and Output (a programmer verb, like the action bar's Clear) and refused with
 its reason while a Look or palette layer is focused, where writes go to the layer (Chris's call).
 
-**The FX band's row is two lines**, because one could not hold it: name, tempo and division with
+**The FX band's row is two lines**, because one could not hold it (and a programmer effect Blind
+holds says *held · Blind* beside its name, its dot amber — show-cue-editing plan D7): name, tempo and division with
 the menu on the first, and property, **target** and home on a wrapping second. It was one flex line
 of `shrink-0` chips in a 404px rail, so the name — the only thing allowed to give — was squeezed to
 nothing and the menu button was pushed past the rail's edge; a `@[320px]` on the home detail was
@@ -5253,7 +5304,9 @@ do not know it is a decision:
   any host**, so no bar draws a tile; Show and the Prompt Book *report* it through the
   `ProgrammerIndicator` their bar mounts, and Busk — which has no bar — through the band's `BLIND`
   pill, the Show glyph's dot and the Show tab's own `ProgrammerIndicator` (§The rig, §Focus and the
-  side sheet). That is session 2b's arrangement exactly inverted,
+  side sheet). All three say *values and effects held*: Blind holds the programmer's effects as it
+  holds its values (show-cue-editing plan D7, the desk's `fx/BlindHold.kt`), so a blind busk is not
+  a working one either. That is session 2b's arrangement exactly inverted,
   and the rule it was written for still holds: one control, one place. The drift to refuse now is
   the reverse one — a Blind tile back in the bar for one host. Do **not** make `ProgrammerIndicator`
   the toggle either: it is also the link to the programmer, and one control cannot be both without

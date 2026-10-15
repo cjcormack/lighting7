@@ -108,14 +108,13 @@ class CueStackManager(
         stackId: Int,
         cueId: Int,
         scope: CoroutineScope = GlobalScope,
-        rejectMarkers: Boolean = false,
         fireEvents: Boolean = true,
     ): ActivateResult {
         val started = System.nanoTime()
         return Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
             span?.setData("cue.stack_id", stackId)
             span?.setData("cue.id", cueId)
-            activate(state, stackId, cueId, scope, rejectMarkers, fireEvents)
+            activate(state, stackId, cueId, scope, fireEvents)
         }.also { DeskMetrics.global.cueGo.record((System.nanoTime() - started) / 1_000_000.0) }
     }
 
@@ -124,7 +123,6 @@ class CueStackManager(
         stackId: Int,
         cueId: Int,
         scope: CoroutineScope,
-        rejectMarkers: Boolean,
         fireEvents: Boolean,
     ): ActivateResult {
         // Read cue data from DB
@@ -136,17 +134,16 @@ class CueStackManager(
             }
             val cue = DaoCue.findById(cueId)
                 ?: throw IllegalArgumentException("Cue not found: $cueId")
-            if (cue.cueStack.id.value != stackId) {
-                throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
-            }
-            if (rejectMarkers && cue.cueType == CueType.MARKER.name) {
-                throw IllegalArgumentException("Cannot go-to a MARKER cue")
-            }
+            // The caller names the stack (cue model plan P7); the entry that places the cue in it
+            // is where the GO lands — its position, its number and its follow. A marker is an
+            // entry with no cue, so a cue id can never name one.
+            val entry = entryInStack(stackId, cueId)
+                ?: throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
 
             // The one builder. This used to be a hand-rolled second construction, and `layers`
             // — added later, to the other one — was inert on this path, the primary firing path,
             // for a whole session. See `buildCueApplyData`.
-            buildCueGoData(cue)
+            buildCueGoData(cue, entry)
         }
 
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
@@ -459,7 +456,9 @@ class CueStackManager(
     /**
      * Go to a specific cue within a stack (arbitrary jump).
      *
-     * Returns HTTP 400 (via IllegalArgumentException) if the target cue is a MARKER.
+     * Throws IllegalArgumentException (HTTP 400 at the route) when the cue has no entry in
+     * [stackId]. A marker is an entry with no cue, so a cue id never names one; the route refuses a
+     * marker's entry id before it gets here.
      */
     fun goToCue(
         state: State,
@@ -467,7 +466,7 @@ class CueStackManager(
         cueId: Int,
         scope: CoroutineScope = GlobalScope,
     ): ActivateResult {
-        return activateCueInStack(state, stackId, cueId, scope, rejectMarkers = true)
+        return activateCueInStack(state, stackId, cueId, scope)
     }
 
     /**
@@ -585,10 +584,9 @@ class CueStackManager(
         if (stackState.autoAdvanceJob?.isActive == true) return false
 
         val cueConfig = transaction(state.database) {
-            val cue = DaoCue.findById(stackState.activeCueId) ?: return@transaction null
-            if (!cue.autoAdvance) return@transaction null
-            val delay = cue.autoAdvanceDelay?.toMillis() ?: return@transaction null
-            delay
+            val entry = entryInStack(stackId, stackState.activeCueId) ?: return@transaction null
+            if (!entry.autoAdvance) return@transaction null
+            entry.autoAdvanceDelay?.toMillis()
         } ?: return false
 
         scheduleAutoAdvance(state, stackId, cueConfig, scope)
@@ -610,11 +608,12 @@ class CueStackManager(
     }
 
     /**
-     * Fire a specific cue without requiring the caller to know its stack id. Looks up the
-     * cue's `cueStack` FK in the DB, then delegates to [activateCueInStack].
+     * Fire a specific cue without requiring the caller to know its stack id. Takes the stack of the
+     * cue's one entry (cue model plan P4, [soleEntryOf]), then delegates to [activateCueInStack].
+     * Its callers — a busk cue pad, a cue slot, a MIDI `FireCue` — hold the cue loose from the
+     * plan's session 2, which is when this goes.
      *
-     * Throws [IllegalArgumentException] if the cue doesn't exist or isn't attached to a
-     * stack.
+     * Throws [IllegalArgumentException] if the cue doesn't exist or isn't in a stack.
      */
     fun fireCue(
         state: State,
@@ -624,7 +623,7 @@ class CueStackManager(
         val stackId = transaction(state.database) {
             val cue = DaoCue.findById(cueId)
                 ?: throw IllegalArgumentException("Cue not found: $cueId")
-            cue.cueStack.id.value
+            soleEntryOf(cue)?.stackId ?: throw IllegalArgumentException("Cue $cueId is not in a stack")
         }
         return activateCueInStack(state, stackId, cueId, scope)
     }

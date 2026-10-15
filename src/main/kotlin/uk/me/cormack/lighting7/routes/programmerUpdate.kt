@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.soleEntryOf
 
 /** One cue Update would overwrite, with a sample of the properties driving that. */
 @Serializable
@@ -194,9 +195,11 @@ internal fun buildUpdateChecklist(
     val meta = transaction(state.database) {
         byCue.keys.associateWith { cueId ->
             DaoCue.findById(cueId)?.let { cue ->
+                // Where the cue plays is its one entry's (cue model plan P4).
+                val entry = soleEntryOf(cue)
                 CueMeta(
-                    cue.name, cue.cueNumber, cue.cueNumberAuto,
-                    cue.cueStack.id.value, cue.cueStack.name,
+                    cue.name, entry?.cueNumber, entry?.cueNumberAuto ?: false,
+                    entry?.stackId, entry?.stack?.name,
                 )
             }
         }

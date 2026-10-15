@@ -806,11 +806,8 @@ internal val recordCueTool = ToolDef(
             put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
             put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number (CREATE). Omit to let the stack number it.") })
             put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (CREATE). Omit to append.") })
-            put("cueType", buildJsonObject {
-                put("type", "string")
-                put("enum", buildJsonArray { add("STANDARD"); add("MARKER") })
-                put("description", "Defaults to STANDARD.")
-            })
+            // No `cueType`: a marker is a stack entry, not a cue, and records nothing (cue model
+            // plan D12). The tool still reads one, so an old caller naming MARKER is refused by name.
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)
@@ -1183,6 +1180,7 @@ internal val setBlindTool = ToolDef(
     name = "set_blind",
     description = "Turn Blind on or off. In Blind the programmer keeps everything it holds and every tool that " +
             "writes it still works, but none of it reaches the stage — build a state, record it, then clear. " +
+            "Its effects are held too: they keep running unseen and paint, in phase, when Blind goes off. " +
             "Its scenery is staged rather than moved, and a cue's one-shot events are rehearsed, not fired. " +
             "Turning Blind off puts the programmer back on stage. `programmer.blind` in get_current_state reads it.",
     inputSchema = buildJsonObject {

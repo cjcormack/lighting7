@@ -228,7 +228,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           !deskConnected
             ? `Stage — Blind: ${DESK_OFFLINE_LABEL}, so it cannot be changed`
             : blind
-              ? 'Stage — Blind is on: programmer values are gated out of the stage output'
+              ? 'Stage — Blind is on: programmer values and effects are held out of the stage output'
               : 'Stage — Blind: edit without the rig showing it'
         }
         onClick={() => programmerSetBlind(!blind, fade)}
@@ -310,8 +310,8 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
             <MenuItem
               icon={<Circle className="size-3.5" />}
               title="An existing cue…"
-              sub="Pick from any stack"
-              onSelect={() => sheets.openRecord()}
+              sub="Pick any cue by name"
+              onSelect={() => sheets.openRecord({ existingCue: true })}
             />
           </DropdownMenuContent>
         </DropdownMenu>

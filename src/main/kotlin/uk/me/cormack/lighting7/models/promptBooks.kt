@@ -110,7 +110,12 @@ class DaoPromptBook(id: EntityID<Int>) : IntEntity(id) {
 
 object DaoPromptBookAnchors : IntIdTable("prompt_book_anchors") {
     val promptBook = reference("prompt_book_id", DaoPromptBooks, onDelete = ReferenceOption.CASCADE)
-    val cue = reference("cue_id", DaoCues, onDelete = ReferenceOption.CASCADE)
+    /**
+     * The stack entry this anchor marks (cue model plan D4): a cue used in two places gets an
+     * anchor at each. Was `cue_id` until the startup migration re-pointed every anchor to its
+     * cue's entry.
+     */
+    val entry = reference("entry_id", DaoCueStackEntries, onDelete = ReferenceOption.CASCADE)
 
     /** One-or-more normalized rects — multiple rects span page breaks / wrapped lines. */
     val region = json<List<PromptBookRectDto>>("region", Json)
@@ -120,8 +125,8 @@ object DaoPromptBookAnchors : IntIdTable("prompt_book_anchors") {
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
-        // One anchor per cue per book: the anchor map is keyed by cue.
-        uniqueIndex(promptBook, cue)
+        // One anchor per entry per book.
+        uniqueIndex(promptBook, entry)
     }
 }
 
@@ -129,17 +134,17 @@ class DaoPromptBookAnchor(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoPromptBookAnchor>(DaoPromptBookAnchors)
 
     var promptBook by DaoPromptBook referencedOn DaoPromptBookAnchors.promptBook
-    var cue by DaoCue referencedOn DaoPromptBookAnchors.cue
+    var entry by DaoCueStackEntry referencedOn DaoPromptBookAnchors.entry
     var region by DaoPromptBookAnchors.region
     var label by DaoPromptBookAnchors.label
     var uuid by DaoPromptBookAnchors.uuid
 
     /**
-     * The FK value without loading the referenced cue entity (avoids N+1 on serialization).
+     * The FK value without loading the referenced entry (avoids N+1 on serialization).
      * Falls back to the delegate for freshly-created entities whose row hasn't been
-     * re-read yet — there the cue is already in the transaction's entity cache anyway.
+     * re-read yet — there the entry is already in the transaction's entity cache anyway.
      */
-    val cueId: Int get() = readValues.getOrNull(DaoPromptBookAnchors.cue)?.value ?: cue.id.value
+    val entryId: Int get() = readValues.getOrNull(DaoPromptBookAnchors.entry)?.value ?: entry.id.value
 }
 
 // ─── Annotations table ──────────────────────────────────────────────────
