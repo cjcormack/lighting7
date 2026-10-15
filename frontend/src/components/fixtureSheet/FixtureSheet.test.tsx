@@ -11,6 +11,7 @@ const wire = vi.hoisted(() => ({
   parked: new Set<string>(),
   connected: true,
   effects: [] as unknown[],
+  blind: false,
 }))
 
 vi.mock('@/hooks/usePropertyValues', async (importOriginal) => {
@@ -33,7 +34,7 @@ vi.mock('@/hooks/useColourAppearance', () => ({
   useColourAppearance: () => ({ r: 255, g: 138, b: 61, combinedCss: '#ff8a3d', appearanceCss: '#ff8a3d' }),
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => wire.connected }))
-vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => false }))
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => wire.blind }))
 vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0 }))
 vi.mock('@/store/fixtureFx', () => ({
   useActiveEffectsQuery: () => ({ data: wire.effects }),
@@ -151,6 +152,7 @@ beforeEach(() => {
   wire.parked = new Set()
   wire.connected = true
   wire.effects = []
+  wire.blind = false
   picker.props = null
   programmerWs.reset()
   resetProgrammerFadeStore()
@@ -370,6 +372,24 @@ describe('FixtureSheet — the shape', () => {
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
     expect(tray.getAttribute('data-open')).toBe('true')
     expect(within(tray).getByTestId('fx-editor')).toBeTruthy()
+  })
+
+  it('marks a programmer effect held · Blind in the tray while blind — the chip and the row — and a cue’s not (D7)', () => {
+    wire.blind = true
+    wire.effects = [
+      makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' }),
+      makeActiveEffect({ id: 9, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 }),
+    ]
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    // Folded: the chip's hover says so, and only the programmer's.
+    expect(screen.getByTitle('Circle on position — held · Blind — edit').hasAttribute('data-held-blind')).toBe(true)
+    expect(screen.getByTitle('Pulse on dimmer — the cue’s').hasAttribute('data-held-blind')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open the effects' }))
+    const circle = document.querySelector('[data-effect-row="5"]') as HTMLElement
+    const pulse = document.querySelector('[data-effect-row="9"]') as HTMLElement
+    expect(within(circle).getByText('held · Blind')).toBeTruthy()
+    expect(within(pulse).queryByText('held · Blind')).toBeNull()
   })
 
   it("shows a cue's effect read-only in the tray — its cue named, no editor, pause or stop (session 5) — and its cue opens the cue", () => {

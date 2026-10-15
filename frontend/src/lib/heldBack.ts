@@ -7,7 +7,8 @@
  * with the engine is worse than no mark:
  *
  * - **Blind holds nothing back.** The desk's suppression snapshot is empty while blind — the
- *   programmer is off stage, so everything under it plays.
+ *   programmer is off stage, so everything under it plays. (What Blind holds instead is the
+ *   programmer's own effects — [isHeldByBlind], a different mark.)
  * - **A programmer-band effect is never held back.** Those modulate *on top of* programmer values
  *   (`programmerOwned` on the wire is the band).
  * - **Otherwise the programmer holding an *entry* on the effect's own key holds it back** — the key
@@ -38,6 +39,21 @@ export function isHeldBack(
   if (blind) return false
   if (effect.programmerOwned) return false
   return holds(headKey, effect.propertyName)
+}
+
+/**
+ * Is an effect **held by Blind** (show-cue-editing plan D7)? While the programmer is blind the desk
+ * holds every effect in the programmer priority band — a busk, what Include spawned, what a programmer
+ * layer spawned — exactly as it holds the programmer's values: still running, its phase kept, painting
+ * nothing until Blind goes off. `programmerOwned` on the wire *is* the band.
+ *
+ * The client's copy of the desk's `BlindHold.holds` (`fx/BlindHold.kt`), and it is the other half of
+ * [isHeldBack]: Blind empties *that* rule (the programmer's values hold nothing back) and holds the
+ * band this one names, so the two are never both true of one effect. The FX tray and the programmer's
+ * FX band mark a held instance *held · Blind* from it.
+ */
+export function isHeldByBlind(effect: Pick<HeldBackEffect, 'programmerOwned'>, blind: boolean): boolean {
+  return blind && effect.programmerOwned
 }
 
 /** What [heldBackReach] needs of an effect — the wire's own fields. */

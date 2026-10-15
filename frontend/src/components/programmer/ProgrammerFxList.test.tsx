@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   effects: [] as ActiveEffect[],
   removeFx: vi.fn(),
   removeGroupFx: vi.fn(),
+  blind: false,
 }))
 
 vi.mock('@/store/fixtureFx', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/store/programmer', () => ({
     data: [{ layerId: 4, source: { kind: 'LOOK', id: 1, name: 'Warm Wash' } }],
   }),
 }))
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => mocks.blind }))
 // Reads a speed-master bank the test has no store for; the chip is the bank's concern, not this row's.
 vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null }))
 vi.mock('./ProgrammerAddEffect', () => ({ ProgrammerAddEffect: () => <button>+ Effect</button> }))
@@ -67,6 +69,7 @@ function effect(over: Partial<ActiveEffect>): ActiveEffect {
 
 beforeEach(() => {
   mocks.effects = []
+  mocks.blind = false
 })
 afterEach(cleanup)
 
@@ -103,6 +106,26 @@ describe('ProgrammerFxList', () => {
     mocks.effects = [effect({ targetKey: 'Front wash', isGroupTarget: true })]
     render(<ProgrammerFxList />)
     expect(screen.getByTitle('Group Front wash')).toBeInTheDocument()
+  })
+
+  it('marks a programmer effect held · Blind while the programmer is blind, and nothing else (D7)', () => {
+    mocks.effects = [
+      effect({ id: 1, targetKey: 'hex-1' }),
+      effect({ id: 2, targetKey: 'hex-2', programmerOwned: false, cueId: 12 }),
+    ]
+    // A fresh mount each time: the list is memoised, and the mocked read is not a store a rerender
+    // would wake.
+    render(<ProgrammerFxList />)
+    expect(document.querySelector('[data-held-blind]')).toBeNull()
+    cleanup()
+
+    mocks.blind = true
+    render(<ProgrammerFxList />)
+    const held = [...document.querySelectorAll('[data-held-blind]')]
+    expect(held).toHaveLength(1)
+    expect(held[0].textContent).toBe('held · Blind')
+    // On the programmer's row, not the cue's — which keeps painting under Blind.
+    expect(held[0].closest('.rounded-md')?.textContent).toContain('hex-1')
   })
 
   it('says when a row is paused', () => {

@@ -199,12 +199,20 @@ class FxEngine(
 
     /**
      * fixtureKey → property names with an active programmer entry, or empty when blind is
-     * engaged (blind removes the programmer from the merge, so effects paint normally).
+     * engaged (blind removes the programmer from the merge, so its values hold no effect back;
+     * what Blind holds instead is the programmer band, [BlindHold]).
      * An entry here suppresses every effect on that (fixture, property) except effects in
      * the programmer priority band — the "programmer wins over effects" rule.
      */
-    internal fun programmerSuppression(): Map<String, Set<String>> {
-        if (programmerStore.blind) return emptyMap()
+    internal fun programmerSuppression(): Map<String, Set<String>> = programmerSuppression(programmerStore.blind)
+
+    /**
+     * [programmerSuppression] against one read of blind the caller has already taken — the tick loops,
+     * which ask [BlindHold] of the same read, so a pass cannot pair an empty (blind) suppression map
+     * with a band that is not held, or the reverse, across a Blind toggle landing mid-pass.
+     */
+    private fun programmerSuppression(blind: Boolean): Map<String, Set<String>> {
+        if (blind) return emptyMap()
         val epoch = programmerStore.coverageEpoch
         var cached = suppressionCache
         if (epoch != cached.epoch) {
@@ -265,16 +273,17 @@ class FxEngine(
     }
 
     /**
-     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick? [EffectSuppression]'s
-     * rule, which provenance and the `programmer.keyStack` read ask too — see there for the two
-     * reasons and why their order matters.
+     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick? Held by Blind ([BlindHold] —
+     * the programmer band while blind), or [EffectSuppression]'s rule; provenance and the
+     * `programmer.keyStack` read ask both too — see each for its reasons.
      */
     private fun isSuppressed(
         suppression: Map<String, Set<String>>,
+        blind: Boolean,
         fixtureKey: String,
         propertyName: String,
         effect: FxInstance,
-    ): Boolean = EffectSuppression.isSuppressed(
+    ): Boolean = BlindHold.holds(blind, effect) || EffectSuppression.isSuppressed(
         suppression, fixtureKey, propertyName, effect, isLayerStomped,
     )
 
@@ -1157,8 +1166,11 @@ class FxEngine(
 
         // Programmer suppression: any non-band effect skips its apply on (fixture,
         // property) pairs the programmer holds — the reset pass has already painted the
-        // programmer value there, and the effect must not repaint over it.
-        val suppression = programmerSuppression()
+        // programmer value there, and the effect must not repaint over it. Blind, read once for
+        // the pass, empties that map and holds the band instead ([BlindHold]): a held instance
+        // still computes its phase below and skips only its apply.
+        val blind = programmerStore.blind
+        val suppression = programmerSuppression(blind)
 
         // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
         // effects compose on top and dominate. Each effect computes phase from *its own*
@@ -1173,9 +1185,9 @@ class FxEngine(
             val tick = frame.tick(effect.speedMasterSlot)
             try {
                 if (effect.isGroupEffect) {
-                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.Beat)
+                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
                 } else {
-                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.Beat)
+                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
                 }
                 noteTickSuccess(effect)
             } catch (t: Throwable) {
@@ -1283,7 +1295,11 @@ class FxEngine(
         // Reset properties controlled by WALL_CLOCK effects to the layer below.
         resetActiveProperties(fixturesWithTx, wallClockEffects, wallClockResetSeen)
 
-        val suppression = programmerSuppression()
+        // The beat pass's two reads, for the same reasons. A held wall-clock effect has already
+        // advanced its clock above, with every other, so it keeps its place in real time — which is
+        // what lands a beat effect on Seconds mid-phase when Blind goes off, as it does a beat one.
+        val blind = programmerStore.blind
+        val suppression = programmerSuppression(blind)
 
         for (effect in wallClockEffects) {
             // Same one-snapshot-per-pass rule as the beat loop.
@@ -1293,11 +1309,11 @@ class FxEngine(
             try {
                 if (effect.isGroupEffect) {
                     processGroupEffect(
-                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.WallClock,
+                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
                     )
                 } else {
                     processFixtureEffect(
-                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, PhaseSource.WallClock,
+                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
                     )
                 }
                 noteTickSuccess(effect)
@@ -1499,6 +1515,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>>,
+        blind: Boolean,
         phases: PhaseSource,
     ) {
         val expansion = expansionFor(effect, dyn)
@@ -1507,14 +1524,14 @@ class FxEngine(
                 val fixtureKey = effect.target.targetKey
                 val effectPhase = phases.single(effect, tick, dyn)
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
-                if (!isSuppressed(suppression, fixtureKey, effect.target.propertyName, effect)) {
+                if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
                 }
             }
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> processElementKeys(
                 tick, effect, dyn, fixturesWithTx, expansion.flat,
-                plansFor(effect, expansion, dyn).flat, deltaMs, suppression, phases,
+                plansFor(effect, expansion, dyn).flat, deltaMs, suppression, blind, phases,
             )
 
             // Neither parent nor elements have the property, or the fixture is gone:
@@ -1541,6 +1558,7 @@ class FxEngine(
         plan: DistributionPlan,
         deltaMs: Long,
         suppression: Map<String, Set<String>>,
+        blind: Boolean,
         phases: PhaseSource,
     ) {
         // Already filtered and in distribution order — see [FxTargetExpansion.flat] /
@@ -1556,7 +1574,7 @@ class FxEngine(
             lastMemberPhase = memberPhase
 
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[distributionIdx])
-            if (!isSuppressed(suppression, elementKey, effect.target.propertyName, effect)) {
+            if (!isSuppressed(suppression, blind, elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
             }
         }
@@ -1583,6 +1601,7 @@ class FxEngine(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
         suppression: Map<String, Set<String>>,
+        blind: Boolean,
         phases: PhaseSource,
     ) {
         val expansion = expansionFor(effect, dyn)
@@ -1597,7 +1616,7 @@ class FxEngine(
                     val memberPhase = phases.member(effect, tick, groupSize, dyn, distOffset)
                     lastMemberPhase = memberPhase
                     val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[memberIdx])
-                    if (!isSuppressed(suppression, member.key, effect.target.propertyName, effect)) {
+                    if (!isSuppressed(suppression, blind, member.key, effect.target.propertyName, effect)) {
                         effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
                     }
                 }
@@ -1613,13 +1632,13 @@ class FxEngine(
                         for ((memberIdx, memberKeys) in expansion.perFixture.withIndex()) {
                             processElementKeys(
                                 tick, effect, dyn, fixturesWithTx, memberKeys,
-                                plans.perFixture[memberIdx], deltaMs, suppression, phases,
+                                plans.perFixture[memberIdx], deltaMs, suppression, blind, phases,
                             )
                         }
                     // All elements across all fixtures as one list.
                     ElementMode.FLAT -> processElementKeys(
                         tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat,
-                        deltaMs, suppression, phases,
+                        deltaMs, suppression, blind, phases,
                     )
                 }
             }

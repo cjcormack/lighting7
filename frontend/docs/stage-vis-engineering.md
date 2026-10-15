@@ -36,6 +36,13 @@ stage did not.
 `programmer` is literal on purpose: an empty programmer shows an empty stage, and a fixture given
 intensity but no position sits at pan/tilt 0 rather than borrowing a position from the wire.
 
+**What the two programmer sources do not draw is the programmer's effects.** Blind holds them as it
+holds its values (show-cue-editing plan D7): a busk, Include's children and a programmer layer's
+effects keep running, phase kept, and paint nothing until Blind goes off. These sources lay the
+programmer's *entries* over the wire, and an effect exists only as output, so in Blind they draw a
+held effect's key as the rig has it — the Pulse a Blind edit included is not drawn moving.
+`FU-BLIND-FX-DRAWN` (lighting7 `docs/plans/followups.md`) is the desk-side fix if it is wanted.
+
 It is a **module store read through `useSyncExternalStore`**, not `usePersistentState`. Two surfaces
 read it — the Stage route's View menu and the globally-mounted Positions panel — and
 `usePersistentState` reads its key once in a `useState` initialiser and never listens for changes,

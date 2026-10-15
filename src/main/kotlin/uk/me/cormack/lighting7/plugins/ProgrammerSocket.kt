@@ -521,6 +521,13 @@ data class KeyStackLayerDto(
     val seconds: Boolean? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
+    /**
+     * Present exactly when [heldBack] is true: `STOMP` (a layer above stomps it), `PROGRAMMER` (the
+     * programmer's value on the key) or `BLIND` (Blind holds the programmer's effects — show-cue-editing
+     * plan D7). Absent from a desk that predates it, where a held-back effect was held by one of the
+     * first two.
+     */
+    val heldBackReason: String? = null,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     /** A programmer layer's id or a cue layer's — whichever produced this layer. */
@@ -1363,6 +1370,7 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             timingSource = dto?.timingSource,
             seconds = dto?.seconds,
             heldBack = if (effect != null) layer.heldBack else null,
+            heldBackReason = layer.heldBackReason?.name,
             cueId = layer.cueId,
             cueStackId = layer.cueStackId,
             layerId = layer.layerId,

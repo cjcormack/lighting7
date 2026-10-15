@@ -267,6 +267,11 @@ export interface KeyStackLayer {
   seconds?: boolean | null
   /** The two effect kinds: running, but not painting this key — the desk's own suppression answer. */
   heldBack?: boolean | null
+  /**
+   * Why, exactly when `heldBack` is true: a layer's stomp above it, the programmer's value on the key,
+   * or Blind holding the programmer's effects (show-cue-editing plan D7). Absent from an older desk.
+   */
+  heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | null
   cueId?: number | null
   cueStackId?: number | null
   /** A programmer layer's id or a cue layer's, whichever produced this one. */
@@ -285,7 +290,10 @@ export interface KeyStackAnswer {
   targetType: ProgrammerTargetType
   targetKey: string
   propertyName: string
-  /** The programmer is blind: its slots are listed, none is on stage, and it holds nothing back. */
+  /**
+   * The programmer is blind: its slots are listed, none is on stage, its values hold nothing back, and
+   * its own effects are held (`heldBackReason: 'BLIND'`).
+   */
   blind: boolean
   stacks: KeyStack[]
 }

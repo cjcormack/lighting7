@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
@@ -131,6 +132,32 @@ pointing at the copy, the desk itself stopped or on another port):
    (the archive now writes each cue's position); nothing else should change. Note what it lists.
 7. **The desk itself.** Then the same start on the real desk, keeping the backup file until the
    next show has run.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-1`
+
+**What it proves**: *Blind holds the programmer's effects* — venue-visit R2.1, show-cue-editing plan
+session 1 (D7, §3.6): while the programmer is blind every programmer effect is held, phase kept, and
+paints in step when Blind goes off; a cue's effects keep painting.
+
+**Why it is here**: the tests drive synthetic ticks against a mock controller and read the stack and
+provenance from the desk. Nothing in review watched a held pulse land back in step on real heads.
+
+**Test**, on Sleeping Beauty, from the busk view and the programmer (session 1 of §10):
+
+1. **Two pulses.** Select two heads apart (a pair of wash fixtures). Busk a Pulse on one — an effect
+   palette pad, or the fixture sheet's *+ Effect* — and GO a cue that runs a Pulse on the other, both
+   on master 1. They pulse together.
+2. **Blind on.** Turn Blind on from the programmer's action bar. The busked pulse stops on the rig;
+   the cue's keeps pulsing. The busk band's `BLIND` pill, the Show glyph's dot and the app header's
+   programmer chip say *values and effects held* on hover; the fixture sheet's FX tray and the
+   programmer rail's FX band mark the busked Pulse *held · Blind*; its row's stack says *Blind holds
+   it*.
+3. **Blind off.** Turn Blind off. The busked pulse paints at once — no fade in — and in step with the
+   cue's, not from the top of its cycle.
+4. **A Blind edit.** With Blind on, Include a cue that holds an effect (*Edit in programmer* after
+   switching Blind on). Nothing moves on stage until Blind goes off.
 
 ---
 

@@ -14,9 +14,12 @@ import { getBeatDivisionLabel, secondsLabel } from '@/components/fx/fxConstants'
 import { useActiveEffectsQuery, useEffectLibraryQuery, useRemoveFxMutation } from '@/store/fixtureFx'
 import { useRemoveGroupFxMutation } from '@/store/groups'
 import { useProgrammerLayersQuery } from '@/store/programmer'
+import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
+import { isHeldByBlind } from '@/lib/heldBack'
 import { familyCanHoldEffect, familyForEffectCategory } from '@/lib/attributeFamily'
 import { findEffectEntry } from '../busking/buskingTypes'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
+import { HeldBlindMark } from '../fx/HeldBlindMark'
 import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
 
@@ -52,6 +55,9 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
   const { data: library } = useEffectLibraryQuery()
+  // One read for the band, not one per row: Blind holds every programmer effect (show-cue-editing
+  // plan D7), and each held row says so.
+  const blind = useProgrammerBlind()
   const [removeFx] = useRemoveFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
   /** The editor and the save sheet mount once, at the list, rather than one pair per row. */
@@ -98,6 +104,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
               key={effect.id}
               effect={effect}
               home={homeOf(effect, layerHomes)}
+              heldByBlind={isHeldByBlind(effect, blind)}
               saveAsTemplate={saveAsTemplateOffer(effect, library)}
               onEdit={(row) => {
                 editAnchor.current = row
@@ -231,11 +238,13 @@ function homeOf(
  * The target is new. `ActiveEffect` is one instance per target, so a chase over eight loose heads
  * is eight rows, and eight rows all reading *sinewave · dimmer · programmer band* could not be told
  * apart — the key is what says which head this one is on. A paused instance dims, as it does in
- * `FxSheet`.
+ * `FxSheet`. One the desk holds because the programmer is blind says *held · Blind* beside its name,
+ * its dot in Blind's amber (show-cue-editing plan D7).
  */
 function FxRow({
   effect,
   home,
+  heldByBlind,
   saveAsTemplate,
   onEdit,
   onSaveAsTemplate,
@@ -243,6 +252,8 @@ function FxRow({
 }: {
   effect: ActiveEffect
   home: ReturnType<typeof homeOf>
+  /** Running but painting nothing: the programmer is blind and this is its effect (D7). */
+  heldByBlind: boolean
   saveAsTemplate: { enabled: boolean; reason?: string }
   /** Handed the row, which the editor's popover is anchored at. */
   onEdit: (row: HTMLElement | null) => void
@@ -261,8 +272,9 @@ function FxRow({
       title={!effect.isRunning ? 'Paused' : undefined}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <span className="size-1.5 shrink-0 rounded-full bg-violet-500" />
+        <span className={cn('size-1.5 shrink-0 rounded-full', heldByBlind ? 'bg-amber-500' : 'bg-violet-500')} />
         <span className="min-w-0 flex-1 truncate font-medium">{effect.effectType}</span>
+        {heldByBlind && <HeldBlindMark />}
         {effect.timingSource === 'WALL_CLOCK' ? (
           // Seconds a cycle — a wall-clock effect, or a beat effect on Seconds (D7), whose loop
           // reads `WALL_CLOCK` too. A rate master, where one scales it, is the chip beside it, which

@@ -1180,6 +1180,7 @@ internal val setBlindTool = ToolDef(
     name = "set_blind",
     description = "Turn Blind on or off. In Blind the programmer keeps everything it holds and every tool that " +
             "writes it still works, but none of it reaches the stage — build a state, record it, then clear. " +
+            "Its effects are held too: they keep running unseen and paint, in phase, when Blind goes off. " +
             "Its scenery is staged rather than moved, and a cue's one-shot events are rehearsed, not fired. " +
             "Turning Blind off puts the programmer back on stage. `programmer.blind` in get_current_state reads it.",
     inputSchema = buildJsonObject {

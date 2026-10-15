@@ -30,6 +30,19 @@ describe('describeStackLayer', () => {
     expect(describeStackLayer(layer({ kind: 'BASE', value: '0' }), cueLabel).title).toBe('Base')
   })
 
+  it('says why an effect is held back, by the desk’s reason — Blind, a stomp, your value (D7)', () => {
+    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', ...over })
+    expect(describeStackLayer(layer({ heldBack: true, heldBackReason: 'BLIND' }), cueLabel).detail).toBe(
+      'programmer effect · Blind holds it; it is still running and paints in phase when Blind goes off',
+    )
+    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
+      'a layer above stomps it',
+    )
+    // An older desk sends no reason: what it held back, your value held back.
+    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
+    expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer effect')
+  })
+
   it('says a slot age in words', () => {
     expect(formatAge(1_000)).toBe('just now')
     expect(formatAge(40_000)).toBe('40 s ago')
@@ -77,6 +90,39 @@ describe('LayerStack', () => {
     expect(screen.getByRole('button', { name: 'Clear yours — let it run' })).toBeTruthy()
     await act(async () => moved?.())
     expect(keyStack).toHaveBeenCalledTimes(2)
+  })
+
+  it('draws a band effect Blind holds as held · Blind, and never offers to let it run', async () => {
+    const answer: KeyStackAnswer = {
+      targetType: 'fixture',
+      targetKey: 'wash-2',
+      propertyName: 'dimmer',
+      blind: true,
+      stacks: [
+        {
+          targetKey: 'wash-2',
+          layers: [
+            { kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', heldBack: true, heldBackReason: 'BLIND' },
+            { kind: 'PROGRAMMER', onStage: false, owner: 'web', value: '204', ageMs: 0 },
+            { kind: 'BASE', onStage: true, value: '0' },
+          ],
+        },
+      ],
+    }
+    vi.spyOn(lightingApi.programmer, 'keyStack').mockResolvedValue(answer)
+    vi.spyOn(lightingApi.programmer, 'subscribeToKey').mockReturnValue({ unsubscribe: () => {} })
+    const context = { cueLabel, connected: true } as unknown as FixtureSheetContextValue
+    await act(async () => {
+      render(
+        <FixtureSheetContext.Provider value={context}>
+          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+        </FixtureSheetContext.Provider>,
+      )
+    })
+    expect(await screen.findByText('held · Blind')).toBeTruthy()
+    expect(screen.queryByText('held back')).toBeNull()
+    // Clearing the value leaves the effect held by Blind, so the button does not promise it runs.
+    expect(screen.getByRole('button', { name: 'Clear yours' })).toBeTruthy()
   })
 
   it('asks a group once and lays its members out as one section per distinct stack', async () => {

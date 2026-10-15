@@ -248,12 +248,12 @@ describe('docked, on the desk board', () => {
       const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
       // On Show's glyph and no other tab's; the dot is aria-hidden and the word is the tab's
       // name — never an sr-only span, which was silent on the fold and *was* the name below 400.
-      const show = screen.getByRole('tab', { name: 'Show — programmer blind' })
+      const show = screen.getByRole('tab', { name: 'Show — programmer blind, values and effects held' })
       expect(show.querySelector('[data-busk-blind-dot]')).not.toBeNull()
       expect(show.querySelector('[data-busk-blind-dot]')).toHaveAttribute('aria-hidden')
       expect(show.textContent).toBe('Show')
       expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
-      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Speed', 'Colour', 'Spread', 'Effects', 'Show — programmer blind'])
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Speed', 'Colour', 'Spread', 'Effects', 'Show — programmer blind, values and effects held'])
       // A mark, not a control: the dot is inert and the tab still opens Show.
       fireEvent.click(show)
       expect(getBuskSheet()).toBe('show')
@@ -261,7 +261,7 @@ describe('docked, on the desk board', () => {
 
       setBuskSheet('none')
       render(<SideSheet {...props} />)
-      const glyph = screen.getByRole('button', { name: 'Open the Show tab — programmer blind' })
+      const glyph = screen.getByRole('button', { name: 'Open the Show tab — programmer blind, values and effects held' })
       expect(glyph.querySelector('[data-busk-blind-dot]')).not.toBeNull()
       expect(screen.getByRole('button', { name: 'Open the Colour tab' }).querySelector('[data-busk-blind-dot]')).toBeNull()
       // The cue number under the glyph is untouched.
@@ -406,11 +406,11 @@ describe('the overlay, off the desk board', () => {
     try {
       render(<SideSheetOverlay {...props} />)
       const tabs = screen.getAllByRole('tab')
-      const show = screen.getByRole('tab', { name: 'Show — programmer blind' })
+      const show = screen.getByRole('tab', { name: 'Show — programmer blind, values and effects held' })
       expect(show.querySelector('[data-busk-blind-dot]')).not.toBeNull()
       expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
       // The other tabs keep their plain names, and every tab is named whatever the width.
-      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Colour', 'Spread', 'Effects', 'Show — programmer blind'])
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Colour', 'Spread', 'Effects', 'Show — programmer blind, values and effects held'])
     } finally {
       programmer.blind = false
     }

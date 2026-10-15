@@ -512,7 +512,7 @@ describe('the rig band', () => {
         const pill = state.querySelector('[data-busk-blind]') as HTMLElement
         expect(pill, focus).not.toBeNull()
         expect(pill).toHaveTextContent('Blind')
-        expect(pill.title).toMatch(/not reaching the stage/)
+        expect(pill.title).toMatch(/values and effects held: the programmer is not reaching the stage/)
         // A reporter, never a control.
         expect(pill.tagName).not.toBe('BUTTON')
         expect(pill.className).toContain('amber')

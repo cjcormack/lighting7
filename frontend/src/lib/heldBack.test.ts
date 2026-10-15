@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellHoldsBack, heldBackKey, heldBackReach, isHeldBack, type ReachingEffect } from './heldBack'
+import { cellHoldsBack, heldBackKey, heldBackReach, isHeldBack, isHeldByBlind, type ReachingEffect } from './heldBack'
 
 /**
  * The client's copy of the desk's `EffectSuppression.heldBackByProgrammer`. Each case is one clause
@@ -25,6 +25,29 @@ describe('isHeldBack', () => {
     // A `pan` entry does not hold back a Circle keyed `position` (session 1 amendment, W4).
     const holdsPan = (_head: string, property: string) => property === 'pan'
     expect(isHeldBack({ programmerOwned: false, propertyName: 'position' }, 'spot-1', holdsPan, false)).toBe(false)
+  })
+})
+
+describe('isHeldByBlind — the desk’s BlindHold (show-cue-editing plan D7)', () => {
+  it('holds a programmer-band effect while blind', () => {
+    expect(isHeldByBlind({ programmerOwned: true }, true)).toBe(true)
+  })
+
+  it('holds nothing while not blind', () => {
+    expect(isHeldByBlind({ programmerOwned: true }, false)).toBe(false)
+  })
+
+  it('never holds a cue’s, a manual or a script effect', () => {
+    expect(isHeldByBlind({ programmerOwned: false }, true)).toBe(false)
+  })
+
+  it('is never true of an effect the programmer’s values hold back — the two marks are exclusive', () => {
+    for (const programmerOwned of [true, false]) {
+      for (const blind of [true, false]) {
+        const effect = { programmerOwned, propertyName: 'dimmer' }
+        expect(isHeldByBlind(effect, blind) && isHeldBack(effect, 'hex-1', holdsDimmerOnHex1, blind)).toBe(false)
+      }
+    }
   })
 })
 
