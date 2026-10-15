@@ -341,7 +341,7 @@ It should start from `docs/lighting-composition-model.md`.
 | 1 | S1 Palettes reach cells | — | `4a1a8fb4` |
 | 2 | S2 Chrome and defaults | — | `f6b37b38` |
 | 3 | S3 Cue list fixes | — | `e2153f5c` |
-| 4 | S4 Templates → palettes | — | |
+| 4 | S4 Templates → palettes | — | `b954eee1` |
 | 5 | R1 Cue model | — | [`cue-model-plan.md`](cue-model-plan.md) |
 | 6 | S5 Grand master | S4 | |
 | 7 | S6 Make rig safe, Undo / Quit desk | S4 | |
