@@ -194,7 +194,7 @@ Grouped by area. §4 gives the order.
 - **Scope (D12).** It keeps scaling DIMMER, UV and STROBE. On a head with no dimmer channel it
   scales the colour-mix channels instead.
 
-**S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19).**
+**S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19).** Done: `fa5291c1`.
 - **Command roles.** `@FixtureCommand` gains a role (`LAMP_ON`, `LAMP_OFF`, `RESET`), so a bulk
   action can ask for "every lamp off" across types.
 - **Bulk run.** A bulk run over the selection, or the whole rig, respects `COMMAND_BUSY`, park and
@@ -359,7 +359,7 @@ a suggested order; Needs is the constraint.
 | # | Session | Needs | Done |
 |---|---|---|---|
 | 1 | S5 Grand master | — | `6729e6f9` |
-| 2 | S6 Make rig safe, Undo / Quit desk | — | |
+| 2 | S6 Make rig safe, Undo / Quit desk | — | `fa5291c1` |
 | 3 | S10 Record polish | — | |
 | 4 | S11 Position scale | — | |
 | 5 | S15 Effect timing | — | |
