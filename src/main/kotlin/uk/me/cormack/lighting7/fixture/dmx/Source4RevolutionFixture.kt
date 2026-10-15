@@ -263,6 +263,7 @@ sealed class Source4RevolutionFixture(
             description = "Recalibrates everything — pan, tilt, scroller, lenses and both modules — then " +
                 "returns to the desk's values. The head and the beam move while it runs.",
             holdMs = RESET_HOLD_MS,
+            role = CommandRole.RESET,
         )
         val reset = DmxCommand(universe, firstChannel + 11, 187u, bandMin = 185u, bandMax = 190u)
 

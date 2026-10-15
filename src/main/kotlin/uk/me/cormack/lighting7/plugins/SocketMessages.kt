@@ -53,6 +53,7 @@ sealed class InMessage
     ParkOutMessage::class,
     ProgrammerOutMessage::class,
     ProjectOutMessage::class,
+    RigSafetyOutMessage::class,
     SceneryOutMessage::class,
     SelectionOutMessage::class,
     SpeedMasterOutMessage::class,

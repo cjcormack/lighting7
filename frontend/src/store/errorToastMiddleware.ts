@@ -38,6 +38,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command
+  // RIG_NOT_SAFE is an ordinary step in quitting — the confirm asks about it — and the rest it shows inline.
+  'quitDesk', // src/components/rigSafety/QuitDeskDialog.tsx
   // A refused update (an open decision, a clash, a version moved on) is drawn in the review sheet,
   // which keeps the operator's answers for the retry; a refused *Run against* in its confirm, and
   // the banner's *Hold output* toasts its own.

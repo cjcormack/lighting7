@@ -25,6 +25,9 @@ import { useVisiblePatchListQuery } from '@/store/patches'
 import { useRunFixtureCommandMutation } from '@/store/commands'
 import { useGetParkStateListQuery, type ParkState } from '@/store/park'
 import type { CommandPropertyDescriptor } from '@/store/fixtures'
+import { useRigSafety } from '@/store/rigSafety'
+import { clockLabel, restrikeLeft } from '@/lib/rigSafety'
+import { useNow } from '@/components/rigSafety/useNow'
 
 /** `3 s`, `1.5 s` — a hold as the confirm names it. */
 export function holdLabel(ms: number): string {
@@ -80,6 +83,10 @@ function useSecondsLeft(endsAt: number | null): number | null {
  * REST call, not a socket frame. Another command on the same unit waits (`COMMAND_BUSY`); Blind and
  * remote access with fixture commands turned off refuse it, by name, as a toast. A command with a
  * parked channel — its own or a precondition's — is greyed out in the menu, naming the channel.
+ *
+ * A *Lamp on* inside the lamp's restrike time (venue-visit plan S6, D19) says so, with the time left,
+ * in the menu and the confirm — from the desk's restrike ledger on `rigSafety.state` — and is still
+ * offered: the operator may know the lamp better than the manual does.
  */
 export function FixtureCommandsMenu({
   fixtureKey,
@@ -102,6 +109,10 @@ export function FixtureCommandsMenu({
   const [asking, setAsking] = useState<CommandPropertyDescriptor | null>(null)
   const [running, setRunning] = useState<{ command: CommandPropertyDescriptor; endsAt: number } | null>(null)
   const secondsLeft = useSecondsLeft(running?.endsAt ?? null)
+  const rig = useRigSafety()
+  const lampOff = rig.lampsOff.find((l) => l.fixture === fixtureKey)
+  const now = useNow(lampOff != null && lampOff.restrikeRemainingMs > 0, lampOff ? rig.receivedAt + lampOff.restrikeRemainingMs : undefined)
+  const restrikeOf = (c: CommandPropertyDescriptor) => (c.role === 'LAMP_ON' ? restrikeLeft(rig, fixtureKey, now) : 0)
 
   const ready = canRun && project != null && patch != null && running == null
 
@@ -140,12 +151,16 @@ export function FixtureCommandsMenu({
           </DropdownMenuLabel>
           {commands.map((c) => {
             const parked = parkedChannelOf(c, parks ?? [])
+            const restrike = restrikeOf(c)
             return (
               <DropdownMenuItem key={c.name} disabled={parked != null} onSelect={() => choose(c)}>
                 <span className="flex flex-1 flex-col">
                   <span>{c.displayName}</span>
                   {parked != null && (
                     <span className="text-xs text-muted-foreground">Channel {parked} is parked — unpark it first</span>
+                  )}
+                  {parked == null && restrike > 0 && (
+                    <span className="text-xs text-amber-700 dark:text-amber-300">Still cooling — restrike in {clockLabel(restrike)}</span>
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground">{holdLabel(c.holdMs)}</span>
@@ -164,6 +179,11 @@ export function FixtureCommandsMenu({
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>{asking?.description}</p>
+                {asking != null && restrikeOf(asking) > 0 && (
+                  <p data-testid="restrike-warning" className="text-amber-800 dark:text-amber-200">
+                    This lamp went off too recently to restrike reliably: {clockLabel(restrikeOf(asking))} to go.
+                  </p>
+                )}
                 <p>
                   The desk holds it for {asking != null ? holdLabel(asking.holdMs) : ''}, then gives the channel back.
                   {asking?.alongside != null && asking.alongside.length > 0 &&

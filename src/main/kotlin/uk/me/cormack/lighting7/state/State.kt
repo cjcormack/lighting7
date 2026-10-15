@@ -74,6 +74,9 @@ import uk.me.cormack.lighting7.telemetry.DbTracing
 
 private val logger = LoggerFactory.getLogger("State")
 
+/** How long *Quit desk* waits for its answer to reach the browser before the process goes. */
+private const val QUIT_GRACE_MS = 500L
+
 class State(val config: ApplicationConfig) {
     // Exposed's `Database.connect()` doesn't surface the underlying datasource, so the
     // reference is kept here for [shutdown] to drain the pool.
@@ -814,6 +817,9 @@ class State(val config: ApplicationConfig) {
      */
     val effectsService: EffectsService by lazy { EffectsService(this) }
 
+    /** Bulk fixture commands, *Make rig safe*, its *Undo* and *Ready to switch off* (venue-visit plan S6). */
+    val rigSafety: RigSafetyService by lazy { RigSafetyService(this) }
+
     /**
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
      * ways of making one gesture, so there is one answer. State-scoped and transient like
@@ -864,6 +870,23 @@ class State(val config: ApplicationConfig) {
     /** Write every pending scaler change now: at shutdown, and in tests, which read the row back. */
     internal fun flushScalerWrites() {
         if (scalerWritesLazy.isInitialized()) scalerWritesLazy.value.flush()
+    }
+
+    /** How the desk process ends. A test seam: *Quit desk*'s route test must not end the JVM. */
+    @Volatile internal var exitDesk: () -> Unit = { kotlin.system.exitProcess(0) }
+
+    /**
+     * *Quit desk* (venue-visit plan S6, D13): once the request's answer has had time to leave, write
+     * what the scaler writer still holds and exit 0. The JVM's shutdown hooks stop the server; the
+     * Windows launcher exits with its backend rather than restarting it, and `./gradlew run` ends.
+     */
+    fun quitDesk() {
+        Thread({
+            Thread.sleep(QUIT_GRACE_MS)
+            runCatching { flushScalerWrites() }
+            logger.info("Quit desk: exiting")
+            exitDesk()
+        }, "quit-desk").start()
     }
 
     /**
@@ -990,6 +1013,7 @@ class State(val config: ApplicationConfig) {
         programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
         sceneryService.attach(show, GlobalScope)
         effectsService.attach(show)
+        rigSafety.attach(show)
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
@@ -1032,6 +1056,9 @@ class State(val config: ApplicationConfig) {
                 // The arm drops on a project switch: the new show's cannons start disarmed, its tubes
                 // are read afresh, and nothing the old show scheduled fires (stage-view plan session 9).
                 effectsService.attach(projectManager.show)
+                // A bulk run belongs to the show being left, and another show's output is not the safe
+                // rig *Ready to switch off* described; what *Undo* would strike is kept per project.
+                rigSafety.attach(projectManager.show)
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
                 // cached binding health against the new show.
                 controlSurfaceBindingService.invalidateHealth(projectManager.currentProject.id.value)
@@ -1069,6 +1096,7 @@ class State(val config: ApplicationConfig) {
         runCatching { handState.close() }
         runCatching { sceneryService.close() }
         runCatching { effectsService.close() }
+        runCatching { rigSafety.close() }
 
         // Before the MIDI stack goes down: the listener's callback reaches back into
         // `midiRegistry`, and it is the one teardown step whose absence silently retains the

@@ -32,8 +32,19 @@ dependencies {
 // Single-shot dev run: build the backend fat jar in the root project and pass its absolute path
 // to the launcher via a system property. Without it, LauncherMain falls back to looking for a
 // sibling of its own JAR (the jpackage layout).
+//
+// It runs when asked for as this project's: `./gradlew :launcher:run` (or an abbreviation of it), or
+// `run` from this directory or with `-p launcher`. A bare `./gradlew run` at the root is the desk's
+// alone; were it this one's too, a desk quit from its own menu would end that `run` and the build
+// would go on to start the launcher, which spawns a desk of its own.
+val startedHere = (gradle.startParameter.projectDir ?: gradle.startParameter.currentDir).canonicalFile == projectDir.canonicalFile
+val launcherRunNamed = startedHere || gradle.startParameter.taskNames.any { name ->
+    val path = name.trimStart(':').split(':')
+    path.size == 2 && path[0].isNotEmpty() && "launcher".startsWith(path[0]) && path[1].isNotEmpty() && "run".startsWith(path[1])
+}
 tasks.named<JavaExec>("run") {
-    dependsOn(":shadowJar")
+    if (launcherRunNamed) dependsOn(":shadowJar")
+    onlyIf("run as ./gradlew :launcher:run") { launcherRunNamed }
     // Property name = JAR filename, so LauncherMain's resolveJar() can look the child up by
     // passing the bare filename through `System.getProperty`.
     systemProperty("lighting7.jar", rootProject.layout.buildDirectory.file("libs/lighting7.jar").get().asFile.absolutePath)

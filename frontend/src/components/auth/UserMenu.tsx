@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CircleUser, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone } from "lucide-react"
+import { CircleUser, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone, Power } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +20,8 @@ import { useWindowName } from "@/lib/windowIdentity"
 import { useDeskWindows } from "@/store/windows"
 import { openScreensSheet } from "@/components/screens/screensSheetState"
 import { useReportProblem } from "@/lib/reportProblem"
+import { useRigSafety } from "@/store/rigSafety"
+import { QuitDeskDialog } from "@/components/rigSafety/QuitDeskDialog"
 
 // Words are filtered to those that *start* with a letter or digit, not merely contain one, so
 // a name like "Chris C (desk)" initials as "CC" rather than "C(" — a parenthesised qualifier
@@ -40,6 +42,9 @@ export function UserMenu() {
   const { data } = useAuthStatusQuery()
   const [logout] = useLogoutMutation()
   const [profileOpen, setProfileOpen] = useState(false)
+  const [quitOpen, setQuitOpen] = useState(false)
+  // An admin on the desk's own listener (the frame says so per socket): never offered remotely.
+  const { quitAllowed } = useRigSafety()
   const windowName = useWindowName()
   const windows = useDeskWindows()
   const { active: fullscreen } = useFullscreenState()
@@ -156,9 +161,20 @@ export function UserMenu() {
               Log out
             </DropdownMenuItem>
           )}
+          {/* Quit desk (venue-visit plan S6, D13): last, an admin's, on the desk itself only. */}
+          {quitAllowed && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setQuitOpen(true)}>
+                <Power className="size-4" />
+                Quit desk…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {user && <ProfileSheet user={user} open={profileOpen} onOpenChange={setProfileOpen} />}
+      {quitOpen && <QuitDeskDialog open={quitOpen} onOpenChange={setQuitOpen} />}
     </>
   )
 }

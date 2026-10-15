@@ -86,6 +86,39 @@ class FixtureCommandsTest {
     }
 
     @Test
+    fun `roles are one per type, and only a strike declares a restrike and a spacing`() {
+        for ((typeKey, _, commands) in library) {
+            for ((role, withRole) in commands.groupBy { it.spec.role }) {
+                if (role != CommandRole.OTHER) assertEquals(1, withRole.size, "$typeKey: one ${role.name} command, not ${withRole.map { it.name }}")
+            }
+            for (c in commands) {
+                if (c.spec.role == CommandRole.LAMP_ON) {
+                    assertTrue(c.spec.restrikeMs in 60_000..900_000, "$typeKey ${c.name}: a restrike of ${c.spec.restrikeMs} ms")
+                    assertTrue(c.spec.strikeSpacingMs in 1_000..30_000, "$typeKey ${c.name}: a spacing of ${c.spec.strikeSpacingMs} ms")
+                } else {
+                    assertEquals(0, c.spec.restrikeMs, "$typeKey ${c.name}: only a strike has a restrike")
+                    assertEquals(0, c.spec.strikeSpacingMs, "$typeKey ${c.name}: only a strike has a spacing")
+                }
+            }
+            val roles = commands.map { it.spec.role }
+            assertEquals(CommandRole.LAMP_ON in roles, CommandRole.LAMP_OFF in roles, "$typeKey: a lamp that strikes also douses")
+            assertTrue(CommandRole.RESET in roles, "$typeKey: every type in the library has a whole reset")
+        }
+        fun rolesOf(typeKey: String) = library.single { it.first == typeKey }.third.associate { it.name to it.spec.role }
+        assertEquals(
+            mapOf("lampOn" to CommandRole.LAMP_ON, "lampOff" to CommandRole.LAMP_OFF, "reset" to CommandRole.RESET),
+            rolesOf("martin-mac-250-mode-4"),
+        )
+        val robe = rolesOf("robe-color-spot-575-mode-2")
+        assertEquals(CommandRole.RESET, robe["reset"])
+        assertEquals(CommandRole.OTHER, robe["resetPanTilt"], "a partial reset is not the whole reset")
+        assertEquals(CommandRole.RESET, rolesOf("etc-source4-revolution-base-frame")["reset"])
+        val mac = library.single { it.first == "martin-mac-250-mode-4" }.third.single { it.name == "lampOn" }
+        assertEquals(480_000, mac.spec.restrikeMs, "the MAC 250's manual: 8 minutes")
+        assertEquals(5_000, mac.spec.strikeSpacingMs, "the MAC 250's manual: 5 seconds apart")
+    }
+
+    @Test
     fun `a shared channel's property offers no option inside a command's band`() {
         // The five RESET options this session removed must stay removed: a setting option in a band would
         // put the command back in every Look picker.
@@ -145,6 +178,10 @@ class FixtureCommandsTest {
             assertEquals(command.spec.holdMs, first.holdMs)
             assertEquals(command.dedicated, first.dedicated)
             assertEquals(command.channelNo, first.channel.channelNo)
+            for ((c, d) in commands.zip(listed)) {
+                assertEquals(c.spec.role.takeIf { it != CommandRole.OTHER }?.name, d.role, "$typeKey ${c.name}")
+                assertEquals(c.spec.restrikeMs.takeIf { it > 0 }, d.restrikeMs, "$typeKey ${c.name}")
+            }
         }
     }
 

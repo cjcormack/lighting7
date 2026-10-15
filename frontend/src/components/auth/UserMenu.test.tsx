@@ -39,6 +39,12 @@ vi.mock('@/lib/fullscreen', () => ({
 const screensSheet = { open: vi.fn() }
 vi.mock('@/components/screens/screensSheetState', () => ({ openScreensSheet: () => screensSheet.open() }))
 
+const rig = { quitAllowed: false }
+vi.mock('@/store/rigSafety', () => ({ useRigSafety: () => rig }))
+vi.mock('@/components/rigSafety/QuitDeskDialog', () => ({
+  QuitDeskDialog: ({ open }: { open: boolean }) => (open ? <div data-testid="quit-dialog" /> : null),
+}))
+
 import { UserMenu } from './UserMenu'
 import { setReportProblem } from '@/lib/reportProblem'
 
@@ -87,6 +93,7 @@ afterEach(() => {
   cleanup()
   statusResult = {}
   registry.windows = []
+  rig.quitAllowed = false
   fullscreen.active = false
   fullscreen.can = true
   vi.clearAllMocks()
@@ -109,6 +116,20 @@ describe('UserMenu', () => {
     expect(items.some((t) => t?.startsWith('Screens…'))).toBe(true)
     expect(items.some((t) => t === 'Log out' || t === 'Profile…')).toBe(false)
     expect(screen.getByRole('menu')).toHaveTextContent('this window is Screen 1')
+  })
+
+  it('offers Quit desk only where the desk says this window may quit, and asks first', () => {
+    signedInAs('Chris Cormack')
+    render(<UserMenu />)
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: /Quit desk/ })).toBeNull()
+    cleanup()
+
+    rig.quitAllowed = true
+    render(<UserMenu />)
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Quit desk/ }))
+    expect(screen.getByTestId('quit-dialog')).toBeTruthy()
   })
 
   describe('the avatar initials', () => {
