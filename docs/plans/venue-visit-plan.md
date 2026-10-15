@@ -227,14 +227,7 @@ Grouped by area. §4 gives the order.
 
 ### Effects
 
-**S15 — Effect timing (D7) and slower defaults.**
-- An effect's timing source is either a speed master (today's behaviour) or *Seconds*: a cycle time,
-  with no master.
-- It's carried on the effect, the effect palette and cue rows. Check the sync field and whether
-  `formatVersion` needs a bump.
-- **New default (D16):** one bar on the family's `usage` master where one is set, so ad-hoc effects
-  use the per-usage default that only effect templates use today.
-- Read `FU-FE-FX-SPEED-SPELLING` and `FU-FX-RATE-MASTER-CLEAR`.
+- ~~S15 — Effect timing (D7) and slower defaults~~ — done, `6d7ca0cf`.
 
 ### Cues
 
