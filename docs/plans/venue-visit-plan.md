@@ -178,16 +178,8 @@ Grouped by area. §4 gives the order.
 
 ### Programmer
 
-**S10 — Record polish.**
-- **Record can create a new stack** from the Record sheet's stack select.
-- **"All attributes".**
-  - The mask picker gets an explicit *All attributes* toggle, which is on when nothing is narrowed.
-  - It's used everywhere a mask is taken: Record, Record Look, Include and busk.
-  - `UpdateDialog` gains the picker.
-- **Fix the "An existing cue…" menu item.** It only creates a new cue (`RecordSheet.tsx:198`).
-  Give it a cue picker that lists cues by name, whatever stack they're in, so it serves loose cues
-  once the cue model plan's session 4 lands.
-
+- ~~S10 — Record polish~~ — done, `499c0d88` (*All attributes* is a switch that hides the four
+  family checkboxes, `MaskToggles` for R3.4).
 - ~~S11 — Position in −127…+127 (D3, P3)~~ — done, `cb71b335` (the scale is exact, DMX − 128, so
   DMX 0 reads −128; the intent is `pos:`; `formatVersion` 28).
 

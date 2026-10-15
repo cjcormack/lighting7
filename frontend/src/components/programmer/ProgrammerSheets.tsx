@@ -13,6 +13,8 @@ export interface RecordPreset {
   targetCueName?: string
   /** Create a new cue in this stack. */
   defaultCueStackId?: number
+  /** Open on Merge with the cue picker — the Record menu's "An existing cue…". */
+  existingCue?: boolean
 }
 
 interface ProgrammerSheetsValue {
@@ -76,7 +78,9 @@ export function ProgrammerSheetsProvider({
               ? `cue:${record.targetCueId}`
               : record.defaultCueStackId != null
                 ? `stack:${record.defaultCueStackId}`
-                : 'new'
+                : record.existingCue
+                  ? 'existing'
+                  : 'new'
           }
           open
           onOpenChange={(o) => !o && setRecord(null)}
@@ -84,6 +88,7 @@ export function ProgrammerSheetsProvider({
           targetCueId={record.targetCueId}
           targetCueName={record.targetCueName}
           defaultCueStackId={record.defaultCueStackId}
+          existingCue={record.existingCue}
         />
       )}
       <RecordLookSheet open={recordLook} onOpenChange={setRecordLook} projectId={projectId} />

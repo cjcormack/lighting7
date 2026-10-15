@@ -18,22 +18,23 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatError } from '@/lib/formatError'
-import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { useCreateProjectCueStackMutation, useProjectCueStackListQuery } from '@/store/cueStacks'
 import { useRecordProgrammerMutation } from '@/store/programmerOps'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
-  PropertyMaskGroup,
   RecordMode,
   RecordResponse,
   RecordSource,
 } from '@/store/programmerOps'
-import { MaskPicker, describeSkips } from './maskPicker'
+import { MaskPicker, describeSkips, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
+import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
 
 export interface RecordSheetProps {
   open: boolean
@@ -44,7 +45,18 @@ export interface RecordSheetProps {
   targetCueName?: string
   /** Preselect a stack to create in. */
   defaultCueStackId?: number
+  /**
+   * Open on Merge with the cue picker, nothing picked — the Record menu's "An existing cue…".
+   * Ignored when [targetCueId] names the cue already.
+   */
+  existingCue?: boolean
 }
+
+/**
+ * The stack select's *New stack…* item (S10). Not a stack id: ids are positive integers, so this
+ * can never name one, and it never reaches the wire — submit creates the stack first.
+ */
+const NEW_STACK = 'new'
 
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
   {
@@ -90,9 +102,13 @@ export function RecordSheet({
   targetCueId,
   targetCueName,
   defaultCueStackId,
+  existingCue = false,
 }: RecordSheetProps) {
   const { data: stacks } = useProjectCueStackListQuery(projectId)
-  const [record, { isLoading, error, reset }] = useRecordProgrammerMutation()
+  const [record, { isLoading: recording, error: recordError, reset }] = useRecordProgrammerMutation()
+  const [createStack, { isLoading: creatingStack, error: createStackError, reset: resetCreateStack }] =
+    useCreateProjectCueStackMutation()
+  const isLoading = recording || creatingStack
 
   // The programmer sheet's selection, published into the store by its list container. Read
   // from there rather than passed in: this sheet opens from the programmer toolbar and from a
@@ -101,13 +117,16 @@ export function RecordSheet({
     selectTargetKeys(s, 'programmer'),
   )
 
-  const [mode, setMode] = useState<RecordMode>(targetCueId ? 'MERGE' : 'CREATE')
+  const openingMode: RecordMode = targetCueId != null || existingCue ? 'MERGE' : 'CREATE'
+  const [mode, setMode] = useState<RecordMode>(openingMode)
   const [source, setSource] = useState<RecordSource>('TOUCHED')
-  const [mask, setMask] = useState<PropertyMaskGroup[]>([])
+  const [mask, setMask] = useState<MaskValue>(null)
   const [includeFx, setIncludeFx] = useState(true)
   const [includeScenery, setIncludeScenery] = useState(true)
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [stackId, setStackId] = useState<string>('')
+  const [newStackName, setNewStackName] = useState('')
+  const [cueId, setCueId] = useState<number | null>(targetCueId ?? null)
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
   const [result, setResult] = useState<RecordResponse | null>(null)
@@ -116,6 +135,9 @@ export function RecordSheet({
     () => (stacks ?? []).filter((stack) => stack.type !== 'SEPARATOR'),
     [stacks],
   )
+
+  /** The stack a Record opens on: the preset's, else the first, else *New stack…* for a show with none. */
+  const defaultStackChoice = () => String(defaultCueStackId ?? recordableStacks[0]?.id ?? NEW_STACK)
 
   // Once per open. RTK Query's `reset` changes identity whenever the mutation's state does, so
   // an effect that depends on it *and* calls it re-fires — here that would wipe the result
@@ -128,9 +150,10 @@ export function RecordSheet({
     }
     if (openedRef.current) return
     openedRef.current = true
-    setMode(targetCueId ? 'MERGE' : 'CREATE')
+    setMode(openingMode)
+    setCueId(targetCueId ?? null)
     setSource('TOUCHED')
-    setMask([])
+    setMask(null)
     setIncludeFx(true)
     // On whenever anything is held (the row is absent otherwise): held scenery is part of what the
     // operator busked, and the cue writes only the pieces it would not already show (D7).
@@ -140,16 +163,38 @@ export function RecordSheet({
     setSelectedOnly(false)
     setName('')
     setCueNumber('')
-    setStackId(String(defaultCueStackId ?? recordableStacks[0]?.id ?? ''))
+    // A show with no stack yet opens on *New stack…*, so the first Record of a show needs no
+    // detour through the Show view to make somewhere to put it — but only once the list says so:
+    // an unloaded list is not an empty one, and the effect below fills it in when it arrives.
+    setStackId(defaultCueStackId != null || stacks != null ? defaultStackChoice() : '')
+    setNewStackName('')
     setResult(null)
     reset()
+    resetCreateStack()
     // recordableStacks is only read for its first id on open; re-running when the list
     // reloads would stomp a stack the operator had already picked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, targetCueId, defaultCueStackId, reset])
 
+  // The list arriving after the sheet opened: fill the stack the open could not, and only then —
+  // never over one the operator has picked.
+  useEffect(() => {
+    if (open && stackId === '' && stacks != null) setStackId(defaultStackChoice())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, stackId, stacks])
+
   const creating = mode === 'CREATE'
-  const canSubmit = creating ? stackId !== '' : targetCueId !== undefined
+  const newStack = stackId === NEW_STACK
+  // The stack's error only while *New stack…* is still the choice: picking an existing stack after a
+  // failed create must not leave it standing over the Record that follows (submit resets it too).
+  const error = (creating && newStack ? createStackError : undefined) ?? recordError
+  const canSubmit =
+    (creating ? (newStack ? newStackName.trim() !== '' : stackId !== '') : cueId != null) &&
+    !maskIsEmpty(mask)
+  const pickedCueName = usePickedCueName(projectId, creating ? null : cueId)
+  // The list's name once it has loaded, the preset's until then — and the preset's only for its
+  // own cue, never for one picked since.
+  const intoCueName = pickedCueName ?? (cueId != null && cueId === targetCueId ? targetCueName : null)
   // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected)
   // while this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
   const scoped = selectedOnly && selectedKeys.length > 0
@@ -158,18 +203,30 @@ export function RecordSheet({
   // nothing left to catch here — Record's one recoverable refusal was `409 CUE_EDIT_SESSION_OPEN`,
   // and backend sweep item D1 retired the sessions that produced it.
   const submit = async () => {
+    resetCreateStack()
+    let cueStackId = creating && !newStack ? Number(stackId) : undefined
+    if (creating && newStack) {
+      // The stack first, and only now: a cancelled sheet leaves nothing behind (S10). It joins the
+      // show order at the end, like the Show view's own *New stack*. Once made it is the selection,
+      // so a Record that then fails is retried into it rather than making a second one.
+      const created = await createStack({ projectId, name: newStackName.trim(), loop: false })
+      if (!('data' in created) || created.data == null) return
+      cueStackId = created.data.id
+      setStackId(String(created.data.id))
+      setNewStackName('')
+    }
     const response = await record({
       projectId,
       mode,
       source,
-      mask: mask.length > 0 ? mask : undefined,
+      mask: maskToWire(mask),
       includeFx,
       scenery: includeScenery,
       targets: scoped
         ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
         : undefined,
-      cueStackId: creating ? Number(stackId) : undefined,
-      cueId: creating ? undefined : targetCueId,
+      cueStackId,
+      cueId: creating ? undefined : (cueId ?? undefined),
       name: creating && name.trim() !== '' ? name.trim() : undefined,
       cueNumber: creating && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
     })
@@ -182,8 +239,8 @@ export function RecordSheet({
         <SheetHeader>
           <SheetTitle>Record</SheetTitle>
           <SheetDescription>
-            {targetCueName
-              ? `Write the programmer into “${targetCueName}”.`
+            {!creating && intoCueName
+              ? `Write the programmer into “${intoCueName}”.`
               : 'Write the programmer into a cue.'}
           </SheetDescription>
         </SheetHeader>
@@ -197,7 +254,7 @@ export function RecordSheet({
               onValueChange={(next) => next && setMode(next as RecordMode)}
               className="flex-wrap justify-start"
             >
-              {MODES.filter((m) => m.value === 'CREATE' || targetCueId !== undefined).map((m) => (
+              {MODES.map((m) => (
                 <ToggleGroupItem key={m.value} value={m.value} className="text-xs">
                   {m.label}
                 </ToggleGroupItem>
@@ -207,6 +264,10 @@ export function RecordSheet({
               {MODES.find((m) => m.value === mode)?.hint}
             </p>
           </div>
+
+          {!creating && (
+            <RecordCuePicker projectId={projectId} value={cueId} onChange={setCueId} disabled={isLoading} />
+          )}
 
           {creating && (
             <>
@@ -222,9 +283,24 @@ export function RecordSheet({
                         {stack.name}
                       </SelectItem>
                     ))}
+                    {recordableStacks.length > 0 && <SelectSeparator />}
+                    <SelectItem value={NEW_STACK}>New stack…</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {newStack && (
+                <div className="space-y-2">
+                  <Label htmlFor="record-new-stack">New stack name</Label>
+                  <Input
+                    id="record-new-stack"
+                    value={newStackName}
+                    onChange={(e) => setNewStackName(e.target.value)}
+                    placeholder="Required"
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">Created when you record.</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="record-name">Name</Label>
                 <Input
