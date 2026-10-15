@@ -204,6 +204,16 @@ index — random UUIDs make accidental collisions astronomically unlikely.
 New tables default to **not synced** until explicitly added to
 `ProjectExporter` / `ProjectImporter`. Don't rely on auto-discovery.
 
+**An edit keeps a child's uuid.** A record whose children are written as whole lists — a cue's
+layers, ad-hoc effects, property assignments and script hooks (`writeCueChildren`), a Look's rows
+and effects (`writeLookChildren`) — reconciles the incoming list against what is stored, by each
+child's natural key, rather than deleting every child and creating it again. A child that survives
+the write is updated in place and keeps its uuid, so a one-value edit is one changed file in the
+working tree, one changed record in the three-way diff and one line in the history, not "every
+child replaced". The keys and the pairing rule are in `docs/cues-engineering.md` §"Key Design
+Decisions". Each child already carried its uuid in the archive, so this needed no `formatVersion`
+change; a template's rows still churn (`FU-SYNC-CHILD-UUID-CHURN`).
+
 ## Ordinal contract (forward-looking)
 
 Phase 1 keeps `sortOrder: Int` on every ordered table. Phase 5 replaces

@@ -115,6 +115,12 @@ export interface CueAdHocEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /**
+   * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
+   * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.
+   * Absent from a desk that predates it.
+   */
+  uuid?: string
 }
 
 /**

@@ -258,7 +258,7 @@ fun replaceCueEvents(cue: DaoCue, writes: List<CueEventWrite>) {
     }
 }
 
-/** A cue's events, swept with the cue. Not part of `deleteCueChildren`, which also runs on a cue *edit*. */
+/** A cue's events, swept with the cue. Not part of `deleteCueChildren` or `writeCueChildren`: a contents edit never touches them. */
 fun deleteCueEvents(cueId: EntityID<Int>): Int = DaoCueEvents.deleteWhere { DaoCueEvents.cue eq cueId }
 
 /** Every event naming [patchIds], swept with the patch — a plain FK with no cascade. */

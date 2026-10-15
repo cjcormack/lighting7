@@ -482,7 +482,7 @@ internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
  * Reject an unrecognised `blendMode` / `distribution` / `elementMode` / `elementFilter` before it
  * reaches the `varchar(50)` that stores it, or null when every value parses.
  *
- * Message-returning rather than throwing, because [createCueChildren] serves surfaces with three
+ * Message-returning rather than throwing, because [writeCueChildren] serves surfaces with three
  * different ways of saying "no" — a 400, a `ToolExecutionResult`, Record's outcome type — and only
  * the first can afford a stack trace.
  */
@@ -504,128 +504,253 @@ internal fun validateCueChildren(
     return null
 }
 
+/** A cue row's identity within its cue: what it is on, never what it holds (show-cue-editing plan §3.4). */
+internal data class CueRowKey(val targetType: String, val targetKey: String, val propertyName: String)
+
+internal fun cueRowKey(targetType: String, targetKey: String, propertyName: String) =
+    CueRowKey(targetType, targetKey, canonicalPropertyName(propertyName))
+
+internal val DaoCuePropertyAssignment.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
+
+internal val CuePropertyAssignmentDto.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
+
+/** A cue effect's identity within its cue: the effect, and what it runs on. */
+internal data class CueEffectKey(val targetType: String, val targetKey: String, val propertyName: String?, val effectType: String)
+
+internal fun cueEffectKey(targetType: String, targetKey: String, propertyName: String?, effectType: String) =
+    CueEffectKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), effectType)
+
+internal val DaoCueAdHocEffect.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
+
+internal val CueAdHocEffectDto.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
+
 /**
- * Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue.
- *
- * **Throws [IllegalArgumentException] on an unrecognised effect enum** — see [validateCueChildren]
- * for why a bad `blendMode` must not be allowed to reach the column. The check is here as well as
- * in the three cue routes, which call [validateCueChildren] themselves to answer a 400, so that a
- * new write path cannot skip it: `AiTools.executeTool` catches the throw at its dispatcher and
- * turns it into a failed tool result, and Record cannot produce an unrecognised value — its
- * ad-hoc effects are serialized from typed enums, and its layers' blends were canonicalised when
- * Include put them in the programmer (`ProgrammerLayerStack.installFromCue`). Record has no catch,
- * so if that ever stops being true it surfaces as a 500, not a stored bad blend.
+ * A cue layer's identity within its cue: the record it applies. Both ids, because a Look and a
+ * template are two tables with two id spaces — the reason [appliesSameSourceAs] compares both.
  */
-internal fun createCueChildren(
-    cue: DaoCue,
-    adHocEffects: List<CueAdHocEffectDto>,
-    propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
-    triggers: List<CueTriggerDto> = emptyList(),
-    layers: List<CueLayerDto> = emptyList(),
-) {
-    validateCueChildren(adHocEffects, layers)?.let { throw IllegalArgumentException(it) }
-    // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
-    // problem at once, before anything is written, so the caller's transaction rolls back whole.
-    // The index is queries; build it only when some name could be refused at all.
-    // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
-    val mayTrigger = propertyAssignments.any { TriggerIndex.mayRefuse(it.propertyName) } || adHocEffects.any { TriggerIndex.mayRefuse(it.propertyName) }
-    // A row is also refused for a level inside a command's band on a property that shares its channel.
-    val mayCommand = propertyAssignments.any { CommandIndex.mayRefuseRow(it.propertyName) } || adHocEffects.any { CommandIndex.mayRefuse(it.propertyName) }
-    if (mayTrigger || mayCommand) {
-        val refs = propertyAssignments.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]", a.value) } +
-            adHocEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") }
-        if (mayTrigger) TriggerIndex.of(cue.project).check(refs)
-        if (mayCommand) CommandIndex.of(cue.project).check(refs)
-    }
-    for (layer in layers) {
-        // A layer naming a record that no longer exists is dropped rather than failing the write —
-        // the rule a preset application used for a deleted preset, kept when that table went. The
-        // same drop covers the malformed shapes (both ids, or neither): [resolveCueLayerSource]
-        // warns and returns null and this layer simply does not appear, which is what the DTO's
-        // exactly-one-of contract means at the write boundary.
-        val resolved = resolveCueLayerSource(layer) ?: continue
-        DaoCueLayer.new {
-            this.cue = cue
-            this.look = resolved.look
-            this.template = resolved.template
-            this.sortOrder = layer.sortOrder
-            this.enabled = layer.enabled
-            this.targets = layer.targets
-            this.propertyMask = layer.propertyMask
-            this.blendMode = layer.blendMode
-            this.amount = layer.amount
-            this.stomp = layer.stomp
-            this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
-            this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
-            this.delay = layer.delayMs.asDuration()
-            this.interval = layer.intervalMs.asDuration()
-            this.randomWindow = layer.randomWindowMs.asDuration()
-        }
-    }
-    for (effect in adHocEffects) {
-        DaoCueAdHocEffect.new {
-            this.cue = cue
-            targetType = effect.targetType
-            targetKey = effect.targetKey
-            effectType = effect.effectType
-            category = effect.category
-            propertyName = effect.propertyName
-            beatDivision = effect.beatDivision
-            blendMode = effect.blendMode
-            distribution = effect.distribution
-            phaseOffset = effect.phaseOffset
-            elementMode = effect.elementMode
-            elementFilter = effect.elementFilter
-            stepTiming = effect.stepTiming
-            parameters = effect.parameters
-            delay = effect.delayMs.asDuration()
-            interval = effect.intervalMs.asDuration()
-            randomWindow = effect.randomWindowMs.asDuration()
-            sortOrder = effect.sortOrder
-            speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
-            rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-        }
-    }
-    for (assignment in propertyAssignments) {
-        DaoCuePropertyAssignment.new {
-            this.cue = cue
-            targetType = assignment.targetType
-            targetKey = assignment.targetKey
-            propertyName = assignment.propertyName
-            value = assignment.value
-            fadeDuration = assignment.fadeDurationMs.asDuration()
-            sortOrder = assignment.sortOrder
-            moveInDark = assignment.moveInDark
-        }
-    }
-    for (trigger in triggers) {
-        val script = DaoScript.findById(trigger.scriptId) ?: continue
-        // Normalize legacy trigger types: DELAYED/RECURRING → ACTIVATION with timing fields
-        val normalizedType = when (trigger.triggerType) {
-            "DELAYED" -> TriggerType.ACTIVATION
-            "RECURRING" -> TriggerType.ACTIVATION
-            else -> try {
-                TriggerType.valueOf(trigger.triggerType)
-            } catch (_: IllegalArgumentException) {
-                throw IllegalArgumentException("Unknown trigger type: '${trigger.triggerType}'. Valid types: ${TriggerType.entries.joinToString()}")
-            }
-        }
-        DaoCueTrigger.new {
-            this.cue = cue
-            this.triggerType = normalizedType
-            this.delay = trigger.delayMs.asDuration()
-            this.interval = trigger.intervalMs.asDuration()
-            this.randomWindow = trigger.randomWindowMs.asDuration()
-            this.script = script
-            this.sortOrder = trigger.sortOrder
-        }
+internal data class CueLayerKey(val lookId: Int?, val templateId: Int?)
+
+internal val DaoCueLayer.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
+
+internal val ResolvedLayerSource.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
+
+/** A script hook's identity within its cue: when it fires, and what it runs. */
+internal data class CueHookKey(val triggerType: TriggerType, val scriptId: Int)
+
+internal val DaoCueTrigger.hookKey get() = CueHookKey(triggerType, script.id.value)
+
+/** A cue's stored layers, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
+internal fun DaoCue.layersInOrder(): List<DaoCueLayer> = layers.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+internal fun DaoCue.adHocEffectsInOrder(): List<DaoCueAdHocEffect> = adHocEffects.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+internal fun DaoCue.propertyAssignmentsInOrder(): List<DaoCuePropertyAssignment> =
+    propertyAssignments.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+internal fun DaoCue.triggersInOrder(): List<DaoCueTrigger> = triggers.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+/**
+ * A [CueTriggerDto]'s `triggerType` read as stored. The legacy `DELAYED` / `RECURRING` are
+ * `ACTIVATION` with timing fields; anything else unknown is refused, naming the valid types.
+ */
+private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
+    "DELAYED", "RECURRING" -> TriggerType.ACTIVATION
+    else -> try {
+        TriggerType.valueOf(raw)
+    } catch (_: IllegalArgumentException) {
+        throw IllegalArgumentException("Unknown trigger type: '$raw'. Valid types: ${TriggerType.entries.joinToString()}")
     }
 }
 
 /**
- * Delete all child entities (layers, ad-hoc effects, property assignments, and triggers) for a
- * cue. Also used by the cue PUT route to *replace* children on update —
- * anything that must survive a cue edit (e.g. prompt-book anchors) must NOT be deleted here.
+ * Make a cue's layers, ad-hoc effects, property assignments and script hooks the given lists; null
+ * leaves that list alone. [created] says the cue has no children yet, so there is nothing to read.
+ *
+ * A child that survives the write is updated in place rather than recreated, so it keeps its `uuid`
+ * and a one-value edit reads as one changed record in a sync diff (show-cue-editing plan P3, §3.4).
+ * Each kind is matched by its natural key — [CueRowKey], [CueLayerKey], [CueEffectKey],
+ * [CueHookKey] — and [pairByKey] pairs the n-th incoming item of a key with the n-th stored one in
+ * `sortOrder` order, so a key held twice pairs deterministically. Everything else about a survivor
+ * is the incoming item's; the rest are inserted or deleted. `writeLookChildren` is the Look's twin.
+ *
+ * A layer naming a record that no longer exists, or a malformed one (both ids, or neither), is
+ * dropped rather than failing the write — the rule a preset application used for a deleted preset,
+ * kept when that table went: [resolveCueLayerSource] warns and returns null. A hook naming a script
+ * that no longer exists is dropped the same way.
+ *
+ * **Throws [IllegalArgumentException] on an unrecognised effect enum or hook type** — see
+ * [validateCueChildren] for why a bad `blendMode` must not be allowed to reach the column. The check
+ * is here as well as in the three cue routes, which call [validateCueChildren] themselves to answer
+ * a 400, so that a new write path cannot skip it: `AiTools.executeTool` catches the throw at its
+ * dispatcher and turns it into a failed tool result, and Record cannot produce an unrecognised
+ * value — its ad-hoc effects are serialized from typed enums, and its layers' blends were
+ * canonicalised when Include put them in the programmer (`ProgrammerLayerStack.installFromCue`).
+ * Record has no catch, so if that ever stops being true it surfaces as a 500, not a stored bad
+ * blend. Every refusal is raised before anything is written.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun writeCueChildren(
+    cue: DaoCue,
+    adHocEffects: List<CueAdHocEffectDto>? = null,
+    propertyAssignments: List<CuePropertyAssignmentDto>? = null,
+    triggers: List<CueTriggerDto>? = null,
+    layers: List<CueLayerDto>? = null,
+    created: Boolean = false,
+) {
+    val newEffects = adHocEffects.orEmpty()
+    val newRows = propertyAssignments.orEmpty()
+    validateCueChildren(newEffects, layers.orEmpty())?.let { throw IllegalArgumentException(it) }
+    // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
+    // problem at once, before anything is written, so the caller's transaction rolls back whole.
+    // The index is queries; build it only when some name could be refused at all.
+    // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
+    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.propertyName) } || newEffects.any { TriggerIndex.mayRefuse(it.propertyName) }
+    // A row is also refused for a level inside a command's band on a property that shares its channel.
+    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.propertyName) } || newEffects.any { CommandIndex.mayRefuse(it.propertyName) }
+    if (mayTrigger || mayCommand) {
+        val refs = newRows.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]", a.value) } +
+            newEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") }
+        if (mayTrigger) TriggerIndex.of(cue.project).check(refs)
+        if (mayCommand) CommandIndex.of(cue.project).check(refs)
+    }
+    // Resolved up front, so an unknown hook type is refused before any child is touched.
+    val newHooks = triggers?.mapNotNull { trigger ->
+        val type = normalisedTriggerType(trigger.triggerType)
+        val script = DaoScript.findById(trigger.scriptId) ?: return@mapNotNull null
+        Triple(trigger, type, script)
+    }
+
+    if (layers != null) {
+        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
+        val pairing = pairByKey(if (created) emptyList() else cue.layersInOrder(), resolved, { it.layerKey }, { it.second.layerKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((item, stored) in pairing.pairs) {
+            val (layer, source) = item
+            if (stored != null) {
+                stored.take(layer)
+            } else {
+                DaoCueLayer.new {
+                    this.cue = cue
+                    this.look = source.look
+                    this.template = source.template
+                    take(layer)
+                }
+            }
+        }
+    }
+    if (adHocEffects != null) {
+        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects, { it.effectKey }, { it.effectKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((effect, stored) in pairing.pairs) {
+            if (stored != null) {
+                stored.take(effect)
+            } else {
+                DaoCueAdHocEffect.new {
+                    this.cue = cue
+                    targetType = effect.targetType
+                    targetKey = effect.targetKey
+                    take(effect)
+                }
+            }
+        }
+    }
+    if (propertyAssignments != null) {
+        val pairing = pairByKey(if (created) emptyList() else cue.propertyAssignmentsInOrder(), propertyAssignments, { it.rowKey }, { it.rowKey })
+        pairing.unmatched.forEach { it.delete() }
+        for ((row, stored) in pairing.pairs) {
+            if (stored != null) {
+                stored.take(row)
+            } else {
+                DaoCuePropertyAssignment.new {
+                    this.cue = cue
+                    targetType = row.targetType
+                    targetKey = row.targetKey
+                    take(row)
+                }
+            }
+        }
+    }
+    if (newHooks != null) {
+        val pairing = pairByKey(
+            if (created) emptyList() else cue.triggersInOrder(), newHooks,
+            { it.hookKey }, { (_, type, script) -> CueHookKey(type, script.id.value) },
+        )
+        pairing.unmatched.forEach { it.delete() }
+        for ((item, stored) in pairing.pairs) {
+            val (trigger, type, script) = item
+            if (stored != null) {
+                stored.take(trigger)
+            } else {
+                DaoCueTrigger.new {
+                    this.cue = cue
+                    this.triggerType = type
+                    this.script = script
+                    take(trigger)
+                }
+            }
+        }
+    }
+}
+
+/** [layer] onto this layer, but for the record [writeCueChildren] matched it on. */
+internal fun DaoCueLayer.take(layer: CueLayerDto) {
+    sortOrder = layer.sortOrder
+    enabled = layer.enabled
+    targets = layer.targets
+    propertyMask = layer.propertyMask
+    blendMode = layer.blendMode
+    amount = layer.amount
+    stomp = layer.stomp
+    speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
+    rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
+    delay = layer.delayMs.asDuration()
+    interval = layer.intervalMs.asDuration()
+    randomWindow = layer.randomWindowMs.asDuration()
+}
+
+/** [effect] onto this effect, but for the target [writeCueChildren] matched it on. */
+internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
+    effectType = effect.effectType
+    category = effect.category
+    propertyName = effect.propertyName
+    beatDivision = effect.beatDivision
+    blendMode = effect.blendMode
+    distribution = effect.distribution
+    phaseOffset = effect.phaseOffset
+    elementMode = effect.elementMode
+    elementFilter = effect.elementFilter
+    stepTiming = effect.stepTiming
+    parameters = effect.parameters
+    delay = effect.delayMs.asDuration()
+    interval = effect.intervalMs.asDuration()
+    randomWindow = effect.randomWindowMs.asDuration()
+    sortOrder = effect.sortOrder
+    speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+}
+
+/** [row] onto this row, but for the target [writeCueChildren] matched it on. */
+internal fun DaoCuePropertyAssignment.take(row: CuePropertyAssignmentDto) {
+    propertyName = row.propertyName
+    value = row.value
+    fadeDuration = row.fadeDurationMs.asDuration()
+    sortOrder = row.sortOrder
+    moveInDark = row.moveInDark
+}
+
+/** [trigger]'s timing onto this hook; its type and script are what [writeCueChildren] matched it on. */
+private fun DaoCueTrigger.take(trigger: CueTriggerDto) {
+    delay = trigger.delayMs.asDuration()
+    interval = trigger.intervalMs.asDuration()
+    randomWindow = trigger.randomWindowMs.asDuration()
+    sortOrder = trigger.sortOrder
+}
+
+/**
+ * Delete all child entities (layers, ad-hoc effects, property assignments, and triggers) for a cue
+ * that is being deleted, with its project or on its own. A cue *edit* goes through
+ * [writeCueChildren], which keeps the children that survive it.
  */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.layers.forEach { it.delete() }
@@ -636,7 +761,8 @@ internal fun deleteCueChildren(cue: DaoCue) {
 
 /**
  * Delete every prompt-book anchor bound to [cue]. Kept separate from [deleteCueChildren]
- * because anchors must survive cue edits and die only with the cue itself. Explicit rather
+ * because an anchor is not one of the cue's children: it is the prompt book's, and dies only
+ * with the cue itself, never with an edit of its contents. Explicit rather
  * than DB-cascade because SQLite doesn't enforce cascades without a per-connection pragma.
  * Returns the number removed so callers know whether to fire promptBookChanged.
  */
@@ -647,9 +773,9 @@ internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
  * Delete everything that *points at* [cue] from outside it — its busk pads and its cue slots —
  * and return the ids of the busk pages that lost a pad, for `buskLayoutChanged`.
  *
- * Kept out of [deleteCueChildren] for the same reason the anchors are: that helper also runs on a
- * cue **edit** to replace the children, and a pad or a slot must survive an edit and die only with
- * the cue. Both are hand-rolled cascades — `cue_slots.cue_id` declares `CASCADE`, but SQLite does
+ * Kept out of [deleteCueChildren] for the same reason the anchors are: a pad or a slot is not one
+ * of the cue's children, and dies only with the cue, never with an edit of its contents. Both are
+ * hand-rolled cascades — `cue_slots.cue_id` declares `CASCADE`, but SQLite does
  * not enforce it without a per-connection pragma, and a slot whose cue is gone used to 500 the
  * slot list. Must be called inside a transaction.
  */

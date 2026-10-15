@@ -352,7 +352,7 @@ its own key, as Record stores one). They beat every layer of the cue whatever it
 resolved against the loaded rig, so `build_cue_stack` refuses them in a project that is not current,
 as it refuses `at`. A cue **layer** names a Look or, with `paletteId`, a palette — exactly one. A
 layer naming a record the project lacks is refused by both tools (`layerSourceProblems`), where
-`createCueChildren` would drop it silently; a generic palette (an effect palette, or rows for
+`writeCueChildren` would drop it silently; a generic palette (an effect palette, or rows for
 whatever it is pointed at) with no layer targets is refused as the busk pad refuses it with nothing
 selected. An effect missing a required field is refused by the field's name.
 
@@ -547,7 +547,7 @@ Three decisions shape them:
   are left to the operator.
 - **A malformed value is refused, never read as a clear.** An explicit `null` clears a field; a
   number field holding a string is a problem like any other. A cue layer naming a Look that is
-  not in the project is refused too, although the shared cue write (`createCueChildren`) drops
+  not in the project is refused too, although the shared cue write (`writeCueChildren`) drops
   one silently — there, by design, for a Look deleted since.
 
 A prompt-book place is `{pdfPage, y, x?, width?, height?}`: `pdfPage` counts from 1 at the

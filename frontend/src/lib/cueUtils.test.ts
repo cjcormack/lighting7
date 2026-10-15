@@ -110,6 +110,35 @@ describe('buildCueInput', () => {
     expect('source' in input.layers[0]).toBe(false)
   })
 
+  it('strips the response-only uuid from an effect and keeps the rest', () => {
+    const cue = cueWithOneLayer()
+    const withEffect: Cue = {
+      ...cue,
+      adHocEffects: [
+        {
+          targetType: 'fixture',
+          targetKey: 'hex-1',
+          effectType: 'Pulse',
+          category: 'dimmer',
+          propertyName: 'dimmer',
+          beatDivision: 0.5,
+          blendMode: 'OVERRIDE',
+          distribution: 'LINEAR',
+          phaseOffset: 0.25,
+          elementMode: null,
+          elementFilter: null,
+          stepTiming: null,
+          parameters: { min: '40' },
+          uuid: 'effect-uuid',
+        },
+      ],
+    }
+    const effect = buildCueInput(withEffect).adHocEffects[0]
+    expect('uuid' in effect).toBe(false)
+    expect(effect.phaseOffset).toBe(0.25)
+    expect(effect.parameters).toEqual({ min: '40' })
+  })
+
   it('carries a palette layer’s id, not just a Look’s', () => {
     // The other half of the polymorphic referent. A cue that layers a template must survive an
     // inline edit of any other field on the cue.
