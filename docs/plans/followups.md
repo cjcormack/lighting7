@@ -64,7 +64,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | Looks made of exactly two deferred effects of one family, no rows |
 | [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
 | [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Tmpl | an operator retunes an effect template and the live effect keeps its old timing |
-| [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | a click on a mixed group spawns nothing where ⌥click lights the capable heads |
+| [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | an effect template on a mixed group (hexes plus a hazer, or plus a 24-channel Shehds) runs on none of its heads |
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a template is asked to address a two-wheel head's second wheel |
@@ -1300,6 +1300,29 @@ Three smaller things sit behind the same gate and are worth doing together if it
 Relaxing the gate to "any member supports it" is the obvious shape, but it changes the group FX
 route's contract too if the helper stays shared — which it should, since two copies disagreeing
 about one fixture is what sharing it prevented.
+
+**Read again by venue-visit plan S1 (2026-10-14), and left open on purpose.** S1 made *value*
+templates reach a multi-head fixture's cells on every arm (`fx/TemplateFanOut.kt`); it tried the
+obvious fix here too — ask `fixturesSupportProperty` of one member at a time and run the group
+effect when any member can take it — and backed it out in review, because it is not the click
+arm's gap alone. Two things sit underneath, and both are the FX engine's:
+
+- **A group effect with no `propertyName` is decided by `detectCapabilities()`'s all-members
+  rule** (`EffectSpawner.resolveTargetForCue`). Every effect template the UI authors names no
+  property (`TemplateEditor`, `NewTemplateFromEffectSheet`), so on a group of hexes plus a hazer
+  — or hexes plus a 24-channel Shehds, whose colour is on its cells — the click *and* the ⌥click
+  resolve no target and spawn nothing. The "⌥click lights the capable heads" in the paragraph above
+  holds only for a spec that names its property.
+- **`FxEngine.buildExpansion` lets the first member stand for the whole group's shape**: a first
+  member with the property directly makes every member a direct target, one whose property is on
+  its cells (`GROUP_ELEMENTS`) contributes no keys for the plain members after it, and a first
+  member with neither is `NONE`. So even a group-targeted effect that does spawn on a mixed group
+  does not drive every capable head, and the per-member skip report would claim it had.
+
+The fix is therefore an engine one — expand a group per member by that member's own shape, and
+resolve a property-less group spec by "any member" — and it moves the group FX route's contract
+with it, which is why it waits for its trigger rather than riding S1. The click arm's skip still
+names the group's key (the first bullet below).
 
 ---
 

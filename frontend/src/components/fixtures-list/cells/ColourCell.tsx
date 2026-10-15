@@ -87,19 +87,27 @@ const RECENT_FORMS: ColourRecentSource['forms'] = ['bottom-sheet']
 const COLOUR_FAMILY = ['COLOUR'] as const
 
 /**
- * Where a template press or record lands for these targets: the fixtures they stand for, deduped
- * — an element target folded onto its parent, since the template route resolves keys against the
- * patch and would drop an element key silently (`templateTargetsFor`'s rule, over the batch's
- * targets rather than the rows, which a cell never sees).
+ * Where a template press or record lands for these targets: each target by its own key — a whole
+ * fixture as itself, a **cell as its element key** (`{type: 'fixture', key: element.key}`, the
+ * cells contract the desk resolves) — deduped, and a cell dropped where its parent is in the batch
+ * too, since the parent covers it (`templateTargetsFor`'s rule, over the batch's targets rather than
+ * the rows, which a cell never sees).
+ *
+ * A cell used to be folded onto its parent, on the belief that the template route would drop an
+ * element key. It never did, and the fold was the bug (venue-visit plan S1): pressing a colour onto
+ * one zone of a Shehds landed it on the parent, which has no colour. The desk now fans a parent
+ * whose colour lives on its cells out to those cells itself, so a whole-fixture target still means
+ * every cell.
  */
 export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarget[] {
+  const parents = new Set(targets.filter((target) => target.fixtureKey == null).map((target) => target.key))
   const seen = new Set<string>()
   const out: TemplateTarget[] = []
   for (const target of targets) {
-    const key = target.fixtureKey ?? target.key
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ type: 'fixture', key })
+    if (target.fixtureKey != null && parents.has(target.fixtureKey)) continue
+    if (seen.has(target.key)) continue
+    seen.add(target.key)
+    out.push({ type: 'fixture', key: target.key })
   }
   return out
 }

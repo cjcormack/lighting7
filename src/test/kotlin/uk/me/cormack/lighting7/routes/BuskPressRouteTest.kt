@@ -168,6 +168,71 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         state.show.fixtures.patchListChanged()
     }
 
+    // ─── A fixture whose colour lives on its cells (venue-visit plan S1) ─
+
+    private fun seedShehds() {
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-2", 25)
+        LocateTestSupport.seedGroup(state, projectId, "washes", "shehds-1", "shehds-2")
+        state.show.fixtures.patchListChanged()
+    }
+
+    private suspend fun HttpClient.pressTargets(padId: Int, vararg targets: CueTargetDto): BuskPressResponse {
+        val resp = post("/api/rest/projects/$projectId/busk/pads/$padId/press") {
+            contentType(ContentType.Application.Json)
+            setBody(BuskPressRequest(targets = targets.toList()))
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        return resp.body()
+    }
+
+    /** The cells of [keys] the programmer's layers hold a colour on. */
+    private fun layerColoured(vararg keys: String): Set<String> = keys.filter { key ->
+        state.show.programmerStore.get(key, "rgbColour")?.owner == uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS
+    }.toSet()
+
+    private val shehdsZones = listOf("shehds-1", "shehds-2").flatMap { k -> (1..3).map { "$k.zone-$it" } }
+
+    @Test
+    fun `a colour pad pressed on a Shehds lights its three zones`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val (pad) = client.bank("keys", solo = false, tpl(client.createTemplate("amber")))
+
+        assertEquals("applied", client.pressTargets(pad, CueTargetDto("fixture", "shehds-1")).action)
+
+        assertEquals(setOf("shehds-1.zone-1", "shehds-1.zone-2", "shehds-1.zone-3"), layerColoured(*shehdsZones.toTypedArray()))
+        assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"), "the parent has no colour to hold")
+    }
+
+    @Test
+    fun `a colour pad pressed on one Shehds zone lights that zone alone`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val (pad) = client.bank("keys", solo = false, tpl(client.createTemplate("amber")))
+
+        client.pressTargets(pad, CueTargetDto("fixture", "shehds-2.zone-2"))
+
+        assertEquals(setOf("shehds-2.zone-2"), layerColoured(*shehdsZones.toTypedArray()))
+    }
+
+    @Test
+    fun `a colour pad pressed through a group of Shehds lights every zone, and a second press clears them`() =
+        testApplication {
+            mountTestApp(state)
+            seedShehds()
+            val client = jsonClient()
+            val (pad) = client.bank("keys", solo = false, tpl(client.createTemplate("amber")))
+
+            client.pressTargets(pad, CueTargetDto("group", "washes"))
+            assertEquals(shehdsZones.toSet(), layerColoured(*shehdsZones.toTypedArray()))
+
+            assertEquals("removed", client.pressTargets(pad, CueTargetDto("group", "washes")).action)
+            assertTrue(layerColoured(*shehdsZones.toTypedArray()).isEmpty())
+        }
+
     // ─── Each kind ──────────────────────────────────────────────────────
 
     @Test

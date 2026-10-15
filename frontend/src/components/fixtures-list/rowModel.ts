@@ -357,45 +357,30 @@ export function selectedRowTargets(
 }
 
 /**
- * Where a **template** press lands for these rows: the fixtures they stand for, as
+ * Where a **template** press lands for these rows: the heads they stand for, as
  * `{type: 'fixture', key}` — the shape `POST /templates/{id}/apply` and `/toggle` take.
  *
- * Neither of its two siblings answers this. [selectedRowTargets] keeps a group row *as a group*,
- * which the desk then expands to every member — including the ones an active filter hides, and
- * "editing a group row while a filter is active must not write to hidden fixtures" is the rule
- * every other group-row action here keeps (`GroupRow.members`). [expandSelectionToTargets]
- * respects the filter but hands back an *element* for a lone element row, and an element key is
- * not a fixture key: the template route resolves targets against the patch and would drop it
- * silently. A template cannot address one head of a fixture anyway, so an element row lands on
- * its fixture.
+ * [selectedRowTargets] does not answer this: it keeps a group row *as a group*, which the desk
+ * then expands to every member — including the ones an active filter hides, and "editing a group
+ * row while a filter is active must not write to hidden fixtures" is the rule every other
+ * group-row action here keeps (`GroupRow.members`). So a group row lands on its visible members, a
+ * fixture row on its fixture, and an element row **on its cell** — `{type: 'fixture', key:
+ * element.key}`, the cells contract the desk resolves — with an element row under a selected
+ * parent dropped, the parent covering it. Deduped by key: a fixture selected through two group
+ * memberships is one head.
  *
- * Deduped by key: a fixture selected through two group memberships is one head.
+ * That is exactly [spreadTargetsFor]'s answer, so it is that walk. They were two until venue-visit
+ * plan S1: this one folded an element row onto its fixture, on the belief that the template route
+ * would drop an element key. It never did, and the fold put a colour pressed on one zone of a Shehds
+ * onto a parent with no colour. A whole fixture whose property lives only on its cells is fanned to
+ * them by the desk, so a fixture row still reaches every cell. Two names for one walk because the
+ * two presses are different questions that happen to share an answer.
  */
 export function templateTargetsFor(
   rows: readonly Row[],
   selectedIds: ReadonlySet<RowId>,
 ): LocateTarget[] {
-  const seen = new Set<string>()
-  const out: LocateTarget[] = []
-  const add = (key: string) => {
-    if (seen.has(key)) return
-    seen.add(key)
-    out.push({ type: 'fixture', key })
-  }
-  for (const row of selectedContributingRows(rows, selectedIds)) {
-    switch (row.kind) {
-      case 'group':
-        for (const member of row.members) add(member.key)
-        break
-      case 'fixture':
-      case 'element':
-        add(row.fixture.key)
-        break
-      case 'divider':
-        break
-    }
-  }
-  return out
+  return spreadTargetsFor(rows, selectedIds)
 }
 
 /**
@@ -405,11 +390,10 @@ export function templateTargetsFor(
  * `{type: 'fixture', key: element.key}`, the cells contract the desk already takes
  * (`rowLocateTarget` publishes it and `BuskRigOrder` sorts it).
  *
- * Not [templateTargetsFor], deliberately: that one folds an element row into its fixture because
- * the template route resolves keys against the patch, and a spread over a bar's cells has to keep
- * the cells. It is [expandSelectionToTargets]'s walk — the same dedupe, the same drop of an element
- * row under a covered parent — read as cue targets, through [spreadTargetsOf], so the container's
- * per-column targets and this answer cannot name different heads for one marquee.
+ * It is [expandSelectionToTargets]'s walk — the same dedupe, the same drop of an element row under
+ * a covered parent — read as cue targets, through [spreadTargetsOf], so the container's per-column
+ * targets and this answer cannot name different heads for one marquee. [templateTargetsFor] is this
+ * walk too since venue-visit plan S1, when it stopped folding a cell onto its fixture.
  */
 export function spreadTargetsFor(
   rows: readonly Row[],

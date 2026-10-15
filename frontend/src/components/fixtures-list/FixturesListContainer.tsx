@@ -525,19 +525,31 @@ export function FixturesListContainer({
     () => templateTargetsFor(rows, selectedRowIds),
     [rows, selectedRowIds],
   )
-  // From the **same list** the press is sent to, resolved back to whole fixtures, so the two
-  // cannot disagree: a lone element row lands on its fixture above, and its families are the
-  // fixture's — parent properties and every element's — not the one element's. Deriving them from
-  // `selectedTargets` instead (which holds the element) under-reported a bar whose dimmer sits on
-  // the parent, and offered no intensity template for a press that would have set it.
-  const fixtureByKey = useMemo(() => new Map(fixtures.map((f) => [f.key, f])), [fixtures])
+  // From the **same list** the press is sent to, resolved back to what each target is, so the two
+  // cannot disagree: a fixture target is the whole fixture — parent properties and every element's,
+  // so a bar whose dimmer sits on the parent is offered an intensity template — and a cell target
+  // (an element row, sent by its element key since venue-visit plan S1) is that cell, whose families
+  // are its own: the press lands on the cell, so only what the cell can take is offered. Deriving them
+  // from `selectedTargets` instead under-reported a bar whose dimmer sits on the parent. The key map
+  // holds every element too: keyed by fixture alone, a cell-only selection resolved to nothing and
+  // the strip offered no template at all.
+  const writeTargetByKey = useMemo(() => {
+    const byKey = new Map<string, WriteTarget>()
+    for (const fixture of fixtures) {
+      byKey.set(fixture.key, fixture)
+      ;(fixture.elements ?? []).forEach((element, cellIndex) =>
+        byKey.set(element.key, { ...element, fixtureKey: fixture.key, cellIndex }),
+      )
+    }
+    return byKey
+  }, [fixtures])
   const templateWriteTargets = useMemo(
     () =>
       templateTargets.flatMap((target) => {
-        const fixture = fixtureByKey.get(target.key)
-        return fixture ? [fixture] : []
+        const writeTarget = writeTargetByKey.get(target.key)
+        return writeTarget ? [writeTarget] : []
       }),
-    [templateTargets, fixtureByKey],
+    [templateTargets, writeTargetByKey],
   )
   const templateFamilies = useMemo(() => targetFamilies(templateWriteTargets), [templateWriteTargets])
   // The family alone cannot filter a template that names an emitter: white, amber, UV and the hex

@@ -26,6 +26,8 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
@@ -33,6 +35,7 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
+import uk.me.cormack.lighting7.fx.TemplateFanOut
 import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
@@ -1563,36 +1566,49 @@ private fun resolveTemplateAgainstPatch(
         fixtures.fixtures.filter { it.key in keys }
     }
 
-    // The whole-template colour rule, per head, before any row is reported. A head that cannot serve
-    // every colour row serves none of them, so each of its colour rows has to say *that* rather than
-    // its own answer — otherwise the panel shows the hex landing fine beside an unsupported amber and
-    // the operator reads it as "mostly works", which is the opposite of what the desk will do.
+    // Every row paired with the heads it lands on, before anything is resolved — the click's and the
+    // cook's pairing, so the panel promises what the desk does. A per-fixture row answers only for
+    // the head it names; a generic row answers for all. A multi-head fixture whose property lives
+    // only on its cells (the Shehds' colour, on its three zones) answers once per cell
+    // ([TemplateFanOut]), where the parent alone was "never a candidate" and quietly omitted.
     // Parsed **once**, not once per candidate: this backs the editor's live panel, so on a rig-wide
     // resolve the old shape re-parsed every row for every patched head on every debounced keystroke.
+    val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = fixtures::fittedMediaFor
     val parsedRows = request.rows.mapNotNull { row -> parseTemplateIntent(row.value)?.let { row to it } }
-    val colourRequirement: Map<String, TemplateResolver.ColourRequirement> = buildMap {
-        for (fixture in candidates) {
-            val applicable = parsedRows.mapNotNull { (row, intent) ->
-                val target = row.target
-                if (target is TargetRef.Fixture && target.key != fixture.key) null
-                else row.propertyName to intent
+    val landings: List<Pair<Pair<TemplateRowDto, TemplateIntent>, List<GroupableFixture>>> =
+        parsedRows.map { (row, intent) ->
+            val forThisRow = when (val target = row.target) {
+                is TargetRef.Fixture -> candidates.filter { it.key == target.key }
+                else -> candidates
             }
-            put(fixture.key, TemplateResolver.unmetColourRequirement(fixture, applicable, fixtures.fittedMediaFor(fixture.key)))
+            (row to intent) to forThisRow.flatMap { TemplateFanOut.headsFor(it, row.propertyName, fittedMediaFor) }
+        }
+
+    // The whole-template colour rule, per landing head, before any row is reported. A head that
+    // cannot serve every colour row serves none of them, so each of its colour rows has to say
+    // *that* rather than its own answer — otherwise the panel shows the hex landing fine beside an
+    // unsupported amber and the operator reads it as "mostly works", which is the opposite of what
+    // the desk will do.
+    val colourRequirement: Map<String, TemplateResolver.ColourRequirement> = buildMap {
+        val applicableByHead = LinkedHashMap<String, Pair<GroupableFixture, MutableList<Pair<String, TemplateIntent>>>>()
+        for ((rowIntent, heads) in landings) {
+            for (head in heads) {
+                applicableByHead.getOrPut(head.targetKey) { head to ArrayList() }
+                    .second.add(rowIntent.first.propertyName to rowIntent.second)
+            }
+        }
+        for ((key, headRows) in applicableByHead) {
+            put(key, TemplateResolver.unmetColourRequirement(headRows.first, headRows.second, TemplateFanOut.mediaOf(headRows.first, fittedMediaFor)))
         }
     }
 
     val entries = ArrayList<TemplateResolutionDto>()
-    for (row in request.rows) {
-        val intent = parseTemplateIntent(row.value) ?: continue
+    for ((rowIntent, heads) in landings) {
+        val (row, intent) = rowIntent
         val isColourRow = TemplateProperty.ofOrNull(row.propertyName)?.family == PropertyMaskGroup.COLOUR
-        // A per-fixture row answers only for the head it names; a generic row answers for all.
-        val forThisRow = when (val target = row.target) {
-            is TargetRef.Fixture -> candidates.filter { it.key == target.key }
-            else -> candidates
-        }
-        for (fixture in forThisRow) {
-            val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent, fixtures.fittedMediaFor(fixture.key))
-            val requirement = if (isColourRow) colourRequirement[fixture.key] else null
+        for (head in heads.distinctBy { it.targetKey }) {
+            val resolution = TemplateResolver.resolve(head, row.propertyName, intent, TemplateFanOut.mediaOf(head, fittedMediaFor))
+            val requirement = if (isColourRow) colourRequirement[head.targetKey] else null
             // A head with nothing in this family was never a candidate — omitted rather than listed
             // as a failure, which is what the resolver's own `NotACandidate` arm says. It used to be
             // decided by matching the reason against a `"no colour"` constant, and a UV-only template
@@ -1606,14 +1622,22 @@ private fun resolveTemplateAgainstPatch(
             } else {
                 describeNote(resolution.note)
             }
+            // A cell names itself by its parent and position (`Shehds 1 · Cell 2`) and carries its
+            // parent's type, so the panel's two lines read as they do for a whole head.
+            val element = head as? FixtureElement<*>
+            val fixture = element?.parentFixture ?: head as? Fixture
             // A head with nothing in this family was never a candidate — omitted rather than listed
             // as a failure. `Unsupported` still appears when the head *could* have taken it but
             // cannot (no degree range, no dimmer), which is the distinction worth drawing.
             entries.add(
                 TemplateResolutionDto(
-                    fixtureKey = fixture.key,
-                    fixtureName = fixture.fixtureName,
-                    typeKey = fixture.typeKey,
+                    fixtureKey = head.targetKey,
+                    fixtureName = if (element != null) {
+                        "${element.parentFixture.fixtureName} · Cell ${element.elementIndex + 1}"
+                    } else {
+                        fixture?.fixtureName ?: head.displayName
+                    },
+                    typeKey = fixture?.typeKey ?: "",
                     propertyName = row.propertyName,
                     resolvedPropertyName = resolution.propertyName,
                     outcome = outcome,

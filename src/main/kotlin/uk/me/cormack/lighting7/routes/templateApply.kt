@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.TemplateFanOut
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
@@ -107,13 +108,8 @@ private fun applyValueTemplateToProgrammer(
 
     val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val skips = ArrayList<TemplateSkipDto>()
+    val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = state.show.fixtures::fittedMediaFor
 
-    // The whole-template colour rule, computed once per head before the row loop: a head that cannot
-    // serve every colour row serves none of them, and reports one skip rather than a skip per row.
-    // An explicit amber is in the template because the hex alone did not get where the operator
-    // wanted, so writing the hex without it would put a *different* colour on that head under this
-    // template's name — see `TemplateResolver.unmetColourRequirement`.
-    val unmetColour = HashMap<String, String>()
     val parsedRows = template.rows.mapNotNull { row ->
         parseTemplateIntent(row.value)?.let { row to it }
             ?: run {
@@ -121,41 +117,17 @@ private fun applyValueTemplateToProgrammer(
                 null
             }
     }
-    for (fixtureKey in fixtureKeys) {
-        val fixture = runCatching {
-            state.show.fixtures.untypedGroupableFixture(fixtureKey)
-        }.getOrNull() ?: continue
-        val applicable = parsedRows.mapNotNull { (row, intent) ->
-            val target = row.target
-            if (target is TargetRef.Fixture && target.key != fixtureKey) null else row.propertyName to intent
-        }
-        when (val requirement = TemplateResolver.unmetColourRequirement(
-            fixture, applicable, state.show.fixtures.fittedMediaFor(fixtureKey),
-        )) {
-            // Reported for both arms: a click that lands on nothing must say why, and unlike the
-            // editor's panel there is no "was never a candidate" to stay quiet about — the operator
-            // selected this head deliberately.
-            is TemplateResolver.ColourRequirement.NotACandidate -> {
-                unmetColour[fixtureKey] = requirement.reason
-                skips += TemplateSkipDto(fixtureKey, TemplateProperty.COLOUR.propertyName, requirement.reason)
-            }
-            is TemplateResolver.ColourRequirement.Unmet -> {
-                unmetColour[fixtureKey] = requirement.reason
-                // The row that actually failed, not `rgbColour`: a UV-only template has no colour
-                // row, so naming one would report a skip against a property the template lacks.
-                skips += TemplateSkipDto(fixtureKey, requirement.propertyName, requirement.reason)
-            }
-            TemplateResolver.ColourRequirement.Met -> Unit
-        }
-    }
 
-    // Iterated as already-parsed pairs: `parsedRows` was built for the requirement check above, and
-    // re-parsing each row here would double the parse work on every apply for no gain. A row that
-    // failed to parse is absent from it — warned about once, at the point it was dropped.
-    for ((row, intent) in parsedRows) {
-        // A per-fixture row applies only to the head it names, *and* only if that head is in the
-        // selection: applying a focus position to two of its eight heads must move those two and
-        // leave the rest alone.
+    // Every row paired with the heads it lands on, before anything is resolved or written. A
+    // per-fixture row applies only to the head it names, *and* only if that head is in the
+    // selection: applying a focus position to two of its eight heads must move those two and leave
+    // the rest alone. Each selected head then fans through [TemplateFanOut] — a multi-head fixture
+    // whose property lives only on its cells (the Shehds' colour, on its three zones) lands on
+    // those cells, where it used to be asked of the parent and refused as "no colour". Distinct by
+    // (row, head), so a selection naming a bar *and* one of its cells writes that cell once.
+    val landings = ArrayList<Landing>()
+    val landed = HashSet<Pair<Int, String>>()
+    parsedRows.forEachIndexed { rowIndex, (row, intent) ->
         val applyTo: List<String> = when (val target = row.target) {
             is TargetRef.Fixture -> listOf(target.key).filter { it in fixtureKeys }
             else -> fixtureKeys.toList()
@@ -168,34 +140,73 @@ private fun applyValueTemplateToProgrammer(
                 skips += TemplateSkipDto(fixtureKey, row.propertyName, "fixture not patched")
                 continue
             }
-            // Already reported once for this head, above. Silent here so one refusal is one skip.
-            if (fixtureKey in unmetColour &&
-                TemplateProperty.ofOrNull(row.propertyName)?.family == PropertyMaskGroup.COLOUR
-            ) {
-                continue
+            for (head in TemplateFanOut.headsFor(fixture, row.propertyName, fittedMediaFor)) {
+                if (landed.add(rowIndex to head.targetKey)) {
+                    landings += Landing(row.propertyName, intent, head, selectedKey = fixtureKey)
+                }
             }
-            val resolution = TemplateResolver.resolve(
-                fixture, row.propertyName, intent, state.show.fixtures.fittedMediaFor(fixtureKey),
-            )
-            val value = resolution.value
-            if (value == null) {
-                skips += TemplateSkipDto(
-                    fixtureKey,
-                    row.propertyName,
-                    (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported",
-                )
-                continue
-            }
-            writes += ProgrammerWriter.PropertyWrite(
-                fixture,
-                // The resolved name, not the row's: on a colour wheel the value lands on
-                // `colourWheel` rather than `rgbColour`, and writing the row's name would address
-                // nothing.
-                resolution.propertyName,
-                value,
-                sourceGroup = groupHints[fixtureKey],
-            )
         }
+    }
+
+    // The whole-template colour rule, computed once per landing head before anything is written: a
+    // head that cannot serve every colour row serves none of them, and reports one skip rather than
+    // a skip per row. An explicit amber is in the template because the hex alone did not get where
+    // the operator wanted, so writing the hex without it would put a *different* colour on that head
+    // under this template's name — see `TemplateResolver.unmetColourRequirement`. Asked of the head
+    // the rows *land on*, so each of a fanned parent's cells answers for itself.
+    val unmetColour = HashMap<String, String>()
+    for ((headKey, forHead) in landings.groupBy { it.head.targetKey }) {
+        val applicable = forHead.map { it.propertyName to it.intent }
+        when (val requirement = TemplateResolver.unmetColourRequirement(
+            forHead.first().head, applicable, TemplateFanOut.mediaOf(forHead.first().head, fittedMediaFor),
+        )) {
+            // Reported for both arms: a click that lands on nothing must say why, and unlike the
+            // editor's panel there is no "was never a candidate" to stay quiet about — the operator
+            // selected this head deliberately.
+            is TemplateResolver.ColourRequirement.NotACandidate -> {
+                unmetColour[headKey] = requirement.reason
+                skips += TemplateSkipDto(headKey, TemplateProperty.COLOUR.propertyName, requirement.reason)
+            }
+            is TemplateResolver.ColourRequirement.Unmet -> {
+                unmetColour[headKey] = requirement.reason
+                // The row that actually failed, not `rgbColour`: a UV-only template has no colour
+                // row, so naming one would report a skip against a property the template lacks.
+                skips += TemplateSkipDto(headKey, requirement.propertyName, requirement.reason)
+            }
+            TemplateResolver.ColourRequirement.Met -> Unit
+        }
+    }
+
+    for (landing in landings) {
+        val headKey = landing.head.targetKey
+        // Already reported once for this head, above. Silent here so one refusal is one skip.
+        if (headKey in unmetColour &&
+            TemplateProperty.ofOrNull(landing.propertyName)?.family == PropertyMaskGroup.COLOUR
+        ) {
+            continue
+        }
+        val resolution = TemplateResolver.resolve(
+            landing.head, landing.propertyName, landing.intent, TemplateFanOut.mediaOf(landing.head, fittedMediaFor),
+        )
+        val value = resolution.value
+        if (value == null) {
+            skips += TemplateSkipDto(
+                headKey,
+                landing.propertyName,
+                (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported",
+            )
+            continue
+        }
+        writes += ProgrammerWriter.PropertyWrite(
+            landing.head,
+            // The resolved name, not the row's: on a colour wheel the value lands on
+            // `colourWheel` rather than `rgbColour`, and writing the row's name would address
+            // nothing.
+            resolution.propertyName,
+            value,
+            // A fanned cell takes the group its parent arrived through, as a spread's cell does.
+            sourceGroup = groupHints[headKey] ?: groupHints[landing.selectedKey],
+        )
     }
 
     if (writes.isNotEmpty()) {
@@ -205,6 +216,18 @@ private fun applyValueTemplateToProgrammer(
     }
     return ApplyTemplateResponse(writes.size, skips)
 }
+
+/**
+ * One template row paired with a head it lands on — the selected head, or one of its cells when
+ * the row's property lives only there ([TemplateFanOut]). [selectedKey] is the head the operator
+ * selected, which a cell takes its group hint from.
+ */
+private class Landing(
+    val propertyName: String,
+    val intent: uk.me.cormack.lighting7.fx.TemplateIntent,
+    val head: GroupableFixture,
+    val selectedKey: String,
+)
 
 /**
  * The click gesture on an **effect** template: one detached programmer-band copy of the effect per

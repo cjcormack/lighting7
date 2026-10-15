@@ -1785,4 +1785,214 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertNull(store.get("bar-1.pixel-3", "rgbColour"), "an unnamed cell is untouched")
         assertNull(store.get("bar-1", "rgbColour"), "the parent is untouched")
     }
+
+    // ─── A fixture whose colour lives on its cells (venue-visit plan S1) ─
+
+    /**
+     * Two Shehds in 24-channel mode, grouped, and a hex beside them. The Shehds' pan, tilt, dimmer,
+     * strobe and zoom are the parent's; its colour is RGBW on three `Zone` elements and the parent
+     * has none — which is why a colour template pressed on the parent used to write nothing.
+     */
+    private fun seedShehds() {
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds-2", 25)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 49)
+        LocateTestSupport.seedGroup(state, projectId, "washes", "shehds-1", "shehds-2")
+        LocateTestSupport.seedGroup(state, projectId, "mixed", "shehds-1", "hex-1")
+    }
+
+    private fun zones(key: String) = (1..3).map { "$key.zone-$it" }
+
+    private suspend fun io.ktor.client.HttpClient.amberTemplate(): TemplateDto = post(base()) {
+        contentType(ContentType.Application.Json)
+        setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+    }.body()
+
+    private suspend fun io.ktor.client.HttpClient.click(id: Int, vararg targets: TemplateTargetDto): ApplyTemplateResponse {
+        val resp = post("${base()}/$id/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = targets.toList()))
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        return resp.body()
+    }
+
+    private suspend fun io.ktor.client.HttpClient.toggle(id: Int, vararg targets: TemplateTargetDto): ToggleTemplateResponse {
+        val resp = post("${base()}/$id/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets.toList()))
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        return resp.body()
+    }
+
+    /** The colour the programmer holds on [key], and by which owner. */
+    private fun heldColour(key: String): Pair<uk.me.cormack.lighting7.fx.ProgrammerOwner, java.awt.Color>? {
+        val slot = state.show.programmerStore.get(key, "rgbColour") ?: return null
+        val colour = slot.value.resolved as uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour
+        return slot.owner to colour.value.color
+    }
+
+    private fun assertHeldBy(owner: uk.me.cormack.lighting7.fx.ProgrammerOwner, keys: List<String>) {
+        for (key in keys) {
+            val held = assertNotNull(heldColour(key), "$key holds the colour")
+            assertEquals(owner, held.first, "$key is held by $owner")
+        }
+    }
+
+    @Test
+    fun `a colour template clicked on a Shehds lands on its three zones`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        val body = client.click(template.id, TemplateTargetDto("fixture", "shehds-1"))
+
+        assertEquals(3, body.written, body.skipped.toString())
+        assertTrue(body.skipped.isEmpty(), body.skipped.toString())
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, zones("shehds-1"))
+        val zone = state.show.programmerStore.get("shehds-1.zone-1", "rgbColour")?.value?.resolved
+        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour>(zone)
+        assertEquals(74u.toUByte(), zone.value.white, "extracted to the zone's own white emitter")
+        assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"), "the parent has no colour to hold")
+        assertNull(heldColour("shehds-2.zone-1"), "the unselected Shehds is untouched")
+    }
+
+    @Test
+    fun `a colour template clicked on one Shehds zone changes only that zone`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        val body = client.click(template.id, TemplateTargetDto("fixture", "shehds-1.zone-2"))
+
+        assertEquals(1, body.written, body.skipped.toString())
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, listOf("shehds-1.zone-2"))
+        assertNull(heldColour("shehds-1.zone-1"))
+        assertNull(heldColour("shehds-1.zone-3"))
+    }
+
+    @Test
+    fun `a colour template clicked through a group of Shehds lands on every zone, carrying the group`() =
+        testApplication {
+            mountTestApp(state)
+            seedShehds()
+            val client = jsonClient()
+            val template = client.amberTemplate()
+
+            val body = client.click(template.id, TemplateTargetDto("group", "washes"))
+
+            assertEquals(6, body.written, body.skipped.toString())
+            assertTrue(body.skipped.isEmpty(), body.skipped.toString())
+            assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, zones("shehds-1") + zones("shehds-2"))
+            assertEquals(
+                "washes",
+                state.show.programmerStore.get("shehds-2.zone-3", "rgbColour")?.sourceGroup,
+                "a zone carries the group its parent arrived through, as a spread's cell does",
+            )
+        }
+
+    @Test
+    fun `a click naming a Shehds and one of its zones writes that zone once`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        val body = client.click(
+            template.id,
+            TemplateTargetDto("fixture", "shehds-1"),
+            TemplateTargetDto("fixture", "shehds-1.zone-1"),
+        )
+
+        assertEquals(3, body.written, body.skipped.toString())
+    }
+
+    @Test
+    fun `a template row the Shehds carries itself stays on the parent`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val half = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "half",
+                    rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "dimmer", "pct:50")),
+                ),
+            )
+        }.body<TemplateDto>()
+
+        val body = client.click(half.id, TemplateTargetDto("fixture", "shehds-1"))
+
+        assertEquals(1, body.written, body.skipped.toString())
+        assertNotNull(state.show.programmerStore.get("shehds-1", "dimmer"), "the master dimmer is the parent's")
+        assertNull(state.show.programmerStore.get("shehds-1.zone-1", "dimmer"))
+    }
+
+    @Test
+    fun `a colour template toggled on a Shehds cooks onto its zones`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        assertEquals("applied", client.toggle(template.id, TemplateTargetDto("fixture", "shehds-1")).action)
+
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, zones("shehds-1"))
+        assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"))
+        assertEquals("removed", client.toggle(template.id, TemplateTargetDto("fixture", "shehds-1")).action)
+        assertNull(heldColour("shehds-1.zone-1"), "the layer took its zones with it")
+    }
+
+    @Test
+    fun `a colour template toggled on one Shehds zone cooks onto that zone alone`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        client.toggle(template.id, TemplateTargetDto("fixture", "shehds-1.zone-3"))
+
+        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, listOf("shehds-1.zone-3"))
+        assertNull(heldColour("shehds-1.zone-1"))
+    }
+
+    @Test
+    fun `a colour template toggled on a group of Shehds and a hex cooks onto every head that has colour`() =
+        testApplication {
+            mountTestApp(state)
+            seedShehds()
+            val client = jsonClient()
+            val template = client.amberTemplate()
+
+            client.toggle(template.id, TemplateTargetDto("group", "mixed"))
+
+            assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, zones("shehds-1") + "hex-1")
+            assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"))
+        }
+
+    @Test
+    fun `resolve lists a Shehds by its zones, not as a head with no colour`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+
+        val entries = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateResolveRequest(
+                    rows = listOf(colourRow()),
+                    targets = listOf(TemplateTargetDto("fixture", "shehds-1")),
+                ),
+            )
+        }.body<TemplateResolveResponse>().entries
+
+        assertEquals(zones("shehds-1"), entries.map { it.fixtureKey })
+        assertEquals("shehds-1 · Cell 2", entries[1].fixtureName)
+        assertEquals("shehds-led19-rgbw-24ch", entries[1].typeKey)
+        assertTrue(entries.all { it.value != null }, entries.toString())
+    }
 }

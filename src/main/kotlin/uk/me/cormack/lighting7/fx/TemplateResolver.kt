@@ -158,18 +158,7 @@ object TemplateResolver {
         }
         if (colourFamily.isEmpty()) return ColourRequirement.Met
 
-        // "Has this head any colour at all" is asked through [resolveColour] itself rather than by a
-        // second property walk, so the panel's omit rule and the cook's resolution cannot drift
-        // apart about what having colour means. The hex is irrelevant — only the Unsupported arm is
-        // read — and it has to be asked separately rather than inferred from the rows, because an
-        // emitter-only template has no colour row to infer it from.
-        val hasColour = resolve(
-            fixture,
-            TemplateProperty.COLOUR.propertyName,
-            TemplateIntent.Colour("#000000", WhitePolicy.RGB_ONLY),
-            media,
-        ).note !is Note.Unsupported
-        if (!hasColour) return ColourRequirement.NotACandidate("no colour")
+        if (!hasColour(fixture, media)) return ColourRequirement.NotACandidate("no colour")
 
         for ((propertyName, intent) in colourFamily) {
             val note = resolve(fixture, propertyName, intent, media).note
@@ -177,6 +166,44 @@ object TemplateResolver {
         }
         return ColourRequirement.Met
     }
+
+    /**
+     * Has this head any colour at all — the question that makes it a candidate for a colour
+     * template ([unmetColourRequirement]) and that decides whether a colour row fans from a parent
+     * to its cells ([TemplateFanOut]).
+     *
+     * Asked through [resolveColour] itself rather than by a second property walk, so the panel's
+     * omit rule, the fan-out and the cook's resolution cannot drift apart about what having colour
+     * means. The hex is irrelevant — only the Unsupported arm is read — and it has to be asked
+     * separately rather than inferred from the rows, because an emitter-only template has no colour
+     * row to infer it from.
+     */
+    fun hasColour(fixture: GroupableFixture, media: FittedMedia?): Boolean = resolve(
+        fixture,
+        TemplateProperty.COLOUR.propertyName,
+        TemplateIntent.Colour("#000000", WhitePolicy.RGB_ONLY),
+        media,
+    ).note !is Note.Unsupported
+
+    /**
+     * Does this head **have** the property a template row names — whether or not this particular
+     * intent resolves on it? The presence question [TemplateFanOut] decides a parent's fan-out by:
+     * a parent with its own pan but no annotated degree range keeps a position row (and reports
+     * why it cannot take it) rather than handing it to cells.
+     *
+     * Colour-family rows ask [hasColour]; a position row asks for pan and tilt; every other row
+     * asks the same `PropertyChannelWriter.resolveProperty` lookup its resolve arm makes first.
+     */
+    fun hasProperty(fixture: GroupableFixture, propertyName: String, media: FittedMedia?): Boolean =
+        when (val property = TemplateProperty.ofOrNull(propertyName)) {
+            null -> PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName)) != null
+            TemplateProperty.POSITION -> fixture is WithPosition
+            else -> if (property.family == PropertyMaskGroup.COLOUR) {
+                hasColour(fixture, media)
+            } else {
+                PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName)) != null
+            }
+        }
 
     // ─── Colour ─────────────────────────────────────────────────────────────
 

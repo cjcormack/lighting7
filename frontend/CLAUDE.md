@@ -2709,10 +2709,18 @@ the target**, and there is no picker to open or family dropdown to get wrong:
 draw that line, since the hex and all three emitters are COLOUR. See §Looks, templates and layers
 for why it is a union and why the probe reads the colour descriptor rather than a category.
 
-`templateTargetsFor` in `rowModel.ts` is the target rule, and it is neither sibling: a group row
-lands on its *visible* members (the filter rule every group-row action keeps), and an element row
-lands on its fixture, because the template route resolves keys against the patch and would drop an
-element key silently. The strip reads nothing from Redux; `NewTemplateFromSelectionSheet` takes the
+`templateTargetsFor` in `rowModel.ts` is the target rule — since venue-visit plan S1 it *is*
+`spreadTargetsFor`'s walk, and not `selectedRowTargets`: a group row lands on its *visible* members
+(the filter rule every group-row action keeps), and an element row lands on its **cell**, `{type: 'fixture', key: element.key}` — dropped under a selected parent, which
+covers it. It folded an element row onto its fixture until venue-visit plan S1, on the belief that the
+template route would drop an element key; it never did, and the fold put a colour pressed on one zone
+of a Shehds onto a parent with no colour. A whole fixture whose property lives only on its cells is
+fanned to them **by the desk** (lighting7 `docs/lighting-composition-model.md` §"A press is per
+target"), so the client never expands one; `templateTargetsOf` in `ColourCell.tsx` is the same rule
+over a batch's write targets. The strip's families and emitters are read off the **same** targets,
+each resolved to what it is — a fixture whole, a cell as that cell — so a cell selection is offered
+what the cell can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
+row C counts them as *heads*. The strip reads nothing from Redux; `NewTemplateFromSelectionSheet` takes the
 same targets so a press and its "new from selection" cannot name different heads.
 `TemplateStrip.test.tsx` pins the filter, the target and the click/⌥click split.
 
@@ -2883,11 +2891,10 @@ hosts that draw a colour endpoint hand `ColourEditor` in (`colourEditor`), becau
 Recent reach the store.
 
 **The marquee answers the panel's first two questions** (D4). Targets are the marquee's heads —
-`spreadTargetsFor` in `rowModel.ts`, beside `templateTargetsFor` and deliberately **not** it: a
+`spreadTargetsFor` in `rowModel.ts`, which `templateTargetsFor` now delegates to: a
 group row expanded to its **visible** members, an element row as `{type: 'fixture', key:
-element.key}` (the cells contract the desk already takes), a fixture row as itself, where the
-template rule folds an element row into its fixture because that route resolves keys against the
-patch. It is `expandSelectionToTargets`'s walk read as cue targets (`spreadTargetsOf`), so the
+element.key}` (the cells contract the desk already takes), a fixture row as itself — the template
+rule's answer too since venue-visit plan S1, so `templateTargetsFor` is this walk. It is `expandSelectionToTargets`'s walk read as cue targets (`spreadTargetsOf`), so the
 container's per-column targets and the request cannot name different heads. `families` is the pair
 the press sends (`usePressFamilies`) — on the programmer, the one surface that bridges; the two
 plain lists send the marquee's own families, as their pill shows (`desk` on `SpreadPopover`). The
