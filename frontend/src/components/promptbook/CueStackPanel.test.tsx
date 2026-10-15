@@ -37,8 +37,6 @@ const base: ComponentProps<typeof CueStackPanel> = {
   goDisabled: false,
   showActive: true,
   stackName: 'Act 1',
-  dbo: false,
-  onDbo: noop,
   projectId: 1,
   coverPages: 0,
 }

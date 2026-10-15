@@ -478,7 +478,7 @@ rejected at the desk. What shipped is two files.
 - **`/fixtures/list` and `/groups/list`.** They mount the same `FixturesTable`, so D4 and D5 reach
   them — that is intended, a selected row should look the same everywhere — but their toolbars,
   filters and cards/list switcher are untouched.
-- **DBO.** Still inert ([`FU-FE-DBO-INERT`](../followups.md#fu-fe-dbo-inert)); this plan draws it
+- **DBO.** Still inert (`FU-FE-DBO-INERT`); this plan draws it
   where it is.
 
 ---

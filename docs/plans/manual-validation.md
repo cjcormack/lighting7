@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open lands the Programmer on its phone arm, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
 | [`FU-MANUAL-SENTRY-RELEASE`](#fu-manual-sentry-release) | the first release build uploads its source maps and commits to Sentry and ships none, and a fresh Windows install sends nothing until an admin turns diagnostics on | Sentry S4, 2026-10-13 |
 | [`FU-MANUAL-SCRIM-S1`](#fu-manual-scrim-s1) | a painted cloth's images travel with its show — through the repo to a second desk, and into a clone | Scrim S1, 2026-10-09 |
@@ -88,6 +89,39 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S5`
+
+**What it proves**: *the grand master is a fader for the whole rig* — venue-visit plan S5 (D5, D12):
+a 0–100 % level applied at transmit to every dimmer and UV channel and, on a head with no dimmer, to
+its colour mix; a strobe channel is cut only at 0, and a park and a fixture command's hold pass
+through untouched.
+
+**Why it is here**: the tests drive a mock controller and a recorded MIDI device. Nothing in review
+put the level on a wire, in front of a real dimmerless LED bar, or under a motor fader.
+
+**Test**, on the hall's rig with the X-Touch attached:
+
+1. **A look at full.** Bring up a state with a MAC 250 or Robe (dimmer), the Kam Liteobar or a
+   lightstrip (no dimmer), and a Shehds wash (master dimmer over its zones), all well up, one head
+   strobing slowly.
+2. **Half.** Open the header's Grand Master panel and drag it to 50 %: every head looks half as bright, the LED bar included,
+   and the strobe keeps its speed. On the Channels sheet the dimmers and the bar's RGB read halved;
+   the Shehds' zones do not (its master dimmer does).
+3. **Out.** Press *Out*: the rig is dark, the strobe stops, a parked channel holds its level. A
+   lamp-off or reset run now still completes.
+4. **The fader.** Bind an X-Touch fader to *GM fader*. Move the panel's fader: the motor follows. Move
+   the X-Touch: the panel follows. Touch it, move the panel, let go: the motor catches up. With the
+   panel shut, the header chip still reads the level.
+5. **It stays.** Leave GM at 70 %, switch to another project and back, then restart the desk: 70 %
+   each time. Another desk importing the project starts at 100 %.
+
+If a dimmerless type is scaled wrongly (a colour wheel moving, a zone dimmed twice), promote it to
+a `FU-` item in `followups.md`.
+
+15 minutes.
 
 ---
 

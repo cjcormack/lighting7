@@ -63,10 +63,8 @@ function draw() {
       stack={stack}
       multiStack={false}
       display={{ activeCue: cues[0], standbyCue: cues[1], nextStack: null } as unknown as RunnerDisplayState}
-      dbo={false}
       onGo={vi.fn()}
       onBack={vi.fn()}
-      onDbo={vi.fn()}
       onSelectStack={vi.fn()}
       onRequeueCue={vi.fn()}
       projectId={1}

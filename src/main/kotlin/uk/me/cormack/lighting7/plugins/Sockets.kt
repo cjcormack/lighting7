@@ -155,6 +155,7 @@ fun Application.configureSockets(state: State) {
             setupFxSubscriptions(scope)
             setupProjectSubscriptions(scope)
             setupSurfaceSubscriptions(scope)
+            setupGrandMasterSubscriptions(scope)
             setupSelectionSubscriptions(scope)
             setupBuskSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)
@@ -213,5 +214,6 @@ private suspend fun dispatch(scope: SocketScope, message: InMessage) {
         is HandInMessage -> handleHand(scope, message)
         is WindowsInMessage -> handleWindows(scope, message)
         is BuskInMessage -> handleBusk(scope, message)
+        is GrandMasterInMessage -> handleGrandMaster(scope, message)
     }
 }

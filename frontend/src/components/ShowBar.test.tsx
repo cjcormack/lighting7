@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Store-connected children (speed masters, the programmer indicator) are mocked to nothing: this
@@ -27,8 +27,6 @@ const bar = (container: HTMLElement) => container.firstElementChild!.firstElemen
 
 const PROPS = {
   stackName: 'Act 1',
-  dbo: false,
-  onDbo: () => {},
   activeNumber: 'Q4',
   activeName: 'Warm Wash',
   standbyNumber: 'Q5',
@@ -108,13 +106,10 @@ describe('ShowBar', () => {
     expect(screen.queryByText(/FADING/)).toBeNull()
   })
 
-  it('toggles blackout', () => {
-    const onDbo = vi.fn()
-    render(<ShowBar {...PROPS} onDbo={onDbo} />)
-    const dbo = screen.getByTitle('Toggle blackout')
-    expect(dbo.getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(dbo)
-    expect(onDbo).toHaveBeenCalled()
+  it('draws no blackout tile: the grand master is the app header’s', () => {
+    render(<ShowBar {...PROPS} />)
+    expect(screen.queryByTitle('Toggle blackout')).toBeNull()
+    expect(screen.queryByText('DBO')).toBeNull()
   })
 })
 

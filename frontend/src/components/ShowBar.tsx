@@ -12,8 +12,6 @@ interface ShowBarProps {
   /** Leading "current stack" segment. Rendered only when non-null — Run passes it only when
    *  the stack tabs are hidden (single stack); Program + Prompt Book always pass it. */
   stackName?: string | null
-  dbo: boolean
-  onDbo: () => void
   /** The cue currently outputting on stage. */
   activeNumber: string | null
   activeName: string | null
@@ -48,7 +46,8 @@ interface ShowBarProps {
 
 /**
  * Universal "show bar" (Row 3) shared across the live-show views:
- * BLACKOUT · speed masters · programmer · active → Next · BACK · GO.
+ * speed masters · programmer · active → Next · BACK · GO. The grand master is the app header's
+ * overview panel, on every view.
  * GO is the largest, most prominent affordance. It reflects show state, not mode state, so it
  * renders identically in Show and the Prompt Book — the two hosts since the busk-chrome plan's
  * session A took the bar off the busk view for its side sheet's Show tab (`useShowBarProps`).
@@ -95,9 +94,8 @@ interface ShowBarProps {
  *
  * **The bottom rung is one row again, and that is a rung added rather than a fallback removed**
  * (space plan D8). It used to be the 440–700 arm plus a bigger GO — two lines, 118px of an 852px
- * phone, before a single fixture. Now everything below 440 shrinks to its chip size instead: the
- * DBO tile centres its initials with no word above them, `SpeedMastersChip` drops its `+n`, the
- * live block says `Q4 → Q5` and nothing else (the pulse, both names and the stack are already
+ * phone, before a single fixture. Now everything below 440 shrinks to its chip size instead:
+ * `SpeedMastersChip` drops its `+n`, the live block says `Q4 → Q5` and nothing else (the pulse, both names and the stack are already
  * gated above it), BACK is its glyph, and GO is a fixed 84×44 — 44px of controls in a 56px band.
  * The `basis-full` transport line is untouched in the 440–700 band, which is where the ladder's
  * own history says it has to stay: the bar wraps rather than deleting, and a rung is added to the
@@ -111,8 +109,6 @@ interface ShowBarProps {
  */
 export const ShowBar = memo(function ShowBar({
   stackName,
-  dbo,
-  onDbo,
   activeNumber,
   activeName,
   standbyNumber,
@@ -164,43 +160,6 @@ export const ShowBar = memo(function ShowBar({
           unlockedWarning && UNLOCKED_WARNING_CLASS,
         )}
       >
-        {/* DBO tile. Tiles use `justify-start` (not `justify-center`) so the labels share the same
-            y-baseline regardless of value font size. It steps its own chrome down the rungs rather
-            than swapping to a second element. */}
-        <button
-          type="button"
-          onClick={onDbo}
-          aria-pressed={dbo}
-          title="Toggle blackout"
-          className={cn(
-            'flex shrink-0 flex-col items-start justify-center gap-px rounded-md border px-2 py-1 transition-colors @[440px]:justify-start @[440px]:px-2.5 @[700px]:px-3 @[700px]:py-1.5',
-            'bg-card hover:bg-muted/40',
-            dbo && 'border-red-700 bg-red-950/40 hover:bg-red-950/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]',
-          )}
-        >
-          <span
-            className={cn(
-              'hidden text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground @[440px]:block',
-              dbo && 'text-red-300',
-            )}
-          >
-            Blackout
-          </span>
-          <span
-            className={cn(
-              'font-mono text-[11px] font-bold leading-none tracking-wider @[440px]:text-base @[700px]:text-lg',
-              dbo ? 'text-red-300' : 'text-foreground',
-            )}
-          >
-            DBO
-          </span>
-        </button>
-
-        {/* Note for whoever wires blackout up: DBO above is local state with no side effect, so it
-            is a tile that does nothing (`FU-FE-DBO-INERT`). It used to have a working BLIND tile
-            beside it, which made the two read as peers; that tile is the programmer's action bar's
-            now, so DBO stands alone — still inert, just no longer beside something that works. */}
-
         {/* Every speed master, master 1 included. Self-contained; picks its own arm from the width
             above. The ShowBar used to own an M1 readout beside this, which is the split that made the
             560px band unwinnable. */}

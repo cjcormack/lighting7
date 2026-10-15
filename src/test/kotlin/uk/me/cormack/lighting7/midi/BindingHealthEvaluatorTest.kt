@@ -247,6 +247,7 @@ class BindingHealthEvaluatorTest {
         val ctx = context()
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.Blackout, ctx))
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.GrandMasterToggle, ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.GrandMasterFader, ctx))
     }
 
     @Test

@@ -9,7 +9,7 @@ import { launchImmersive } from './windowIdentity'
  * One per-window fact, `desk.immersive`, `off` | `on`, default `off` on every surface — nothing
  * about a screen's size says the app should vanish. While it is on and the window is on one of
  * the four live views (`lib/liveViews.ts`'s predicate), `Layout` skips the sidebar (hides, not
- * collapses), the app header and the four overview panels; on every other route the app is drawn
+ * collapses), the app header and the five overview panels; on every other route the app is drawn
  * whatever this says, because the fixtures list is navigated *from* the sidebar. The `ShowHeader`
  * stays and carries the way back (D11): the same glyph, inverted.
  *

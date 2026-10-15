@@ -86,8 +86,8 @@ export function ProjectBusk() {
         projectName={project.name}
         {...showHeaderProps}
       />
-      {/* No bar: the Show tab in the side sheet is where the transport, DBO and the programmer
-          chip live on this view (busk-chrome plan D1). */}
+      {/* No bar: the Show tab in the side sheet is where the transport and the programmer chip
+          live on this view (busk-chrome plan D1). */}
       <BuskingView projectId={projectIdNum} show={show} />
     </div>
   )

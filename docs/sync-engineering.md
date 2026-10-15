@@ -37,7 +37,8 @@ The repo split is:
   into `machine_overrides` was removed on 2026-08-24 along with the rest
   of the migrations — see
   [`InstallBootstrap.kt`](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt).
-* **Transient runtime state** (never synced): grand master / blackout state.
+* **Machine-local runtime state** (never synced): grand master level and blackout, per project in
+  `project_scaler_states`, written through so a restart keeps them.
   (AI conversation history was here until the in-app chat was removed; its
   `ai_conversations` table is no longer declared, and an existing database
   keeps the table as an orphan nothing reads.)

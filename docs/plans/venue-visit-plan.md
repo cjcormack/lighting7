@@ -186,7 +186,7 @@ Grouped by area. §4 gives the order.
 
 ### Rig and output
 
-**S5 — Grand master (D5).**
+**S5 — Grand master (D5).** Done: `6729e6f9`.
 - `GlobalScalerState` becomes a continuous scale. It still persists in
   `project_scaler_states`, which needs a new real column (an additive change).
 - REST and WS set and stream it. A MIDI `GrandMasterFader` target is added beside the toggle.
@@ -358,7 +358,7 @@ a suggested order; Needs is the constraint.
 
 | # | Session | Needs | Done |
 |---|---|---|---|
-| 1 | S5 Grand master | — | |
+| 1 | S5 Grand master | — | `6729e6f9` |
 | 2 | S6 Make rig safe, Undo / Quit desk | — | |
 | 3 | S10 Record polish | — | |
 | 4 | S11 Position scale | — | |

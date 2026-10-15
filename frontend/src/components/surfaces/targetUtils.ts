@@ -93,6 +93,8 @@ export function describeTarget(target: BindingTarget): string {
       return "Blackout"
     case "grandMasterToggle":
       return "Grand Master"
+    case "grandMasterFader":
+      return "Grand Master fader"
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
     // The uuid is not resolved to a name here: this is a pure function with no access to the

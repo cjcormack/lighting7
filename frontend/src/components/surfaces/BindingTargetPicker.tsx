@@ -81,6 +81,7 @@ const CONTINUOUS_KINDS: TargetKind[] = [
   "groupProperty",
   "selectionProperty",
   "speedMasterBpm",
+  "grandMasterFader",
 ]
 const BUTTON_KINDS: TargetKind[] = [
   "flash",
@@ -129,6 +130,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   encoderBankSet: "Encoder bank",
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
+  grandMasterFader: "Grand Master — fader",
   setBank: "Set bank",
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
@@ -963,6 +965,8 @@ function defaultForKind(
       return { type: "blackout" }
     case "grandMasterToggle":
       return { type: "grandMasterToggle" }
+    case "grandMasterFader":
+      return { type: "grandMasterFader" }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
     // `dimmer` is `EncoderBankState.DEFAULT_PROPERTY` and the one property every rig has, so both

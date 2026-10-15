@@ -268,6 +268,17 @@ class SurfaceFeedbackPublisher(
         val policy: BindingTakeoverPolicy,
     )
 
+    /**
+     * A control bound to the grand master's level. Like [SpeedMasterEntry], not a
+     * [ContinuousEntry]: its value lives in the scaler holder, not on a channel, and the entry is
+     * what lets PICKUP know where the level already sits.
+     */
+    private data class GrandMasterEntry(
+        val displayKey: String,
+        val control: ControlDescriptor,
+        val policy: BindingTakeoverPolicy,
+    )
+
     /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
@@ -299,12 +310,14 @@ class SurfaceFeedbackPublisher(
          * DMX-tick-rate.
          */
         val speedMasterEntries: List<SpeedMasterEntry>,
+        /** Grand-master faders: a flat list, scanned per level change, for [speedMasterEntries]' reason. */
+        val grandMasterEntries: List<GrandMasterEntry>,
     ) {
         companion object {
             val EMPTY = Index(
                 emptyMap(), emptyMap(), emptyMap(), emptyMap(),
                 emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
-                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(),
+                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(), emptyList(),
             )
         }
     }
@@ -335,6 +348,7 @@ class SurfaceFeedbackPublisher(
 
     private val jobs = mutableListOf<Job>()
     private var scalerJob: Job? = null
+    private var grandMasterJob: Job? = null
     private var speedMasterJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
@@ -438,6 +452,7 @@ class SurfaceFeedbackPublisher(
      */
     private fun subscribeScaler(scope: CoroutineScope) {
         scalerJob?.cancel()
+        grandMasterJob?.cancel()
         val scaler = try {
             globalScalerStateProvider()
         } catch (_: Exception) {
@@ -445,6 +460,11 @@ class SurfaceFeedbackPublisher(
         } ?: return
         scalerJob = combine(scaler.blackoutEnabled, scaler.grandMasterEnabled) { b, g -> b to g }
             .onEach { (blackout, grandMaster) -> onScalerChanged(blackout, grandMaster) }
+            .launchIn(scope)
+        // Apart from the LEDs above, which only move when the level crosses 0: a fader dragged
+        // from the browser moves the level at frame rate, and only the faders need to follow it.
+        grandMasterJob = scaler.grandMasterLevel
+            .onEach { resyncGrandMasterEntries(index.get().grandMasterEntries) }
             .launchIn(scope)
     }
 
@@ -490,6 +510,8 @@ class SurfaceFeedbackPublisher(
         jobs.clear()
         scalerJob?.cancel()
         scalerJob = null
+        grandMasterJob?.cancel()
+        grandMasterJob = null
         speedMasterJob?.cancel()
         speedMasterJob = null
         locateJob?.cancel()
@@ -782,6 +804,7 @@ class SurfaceFeedbackPublisher(
         val recordLeds = mutableListOf<RecordLedEntry>()
         val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
+        val grandMasterEntries = mutableListOf<GrandMasterEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
         val recordRefs = RecordRefResolver(projectId)
@@ -809,6 +832,13 @@ class SurfaceFeedbackPublisher(
                             masterUuid = tempo.masterUuid?.let { speedMasterUuidOrNull(it) },
                             minBpm = tempo.minBpm,
                             maxBpm = tempo.maxBpm,
+                            policy = binding.takeoverPolicy ?: classDefault,
+                        )
+                    }
+                    if (binding.target == BindingTarget.GrandMasterFader) {
+                        grandMasterEntries += GrandMasterEntry(
+                            displayKey = displayKey,
+                            control = control,
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
@@ -888,11 +918,13 @@ class SurfaceFeedbackPublisher(
                 buskPageLeds = buskPageLeds,
                 buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
                 speedMasterEntries = speedMasterEntries,
+                grandMasterEntries = grandMasterEntries,
             )
         )
         // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
         // the operator's first touch, rather than only after the first tempo change.
         resyncSpeedMasterEntries(speedMasterEntries)
+        resyncGrandMasterEntries(grandMasterEntries)
     }
 
     /**
@@ -952,7 +984,11 @@ class SurfaceFeedbackPublisher(
 
     /** Resync one specific control — motor catch-up on touch-off. */
     private fun resyncControl(displayKey: String, controlId: String) {
-        val entries = index.get().continuousByDisplay[displayKey] ?: return
+        val idx = index.get()
+        resyncGrandMasterEntries(
+            idx.grandMasterEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
+        )
+        val entries = idx.continuousByDisplay[displayKey] ?: return
         for (entry in entries) {
             if (entry.control.controlId != controlId) continue
             applyContinuous(entry, computeValue7Bit(entry), rearmPickup = false)
@@ -992,6 +1028,7 @@ class SurfaceFeedbackPublisher(
         // Tempo-bound encoders are not ContinuousEntries (they have no channel), so the reset
         // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
+        resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
         for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
@@ -1209,6 +1246,17 @@ class SurfaceFeedbackPublisher(
             val value7Bit = if (span <= 0.0) 0u else {
                 (((bpm - entry.minBpm) / span) * 127.0).roundToInt().coerceIn(0, 127).toUByte()
             }
+            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
+            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
+        }
+    }
+
+    /** Push the grand master's level onto each entry's control, and record it for PICKUP. */
+    private fun resyncGrandMasterEntries(entries: List<GrandMasterEntry>) {
+        if (entries.isEmpty()) return
+        val level = runCatching { globalScalerStateProvider().grandMasterLevel.value }.getOrNull() ?: return
+        val value7Bit = grandMasterLevelTo7Bit(level)
+        for (entry in entries) {
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

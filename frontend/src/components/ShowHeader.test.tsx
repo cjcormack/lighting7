@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 
 vi.mock('./SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 vi.mock('./effects/ArmedChip', () => ({ ArmedChip: () => null }))
+vi.mock('./GrandMasterOverviewPanel', () => ({ GrandMasterImmersiveChip: () => <div data-testid="grand-master" /> }))
 vi.mock('./venue/VenueHeldChip', () => ({ VenueHeldChip: () => null }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
@@ -145,6 +146,15 @@ describe('ShowHeader', () => {
       fireEvent.click(back)
       expect(isImmersive()).toBe(false)
       expect(screen.getByRole('button', { name: 'Expand over the app' })).toHaveAttribute('data-immersive', 'off')
+    })
+
+    it('draws the grand master readout only while immersive, the app header badge saying it otherwise', () => {
+      const a = draw()
+      expect(screen.queryByTestId('grand-master')).toBeNull()
+      a.unmount()
+      setImmersive(true)
+      draw()
+      expect(screen.getByTestId('grand-master')).toBeInTheDocument()
     })
 
     it('draws the Offline chip only while immersive and the socket is down', () => {

@@ -215,6 +215,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
 | Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
 | FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
+| Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
@@ -233,7 +234,7 @@ Broadcast, Cloud sync, Effects, Machine, Scenery and Stage render. Channel is th
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (54)
+## Client → Server (55)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -487,6 +488,18 @@ shape, because a surface's *next page* button and a tab click are two ways of on
 id that is not the current project's is ignored. Not to be confused with `busk.layoutChanged`,
 which shares only the namespace: that one names pages whose **document** changed.
 
+### Grand master — `GrandMasterSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `grandMaster.set` | `level: Double` | none — `grandMaster.state` follows |
+
+The live project's grand master (venue-visit plan S5), clamped into 0–100; a non-finite level is
+ignored. The Grand Master overview panel's fader, sent at frame rate (floored at 50 ms by the client), so it is
+`CONTINUOUS` in `TraceSampling.WS_MESSAGES` and never traced. An operator gesture, so
+`FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT /projects/{id}/grand-master` reads and sets the
+same value over REST, and a MIDI `grandMasterFader` binding moves it too.
+
 ### Speed masters — `SpeedMasterSocket.kt`
 
 The desk's only WS tempo surface. A master is addressed by uuid, and `masterUuid` null/omitted
@@ -579,14 +592,14 @@ broadcast because the programmer is shared desk state.
 | `surfaceBank.state` | — | `surfaceBank.state` |
 | `surfaceScaler.state` | — | `surfaceScaler.state` |
 | `surfaceScaler.setBlackout` | `enabled: Boolean` | none — `surfaceScaler.state` follows |
-| `surfaceScaler.setGrandMaster` | `enabled: Boolean` | none — `surfaceScaler.state` follows |
+| `surfaceScaler.setGrandMaster` | `enabled: Boolean` | none — `surfaceScaler.state` follows. `false` takes the grand master to 0, `true` back to its last level above 0 |
 | `surfaceDevices.state` | — | `surfaceDevices.state` |
 
 Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds the inbound event
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (81)
+## Server → Client (82)
 
 ### Boot — `BootSocket.kt`
 
@@ -864,6 +877,22 @@ switch re-attaches the service to the new show, which disarms.
 view already resolves a `?page=` it cannot find against the list it fetched, so saying nothing
 leaves each client on its own fallback.
 
+### Grand master — `GrandMasterSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `grandMaster.state` | `projectId: Int`, `level: Double` (0–100) | Connect snapshot + broadcast |
+
+`StateFlow`-backed, so the subscription is the snapshot and every change is a whole frame; it
+re-subscribes through `flatMapLatest` off `projectChangedFlow`, as `surfaceScaler.state` does,
+because the scaler facade is re-created on a project switch. The level is per project and
+machine-local: persisted in `project_scaler_states` (excluded from sync), so it survives a switch
+away and back and a restart. It scales at transmit, after composition and FX and under park —
+every DIMMER and UV channel, and the colour mix (a `DmxColour`'s RGB, WHITE and AMBER) of a head
+with no dimmer; a STROBE channel is cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
+sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
+leaves it.
+
 ### Speed masters — `SpeedMasterSocket.kt`
 
 | Message | Payload | When |
@@ -1027,7 +1056,7 @@ refetch.
 | `surfaceBank.bindingsChanged` | `projectId`, `changeType: added\|updated\|removed\|reloaded`, `bindingId?` | Broadcast |
 | `surfaceBank.state` | `activeBanks: {deviceTypeKey: bank}` (null values elided) | Connect snapshot + broadcast |
 | `surfaceBank.changed` | `deviceTypeKey`, `previousBank?`, `newBank?` | Broadcast delta |
-| `surfaceScaler.state` | `blackoutEnabled`, `grandMasterEnabled` | Connect snapshot + broadcast |
+| `surfaceScaler.state` | `blackoutEnabled`, `grandMasterEnabled` (the grand master's level read as `> 0`) | Connect snapshot + broadcast |
 | `surfacePickup.changed` | `displayKey`, `controlId`, `state`, `target?` | Broadcast — soft-takeover pickup indicator |
 | `surfaceDevices.state` | `devices: [{displayKey, displayName, typeKey?, isMatched, hasInputPort, hasOutputPort, activeBank?}]` | Connect snapshot + broadcast |
 | `surfaceControls.state` | `displayKey`, `controls: {controlId: {value?, physical?, touched, led: on\|off\|none, ring: on\|off\|none}}` | Connect snapshot (one per attached device, explicit `sendSnapshot`) + broadcast after every full resync; an empty `controls` map is a detach |
@@ -1217,6 +1246,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-effect state, the five FX writes and their `fxError` refusal |
+| `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |

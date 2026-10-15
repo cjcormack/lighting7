@@ -22,6 +22,7 @@ import { useOpenMobileDrawer } from './mobileDrawerContext'
 import { ImmersiveToggle } from './ImmersiveToggle'
 import { SaveStatusIndicator } from './SaveStatusIndicator'
 import { ArmedChip } from './effects/ArmedChip'
+import { GrandMasterImmersiveChip } from './GrandMasterOverviewPanel'
 import { VenueHeldChip } from './venue/VenueHeldChip'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 import { useVenueMode } from '@/store/venues'
@@ -185,6 +186,9 @@ export function ShowHeader({
         {/* ARMED, while immersive: the app header that carries it is not drawn, and the arm is the
             one state no screen may hide (stage-view plan session 9, D16). */}
         {immersive && <ArmedChip className="h-6" />}
+        {/* The grand master below full, while immersive, for the arm's reason: the app header's
+            badge that says so is not drawn, and a dimmed rig looks like a dim show. */}
+        {immersive && <GrandMasterImmersiveChip />}
         {/* Blind · venue, while immersive: the app header's chip that says the show is held is not
             drawn, and a held show looks like a working one (venue plan session 6). */}
         {immersive && <VenueHeldChip projectId={projectId} />}

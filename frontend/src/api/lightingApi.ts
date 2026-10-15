@@ -39,6 +39,7 @@ import {createHandWsApi, HandWsApi} from "./handApi";
 import {createSceneryWsApi, SceneryWsApi} from "./sceneryApi";
 import {createEffectsWsApi, EffectsWsApi} from "./effectsApi";
 import {createVenueHoldWsApi, VenueHoldWsApi} from "./venueHoldApi";
+import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
 interface LightingApi {
@@ -79,6 +80,7 @@ interface LightingApi {
   scenery: SceneryWsApi
   effects: EffectsWsApi
   venueHold: VenueHoldWsApi
+  grandMaster: GrandMasterWsApi
   stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
@@ -147,6 +149,7 @@ function createLightingApi(): LightingApi {
   const sceneryWsApi = createSceneryWsApi(connection)
   const effectsWsApi = createEffectsWsApi(connection)
   const venueHoldWsApi = createVenueHoldWsApi(connection)
+  const grandMasterWsApi = createGrandMasterWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
@@ -190,6 +193,7 @@ function createLightingApi(): LightingApi {
     scenery: sceneryWsApi,
     effects: effectsWsApi,
     venueHold: venueHoldWsApi,
+    grandMaster: grandMasterWsApi,
     stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,

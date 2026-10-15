@@ -64,8 +64,6 @@ interface CueStackPanelProps {
   /** Whether the show is running — drives the drawer header dot colour + a "Stopped" label. */
   showActive: boolean
   stackName: string | null
-  dbo: boolean
-  onDbo: () => void
   projectId: number
   /** Front-matter page count, offsets each cue's page label to the script's numbering. */
   coverPages: number
@@ -87,7 +85,7 @@ interface CueStackPanelProps {
  * (green) and next (blue) cues expand by default into full cards; every other cue is
  * a compact row that can be expanded on demand, with MARKER separators between them.
  * Clicking a card/row navigates to that cue's anchor — it never fires a cue; a per-card
- * "Set next" arms the next GO. Transport (stack · BPM · TAP · DBO · BACK/GO) lives in the
+ * "Set next" arms the next GO. Transport (stack · BPM · TAP · BACK/GO) lives in the
  * shared Row 3 show bar above the view; only the narrow drawer variant keeps its own header.
  */
 export function CueStackPanel({
@@ -117,8 +115,6 @@ export function CueStackPanel({
   goDisabled,
   showActive,
   stackName,
-  dbo,
-  onDbo,
   projectId,
   coverPages,
   inDrawer,
@@ -147,7 +143,7 @@ export function CueStackPanel({
         inDrawer ? '' : 'max-w-[380px] min-w-[300px] border-l',
       )}
     >
-      {/* Header (drawer only) — stack name · BPM · TAP · DBO · close. On desktop these controls
+      {/* Header (drawer only) — stack name · BPM · TAP · close. On desktop these controls
           live in the shared Row 3 show bar above the whole view, so the rail is a pure cue list. */}
       {inDrawer && (
         <div className="flex h-12 shrink-0 items-center gap-1 border-b bg-card px-2">
@@ -168,17 +164,6 @@ export function CueStackPanel({
               could neither see nor tap any other master. No `@container` ancestor here, so the
               phone-width arm is asked for by name. */}
           <SpeedMastersChip />
-          <Button
-            variant={dbo ? 'destructive' : 'outline'}
-            size="sm"
-            onClick={onDbo}
-            className={cn(
-              'h-8 px-2 text-xs font-bold tracking-wider',
-              dbo && 'shadow-[0_0_14px_rgba(200,32,32,0.55)]',
-            )}
-          >
-            DBO
-          </Button>
           {onClose && (
             <Button variant="ghost" size="icon-sm" aria-label="Close cues" onClick={onClose}>
               <X className="size-4" />

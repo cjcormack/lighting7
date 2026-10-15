@@ -98,7 +98,6 @@ function showSource(overrides: Partial<ShowTabSource['transport']> = {}): ShowTa
       cancelAnimations: vi.fn(),
       ...overrides,
     },
-    showBarProps: { dbo: false, onDbo: vi.fn() },
     activeCue: cues[0],
     standbyCue: cues[1],
     nextStack: null,

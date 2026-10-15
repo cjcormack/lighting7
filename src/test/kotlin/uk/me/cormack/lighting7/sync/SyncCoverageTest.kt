@@ -210,7 +210,7 @@ class SyncCoverageTest {
         // tags (session 4, `VenueRepoSync`); the version itself travels as a tagged commit, never as this row.
         DaoVenueVersions to Disposition.MachineLocal("this desk's index of venue versions; rebuilt from the venue repo's tags"),
 
-        DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
+        DaoProjectScalerStates to Disposition.Excluded("machine-local blackout / grand-master level"),
         // Venue plan §3.2, exported from formatVersion 24 (session 4). Only a show on a venue holds
         // any, so the exporter check below reads them from `seedShowOnVenue`'s export.
         DaoShowHides to Disposition.Portable("showHides"),

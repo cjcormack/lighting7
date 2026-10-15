@@ -101,6 +101,11 @@ export interface GrandMasterToggleTarget {
   type: "grandMasterToggle"
 }
 
+/** Set the grand master's level from a fader / encoder: 0..127 across 0–100 %. */
+export interface GrandMasterFaderTarget {
+  type: "grandMasterFader"
+}
+
 export interface SetBankTarget {
   type: "setBank"
   deviceTypeKey: string
@@ -352,6 +357,7 @@ export type BindingTarget =
   | FlashTarget
   | BlackoutTarget
   | GrandMasterToggleTarget
+  | GrandMasterFaderTarget
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
