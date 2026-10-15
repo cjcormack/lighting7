@@ -1,0 +1,496 @@
+<title>Apply Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of plan sections; each mock-up is a dark desk "screen" that scrolls in its own box.
+     Colour carries meaning: blue = the selection and Local values, teal = a layer (a palette or Look that tracks),
+     violet = an effect, amber = the attribute mask, green = a door that follows the rule, coral = one that doesn't. */
+  :root {
+    --bg:#f2f3f1; --panel:#ffffff; --fg:#17191c; --muted:#5d636b; --line:#d6d9d6; --soft:#e8eae6;
+    --sel:#2b62d6; --layer:#0f7a6e; --fx:#7a45c2; --mask:#a86a00; --good:#1f8a45; --bad:#c2462e;
+    --sel-t:rgba(43,98,214,0.12); --mask-t:rgba(168,106,0,0.14); --layer-t:rgba(15,122,110,0.10);
+    --sans:"Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --sel:#86a9ff; --layer:#5cd1c1; --fx:#c39cf5; --mask:#f2bd4f; --good:#5fd38a; --bad:#ff8f78;
+    --sel-t:rgba(134,169,255,0.16); --mask-t:rgba(242,189,79,0.16); --layer-t:rgba(92,209,193,0.12); color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --sel:#86a9ff; --layer:#5cd1c1; --fx:#c39cf5; --mask:#f2bd4f; --good:#5fd38a; --bad:#ff8f78;
+    --sel-t:rgba(134,169,255,0.16); --mask-t:rgba(242,189,79,0.16); --layer-t:rgba(92,209,193,0.12); color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:46px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--mask); }
+  h1 { margin:0; font-size:clamp(30px, 5.2vw, 48px); line-height:1.05; font-weight:800; letter-spacing:-0.025em; text-wrap:balance; max-width:21ch; }
+  h1 em { font-style:normal; color:var(--layer); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-22px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--sel); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:24px; line-height:1.2; font-weight:800; letter-spacing:-0.01em; text-wrap:balance; }
+  h2 small { font:500 11px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:8px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.8em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+
+  .k { display:inline-block; font:500 11px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; border:1px solid currentColor; }
+  .k.sel { color:var(--sel); } .k.layer { color:var(--layer); } .k.fx { color:var(--fx); } .k.mask { color:var(--mask); }
+  .yes { color:var(--good); font-weight:600; } .no { color:var(--bad); font-weight:600; } .part { color:var(--mask); font-weight:600; }
+
+  .rules { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .rule { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; }
+  .rule b { display:block; margin-bottom:3px; font-size:15px; }
+  .rule .n { font:500 11px var(--mono); color:var(--muted); display:block; margin-bottom:4px; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.w { min-width:220px; }
+  tr.fold td:first-child { box-shadow:inset 3px 0 0 var(--layer); }
+  tr.keep td:first-child { box-shadow:inset 3px 0 0 var(--sel); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  .fig { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .fig svg { display:block; width:100%; min-width:760px; height:auto; color:var(--fg); font-family:var(--sans); }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-sel:#7aa2ff; --s-layer:#5cd1c1; --s-fx:#b98cff; --s-amber:#f5c04a; --s-pri:#3b82f6;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:960px; padding:14px; display:flex; gap:14px; align-items:flex-start; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .screen .sp { flex:1; }
+  .screen .lbl { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .pop { width:340px; border:1px solid var(--s-bd); background:var(--s-card); border-radius:12px; box-shadow:0 14px 34px rgba(0,0,0,0.55); display:flex; flex-direction:column; overflow:hidden; flex-shrink:0; }
+  .screen .pop.small { width:270px; }
+  .screen .ph { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--s-bd); }
+  .screen .ph b { font-size:13px; }
+  .screen .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .pill.mask { color:var(--s-amber); border-color:rgba(245,192,74,0.5); background:rgba(245,192,74,0.08); }
+  .screen .pill.sel { color:var(--s-sel); border-color:rgba(122,162,255,0.45); }
+  .screen .band { padding:8px 12px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid var(--s-bd); }
+  .screen .band:last-child { border-bottom:none; }
+  .screen .pal { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px 0 6px; border-radius:7px; border:1px solid var(--s-bd); background:var(--s-row); font-size:11.5px; white-space:nowrap; }
+  .screen .pal .sw { width:13px; height:13px; border-radius:50%; box-shadow:0 0 0 2px var(--s-row), 0 0 0 3px transparent; }
+  .screen .pal.on { border-color:var(--s-layer); box-shadow:inset 0 0 0 1px var(--s-layer); }
+  .screen .pal.some { border-color:var(--s-layer); border-style:dashed; }
+  .screen .pal.fxp { color:var(--s-fx); border-color:rgba(185,140,255,0.4); }
+  .screen .pal.more { color:var(--s-mfg); }
+  .screen .glyph { font-size:10px; color:var(--s-mfg); }
+  .screen .picker { height:92px; border-radius:6px; background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, #ff8a1f); }
+  .screen .hue { height:9px; border-radius:5px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+  .screen .field { display:inline-flex; align-items:center; height:24px; padding:0 8px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-bg); font-size:11.5px; }
+  .screen .slider { height:6px; border-radius:3px; background:#2a2a31; position:relative; }
+  .screen .slider i { position:absolute; inset:0 auto 0 0; border-radius:3px; background:var(--s-pri); }
+  .screen .xy { height:110px; border-radius:6px; background-color:var(--s-bg); background-image:linear-gradient(var(--s-bd) 1px, transparent 1px), linear-gradient(90deg, var(--s-bd) 1px, transparent 1px); background-size:22px 22px; position:relative; border:1px solid var(--s-bd); }
+  .screen .xy i { position:absolute; width:10px; height:10px; border-radius:50%; background:var(--s-pri); left:58%; top:36%; box-shadow:0 0 0 3px rgba(59,130,246,0.3); }
+  .screen .foot { display:flex; gap:6px; padding:8px 12px; background:var(--s-row); flex-wrap:wrap; }
+  .screen .btn { display:inline-flex; align-items:center; height:24px; padding:0 8px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:11.5px; white-space:nowrap; color:var(--s-fg); }
+  .screen .menu { border:1px solid var(--s-bd); background:var(--s-card); border-radius:8px; padding:4px; box-shadow:0 12px 28px rgba(0,0,0,0.5); display:flex; flex-direction:column; width:200px; flex-shrink:0; margin-top:96px; }
+  .screen .menu .mi { padding:6px 8px; border-radius:5px; font-size:12px; display:flex; }
+  .screen .menu .mi small { margin-left:auto; color:var(--s-mfg); font-size:10.5px; }
+  .screen .menu .ms { height:1px; background:var(--s-bd); margin:3px 0; }
+  .screen .col { display:flex; flex-direction:column; gap:14px; }
+
+  .q { background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--mask); border-radius:8px; padding:12px 14px; font-size:14px; min-width:0; }
+  .q b { display:block; font-size:15px; margin-bottom:4px; }
+  .q ol { margin:6px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:3px; }
+  .q li.rec { font-weight:600; }
+  .q.done { border-left-color:var(--good); }
+
+  ol.sessions { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; counter-reset:s; }
+  ol.sessions li { counter-increment:s; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px 12px 58px; position:relative; font-size:14px; min-width:0; }
+  ol.sessions li::before { content:counter(s); position:absolute; left:14px; top:11px; width:30px; height:30px; border-radius:6px; background:var(--soft); color:var(--fg); font:500 13px var(--mono); display:grid; place-items:center; }
+  ol.sessions b { font-size:15px; }
+  ol.sessions .scope { font:11px var(--mono); color:var(--muted); margin-left:6px; }
+  ol.sessions .needs { display:block; font:11px var(--mono); color:var(--muted); margin-top:4px; }
+  ol.sessions p { margin-top:4px; }
+
+  footer { font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  a { color:var(--sel); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>lighting7 · design session R3</span><span>venue-visit plan · after S1</span><span class="status">Agreed · 2026-10-15</span></div>
+    <h1>One press, <em>whatever you press it from</em></h1>
+    <p class="lede">On the first evening in the hall, putting a palette, a Look or an effect onto some fixtures went through seven different mechanisms. Each picked its fixtures differently, honoured a different mask and landed somewhere different. This plan makes them one press. It takes a source and the window's selection (fixtures and attributes), and lands where the programmer is pointed. Every cell's popup offers that family's palettes.</p>
+    <p class="muted" style="font-size:13.5px">The engineering plan is <code>docs/plans/apply-model-plan.md</code>, and this page is its one-page copy, checked in as <code>docs/plans/apply-model-design/apply-model.html</code>. Where they differ, the markdown wins. "Palette" is venue-visit D2's word for what the code still calls a template.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#today">Seven mechanisms</a><a href="#decisions">Decisions</a><a href="#model">The model</a><a href="#diagram">Selection, mask, layer</a><a href="#doors">Every door</a><a href="#popup">The popup</a><a href="#surfaces">Fold or keep</a><a href="#effects">Effects</a><a href="#sessions">Sessions</a><a href="#questions">Questions</a>
+  </nav>
+
+  <section id="today">
+    <h2>Seven mechanisms today<small>§1</small></h2>
+    <p>Each row is a way to put something on a selection, surveyed on <code>main</code> at <code>2bf9aba</code>, after S1. They disagree about all three things a press needs: which fixtures, which attributes, and where the result goes.</p>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Surface</th><th>A press puts on</th><th>Fixtures from</th><th>Desk mask</th><th>Focused Look</th></tr></thead>
+        <tbody>
+          <tr><td>Palette strip (row C)</td><td class="w">click: values in Local · ⌥click or hold: a layer</td><td>grid marquee</td><td class="yes">yes</td><td class="no">ignored</td></tr>
+          <tr><td>Palette picker (<i>All · n</i>)</td><td class="w">the strip's two gestures</td><td>grid marquee</td><td class="yes">yes</td><td class="no">ignored</td></tr>
+          <tr><td>Busk pads</td><td class="w">always a layer (toggle), solo banks narrow siblings</td><td>window selection</td><td class="yes">yes</td><td class="muted">n/a</td></tr>
+          <tr><td>Add-layer sheet (<i>+ Look · + Template</i>)</td><td class="w">a new layer, never a toggle</td><td class="no">one fixture or group from its own picker</td><td class="no">no</td><td class="muted">n/a</td></tr>
+          <tr><td>FX sheet (<i>+ Effect</i>, ⌘K Apply FX)</td><td class="w">a detached effect, one cycle per beat</td><td class="no">the first group, else the first fixture</td><td class="no">no</td><td class="yes">absorbed into it</td></tr>
+          <tr><td>Busk side sheets</td><td class="w">Colour: values · Spread: values · Effects: edit only, no add</td><td>window selection</td><td class="part">Spread only</td><td class="muted">n/a</td></tr>
+          <tr><td>Include</td><td class="w">a cue's or Look's own rows, to edit</td><td>the record's own; then selects them</td><td class="no">own picker</td><td class="muted">n/a</td></tr>
+          <tr><td>Colour cell's <i>Recent</i> chips</td><td class="w">values only, previously pressed palettes only</td><td>the cell's heads</td><td class="part">hard-coded Colour</td><td class="no">ignored</td></tr>
+          <tr><td>The hand's <i>Place</i> on the layer strip</td><td class="w">a new layer</td><td class="no">the desk's, even when the window is unlinked</td><td class="no">no</td><td class="muted">n/a</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:13.5px">Effects alone arrive in four forms: a detached <i>+ Effect</i>, a detached copy from a palette click, a layer's tracked instance, and one absorbed into a Look. Only the colour cell offers palettes from a property, and only ones pressed before.</p>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions<small>§2 · agreed 2026-10-15</small></h2>
+    <div class="tablebox">
+      <table>
+        <tbody>
+          <tr><td class="n">D1</td><td><b>A palette press puts on a layer that tracks it, on every surface.</b> Values come only from <i>Apply as values</i> or a layer's <i>Detach</i>.</td></tr>
+          <tr><td class="n">D2</td><td><b>One palette per head per family.</b> Pressing one on heads that hold another of its family takes them off it. Pressing it on heads it covers takes it off them.</td></tr>
+          <tr><td class="n">D3</td><td><b>One mask, the selection's.</b> The family pill is its picker. Record, Record Look, Include, Make layer and Update open on it.</td></tr>
+          <tr><td class="n">D4</td><td><b>The popup puts bands round the editor</b>: the family's palettes above, effects below, <i>All …</i> for the rest.</td></tr>
+          <tr><td class="n">D5</td><td><b>A bare effect is Local on the whole selection, and edits follow the selection.</b> With a subset selected, those heads split off at their phase (MagicQ's rule).</td></tr>
+          <tr><td class="n">D6</td><td><b>Value palettes replace value palettes, effect palettes replace effect palettes, and Looks stack.</b> Amber Breathe can run over Red.</td></tr>
+          <tr><td class="n">D7</td><td><b>With a Look focused, a press goes into the Look</b>: a palette's values into its rows. In R2's cue editor a palette goes on as a cue layer.</td></tr>
+          <tr><td class="n">D8</td><td><b>⌥click is <i>Apply as values</i>; a hold opens the menu</b>, on every surface.</td></tr>
+          <tr><td class="n">D9</td><td><b>The MCP tools follow the UI</b>: <code>apply_palette</code> layers by default, <code>asValues</code> for literals.</td></tr>
+          <tr><td class="n">D10</td><td><b>The busk side sheet gets a tab per family</b>: Level, Colour, Position, Beam, each the popup's body.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:13.5px">The plan adds its own rules. The desk owns every rule and the client keeps no copy. A press widens a record's layer only when that layer is on top. Solo banks keep their meaning. A palette layer's effect is edited as today. Include stays its own verb. Nothing is stored differently: no table, no column, no <code>formatVersion</code>.</p>
+  </section>
+
+  <section id="model">
+    <h2>The model<small>§3</small></h2>
+    <p>A press is <b>a source, onto a selection, into a destination</b>. Each of the three has one answer, read in one place, so every door is the same press.</p>
+    <div class="rules">
+      <div class="rule"><span class="n">source</span><b>A palette, a Look or an effect</b>A palette (a value or an effect palette) or a Look is a <i>named</i> record. A bare effect from the library is not. A cue pad is playback, outside the model.</div>
+      <div class="rule"><span class="n">selection</span><b>Fixtures × attributes, the window's</b>The desk selection's targets and its mask, or the window's own while it is unlinked. Every door reads the same pair. No door picks its own fixture.</div>
+      <div class="rule"><span class="n">destination</span><b>Where the programmer is pointed</b>The programmer, unless a record is open for editing: a focused Look layer takes the press into that Look, and R2's cue editor into that cue.</div>
+      <div class="rule"><span class="n">rule 1 · agreed</span><b>Named things track; direct things are Local</b>A palette or Look goes on as a layer that follows the record. Values you set, a spread, an aim and a bare effect go into Local. <i>Detach</i> turns a layer into Local; <i>Make layer</i> and <i>Save as palette</i> go the other way.</div>
+      <div class="rule"><span class="n">rule 2 · agreed</span><b>One palette per head per family</b>Pressing Blue on heads that hold Red takes those heads off Red. Value and effect palettes are kept apart, and Looks stack. The ring then always means "this is on stage", and pressing again turns it off.</div>
+      <div class="rule"><span class="n">rule 3 · existing, now everywhere</span><b>The mask cuts, the layer keeps the cut</b>A palette outside the mask is refused. A Look lands with <code>mask ∩ its families</code> and names what it skipped. A cell's popup is masked to its own family.</div>
+    </div>
+  </section>
+
+  <section id="diagram">
+    <h2>Selection, mask and layer<small>§3.2</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 980 400" role="img" aria-label="The selection is rows of fixtures, the mask is columns of attribute families, and a press lands on their intersection as a layer that records both.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <!-- matrix -->
+          <text x="20" y="22" font-size="12" font-weight="700" fill="currentColor">The window's selection</text>
+          <text x="20" y="38" font-size="11" fill="currentColor" opacity="0.65">rows = targets · columns = mask</text>
+          <g font-size="11" fill="currentColor">
+            <text x="141" y="66" text-anchor="middle">Intensity</text>
+            <text x="203" y="66" text-anchor="middle">Position</text>
+            <text x="265" y="66" text-anchor="middle" font-weight="700" style="fill:var(--mask)">Colour</text>
+            <text x="327" y="66" text-anchor="middle">Beam</text>
+          </g>
+          <rect x="236" y="72" width="58" height="196" rx="4" fill="none" style="stroke:var(--mask)" stroke-width="2"/>
+          <g font-size="11.5" fill="currentColor">
+            <text x="20" y="92">Hex 1</text><text x="20" y="120">Hex 2</text><text x="20" y="148">Hex 3</text><text x="20" y="176">Hex 4</text>
+            <text x="20" y="204" opacity="0.6">Orbit 1</text><text x="20" y="232" opacity="0.6">Orbit 2</text><text x="20" y="260" opacity="0.6">Shehds · Zone 1</text>
+          </g>
+          <g>
+            <rect x="112" y="78" width="244" height="110" rx="3" style="fill:var(--sel-t)"/>
+            <rect x="112" y="78" width="244" height="110" rx="3" fill="none" style="stroke:var(--sel)" stroke-width="1.5"/>
+            <rect x="238" y="80" width="54" height="106" rx="2" style="fill:var(--mask-t)"/>
+          </g>
+          <g fill="currentColor" font-size="10" text-anchor="middle" opacity="0.5">
+            <text x="141" y="92">●</text><text x="203" y="92">–</text><text x="327" y="92">–</text>
+            <text x="141" y="120">●</text><text x="203" y="120">–</text><text x="327" y="120">–</text>
+            <text x="141" y="148">●</text><text x="203" y="148">–</text><text x="327" y="148">–</text>
+            <text x="141" y="176">●</text><text x="203" y="176">–</text><text x="327" y="176">–</text>
+          </g>
+          <g font-size="10" text-anchor="middle" style="fill:var(--mask)" font-weight="700">
+            <text x="265" y="92">●</text><text x="265" y="120">●</text><text x="265" y="148">●</text><text x="265" y="176">●</text>
+          </g>
+          <text x="112" y="292" font-size="11" style="fill:var(--sel)" font-weight="600">targets: Hex 1–4</text>
+          <text x="112" y="308" font-size="11" style="fill:var(--mask)" font-weight="600">mask: Colour</text>
+          <text x="112" y="324" font-size="11" fill="currentColor" opacity="0.7">a press can touch only the amber cells</text>
+
+          <!-- sources -->
+          <text x="420" y="22" font-size="12" font-weight="700" fill="currentColor">Pressed</text>
+          <rect x="420" y="40" width="190" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <circle cx="438" cy="62" r="7" fill="#ff9a2e"/>
+          <text x="452" y="58" font-size="12" font-weight="600" fill="currentColor">Amber</text>
+          <text x="452" y="74" font-size="10.5" fill="currentColor" opacity="0.65">palette · Colour</text>
+          <rect x="420" y="104" width="190" height="44" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="434" y="122" font-size="12" font-weight="600" fill="currentColor">Warm wash</text>
+          <text x="434" y="138" font-size="10.5" fill="currentColor" opacity="0.65">Look · Intensity, Colour, Position</text>
+          <rect x="420" y="168" width="190" height="44" rx="6" fill="none" style="stroke:var(--fx)" stroke-opacity="0.8"/>
+          <text x="434" y="186" font-size="12" font-weight="600" style="fill:var(--fx)">Rainbow Cycle</text>
+          <text x="434" y="202" font-size="10.5" fill="currentColor" opacity="0.65">library effect · Colour</text>
+
+          <line x1="360" y1="132" x2="414" y2="132" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="387" y="124" font-size="10.5" text-anchor="middle" fill="currentColor">press</text>
+
+          <!-- programmer -->
+          <text x="690" y="22" font-size="12" font-weight="700" fill="currentColor">Programmer · top wins</text>
+          <rect x="690" y="36" width="270" height="250" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <rect x="700" y="46" width="250" height="54" rx="5" style="fill:var(--sel-t);stroke:var(--sel)" stroke-width="1"/>
+          <text x="712" y="66" font-size="11.5" font-weight="700" style="fill:var(--sel)">Local</text>
+          <text x="712" y="82" font-size="10.5" fill="currentColor">Rainbow Cycle on Hex 1–4</text>
+          <text x="712" y="95" font-size="10" fill="currentColor" opacity="0.6">values, spreads, aims, bare effects</text>
+          <rect x="700" y="110" width="250" height="54" rx="5" style="fill:var(--layer-t);stroke:var(--layer)" stroke-width="1"/>
+          <text x="712" y="130" font-size="11.5" font-weight="700" style="fill:var(--layer)">Amber</text>
+          <text x="712" y="146" font-size="10.5" fill="currentColor">targets Hex 1–4 · mask Colour</text>
+          <text x="712" y="159" font-size="10" fill="currentColor" opacity="0.6">tracks the palette; Red's layer lost these heads</text>
+          <rect x="700" y="174" width="250" height="54" rx="5" style="fill:var(--layer-t);stroke:var(--layer)" stroke-width="1"/>
+          <text x="712" y="194" font-size="11.5" font-weight="700" style="fill:var(--layer)">Warm wash</text>
+          <text x="712" y="210" font-size="10.5" fill="currentColor">targets Hex 1–4 · mask Colour</text>
+          <text x="712" y="223" font-size="10" fill="currentColor" opacity="0.6">skipped Intensity, Position (toast)</text>
+          <text x="712" y="252" font-size="10.5" fill="currentColor" opacity="0.65">layer mask = selection mask ∩ the source's families</text>
+          <text x="712" y="268" font-size="10.5" fill="currentColor" opacity="0.65">layer targets = selection targets</text>
+
+          <line x1="614" y1="190" x2="694" y2="76" style="stroke:var(--fx)" stroke-width="1.5" marker-end="url(#ah)"/>
+          <line x1="614" y1="62" x2="694" y2="136" style="stroke:var(--layer)" stroke-width="1.5" marker-end="url(#ah)"/>
+          <line x1="614" y1="126" x2="694" y2="200" style="stroke:var(--layer)" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="652" y="98" font-size="10" fill="currentColor" text-anchor="middle" opacity="0.7">tracks</text>
+          <text x="638" y="166" font-size="10" fill="currentColor" text-anchor="middle" opacity="0.7">direct</text>
+
+          <!-- destination switch -->
+          <rect x="420" y="320" width="540" height="62" rx="8" fill="none" stroke="currentColor" stroke-dasharray="4 4" stroke-opacity="0.5"/>
+          <text x="436" y="342" font-size="11.5" font-weight="700" fill="currentColor">If a record is open for editing, the press goes into it instead</text>
+          <text x="436" y="360" font-size="10.5" fill="currentColor" opacity="0.75">Focused Look layer: a palette's values written into the Look's rows, an effect into its effects.</text>
+          <text x="436" y="374" font-size="10.5" fill="currentColor" opacity="0.75">R2's cue editor: a palette as a layer on the cue, an effect as one of the cue's effects. Nothing is sent.</text>
+          <line x1="825" y1="290" x2="825" y2="316" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+        </svg>
+      </div>
+      <figcaption>The selection is rows (fixtures, cells and groups) and the mask is columns (Intensity, Position, Colour, Beam). A press lands on the cells where they meet. A named source becomes a layer carrying both as its targets and its mask. A bare effect goes into Local. Inside a record's editor, the same press writes the record instead of the programmer.</figcaption>
+    </figure>
+  </section>
+
+  <section id="doors">
+    <h2>Every door, one press<small>§3.3</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 980 300" role="img" aria-label="Nine doors all call one press, which reads the window's selection pair and the programmer's scope and lands on one of three destinations.">
+          <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+          <g font-size="11.5" fill="currentColor">
+            <text x="20" y="20" font-weight="700" font-size="12">Doors</text>
+            <rect x="20" y="30" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="46">Palette strip</text>
+            <rect x="20" y="58" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="74">A cell's popup</text>
+            <rect x="20" y="86" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="102">The picker (All · + Look · + Palette)</text>
+            <rect x="20" y="114" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="130">+ Effect · ⌘K Apply FX</text>
+            <rect x="20" y="142" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="158">Busk pad (+ solo bank)</text>
+            <rect x="20" y="170" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="186">Busk Colour sheet chips</text>
+            <rect x="20" y="198" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="214">The hand's Place</text>
+            <rect x="20" y="226" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="242">Cue-slot Look · Look picker</text>
+            <rect x="20" y="254" width="200" height="24" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.35"/><text x="32" y="270">MIDI PressPad · PressPalette</text>
+          </g>
+          <g stroke="currentColor" stroke-opacity="0.45" stroke-width="1.2" fill="none">
+            <path d="M220 42 C 300 42, 300 150, 380 150"/><path d="M220 70 C 300 70, 300 150, 380 150"/>
+            <path d="M220 98 C 300 98, 300 150, 380 150"/><path d="M220 126 C 300 126, 300 150, 380 150"/>
+            <path d="M220 154 L 380 150"/><path d="M220 182 C 300 182, 300 150, 380 150"/>
+            <path d="M220 210 C 300 210, 300 150, 380 150"/><path d="M220 238 C 300 238, 300 150, 380 150"/>
+            <path d="M220 266 C 300 266, 300 150, 380 150"/>
+          </g>
+          <rect x="384" y="96" width="220" height="108" rx="10" style="fill:var(--layer-t);stroke:var(--layer)" stroke-width="1.5"/>
+          <text x="494" y="120" text-anchor="middle" font-size="13" font-weight="800" fill="currentColor">press(source)</text>
+          <text x="400" y="142" font-size="11" style="fill:var(--sel)">reads the selection pair</text>
+          <text x="400" y="158" font-size="11" style="fill:var(--mask)">reads the mask with it</text>
+          <text x="400" y="174" font-size="11" fill="currentColor">reads the window's scope</text>
+          <text x="400" y="192" font-size="10.5" fill="currentColor" opacity="0.65">one desk route per kind</text>
+          <g stroke="currentColor" stroke-width="1.5" fill="none">
+            <path d="M604 130 C 660 130, 660 60, 712 60" marker-end="url(#ah2)"/>
+            <path d="M604 150 L 712 150" marker-end="url(#ah2)"/>
+            <path d="M604 170 C 660 170, 660 240, 712 240" marker-end="url(#ah2)"/>
+          </g>
+          <g font-size="11.5" fill="currentColor">
+            <rect x="716" y="36" width="244" height="50" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="728" y="56" font-weight="700">Programmer</text><text x="728" y="74" font-size="10.5" opacity="0.7">a layer, or Local for a bare effect</text>
+            <rect x="716" y="126" width="244" height="50" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="728" y="146" font-weight="700">A focused Look layer</text><text x="728" y="164" font-size="10.5" opacity="0.7">the Look's draft; nothing else moves</text>
+            <rect x="716" y="216" width="244" height="50" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+            <text x="728" y="236" font-weight="700">R2's cue editor</text><text x="728" y="254" font-size="10.5" opacity="0.7">the stored cue; never sent</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Every door becomes one client call, <code>usePress</code>, which reads the same selection pair (targets and mask) and the window's scope. The desk does the resolving, as it does today. A door's only job is to say what was pressed.</figcaption>
+    </figure>
+  </section>
+
+  <section id="popup">
+    <h2>A palette popup for every family<small>§4</small></h2>
+    <p>Every value cell's editor gains the same two bands: that family's palettes that fit the cell's heads, above the editor, and its effects below. A chip carries the busk pad's ring, so the popup shows what is already on. A tap is the press, and a hold opens a menu.</p>
+    <div class="screenbox">
+      <div class="screen">
+        <div class="pop">
+          <div class="ph"><b>Colour</b><span class="pill sel">Hex 1–4 · 4 heads</span><span class="sp"></span><span class="pill mask">Colour</span></div>
+          <div class="band">
+            <div class="row"><span class="lbl">Palettes</span><span class="sp"></span><span class="glyph">fit these heads</span></div>
+            <div class="row">
+              <span class="pal on"><span class="sw" style="background:#ff9a2e"></span>Amber</span>
+              <span class="pal"><span class="sw" style="background:#2f6bff"></span>Deep blue</span>
+              <span class="pal some"><span class="sw" style="background:#ff3b3b"></span>Red</span>
+              <span class="pal"><span class="sw" style="background:#fff3d6"></span>Warm white</span>
+              <span class="pal"><span class="sw" style="background:#b04cff"></span>Lavender</span>
+              <span class="pal more">All 23 …</span>
+            </div>
+          </div>
+          <div class="band">
+            <div class="picker"></div>
+            <div class="hue"></div>
+            <div class="row"><span class="field m">#FF9A2E</span><span class="field m">W 40</span><span class="sp"></span><span class="glyph">a drag is a Local value</span></div>
+          </div>
+          <div class="band">
+            <div class="row"><span class="lbl">Effects</span></div>
+            <div class="row">
+              <span class="pal fxp">Amber breathe</span>
+              <span class="pal fxp">Rainbow Cycle</span>
+              <span class="pal fxp">Colour Fade</span>
+              <span class="pal more">+ Effect …</span>
+            </div>
+          </div>
+          <div class="foot"><span class="btn">Save as palette…</span><span class="btn">Spread…</span><span class="btn">Pick</span></div>
+        </div>
+        <div class="menu">
+          <div class="mi">Amber <small>palette</small></div>
+          <div class="ms"></div>
+          <div class="mi">Put on</div>
+          <div class="mi">Take off these heads</div>
+          <div class="mi">Apply as values</div>
+          <div class="ms"></div>
+          <div class="mi">Pick up</div>
+          <div class="mi">Edit palette…</div>
+        </div>
+        <div class="col">
+          <div class="pop small">
+            <div class="ph"><b>Level</b><span class="pill sel">4 heads</span><span class="sp"></span><span class="pill mask">Intensity</span></div>
+            <div class="band"><div class="row"><span class="pal">Full</span><span class="pal on">Seventy</span><span class="pal">Half</span><span class="pal">Out</span><span class="pal more">All 6 …</span></div></div>
+            <div class="band"><div class="slider"><i style="width:70%"></i></div><div class="row"><span class="field m">70 %</span></div></div>
+            <div class="band"><div class="row"><span class="pal fxp">Breathe</span><span class="pal fxp">Pulse</span><span class="pal more">+ Effect …</span></div></div>
+          </div>
+          <div class="pop small">
+            <div class="ph"><b>Position</b><span class="pill sel">Orbit 1–2</span><span class="sp"></span><span class="pill mask">Position</span></div>
+            <div class="band"><div class="row"><span class="pal">DS centre</span><span class="pal on">Piano</span><span class="pal">Up centre</span><span class="pal more">All 9 …</span></div></div>
+            <div class="band"><div class="xy"><i></i></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:13.5px">Drawn on the dark desk, with Sleeping Beauty's fixture names; the palette names are illustrative. A setting cell (gobo, prism) has no palette band, since a palette can't carry a slotted role; a Look holds those. Beam cells (zoom, iris, frost) offer Beam palettes that set that property.</p>
+  </section>
+
+  <section id="effects">
+    <h2>Effects follow the selection<small>§3.4 · D5</small></h2>
+    <p>An effect running on four fixtures is edited the way MagicQ edits one: select heads, then change it. The edit lands on what is selected.</p>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 980 230" role="img" aria-label="Editing a Local effect with two of its four heads selected splits those two off into their own instance at the phase they had; with all four selected the edit is in place.">
+          <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+          <text x="20" y="22" font-size="12" font-weight="700" fill="currentColor">Before</text>
+          <rect x="20" y="36" width="250" height="70" rx="8" fill="none" style="stroke:var(--fx)" stroke-width="1.5"/>
+          <text x="34" y="58" font-size="12" font-weight="700" style="fill:var(--fx)">Rainbow Cycle · 1 bar</text>
+          <g font-size="11" fill="currentColor"><text x="34" y="84">Hex 1</text><text x="88" y="84">Hex 2</text><text x="142" y="84">Hex 3</text><text x="196" y="84">Hex 4</text></g>
+          <rect x="28" y="70" width="108" height="22" rx="4" fill="none" style="stroke:var(--sel)" stroke-width="1.5"/>
+          <text x="34" y="128" font-size="10.5" style="fill:var(--sel)">selected: Hex 1–2</text>
+          <line x1="280" y1="70" x2="370" y2="70" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <text x="325" y="62" font-size="10.5" text-anchor="middle" fill="currentColor">edit: 2 bars</text>
+          <text x="380" y="22" font-size="12" font-weight="700" fill="currentColor">A subset selected: split</text>
+          <rect x="380" y="36" width="250" height="56" rx="8" fill="none" style="stroke:var(--fx)" stroke-width="1.5"/>
+          <text x="394" y="58" font-size="12" font-weight="700" style="fill:var(--fx)">Rainbow Cycle · 2 bars</text>
+          <text x="394" y="78" font-size="11" fill="currentColor">Hex 1, Hex 2 · each at the phase it had</text>
+          <rect x="380" y="102" width="250" height="56" rx="8" fill="none" style="stroke:var(--fx)" stroke-opacity="0.55" stroke-width="1.5"/>
+          <text x="394" y="124" font-size="12" font-weight="700" style="fill:var(--fx)" opacity="0.8">Rainbow Cycle · 1 bar</text>
+          <text x="394" y="144" font-size="11" fill="currentColor">Hex 3, Hex 4 · unchanged, same id</text>
+          <text x="690" y="22" font-size="12" font-weight="700" fill="currentColor">All four selected: in place</text>
+          <rect x="690" y="36" width="270" height="56" rx="8" fill="none" style="stroke:var(--fx)" stroke-width="1.5"/>
+          <text x="704" y="58" font-size="12" font-weight="700" style="fill:var(--fx)">Rainbow Cycle · 2 bars</text>
+          <text x="704" y="78" font-size="11" fill="currentColor">Hex 1–4 · same id, phase kept</text>
+          <text x="690" y="124" font-size="10.5" fill="currentColor" opacity="0.75">A palette layer's effect is edited as today (no split);</text>
+          <text x="690" y="140" font-size="10.5" fill="currentColor" opacity="0.75">a cue's effect is read-only.</text>
+          <text x="20" y="190" font-size="11" fill="currentColor" opacity="0.8">Pressing another colour effect on Hex 1–2 narrows the same way first: those heads come off Rainbow Cycle, then the new effect starts on them.</text>
+          <text x="20" y="208" font-size="11" fill="currentColor" opacity="0.8">An instance targets one fixture or one group, so a group member's distribution offset becomes its own phase offset when it splits off.</text>
+        </svg>
+      </div>
+      <figcaption>A bare effect from the library is Local, one instance per selected target, and a group stays one group effect. <code>PUT /fx/{id}</code> gains <code>targets</code>. Naming all of the effect's heads is today's in-place edit. A strict subset narrows the effect and starts the edited copy on the subset.</figcaption>
+    </figure>
+  </section>
+
+  <section id="surfaces">
+    <h2>What folds in, and what stays a shortcut<small>§5</small></h2>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Surface</th><th>Becomes</th></tr></thead>
+        <tbody>
+          <tr class="keep"><td>Palette strip</td><td>A shortcut: the recents row, now the same press as a pad. <i>All · n</i> opens the picker.</td></tr>
+          <tr class="fold"><td>Palette picker</td><td>Folds into one picker. The popup's <i>All …</i> opens it on one family; the strip's <i>All</i>, <i>+ Look</i> and <i>+ Palette</i> open it on every family.</td></tr>
+          <tr class="keep"><td>Busk pads</td><td>A shortcut, unchanged. They already are the model, and solo banks stay theirs.</td></tr>
+          <tr class="fold"><td>Add-layer sheet</td><td>Folds into the picker on the selection. Its own fixture picker goes, and <i>the Look's own fixtures</i> stays as an option.</td></tr>
+          <tr class="fold"><td>FX sheet, ⌘K Apply FX</td><td>Folds into the popup's Effects band and the picker's Effects section, on the whole selection under its mask.</td></tr>
+          <tr class="fold"><td>Busk Colour sheet</td><td>Becomes the Colour tab of a tab per family: Level, Colour, Position, Beam, each the popup's body (D10).</td></tr><tr class="keep"><td>Busk Spread sheet</td><td>Stays a direct-value tool.</td></tr>
+          <tr class="fold"><td>Busk Effects sheet</td><td>Gains <i>+ Effect</i> and the edit by selection.</td></tr>
+          <tr class="keep"><td>Include</td><td>Stays its own verb: it opens a record to edit rather than using it. It starts from the selection's mask.</td></tr>
+          <tr class="fold"><td>Colour Recent chips, the hand's Place</td><td>Become the popup band and the press, so they read the window's selection and mask.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+  <section id="sessions">
+    <h2>Eight sessions, one PR each<small>§8</small></h2>
+    <ol class="sessions">
+      <li><b>The press on the desk</b><span class="scope">backend</span><p><code>LayerPress</code> factored out of the toggle; family replacement in every palette door; widening; <i>Detach</i>; <code>POST /looks/{id}/apply</code>; <code>write: false</code> on palette apply; the MCP tools follow the UI.</p><span class="needs">needs S4 (the palette rename)</span></li>
+      <li><b>Local effects follow the selection</b><span class="scope">backend</span><p><code>POST /programmer/effects</code> over the whole selection; Local replacement; the <code>targets</code> split on <code>PUT /fx/{id}</code> with each head's phase carried.</p><span class="needs">needs S15 (effect timing)</span></li>
+      <li><b>One press in the client</b><span class="scope">frontend</span><p><code>usePress</code> and every door through it; the strip's tap, ⌥ and hold, its rings and mask filter; presses into a focused Look; <i>Detach</i> in the rail.</p><span class="needs">needs 1</span></li>
+      <li><b>One mask</b><span class="scope">frontend</span><p>The family pill's picker; Record, Record Look, Include, Make layer and Update opening on it.</p><span class="needs">needs S10 (<i>All attributes</i>)</span></li>
+      <li><b>The palette popup and the one picker</b><span class="scope">frontend</span><p>Bands on the colour, slider and position editors; <i>Save as palette</i> for every family; <code>ApplyPicker</code> replacing the picker and the add-layer sheet's steps.</p><span class="needs">needs 3</span></li>
+      <li><b>Effects in the popup</b><span class="scope">frontend</span><p>The Effects band; <i>+ Effect</i> and ⌘K over the whole selection; the split editor; <code>FxAddSheet</code> retired.</p><span class="needs">needs 2, 5</span></li>
+      <li><b>The busk side sheets</b><span class="scope">frontend</span><p>Level, Colour, Position and Beam tabs on the popup's body; the Effects tab's add and split.</p><span class="needs">needs 5, 6</span></li>
+      <li><b>Into the cue editor</b><span class="scope">backend + frontend</span><p><code>POST /cues/{id}/layers/press</code> on <code>LayerPress</code>; the bands and picker in R2's cue editor, writing the cue and sending nothing.</p><span class="needs">needs R2 sessions 5–6</span></li>
+    </ol>
+    <p class="muted" style="font-size:13.5px">No migration, no table, no <code>formatVersion</code> change. S14's applied tables are independent: whichever lands second carries <i>Detach</i> onto the other's rows.</p>
+  </section>
+
+
+  <section id="questions">
+    <h2>Questions asked<small>§11 · three rounds</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Question</th><th>Answer</th><th>Declined</th></tr></thead>
+      <tbody>
+        <tr><td>What does a palette press put on?</td><td class="yes">A tracking layer, everywhere</td><td>values everywhere; today's split</td></tr>
+        <tr><td>A palette over another of its family?</td><td class="yes">Replaces it on those heads</td><td>stack; solo banks only</td></tr>
+        <tr><td>How many masks?</td><td class="yes">One, the selection's</td><td>two; marquee only</td></tr>
+        <tr><td>The popup's layout?</td><td class="yes">Bands round the editor</td><td>tabs; a separate button</td></tr>
+        <tr><td>A bare effect, and editing it?</td><td class="yes">Local; edits follow the selection</td><td>an edit changes all heads; always via a palette</td></tr>
+        <tr><td>What the replacement covers?</td><td class="yes">Value and effect apart; Looks stack</td><td>any palette of the family; Looks too</td></tr>
+        <tr><td>A press with a Look focused?</td><td class="yes">Values written into the Look</td><td>refused; the programmer</td></tr>
+        <tr><td>⌥click and hold?</td><td class="yes">⌥ values; hold menu</td><td>no modifier; ⌥ stacks</td></tr>
+        <tr><td>MCP tools?</td><td class="yes">Follow the UI</td><td>values by default</td></tr>
+        <tr><td>Busk popups?</td><td class="yes">A tab per family</td><td>Colour only; pads only</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>Design session R3 of <code>docs/plans/venue-visit-plan.md</code>. Agreed with Chris, 2026-10-15.</footer>
+</div>
