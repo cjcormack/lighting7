@@ -109,6 +109,8 @@ The plan adds its own:
 - **P1 — One PR per session**, in §6's order, per CLAUDE.md §"Git workflow". Each session ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and a
   done-marker in its heading citing its change commit(s), never the merge commit.
+  The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
+  before each PR.
 - **P2 — Nothing in the Show view sends output but *Update stage*.** The cue grid mounts none of the
   surfaces that reach the rig or the desk: the desk-selection bridge, Release, Locate, Highlight,
   the palette strip, `useClearCellEffects` and the live writers. Its selection is local state. A test

@@ -9,9 +9,8 @@
 > [`navigation-design/navigation.html`](navigation-design/navigation.html), with a live copy at
 > <https://claude.ai/artifact/56QW1wW5M8HcB7yXCzqbhX>. The checked-in file is the authority.
 >
-> "Palette" is venue-visit D2's word for a template. The registry keeps the label "Templates" until
-> venue-visit S4 renames it, and this plan uses "Palettes" for what will ship. Where this plan and the
-> venue-visit plan disagree, this plan wins on how the desk is navigated.
+> "Palette" is venue-visit D2's word for a template; S4 (`b954eee`) renamed the registry's label.
+> Where this plan and the venue-visit plan disagree, this plan wins on how the desk is navigated.
 
 ## 1. Context
 
@@ -111,6 +110,8 @@ The plan adds its own:
     backend).
   - Its engineering-doc paragraphs are written.
   - It gets a done-marker in its heading, citing its change commit(s) and never the merge commit.
+  - The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md))
+    applies before each PR.
 - **P2 — A row and its page share one predicate.** Who sees a nav row, its tab and its ⌘K item is
   decided once, beside the registry entry, and matches what the backend allows. The Sync tabs
   therefore go for operators: every cloud-sync route is admin-only.
@@ -141,6 +142,9 @@ sections, as today.
 | **Library** | Looks · Palettes · Effects · Speed Masters · Scripts | program, reordered; *FX Library* relabelled *Effects* |
 | **Project** | Settings · Surfaces · Sync | settings |
 | **Desk** | Projects · Install Settings › Users · Sync · Remote Access · Updates · Diagnostics | install, with Projects added |
+
+The cue model plan's all-cues table (R1 D13, its session 5) joins Library as **Cues**, after Looks,
+and is hidden in a venue like the rest of Library.
 
 - **Run goes first.** Running a show is what the desk is most used for. The live-view group's order
   test (`navigation.test.ts:91-102`) becomes Run's: the four live views and then Stage.

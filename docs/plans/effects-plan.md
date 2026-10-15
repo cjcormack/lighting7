@@ -22,7 +22,8 @@ way round. R4 asked what other desks offer, and which of it a desk like this one
 
 **S15 has not landed.** This plan is written against it as agreed: an effect's timing is a speed master
 or *Seconds* (D7 of the venue-visit plan), and a new effect is one bar on its family's `usage` master
-(D16). Nothing here changes timing; sessions 1–3 bump `formatVersion` after S15's and S16's bumps.
+(D16). Nothing here changes timing. Sessions 1–3 each bump `formatVersion`, taking the next number free
+when they land (venue-visit P5).
 
 ### 1.1 The survey
 
@@ -128,6 +129,8 @@ The plan adds its own:
 - **P1 — One PR per session**, in §8's order, per CLAUDE.md §"Git workflow". Each session ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and a done-marker
   in its heading citing its change commit(s), never the merge commit.
+  The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
+  before each PR.
 - **P2 — The desk owns every rule.** Size weighting, direction, the spread's shape, the per-head
   resolution of a step and the fade envelope are server-side, once each. The editor's dial preview
   is the one client copy, of the spread's shape only, and a shared vector pins it to the desk's
@@ -212,6 +215,9 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 - **On GO** (and GO TO, GO BACK), an outgoing effect's envelope runs 1 → 0 over the cue's fade on the
   cue's curve, and the instance is removed at 0; an incoming one runs 0 → 1. A continuing effect
   (P4) is untouched. A 0 s fade is today's snap.
+- **Under shared cues** (the cue model plan's holds), the envelope follows the cue's holds: it fades
+  in on the first hold and out on the last release. A GO between two entries of a cue that stays
+  held moves no envelope, as it moves no value.
 - **A stack stop** fades its effects over the time it fades its values.
 - **The programmer** (D13): a layer added or removed by a press, a release (`clearTarget`,
   `clearEntry` on an effect) and Clear move the envelope over the programmer fade.
@@ -294,6 +300,8 @@ changes meaning (P6). Older desks refuse a newer archive by `formatVersion`, as 
   `FU-FX-SELECTION-DISTRIBUTION` is closed by session 3 rather than recorded.
 - **The grand master (venue-visit S5)** is the shape session 5 copies — REST, WS and MIDI over a
   runtime value; either may land first.
+- **The cue model plan's session 2 (holds)** before session 4, so the envelope is built on holds
+  (§3.5) rather than on a stack's live cue.
 
 ## 7. What the busk and editor surfaces need
 

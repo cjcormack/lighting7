@@ -86,6 +86,8 @@ The plan adds its own:
 - **P1 — One PR per session**, in §8's order. Each session ends with `./gradlew test` and
   `npm run check` green, its engineering-doc paragraphs written, and a done-marker in its heading
   citing its change commit(s).
+  The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
+  before each PR.
 - **P2 — Attaching what Detach just wrote changes nothing.** Detaching a show and attaching it back
   to the same version leaves:
   - the same effective rig, compared through `RigScope.effective`;

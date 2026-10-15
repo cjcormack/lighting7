@@ -10,6 +10,10 @@
 >
 > Where a later R plan disagrees with this one, the R plan wins on everything inside its scope.
 >
+> **Revised 2026-10-15.** The five R sessions are done and produced six plans. §4 is now the run order
+> across all of them (P6), with seven course checks (K1–K7). P1 became a checklist, and D20 and P5
+> were added.
+>
 > A one-page copy for human readers is
 > [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
 > <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
@@ -96,13 +100,26 @@ Agreed with Chris, 2026-10-14:
 | D17 | **A unit's stored locate is pan and tilt only.** Every other property keeps its category default. |
 | D18 | **Make rig safe can be undone.** *Undo* strikes the lamps it turned off, then releases the blackout, so the show resumes as it was. |
 | D19 | **Bulk lamp-on is staggered.** It strikes one unit at a time, a couple of seconds apart, to spread the inrush current. A unit that went off too recently to restrike reliably is shown with a warning and the time left. The same applies to a bulk lamp-on over a selection. |
+| D20 | **A cue sets its speed masters on every GO into one of its entries**, GO TO and GO BACK included, even when another stack already holds the cue live. Tempo is state the cue re-asserts. Its events are different: they fire once, on the cue's first hold (cue model plan D15). Agreed 2026-10-15, after R1. |
 
 The plan adds its own:
 
-- **P1 — One PR per session, per CLAUDE.md §"Git workflow".**
-  - Each S session ends with `./gradlew test` and `npm run check` green, its engineering-doc
-    paragraphs written, and a done-marker row in §4 citing its change commit(s).
-  - Each R session ends with its new plan checked in, and a row here that links it.
+- **P1 — One PR per session, per CLAUDE.md §"Git workflow".** Every session in §4, whichever plan
+  it belongs to, does this before the PR:
+  1. **Gates.** `./gradlew test` and `npm run check` are green.
+  2. **Docs.** Its engineering-doc paragraphs are written, and CLAUDE.md (root or `frontend/`) is
+     updated wherever it lists an endpoint, frame, table or tool the session changed.
+  3. **Follow-ups.** An item the session closes becomes a one-line row in `followups.md`'s
+     Completed table. An item its plan's "Follow-ups to record" assigns to it is added.
+  4. **Operator check.** What only the rig can prove gets an Outstanding row in
+     `manual-validation.md`, from its plan's Verification section where it has one.
+  5. **Hand-offs.** Where its plan says "whichever lands second…", or the session changes something
+     another plan or §4's Needs assumes, it makes that edit in the same PR.
+  6. **Done-marker.** A second commit on the branch, *Mark <id> done*, citing the change commit(s),
+     never the merge commit. It marks the session's heading in its own plan, and its row in §4:
+     the SHA for an S session, *done* for any other.
+  7. **One-page copies.** The checked-in HTML and its artifact are left alone; course checks
+     refresh them.
 - **P2 — Rename before building.** S4 (palettes) lands before any session that adds UI copy, so
   later sessions write the new word once.
 - **P3 — Old position data stays readable.** D3 changes what a generic position palette and a spread
@@ -113,6 +130,13 @@ The plan adds its own:
     edited.
 - **P4 — R sessions gate only what they must.** Anything a design session might reshape (cue
   actions, the apply model, FX parameters) waits for it. Anything it won't touch lands first.
+- **P5 — No plan names a `formatVersion`.** A session that bumps it takes the next number free when
+  it lands. Several sessions across these plans bump it: S16, possibly S8 and S15, the cue model
+  plan's session 3, the effects plan's sessions 1–3 and possibly venue-attach session 1.
+- **P6 — One queue, bodies in their plans.** §4 orders every session across this plan and the six R
+  plans. A session's body and its done-marker live in its own plan, and its row in §4 says *done* and
+  links there. Where §4's Needs and a plan's own dependencies disagree, the plan wins and §4 is
+  corrected.
 
 ## 3. Sessions
 
@@ -218,7 +242,8 @@ Grouped by area. §4 gives the order.
   - It's used everywhere a mask is taken: Record, Record Look, Include and busk.
   - `UpdateDialog` gains the picker.
 - **Fix the "An existing cue…" menu item.** It only creates a new cue (`RecordSheet.tsx:198`).
-  Give it a cue picker.
+  Give it a cue picker that lists cues by name, whatever stack they're in, so it serves loose cues
+  once the cue model plan's session 4 lands.
 
 **S11 — Position in −127…+127 (D3, P3).**
 - A shared frontend conversion replaces `lib/axisDegrees.ts` for display and entry, on the same
@@ -266,108 +291,153 @@ Grouped by area. §4 gives the order.
 
 **S16 — Speed masters on a cue.**
 - A cue can set masters' BPM when it runs: a list of master and BPM pairs.
-- **When it applies (D15).** Whenever the cue becomes live: GO into it, GO TO it, or GO BACK onto
-  it. It never tracks.
-- Hook it beside cue events (`EffectsService.onCueGo`). That hook fires on GO into the cue only,
-  so the GO TO and GO BACK paths need their own call.
-- It's a portable cue field, so expect a `formatVersion` bump.
-- It's independent of R1 because it's content of the cue, not membership.
+- **When it applies (D15, D20).** On every GO into one of the cue's entries, GO TO it, or GO BACK
+  onto it, even when another stack already holds the cue. It never tracks.
+- **It lands after the cue model plan's session 2** (holds), and hooks the entry's GO rather than the
+  hold registry: D20 fires where events, on the first hold, don't.
+- It's a field of the cue, not of its entries, so a shared cue sets the same tempo from every stack.
+- It's a portable cue field, so expect a `formatVersion` bump (P5).
 
-### Research and design
+### Course checks
 
-Each produces a plan, not a feature.
+**K1–K7 — Check the course.** Each lands documents only, as one PR. There is a check at every wave
+boundary in §4, and one within a wave after about eight sessions. If §4 is reordered, it keeps that
+spacing. Each one:
+- checks every done-marker in §4 and the R plans against `git log`;
+- re-reads the plans with sessions still to run against the code that has landed since the last
+  check, and fixes what it has made wrong. It reads only the plans that code touches, so a check
+  after independent sessions is quick;
+- re-checks §4's Needs and waves;
+- triages the venue-visit rows in `manual-validation.md`;
+- refreshes the one-page copy and republishes its artifact;
+- brings Chris any question about priorities.
 
-**R1 — The cue model (D1).** Cues as project records, with stacks as ordered membership. The
-resulting plan must cover:
-- **Membership.** What belongs to a membership and what belongs to the cue: number,
-  auto-numbering, follow, wait, and fade overrides.
-- **Show order and numbering.** The unique-number index moves to membership. Auto-numbering is
-  recomputed in the source stack too.
-- **Runtime.** `CueStackManager`, live and standby cues, a cue live in two stacks at once,
-  `activeCueId`, and the most-recent-stack rule for scenery.
-- **Everything that names a cue.** Busk pads, cue slots, prompt-book anchors (per membership or per
-  cue?) and MIDI bindings.
-- **Sync.** Membership files, a `formatVersion` bump, and a merge story for `FU-SYNC-ORDINAL-DOUBLE`.
-- **Explicit delete.** What a delete takes with it, and the *in use* guard.
-- **The all-cues table.** Multi-select, delete, and add to stack.
-- **Copying a cue from another show on the same venue,** with a decision on version scope: same
-  version only, or mapped by key.
-- **The MCP tools' new shape.**
+K7 also closes the plan: it moves this plan and the six R plans to `completed/`. Another evening on
+the rig calls for an unscheduled check first, to file its notes into the queue.
 
-**R2 — Editing a cue in the Show view.** Direct editing of a cue's values, Looks and FX in tables
-that behave like the programmer's without sending anything. The resulting plan must cover:
-- **How it looks in the card view and in the table view.**
-- **One standard action set for both views.** Load into programmer, edit, blind edit, record,
-  duplicate, remove from stack and delete, with R1's semantics.
-- **Blind edit.** *Blind edit in programmer*, possibly as the second state of the edit button.
+### Research and design — done
 
-R2 follows R1.
+Each produced a plan, which wins inside its scope. Their sessions are in §4.
 
-**R3 — Applying to a selection.** One model for putting a Look, a palette or an effect onto a
-selection of fixtures and properties, replacing the seven mechanisms in §1. The resulting plan must
-cover:
-- **The per-property popup**, choosing a palette for any family, not only colour.
-- **How the mask, the selection and the layer relate.**
-- **Which existing surfaces fold in, and which stay as shortcuts.**
-
-It should start from `docs/lighting-composition-model.md`.
-
-**R4 — The effects survey.**
-- **What other desks offer.** Survey effect families, targetable attributes and parameters on
-  ChamSys MagicQ, grandMA3, ETC Eos and Hog 4: size, rate, offset, direction, wings, groups,
-  waveform, fade and spread.
-- **Compare with ours.** Set that against the 24 built-ins and the parameters they take. Known gaps:
-  no zoom effect, and ColourCycle has a fade ratio but no direction.
-- **Output:** an effects plan, which also says whether the busk and editor surfaces need to change
-  to carry the new parameters.
-
-**R5 — Project structure and navigation.**
-- **Survey these paths:**
-  - how the operator reaches the projects list
-  - what the top-level project screen shows, and what it leaves out
-  - which actions exist only in a project's ⋮ menu
-  - which install settings the nav lacks after S2
-  - the nav registry's grouping overall
-- **Design re-attach.** Attach a standalone or detached show to a venue version: Detach in reverse.
-  - Detach keeps uuids, so a detached show's rows can be matched to the venue's by uuid, falling
-    back to key.
-  - What differs becomes facet overrides or show additions.
-- **Output:** a navigation plan, plus a venue-attach plan if re-attach is large enough to need one.
+- ~~R1 — The cue model (D1)~~ — done, [`cue-model-plan.md`](cue-model-plan.md), seven sessions.
+- ~~R2 — Editing a cue in the Show view~~ — done, [`show-cue-editing-plan.md`](show-cue-editing-plan.md),
+  eight sessions.
+- ~~R3 — Applying to a selection~~ — done, [`apply-model-plan.md`](apply-model-plan.md), eight
+  sessions.
+- ~~R4 — The effects survey~~ — done, [`effects-plan.md`](effects-plan.md), seven sessions.
+- ~~R5 — Project structure and navigation~~ — done, [`navigation-plan.md`](navigation-plan.md) (five
+  sessions) and [`venue-attach-plan.md`](venue-attach-plan.md) (three).
 
 ## 4. Order
 
+One queue across this plan and the six R plans (P6). Session ids:
+
+- **S*n*** is this plan's.
+- **R1.*n*** is [`cue-model-plan.md`](cue-model-plan.md)'s session *n*, **R2.*n***
+  [`show-cue-editing-plan.md`](show-cue-editing-plan.md)'s, **R3.*n***
+  [`apply-model-plan.md`](apply-model-plan.md)'s and **R4.*n*** [`effects-plan.md`](effects-plan.md)'s.
+- **Nav.*n*** is [`navigation-plan.md`](navigation-plan.md)'s and **Att.*n***
+  [`venue-attach-plan.md`](venue-attach-plan.md)'s.
+- **K*n*** is a course check (§3).
+
+Within a plan, sessions run in that plan's order unless it says otherwise (R2.1 and R2.2, and Nav.1–3,
+are independent). **Needs** lists only what a session needs from outside its own plan. The waves are
+a suggested order; Needs is the constraint.
+
+**Landed**
+
+| Session | Done |
+|---|---|
+| S1 Palettes reach cells | `4a1a8fb4` |
+| S2 Chrome and defaults | `f6b37b38` |
+| S3 Cue list fixes | `e2153f5c` |
+| S4 Templates → palettes | `b954eee1` |
+| R1–R5 | the six plans above |
+
+**A — nothing blocks these**
+
 | # | Session | Needs | Done |
 |---|---|---|---|
-| 1 | S1 Palettes reach cells | — | `4a1a8fb4` |
-| 2 | S2 Chrome and defaults | — | `f6b37b38` |
-| 3 | S3 Cue list fixes | — | `e2153f5c` |
-| 4 | S4 Templates → palettes | — | `b954eee1` |
-| 5 | R1 Cue model | — | [`cue-model-plan.md`](cue-model-plan.md) |
-| 6 | S5 Grand master | S4 | |
-| 7 | S6 Make rig safe, Undo / Quit desk | S4 | |
-| 8 | S10 Record polish | S4 | |
-| 9 | S11 Position scale | S4 | |
-| 10 | S7 Group member order | — | |
-| 11 | S8 Per-patch locate | S11 | |
-| 12 | S12 Fan | S7, S11 | |
-| 13 | S13 Aim from the plan | S11 | |
-| 14 | S9 Blinder colour | S1 | |
-| 15 | S15 Effect timing | S4 | |
-| 16 | S16 Speed masters on a cue | S15 | |
-| 17 | S14 Applied tables | S4 | |
-| 18 | R2 Show cue editing | R1 | [`show-cue-editing-plan.md`](show-cue-editing-plan.md) |
-| 19 | R3 Applying to a selection | S1, S14 | [`apply-model-plan.md`](apply-model-plan.md) |
-| 20 | R4 Effects survey | S15 | [`effects-plan.md`](effects-plan.md) |
-| 21 | R5 Project structure | S2 | [`navigation-plan.md`](navigation-plan.md), [`venue-attach-plan.md`](venue-attach-plan.md) |
+| 1 | S5 Grand master | — | |
+| 2 | S6 Make rig safe, Undo / Quit desk | — | |
+| 3 | S10 Record polish | — | |
+| 4 | S11 Position scale | — | |
+| 5 | S15 Effect timing | — | |
+| 6 | S7 Group member order | — | |
+| 7 | S9 Blinder colour | — | |
+| 8 | S14 Applied tables | — | |
+| 9 | K1 Course check | rows 1–8 | |
+| 10 | R2.1 Blind holds the programmer's effects | — | |
+| 11 | R2.2 A cue's children keep their uuids | — | |
+| 12 | R3.1 The press on the desk | — | |
+| 13 | Nav.1 Sections and the registry | — | |
+| 14 | Nav.2 Off the rig | — | |
+| 15 | Nav.3 The switcher | — | |
+| 16 | Att.1 The origin, and the pairing | — | |
+| 17 | Att.2 The attach | — | |
+| 18 | K2 Course check | wave A | |
 
-R1 is early because more of the notes wait on it than on anything else. The R sessions can run in
-parallel with the S sessions, since they land only documents.
+**B — the cue model.** The long pole: R2.3 onwards waits on it. R1.1 is the startup migration, run on
+a copy of the desk's database first. K3 matters most: the plans still to run were written against
+the old cue model.
+
+| # | Session | Needs | Done |
+|---|---|---|---|
+| 19 | R1.1 Entries and the migration | — | |
+| 20 | R1.2 Holds | — | |
+| 21 | R1.3 Sync | — | |
+| 22 | R1.4 Sharing and explicit delete | — | |
+| 23 | K3 Course check | wave B | |
+
+**C — on the scale, the timing and the holds**
+
+| # | Session | Needs | Done |
+|---|---|---|---|
+| 24 | S8 Per-patch locate | S11 | |
+| 25 | S12 Fan | S7, S11 | |
+| 26 | S13 Aim from the plan | S11 | |
+| 27 | S16 Speed masters on a cue | S15, R1.2 | |
+| 28 | R4.1 Size, direction and N-shot | S15 | |
+| 29 | R4.2 Shaping the spread | — | |
+| 30 | R4.3 One effect over a selection | — | |
+| 31 | R1.5 The Cues table | Nav.1 (its Library row; either order) | |
+| 32 | R3.2 Local effects follow the selection | S15, R4.3 | |
+| 33 | R3.3 One press in the client | — | |
+| 34 | R3.4 One mask | S10 | |
+| 35 | K4 Course check | wave C | |
+
+**D — cue editing, the rest of effects, and the project's home**
+
+| # | Session | Needs | Done |
+|---|---|---|---|
+| 36 | R2.3 The action set | R1.4 | |
+| 37 | R1.6 Copy from another show | R2.3 (for *Duplicate*; else it builds it) | |
+| 38 | R1.7 The MCP tools | — | |
+| 39 | R2.4 The editor and its two hosts | — | |
+| 40 | R2.5 The Values grid | — | |
+| 41 | R2.6 The Looks and FX tables | — | |
+| 42 | R2.7 Edited since GO and Update stage | — | |
+| 43 | R2.8 Show on stage | — | |
+| 44 | K5 Course check | rows 36–43 | |
+| 45 | R4.4 Fading by size | R1.2 | |
+| 46 | R4.5 A stack's effect size | S5 (its shape; either order) | |
+| 47 | R4.6 Beam effects | — | |
+| 48 | R4.7 Palette Steps and Slot Steps | — | |
+| 49 | Nav.4 One set of project actions, and a show's home | — | |
+| 50 | Nav.5 A venue's home | — | |
+| 51 | Att.3 The sheet | Nav.4 (else it uses the card's ⋮) | |
+| 52 | K6 Course check | wave D | |
+
+**E — applying everywhere**
+
+| # | Session | Needs | Done |
+|---|---|---|---|
+| 53 | R3.5 The palette popup and the one picker | — | |
+| 54 | R3.6 Effects in the popup | — | |
+| 55 | R3.7 The busk side sheets | — | |
+| 56 | R3.8 Into the cue editor | R2.6 | |
+| 57 | K7 Course check and close | wave E | |
 
 ## 5. Not in this plan
 
-- **FX survey items** beyond D7 and the default timing: zoom effects, and ColourCycle direction and
-  fade. They are R4's.
-- **The standardised cue action set and in-place cue editing.** These are R2's. S3 fixes only the
-  three actions that already exist.
-- **Cross-show cue copy.** This is R1's. `copy_to_project` already copies whole stacks between
-  projects, and R1 decides how a single shared cue travels.
+Each R plan's own out-of-scope section holds what it declined.
