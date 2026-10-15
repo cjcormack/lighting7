@@ -29,12 +29,11 @@ import { useLookListQuery } from '@/store/looks'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
-  PropertyMaskGroup,
   RecordLookResponse,
   RecordMode,
   RecordSource,
 } from '@/store/programmerOps'
-import { MaskPicker, describeSkips } from './maskPicker'
+import { MaskPicker, describeSkips, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
@@ -126,7 +125,7 @@ export function RecordLookSheet({
 
   const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
   const [source, setSource] = useState<RecordSource>('TOUCHED')
-  const [mask, setMask] = useState<PropertyMaskGroup[]>([])
+  const [mask, setMask] = useState<MaskValue>(null)
   const [selectedOnly, setSelectedOnly] = useState(true)
   const [effectIds, setEffectIds] = useState<number[]>([])
   const [includeScenery, setIncludeScenery] = useState(true)
@@ -148,7 +147,7 @@ export function RecordLookSheet({
     openedRef.current = true
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
-    setMask([])
+    setMask(null)
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
@@ -167,7 +166,7 @@ export function RecordLookSheet({
   }, [open, targetLookId, reset])
 
   const creating = mode === 'CREATE'
-  const canSubmit = creating ? name.trim() !== '' : lookId !== ''
+  const canSubmit = (creating ? name.trim() !== '' : lookId !== '') && !maskIsEmpty(mask)
   // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected) while
   // this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
   const scoped = selectedOnly && selection.length > 0
@@ -178,7 +177,7 @@ export function RecordLookSheet({
         projectId,
         mode,
         source,
-        mask: mask.length > 0 ? mask : undefined,
+        mask: maskToWire(mask),
         lookId: creating ? undefined : Number(lookId),
         name: creating ? name.trim() : undefined,
         notes: creating && notes.trim() !== '' ? notes.trim() : undefined,
@@ -358,8 +357,8 @@ function MaskedAttributes({
   value,
   onChange,
 }: {
-  value: PropertyMaskGroup[]
-  onChange: (next: PropertyMaskGroup[]) => void
+  value: MaskValue
+  onChange: (next: MaskValue) => void
 }) {
   return <MaskPicker value={value} onChange={onChange} counts={useLocalFamilyCounts()} />
 }
