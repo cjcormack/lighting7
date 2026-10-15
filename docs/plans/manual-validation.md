@@ -123,8 +123,8 @@ pointing at the copy, the desk itself stopped or on another port):
    (auto numbers unchanged, explicit ones unchanged), the same follows, and its markers where they
    were. GO through a few cues; standby and GO TO work from the cue table.
 4. **Same book.** The prompt book's cue anchors sit where they did. A marker's anchor is kept but
-   not drawn until anchors are read by entry (cue model plan session 2), so check it on the copy
-   instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
+   not drawn until the prompt book reads anchors by entry (cue model plan D4, a later session), so
+   check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
    cue_stack_entries e ON e.id = a.entry_id WHERE e.kind = 'MARKER'"` lists each one against its
    marker. The log's dropped-anchor count should be 0 unless an anchor named a cue already gone.
 5. **Once.** Stop and start again: no migration line, no second backup.

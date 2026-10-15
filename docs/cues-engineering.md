@@ -245,14 +245,15 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
 *is*: its name, fade, notes, stomp and children. See `cue-stacks-engineering.md` for the stack itself.
 
 - **One entry per cue** (plan P4), for now: every cue has exactly one cue entry, so a cue is still in
-  exactly one stack and `add-cue` still *moves* it. Session 2 lets a cue be in more than one.
+  exactly one stack and `add-cue` still *moves* it. Session 4 lets a cue be in more than one, or none.
 - **The caller names the stack** (P7). Every route that runs or edits a cue's place in a list takes
   the stack (and, for reorder, standby and go-to, the **entry** id), and no code path picks a "home"
   stack for a cue. The callers that only hold a cue id — a busk pad, a cue slot, MIDI `FireCue`,
   `POST /cues/{id}/apply`, the AI's `apply_cue`, `CueDetails`, the rig briefing and the prompt book's
   cue-keyed routes — go through `soleEntryOf(cue)`, which answers the cue's entry only while it has
-  exactly one. It is the P4 bridge, not a home-stack rule: session 2 turns those callers into loose
-  holds that need no entry at all.
+  exactly one. It is the P4 bridge, not a home-stack rule: session 2 turns the ones that make a cue
+  live (pads, slots, `FireCue`, `/apply`, `apply_cue`) into loose holds that need no entry at all,
+  and the reads take an entry from their caller as later sessions reach them (anchors by entry, D4).
 - **A marker is an entry, never a cue.** `POST /cues` refuses `cueType: "MARKER"` (400, naming the
   markers route); markers are made, renamed and removed through
   `POST/PUT/DELETE /cue-stacks/{id}/markers[/{entryId}]`, and can be neither armed nor fired.
