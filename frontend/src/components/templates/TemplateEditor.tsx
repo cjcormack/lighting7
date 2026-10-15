@@ -31,6 +31,8 @@ import {
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 import { describeTemplateIntent, type TemplateIntent } from '@/lib/templateIntent'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { findPanProperty, findTiltProperty } from '@/store/fixtures'
 import {
   type TemplateEffect,
   type TemplateInput,
@@ -63,7 +65,7 @@ import {
  * before anything else, built a synthetic fixture from it, and rendered a descriptor-driven property
  * grid — which is what made "Amber Key" a MAC Aura's colour rather than a colour. There is no fixture
  * type here and no grid: the family is the template's identity, the control is native to it (a colour
- * picker, one level, a pan/tilt pad in degrees), and what gets stored is an **intent** resolved per
+ * picker, one level, a centre-relative pan/tilt), and what gets stored is an **intent** resolved per
  * head at cook.
  *
  * **Holds** is the second identity choice, and it sits beside the family rather than under it: a
@@ -505,7 +507,8 @@ export function TemplateEditor({
  *  - no setting or slider *On* — a template effect names no property on no fixture;
  *  - no element mode, head filter or step timing — all three are questions about a *specific*
  *    multi-element head;
- *  - no degrees — a size is in bytes, since there is no head to read a travel range from;
+ *  - a size in DMX steps and a centre on the centre-relative scale, as the live editor has them —
+ *    neither consults a head;
  *  - no extended colour channels, so the colour picker offers RGB only. That is correct rather than
  *    lazy, and it matches the backend: `resolveColourGeneric` resolves a template's colour without
  *    a head, so what is authored here is what any head will be asked for.
@@ -585,7 +588,6 @@ function EffectControls({
             timingSource={draft.timingSource}
             draft={fxDraft}
             scope={TEMPLATE_SCOPE}
-            axes={null}
             extendedChannels={undefined}
             settingProperty={undefined}
             readOnly={false}
@@ -615,6 +617,12 @@ const TEMPLATE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter
  */
 function PerFixtureValues({ template }: { template: TemplateSummary | null }) {
   const rows = template?.rows ?? []
+  // A position recorded in degrees (before D3) reads on the centre scale through its own head.
+  const { fixtureByKey } = useFixtureLookup()
+  const axesOf = (key: string) => {
+    const props = fixtureByKey.get(key)?.properties ?? []
+    return { pan: findPanProperty(props), tilt: findTiltProperty(props) }
+  }
   return (
     <div className="space-y-1.5">
       <Label>Recorded values</Label>
@@ -630,7 +638,7 @@ function PerFixtureValues({ template }: { template: TemplateSummary | null }) {
               {row.propertyName}
             </Badge>
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground shrink-0">
-              {describeTemplateIntent(row.value)}
+              {describeTemplateIntent(row.value, axesOf(row.targetKey))}
             </span>
           </div>
         ))}

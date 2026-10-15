@@ -10,7 +10,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { dmxToDegrees, degreesToDmx } from '@/lib/axisDegrees'
+import { CENTRE_MAX, CENTRE_MIN, centreToDmx, dmxToCentre } from '@/lib/positionScale'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import type { SettingPropertyDescriptor } from '@/store/fixtures'
@@ -34,21 +34,17 @@ import {
   centreModeOf,
   clampByte,
   defaultParameters,
-  degreesToSize,
   hasCentre,
   isLevelEffect,
   isRatioParam,
   levelModeOf,
-  paramAxis,
   paramRole,
-  sizeToDegrees,
   timingChoicePatch,
   withCentreMode,
   type CentreMode,
   type FxDraft,
   type FxScope,
   type LevelMode,
-  type PositionAxes,
 } from './fxEditorModel'
 
 const CURVES = [
@@ -105,7 +101,6 @@ export function FxEffectFields({
   timingSource,
   draft,
   scope,
-  axes,
   extendedChannels,
   settingProperty,
   readOnly,
@@ -117,7 +112,6 @@ export function FxEffectFields({
   timingSource: string | null | undefined
   draft: FxDraft
   scope: FxScope
-  axes: PositionAxes | null
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingProperty: SettingPropertyDescriptor | undefined
   readOnly: boolean
@@ -144,7 +138,6 @@ export function FxEffectFields({
       param={param}
       role={role}
       value={draft.parameters[param.name] ?? param.defaultValue}
-      axes={axes}
       extendedChannels={extendedChannels}
       settingProperty={param.name === 'level' ? settingProperty : undefined}
       readOnly={readOnly}
@@ -642,15 +635,14 @@ function SelectRow({
 }
 
 /**
- * One parameter, in its role's unit (`paramRole`): a level as a percent, a size in degrees of travel
- * where the head annotates and bytes elsewhere, a centre or a sweep's end as a position on its axis,
+ * One parameter, in its role's unit (`paramRole`): a level as a percent, a size in DMX steps, a
+ * centre or a sweep's end centre-relative on its axis,
  * a ratio as a percent, a curve as a list, a colour through the FX colour pickers.
  */
 function ParamControl({
   param,
   role,
   value,
-  axes,
   extendedChannels,
   settingProperty,
   readOnly,
@@ -659,7 +651,6 @@ function ParamControl({
   param: EffectParameterDef
   role: ReturnType<typeof paramRole>
   value: string
-  axes: PositionAxes | null
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingProperty: SettingPropertyDescriptor | undefined
   readOnly: boolean
@@ -682,39 +673,23 @@ function ParamControl({
   }
 
   if (type === 'ubyte') {
-    const axisName = paramAxis(param.name)
-    const axis = axes != null && axisName != null ? axes[axisName] : null
-    if ((role === 'size') && axis != null) {
+    // A centre or a sweep's end is a point on its axis, read centre-relative on every head
+    // (venue-visit plan D3): `-128..127`, 0 the centre of travel (DMX 128, where Around pins it).
+    // A size (a radius, a range) is a distance and stays in DMX steps — never offset. The value is
+    // raw DMX either way, so no head's range is consulted.
+    if (role === 'centre' || role === 'axis') {
       return (
         <SliderRow
           label={label}
           description={param.description || undefined}
-          unit="°"
           value={num}
           min={0}
           max={255}
           step={1}
-          display={(v) => Math.round(sizeToDegrees(v, axis))}
-          fromDisplay={(d) => degreesToSize(d, axis)}
-          readOnly={readOnly}
-          onChange={(v, release) => onChange(String(clampByte(v)), release)}
-        />
-      )
-    }
-    if ((role === 'centre' || role === 'axis') && axis != null) {
-      return (
-        <SliderRow
-          label={label}
-          description={param.description || undefined}
-          unit="°"
-          value={num}
-          min={0}
-          max={255}
-          step={1}
-          display={(v) => Math.round(dmxToDegrees(v, axis) ?? 0)}
-          fromDisplay={(d) => degreesToDmx(d, axis) ?? 0}
-          displayMin={Math.min(axis.degMin, axis.degMax)}
-          displayMax={Math.max(axis.degMin, axis.degMax)}
+          display={(v) => dmxToCentre(v)}
+          fromDisplay={(d) => centreToDmx(d)}
+          displayMin={CENTRE_MIN}
+          displayMax={CENTRE_MAX}
           readOnly={readOnly}
           onChange={(v, release) => onChange(String(clampByte(v)), release)}
         />

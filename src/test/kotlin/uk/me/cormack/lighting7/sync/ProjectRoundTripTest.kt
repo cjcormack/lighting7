@@ -165,7 +165,7 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * D7's *Seconds* (formatVersion 28) travels on all three stored effect shapes — a Look's effect,
+     * D7's *Seconds* (formatVersion 29) travels on all three stored effect shapes — a Look's effect,
      * a palette's effect and a cue's ad-hoc effect. Asserted on the export text for the reason the
      * template test above gives: a field both sides dropped would still round-trip byte for byte.
      */
@@ -192,8 +192,8 @@ class ProjectRoundTripTest {
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertTrue(format.formatVersion >= 28, "Seconds syncs from v28")
-        assertTrue(SUPPORTED_FORMAT_VERSION >= 28, "and this desk reads v28")
+        assertTrue(format.formatVersion >= 29, "Seconds syncs from v29")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 29, "and this desk reads v29")
     }
 
     /**

@@ -93,7 +93,6 @@ function fields(entry: EffectLibraryEntry, d: FxDraft) {
       timingSource={entry.timingSource}
       draft={d}
       scope={SCOPE}
-      axes={null}
       extendedChannels={undefined}
       settingProperty={undefined}
       readOnly={false}

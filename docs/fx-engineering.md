@@ -1683,7 +1683,7 @@ It is one question for every effect, asked by one chip (`Seconds | M1 | M2…`),
 flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`template_effects`), a
 Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`), with
 `LookEffectSpec`, `EffectEntry` and `LookEffectSettings` carrying it between them. It syncs from
-`formatVersion` 28. The rules are `fx/EffectTiming.kt`'s:
+`formatVersion` 29. The rules are `fx/EffectTiming.kt`'s:
 
 - **A beat effect on Seconds** reads its `beatDivision` as seconds and runs on the **wall-clock
   loop** with both masters null — `FxInstance.seconds` true, `timingSource` `WALL_CLOCK`,

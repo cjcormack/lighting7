@@ -226,7 +226,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 28`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 29`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -280,20 +280,36 @@ imports such a row back would hold nothing worse than it held before; on this de
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
-### Version 28 — Seconds
+### Version 29 — Seconds
 
 An effect may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
 own cycle, with no speed master. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain
 `seconds` (default false, so omitted), and a beat effect's `beatDivision` is then its cycle in
-**seconds**. `SUPPORTED_FORMAT_VERSION = 28`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field
+**seconds**. `SUPPORTED_FORMAT_VERSION = 29`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field
 defaults to false, so every older archive decodes as before. The writer's number moves by the
-sharp-edge rule, and it is a semantic change on an existing field as much as a new one: a v27 reader
+sharp-edge rule, and it is a semantic change on an existing field as much as a new one: a v28 reader
 would import a ten-second breathe as ten beats of master 1 and write the flag away on its next push.
 A row the desk writes holds no master beside the flag (`RichProjectFixture` keeps its masters there,
 dormant, only so the clone test's remap still has a reference to rewrite). A wall-clock effect with no
-rate master is on Seconds with or without the flag, so a v27 archive's wall-clock rows mean what they
-meant. A project with no effect on Seconds exports byte-for-byte as at v27 (only `formatVersion.json`
-says 28).
+rate master is on Seconds with or without the flag, so an older archive's wall-clock rows mean what they
+meant. A project with no effect on Seconds exports byte-for-byte as at v28 (only `formatVersion.json`
+says 29).
+
+### Version 28 — centre-relative positions
+
+A palette's position row gains a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
+centre-relative coarse DMX — `-128..127` on each axis, 0 the centre of travel (DMX 128), the same
+fraction of travel on every head — beside the `deg:` travel degrees every earlier row holds. **No
+field moved**: `TemplateRowJson.value` is a string the importer stores verbatim, and a `deg:` row
+exports byte-for-byte as before. What moved is the value's meaning, which is the sharp-edge rule's
+semantic-change arm: a v27 reader parses a `pos:` row as no intent, so `CueComposer`, a press and
+the resolves-to panel skip it with a warn — it would run every new position palette, and every aim
+saved as one, as nothing — while its next push wrote the row back unchanged. `SUPPORTED_FORMAT_VERSION
+= 28` so a v27 install refuses the repo instead; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because
+a `deg:` row still resolves as angles (`TemplateResolver.resolvePosition` takes both units) and there
+are no migrations — a stored row becomes `pos:` only when an editor saves a moved position.
+`RichProjectFixture`'s per-fixture position palette holds one row in each unit, so a round trip that
+rewrote either would show.
 
 ### Version 27 — venue parks
 

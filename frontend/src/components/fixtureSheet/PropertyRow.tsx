@@ -5,13 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
-import { dmxToDegrees } from '@/lib/axisDegrees'
+import { CENTRE_MAX, CENTRE_MIN, clampCentre, dmxToCentre, formatCentre } from '@/lib/positionScale'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useChannelValue, useSettingValue, useSliderValue } from '@/hooks/usePropertyValues'
 import { useColourAppearance } from '@/hooks/useColourAppearance'
 import { useVirtualDimmer } from '@/hooks/useVirtualDimmer'
 import { usePropertyParkStatus } from '@/hooks/usePropertyParkStatus'
-import type { SliderPropertyDescriptor } from '@/store/fixtures'
 import { EditorLabel } from '../editor/EditorLabel'
 import { ColourEditor } from '../editor/ColourEditor'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
@@ -395,16 +394,13 @@ function ColourRow({ row, headKey, headName, sourceGroup }: { row: Extract<Sheet
 
 // ─── Position ──────────────────────────────────────────────────────────────
 
-export function axisText(byte: number, slider: SliderPropertyDescriptor | undefined, degrees: boolean): string {
-  if (degrees && slider) {
-    const deg = dmxToDegrees(byte, slider)
-    if (deg != null) return `${Math.round(deg)}°`
-  }
-  return String(byte)
+/** An axis's DMX value as the operator reads it: centre-relative, `+12` / `0` / `-12` (D3). */
+export function axisText(byte: number, min: number, max: number): string {
+  return formatCentre(dmxToCentre(byte, { min, max }))
 }
 
 function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'position' }> } & RowHead) {
-  const { resolution, degrees } = row
+  const { resolution, aimable } = row
   const { openRowId, aim, target } = useFixtureSheet()
   const open = openRowId === openKey(headKey, row)
   const source = useRowSource(headKey, row.keys)
@@ -414,8 +410,6 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
   const readOnly = useRowReadOnly(parked)
   const pan = useChannelValue(resolution.pan)
   const tilt = useChannelValue(resolution.tilt)
-  const panDeg = degrees && resolution.panProperty ? dmxToDegrees(pan, resolution.panProperty) : null
-  const tiltDeg = degrees && resolution.tiltProperty ? dmxToDegrees(tilt, resolution.tiltProperty) : null
 
   const write = useCallback(
     (commit: Extract<CellCommit, { kind: 'position' }>, typed: boolean) =>
@@ -429,7 +423,7 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
   const aimButton =
     // Aim is the fixture's (`StageAimControls` over its key), so only the fixture's own Position row
     // offers it — a head's row would aim the whole fixture.
-    aim != null && degrees && target.type === 'fixture' && headKey === target.fixture.key ? (
+    aim != null && aimable && target.type === 'fixture' && headKey === target.fixture.key ? (
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px]" disabled={readOnly}>
@@ -468,10 +462,8 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
               <AxisControl
                 label="Pan"
                 byte={pan}
-                deg={panDeg}
                 min={resolution.panMin}
                 max={resolution.panMax}
-                slider={resolution.panProperty}
                 readOnly={readOnly}
                 onCommit={(c, typed) => write(c, typed)}
                 axis="pan"
@@ -479,10 +471,8 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
               <AxisControl
                 label="Tilt"
                 byte={tilt}
-                deg={tiltDeg}
                 min={resolution.tiltMin}
                 max={resolution.tiltMax}
-                slider={resolution.tiltProperty}
                 readOnly={readOnly}
                 onCommit={(c, typed) => write(c, typed)}
                 axis="tilt"
@@ -492,11 +482,11 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
             <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
               <span>
                 <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
-                {axisText(pan, resolution.panProperty, degrees)}
+                {axisText(pan, resolution.panMin, resolution.panMax)}
               </span>
               <span>
                 <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
-                {axisText(tilt, resolution.tiltProperty, degrees)}
+                {axisText(tilt, resolution.tiltMin, resolution.tiltMax)}
               </span>
             </div>
           )}
@@ -511,52 +501,46 @@ export function AxisControl({
   label,
   axis,
   byte,
-  deg,
   min,
   max,
-  slider,
   readOnly,
   onCommit,
 }: {
   label: string
   axis: 'pan' | 'tilt'
+  /** The axis's DMX value, and its DMX range. */
   byte: number
-  deg: number | null
   min: number
   max: number
-  slider: SliderPropertyDescriptor | undefined
   readOnly: boolean
   onCommit: (commit: Extract<CellCommit, { kind: 'position' }>, typed: boolean) => void
 }) {
-  // Degrees where the head annotates travel (D14 of the editor kit, the grid's PositionCell rule),
-  // resolved to this head's own byte by `clampCommitToResolution`; bytes elsewhere.
-  const inDegrees = deg != null && slider?.degMin != null && slider.degMax != null
-  const lo = inDegrees ? Math.min(slider.degMin!, slider.degMax!) : min
-  const hi = inDegrees ? Math.max(slider.degMin!, slider.degMax!) : max
+  // Centre-relative on every head (venue-visit plan D3, the grid's PositionCell rule): the slider
+  // and the field both run -128..127 with 0 at the centre of travel, and the commit is resolved to
+  // this head's own byte by `clampCommitToResolution`.
+  const range = { min, max }
+  const value = dmxToCentre(byte, range)
+  const key = axis === 'pan' ? 'panCentre' : 'tiltCentre'
   return (
     <div className="flex min-w-0 items-center gap-2">
       <EditorLabel className="w-7 shrink-0">{label}</EditorLabel>
       <Slider
         aria-label={label}
-        value={[byte]}
-        min={min}
-        max={max}
+        value={[value]}
+        min={CENTRE_MIN}
+        max={CENTRE_MAX}
         step={1}
         disabled={readOnly}
-        onValueChange={([v]) => v !== undefined && onCommit({ kind: 'position', [axis]: v }, false)}
+        onValueChange={([v]) => v !== undefined && onCommit({ kind: 'position', [key]: v }, false)}
         className="min-w-[40px] flex-1"
       />
       <SheetField
-        label={`${label} ${inDegrees ? 'degrees' : 'value'}`}
-        unit={inDegrees ? '°' : undefined}
-        value={inDegrees ? Math.round(deg) : byte}
-        min={lo}
-        max={hi}
+        label={`${label} value`}
+        value={value}
+        min={CENTRE_MIN}
+        max={CENTRE_MAX}
         disabled={readOnly}
-        onEnter={(n) => {
-          const v = Math.max(lo, Math.min(hi, n))
-          onCommit(inDegrees ? { kind: 'position', [`${axis}Deg`]: v } : { kind: 'position', [axis]: Math.round(v) }, true)
-        }}
+        onEnter={(n) => onCommit({ kind: 'position', [key]: clampCentre(n) }, true)}
       />
     </div>
   )

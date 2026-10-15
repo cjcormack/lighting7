@@ -1214,6 +1214,48 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `new from selection records a position centre-relative, one row for heads whose degrees differ`() = testApplication {
+        mountTestApp(state)
+        // A Shehds tilts 0–270°, a MAC 250 0–257°: the same bytes are different degrees, which
+        // made the old degree record two per-fixture rows. Centre-relative (venue-visit plan P3),
+        // the same bytes are the same fraction of travel, so the heads agree and one row serves.
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-16ch", "mover-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 40)
+        val client = jsonClient()
+        for (key in listOf("mover-1", "mac-1")) {
+            state.show.fxEngine.programmer.writeProperties(
+                uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
+                listOf(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
+                        state.show.fixtures.untypedGroupableFixture(key),
+                        "position",
+                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Position(100u, 200u),
+                    ),
+                ),
+            )
+        }
+
+        val body = client.post("${base()}/from-programmer") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateFromProgrammerRequest(
+                    name = "stage left high",
+                    mask = listOf("POSITION"),
+                    targets = listOf(
+                        uk.me.cormack.lighting7.models.CueTargetDto("fixture", "mover-1"),
+                        uk.me.cormack.lighting7.models.CueTargetDto("fixture", "mac-1"),
+                    ),
+                )
+            )
+        }.body<TemplateFromProgrammerResponse>()
+
+        assertTrue(body.isGeneric, "the same bytes on both heads, so one centre-relative value serves")
+        val row = body.template.rows.single()
+        assertEquals(DEFERRED_TARGET_TYPE, row.targetType)
+        assertEquals("pos:-28,72", row.value, "100 - 128, 200 - 128")
+    }
+
+    @Test
     fun `new from selection keeps per-fixture rows where the heads disagree`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)

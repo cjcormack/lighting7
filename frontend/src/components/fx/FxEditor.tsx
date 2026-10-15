@@ -30,7 +30,6 @@ import {
   defaultParameters,
   differsFromTemplate,
   draftOf,
-  positionAxesOf,
   withTemplateDraft,
   OPTIONAL_FIELDS,
   sameRequest,
@@ -107,7 +106,6 @@ export function FxEditor({
     return { heads, elementMode: false, elementFilter: heads }
   }, [effect.isGroupTarget, targetFixtures])
 
-  const axes = useMemo(() => (entry?.category === 'position' ? positionAxesOf(targetFixtures) : null), [entry, targetFixtures])
   const extendedChannels = useMemo(
     () => (entry?.category === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.properties ?? [])) : undefined),
     [entry, targetFixtures],
@@ -278,7 +276,6 @@ export function FxEditor({
           timingSource={effect.timingSource}
           draft={draft}
           scope={scope}
-          axes={axes}
           extendedChannels={extendedChannels}
           settingProperty={settingProperty}
           readOnly={readOnly}

@@ -164,11 +164,18 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
-// v28 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
+// v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
-// beat effect's `beatDivision` is then its cycle in seconds. SUPPORTED moved for v14's reason — a v27
+// beat effect's `beatDivision` is then its cycle in seconds. SUPPORTED moved for v14's reason — a v28
 // reader would import a ten-second breathe as ten beats of master 1 and write the flag away on its
 // next push; MIN stays at 5 because the field defaults to false.
+//
+// v28 gave a palette's position row a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
+// centre-relative coarse DMX, beside the `deg:` travel degrees every earlier row holds. No field
+// moved — `TemplateRowJson.value` is a string, imported verbatim — but its meaning did: a v27 reader
+// parses a `pos:` row as no intent and skips it with a warn, so it would run every new position
+// palette as nothing while its push wrote the row back unchanged. SUPPORTED moves so a v27 install
+// refuses the repo instead; MIN stays at 5 because a `deg:` row still resolves as angles.
 //
 // v27 made a show on a venue inherit its pinned version's parks and added `showParkReleases/`, the
 // venue parks it releases, keyed by universe and channel. SUPPORTED moved by the sharp-edge rule — a
@@ -237,7 +244,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 28
+internal const val SUPPORTED_FORMAT_VERSION = 29
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**

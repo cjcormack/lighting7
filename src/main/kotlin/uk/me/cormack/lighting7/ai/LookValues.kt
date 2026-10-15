@@ -54,7 +54,8 @@ internal const val LOOK_VALUE_GRAMMAR =
         "and ';uv0-255' for the head's own white, amber and UV emitters (an emitter the head lacks is left out), " +
         "or by ';policy=extract' (the hex's white moved into the white or amber emitter) or ';policy=additive' (driven " +
         "alongside RGB) — without one, RGB alone; a named emitter level wins over the policy's, " +
-        "'deg:<pan>,<tilt>' for position, or pan and tilt each on its own with 'pct:' or 'dmx:', " +
+        "'pos:<pan>,<tilt>' for position (centre-relative DMX, -128 to 127 each, 0 the centre of travel; 'deg:' travel " +
+        "degrees is still read), or pan and tilt each on its own with 'pct:' or 'dmx:', " +
         "'dmx:0-255' for a raw channel level (white, amber and uv, or any single channel), 'on' / 'off' for prism, " +
         "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' properties name it"
 
@@ -181,7 +182,7 @@ private sealed interface LookValue {
 private data class Emitters(val white: UByte?, val amber: UByte?, val uv: UByte?)
 
 /**
- * A hex only for a colour and `deg:` only for `position`, so [TemplateResolver]'s colour fallback
+ * A hex only for a colour and `pos:` / `deg:` only for `position`, so [TemplateResolver]'s colour fallback
  * cannot land a hex on some other property. Anything that is not an intent is an option name.
  */
 private fun parseLookValue(propertyName: String, raw: String): LookValue? {

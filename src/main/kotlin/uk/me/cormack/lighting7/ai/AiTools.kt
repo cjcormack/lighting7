@@ -892,19 +892,22 @@ class AiTools(private val state: State) {
         val project = state.projectManager.currentProject
         // Resolved without writing first, so a template that cannot be made (a name already taken)
         // refuses the whole call before any head moves — the template is the reason it was made.
-        val resolved = when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs, write = false)) {
+        val aimed = when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs, write = false)) {
             is AimOutcome.Invalid -> return errorResult(outcome.message)
-            is AimOutcome.Done -> outcome.response
+            is AimOutcome.Done -> outcome
         }
-        // Aims into a position template: one fixture-specific row per aimed head, in travel
-        // degrees — the template grammar's position intent, which holds a tenth of a degree — so it
-        // resolves back to each head's aim to within that, and outlives the programmer.
-        val templateRows = resolved.written.map { w ->
+        val resolved = aimed.response
+        // Aims into a position template: one fixture-specific row per aimed head, centre-relative
+        // (`pos:`, the unit every new position write takes) — each head's own coarse bytes, so it
+        // resolves back to the aim's coarse channels exactly and outlives the programmer. The fine
+        // channel is not part of the scale; a palette never wrote it.
+        val templateRows = resolved.written.mapNotNull { w ->
+            val value = aimed.paletteValues[w.target.key] ?: return@mapNotNull null
             TemplateRowDto(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = w.target.key,
                 propertyName = TemplateProperty.POSITION.propertyName,
-                value = TemplateIntent.Position(w.panDeg, w.tiltDeg).serialize(),
+                value = value,
             )
         }
         var savedTemplate: TemplateDto? = null

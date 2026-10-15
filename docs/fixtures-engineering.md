@@ -1979,9 +1979,11 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   placement and mount were measured.
 - **An aim can be kept as a position palette.** The programmer is scratch — Clear releases an aim
   like any other entry — so `aim_fixtures` takes `saveAsPalette`: a new palette with one
-  fixture-specific `position` row per aimed head, in travel degrees (`deg:pan,tilt`, the palette
-  grammar), which `TemplateResolver` turns back into each head's aim to within that tenth of a degree
-  (the grammar's precision; the programmer write is exact, fine channels included). It is a focus
+  fixture-specific `position` row per aimed head, centre-relative (`pos:pan,tilt`, the palette
+  grammar since venue-visit plan D3: each head's own coarse bytes about DMX 128), which
+  `TemplateResolver` turns back into exactly the aim's coarse channels. The fine channel is not part
+  of the palette scale, so the palette lands the aim to within a coarse step; the programmer write is
+  exact, fine channels included. (It held travel degrees, `deg:`, until D3; those rows still resolve.) It is a focus
   palette cues, Looks and busk pads can reference, and it outlives the programmer. The palette is
   created before the programmer is written, so a taken name refuses the call with no head moved;
   `dryRun` creates nothing.

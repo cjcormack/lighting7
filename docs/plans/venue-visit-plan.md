@@ -194,11 +194,8 @@ Grouped by area. §4 gives the order.
   Give it a cue picker that lists cues by name, whatever stack they're in, so it serves loose cues
   once the cue model plan's session 4 lands.
 
-**S11 — Position in −127…+127 (D3, P3).**
-- A shared frontend conversion replaces `lib/axisDegrees.ts` for display and entry, on the same
-  surfaces the survey listed.
-- The intent gains a unit (P3), and `TemplateResolver.resolvePosition` resolves both units.
-- Degree annotations stay. Aim and the Stage view still need them.
+- ~~S11 — Position in −127…+127 (D3, P3)~~ — done, `cb71b335` (the scale is exact, DMX − 128, so
+  DMX 0 reads −128; the intent is `pos:`; `formatVersion` 28).
 
 **S12 — Fan in and fan out.**
 - Spread gains a relative mode: a fan amount around each head's current position.

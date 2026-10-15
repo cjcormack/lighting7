@@ -39,7 +39,7 @@ export interface TemplateRow {
   targetKey: string
   /** One of `TEMPLATE_PROPERTIES` — the closed vocabulary; see `templateIntent.ts`. */
   propertyName: string
-  /** A serialised intent: `#FF9D4A;policy=extract`, `pct:75`, `deg:45,12.5`, `on`. */
+  /** A serialised intent: `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (or a stored `deg:45,12.5`), `on`. */
   value: string
   sortOrder?: number
   /** Resolved server-side on read; ignored on write. */

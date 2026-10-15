@@ -227,8 +227,8 @@ describe('FxEditor', () => {
     expect(screen.getByRole('radio', { name: 'Around current position' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.queryByRole('slider', { name: 'Pan' })).toBeNull()
     expect(screen.queryByRole('slider', { name: 'Tilt' })).toBeNull()
-    // Sizes in degrees: both axes annotate. 64 of 255 on a 540° pan is 136°.
-    expect((screen.getByRole('spinbutton', { name: 'Pan size degrees' }) as HTMLInputElement).value).toBe('136')
+    // A size is a distance in DMX steps (venue-visit plan D3), never offset to the centre.
+    expect((screen.getByRole('spinbutton', { name: 'Pan size' }) as HTMLInputElement).value).toBe('64')
   })
 
   it('sends Around as Additive with the centre at 128 and hides the centre; Absolute is Override with it shown', () => {
@@ -243,6 +243,8 @@ describe('FxEditor', () => {
     render(<FxEditor effect={absolute} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Absolute' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('slider', { name: 'Pan' })).toBeTruthy()
+    // An absolute centre reads centre-relative (D3): byte 60 is 68 steps left of centre.
+    expect((screen.getByRole('spinbutton', { name: 'Pan' }) as HTMLInputElement).value).toBe('-68')
 
     fireEvent.click(screen.getByRole('radio', { name: 'Around current position' }))
     expect(lastFrame()).toMatchObject({

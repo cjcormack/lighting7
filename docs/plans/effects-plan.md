@@ -29,7 +29,7 @@ below build on: the flag is `seconds` on the same four effect homes they extend 
 `PhaseSource` arms, which share one path already; the default master is **stamped at creation** —
 by `FxPicker`, the palette editor and the MCP tools — so session 6's "a Beam master takes a new beam
 effect by S15's default" needs only `usage` to gain `beam`. Nothing here changes timing. Sessions 1–3
-each bump `formatVersion`, taking the next number free when they land (venue-visit P5); S15 took 28.
+each bump `formatVersion`, taking the next number free when they land (venue-visit P5); S15 took 29 (S11 had taken 28).
 
 ### 1.1 The survey
 
@@ -87,7 +87,7 @@ Read from `main` at `8182be4`, 2026-10-15.
   unison; R3 left that to this plan (`FU-FX-SELECTION-DISTRIBUTION`).
 - **Effect rows store their fields as columns** — `look_effects`, `cue_ad_hoc_effects`, a palette's
   effect, the programmer's — and `LookEffectSpec` carries them, so a new field on an instance is a
-  `formatVersion` bump (28 today). A new parameter of one effect is a key in `parameters` and is not.
+  `formatVersion` bump (29 today). A new parameter of one effect is a key in `parameters` and is not.
 - **Speed masters are ahead of the field**: a bank with per-family `usage` routing and phase-locked
   follow. The usage vocabulary is pinned to the effect categories (`SpeedMasterUsageVocabularyTest`).
 - **One editor carries every effect**: `FxEffectFields` is the live editor's (`FxEditor`), the effect
@@ -237,7 +237,8 @@ between them — and the **target** resolves it per head, which is what no outpu
 
 - **Palette Steps** (`category` by the palettes' family). Parameters: `palettes`, a list of value
   palette references (`tmpl:{uuid}`, generic, one family), and `fadeRatio` as Colour Cycle's. The
-  target resolves each step's palette for its head through `TemplateResolver` — degrees to that head's
+  target resolves each step's palette for its head through `TemplateResolver` — a position, whether
+  centre-relative (`pos:`, venue-visit plan D3) or stored in degrees (`deg:`, P3), to that head's own
   pan and tilt, a beam role to its range — and blends between the two by the property's own rule. A
   colour target resolves per head too, so a wheel-less RGBW head and an RGB one each get their own.
 - **Slot Steps** (`category: beam`, a setting). Parameters: `slots`, a list of option names, and no
@@ -405,7 +406,8 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   the two built-ins.
 - Editor parameter types: a palette list (the colour list's picker, any family, generic value palettes
   only) and a slot list (the target's setting options; on an effect palette, typed names).
-- **Tests:** two position palettes in degrees land on each head's own pan and tilt; Slot Steps of
+- **Tests:** two position palettes land on each head's own pan and tilt — one centre-relative
+  (`pos:`) and one stored in degrees (`deg:`), since `TemplateResolver` resolves both; Slot Steps of
   *Gobo 3, Gobo 5* lands each head's own levels; a head without *Gobo 5* holds underneath on that step;
   Bounce runs the steps back.
 - **Docs:** `fx-engineering.md`, `fixtures-engineering.md` (settings as effect targets).

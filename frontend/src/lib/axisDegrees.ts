@@ -3,11 +3,16 @@ import type { SliderPropertyDescriptor } from '../store/fixtures'
 /**
  * A pan/tilt (or zoom) axis between its raw DMX value and the degrees its descriptor annotates.
  *
+ * **Not for display or entry** (venue-visit plan D3): the operator reads and types position
+ * centre-relative, through `lib/positionScale.ts`. This module is the Stage view's and aim's —
+ * the beam's angle, a ZOOM slider's field, *Aim…* being offered at all — and `positionScale`'s one
+ * read of a palette stored in degrees before D3.
+ *
  * The mapping is the descriptor's `degMin` / `degMax`, set on the movers (10 of the 28 fixture
  * models today) and absent everywhere else — and where it is absent both functions answer null,
- * because a range is never invented: the 3D view treats such a head as static, and the position
- * editor keeps bytes in its fields (editor-kit plan D14). The result is a position along the
- * axis's *travel range* (a mover declares pan 0–540, tilt 0–210), not a signed angle; callers
+ * because a range is never invented: the 3D view treats such a head as static. The result is a
+ * position along the axis's *travel range* (a mover declares pan 0–540, tilt 0–210), not a signed
+ * angle; callers
  * aiming a head want `dmxToSignedDegrees` in `stageCoords.ts`. Reused verbatim for ZOOM sliders,
  * where `degMin` / `degMax` mean "full beam angle at DMX min / max".
  */
@@ -35,7 +40,7 @@ export function degreesToDmx(deg: number, slider: SliderPropertyDescriptor): num
   return Math.round(slider.min + tt * span)
 }
 
-/** Both axes annotate — the position editor's test for typing degrees at all. */
+/** Both axes annotate — the test for offering *Aim…*, which solves pan and tilt in degrees. */
 export function annotatesDegrees(slider: SliderPropertyDescriptor | undefined): slider is SliderPropertyDescriptor & { degMin: number; degMax: number } {
   return slider != null && slider.degMin != null && slider.degMax != null && slider.max > slider.min
 }

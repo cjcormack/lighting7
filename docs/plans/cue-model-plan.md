@@ -69,7 +69,7 @@ The findings that shape the plan, from three surveys of the code on `main` at `2
   with the cue's number.
 - **Sync stores membership inside the cue.** `CueJson` carries `cueStackUuid`, `sortOrder`,
   `cueNumber`, `cueNumberAuto` and `autoAdvance` (`sync/dto/SyncDtos.kt:835`). The writer is at
-  `formatVersion` 28 and the importer reads 5–28 (`sync/ProjectImporter.kt:234-235`). Merging is per
+  `formatVersion` 29 and the importer reads 5–29 (`sync/ProjectImporter.kt:234-235`). Merging is per
   record (`sync/ThreeWayDiff.kt`), so a renumber touches every cue file in the stack and conflicts
   with any concurrent edit to those cues. `FU-SYNC-ORDINAL-DOUBLE` asks for its fix "in the same
   bump" as the next one.

@@ -4,10 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import { makeActiveEffect } from '@/test/fixtureFactories'
 import {
   centreModeOf,
-  degreesToSize,
   differsFromTemplate,
   withTemplateDraft,
   draftOf,
@@ -15,8 +14,6 @@ import {
   paramAxis,
   paramRole,
   pickerFamilyOf,
-  positionAxesOf,
-  sizeToDegrees,
   startingSpec,
   timingChoicePatch,
   updateRequestOf,
@@ -76,24 +73,6 @@ describe('fxEditorModel', () => {
     expect(roles(PULSE)).toEqual({ min: 'level', max: 'level', attackRatio: 'shape' })
     // A ratio with no level beside it is the effect, not its shape.
     expect(roles(CYCLE)).toEqual({ colours: 'main', fadeRatio: 'main' })
-  })
-
-  it('says a size in degrees of travel and back — 28 of 255 is about 60° on a 540° pan', () => {
-    const pan = { ...sliderProp('pan', 'pan', chan(1), { axis: 'PAN' }), degMin: 0, degMax: 540 }
-    expect(Math.round(sizeToDegrees(28, pan))).toBe(59)
-    expect(degreesToSize(60, pan)).toBe(28)
-    expect(degreesToSize(10_000, pan)).toBe(255)
-  })
-
-  it('speaks degrees only where every head annotates both axes', () => {
-    const mover = makeFixture('m', [
-      sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540 }),
-      sliderProp('tilt', 'tilt', chan(2), { axis: 'TILT', degMin: 0, degMax: 270 }),
-    ])
-    const silent = makeFixture('s', [sliderProp('pan', 'pan', chan(3), { axis: 'PAN' }), sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' })])
-    const par = makeFixture('p', [sliderProp('dimmer', 'dimmer', chan(5))])
-    expect(positionAxesOf([mover, par])?.pan.degMax).toBe(540)
-    expect(positionAxesOf([mover, silent])).toBeNull()
   })
 
   it('writes the core every time and an optional field only once touched', () => {
