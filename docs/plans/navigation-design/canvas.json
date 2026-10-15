@@ -1,0 +1,27 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Navigation.dc.html": {
+      "h": 1520,
+      "title": "Navigation · the switcher, the sections and the rows off the rig",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Home.dc.html": {
+      "h": 1460,
+      "title": "The project home · a show and a venue",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Attach.dc.html": {
+      "h": 1490,
+      "title": "Attach to venue · the review",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    }
+  }
+}
