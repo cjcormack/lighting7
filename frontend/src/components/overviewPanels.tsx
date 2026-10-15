@@ -1,10 +1,12 @@
-import { Gauge, Grid3x3, LayoutGrid, Theater, type LucideIcon } from 'lucide-react'
+import type { ComponentType } from 'react'
+import { Gauge, Grid3x3, LayoutGrid, SunDim, Theater, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePersistentToggle } from '@/hooks/usePersistentState'
+import { GrandMasterChip } from './GrandMasterOverviewPanel'
 
 /**
- * The four collapsible panels Layout hangs under the header, as data.
+ * The five collapsible panels Layout hangs under the header, as data.
  *
  * They were four all-but-identical toggle components and three one-line hooks wrapping
  * `usePersistentToggle`, plus a fifth hand-written copy of the same list inside the command
@@ -14,7 +16,7 @@ import { usePersistentToggle } from '@/hooks/usePersistentState'
  * `label` is the palette's noun (title case, it heads a list); `noun` is the toolbar tooltip's,
  * which reads "Show …" / "Hide …". They differ per panel and always have.
  */
-type OverviewPanelId = 'stage' | 'fixtures' | 'speedMasters' | 'cueSlots'
+type OverviewPanelId = 'stage' | 'fixtures' | 'speedMasters' | 'cueSlots' | 'grandMaster'
 
 interface OverviewPanelDescriptor {
   id: OverviewPanelId
@@ -22,6 +24,8 @@ interface OverviewPanelDescriptor {
   noun: string
   icon: LucideIcon
   storageKey: string
+  /** Draws the toolbar toggle in place of the icon button, for a panel whose state is worth reading shut. */
+  toggleChip?: ComponentType<{ isVisible: boolean; onToggle: () => void }>
 }
 
 /**
@@ -63,6 +67,16 @@ const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
     storageKey: 'speed-master-overview-visible',
   },
   {
+    // A panel and not a control on the header (venue-visit plan S5): a fader always under the
+    // pointer was too easy to move by accident. Its toggle is the level chip, so the level reads shut.
+    id: 'grandMaster',
+    label: 'Grand Master',
+    noun: 'grand master',
+    icon: SunDim,
+    storageKey: 'grand-master-overview-visible',
+    toggleChip: GrandMasterChip,
+  },
+  {
     id: 'cueSlots',
     label: 'Cue Slots',
     noun: 'FX cue slots',
@@ -89,7 +103,7 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
 }
 
 /**
- * Visibility for all four panels.
+ * Visibility for all five panels.
  *
  * There was a different fourth once, Effects Overview: a beat dot, master 1's bpm, a TAP, a
  * running-effect count and a Kill All. The ShowBar carries the tempo half on the live views that
@@ -124,12 +138,14 @@ export function useOverviewPanels(): {
   const fixtures = usePersistentToggle(BY_ID.fixtures.storageKey)
   const speedMasters = usePersistentToggle(BY_ID.speedMasters.storageKey)
   const cueSlots = usePersistentToggle(BY_ID.cueSlots.storageKey)
+  const grandMaster = usePersistentToggle(BY_ID.grandMaster.storageKey)
 
   const visibility: Record<OverviewPanelId, PanelVisibility> = {
     stage: { isVisible: stage.isVisible, toggle: stage.toggle },
     fixtures: { isVisible: fixtures.isVisible, toggle: fixtures.toggle },
     speedMasters: { isVisible: speedMasters.isVisible, toggle: speedMasters.toggle },
     cueSlots: { isVisible: cueSlots.isVisible, toggle: cueSlots.toggle },
+    grandMaster: { isVisible: grandMaster.isVisible, toggle: grandMaster.toggle },
   }
 
   const panels = DESCRIPTORS.map((d) => ({ ...d, ...visibility[d.id] }))
@@ -145,7 +161,8 @@ export function useOverviewPanels(): {
 
 /** The header button for one overview panel. */
 export function OverviewToggle({ panel }: { panel: OverviewPanel }) {
-  const { icon: Icon, noun, isVisible, toggle } = panel
+  const { icon: Icon, noun, isVisible, toggle, toggleChip: Chip } = panel
+  if (Chip) return <Chip isVisible={isVisible} onToggle={toggle} />
   return (
     <Tooltip>
       <TooltipTrigger asChild>

@@ -192,7 +192,7 @@ a new one has a row:
 
 | Kind | Frames |
 |---|---|
-| Continuous (never) | `updateChannel`, `programmer.set` / `setColour` / `setPosition` / `patchLayer` / `keyStack`, `updateFx`, `surfaceScaler.setGrandMaster`, `speedMasters.setBpm` / `tap` / `requestBeat`, `windows.announce` |
+| Continuous (never) | `updateChannel`, `programmer.set` / `setColour` / `setPosition` / `patchLayer` / `keyStack`, `updateFx`, `surfaceScaler.setGrandMaster`, `grandMaster.set`, `speedMasters.setBpm` / `tap` / `requestBeat`, `windows.announce` |
 | Snapshot (never) | every state request a client sends on connect (`channelState`, `programmer.state`, …) |
 | Gesture (sampled) | the rest: selection, hand, busk page, programmer layers, blind and scenery, park, FX pause, resume and remove, surface learn and banks, blackout, the windows commands |
 

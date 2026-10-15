@@ -266,6 +266,23 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `GrandMasterFader passes the fader's value to the grand master, and ignores a press`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(
+                binding(1, "enc-1", BindingTarget.GrandMasterFader),
+                binding(2, "btn-3", BindingTarget.GrandMasterFader),
+            ),
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+
+        assertEquals(listOf<RecordedCall>(RecordedCall.WriteGrandMaster(64u)), actions.calls.toList())
+    }
+
+    @Test
     fun `a button press on a BPM target is ignored rather than jumping the tempo`() {
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterBpm())))
@@ -925,6 +942,7 @@ private class RecordingActions : SurfaceActions {
     override fun locateSelection() { calls += RecordedCall.LocateSelection }
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
+    override fun writeGrandMaster(midiValue7Bit: UByte) { calls += RecordedCall.WriteGrandMaster(midiValue7Bit) }
     override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
         calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
     }
@@ -990,6 +1008,7 @@ private sealed class RecordedCall {
     data object LocateSelection : RecordedCall()
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
+    data class WriteGrandMaster(val value: UByte) : RecordedCall()
     data class ApplyLook(val lookUuid: String) : RecordedCall()
     data class PressTemplate(val templateUuid: String) : RecordedCall()
     data class PressPad(val padUuid: String) : RecordedCall()

@@ -49,6 +49,7 @@ object TraceSampling {
             "programmer.keyStack",
             "updateFx",
             "surfaceScaler.setGrandMaster",
+            "grandMaster.set",
             "speedMasters.setBpm",
             "speedMasters.tap",
             "speedMasters.requestBeat",

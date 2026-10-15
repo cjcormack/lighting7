@@ -299,7 +299,12 @@ changes meaning (P6). Older desks refuse a newer archive by `formatVersion`, as 
   effect press is one instance over the selection, `effects-plan.md` D3*, and
   `FU-FX-SELECTION-DISTRIBUTION` is closed by session 3 rather than recorded.
 - **The grand master (venue-visit S5)** is the shape session 5 copies — REST, WS and MIDI over a
-  runtime value; either may land first.
+  runtime value; either may land first. S5 landed first: `routes/projectGrandMaster.kt` (REST, current
+  project only), `plugins/GrandMasterSocket.kt` (one `StateFlow`-backed state frame following the live
+  show, one `CONTINUOUS` set frame), `BindingTarget.GrandMasterFader` with its health arm and a
+  `GrandMasterEntry` in `SurfaceFeedbackPublisher` (a value with no channel behind it, fed back and
+  armed for PICKUP as `SpeedMasterEntry` is), and `GrandMasterOverviewPanel.tsx` over `useLivePush`. The
+  grand master persists per project; a stack's size is dropped on a switch, so it needs no table.
 - **The cue model plan's session 2 (holds)** before session 4, so the envelope is built on holds
   (§3.5) rather than on a stack's live cue.
 

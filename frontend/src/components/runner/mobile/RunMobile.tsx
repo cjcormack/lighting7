@@ -1,7 +1,6 @@
 import { useState, useCallback, useMemo, type ReactNode } from 'react'
 import { ArrowLeft, ChevronDown, List, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { SpeedMastersChip } from '../../SpeedMasters'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
@@ -31,10 +30,8 @@ interface RunMobileProps {
   /** When false (single-stack show), the stack name is a plain label — no picker. */
   multiStack: boolean
   display: RunnerDisplayState
-  dbo: boolean
   onGo: () => void
   onBack: () => void
-  onDbo: () => void
   onSelectStack: (stack: CueStack) => void
   onRequeueCue: (cueId: number) => void
   projectId: number
@@ -71,10 +68,8 @@ export function RunMobile({
   stack,
   multiStack,
   display,
-  dbo,
   onGo,
   onBack,
-  onDbo,
   onSelectStack,
   onRequeueCue,
   projectId,
@@ -116,10 +111,9 @@ export function RunMobile({
     <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
       {/* Top strip. **The stack name is what gives.** In the busk sheet's 320px column (and the
           overlay's 288) the strip's fixed items — the list glyph, the programmer chip, the tempo
-          chip, DBO — come to ~250px with the gutters, so the name button is `shrink` (the button
-          base is `shrink-0`) down to `min-w-10`, truncating; everything else keeps its width and
-          the last item, DBO, is never clipped. Found by mounting this in the sheet (busk-chrome
-          plan §10). */}
+          chip — take most of it with the gutters, so the name button is `shrink` (the button base
+          is `shrink-0`) down to `min-w-10`, truncating; everything else keeps its width and the
+          last item is never clipped. Found by mounting this in the sheet (busk-chrome plan §10). */}
       <div className="flex h-12 min-w-0 shrink-0 items-center gap-1 border-b bg-card px-2">
         {multiStack ? (
           <Button
@@ -166,18 +160,6 @@ export function RunMobile({
             and neither could tap anything but master 1. Asked for by name rather than by a `compact`
             prop because RunMobile has no `@container` ancestor for the chip to choose itself. */}
         <SpeedMastersChip />
-
-        <Button
-          variant={dbo ? 'destructive' : 'outline'}
-          size="sm"
-          onClick={onDbo}
-          className={cn(
-            'h-8 px-2 text-xs font-bold tracking-wider',
-            dbo && 'shadow-[0_0_14px_rgba(200,32,32,0.55)]',
-          )}
-        >
-          DBO
-        </Button>
       </div>
 
       {/* Stacked Current + Next cards */}

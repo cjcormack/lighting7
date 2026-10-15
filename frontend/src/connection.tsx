@@ -44,13 +44,15 @@ export const ConnectionStatus = () => {
   if (!config) throw new Error("Unknown ReadyState")
 
   return (
-    <div className="flex items-center gap-2">
+    // Connected says nothing on a phone's header, which has no room for it beside the grand master's
+    // chip and the programmer chip; anything but Connected still draws.
+    <div className={cn("flex items-center gap-2", readyState === Status.OPEN && "@max-[619px]:hidden")}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div>
             {/* Compact: icon-only pill on narrow viewports */}
             <div className={cn(
-              "@[760px]:hidden flex items-center justify-center rounded-lg border p-1.5 bg-card",
+              "@[760px]:hidden flex size-7 items-center justify-center rounded-lg border bg-card",
               config.variant === "destructive" && "text-destructive",
               config.iconClassName,
               config.alertClassName?.replace(/\[&>svg\][^ ]*/g, ''),
@@ -60,7 +62,7 @@ export const ConnectionStatus = () => {
             {/* Full: Alert with label on wider viewports */}
             <Alert
               variant={config.variant}
-              className={cn("hidden @[760px]:grid w-fit py-1 px-3 gap-x-2!", config.alertClassName)}
+              className={cn("hidden @[760px]:grid h-7 w-fit items-center py-0 px-3 gap-x-2! [&>svg]:translate-y-0", config.alertClassName)}
             >
               {config.icon}
               <AlertDescription>{config.label}</AlertDescription>

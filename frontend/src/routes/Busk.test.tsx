@@ -37,7 +37,7 @@ vi.mock('@/hooks/useTransportKeys', () => ({
 }))
 const showBarOptions = vi.fn()
 const barState = {
-  showBarProps: { goDisabled: false, dbo: false, onDbo: vi.fn() },
+  showBarProps: { goDisabled: false },
   showHeaderProps: { isShowActive: true, canStart: false, onStart: vi.fn(), onStop: vi.fn() },
   transport: { go: vi.fn(), back: vi.fn(), serverActiveCueId: 12 },
   activeCue: null,

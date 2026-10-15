@@ -68,6 +68,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The hold (venue plan session 6), in the show band: a standalone show's frame says nothing is
         // held, and that is still what every window's banner and Blind chip start from.
         VenueHoldOutMessage::class,
+        // The grand master (venue-visit S5), a StateFlow following the live show: at full on a fresh
+        // desk, which is still the level every Grand Master panel starts from.
+        GrandMasterStateOutMessage::class,
     )
 
     @Test

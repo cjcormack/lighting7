@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { OverviewToggle, useOverviewPanels } from './overviewPanels'
+
+vi.mock('./GrandMasterOverviewPanel', () => ({
+  GrandMasterChip: ({ onToggle }: { onToggle: () => void }) => <button data-testid="gm-chip" onClick={onToggle} />,
+}))
 
 /**
  * The registry's whole promise is that the header toolbar and the command palette are two
@@ -57,10 +61,10 @@ describe('overview panel registry', () => {
 
     // The toolbar's tooltips are the trigger's accessible description rather than its name, so the
     // toggle is identified the way the palette row is not: by count and by the palette agreeing.
-    expect(screen.getByTestId('toolbar').children).toHaveLength(4)
+    expect(screen.getByTestId('toolbar').children).toHaveLength(5)
     expect(
       screen.getAllByRole('listitem').map((li) => li.textContent),
-    ).toEqual(['Positions', 'Fixture Overview', 'Speed Master Overview', 'Cue Slots'])
+    ).toEqual(['Positions', 'Fixture Overview', 'Speed Master Overview', 'Grand Master', 'Cue Slots'])
   })
 
   it('pairs each panel with its own visibility, never by array position', () => {
@@ -76,6 +80,7 @@ describe('overview panel registry', () => {
     expect(paletteRow('Positions').dataset.visible).toBe('false')
     expect(paletteRow('Fixture Overview').dataset.visible).toBe('false')
     expect(paletteRow('Cue Slots').dataset.visible).toBe('false')
+    expect(paletteRow('Grand Master').dataset.visible).toBe('false')
   })
 
   it('gives Speed Masters a storage key of its own, so it persists separately', () => {
@@ -83,10 +88,20 @@ describe('overview panel registry', () => {
     fireEvent.click(paletteRow('Speed Master Overview'))
 
     // `usePersistentState` writes its fallback on mount, so the others are present and `false`
-    // rather than absent — which is the stronger assertion anyway: four live keys, one moved.
+    // rather than absent — which is the stronger assertion anyway: five live keys, one moved.
     expect(localStorage.getItem('speed-master-overview-visible')).toBe('true')
     expect(localStorage.getItem('cue-slot-overview-visible')).toBe('false')
     expect(localStorage.getItem('stage-overview-visible')).toBe('false')
     expect(localStorage.getItem('fixture-overview-visible')).toBe('false')
+    expect(localStorage.getItem('grand-master-overview-visible')).toBe('false')
+  })
+
+  it('draws the Grand Master toggle as its level chip, which toggles the panel', () => {
+    render(<Harness />)
+    const chip = screen.getByTestId('gm-chip')
+    expect(screen.getByTestId('toolbar').children[3]).toBe(chip)
+    fireEvent.click(chip)
+    expect(paletteRow('Grand Master').dataset.visible).toBe('true')
+    expect(paletteRow('Speed Master Overview').dataset.visible).toBe('false')
   })
 })

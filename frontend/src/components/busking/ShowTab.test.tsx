@@ -83,7 +83,6 @@ function source(): ShowTabSource {
       setStandby: vi.fn(),
       cancelAnimations: vi.fn(),
     },
-    showBarProps: { dbo: true, onDbo: vi.fn() },
     activeCue: stacks[0].cues[0],
     standbyCue: stacks[0].cues[1],
     nextStack: null,
@@ -105,8 +104,6 @@ describe('ShowTab', () => {
     expect(props.stack).toBe(stacks[0])
     expect(props.selectedStackId).toBe(1)
     expect(props.multiStack).toBe(true)
-    expect(props.dbo).toBe(true)
-    expect(props.onDbo).toBe(show.showBarProps.onDbo)
     expect(props.onBack).toBe(show.transport.back)
     expect(props.fadeStackId).toBe(1)
     expect(props.activeLocation).toBe('top of p. 10')

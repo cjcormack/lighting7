@@ -53,7 +53,7 @@ vi.mock('../store/projects', () => ({
 vi.mock('../hooks/useContainerBand', () => ({ useNarrowContainer: () => [vi.fn(), false] }))
 vi.mock('../hooks/useShowBarProps', () => ({
   useShowBarProps: () => ({
-    showBarProps: { dbo: false, onDbo: vi.fn(), goDisabled: true, stackName: null, fade: null },
+    showBarProps: { goDisabled: true, stackName: null, fade: null },
     showHeaderProps: { isShowActive: false, canStart: false, onStart: vi.fn(), onStop: vi.fn() },
     transport: {
       standbyCueId: null,

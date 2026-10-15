@@ -45,6 +45,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     is BindingTarget.GroupProperty,
     is BindingTarget.SelectionProperty,
     is BindingTarget.SpeedMasterBpm,
+    BindingTarget.GrandMasterFader,
         -> ControlKind.CONTINUOUS
 
     is BindingTarget.Flash,

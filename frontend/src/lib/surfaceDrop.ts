@@ -126,6 +126,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'groupProperty':
     case 'selectionProperty':
     case 'speedMasterBpm':
+    case 'grandMasterFader':
       return 'continuous'
     // Every button target, records and busk pages included, and the busk-further plan's five (D14:
     // two window commands and three sub-selection rewrites, BUTTON in `midi/BindingControlKind.kt`):

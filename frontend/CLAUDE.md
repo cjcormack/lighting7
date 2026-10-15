@@ -1735,7 +1735,7 @@ where the tab puts `ProgrammerIndicator` (the blind report and value count the b
 cards open collapsed here** (D2), because the rig band is the stage on this view; it took a
 `defaultExpansion` prop while the phone opened Current in Stage, and since venue-visit plan S3 took
 the cards' stage map away both hosts open collapsed and the prop is gone. BACK · GO is the tab's static footer, the way
-Colour and Spread keep their verbs, and DBO is still inert (`FU-FE-DBO-INERT`). **No transport
+Colour and Spread keep their verbs; the grand master is the app header's panel (§The grand master). **No transport
 keys on the busk view** (D5): Space on a focused pad presses the pad, and a key that also fired GO
 would be two effects from one press on a live rig — GO is the footer, a MIDI `go` binding, or the
 Show view one pill away; `Busk.test.tsx` and `ShowTab.test.tsx` both pin that `useTransportKeys`
@@ -1749,9 +1749,9 @@ the rail's three tabs keep 400): the strip's **unpadded wrapper** is the `@conta
 and the chevron on one row. The overlay strip
 takes the same rule and the same wrapper: three worded tabs are ~291px, which overran the
 right-hand form while it was 288 and ran under the sheet primitive's close cross. **That form is
-320 now**, the sheet's own floor: the Show tab's strip — name, list, programmer chip, tempo chip,
-DBO — fits at 320 with the stack name shrunk to its minimum (`RunMobile` makes the name the one
-item that gives) and clipped DBO at 288. **The fold shows the live cue number under the Show glyph** (D4) — green, an
+320 now**, the sheet's own floor: the Show tab's strip — name, list, programmer chip, tempo chip —
+fits at 320 with the stack name shrunk to its minimum (`RunMobile` makes the name the one
+item that gives). **The fold shows the live cue number under the Show glyph** (D4) — green, an
 em-dash with nothing on stage — from the **server** cursor (`transport.serverActiveCueId`, which
 holds on the outgoing cue mid-fade), derived in `SideSheet` and handed in as `liveCue`; the strip
 subscribes to nothing for it. **The Show glyph also carries an amber dot while the programmer is
@@ -4816,7 +4816,7 @@ per tab, beside the follow flag and the full-screen flag, **never `localStorage`
 desk's**, because the flow it exists for is a busk window with no app around it beside a programmer
 window with the app drawn. `Layout` reads one boolean, `useImmersive() && isLiveViewPath(pathname)`,
 and while it holds skips the `<aside>` sidebar (**hidden, not collapsed**), the app `<header>`, the
-four overview panels and the sidebar's `marginLeft`; the panels' stored visibility is untouched, so
+five overview panels and the sidebar's `marginLeft`; the panels' stored visibility is untouched, so
 they return on exit. On every other route the app is drawn whatever the fact says — the fixtures
 list is navigated *from* the sidebar — and a window that leaves a live view for it gets the app back
 and finds immersive waiting when it returns. Banners, `HandChip` and `DeskDndProvider`
@@ -4862,7 +4862,7 @@ another tab open, the band's amber `BLIND` pill and the Show glyph's dot (§The 
 side sheet); theme, full screen and Screens… through ⌘K — the theme had no
 command until this, so `lib/theme.ts` became a module-level store (bare string, not `syncStore`'s
 JSON — `getInitialTheme` reads it before React exists) that the user menu's row and the new
-*Switch to dark mode* / *Switch to light mode* command both read. The four overview panels' ⌘K
+*Switch to dark mode* / *Switch to light mode* command both read. The five overview panels' ⌘K
 toggles are withheld with the panels, since a row reading *On* for a panel that is not on screen
 is a control reporting a state it is not in. **Every live route's loading and not-found arms
 draw `ImmersiveEscape`** — the header's own glyph on a chrome row, or bare inside
@@ -5062,6 +5062,45 @@ recovery. Frontend shape:
   is reachable: a failed mint leaves no `code`, so the EXPIRED/CANCELLED retry branch
   can't render and the tab would otherwise be an error with nothing to press.
 
+### The grand master
+
+**A fifth overview panel, summoned from the header, never resident on it** (venue-visit plan S5,
+D5, D12; lighting7 `midi/GlobalScalerState.kt` and `plugins/GrandMasterSocket.kt` are the contract).
+`components/GrandMasterOverviewPanel.tsx` is a `CollapsiblePanel` row — the fader, the level, *Out*
+and *Full* — registered in `overviewPanels.tsx` between Speed Masters and Cue Slots, so the header
+toggle, the ⌘K row (`SunDim`) and the panel come from the one array like the other four. **The
+toggle is the level chip**, `GrandMasterChip` (the descriptor's `toggleChip`, which `OverviewToggle`
+draws in place of an icon button, and which `Layout` places with the chips — after the programmer
+chip, before the icon toggles): `GM 100%`, the percentage alone below 620px of header, amber below
+full and red at 0, `aria-pressed` while the panel is open. A press opens or closes the panel and never
+moves the level. It was a chip with its own popover fader and an inline fader on the header first,
+and Chris moved the fader behind the toggle: a fader always under the pointer is too easy to move by
+accident. It is the live project's level, 0–100 %, which
+the desk applies at transmit: every dimmer and UV channel, and the colour mix of a head with no
+dimmer; a strobe is cut only at 0. So the Stage view and the channel views draw the rig as the grand
+master leaves it.
+
+- **Every chip on the app header is 28px** (`h-7`, the ARMED chip's): ARMED, Connected (both its
+  forms), the programmer chip (`className="h-7"` in `Layout` alone) and this one; the icon toggles
+  and the avatar are 36.
+- **While immersive** — panels and toggles withheld — the `ShowHeader` draws
+  `GrandMasterImmersiveChip`, a readout and never a control, and only below full.
+- **The wire is `grandMaster.state` / `grandMaster.set`** (`api/grandMasterApi.ts`), and the store
+  is form 3 (`store/grandMaster.ts`'s `grandMaster` entry, seeded from the last frame) — the chip
+  is on the earliest render path. The fader writes over WS through `useLivePush` (50 ms floor, the
+  release always lands, `sendGesture` toasting a dead socket); REST's
+  `GET/PUT projects/{id}/grand-master` is for tools, and nothing here calls it.
+- **A drag shows its own value until the release**, then the desk's frame is the truth, since a
+  MIDI `grandMasterFader` binding or another window may move it too.
+- **Below 620px of header `ConnectionStatus` draws nothing while Connected** (anything else still
+  draws): the chip took the room a 375px phone needs for the programmer chip beside the avatar,
+  measured in the app.
+- **It is per project and machine-local**: the desk keeps each project's level across a switch and
+  a restart, and never syncs it. The MIDI `grandMasterToggle` takes it to 0 and back; the
+  `blackout` target is unchanged.
+- **The surfaces picker offers `grandMasterFader`** as a continuous target (`lib/surfaceDrop.ts`,
+  the binding picker, a *GM fader* chip on the library's Desk row).
+
 ### Cues, Stacks & Triggers
 Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
@@ -5120,7 +5159,7 @@ Everything else comes from the hook, which is what stops the bar drifting into n
 previously had no Blind on the Prompt Book, a different stack-name rule on Show, and a hand-wired
 transport on the Prompt Book that gave that page two transport instances. **The busk view was the
 third host until the busk-chrome plan's session A** and draws no bar on any board: it still calls
-the hook — for the transport and the `dbo` pair — and hands the result to its side sheet's Show
+the hook — for the transport — and hands the result to its side sheet's Show
 tab, which mounts the phone runner in the bar's place (§Focus and the side sheet). It is the
 second view without a bar and for the opposite reason to the programmer's: not too much chrome for
 the job, but the wrong shape of it.
@@ -5130,11 +5169,11 @@ the save pill, the view switcher, Start/Stop and the live dot — and nothing be
 That is the space plan's session 5, and it is *not* what D9 proposed: D9 was to fold `ShowHeader`
 into `ShowBar` on all four views, which was built and then rejected at the desk in favour of this.
 The reasoning is D1 applied to a band rather than to a row — everything above the grid earns its
-place by the line, and ~60px of blackout, tempo, cue numbers and transport is the largest thing on
+place by the line, and ~60px of tempo, cue numbers and transport is the largest thing on
 that page that is not about editing values. Three consequences, each of which reads as a bug if you
 do not know it is a decision:
 
-- **Blind is toggled on the programmer, and only there; blackout is gone outright.** Blind is a
+- **Blind is toggled on the programmer, and only there.** Blind is a
   *programmer* fact, not show chrome — `ProgrammerSummary.blind`, written by `programmerSetBlind`,
   faded by the programmer's own fade — and session 5 leaving the programmer with no press was the
   one failed check of the desk pass (`PD-BLIND-ON-PROGRAMMER`). The control is the action bar's, in
@@ -5161,10 +5200,10 @@ do not know it is a decision:
 `ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
 long form of all three.
 
-- **The bar is not gated on the show running.** It carries blackout, the speed masters and the
-  programmer chip, all of which mean something with the show down, and `goDisabled` already mutes
+- **The bar is not gated on the show running.** It carries the speed masters and the programmer
+  chip, both of which mean something with the show down, and `goDisabled` already mutes
   BACK/GO. Gating it was what once made **Blind's location depend on the show's state**.
-- **Blind is not in the bar.** From session 2b to `PD-BLIND-ON-PROGRAMMER` it was, beside blackout,
+- **Blind is not in the bar.** From session 2b to `PD-BLIND-ON-PROGRAMMER` it was, beside a blackout tile,
   on the reasoning that the two are the same class of thing (a gate on what reaches the rig) — and
   that put the press on the three views whose programmer is usually empty and off the one whose
   whole subject it gates. See the programmer bullet above for where it is now. The fade survived
@@ -5172,9 +5211,9 @@ long form of all three.
   `usePersistentState` per reader, because as two instances of one key it was two mount-time
   snapshots, and Blind snapped for the rest of the visit. The action bar's Blind and Clear read one
   subscribed value from it; the marquee's Backspace reads it at press time.
-- **DBO is still inert** in every host — local state, no side effect
-  ([`FU-FE-DBO-INERT`](../docs/plans/followups.md)). It no longer has a working Blind tile
-  beside it to read as a peer of, but a tile that does nothing is still the part that must not stand.
+- **There is no blackout tile in the bar.** The inert DBO tile went with venue-visit plan S5, as did
+  the phone runner's and the Prompt Book drawer's copies; the grand master is the app header's panel
+  (§The grand master). The MIDI `blackout` target is the desk's one blackout.
 
 **Browsing a stack never moves the playhead.** A tab click used to run
 `deactivate(old) → goToStack → deactivate(target)`, so one unconfirmed press took the live cue off
@@ -5756,7 +5795,7 @@ path may quietly change where it lands.
     `useShowTransport` through `useShowBarProps` — a second instance would mean a second rAF loop
     and a second reconcile effect on one runner slice — but nothing below it needs one.
 
-  **The Effects Overview panel is gone, and there are four overview panels now** — Stage,
+  **The Effects Overview panel is gone, and there are five overview panels now** — Stage,
   Fixture, Speed Masters, Cue Slots. Effects Overview held a beat dot, master 1's bpm, a TAP, a
   running-effect count and a
   Kill All, and `/fx` used to force it open and its toggle inert for as long as that route was
@@ -5767,7 +5806,7 @@ path may quietly change where it lands.
   busk view has a speed rail and pad presence rings besides. **The count and Kill All were not
   moved anywhere.** What is running is listed, effect by effect and removable by name, in the
   programmer's FX band and in its live editor; a "stop everything" gesture, if it is wanted
-  again, belongs beside blackout in the ShowBar rather than in a panel the operator has to open
+  again, belongs in the ShowBar rather than in a panel the operator has to open
   first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
   `store/groups.ts` still subscribes to the frame.
 

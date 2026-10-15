@@ -9,11 +9,10 @@ import { useProjectCueStackListQuery, useProjectProgramStateQuery } from '@/stor
 import type { CueStack } from '@/api/cueStacksApi'
 
 /**
- * What the Show tab needs from the route: the transport, the bar's `dbo` pair, and the three cue
- * entries `useShowBarProps` already resolved. `routes/Busk.tsx` holds the one instance and threads
+ * What the Show tab needs from the route: the transport and the three cue entries `useShowBarProps` already resolved. `routes/Busk.tsx` holds the one instance and threads
  * it down through `BuskingView` and the sheet, so the tab and a pad press act on one transport.
  */
-export type ShowTabSource = Pick<ShowBarState, 'transport' | 'showBarProps' | 'activeCue' | 'standbyCue' | 'nextStack'>
+export type ShowTabSource = Pick<ShowBarState, 'transport' | 'activeCue' | 'standbyCue' | 'nextStack'>
 
 /** Stable no-op for the runner's requeue while it is reading a stack off the playhead. */
 const NO_REQUEUE = () => {}
@@ -38,8 +37,8 @@ const NO_REQUEUE = () => {}
  *    MIDI `go` binding, or the Show view one pill away. Nothing here calls `useTransportKeys`.
  * 5. **The strip carries what the bar carried and nothing more**: stack picker, cue list, the
  *    programmer chip (`ProgrammerIndicator` — the tab's blind report and value count, through
- *    `RunMobile`'s `strip` slot), the tempo chip, DBO. DBO is still inert (`FU-FE-DBO-INERT`);
- *    moving it does not wire it up. The band's `BLIND` pill and the Show glyph's dot
+ *    `RunMobile`'s `strip` slot) and the tempo chip. The grand master is the app header's panel, not
+ *    the strip's (venue-visit plan D5). The band's `BLIND` pill and the Show glyph's dot
  *    (`BlindMarks.tsx`) report blind beside this, a region apart — the strip is invisible with
  *    the sheet folded or another tab open — and this chip keeps the count; two reporters, no
  *    control.
@@ -54,7 +53,7 @@ const NO_REQUEUE = () => {}
  * stack that becomes live is simply followed again.
  */
 export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabSource }) {
-  const { transport, showBarProps } = show
+  const { transport } = show
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: programState } = useProjectProgramStateQuery(projectId)
   const activeStackId = programState?.activeStackId ?? null
@@ -96,10 +95,8 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
         stack={stack}
         multiStack={runnableStackCount > 1}
         display={display}
-        dbo={showBarProps.dbo}
         onGo={transport.go}
         onBack={transport.back}
-        onDbo={showBarProps.onDbo}
         onSelectStack={selectStack}
         // Inert off the playhead, for the reason the phone's is: `setStandby` arms the *playhead's*
         // stack, so a tap here would arm a cue that is not in it.

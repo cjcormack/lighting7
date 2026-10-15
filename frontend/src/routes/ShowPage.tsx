@@ -553,10 +553,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
             stack={phoneStack}
             multiStack={runnableStackCount > 1}
             display={runnerDisplay}
-            dbo={showBarProps.dbo}
             onGo={transport.go}
             onBack={transport.back}
-            onDbo={showBarProps.onDbo}
             onSelectStack={handleSelectStack}
             // Inert off the playhead, for the reason the desktop rows are: `setStandby` arms the
             // *playhead's* stack, so a tap here would arm a cue that is not in it.
