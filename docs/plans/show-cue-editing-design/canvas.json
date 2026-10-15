@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Card.dc.html": {
+      "h": 1180,
+      "title": "Card view · the editor in an open card",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Table.dc.html": {
+      "h": 1180,
+      "title": "Table view · the bottom pane",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Tabs.dc.html": {
+      "h": 1080,
+      "title": "The FX, Scenery and Cue tabs, and the header",
+      "w": 1440,
+      "x": 0,
+      "y": 1260
+    },
+    "Actions.dc.html": {
+      "h": 1240,
+      "title": "The action set · states, menus, confirms, the phone, the way back",
+      "w": 1440,
+      "x": 1520,
+      "y": 1260
+    }
+  }
+}

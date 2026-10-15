@@ -302,6 +302,10 @@ It replaces REST `POST /cues/{id}/copy` and its layer FK leak. A same-project **
 `POST /cues/{id}/duplicate {stackId?, after?}`: a new cue with the scenery and events, appended
 after the source's entry in that stack, or loose.
 
+> **Revised by R2** ([`show-cue-editing-plan.md`](show-cue-editing-plan.md) D12): Duplicate appends the
+> copy to the **end** of the stack, `POST /cues/{id}/duplicate {stackId?}` with no `after`, and R2's
+> session 3 builds the route, so session 6 here builds only the cross-project copy.
+
 **Any project can be the source** (D18). The venue's uuid matching applies only when both projects
 are on the same venue; otherwise every record falls back to key and name.
 
@@ -468,7 +472,8 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 ### Session 6 — copy from another show (backend + frontend)
 
 - §3.8: the route, *Copy from another show…* in the Cues table, *Duplicate*. The REST
-  `/cues/{id}/copy` goes.
+  `/cues/{id}/copy` goes. *Duplicate* and its route are R2 session 3's if that has landed first
+  (R2 D12: appended to the end of the stack); otherwise this session builds them to R2's rule.
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;

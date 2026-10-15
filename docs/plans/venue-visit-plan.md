@@ -351,7 +351,7 @@ It should start from `docs/lighting-composition-model.md`.
 | 15 | S15 Effect timing | S4 | |
 | 16 | S16 Speed masters on a cue | S15 | |
 | 17 | S14 Applied tables | S4 | |
-| 18 | R2 Show cue editing | R1 | |
+| 18 | R2 Show cue editing | R1 | [`show-cue-editing-plan.md`](show-cue-editing-plan.md) |
 | 19 | R3 Applying to a selection | S1, S14 | |
 | 20 | R4 Effects survey | S15 | |
 | 21 | R5 Project structure | S2 | |
