@@ -1,0 +1,448 @@
+<title>Show Cue Editing</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of plan sections; each mock-up is a dark desk "screen" that scrolls in its own box.
+     Colour carries meaning: blue = the cue's own row, teal = a Look layer, violet = an effect,
+     green = live, coral = edited since GO, amber = Blind. */
+  :root {
+    --bg:#f2f3f1; --panel:#ffffff; --fg:#17191c; --muted:#5d636b; --line:#d6d9d6; --soft:#e8eae6;
+    --own:#2b62d6; --look:#0f7a6e; --fx:#7a45c2; --live:#1f8a45; --stale:#c2462e; --blind:#a86a00;
+    --sans:"Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --own:#86a9ff; --look:#5cd1c1; --fx:#c39cf5; --live:#5fd38a; --stale:#ff8f78; --blind:#f2bd4f; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --own:#86a9ff; --look:#5cd1c1; --fx:#c39cf5; --live:#5fd38a; --stale:#ff8f78; --blind:#f2bd4f; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:46px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--blind); }
+  h1 { margin:0; font-size:clamp(30px, 5.2vw, 48px); line-height:1.05; font-weight:800; letter-spacing:-0.025em; text-wrap:balance; max-width:20ch; }
+  h1 em { font-style:normal; color:var(--own); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-22px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--own); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:24px; line-height:1.2; font-weight:800; letter-spacing:-0.01em; text-wrap:balance; }
+  h2 small { font:500 11px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:8px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.8em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+
+  .k { display:inline-block; font:500 11px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; border:1px solid currentColor; }
+  .k.own { color:var(--own); } .k.look { color:var(--look); } .k.fx { color:var(--fx); }
+  .k.live { color:var(--live); } .k.stale { color:var(--stale); } .k.blind { color:var(--blind); }
+
+  .findings { display:grid; grid-template-columns:repeat(auto-fit, minmax(290px, 1fr)); gap:12px; }
+  .finding { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; }
+  .finding b { display:block; margin-bottom:3px; }
+  .finding .where { display:block; margin-top:6px; font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:300px; }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  .fig { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .fig svg { display:block; width:100%; min-width:720px; height:auto; color:var(--fg); font-family:var(--sans); }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-own:#7aa2ff; --s-look:#5cd1c1; --s-fx:#b98cff; --s-live:#4ade80; --s-next:#60a5fa; --s-stale:#ff8f78; --s-amber:#f5c04a; --s-pri:#3b82f6;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:900px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:8px; }
+  .screen .sp { flex:1; }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:12px; white-space:nowrap; color:var(--s-fg); }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .btn.blindp { background:#3a2c08; border-color:#8a6a1a; color:var(--s-amber); }
+  .screen .btn.red { color:#ff7b7b; }
+  .screen .btn.ask { opacity:0.55; }
+  .screen .btn .chev { border-left:1px solid rgba(255,255,255,0.25); padding-left:6px; margin-left:2px; }
+  .screen .btn.split { padding-right:6px; }
+  .screen .sep { width:1px; height:18px; background:var(--s-bd); }
+  .screen .lbl { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .card { border:1px solid var(--s-bd); border-radius:10px; background:var(--s-card); overflow:hidden; }
+  .screen .card.open { border-color:#3a5fb0; }
+  .screen .card.live { border-color:rgba(74,222,128,0.6); }
+  .screen .cuehead { display:grid; grid-template-columns:18px 44px 1fr auto auto 14px; align-items:center; gap:10px; padding:8px 12px; }
+  .screen .pip { width:9px; height:9px; border-radius:50%; background:#3f3f46; }
+  .screen .pip.live { background:var(--s-live); box-shadow:0 0 0 3px rgba(74,222,128,0.2); }
+  .screen .num { font-weight:700; }
+  .screen .chip { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .chip.shared { color:var(--s-own); border-color:rgba(122,162,255,0.45); }
+  .screen .chip.stale { color:var(--s-stale); border-color:rgba(255,143,120,0.5); background:rgba(255,143,120,0.08); }
+  .screen .strip { border-top:1px solid var(--s-bd); background:var(--s-row); padding:6px 12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .screen .tabs { display:flex; gap:2px; border-bottom:1px solid var(--s-bd); padding:0 12px; background:var(--s-bg); }
+  .screen .tab { padding:7px 10px; font-size:12px; color:var(--s-mfg); border-bottom:2px solid transparent; }
+  .screen .tab b { font-weight:500; color:var(--s-mfg); margin-left:4px; font-size:10.5px; }
+  .screen .tab.on { color:var(--s-fg); border-bottom-color:var(--s-pri); }
+  .screen .selbar { display:flex; align-items:center; gap:8px; padding:5px 12px; border-bottom:1px solid var(--s-bd); background:var(--s-bg); font-size:11.5px; }
+  .screen table.g { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .screen table.g th { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); text-align:left; padding:6px 8px; border-bottom:1px solid var(--s-bd); background:transparent; }
+  .screen table.g td { height:30px; padding:0 8px; border-bottom:1px solid #222228; white-space:nowrap; color:var(--s-fg); vertical-align:middle; }
+  .screen table.g tr.sel td { background:rgba(59,130,246,0.12); }
+  .screen .c { display:inline-flex; align-items:center; gap:6px; padding:2px 6px; border-radius:4px; }
+  .screen .c.own { box-shadow:inset 2px 0 0 var(--s-own); background:rgba(122,162,255,0.08); }
+  .screen .c.look { box-shadow:inset 2px 0 0 var(--s-look); }
+  .screen .c.mq { outline:2px solid var(--s-pri); outline-offset:1px; }
+  .screen .src { font-size:9.5px; color:var(--s-mfg); }
+  .screen .src.own { color:var(--s-own); } .screen .src.look { color:var(--s-look); }
+  .screen .bar { display:inline-block; width:58px; height:5px; border-radius:3px; background:#2a2a31; position:relative; overflow:hidden; vertical-align:middle; }
+  .screen .bar i { position:absolute; inset:0 auto 0 0; background:var(--s-pri); }
+  .screen .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .screen .stale-band { display:flex; align-items:center; gap:10px; padding:7px 12px; background:rgba(255,143,120,0.08); border-top:1px solid rgba(255,143,120,0.35); color:var(--s-stale); font-size:12px; }
+  .screen .layer { display:grid; grid-template-columns:16px 22px 1fr auto auto auto auto; gap:10px; align-items:center; padding:6px 12px; border-bottom:1px solid #222228; }
+  .screen .tog { width:24px; height:13px; border-radius:7px; background:var(--s-pri); position:relative; }
+  .screen .tog::after { content:""; position:absolute; right:2px; top:2px; width:9px; height:9px; border-radius:50%; background:#fff; }
+  .screen .tog.off { background:#3f3f46; } .screen .tog.off::after { left:2px; right:auto; }
+  .screen .handle { height:10px; display:grid; place-items:center; border-top:1px solid var(--s-bd); border-bottom:1px solid var(--s-bd); background:var(--s-row); }
+  .screen .handle i { width:36px; height:3px; border-radius:2px; background:#52525b; }
+  .screen .sheetrow { display:grid; grid-template-columns:14px 34px 1fr 60px 60px 86px 160px; gap:10px; align-items:center; padding:0 10px; height:30px; border-bottom:1px solid #222228; }
+  .screen .sheetrow.head { height:24px; font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .sheetrow.sel { background:rgba(59,130,246,0.12); box-shadow:inset 3px 0 0 var(--s-pri); }
+  .screen .sheetrow.live { background:rgba(74,222,128,0.07); }
+  .screen .menu { border:1px solid var(--s-bd); background:var(--s-card); border-radius:8px; padding:4px; box-shadow:0 12px 28px rgba(0,0,0,0.5); display:flex; flex-direction:column; min-width:210px; }
+  .screen .menu .mi { padding:6px 8px; border-radius:5px; display:flex; gap:8px; align-items:center; font-size:12px; }
+  .screen .menu .mi.on { background:#27272a; }
+  .screen .menu .mi small { margin-left:auto; color:var(--s-mfg); font-size:10.5px; }
+  .screen .menu .ms { height:1px; background:var(--s-bd); margin:3px 0; }
+  .screen .state { display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:center; padding:8px 12px; border-bottom:1px solid #222228; }
+  .screen .state:last-child { border-bottom:none; }
+  .screen .lock { font-size:10px; color:var(--s-mfg); }
+  .phonewrap { display:flex; gap:16px; flex-wrap:wrap; }
+  .screen.phone { min-width:0; width:330px; max-width:100%; }
+
+  ol.sessions { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; counter-reset:s; }
+  ol.sessions li { counter-increment:s; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px 12px 58px; position:relative; font-size:14px; min-width:0; }
+  ol.sessions li::before { content:counter(s); position:absolute; left:14px; top:11px; width:30px; height:30px; border-radius:6px; background:var(--soft); color:var(--fg); font:500 13px var(--mono); display:grid; place-items:center; }
+  ol.sessions b { font-size:15px; }
+  ol.sessions .scope { font:11px var(--mono); color:var(--muted); margin-left:6px; }
+  ol.sessions .needs { display:block; font:11px var(--mono); color:var(--muted); margin-top:4px; }
+  ol.sessions p { margin-top:4px; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:720px) { .two { grid-template-columns:1fr; } }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; display:flex; flex-direction:column; gap:6px; }
+  .box h3 { margin:0; }
+  .box ul { margin:0; padding-left:18px; }
+
+  footer { font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  a { color:var(--own); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>lighting7 · design session R2</span><span>venue-visit plan · follows R1</span><span class="status">Draft · under discussion · 2026-10-14</span></div>
+    <h1>Edit the cue <em>where you read it</em></h1>
+    <p class="lede">The Show view shows a cue and can't change it: every edit is a trip through the programmer, and that trip puts the cue on stage unless Blind is on first. This plan puts the programmer's own tables (values, Looks and effects) inside the cue card and under the cue table. They write the stored cue and never send output. One action set does the rest, in both views.</p>
+    <p class="muted" style="font-size:13.5px">The engineering plan is <code>docs/plans/show-cue-editing-plan.md</code>; this page is its one-page copy, checked in as <code>docs/plans/show-cue-editing-design/show-cue-editing.html</code>. Where they differ, the markdown wins. It designs against the cue model of R1 (<code>cue-model-plan.md</code>): a cue is shared, a stack is a list of entries, and delete is its own act.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#problem">Problem</a><a href="#flow">Where an edit goes</a><a href="#decisions">Decisions</a><a href="#editor">The editor</a><a href="#cards">Card view</a><a href="#table">Table view</a><a href="#actions">Action set</a><a href="#live">Live cue</a><a href="#sessions">Sessions</a><a href="#out">Out of scope</a>
+  </nav>
+
+  <section id="problem">
+    <h2>The problem<small>§1</small></h2>
+    <p>On the first evening in the hall, a cue was read in the Show view and changed somewhere else. The card says what the cue holds and offers <em>Edit in Programmer</em>, which Includes it and so lights it. The table view has no edit, no Record, no duplicate and no delete at all. What the code says, read from <code>main</code> at <code>a6e4053</code>:</p>
+    <div class="findings">
+      <div class="finding"><b>A stored edit never reaches the stage</b>A cue PATCH fires list frames and nothing else. Only Record, Update and a Look or palette contents edit republish a live cue. So a table that writes the cue is silent by construction, and a live cue it edits goes stale.<span class="where">routes/projectCues.kt:190, 280 · programmerRecord.kt:581</span></div>
+      <div class="finding"><b>Blind does not hold effects</b>Blind takes the programmer's values and layers out of the merge, but effects the programmer runs keep painting. Include spawns a cue's effects, so "Edit in Blind" today still puts them on the rig.<span class="where">fx/FxEngine.kt:207 · lighting-composition-model.md §Blind</span></div>
+      <div class="finding"><b>The read surface is long, and its verbs are last</b>Q1 in Sleeping Beauty expands to values, five layers and more than a dozen tracked scenery rows before Remove · Duplicate · Edit in Programmer · Record, a screen and a half below the cue's name.<span class="where">CueCardEditor.tsx:417 · CueDetailContent.tsx</span></div>
+      <div class="finding"><b>The programmer already has the tables</b>The value grid scopes its writes (Output, Local, a focused Look's rows), the Look stack and FX fields are host-agnostic. A cue scope is a fourth writer, beside the Look layer's.<span class="where">ProgrammerScope.tsx · useCellWriters.ts:124 · FxEffectFields.tsx:110</span></div>
+      <div class="finding"><b>A cue write replaces its children</b>Every PATCH deletes and recreates the rows, layers and effects, so each child gets a fresh uuid. An editor that saves per gesture would rewrite the whole cue in sync, the problem PR #140 fixed for Looks.<span class="where">projectCuesHelpers.kt:519, 630</span></div>
+      <div class="finding"><b>Cue properties is a second editor</b>Name, number, fade, follow, notes, scenery, events, hooks and busk pages sit in a drawer, opened from the card or from the FX tray's <em>on Q12</em>. The cue's values are edited nowhere but the programmer.<span class="where">CuePropertiesSheet.tsx · CuePropsPane.tsx</span></div>
+    </div>
+  </section>
+
+  <section id="flow">
+    <h2>Where an edit goes<small>§3.2</small></h2>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 940 330" role="img" aria-label="Edits in the Show view's tables write only the stored cue, which reaches the stage on the next GO or an explicit Update stage. Edit in programmer goes through the programmer, live or Blind. Look contents are edited in the Looks library, which republishes live cues.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          </defs>
+          <g font-size="13" fill="currentColor">
+            <!-- sources -->
+            <rect style="stroke:var(--own)" x="12" y="24" width="210" height="52" rx="7" fill="none" stroke-width="2"/>
+            <text x="117" y="46" text-anchor="middle" font-weight="600">Show view tables</text>
+            <text x="117" y="64" text-anchor="middle" font-size="11.5" opacity="0.75">Values · Looks · FX · Scenery</text>
+            <rect x="12" y="128" width="210" height="40" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="117" y="153" text-anchor="middle">Edit in programmer</text>
+            <rect style="stroke:var(--blind)" x="12" y="184" width="210" height="40" rx="7" fill="none" stroke-width="1.5"/>
+            <text x="117" y="209" text-anchor="middle">Blind edit in programmer</text>
+            <rect x="12" y="262" width="210" height="44" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="117" y="289" text-anchor="middle">Looks library (Open Look)</text>
+            <!-- middles -->
+            <rect x="342" y="24" width="190" height="52" rx="7" fill="none" stroke="currentColor"/>
+            <text x="437" y="46" text-anchor="middle" font-weight="600">Stored cue</text>
+            <text x="437" y="64" text-anchor="middle" font-size="11.5" opacity="0.75">in every stack it's in</text>
+            <rect x="342" y="148" width="190" height="56" rx="7" fill="none" stroke="currentColor"/>
+            <text x="437" y="172" text-anchor="middle" font-weight="600">Programmer</text>
+            <text x="437" y="190" text-anchor="middle" font-size="11.5" opacity="0.75">the included cue</text>
+            <rect x="342" y="262" width="190" height="44" rx="7" fill="none" stroke="currentColor"/>
+            <text x="437" y="289" text-anchor="middle" font-weight="600">Look</text>
+            <!-- stage -->
+            <rect style="stroke:var(--live)" x="760" y="24" width="168" height="282" rx="9" fill="none" stroke-width="2"/>
+            <text x="844" y="160" text-anchor="middle" font-weight="600" font-size="15">Stage</text>
+            <text x="844" y="180" text-anchor="middle" font-size="11.5" opacity="0.75">DMX out</text>
+          </g>
+          <g stroke="currentColor" stroke-width="1.5" fill="none" font-size="11.5">
+            <line style="stroke:var(--own);color:var(--own)" x1="222" y1="50" x2="340" y2="50" stroke-width="2" marker-end="url(#ar)"/>
+            <line x1="222" y1="148" x2="340" y2="168" marker-end="url(#ar)"/>
+            <line style="stroke:var(--blind);color:var(--blind)" x1="222" y1="204" x2="340" y2="186" marker-end="url(#ar)"/>
+            <line x1="222" y1="284" x2="340" y2="284" marker-end="url(#ar)"/>
+            <!-- stored cue to stage -->
+            <line x1="532" y1="40" x2="758" y2="40" marker-end="url(#ar)"/>
+            <line style="stroke:var(--stale);color:var(--stale)" x1="532" y1="62" x2="758" y2="62" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+            <!-- programmer to stage -->
+            <line x1="532" y1="166" x2="758" y2="166" marker-end="url(#ar)"/>
+            <line style="stroke:var(--blind)" x1="532" y1="190" x2="640" y2="190" stroke-dasharray="3 4"/>
+            <line style="stroke:var(--blind)" x1="640" y1="178" x2="640" y2="202" stroke-width="3"/>
+            <!-- programmer back to cue -->
+            <line x1="420" y1="148" x2="420" y2="78" marker-end="url(#ar)"/>
+            <!-- look to stage -->
+            <line x1="532" y1="284" x2="758" y2="284" marker-end="url(#ar)"/>
+          </g>
+          <g font-size="11.5" fill="currentColor">
+            <text style="fill:var(--own)" x="281" y="42" text-anchor="middle">saves</text>
+            <text x="645" y="34" text-anchor="middle">next GO into it</text>
+            <text style="fill:var(--stale)" x="645" y="78" text-anchor="middle">Update stage (explicit, confirmed)</text>
+            <text x="281" y="146" text-anchor="middle">Include</text>
+            <text style="fill:var(--blind)" x="281" y="222" text-anchor="middle">Blind, Include</text>
+            <text x="645" y="160" text-anchor="middle">live</text>
+            <text style="fill:var(--blind)" x="652" y="194">held: values,</text>
+            <text style="fill:var(--blind)" x="652" y="208">layers, effects</text>
+            <text x="415" y="112" text-anchor="end">Update · Record</text>
+            <text x="645" y="278" text-anchor="middle">republishes live cues</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Only one path out of the Show view's tables reaches the stage, and it is an explicit button. Blind holds effects as well as values once session 1 lands; today the bar after "Blind" lets effects through.</figcaption>
+    </figure>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions<small>§2</small></h2>
+    <p>Agreed with Chris on 2026-10-14 in three rounds, on top of R1's D1–D18. Where this plan and R1 disagree inside this plan's scope (cue editing and the action set), this plan wins.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td class="n">D1</td><td class="d"><b>One cue editor, two hosts.</b> The expanded card's body and the table view's bottom pane mount the same editor: a header (number, name, fade, curve, follow, the shared chip, the save state) and tabs <i>Values · Looks · FX · Scenery · Events · Cue</i>.</td></tr>
+        <tr><td class="n">D2</td><td class="d"><b>The Values grid shows what GO lands and edits the cue's own rows.</b> Each cell says whether it is <span class="k own">own</span> or which <span class="k look">Look</span> won it. A typed value becomes an own row, which wins over every layer, so you see what you typed. ⌫ removes the own row and shows the layer underneath again.</td></tr>
+        <tr><td class="n">D3</td><td class="d"><b>A Look layer is edited as a layer, never as a Look.</b> Add, remove, reorder, enable, amount, mask, blend, stomp and targets are stored on the cue. <i>Open Look</i> goes to the Looks library, because a Look edit changes every cue that layers it and republishes the live ones.</td></tr>
+        <tr><td class="n">D4</td><td class="d"><b>A live cue edited in place is marked, and Update stage is the one way to send it.</b> <span class="k stale">Edited since GO</span> on the card, the row and the pane; the next GO into it lands the edit. <i>Update stage</i> is explicit and confirmed.</td></tr>
+        <tr><td class="n">D5</td><td class="d"><b>The table view's editor is a bottom pane</b> under the cue sheet, for the one selected row, with a drag handle for its height. No row or several rows: no pane.</td></tr>
+        <tr><td class="n">D6</td><td class="d"><b>Edit in programmer is a split button whose default follows the show.</b> Stopped: <i>Edit in programmer</i>, with Blind edit in its menu. Running: <i>Blind edit in programmer</i>, with the live edit in its menu.</td></tr>
+        <tr><td class="n">D7</td><td class="d"><b>Blind holds programmer effects too.</b> Effects the programmer runs are staged while Blind is on and start when it goes off, as values do.</td></tr>
+        <tr><td class="n">D8</td><td class="d"><b>Locked, the tables read and Blind edit still works.</b> Both views draw the whole action set; every action but Blind edit asks to unlock, as the cue sheet's verbs do today.</td></tr>
+        <tr><td class="n">D9</td><td class="d"><b>The phone card gets the action set in a ⋯ menu</b>, and its body stays a read-out. A values grid is not a phone surface.</td></tr>
+        <tr><td class="n">D10</td><td class="d"><b>Edits save as they go</b>, coalesced (400 ms, 2 s ceiling, whole list rebuilt at flush), with the cue's save state in the header and an Undo toast for the last edit.</td></tr>
+        <tr><td class="n">D11</td><td class="d"><b>Update stage sends rows and effects at the cue's fade.</b> Rows republish over the cue's own fade; effects are brought in line (a changed one edited in place, phase kept; a removed one stopped; a new one started). Events and scenery are not re-fired.</td></tr>
+        <tr><td class="n">D12</td><td class="d"><b>Duplicate appends the copy to the end of the stack</b> (venue-visit S3's rule), and opens it. This replaces R1 §3.8's "after the source's entry".</td></tr>
+        <tr><td class="n">D13</td><td class="d"><b>The Stage view can draw the cue in edit.</b> A vis source, <i>Cue in edit</i>, composed by the preview route and drawn, never output; the editor's <i>Show on stage</i> points this window's Stage at it.</td></tr>
+        <tr><td class="n">D14</td><td class="d"><b>The grid lists the cue's fixtures</b>: every target of an own row or a layer, in rig order. <i>+ Fixtures…</i> adds rows, and <i>Whole rig</i> lists every fixture.</td></tr>
+        <tr><td class="n">D15</td><td class="d"><b>Cue properties folds into the editor.</b> The drawer retires; the FX tray's <i>on Q12</i> and the Stage's <i>Moves with</i> open the editor instead.</td></tr>
+        <tr><td class="n">D16</td><td class="d"><b>The programmer's source box gains ← Show</b> while the include came from the Show view: back to that stack with the cue open.</td></tr>
+        <tr><td class="n">D17</td><td class="d"><b>An effect is added through the FX picker, in draft.</b> A tap adds it to the cue with its defaults and runs nothing; its fields are the live editor's, over the stored effect, plus the cue's timing.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:13.5px">The plan's own: <b>P1</b> one PR per session; <b>P2</b> nothing in the Show view sends output but Update stage, and every surface that would (the desk selection, Locate, Highlight, Release, the palette strip) is left out of the cue grid; <b>P3</b> a cue's children keep their uuids across a write; <b>P4</b> the editor writes the cue, so a shared cue changes in every stack and the header says so; <b>P5</b> the entry's fields (number, follow) are this stack's, and the header says which.</p>
+  </section>
+
+  <section id="editor">
+    <h2>The editor<small>§3.3, §4.1</small></h2>
+    <p>One component, <code>CueEditor</code>, with the programmer's pieces inside it. It writes through a cue row store shaped like the focused Look layer's, so the grid's gestures (marquee, Enter, typing, Set · Clear · Spread, the three editor forms) are the programmer's own.</p>
+    <div class="two">
+      <div class="box"><h3>Values</h3><ul>
+        <li>Rows: the cue's fixtures and groups, a multi-head's cells under it; <i>+ Fixtures…</i>, <i>Whole rig</i>.</li>
+        <li>Cells read <code>/cues/{id}/cooked</code>: the value GO lands, edged <span class="k own">own</span> or <span class="k look">by its Look</span>.</li>
+        <li>An edit writes an own row; Spread asks the desk with <code>write:false</code> and lands the literals.</li>
+        <li>⌫ removes own rows; a Look-won cell has nothing to clear.</li>
+        <li>No desk selection, Locate, Highlight, Release or palette strip (P2).</li>
+      </ul></div>
+      <div class="box"><h3>Looks</h3><ul>
+        <li>The programmer's <code>LookStack</code>, top wins, over the cue's layers.</li>
+        <li>Enable, amount, blend, mask, stomp, drag to reorder, × to remove, targets from the Values selection.</li>
+        <li><i>+ Look</i> and <i>+ Palette</i> pickers; the hand places here as today.</li>
+        <li><i>Open Look</i> leaves for the Looks library (D3).</li>
+      </ul></div>
+      <div class="box"><h3>FX</h3><ul>
+        <li>One row per stored effect: target, effect, property, speed and master, timing.</li>
+        <li>A row opens <code>FxEffectFields</code> over the stored effect, with delay · interval · random under it.</li>
+        <li><i>+ Effect</i>: the picker over the Values selection, in draft (D17).</li>
+        <li>A Look's effects are listed under the Look, read-only.</li>
+      </ul></div>
+      <div class="box"><h3>Scenery · Events · Cue</h3><ul>
+        <li>Scenery: <code>CueSceneryEditor</code>, the cue's rows and what it tracks.</li>
+        <li>Events: <code>CueEventsEditor</code>.</li>
+        <li>Cue: notes, script hooks, busk pages, what was in Cue properties.</li>
+        <li>The header: number and follow (this stack's entry), name, fade, curve, <span class="k own">in 2 stacks</span>.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="cards">
+    <h2>Card view<small>§4.2</small></h2>
+    <p>The card keeps its collapsed row. Opened, the action set and the save state sit directly under it, then the tabs. Values is the first tab. Act 1's Q1 in Sleeping Beauty, unlocked, the show stopped:</p>
+    <div class="screenbox"><div class="screen" role="img" aria-label="Mock-up of an expanded cue card in the card view with the action set under the cue row and the Values tab open.">
+      <div class="card"><div class="cuehead"><span class="pip"></span><span class="m num">Q0</span><span>Pre-show · house lights</span><span class="row"><span class="chip shared">in 2 stacks</span><span class="m dim" style="font-size:10px">top of p. 4</span></span><span class="m dim">SNAP</span><span class="dim">›</span></div></div>
+      <div class="card open">
+        <div class="cuehead"><span class="pip"></span><span class="m num">Q1</span><span>Tabs out · Snooze in front of scrim</span><span class="m dim" style="font-size:10px">upper of p. 4</span><span class="m">SNAP</span><span class="dim">⌄</span></div>
+        <div class="strip">
+          <span class="btn pri split">Edit in programmer <span class="chev">▾</span></span>
+          <span class="btn">Load into programmer</span>
+          <span class="btn">Record…</span>
+          <span class="sep"></span>
+          <span class="btn">Duplicate</span>
+          <span class="btn">Remove from stack</span>
+          <span class="btn red">Delete…</span>
+          <span class="btn">⋯</span>
+          <span class="sp"></span>
+          <span class="dim" style="font-size:11px">✓ Saved</span>
+          <span class="btn">◐ Show on stage</span>
+        </div>
+        <div class="tabs"><span class="tab on">Values<b>17</b></span><span class="tab">Looks<b>5</b></span><span class="tab">FX<b>0</b></span><span class="tab">Scenery<b>1</b></span><span class="tab">Events</span><span class="tab">Cue</span></div>
+        <div class="selbar"><span>2 cells · Dimmer</span><span class="dim">⏎ edit · ⌫ clear own</span><span class="sp"></span><span class="btn">Set</span><span class="btn">Clear</span><span class="btn">Spread</span><span class="sep"></span><span class="btn">+ Fixtures…</span><span class="btn">Whole rig</span><span class="btn">Deselect</span></div>
+        <table class="g">
+          <thead><tr><th>Fixture</th><th>Dimmer</th><th>Colour</th><th>Position</th><th>Zoom</th></tr></thead>
+          <tbody>
+            <tr><td>LX1 Orbit 70 SR</td><td><span class="c own mq"><span class="bar"><i style="width:80%"></i></span> 80% <span class="src own">own</span></span></td><td><span class="c look"><span class="sw" style="background:#8070ff"></span> 128,112,255 <span class="src look">Scrim · opaque</span></span></td><td><span class="c look m">120,150 <span class="src look">Scrim · opaque</span></span></td><td class="dim">—</td></tr>
+            <tr><td>LX1 Orbit 70 SL</td><td><span class="c own mq"><span class="bar"><i style="width:80%"></i></span> 80% <span class="src own">own</span></span></td><td><span class="c look"><span class="sw" style="background:#8070ff"></span> 128,112,255 <span class="src look">Scrim · opaque</span></span></td><td><span class="c look m">132,150 <span class="src look">Scrim · opaque</span></span></td><td class="dim">—</td></tr>
+            <tr><td>LX1 Shehds 19×15 SR</td><td><span class="c look"><span class="bar"><i style="width:70%"></i></span> 70% <span class="src look">Heads · shutters open</span></span></td><td><span class="c look"><span class="sw" style="background:#8070ff"></span> 128,112,255 <span class="src look">Shehds colour</span></span></td><td><span class="c look m">124,148</span></td><td><span class="c own">60% <span class="src own">own</span></span></td></tr>
+            <tr><td>ADV1 Robe 575 SR</td><td><span class="c look"><span class="bar"><i style="width:100%"></i></span> 100% <span class="src look">Front of scrim</span></span></td><td class="dim">—</td><td><span class="c look m">96,170</span></td><td><span class="c look">35%</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div></div>
+    <p class="muted" style="font-size:13.5px">The pre-show cue above is shared by Act 1 and Act 2 (R1); its chip names both. Locked, the strip still shows the set (D8) and the grid's cells are inert.</p>
+  </section>
+
+  <section id="table">
+    <h2>Table view<small>§4.3</small></h2>
+    <p>The cue sheet stays the list. The selection bar carries the action set over the selected rows; one selected row opens the editor in a pane under the sheet. The pane's height is this window's, and the keys go to whichever of the two regions has focus.</p>
+    <div class="screenbox"><div class="screen" role="img" aria-label="Mock-up of the cue table with one row selected, the action set on the selection bar, and the cue editor in a bottom pane on its Looks tab.">
+      <div class="selbar" style="border:1px solid var(--s-bd); border-radius:6px"><span>1 cue</span><span class="sp"></span><span class="btn">Set</span><span class="btn">Clear</span><span class="btn">Spread</span><span class="sep"></span><span class="btn pri split">Edit in programmer <span class="chev">▾</span></span><span class="btn">Load</span><span class="btn">Record…</span><span class="btn">Duplicate</span><span class="btn">Remove</span><span class="btn red">Delete…</span><span class="btn">⋯</span><span class="btn">Deselect</span></div>
+      <div>
+        <div class="sheetrow head"><span></span><span>Cue</span><span>Name</span><span>Fade</span><span>Follow</span><span>Layers</span><span>Scenery</span></div>
+        <div class="sheetrow"><span class="pip"></span><span class="m">Q0</span><span>Pre-show · house lights <span class="chip shared">in 2 stacks</span></span><span class="m">SNAP</span><span class="dim">—</span><span class="dim">1</span><span class="dim">tracked</span></div>
+        <div class="sheetrow sel"><span class="pip"></span><span class="m">Q1</span><span>Tabs out · Snooze in front of scrim</span><span class="m">SNAP</span><span class="dim">—</span><span>5</span><span>House tabs → drawn · 4 s</span></div>
+        <div class="sheetrow"><span class="pip"></span><span class="m">Q2</span><span>Scrim out · palace ballroom</span><span class="m">SNAP</span><span class="dim">—</span><span class="dim"></span><span>SB Scrim → drawn · 6 s</span></div>
+        <div class="sheetrow"><span class="pip"></span><span class="m">Q3</span><span>Blackout · scrim in</span><span class="m">SNAP</span><span class="dim">—</span><span class="dim"></span><span>SB Scrim → closed · 6 s</span></div>
+      </div>
+      <div class="handle"><i></i></div>
+      <div class="card" style="border-radius:8px">
+        <div class="strip" style="border-top:none"><span class="m num">Q1</span><span>Tabs out · Snooze in front of scrim</span><span class="chip">Act 1</span><span class="m dim">fade SNAP · follow —</span><span class="sp"></span><span class="dim" style="font-size:11px">✓ Saved</span><span class="btn">◐ Show on stage</span></div>
+        <div class="tabs"><span class="tab">Values<b>17</b></span><span class="tab on">Looks<b>5</b></span><span class="tab">FX<b>0</b></span><span class="tab">Scenery<b>1</b></span><span class="tab">Events</span><span class="tab">Cue</span></div>
+        <div class="layer"><span class="dim">⋮</span><span class="m dim">5</span><span>Special · Snooze SR forestage v2 <span class="chip">Intensity</span> <span class="chip">Position</span> <span class="chip">Colour</span></span><span class="dim">100%</span><span class="tog"></span><span class="btn">Open Look</span><span class="dim">×</span></div>
+        <div class="layer"><span class="dim">⋮</span><span class="m dim">4</span><span>Front of scrim · ADV1 Robes key <span class="chip">adv1-robe575-sr</span> <span class="chip">adv1-robe575-sl</span></span><span class="dim">100%</span><span class="tog"></span><span class="btn">Open Look</span><span class="dim">×</span></div>
+        <div class="layer"><span class="dim">⋮</span><span class="m dim">3</span><span>Shehds colour · scrim lavender <span class="chip">Colour</span></span><span class="dim">100%</span><span class="tog"></span><span class="btn">Open Look</span><span class="dim">×</span></div>
+        <div class="layer"><span class="dim">⋮</span><span class="m dim">2</span><span>Scrim · opaque (front-lit) v2 <span class="chip">stomp</span></span><span class="dim">60%</span><span class="tog"></span><span class="btn">Open Look</span><span class="dim">×</span></div>
+        <div class="layer" style="border-bottom:none"><span class="dim">⋮</span><span class="m dim">1</span><span class="dim">Heads · shutters open <span class="chip">Intensity</span></span><span class="dim">100%</span><span class="tog off"></span><span class="btn">Open Look</span><span class="dim">×</span></div>
+        <div class="strip"><span class="btn">+ Look</span><span class="btn">+ Palette</span><span class="dim" style="font-size:11px">Top wins. Edits change the layer in this cue; a Look's contents change in the Looks library.</span></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section id="actions">
+    <h2>The action set<small>§5</small></h2>
+    <p>One component, <code>CueActions</code>, on the card under its row, on the cue sheet's selection bar and in the phone card's ⋯ menu. Semantics are R1's.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Action</th><th>Does</th><th>Over several rows</th><th>Locked</th></tr></thead>
+      <tbody>
+        <tr><td><b>Edit in programmer ▾</b></td><td>Include, then open the programmer with <i>← Show</i> in its source box. The face follows the show (D6).</td><td>Disabled, one cue</td><td>Asks to unlock</td></tr>
+        <tr><td><b>Blind edit in programmer</b></td><td>Blind on, Include, open the programmer. Nothing reaches the stage until Blind goes off (D7).</td><td>Disabled, one cue</td><td>Works</td></tr>
+        <tr><td><b>Load into programmer</b></td><td>Include and stay. Live unless Blind is already on.</td><td>Disabled, one cue</td><td>Asks to unlock</td></tr>
+        <tr><td><b>Record…</b></td><td>The Record sheet targeting this cue (it writes the shared cue).</td><td>Disabled, one cue</td><td>Asks to unlock</td></tr>
+        <tr><td><b>Duplicate</b></td><td>A new cue, appended to the end of this stack, opened (D12).</td><td>Each, in order</td><td>Asks to unlock</td></tr>
+        <tr><td><b>Remove from stack</b></td><td>Deletes the entry. The cue stays, loose if that was its last; no confirm (R1 §4).</td><td>Each</td><td>Asks to unlock</td></tr>
+        <tr><td><b>Delete…</b></td><td>Deletes the cue, after R1's confirm listing every entry, pad, slot and anchor.</td><td>One confirm for all</td><td>Asks to unlock</td></tr>
+        <tr><td><b>⋯</b></td><td>Add to stack…, Move to stack…, Copy link.</td><td>Each</td><td>Asks to unlock</td></tr>
+      </tbody>
+    </table></div>
+    <div class="screenbox"><div class="screen" role="img" aria-label="The action strip in three states: stopped and unlocked, running and unlocked, and locked.">
+      <div class="card">
+        <div class="state"><span><b>Stopped</b><br><span class="dim">unlocked</span></span><span class="row"><span class="btn pri split">Edit in programmer <span class="chev">▾</span></span><span class="btn">Load into programmer</span><span class="btn">Record…</span><span class="sep"></span><span class="btn">Duplicate</span><span class="btn">Remove from stack</span><span class="btn red">Delete…</span><span class="btn">⋯</span></span></div>
+        <div class="state"><span><b>Running</b><br><span class="dim">unlocked, amber wash</span></span><span class="row"><span class="btn blindp split">◌ Blind edit in programmer <span class="chev">▾</span></span><span class="btn">Load into programmer</span><span class="btn">Record…</span><span class="sep"></span><span class="btn">Duplicate</span><span class="btn">Remove from stack</span><span class="btn red">Delete…</span><span class="btn">⋯</span></span></div>
+        <div class="state"><span><b>Locked</b><br><span class="dim">running</span></span><span class="row"><span class="btn blindp split">◌ Blind edit in programmer <span class="chev">▾</span></span><span class="btn ask">Load into programmer</span><span class="btn ask">Record…</span><span class="sep"></span><span class="btn ask">Duplicate</span><span class="btn ask">Remove from stack</span><span class="btn ask">Delete…</span><span class="lock">🔒 asks to unlock</span></span></div>
+      </div>
+      <div class="row" style="align-items:flex-start; gap:16px; margin-top:4px">
+        <div class="menu"><div class="mi on">◌ Blind edit in programmer <small>default while running</small></div><div class="mi">Edit in programmer <small>live</small></div></div>
+        <div class="menu"><div class="mi">Add to stack…</div><div class="mi">Move to stack…</div><div class="ms"></div><div class="mi">Copy link</div></div>
+      </div>
+    </div></div>
+    <div class="phonewrap">
+      <div class="screen phone" role="img" aria-label="The phone runner's Now playing card with its ⋯ menu open, listing the action set.">
+        <div class="card live" style="padding:10px 12px; display:flex; flex-direction:column; gap:8px">
+          <div class="row"><span class="lbl" style="color:var(--s-live)">● Now playing</span><span class="sp"></span><span class="chip">3 / 13</span><span class="btn">⋯</span></div>
+          <div class="row" style="gap:10px"><span class="m" style="font-size:22px; font-weight:800">Q1</span><span style="font-weight:600">Tabs out · Snooze in front of scrim</span></div>
+          <div class="chip stale" style="align-self:flex-start">Edited since GO</div>
+          <div class="menu" style="min-width:0"><div class="mi on">◌ Blind edit in programmer</div><div class="mi">Edit in programmer</div><div class="mi">Load into programmer</div><div class="mi">Record…</div><div class="ms"></div><div class="mi">Update stage…</div><div class="mi">Duplicate</div><div class="mi">Remove from stack</div><div class="mi" style="color:#ff7b7b">Delete…</div></div>
+        </div>
+      </div>
+      <p class="muted" style="flex:1; min-width:240px; font-size:13.5px; align-self:center">The phone card, also the busk view's Show tab and the Prompt Book's card, keeps its read-out body. Its ⋯ carries the set in the same order, Update stage when the cue is edited since GO, and the same locked rule.</p>
+    </div>
+  </section>
+
+  <section id="live">
+    <h2>A live cue, edited<small>§3.5</small></h2>
+    <p>Because a stored edit is silent, an edited live cue no longer matches the stage. The desk says so: R1's hold registry marks a held cue <i>edited since GO</i> when its rows, layers or effects change, and <code>cueHolds.state</code> carries the mark. Scenery is drawn and already follows its edit; events fire only on GO.</p>
+    <div class="screenbox"><div class="screen" role="img" aria-label="A live cue card marked Edited since GO with its Update stage button.">
+      <div class="card live">
+        <div class="cuehead"><span class="pip live"></span><span class="m num">Q4</span><span>Snooze front of scrim · change to market</span><span class="row"><span class="chip stale">Edited since GO</span></span><span class="m">SNAP</span><span class="dim">⌄</span></div>
+        <div class="stale-band"><span>The stage still shows Q4 as it was at its GO. The next GO into it lands your edit.</span><span class="sp"></span><span class="btn" style="color:var(--s-stale); border-color:rgba(255,143,120,0.5)">Update stage…</span></div>
+      </div>
+      <div class="menu" style="max-width:440px; margin-top:6px; padding:12px; gap:8px"><b>Update the stage with Q4?</b><span class="dim">Its rows fade in over the cue's own fade (SNAP). 1 effect is edited in place, 1 stopped. Scenery and events are not re-fired.</span><span class="row" style="justify-content:flex-end"><span class="btn">Cancel</span><span class="btn pri">Update stage</span></span></div>
+    </div></div>
+  </section>
+
+  <section id="sessions">
+    <h2>Sessions<small>§6</small></h2>
+    <p>One PR each, in this order. Sessions 1 and 2 need nothing from R1 and can land at once; session 3 onwards needs R1's sessions 1–4 and venue-visit S3.</p>
+    <ol class="sessions">
+      <li><b>Blind holds programmer effects</b><span class="scope">backend + reporters</span><p>Programmer-band effects are staged under Blind and start when it goes off, at the Blind fade; the busk pill, the Show tab dot and the indicator say "values and effects held".</p><span class="needs">needs —</span></li>
+      <li><b>A cue's children keep their uuids</b><span class="scope">backend</span><p><code>writeCueChildren</code> reconciles rows, layers, effects and hooks by natural key, as Looks have since PR #140, so a per-gesture save changes one record in sync and Update stage can match effects.</p><span class="needs">needs —</span></li>
+      <li><b>The action set</b><span class="scope">frontend + duplicate route</span><p><code>CueActions</code> on the card, the sheet's bar and the phone ⋯; the split Edit and Blind edit; Load; Record; Duplicate (<code>POST /cues/{id}/duplicate</code>, appended); Remove from stack; Delete…; the locked rule; ← Show in the source box.</p><span class="needs">needs session 1, R1 sessions 1–4, venue-visit S3</span></li>
+      <li><b>The cue editor and its two hosts</b><span class="scope">frontend</span><p><code>CueEditor</code>'s header and tabs in the card body and the table's bottom pane; Scenery, Events and Cue tabs from the existing editors; Cue properties retired; Values, Looks and FX as today's read-outs.</p><span class="needs">needs session 3</span></li>
+      <li><b>The Values grid</b><span class="scope">frontend + cooked route</span><p>The cue row store, the writers' cue arm with no live fallback, composed reads with source edges, the rows rule, Spread with <code>write:false</code>, ⌫, Undo; <code>/cooked</code> keeps a group row's key.</p><span class="needs">needs sessions 2, 4</span></li>
+      <li><b>The Looks and FX tables</b><span class="scope">frontend</span><p>The cue host for <code>LookStack</code> (whole-list PATCH, <code>sortOrder</code> restated), the Look and palette pickers, Open Look; the FX table over <code>FxEffectFields</code> with the cue's timing and the picker in draft.</p><span class="needs">needs session 5</span></li>
+      <li><b>Edited since GO and Update stage</b><span class="scope">backend + frontend</span><p>The mark on R1's holds and <code>cueHolds.state</code>; <code>POST /cues/{id}/update-stage</code> at the cue's fade with effects reconciled by uuid; the band, the chip and the confirm.</p><span class="needs">needs sessions 2, 6, R1 session 2</span></li>
+      <li><b>Show on stage</b><span class="scope">frontend + preview route</span><p>The <i>Cue in edit</i> vis source on the Stage view and Positions, an entry's preview route, the editor's toggle, and the source on the Screens sheet.</p><span class="needs">needs session 4</span></li>
+    </ol>
+  </section>
+
+  <section id="out">
+    <h2>Out of scope<small>§8</small></h2>
+    <ul class="plain">
+      <li><b>Pressing a palette onto cue cells.</b> How a palette, a Look or an effect reaches a selection is R3's.</li>
+      <li><b>Editing a Look's contents from a cue.</b> D3; the Looks library does it.</li>
+      <li><b>A row's own fade and move-in-dark.</b> Kept on every write and shown on the cell's hover; editing them is a follow-up.</li>
+      <li><b>Values tables on a phone</b> (D9).</li>
+      <li><b>Drawing a cue's effects in the Cue in edit source.</b> The preview route composes Layer 4 only.</li>
+    </ul>
+  </section>
+
+  <footer>Design session R2 of the venue-visit plan, 2026-10-14. Show names, cues, fixtures and Looks are Sleeping Beauty's from the desk; the Act 1 Q4 edit is illustrative.</footer>
+</div>
