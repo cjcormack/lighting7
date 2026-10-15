@@ -102,6 +102,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         assertEquals(pulse.id, effect.effectId)
         assertEquals(42, effect.cueId)
         assertEquals(true, effect.heldBack)
+        assertEquals("PROGRAMMER", effect.heldBackReason, "the programmer's value is the reason")
         assertFalse(effect.onStage)
         assertTrue(stack.layers[0].onStage)
 
@@ -125,9 +126,30 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         val answer = ask("fixture", "hex-1", "dimmer")
         assertTrue(answer.blind)
         val layers = answer.stacks.single().layers
-        assertTrue(layers.none { it.heldBack == true }, "blind holds nothing back")
+        assertTrue(layers.none { it.heldBack == true }, "blind's values hold nothing back")
         assertFalse(layers.single { it.kind == "PROGRAMMER" }.onStage, "blind: listed, not on stage")
         assertTrue(layers.single { it.kind == "EFFECT" }.onStage, "the Pulse paints again")
+    }
+
+    @Test
+    fun `blind holds a band effect, listed as held back by Blind and off stage`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val pulse = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        setDimmer("hex-1", 200)
+        state.show.fxEngine.programmer.setBlind(true)
+
+        val answer = ask("fixture", "hex-1", "dimmer")
+        assertTrue(answer.blind)
+        val stack = answer.stacks.single()
+        assertEquals(listOf("PROGRAMMER_EFFECT", "PROGRAMMER", "BASE"), kinds(stack))
+        val band = stack.layers[0]
+        assertEquals(pulse.id, band.effectId)
+        assertEquals(true, band.heldBack)
+        assertEquals("BLIND", band.heldBackReason)
+        assertFalse(band.onStage, "held: the Override Pulse covers nothing")
+        assertFalse(stack.layers[1].onStage, "blind: the programmer's value is listed, not on stage")
+        assertTrue(stack.layers[2].onStage, "the base is what the rig shows")
     }
 
     @Test

@@ -92,13 +92,19 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
   const tip = [
     entryCount > 0
       ? `Programmer holds ${entryCount} value${entryCount === 1 ? '' : 's'}`
-      : 'Programmer is empty',
+      : // The count is values only: under Blind the programmer may still hold effects, which the
+        // Blind clause beside this says are held, so "empty" would contradict it.
+        summary?.blind
+        ? 'Programmer holds no values'
+        : 'Programmer is empty',
     // The full sentence, because the badge itself spells out "Blind" only above 760px: "5 values,
     // and none of them reaching the stage" is the useful reading, and a tooltip costs no width.
     venueHeld
       ? `Blind · venue — output held: this show uses v${hold.pinned} and the hall is v${hold.installed}. Review the update or run against v${hold.pinned}`
       : null,
-    summary?.blind ? 'Blind — the programmer is gated out of the stage output' : null,
+    // Values *and* effects: Blind holds the programmer's effects as it holds its values
+    // (show-cue-editing plan D7), so a blind busk is not a working one either.
+    summary?.blind ? 'Blind — values and effects held: the programmer is gated out of the stage output' : null,
     // Only offer the trip if we aren't already there.
     programmerPath && !onProgrammer ? 'Go to the programmer to clear or edit' : null,
   ]

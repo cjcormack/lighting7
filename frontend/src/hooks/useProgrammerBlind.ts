@@ -1,7 +1,8 @@
 import { useProgrammerSummaryQuery } from '@/store/programmer'
 
 /**
- * Is the programmer blind — its values held back from the stage? The same field
+ * Is the programmer blind — its values and its effects held back from the stage (show-cue-editing
+ * plan D7)? The same field
  * `ProgrammerIndicator` reads, narrowed through `selectFromResult` to the one boolean so a reader
  * re-renders when blind flips and not on every programmer event (`ProgrammerSummary` moves on
  * every entry change, which at busking rate is constantly).
