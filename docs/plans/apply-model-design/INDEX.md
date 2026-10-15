@@ -10,7 +10,7 @@ relate, and which surfaces fold in and which stay as shortcuts. It started from
 (palettes reaching cells, `4a1a8fb`). S14 (the applied tables) had not landed, so the rail's rows stand
 in for them.
 
-**Status: draft, 2026-10-15.** The implementation plan is
+**Status: approved 2026-10-15.** The implementation plan is
 [`../apply-model-plan.md`](../apply-model-plan.md). A one-page copy for human readers is
 [`apply-model.html`](apply-model.html), with a live copy at
 <https://claude.ai/artifact/9cDRZDeBKFiN5un88v7cNJ>, private to Chris and a convenience; the files

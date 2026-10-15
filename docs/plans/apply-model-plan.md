@@ -1,6 +1,6 @@
 # Applying to a selection — one press, whatever you press it from
 
-> **Document status: DRAFT, 2026-10-15.** This is design session R3 of
+> **Document status: AGREED, 2026-10-15.** This is design session R3 of
 > [`venue-visit-plan.md`](venue-visit-plan.md). It designs one model for putting a palette, a Look or
 > an effect onto a selection of fixtures and attributes, replacing the seven mechanisms the
 > venue-visit plan's §1 lists. The questions asked and their answers are in §11 and in the design
