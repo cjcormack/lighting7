@@ -1,6 +1,6 @@
 # Effects — what a theatre and busking desk needs from them
 
-> **Document status: DRAFT, 2026-10-15, in review.** This is design session R4 of
+> **Document status: AGREED, 2026-10-15.** This is design session R4 of
 > [`venue-visit-plan.md`](venue-visit-plan.md): a survey of what ChamSys MagicQ, grandMA3, ETC Eos and
 > Hog 4 offer an operator in an effect, set against our 24 built-ins, and a plan for the gaps that
 > matter here. The questions asked and their answers are in §11. The survey, with every manual page

@@ -5,7 +5,7 @@ evening in the hall wanted a breathing zoom, a colour cycle the other way round,
 not all start at one beat. R4 asked what MagicQ, grandMA3, Eos and Hog 4 offer, what our 24 built-ins
 lack against them, and which of the gaps a theatre and busking desk should close.
 
-**Status: draft, 2026-10-15, in review.** The implementation plan is
+**Status: approved 2026-10-15.** The implementation plan is
 [`../effects-plan.md`](../effects-plan.md). A one-page copy for human readers is
 [`effects.html`](effects.html), with a live copy at <https://claude.ai/artifact/LttskDxQVM8upsDYoBj9P5>,
 private to Chris and a convenience; the files here are the authority. `node gen.mjs` regenerates the

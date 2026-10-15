@@ -225,7 +225,7 @@ const QUESTIONS = [
 
 // ─── page ─────────────────────────────────────────────────────────────────────
 
-const STATUS = 'Draft · in review'
+const STATUS = 'Agreed'
 
 const html = `<title>Effects Plan</title>
 <meta name="color-scheme" content="light dark">
