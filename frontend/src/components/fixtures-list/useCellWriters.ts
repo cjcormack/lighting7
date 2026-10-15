@@ -11,14 +11,15 @@ import {
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
 import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import type { PlannedWrite } from './rowModel'
-import type { ChannelRef, ColourPropertyDescriptor } from '../../store/fixtures'
+import type { ChannelRef, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '../../store/fixtures'
 
 export interface CellWriters {
   /** `propertyName` is the backend's own name for the property behind `ref`. */
   writeSlider(fixtureKey: string, propertyName: string, ref: ChannelRef, value: number): void
+  /** A white-mix [property] takes the RGB alone; the desk lands it as the whites' nearest mix. */
   writeColour(
     fixtureKey: string,
-    property: ColourPropertyDescriptor,
+    property: ColourPropertyDescriptor | WhiteMixPropertyDescriptor,
     r: number,
     g: number,
     b: number,
@@ -79,7 +80,7 @@ export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): 
       }
       break
     case 'colour':
-      if (resolution.kind === 'colour') {
+      if (resolution.kind === 'colour' || resolution.kind === 'white-mix') {
         writers.writeColour(
           target.key,
           resolution.property,
@@ -155,6 +156,15 @@ export function useCellWriters(): CellWriters {
       },
 
       writeColour(fixtureKey, property, r, g, b, w, a, uv) {
+        if (property.type === 'whiteMix') {
+          // Only the RGB lands on a white mix: a white component folds into it, as on a head
+          // without a white channel (below), and amber and UV have nowhere to go.
+          const white = w ?? 0
+          const rgb = { r: Math.max(r, white), g: Math.max(g, white), b: Math.max(b, white) }
+          if (setLookValue) setLookValue(fixtureKey, property.name, serializeColour(rgb.r, rgb.g, rgb.b))
+          else lightingApi.programmer.setColour('fixture', fixtureKey, property.name, rgb)
+          return
+        }
         if (setLookValue) {
           // **No wire sampling here**, unlike the live branch below. A stored Look row must not
           // bake in the current stage state of a fixture the layer may not even target: an

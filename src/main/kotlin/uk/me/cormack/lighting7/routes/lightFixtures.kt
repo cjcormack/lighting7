@@ -376,6 +376,27 @@ data class ColourPropertyDescriptor(
     override val category: String = "colour"
 }
 
+/**
+ * A colour made by mixing a warm and a cold white (venue-visit plan D8): the head takes any colour
+ * as the two whites' nearest mix, and its colour is the one the two channels make
+ * (`fixture/property/WhiteMix.kt`, mirrored by `frontend/src/lib/whiteMix.ts`). [warmKelvin] and
+ * [coldKelvin] are the whites' declared temperatures. The two channels are also the head's own
+ * WHITE sliders, listed beside it for direct control.
+ */
+@Serializable
+@kotlinx.serialization.SerialName("whiteMix")
+data class WhiteMixPropertyDescriptor(
+    override val name: String,
+    override val displayName: String,
+    val warmChannel: ChannelRef,
+    val coldChannel: ChannelRef,
+    val warmKelvin: Int,
+    val coldKelvin: Int,
+    override val compactDisplay: String? = null,
+) : PropertyDescriptor {
+    override val category: String = "colour"
+}
+
 @Serializable
 @kotlinx.serialization.SerialName("position")
 data class PositionPropertyDescriptor(

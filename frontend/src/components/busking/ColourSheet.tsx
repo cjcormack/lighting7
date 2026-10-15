@@ -14,7 +14,7 @@ import { rigHeadOrder } from '@/lib/liveAppearance'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useBuskRigQuery } from '@/store/busk'
 import { useGroupListQuery } from '@/store/groups'
-import type { Fixture, ColourPropertyDescriptor } from '@/store/fixtures'
+import type { Fixture, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '@/store/fixtures'
 import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
 /**
@@ -87,29 +87,34 @@ const NEUTRAL: ColourChannels = { r: 255, g: 255, b: 255, w: 0, a: 0, uv: 0 }
  */
 const NEUTRAL_CSS = computeCombinedCss(NEUTRAL.r, NEUTRAL.g, NEUTRAL.b, 0, 0, 0)
 
-function colourDescriptorOf(properties: readonly { type: string }[]): ColourPropertyDescriptor | null {
-  return (properties.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined) ?? null
+/** A head's colour as the sheet writes it: RGB, or a warm/cold white pair the desk lands it on. */
+type ColourDescriptor = ColourPropertyDescriptor | WhiteMixPropertyDescriptor
+
+function colourDescriptorOf(properties: readonly { type: string }[]): ColourDescriptor | null {
+  return (properties.find((p) => p.type === 'colour' || p.type === 'whiteMix') as ColourDescriptor | undefined) ?? null
 }
 
 /** Every colour descriptor a head writes through: its own, or its cells'. */
-function colourDescriptorsOf(fixture: Fixture): ColourPropertyDescriptor[] {
+function colourDescriptorsOf(fixture: Fixture): ColourDescriptor[] {
   const own = colourDescriptorOf(fixture.properties)
   if (own != null) return [own]
-  return (fixture.elements ?? []).map((element) => colourDescriptorOf(element.properties)).filter((d): d is ColourPropertyDescriptor => d != null)
+  return (fixture.elements ?? []).map((element) => colourDescriptorOf(element.properties)).filter((d): d is ColourDescriptor => d != null)
 }
 
-/** Which emitters a descriptor can take, as a comparable key. */
-function emitterShape(descriptor: ColourPropertyDescriptor): string {
+/** Which emitters a descriptor can take, as a comparable key. A white pair takes RGB alone. */
+function emitterShape(descriptor: ColourDescriptor): string {
+  if (descriptor.type === 'whiteMix') return 'mix'
   return `${descriptor.whiteChannel ? 'w' : '-'}${descriptor.amberChannel ? 'a' : '-'}${descriptor.uvChannel ? 'u' : '-'}`
 }
 
 /** The colour a head can take: RGB always, an emitter only where its descriptor has the channel. */
-function colourFor(channels: ColourChannels, descriptor: ColourPropertyDescriptor): ColourWrite['colour'] {
+function colourFor(channels: ColourChannels, descriptor: ColourDescriptor): ColourWrite['colour'] {
   let { r, g, b } = channels
+  const extended = descriptor.type === 'colour' ? descriptor : null
   // The picker's pure-white branch emits `0,0,0,w=255` for a selection whose union has white; a
   // head without one would go black instead of white, so the undeliverable white is folded back
   // into RGB — `useCellWriters.writeColour`'s rule.
-  if (channels.w > 0 && descriptor.whiteChannel == null) {
+  if (channels.w > 0 && extended?.whiteChannel == null) {
     r = Math.max(r, channels.w)
     g = Math.max(g, channels.w)
     b = Math.max(b, channels.w)
@@ -118,9 +123,9 @@ function colourFor(channels: ColourChannels, descriptor: ColourPropertyDescripto
     r,
     g,
     b,
-    w: descriptor.whiteChannel ? channels.w : undefined,
-    a: descriptor.amberChannel ? channels.a : undefined,
-    uv: descriptor.uvChannel ? channels.uv : undefined,
+    w: extended?.whiteChannel ? channels.w : undefined,
+    a: extended?.amberChannel ? channels.a : undefined,
+    uv: extended?.uvChannel ? channels.uv : undefined,
   }
 }
 

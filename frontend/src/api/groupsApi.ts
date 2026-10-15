@@ -121,6 +121,7 @@ export interface GroupActiveEffect {
 export type GroupPropertyDescriptor =
   | GroupSliderPropertyDescriptor
   | GroupColourPropertyDescriptor
+  | GroupWhiteMixPropertyDescriptor
   | GroupPositionPropertyDescriptor
   | GroupSettingPropertyDescriptor
 
@@ -150,6 +151,23 @@ export interface GroupColourPropertyDescriptor {
   displayName: string
   category: 'colour'
   memberColourChannels: MemberColourChannels[]
+}
+
+export interface MemberWhiteMixChannels {
+  fixtureKey: string
+  warmChannel: ChannelRef
+  coldChannel: ChannelRef
+}
+
+/** The "all heads" form of a warm/cold white pair (venue-visit plan D8) — the blinder's cells. */
+export interface GroupWhiteMixPropertyDescriptor {
+  type: 'whiteMix'
+  name: string
+  displayName: string
+  category: 'colour'
+  warmKelvin: number
+  coldKelvin: number
+  memberChannels: MemberWhiteMixChannels[]
 }
 
 export interface MemberPositionChannels {

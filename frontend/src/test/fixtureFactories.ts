@@ -9,6 +9,7 @@ import type {
   SettingOption,
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
+  WhiteMixPropertyDescriptor,
 } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { ActiveEffect } from '@/store/fixtureFx'
@@ -71,6 +72,25 @@ export function colourProp(
     redChannel: red,
     greenChannel: green,
     blueChannel: blue,
+    ...over,
+  }
+}
+
+/** A warm/cold white pair taking colour as its nearest mix — the blinder cell's, by default. */
+export function whiteMixProp(
+  warm: ChannelRef,
+  cold: ChannelRef,
+  over: Partial<WhiteMixPropertyDescriptor> = {},
+): WhiteMixPropertyDescriptor {
+  return {
+    type: 'whiteMix',
+    name: 'rgbColour',
+    displayName: 'Warmth',
+    category: 'colour',
+    warmChannel: warm,
+    coldChannel: cold,
+    warmKelvin: 3000,
+    coldKelvin: 6500,
     ...over,
   }
 }

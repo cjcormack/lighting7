@@ -66,6 +66,30 @@ data class GroupColourPropertyDescriptor(
  * Position channels for a single group member.
  */
 @Serializable
+data class MemberWhiteMixChannels(
+    val fixtureKey: String,
+    val warmChannel: ChannelRef,
+    val coldChannel: ChannelRef,
+)
+
+/**
+ * A warm/cold white pair's colour aggregated across members — the blinder's cells, as the "all
+ * heads" form of `WhiteMixPropertyDescriptor`. Only members whose pairs share their declared
+ * temperatures aggregate, so one warmth means one mix on every member.
+ */
+@Serializable
+@kotlinx.serialization.SerialName("whiteMix")
+data class GroupWhiteMixPropertyDescriptor(
+    override val name: String,
+    override val displayName: String,
+    val warmKelvin: Int,
+    val coldKelvin: Int,
+    val memberChannels: List<MemberWhiteMixChannels>,
+) : GroupPropertyDescriptor {
+    override val category: String = "colour"
+}
+
+@Serializable
 data class MemberPositionChannels(
     val fixtureKey: String,
     val panChannel: ChannelRef,

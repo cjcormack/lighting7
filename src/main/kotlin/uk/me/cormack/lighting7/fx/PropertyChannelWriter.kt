@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
@@ -33,7 +34,8 @@ import kotlin.reflect.KProperty1
  * - [CueAssignmentResolver.PropertyValue.Colour] — R/G/B writes always; white / amber / UV
  *   writes emitted when the fixture implements the respective [WithWhite] / [WithAmber]
  *   / [WithUv] trait. Trait-less fixtures silently drop the extended channel (same
- *   contract for all three).
+ *   contract for all three). On a [DmxWhiteMixColour] the colour's nearest warm/cold mix,
+ *   its two whites' writes; W/A/UV are not part of it.
  * - [CueAssignmentResolver.PropertyValue.Position] — pan + tilt writes when the fixture implements
  *   [WithPosition].
  *
@@ -91,6 +93,10 @@ object PropertyChannelWriter {
                 extendedChannelWrite((fixture as? WithAmber)?.amber, 0u, PropertyCategory.AMBER)?.let { add(it) }
                 extendedChannelWrite((fixture as? WithUv)?.uv, 0u, PropertyCategory.UV)?.let { add(it) }
             }
+            is DmxWhiteMixColour -> listOf(
+                PropertyChannelResolver.ChannelWrite(raw.warm.universe, raw.warm.channelNo, 0u, PropertyCategory.WHITE),
+                PropertyChannelResolver.ChannelWrite(raw.cold.universe, raw.cold.channelNo, 0u, PropertyCategory.WHITE),
+            )
             // resolved.category, not a hardcoded SETTING — a gobo or prism wheel is backed
             // by a DmxFixtureSetting but no longer carries the SETTING category, and the
             // clear path must key off the same category the write path used.
@@ -266,6 +272,13 @@ object PropertyChannelWriter {
     ): List<PropertyChannelResolver.ChannelWrite> {
         val resolved = resolveProperty(fixture, propertyName) ?: return emptyList()
         val raw = resolved.value
+        if (raw is DmxWhiteMixColour) {
+            val levels = raw.mix.levelsFor(value.color)
+            return listOf(
+                PropertyChannelResolver.ChannelWrite(raw.warm.universe, raw.warm.channelNo, levels.warm, PropertyCategory.WHITE),
+                PropertyChannelResolver.ChannelWrite(raw.cold.universe, raw.cold.channelNo, levels.cold, PropertyCategory.WHITE),
+            )
+        }
         if (raw !is DmxColour) {
             logger.debug(
                 "Colour value targeted non-colour property '{}' (type {}) on '{}'",

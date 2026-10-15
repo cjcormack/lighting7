@@ -3658,11 +3658,17 @@ each was:
   `footer`, `counts`, `labelLine`, `docked` (the busk tab's frame: one scroller, the footer static
   under it), `pickOnTargets` (the busk tab's seed from the rig), `onPick`, `onSave`, `onSpread` (absent
   draws the button inert — session 3 wires the programmer's). The cell hands it the batch's targets
-  **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell, a bar whose
-  colour lives on its cells expanded, a head with no RGB colour dropped — a colour-wheel head
-  resolves a `colour-setting` cell the batch counts and a colour commit refuses, so the label line
-  counts this list rather than `batch.count`, and the two lines say one number), and the container passes `projectId` for the **programmer alone**, since the
-  plain lists draw no palette strip and Save records from the programmer. Five hosts: the programmer's colour
+  **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell or warm/cold
+  white pair, a bar whose colour lives on its cells expanded, a head with neither dropped — a
+  colour-wheel head resolves a `colour-setting` cell the batch counts and a colour commit refuses,
+  so the label line counts this list rather than `batch.count`, and the two lines say one number),
+  and the container passes `projectId` for the **programmer alone**, since the plain lists draw no
+  palette strip and Save records from the programmer. A batch of warm/cold white pairs alone (the
+  blinder's cells, venue-visit plan D8) opens `WarmthCell` instead — a warmth between the pair's
+  declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
+  `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Spread in its footer — and
+  `ColourCell` dispatches between the two. Its controls are `editor/WarmthEditor`, which the fixture
+  sheet's `white-mix` row draws too. Five hosts: the programmer's colour
   cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
   in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
   compact width, because the compact body sits its 208px emitter column beside a 256px picker row

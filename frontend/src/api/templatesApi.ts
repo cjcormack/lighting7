@@ -349,9 +349,12 @@ export interface TemplateResolution {
   /** The property the value landed on — differs from `propertyName` on a colour wheel. */
   resolvedPropertyName: string
   outcome: 'EXACT' | 'CLAMPED' | 'SNAPPED' | 'DEGRADED' | 'UNSUPPORTED'
-  /** The clamp, the slot name, or the reason. Null when nothing was lost. */
+  /**
+   * The clamp, the slot name or a warm/cold white mix's temperature (`3400 K`), or the reason.
+   * Null when nothing was lost.
+   */
   detail: string | null
-  /** ΔE against the requested colour, on a wheel snap only. */
+  /** ΔE against the requested colour, on a snap only — a wheel's slot or a white mix. */
   deltaE: number | null
   /** The resolved value in the canonical assignment grammar — for a swatch or a number. */
   value: string | null

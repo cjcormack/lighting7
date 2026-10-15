@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxCommand
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
@@ -144,6 +145,10 @@ object FixtureCommands {
                     out += value.redSlider.channelNo
                     out += value.greenSlider.channelNo
                     out += value.blueSlider.channelNo
+                }
+                is DmxWhiteMixColour -> {
+                    out += value.warm.channelNo
+                    out += value.cold.channelNo
                 }
                 is DmxFixtureSetting<*> -> out += value.channelNo
             }

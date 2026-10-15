@@ -1,11 +1,21 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureType
+import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
+import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.KamLiteobar252Fixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripRgbFixture
 import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
+import uk.me.cormack.lighting7.fixture.property.WhiteMix
+import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.models.GRAND_MASTER_FULL
 import uk.me.cormack.lighting7.models.ProjectScalerStateSnapshot
 import uk.me.cormack.lighting7.show.Fixtures
@@ -283,6 +293,59 @@ class GlobalScalerStateTest {
         scaler.setGrandMasterLevel(50.0)
         assertEquals(100u.toUByte(), controller.getEffectiveValue(7))
         for (ch in listOf(9, 12, 20)) assertEquals(200u.toUByte(), controller.getEffectiveValue(ch), "ch $ch")
+    }
+
+    @Test
+    fun `a blinder's warmth is left to its master dimmer, as its whites always were`() {
+        val fixtures = Fixtures()
+        val controller = MockDmxController(Universe(0, 0))
+        fixtures.register(removeUnused = true) {
+            addController(controller)
+            // Ch 1 the master dimmer, ch 5–8 two warm/cold cells, each also a white-mix colour.
+            addFixture(China2CellLedBlinderFixture(Universe(0, 0), "blinder", "Blinder", 1))
+        }
+        val scaler = GlobalScalerState(fixtures)
+        scaler.attach()
+        for (ch in listOf(1, 5, 6, 7, 8)) controller.setValue(ch, 200u, 0)
+
+        scaler.setGrandMasterLevel(50.0)
+        assertEquals(100u.toUByte(), controller.getEffectiveValue(1))
+        for (ch in 5..8) assertEquals(200u.toUByte(), controller.getEffectiveValue(ch), "ch $ch")
+    }
+
+    /** A dimmerless warm/cold head whose whites are both sliders and its colour. */
+    @FixtureType("test-white-mix-head")
+    internal class WhiteMixHead(
+        universe: Universe,
+        key: String,
+        private val transaction: ControllerTransaction? = null,
+    ) : DmxFixture(universe, 1, 2, key, key), WithColour {
+        @FixtureProperty(category = PropertyCategory.WHITE)
+        val warm = DmxSlider(transaction, universe, 1)
+
+        @FixtureProperty(category = PropertyCategory.WHITE)
+        val cold = DmxSlider(transaction, universe, 2)
+
+        @FixtureProperty(category = PropertyCategory.COLOUR)
+        override val rgbColour = DmxWhiteMixColour(warm, cold, WhiteMix(3000, 6500))
+
+        override fun withTransaction(transaction: ControllerTransaction) = WhiteMixHead(universe, key, transaction)
+    }
+
+    @Test
+    fun `a dimmerless white-mix head is scaled once per channel, though two properties cover it`() {
+        val fixtures = Fixtures()
+        val controller = MockDmxController(Universe(0, 0))
+        fixtures.register(removeUnused = true) {
+            addController(controller)
+            addFixture(WhiteMixHead(Universe(0, 0), "head"))
+        }
+        val scaler = GlobalScalerState(fixtures)
+        scaler.attach()
+        for (ch in 1..2) controller.setValue(ch, 200u, 0)
+
+        scaler.setGrandMasterLevel(50.0)
+        for (ch in 1..2) assertEquals(100u.toUByte(), controller.getEffectiveValue(ch), "ch $ch")
     }
 
     @Test

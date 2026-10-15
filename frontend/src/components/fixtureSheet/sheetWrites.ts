@@ -1,7 +1,8 @@
 import { lightingApi } from '@/api/lightingApi'
 import { parseProgrammerEntryValue, serializeLevel } from '@/lib/programmerValue'
 import { clampCommitToResolution, type CellCommit } from '../fixtures-list/rowModel'
-import type { ChannelRef, ColourPropertyDescriptor } from '@/store/fixtures'
+import type { ChannelRef, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '@/store/fixtures'
+import type { Rgb } from '@/lib/whiteMix'
 import type { PickWrite } from './sheetPick'
 import type { PositionResolution } from './sheetRows'
 
@@ -131,6 +132,30 @@ export function writePickColour(
   const sourceGroup = write.kind === 'group' ? write.group : write.sourceGroup
   for (const { key, property } of heads) {
     lightingApi.programmer.setColour('fixture', key, property.name, own(property), fadeMs, sourceGroup)
+  }
+}
+
+/**
+ * A warm/cold white pair's colour over a pick (venue-visit plan D8): the RGB the chosen mix makes,
+ * which the desk lands on each head as its own nearest mix. A group's *All* is one group entry when
+ * every member's whites match, else each head's own entry carrying the group.
+ */
+export function writePickWhiteMix(
+  write: PickWrite,
+  heads: readonly { key: string; property: WhiteMixPropertyDescriptor }[],
+  [r, g, b]: Rgb,
+  fadeMs?: number,
+): void {
+  const first = heads[0]?.property
+  if (first == null) return
+  const sameWhites = heads.every((h) => h.property.warmKelvin === first.warmKelvin && h.property.coldKelvin === first.coldKelvin)
+  if (write.kind === 'group' && sameWhites) {
+    lightingApi.programmer.setColour('group', write.group, first.name, { r, g, b }, fadeMs)
+    return
+  }
+  const sourceGroup = write.kind === 'group' ? write.group : write.sourceGroup
+  for (const { key, property } of heads) {
+    lightingApi.programmer.setColour('fixture', key, property.name, { r, g, b }, fadeMs, sourceGroup)
   }
 }
 

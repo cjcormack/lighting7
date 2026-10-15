@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.property.Slider
@@ -490,7 +491,12 @@ data class ColourTarget(
     }
 
     override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
-        val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour ?: return false
+        val colour = (fixture as? WithColour)?.rgbColour
+        if (colour is DmxWhiteMixColour) {
+            return parkManager.isParked(colour.warm.universe.universe, colour.warm.channelNo) &&
+                parkManager.isParked(colour.cold.universe.universe, colour.cold.channelNo)
+        }
+        val dmxColour = colour as? DmxColour ?: return false
         val u = dmxColour.universe.universe
         if (!parkManager.isParked(u, dmxColour.redSlider.channelNo)) return false
         if (!parkManager.isParked(u, dmxColour.greenSlider.channelNo)) return false

@@ -259,7 +259,7 @@ object FixtureTypeRegistry {
             val egp = fixture.generateElementGroupPropertyDescriptors()
             if (egp != null) {
                 if ("dimmer" !in caps && egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" }) caps.add("dimmer")
-                if ("colour" !in caps && egp.any { it is GroupColourPropertyDescriptor }) caps.add("colour")
+                if ("colour" !in caps && egp.any { it is GroupColourPropertyDescriptor || it is GroupWhiteMixPropertyDescriptor }) caps.add("colour")
                 if ("position" !in caps && egp.any { it is GroupPositionPropertyDescriptor }) caps.add("position")
             }
         }

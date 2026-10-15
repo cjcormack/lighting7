@@ -2,6 +2,7 @@ import { channelKey } from '../../hooks/usePropertyValues'
 import { aggregateCellValue } from './useRowValues'
 import type { CellResolution, ColumnKey } from './columns'
 import type { ChannelRef } from '../../store/fixtures'
+import { whiteLevelsFor } from '../../lib/whiteMix'
 import type { ProgrammerKeyState } from '../../api/programmerWsApi'
 import type { CellValue } from './useRowValues'
 import type { StagedValue } from './useRowOwnership'
@@ -102,7 +103,8 @@ export function stagedPartFor(
       const staged = lookup(targetKey, res.property.name)
       return staged?.kind === 'level' ? { staged, complete: true } : undefined
     }
-    case 'colour': {
+    case 'colour':
+    case 'white-mix': {
       const staged = lookup(targetKey, res.property.name)
       return staged?.kind === 'colour' ? { staged, complete: true } : undefined
     }
@@ -154,6 +156,13 @@ function stageOntoChannels(
       put(res.property.amberChannel, staged.a)
       put(res.property.uvChannel, staged.uv)
       return
+    case 'white-mix': {
+      if (staged.kind !== 'colour') return
+      const levels = whiteLevelsFor(res.property, [staged.r, staged.g, staged.b])
+      put(res.property.warmChannel, levels.warm)
+      put(res.property.coldChannel, levels.cold)
+      return
+    }
     case 'position':
       if (staged.kind !== 'position') return
       put(res.pan, staged.pan)

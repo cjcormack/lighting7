@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { dmxToDegrees } from '@/lib/axisDegrees'
+import { whiteMixColour, type Rgb } from '@/lib/whiteMix'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useChannelValue, useSettingValue, useSliderValue } from '@/hooks/usePropertyValues'
 import { useColourAppearance } from '@/hooks/useColourAppearance'
@@ -14,6 +15,7 @@ import { usePropertyParkStatus } from '@/hooks/usePropertyParkStatus'
 import type { SliderPropertyDescriptor } from '@/store/fixtures'
 import { EditorLabel } from '../editor/EditorLabel'
 import { ColourEditor } from '../editor/ColourEditor'
+import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
@@ -21,7 +23,8 @@ import { SheetField } from './SheetField'
 import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
 import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
-import { clearSheetRow, writePickColour, writePickVirtualDimmer, writeSheetLevel, writeSheetPosition } from './sheetWrites'
+import { clearSheetRow, writePickColour, writePickVirtualDimmer, writePickWhiteMix, writeSheetLevel, writeSheetPosition } from './sheetWrites'
+import { useChannelValues } from './useChannelValues'
 import type { RowSource } from './rowSource'
 import type { SheetRow } from './sheetRows'
 
@@ -53,6 +56,8 @@ export const PropertyRow = memo(function PropertyRow({
       return <SettingRow row={row} {...head} />
     case 'colour':
       return <ColourRow row={row} {...head} />
+    case 'white-mix':
+      return <WhiteMixRow row={row} {...head} />
     case 'position':
       return <PositionRow row={row} {...head} />
   }
@@ -386,6 +391,47 @@ function ColourRow({ row, headKey, headName, sourceGroup }: { row: Extract<Sheet
               readOnly={readOnly}
               open
             />
+          </fieldset>
+        )}
+      </div>
+    </RowFrame>
+  )
+}
+
+// ─── Warm/cold white ───────────────────────────────────────────────────────
+
+/**
+ * A warm/cold white pair's colour (venue-visit plan D8): the colour its two channels make, read as
+ * a warmth and a level, and set through `WarmthEditor` as the colour that mix makes.
+ */
+function WhiteMixRow({ row, headKey, headName, sourceGroup }: { row: Extract<SheetRow, { kind: 'white-mix' }> } & RowHead) {
+  const { property } = row
+  const { openRowId } = useFixtureSheet()
+  const open = openRowId === openKey(headKey, row)
+  const source = useRowSource(headKey, row.keys)
+  const { isAnyParked } = usePropertyParkStatus(property)
+  const readOnly = useRowReadOnly(isAnyParked)
+  const refs = useMemo(() => [property.warmChannel, property.coldChannel], [property])
+  const [warm = 0, cold = 0] = useChannelValues(refs)
+  const colour = whiteMixColour(property, warm, cold)
+  const update = useCallback(
+    (next: Rgb) => writePickWhiteMix({ kind: 'heads', keys: [headKey], sourceGroup }, [{ key: headKey, property }], next),
+    [headKey, property, sourceGroup],
+  )
+  return (
+    <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex h-7 min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-xs">
+          <span
+            data-testid="colour-swatch"
+            className="size-3.5 shrink-0 rounded border border-white/15"
+            style={{ backgroundColor: `rgb(${colour.join(', ')})` }}
+          />
+          <span className="truncate font-mono">{warmthReading(property, colour)}</span>
+        </div>
+        {open && (
+          <fieldset disabled={readOnly} className="min-w-0" data-testid="warmth-editor">
+            <WarmthEditor mix={property} colour={colour} onColourChange={update} />
           </fieldset>
         )}
       </div>

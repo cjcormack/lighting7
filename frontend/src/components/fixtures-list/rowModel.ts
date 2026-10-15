@@ -446,7 +446,7 @@ export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null
 function headTakesProperty(properties: readonly PropertyDescriptor[], property: TemplateProperty): boolean {
   switch (property.propertyName) {
     case 'rgbColour':
-      return properties.some((p) => p.type === 'colour')
+      return properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
     // The bundled emitters are omitted from the flat descriptor list, so read the colour
     // descriptor's channels (`targetEmitters`'s rule).
     case 'white':
@@ -633,7 +633,8 @@ export function expandSelectionToTargets(
 }
 
 /** Does this commit make sense against this resolution? A colour commit can't
- *  drive a colour *wheel* (option levels, not RGB), and vice versa. */
+ *  drive a colour *wheel* (option levels, not RGB), and vice versa; it can drive a white mix,
+ *  which the desk lands as the nearest mix. */
 export function commitMatchesResolution(
   commit: CellCommit,
   res: CellResolution,
@@ -643,7 +644,7 @@ export function commitMatchesResolution(
     case 'slider':
       return res.kind === 'slider'
     case 'colour':
-      return res.kind === 'colour'
+      return res.kind === 'colour' || res.kind === 'white-mix'
     case 'position':
       return res.kind === 'position'
     case 'setting':

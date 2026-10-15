@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
@@ -152,6 +153,30 @@ it to a `FU-` item in `followups.md`.
 20 minutes, plus the restrike wait.
 
 ---
+
+## `FU-MANUAL-S9-WHITES`
+
+**What it proves**: *the blinder is a colour head* — venue-visit plan S9 (D8): each cell takes any
+colour as the nearest mix of its warm and cold whites, its level folded in, and reads back as the
+colour the two whites make; the whites' temperatures are estimates, 3000 K and 6500 K, because no
+manual for the unit gives them.
+
+**Why it is here**: the tests pin the model against itself and a mock controller. Nothing has put the
+mix in front of the real LEDs, so neither the estimated temperatures nor the claim that the mix looks
+like the colour asked for has been seen.
+
+**Test**, on the hall's rig with the blinder up:
+
+1. **The whites.** Put cell 1 on warm white alone and cell 2 on cold white alone, at full, beside a
+   tungsten profile at full and a daylight source if there is one. If the warm reads clearly warmer or
+   cooler than about 3000 K, or the cold than about 6500 K, note the values that would match and set
+   them on `China2CellLedBlinderFixture.WHITE_MIX`.
+2. **A palette.** Press a red palette on the whole blinder: both cells go to warm white at full. A
+   white palette: both whites on, the cold one at full. A blue one: cold alone.
+3. **The cell.** In the programmer, open a cell's Colour: it offers Warmth and Level, not an RGB
+   picker. Drag Warmth from end to end; the cell moves warm to cold and the Stage view follows.
+4. **The sliders.** Set a cell's warm and cold sliders by hand: its Colour cell shows that mix's
+   temperature, and the grand master still dims the blinder through its master dimmer alone.
 
 ## `FU-MANUAL-VENUE-VISIT-S5`
 

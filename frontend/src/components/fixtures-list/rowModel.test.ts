@@ -34,6 +34,7 @@ import {
   positionProp,
   settingProp,
   sliderProp,
+  whiteMixProp,
 } from '@/test/fixtureFactories'
 
 const dimmerOnly = () => [sliderProp('dimmer', 'dimmer', chan(1))]
@@ -446,6 +447,10 @@ describe('batch write planning', () => {
     const wheelRes = resolveCell(wheelFixture.properties, 'colour')
     expect(commitMatchesResolution({ kind: 'colour', r: 0, g: 0, b: 0 }, wheelRes)).toBe(false)
     expect(commitMatchesResolution({ kind: 'setting', level: 0 }, wheelRes)).toBe(true)
+    // A warm/cold white pair takes a colour, which the desk lands as its nearest mix.
+    const mixRes = resolveCell([whiteMixProp(chan(5), chan(6))], 'colour')
+    expect(commitMatchesResolution({ kind: 'colour', r: 255, g: 0, b: 0 }, mixRes)).toBe(true)
+    expect(commitMatchesResolution({ kind: 'setting', level: 0 }, mixRes)).toBe(false)
   })
 
   it('clamps each planned write to the target fixture\'s own ranges', () => {

@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.colourOf
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
@@ -48,6 +49,9 @@ import kotlin.math.sqrt
 object TemplateResolver {
     private val logger = LoggerFactory.getLogger(TemplateResolver::class.java)
 
+    /** Below this ΔE a white mix reproduces the colour asked for — a byte's rounding, not a snap. */
+    private const val WHITE_MIX_EXACT_DELTA_E = 1.0
+
     /**
      * What happened to the intent on the way to this head. Reported to the operator, not just
      * logged: "it works" and "it works, roughly" are different answers and the editor shows both.
@@ -60,8 +64,10 @@ object TemplateResolver {
         data class Clamped(val to: String) : Note
 
         /**
-         * A continuous intent landed on a discrete wheel. [deltaE] is CIE76 in Lab against the
-         * slot's declared preview — see [nearestColourSlot] for what that number is worth.
+         * A continuous intent landed on a discrete wheel, or on the nearest mix of a warm/cold
+         * white pair ([slot] then names the mix's temperature). [deltaE] is CIE76 in Lab against
+         * the slot's declared preview or the mix's colour — see [nearestColourSlot] for what that
+         * number is worth.
          */
         data class Snapped(val slot: String, val deltaE: Double) : Note
 
@@ -304,6 +310,20 @@ object TemplateResolver {
             val hasAmber = (fixture as? WithAmber)?.amber is DmxSlider
             val (colour, note) = mixColour(target, intent.policy, hasWhite, hasAmber)
             return Resolution(CueAssignmentResolver.PropertyValue.Colour(colour), mixed.name, note)
+        }
+
+        // Then a warm/cold white pair: the nearest mix, and the colour it makes.
+        val whiteMix = properties.firstOrNull { it.value is DmxWhiteMixColour }
+        if (whiteMix != null) {
+            val mix = (whiteMix.value as DmxWhiteMixColour).mix
+            val levels = mix.levelsFor(target)
+            val made = mix.colourOf(levels.warm, levels.cold)
+            val deltaE = labDistance(toLab(target), toLab(made))
+            val note = when (val kelvin = mix.kelvinOf(levels)) {
+                null -> Note.Exact
+                else -> if (deltaE < WHITE_MIX_EXACT_DELTA_E) Note.Exact else Note.Snapped("$kelvin K", deltaE)
+            }
+            return Resolution(CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(made)), whiteMix.name, note)
         }
 
         // Then a colour wheel: a discrete set of slots, each with a declared preview.
