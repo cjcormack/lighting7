@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open lands the Programmer on its phone arm, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
@@ -126,6 +127,27 @@ If a mover's centre of travel is not DMX 128, or a model's travel is not the sam
 value, promote it to a `FU-` item in `followups.md`.
 
 15 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-2`
+
+**What it proves**: *a cue's children keep their uuids* — venue-visit R2.2, show-cue-editing plan
+session 2 (P3, §3.4): every cue write reconciles its layers, effects, rows and hooks by natural key
+and keeps the uuid of each one it keeps, so a one-value edit is one changed record in sync.
+
+**Why it is here**: the tests export a seeded project before and after a `PATCH` and compare the
+two trees. Nothing in review ran an edit through a real show's working tree and its sync status.
+
+**Test**, on Sleeping Beauty, on a desk with push on (or a pull-only desk reading the status alone):
+
+1. **Clean.** *Sync now* until the Sync tab says there is nothing to push.
+2. **One value.** Change one value of Act 1 Q1 through the API — `PATCH
+   /api/rest/projects/{id}/cues/{cueId}` with its `propertyAssignments`, one value changed.
+3. **One record.** The sync status lists **one** changed record, the
+   `cuePropertyAssignments/{uuid}.json` of that row, and the working tree's diff touches that one file.
+4. **The inline editor too.** Change Q1's fade from its card or the cue table: one changed record,
+   `cues/{uuid}.json`, and no child file.
 
 ---
 

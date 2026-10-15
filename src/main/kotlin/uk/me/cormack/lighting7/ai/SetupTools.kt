@@ -52,7 +52,7 @@ import uk.me.cormack.lighting7.routes.listedProjects
 import uk.me.cormack.lighting7.routes.PlacementInput
 import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.clearStaleInheritedZooms
-import uk.me.cormack.lighting7.routes.createCueChildren
+import uk.me.cormack.lighting7.routes.writeCueChildren
 import uk.me.cormack.lighting7.routes.deleteFixtureGroupRows
 import uk.me.cormack.lighting7.routes.fixedLengthRefusal
 import uk.me.cormack.lighting7.routes.lamplessRefusal
@@ -1690,7 +1690,7 @@ class SetupTools(
                     autoAdvance = spec.follow != null
                     autoAdvanceDelay = spec.follow
                 }
-                createCueChildren(cue, emptyList(), spec.values?.asCueAssignments().orEmpty(), layers = spec.layers)
+                writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
                 replaceCueScenery(cue, spec.scenery)
                 replaceCueEvents(cue, spec.events)
                 cue to spec

@@ -159,6 +159,14 @@ data class CueAdHocEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * The stored effect's uuid, on read only, so a client can name one effect across writes
+     * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored on
+     * write, like [CueLayerDto.id] — an effect is matched by its target, property and type, and a
+     * body that echoed a uuid back must not be trusted as identity. Null where no stored effect
+     * stands behind the DTO (a capture, an AI tool's input).
+     */
+    val uuid: String? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
@@ -577,4 +585,5 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     sortOrder = sortOrder,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    uuid = uuid.toString(),
 )

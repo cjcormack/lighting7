@@ -1878,18 +1878,16 @@ Safari bundle name.
 
 **Child rows keep their uuid across an edit** · Ready · Cloud sync; logged 2026-10-14
 
-A Look's rows and effects are reconciled by natural key on every write (`writeLookChildren` in
-`routes/projectLooks.kt`, `pairByKey`), so a one-value edit is one changed row in the sync diff.
-The same delete-every-child-then-recreate pattern still mints a fresh uuid for every child on:
-
-- a cue's layers, ad-hoc effects, property assignments and triggers (the cue `PUT` in
-  `routes/projectCues.kt`, `deleteCueChildren` in `routes/projectCuesHelpers.kt`);
-- a template's rows (the template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
+A Look's rows and effects (`writeLookChildren` in `routes/projectLooks.kt`) and a cue's layers,
+ad-hoc effects, property assignments and script hooks (`writeCueChildren` in
+`routes/projectCuesHelpers.kt`, venue-visit R2.2) are reconciled by natural key on every write,
+`pairByKey`, so a one-value edit is one changed record in the sync diff. The same
+delete-every-child-then-recreate pattern still mints a fresh uuid for every row of a template (the
+template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
 
 Not a conflict source — the three-way diff hashes whole records — but the git diff, the conflict
-view and the history read every such edit as "all children replaced". Give each the Look's
-treatment with its own natural key; a cue layer has none beyond its position, so it may want
-pairing by `(source, sortOrder)`.
+view and the history read every such edit as "all rows replaced". Give it the Look's treatment
+with its own natural key (`docs/cues-engineering.md` §"Key Design Decisions" has the cue's).
 
 ### `FU-SYNC-TOMBSTONE-GC`
 

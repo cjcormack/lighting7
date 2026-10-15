@@ -1154,7 +1154,7 @@ class AiTools(private val state: State) {
                 this.cueStack = stack
                 this.sortOrder = stack.cues.count().toInt()
             }
-            createCueChildren(newCue, adHocEffects, assignments, layers = layers)
+            writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             newCue
@@ -1200,7 +1200,7 @@ class AiTools(private val state: State) {
                 // call that lists layers bottom-to-top composes the way it reads.
                 sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
                 propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
-                // Unrecognised blends are rejected by `createCueChildren` rather than here, so this
+                // Unrecognised blends are rejected by `writeCueChildren` rather than here, so this
                 // surface and the cue routes cannot disagree about what a valid blend is.
                 blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
                 amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
@@ -1241,7 +1241,7 @@ class AiTools(private val state: State) {
     }
 
     /**
-     * A layer naming a Look or template [project] does not have. `createCueChildren` drops such a
+     * A layer naming a Look or template [project] does not have. `writeCueChildren` drops such a
      * layer, by design for a record deleted under a stored cue; from a tool it would be a typo
      * answered with success, so it is refused before anything is written.
      */
@@ -2046,7 +2046,7 @@ class AiTools(private val state: State) {
      * One ad-hoc cue effect out of a tool call.
      *
      * No enum check here, unlike [parseLookEffect]: everything this returns goes through
-     * `createCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
+     * `writeCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
      * turns that message into a failed result the same way.
      */
     private fun parseAdHocEffectFromJson(obj: JsonObject, at: String): CueAdHocEffectDto {
