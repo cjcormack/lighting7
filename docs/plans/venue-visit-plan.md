@@ -9,6 +9,10 @@
 >   design record beside it if it needs boards, and lands nothing else.
 >
 > Where a later R plan disagrees with this one, the R plan wins on everything inside its scope.
+>
+> A one-page copy for human readers is
+> [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
+> <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
 
 ## 1. Context
 
