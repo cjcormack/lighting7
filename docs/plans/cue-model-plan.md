@@ -101,7 +101,7 @@ From the venue-visit plan, and agreed with Chris on 2026-10-14 (§10):
 | D10 | **Loose holds compose above every stack**, newest press on top. Stacks keep their order among themselves. |
 | D11 | **A cue pad has two lit looks.** Solid: held loose. Outline: live only through a stack. A press always toggles the loose hold. |
 | D12 | **A marker is a labelled entry, not a cue.** It is never shared, pressed, listed or deleted as a cue. |
-| D13 | **The all-cues table is its own nav item**, a library view beside Looks and Templates. |
+| D13 | **The all-cues table is its own nav item**, a library view beside Looks and Palettes. |
 | D14 | **Numbering is per entry, and venue-visit D11 still holds.** An explicit renumber never relabels its auto neighbours, and *Fix Order* moves a cue that reads out of order. |
 | D15 | **A cue's events fire when it comes on**: on its first hold. A GO into a cue another hold already keeps live fires nothing, as GO BACK fires nothing today. |
 | D16 | **Removing the live entry leaves the stage alone.** The stack keeps the cue on stage until its next GO, which fires the entry that followed the removed one. |
@@ -113,6 +113,8 @@ The plan adds its own:
 - **P1 — One PR per session**, in §5's order, per CLAUDE.md §"Git workflow". Each session ends
   with `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and a
   done-marker in its heading citing its change commit(s), never the merge commit.
+  The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
+  before each PR.
 - **P2 — The entry is the playback key.** A stack's live cue, its standby, a GO TO, a preview, an
   anchor and an include's context name an entry id. A cue id alone means the cue's content, or a
   loose hold.
@@ -121,7 +123,7 @@ The plan adds its own:
   and releasing go through the registry, which decides when a cue fades in, fades out, and at what
   priority it composes.
 - **P4 — One entry per cue until sync can say more.** Sessions 1 and 2 keep every cue in exactly
-  one stack, so a v27 archive can still describe the desk. Session 3 lands `formatVersion` 28
+  one stack, so today's archive format can still describe the desk. Session 3 bumps `formatVersion`
   before session 4 lets a cue be shared or loose (the venue plan's P6, applied here).
 - **P5 — Auto numbers are derived, never synced.** The archive carries an entry's number only when
   it is explicit; every reader recomputes the auto ones from position. A drag then changes one
@@ -270,8 +272,8 @@ priority(cue) = the highest of its holds:
 
 ### 3.7 The all-cues table (D13)
 
-A library view, `/projects/:id/cues`, registered in `navigation.ts` beside Looks (`:145`) and
-Templates (`:161`), and in `lib/windowViews.ts` so the Screens sheet can open it. It reclaims the
+A library view, `/projects/:id/cues`, registered in `navigation.ts` beside Looks and Palettes
+(the navigation plan's Library section), and in `lib/windowViews.ts` so the Screens sheet can open it. It reclaims the
 path the `/cues` redirects hold today (`App.tsx:222-242`).
 
 - **Columns:** name; *In*, each entry as `Stack · Q14` (a chip per entry, *Loose* when none); fade;
@@ -315,7 +317,8 @@ are on the same venue; otherwise every record falls back to key and name.
 
 ### 3.9 Sync (P4, P5, P6)
 
-**`formatVersion` 28**, from session 3:
+**A `formatVersion` bump**, from session 3. It takes the next number free when it lands
+(venue-visit P5; 28 when this plan was written). Below, *vN* is that version:
 
 - `cues/{uuid}.json` drops `cueStackUuid`, `sortOrder`, `cueNumber`, `cueNumberAuto`,
   `autoAdvance`, `autoAdvanceDelayMs` and `cueType`.
@@ -325,14 +328,14 @@ are on the same venue; otherwise every record falls back to key and name.
   adding to one stack add two records, a drag between two entries rewrites one file, and a
   renumber rewrites only the entries whose explicit number changed.
 - `promptBookAnchors/` carries `entryUuid` instead of `cueUuid`.
-- **A v5–v27 archive still imports.** Each cue becomes one entry in its `cueStackUuid` stack, with
+- **A v5 to vN−1 archive still imports.** Each cue becomes one entry in its `cueStackUuid` stack, with
   `ordinal = sortOrder`, its number (explicit only when `cueNumberAuto` is false) and its follow. A
   MARKER cue becomes a marker entry labelled with its name. A cue with no stack is loose, so the
   "Unsorted" fallback goes. An anchor moves to its cue's one entry.
 - **After a merge, two explicit numbers can clash** in one stack (two desks each typed 14A). The
   importer keeps the number on the entry with the lower uuid and makes the other auto, and the sync
   result names it. A unique-index failure must never abort a pull.
-- **A v27 desk refuses v28**, through `SUPPORTED_FORMAT_VERSION`, as every bump since v6 has.
+- **An older desk refuses vN**, through `SUPPORTED_FORMAT_VERSION`, as every bump since v6 has.
   `minReader` stays 5.
 - `ExportUuidRemapper`, `ProjectCloner` and `KeptUuidCopy` need no cue code: the entries' links
   are `…Uuid` fields.
@@ -403,7 +406,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   read and write of order, number, follow and type moved onto entries. The create, add, reorder,
   sort and delete handlers keep their behaviour, with **one entry per cue** (P4): `add-cue` still
   moves a cue.
-- **The exporter still writes v27** from the one entry each cue has; a marker entry is written as a
+- **The exporter still writes today's version** from the one entry each cue has; a marker entry is written as a
   MARKER cue whose uuid is the entry's. There is no sync change.
 - **Frontend:** `CueStackCueEntry` gains `entryId`, and reorder, standby and go-to send entry ids.
   Markers render from entries.
@@ -438,15 +441,15 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   §"Active Cue Tracking", `lighting-composition-model.md` (holds and the loose band),
   `websocket-engineering.md` (`cueHolds.state`).
 
-### Session 3 — sync v28 (backend)
+### Session 3 — sync vN (backend)
 
 - §3.9: `cueStackEntries/`, ordinals (P6), auto numbers not exported (P5), anchors by entry, the
-  v27 reader, the duplicate-number rule on import.
-- **Tests:** `ProjectRoundTripTest` over the extended fixture; a v27 archive (with a marker, an
+  pre-vN reader, the duplicate-number rule on import.
+- **Tests:** `ProjectRoundTripTest` over the extended fixture; a pre-vN archive (with a marker, an
   anchor, a stack-less cue) imports to the right entries; two desks inserting into one gap both
   keep their entries in a stable order; a number clash after a merge resolves and is reported; a
   drag changes one file.
-- **Docs:** `sync-engineering.md` §"Version 28" and §"Ordinal contract"; `followups.md` narrows
+- **Docs:** `sync-engineering.md` §"Version N" and §"Ordinal contract"; `followups.md` narrows
   `FU-SYNC-ORDINAL-DOUBLE` to the other tables and corrects `FU-SYNC-FORMAT-MIGRATIONS`' stale
   version numbers.
 
@@ -494,7 +497,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 - **One startup migration** in session 1 (D5): additive for `cue_stack_entries`, a rebuild for
   `cues` and `prompt_book_anchors`, with a backup copy first. On a fresh database it does nothing.
-- **`formatVersion` 28** in session 3 (§3.9). Older archives import into the new model.
+- **A `formatVersion` bump** in session 3 (§3.9). Older archives import into the new model.
 - **The Windows MSI** runs the same migration on upgrade. It is idempotent and needs no network.
 
 ## 7. Explicitly out of scope
@@ -524,7 +527,7 @@ Beyond the unit suites, at the desk:
 - **Session 2.** Put one cue in two stacks (through the API), GO both, step one on: the state
   stays. A busk cue pad over a running stack wins and shows solid; the same cue live only in the
   stack shows outline.
-- **Session 3.** Sync a show from v27 to v28 on one desk and pull it on a second; insert a cue into
+- **Session 3.** Sync a show across session 3's bump on one desk and pull it on a second; insert a cue into
   one gap on both, sync both, and check both keep it in the same order.
 - **Session 4.** Share a cue between two stacks, edit it once, check both. Delete a stack and find
   its cues loose. Delete a cue in use and read the list.

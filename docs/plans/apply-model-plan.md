@@ -101,6 +101,8 @@ The plan adds its own:
 - **P1 — One PR per session**, in §8's order, per CLAUDE.md §"Git workflow". Each session ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and a
   done-marker in its heading citing its change commit(s), never the merge commit.
+  The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
+  before each PR.
 - **P2 — The desk owns every rule.** Coverage, replacement, widening, the mask test and the split
   are server-side, in one place each. A door sends what was pressed, the selection pair and its
   scope. The client keeps no copy of a rule (the composition doc's §"Applied state is resolved by the
