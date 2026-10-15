@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>The palette popup · one per family</title>
+  <style>
+    body { margin:0; }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --page:oklch(0.17 0.005 286); --amber:oklch(0.82 0.16 80); --green:#4ade80; --blue:#60a5fa;
+      --own:#7aa2ff; --look:#5cd1c1; --fx:#b98cff; --stale:#ff8f78;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing:antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; font-size:13px; line-height:1.35;
+      width:1440px; display:flex; flex-direction:column; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+    .dim { color:var(--mfg); } .sp { flex:1; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .row { display:flex; align-items:center; gap:8px; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border:1px solid var(--bd); border-radius:7px; background:var(--card); font-size:12.5px; white-space:nowrap; color:var(--fg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11.5px; border-radius:6px; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:#fff; }
+    .btn.blind { background:oklch(0.3 0.06 80); border-color:oklch(0.6 0.12 80 / 0.7); color:var(--amber); }
+    .btn.red { color:#ff7b7b; } .btn.ghost { background:transparent; border-color:transparent; }
+    .btn.ask { opacity:0.5; } .btn.stale { color:var(--stale); border-color:oklch(0.65 0.14 30 / 0.6); }
+    .btn .chev { border-left:1px solid rgba(255,255,255,0.28); padding-left:6px; margin-left:3px; }
+    .sep { width:1px; height:18px; background:var(--bd); }
+    .chip { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10.5px; color:var(--mfg); white-space:nowrap; }
+    .chip.shared { color:var(--own); border-color:oklch(0.6 0.12 260 / 0.55); }
+    .chip.stale { color:var(--stale); border-color:oklch(0.65 0.14 30 / 0.6); background:oklch(0.3 0.06 30 / 0.3); }
+    .chip.amber { color:var(--amber); border-color:oklch(0.6 0.12 80 / 0.6); background:oklch(0.3 0.06 80 / 0.3); }
+    /* chrome */
+    .top { height:48px; background:#2563eb; display:flex; align-items:center; padding:0 16px; gap:10px; font-weight:600; font-size:16px; }
+    .shell { display:flex; flex:1; min-height:0; }
+    .rail { width:64px; background:var(--bg); border-right:1px solid var(--bd); display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:14px; }
+    .rail i { width:22px; height:22px; border-radius:6px; background:var(--muted); display:block; }
+    .rail i.on { background:oklch(0.35 0.08 260); }
+    .main { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--page); }
+    .showhead { height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .showhead.warn { background:oklch(0.3 0.06 80 / 0.35); border-bottom-color:oklch(0.6 0.12 80 / 0.6); }
+    .crumb { font-size:13px; color:var(--mfg); } .crumb b { color:var(--fg); font-weight:600; }
+    .seg { display:inline-flex; border:1px solid var(--bd); border-radius:8px; padding:2px; gap:2px; background:var(--bg); }
+    .seg span { height:24px; padding:0 9px; display:inline-flex; align-items:center; border-radius:6px; font-size:12px; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .showbar { height:56px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .tile { height:44px; border:1px solid var(--bd); border-radius:8px; background:var(--card); padding:4px 10px; display:flex; flex-direction:column; justify-content:center; }
+    .go { width:120px; height:44px; border-radius:8px; background:var(--pri); display:grid; place-items:center; font-weight:800; letter-spacing:0.1em; }
+    .tabsstrip { height:40px; display:flex; align-items:flex-end; gap:2px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .tabsstrip span { padding:9px 14px; font-size:12.5px; color:var(--mfg); border-bottom:2px solid transparent; }
+    .tabsstrip span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .stackhead { height:48px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .stackhead.warn { background:oklch(0.3 0.06 80 / 0.25); }
+    /* cards */
+    .list { padding:6px 8px; display:flex; flex-direction:column; gap:6px; flex:1; min-height:0; overflow:hidden; }
+    .card { border:1px solid var(--bd); border-radius:10px; background:var(--muted); overflow:hidden; }
+    .card.open { border-color:oklch(0.55 0.15 260 / 0.6); }
+    .card.live { border-color:rgba(74,222,128,0.65); box-shadow:0 0 0 1px rgba(74,222,128,0.25); }
+    .card.next { border-color:rgba(96,165,250,0.6); }
+    .cuehead { display:grid; grid-template-columns:22px 52px 1fr auto 60px 16px; align-items:center; gap:12px; padding:9px 12px; }
+    .pip { width:9px; height:9px; border-radius:50%; background:#52525b; justify-self:center; }
+    .pip.live { background:var(--green); box-shadow:0 0 0 3px rgba(74,222,128,0.2); }
+    .pip.next { background:var(--blue); }
+    .num { font-weight:700; font-family:ui-monospace,Menlo,monospace; }
+    .body { background:var(--bg); border-top:1px solid var(--bd); }
+    .strip { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--bd); background:oklch(0.19 0.005 286); flex-wrap:nowrap; }
+    .etabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .etabs span { padding:8px 11px; font-size:12px; color:var(--mfg); border-bottom:2px solid transparent; }
+    .etabs span b { font-weight:500; font-size:10.5px; margin-left:4px; }
+    .etabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .selbar { height:36px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); font-size:12px; }
+    .stale-band { display:flex; align-items:center; gap:10px; padding:7px 12px; background:oklch(0.3 0.06 30 / 0.3); border-top:1px solid oklch(0.65 0.14 30 / 0.45); color:var(--stale); font-size:12.5px; }
+    /* grid */
+    table.g { width:100%; border-collapse:collapse; font-size:12px; }
+    table.g th { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--mfg); text-align:left; padding:7px 10px; border-bottom:1px solid var(--bd); }
+    table.g td { height:34px; padding:0 10px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); white-space:nowrap; vertical-align:middle; }
+    table.g td.n { padding-left:12px; }
+    table.g td.sub { padding-left:30px; color:var(--mfg); }
+    .c { display:inline-flex; align-items:center; gap:6px; padding:3px 7px; border-radius:5px; position:relative; }
+    .c.own { box-shadow:inset 3px 0 0 var(--own); background:oklch(0.62 0.16 260 / 0.1); }
+    .c.look { box-shadow:inset 3px 0 0 var(--look); }
+    .c.mq { outline:2px solid var(--pri); outline-offset:1px; }
+    .c.open { outline:2px solid var(--pri); outline-offset:1px; background:oklch(0.62 0.16 260 / 0.22); }
+    .src { font-size:9.5px; } .src.own { color:var(--own); } .src.look { color:var(--look); }
+    .bar { display:inline-block; width:64px; height:5px; border-radius:3px; background:#2f2f37; position:relative; overflow:hidden; }
+    .bar i { position:absolute; inset:0 auto 0 0; background:var(--pri); }
+    .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
+    /* popovers, menus, sheets */
+    .pop { position:absolute; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 16px 36px rgba(0,0,0,0.55); z-index:5; }
+    .pop .ph { padding:9px 12px; border-bottom:1px solid var(--bd); display:flex; gap:8px; align-items:center; font-size:11.5px; }
+    .pop .pb { padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+    .field { height:28px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); display:flex; align-items:center; padding:0 8px; gap:6px; font-family:ui-monospace,Menlo,monospace; }
+    .field.focus { border-color:var(--pri); box-shadow:0 0 0 2px oklch(0.62 0.2 260 / 0.3); }
+    .slider { height:6px; border-radius:3px; background:#2f2f37; position:relative; }
+    .slider i { position:absolute; inset:0 auto 0 0; background:var(--pri); border-radius:3px; }
+    .slider b { position:absolute; top:-5px; width:16px; height:16px; border-radius:50%; background:#fff; }
+    .readout { font-size:10.5px; color:var(--mfg); }
+    .menu { background:var(--card); border:1px solid var(--bd); border-radius:9px; padding:4px; box-shadow:0 14px 32px rgba(0,0,0,0.55); display:flex; flex-direction:column; min-width:220px; }
+    .menu .mi { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 9px; border-radius:6px; font-size:12px; }
+    .menu .mi.on { background:var(--muted); }
+    .menu .mi small { margin-left:auto; color:var(--mfg); font-size:10.5px; padding-left:12px; }
+    .menu .ms { height:1px; background:var(--bd); margin:4px 0; }
+    .menu .mi.red { color:#ff7b7b; }
+    .layer { display:grid; grid-template-columns:16px 24px minmax(0,1fr) 90px 34px 96px 18px; gap:12px; align-items:center; padding:7px 12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); }
+    .tog { width:26px; height:14px; border-radius:7px; background:var(--pri); position:relative; }
+    .tog::after { content:""; position:absolute; right:2px; top:2px; width:10px; height:10px; border-radius:50%; background:#fff; }
+    .tog.off { background:#3f3f46; } .tog.off::after { left:2px; right:auto; }
+    .fxrow { display:grid; grid-template-columns:20px minmax(0,1fr) 140px 130px 150px 24px; gap:12px; align-items:center; padding:8px 12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); }
+    .sheetrow { display:grid; grid-template-columns:14px 18px 44px minmax(0,1fr) 70px 80px 80px 100px 70px 50px 200px; gap:10px; align-items:center; padding:0 12px; height:36px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); font-size:12.5px; }
+    .sheetrow.head { height:30px; font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--mfg); }
+    .sheetrow.sel { background:oklch(0.62 0.16 260 / 0.14); box-shadow:inset 3px 0 0 var(--pri); }
+    .sheetrow.sel2 { background:oklch(0.62 0.16 260 / 0.14); }
+    .sheetrow.div { justify-content:center; display:flex; color:var(--mfg); font-size:11px; height:30px; }
+    .handle { height:12px; display:grid; place-items:center; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); background:oklch(0.19 0.005 286); cursor:row-resize; }
+    .handle i { width:40px; height:3px; border-radius:2px; background:#5a5a63; }
+    .note { position:absolute; width:20px; height:20px; border-radius:50%; background:oklch(0.82 0.16 80); color:#111; font-size:11px; font-weight:800; display:grid; place-items:center; z-index:9; box-shadow:0 0 0 3px rgba(0,0,0,0.5); }
+    .notes { border-top:1px solid var(--bd); background:var(--bg); padding:14px 20px 18px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 28px; font-size:12px; color:var(--mfg); }
+    .notes div b { color:var(--fg); margin-right:4px; }
+    .notes .t { grid-column:1 / -1; font-size:14px; color:var(--fg); font-weight:600; }
+    .panel { border:1px solid var(--bd); border-radius:10px; background:var(--page); overflow:hidden; display:flex; flex-direction:column; }
+    .panel .pt { padding:8px 12px; border-bottom:1px solid var(--bd); }
+    /* ── apply-model additions ── */
+    .pal { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px 0 7px; border-radius:7px; border:1px solid var(--bd); background:oklch(0.19 0.005 286); font-size:12px; white-space:nowrap; }
+    .pal .d { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+    .pal.on { border-color:#5cd1c1; box-shadow:inset 0 0 0 1px #5cd1c1; }
+    .pal.some { border-color:#5cd1c1; border-style:dashed; }
+    .pal.fx { color:var(--fx); border-color:oklch(0.6 0.12 300 / 0.5); }
+    .pal.fx.on { box-shadow:inset 0 0 0 1px var(--fx); border-color:var(--fx); }
+    .pal.more { color:var(--mfg); }
+    .pal.out { opacity:0.42; }
+    .pp { background:var(--card); border:1px solid var(--bd); border-radius:12px; box-shadow:0 16px 36px rgba(0,0,0,0.55); display:flex; flex-direction:column; overflow:hidden; }
+    .pp .ph { padding:9px 12px; border-bottom:1px solid var(--bd); display:flex; gap:8px; align-items:center; }
+    .pp .ph b { font-size:13px; }
+    .pp .bd { padding:9px 12px; display:flex; flex-direction:column; gap:7px; border-bottom:1px solid var(--bd); }
+    .pp .ft { padding:8px 12px; display:flex; gap:6px; background:oklch(0.19 0.005 286); flex-wrap:wrap; }
+    .pp .into { padding:6px 12px; background:oklch(0.3 0.05 185 / 0.35); color:#5cd1c1; font-size:11.5px; border-bottom:1px solid oklch(0.6 0.08 185 / 0.4); }
+    .wrapr { display:flex; gap:6px; flex-wrap:wrap; }
+    .chip.mask { color:var(--amber); border-color:oklch(0.6 0.12 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .chip.sel { color:var(--own); border-color:oklch(0.6 0.12 260 / 0.55); }
+    .picker { height:96px; border-radius:6px; background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, #ff8a1f); }
+    .hue { height:10px; border-radius:5px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .xy { height:120px; border-radius:6px; background-color:var(--bg); background-image:linear-gradient(var(--bd) 1px, transparent 1px), linear-gradient(90deg, var(--bd) 1px, transparent 1px); background-size:24px 24px; position:relative; border:1px solid var(--bd); }
+    .xy i { position:absolute; width:11px; height:11px; border-radius:50%; background:var(--pri); box-shadow:0 0 0 3px rgba(59,130,246,0.3); }
+    .canvas { padding:24px; display:flex; flex-direction:column; gap:22px; background:var(--page); flex:1; }
+    .cap { font-size:11px; color:var(--mfg); max-width:340px; }
+    .stack { display:flex; flex-direction:column; gap:8px; }
+    .lrow { display:grid; grid-template-columns:16px 26px minmax(0,1fr) auto 18px; gap:10px; align-items:center; padding:7px 10px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); font-size:12px; }
+    .lrow .who { font-size:10.5px; color:var(--mfg); }
+    .lrow.narrowed { background:oklch(0.3 0.05 185 / 0.18); }
+    .sidesheet { width:460px; border-left:1px solid var(--bd); background:var(--card); display:flex; flex-direction:column; }
+    .stabs { display:flex; gap:2px; padding:0 10px; border-bottom:1px solid var(--bd); flex-wrap:wrap; }
+    .stabs span { padding:8px 7px; font-size:12px; color:var(--mfg); border-bottom:2px solid transparent; }
+    .stabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .stabs span.new { color:#5cd1c1; }
+    .pad { height:64px; border-radius:9px; border:1px solid var(--bd); background:var(--muted); display:flex; flex-direction:column; justify-content:flex-end; padding:7px 9px; font-size:11.5px; }
+    .pad.on { box-shadow:inset 0 0 0 2px #5cd1c1; }
+    .tile2 { height:40px; border-radius:8px; border:1px solid var(--bd); background:var(--muted); display:flex; align-items:center; padding:0 10px; font-size:11.5px; }
+    .tile2.sel { border-color:var(--pri); box-shadow:inset 0 0 0 1px var(--pri); }
+
+  </style>
+</head>
+<body>
+<div class="app" style="min-height:1250px">
+
+<div class="top">Chris' DMX Controller v7<span class="sp"></span><span class="chip" style="background:#0f3a1f;border-color:#2f7a45;color:#86efac;height:28px;font-size:12px">Connected</span></div>
+<div class="shell"><div class="rail"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+<div class="main" style="position:relative">
+<div class="canvas">
+  <div class="row" style="gap:22px; align-items:flex-start">
+    <div class="stack">
+      <span class="lbl">Colour · a programmer cell, desk</span>
+      <div class="pp" style="width:340px">
+  <div class="ph"><b>Colour</b><span class="chip sel">Hex 1–4 · 4 heads</span><span class="sp"></span><span class="chip mask">Colour</span></div>
+  
+  <div class="bd"><div class="row"><span class="lbl">Palettes</span><span class="sp"></span><span class="readout">recent first · fit these heads</span></div><div class="wrapr"><span class="pal on"><span class="d" style="background:#ff9a2e"></span>Amber</span><span class="pal "><span class="d" style="background:#2f6bff"></span>Deep blue</span><span class="pal some"><span class="d" style="background:#ff3b3b"></span>Red</span><span class="pal "><span class="d" style="background:#fff3d6"></span>Warm white</span><span class="pal "><span class="d" style="background:#b04cff"></span>Lavender</span><span class="pal "><span class="d" style="background:#9fc4ff"></span>Steel</span><span class="pal more">All 23 …</span></div></div>
+  <div class="bd"><div class="picker"></div><div class="hue"></div><div class="row"><span class="field">#FF9A2E</span><span class="field">W 40</span><span class="sp"></span><span class="readout">a drag is a Local value</span></div></div>
+  <div class="bd"><div class="row"><span class="lbl">Effects</span><span class="sp"></span><span class="readout">on these heads · palettes · library</span></div><div class="wrapr"><span class="pal fx ">∿ Amber breathe</span><span class="pal fx on">∿ Rainbow Cycle</span><span class="pal fx ">∿ Colour Fade</span><span class="pal more">+ Effect …</span></div></div>
+  <div class="ft"><span class="btn sm ">Save as palette…</span><span class="btn sm ">Spread…</span><span class="btn sm ">Pick</span></div>
+</div>
+    </div>
+    <div class="stack" style="margin-top:150px">
+      <span class="lbl">Hold (or right-click) on a chip</span>
+      <div class="menu"><div class="mi"><b>Amber</b><small>palette · Colour</small></div><div class="ms"></div><div class="mi on">Take off these heads <small>it is on</small></div><div class="mi">Apply as values <small>⌥click</small></div><div class="ms"></div><div class="mi">Pick up</div><div class="mi">Edit palette…</div></div>
+      <span class="cap">On every surface the chip, pad or strip, a hold opens this menu (D8). The first item is the tap's own verb, named for what it will do.</span>
+    </div>
+    <div class="stack">
+      <span class="lbl">Colour · with the Warm wash layer focused</span>
+      <div class="pp" style="width:340px">
+  <div class="ph"><b>Colour</b><span class="chip sel">Hex 1–4</span><span class="sp"></span><span class="chip mask">Colour</span></div>
+  <div class="into">Into <b>Warm wash</b> · a palette writes its values into the Look; nothing reaches the stage</div>
+  <div class="bd"><div class="row"><span class="lbl">Palettes</span><span class="sp"></span><span class="readout">no rings: a Look holds values</span></div><div class="wrapr"><span class="pal "><span class="d" style="background:#ff9a2e"></span>Amber</span><span class="pal "><span class="d" style="background:#2f6bff"></span>Deep blue</span><span class="pal "><span class="d" style="background:#ff3b3b"></span>Red</span><span class="pal "><span class="d" style="background:#fff3d6"></span>Warm white</span><span class="pal more">All 23 …</span></div></div>
+  <div class="bd"><div class="picker"></div><div class="hue"></div><div class="row"><span class="field">#FF9A2E</span><span class="field">W 40</span><span class="sp"></span><span class="readout">a drag is a Local value</span></div></div>
+  <div class="bd"><div class="row"><span class="lbl">Effects</span><span class="sp"></span><span class="readout">joins the Look</span></div><div class="wrapr"><span class="pal fx ">∿ Amber breathe</span><span class="pal fx ">∿ Rainbow Cycle</span><span class="pal more">+ Effect …</span></div></div>
+  <div class="ft"><span class="btn sm ">Spread…</span></div>
+</div>
+    </div>
+  </div>
+  <div class="row" style="gap:22px; align-items:flex-start">
+    <div class="stack"><span class="lbl">Level · dimmer cell</span>
+      <div class="pp" style="width:290px">
+  <div class="ph"><b>Level</b><span class="chip sel">4 heads</span><span class="sp"></span><span class="chip mask">Intensity</span></div>
+  
+  <div class="bd"><div class="row"><span class="lbl">Palettes</span><span class="sp"></span></div><div class="wrapr"><span class="pal ">Full</span><span class="pal on">Seventy</span><span class="pal ">Half</span><span class="pal ">Glow</span><span class="pal more">All 6 …</span></div></div>
+  <div class="bd"><div class="row"><div class="slider" style="flex:1"><i style="width:70%"></i><b style="left:calc(70% - 8px)"></b></div><div class="field" style="width:84px">70<span class="dim">%</span></div></div></div>
+  <div class="bd"><div class="row"><span class="lbl">Effects</span><span class="sp"></span></div><div class="wrapr"><span class="pal fx ">∿ Breathe</span><span class="pal fx ">∿ Pulse</span><span class="pal more">+ Effect …</span></div></div>
+  <div class="ft"><span class="btn sm ">Save as palette…</span></div>
+</div></div>
+    <div class="stack"><span class="lbl">Position · pan/tilt cell</span>
+      <div class="pp" style="width:290px">
+  <div class="ph"><b>Position</b><span class="chip sel">Orbit 1–2</span><span class="sp"></span><span class="chip mask">Position</span></div>
+  
+  <div class="bd"><div class="row"><span class="lbl">Palettes</span><span class="sp"></span></div><div class="wrapr"><span class="pal ">DS centre</span><span class="pal on">Piano</span><span class="pal ">Up centre</span><span class="pal ">Audience</span><span class="pal more">All 9 …</span></div></div>
+  <div class="bd"><div class="xy"><i style="left:58%; top:36%"></i></div><div class="row"><span class="field">Pan +18</span><span class="field">Tilt −42</span></div></div>
+  <div class="bd"><div class="row"><span class="lbl">Effects</span><span class="sp"></span></div><div class="wrapr"><span class="pal fx ">∿ Circle</span><span class="pal fx ">∿ Figure 8</span><span class="pal more">+ Effect …</span></div></div>
+  <div class="ft"><span class="btn sm ">Save as palette…</span><span class="btn sm ">Aim…</span></div>
+</div></div>
+    <div class="stack"><span class="lbl">Zoom · a Beam cell</span>
+      <div class="pp" style="width:270px">
+  <div class="ph"><b>Zoom</b><span class="chip sel">Robe 1–2</span><span class="sp"></span><span class="chip mask">Beam</span></div>
+  
+  <div class="bd"><div class="row"><span class="lbl">Palettes</span><span class="sp"></span><span class="readout">Beam palettes that set zoom</span></div><div class="wrapr"><span class="pal ">Narrow</span><span class="pal ">Mid</span><span class="pal on">Wide</span><span class="pal more">All 4 …</span></div></div>
+  <div class="bd"><div class="row"><div class="slider" style="flex:1"><i style="width:82%"></i><b style="left:calc(82% - 8px)"></b></div><div class="field" style="width:84px">82<span class="dim">%</span></div></div></div>
+  
+  <div class="ft"><span class="btn sm ">Save as palette…</span></div>
+</div></div>
+    <div class="stack"><span class="lbl">Gobo · a setting cell</span>
+      <div class="pp" style="width:250px">
+  <div class="ph"><b>Gobo</b><span class="chip sel">Robe 1–2</span><span class="sp"></span><span class="chip mask">Beam</span></div>
+  
+  
+  <div class="bd"><div class="field focus" style="width:100%">Breakup 2</div><div class="readout">Open · Dots · Breakup 1 · <b>Breakup 2</b> · Cone …</div><div class="readout">No palette band: a palette can't carry a slotted role. A Look holds one.</div></div>
+  
+  
+</div></div>
+  </div>
+</div>
+<span class="note" style="left:12px; top:52px">1</span><span class="note" style="left:12px; top:92px">2</span><span class="note" style="left:12px; top:262px">3</span><span class="note" style="left:12px; top:392px">4</span><span class="note" style="left:735px; top:52px">5</span><span class="note" style="left:12px; top:498px">6</span><span class="note" style="left:928px; top:592px">7</span>
+</div></div>
+<div class="notes"><div class="t">The palette popup: the cell editor every family already has, with that family's palettes above it and its effects below (D4). Sleeping Beauty's fixtures; palette names illustrative.</div><div><b>1</b>The header names the heads the press lands on (the cell batch) and the mask, which is the cell's own family, as a Sel · property fader names its own attribute.</div><div><b>2</b>Palettes that fit these heads, recently pressed first, then by name; All … opens the picker on this family. A ring is the pad's: solid when every head has it, dashed when some do. A tap is the press: a layer that tracks (D1), replacing the family's other value palette on these heads (D2, D6).</div><div><b>3</b>The editor is unchanged. A drag or a typed value is a Local value, above every layer, as today.</div><div><b>4</b>Effects: what runs on these heads first (lit), then the family's effect palettes, then + Effect … for the library. An effect palette is a layer; a library effect is Local (D5).</div><div><b>5</b>With a Look layer focused the press goes into the Look (D7): a palette's values written per head into its rows, an effect into its effects. No rings, since a Look holds values, not palettes.</div><div><b>6</b>Save as palette… from every family, from the cell's current values (Colour had it alone).</div><div><b>7</b>A setting cell keeps its type-ahead and has no palette band; Beam cells offer the Beam palettes that set their property.</div></div>
+
+</div>
+</body>
+</html>
