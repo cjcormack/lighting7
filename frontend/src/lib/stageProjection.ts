@@ -4,8 +4,8 @@
 // This module is deliberately **three.js-free** — pure arithmetic, no Vector3,
 // no MathUtils. `stageCoords` imports three at module scope, so anything that
 // pulls it in drags the 3D chunk along; keeping the projection maths separate
-// lets the cue-card MiniStage and the app-shell peek panel (mounted on *every*
-// route) share it without that cost.
+// lets a surface on the app shell's path (mounted on *every* route) use it
+// without that cost.
 //
 // Lighting coords are Z-up, FOH-relative, metres: X = stage right, Y = upstage,
 // Z = up. The stage envelope is X ∈ [−w/2, w/2], Y ∈ [0, d], Z ∈ [0, h] — Y = 0

@@ -33,7 +33,7 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
  * A cue can name one head of a multi-head fixture: Record writes a head the programmer holds as a
  * **cell-target** row (`{type: 'fixture', key: 'bar.pixel-2'}`), the same spelling a cell has as a
  * press target. That key is no patched fixture's key, so a surface that draws whole fixtures — the
- * cue's Values grid, its MiniStage — has to map it to its parent or it draws nothing. Read from the
+ * cue's Values grid — has to map it to its parent or it draws nothing. Read from the
  * fixture list's own element descriptors; element keys are opaque here, never parsed.
  */
 export function elementParents(

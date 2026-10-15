@@ -28,8 +28,8 @@ interface PromptBookCueCardProps {
   /** This cue is armed for click-to-place on the script. */
   placing: boolean
   expanded: boolean
-  /** Stage / Details mode for this card, owned by the page so it can persist across
-   *  cue changes (live cue carries the last-used view). null = neither selected. */
+  /** Whether this card shows its Details, owned by the page so it can persist across
+   *  cue changes (the live cue carries the last-used view). null = collapsed. */
   mode: ExpansionMode | null
   onModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
   /**

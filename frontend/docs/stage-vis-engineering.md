@@ -242,8 +242,7 @@ the patch's cell list; since the side sheet, `SideSheetFold`'s selection colour 
 (`components/busking/SideSheetFold.tsx`), one leaf for the first selected head; and the Colour
 tab's **hidden leaf per selected head** (`components/busking/ColourSheet.tsx`), which renders
 nothing and only reports into `lib/liveAppearance.ts` so *Pick* can answer in Pads focus with the
-rig tiles folded away. The cues' `MiniStage` borrows only the dispatch's default colour and a
-lantern's lamp at full (`unitLamp`, `lampHex`), and is not a reader. `FixtureModel` keeps its own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
+rig tiles folded away. `FixtureModel` keeps its own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
 store-driven re-renders drop beat-rate changes, so the 3D path writes straight to the scene from the
 channel callback. Three copies of the shape, two of the code; changing the dispatch means changing
 `fixtureAppearance.tsx` and `FixtureModel`'s `ColourSync` together.
@@ -513,7 +512,7 @@ second place, never a second fixture. Four rules keep that true:
 
 - **`useProjectedPatches` returns the lanterns apart from the fixtures** — `points` (one per
   fixture, unchanged) and `extraPoints` (one per placed lantern, carrying `placement`). A surface
-  that only draws the rig (the overview panel, `MiniStage`) draws both; the editors keep reading
+  that only draws the rig (the overview panel) draws both; the editors keep reading
   `points` for everything a gesture does. Folding the lanterns into `points` would have made every
   drag, snap, count and bulk operation meet a fixture twice, and a drag on a lantern would move the
   fixture's own placement to where that lantern hangs.

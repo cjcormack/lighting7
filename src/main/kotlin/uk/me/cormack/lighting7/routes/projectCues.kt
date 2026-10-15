@@ -77,6 +77,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     ?: return@transaction null to "Cue stack not found"
                 if (stack.project.id != project.id) return@transaction null to "Cue stack does not belong to project"
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
+                val before = standardCueIds(stack)
 
                 val cue = DaoCue.new {
                     name = newCue.name
@@ -103,7 +104,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.layers,
                 )
                 // A cue created without a number gets one derived from where it landed.
-                renumberAutoCues(stack)
+                renumberAutoCues(stack, before)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
             }
             val (cueDetails, error) = result
@@ -182,7 +183,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.layers,
                 )
 
-                if (numberChanged) renumberAutoCues(cue.cueStack)
+                // A number edit moves nothing, so every other auto cue keeps its number (D11).
+                if (numberChanged) renumberAutoCues(cue.cueStack, standardCueIds(cue.cueStack))
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -272,7 +274,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     )
                 }
 
-                if (numberChanged) renumberAutoCues(cue.cueStack)
+                // A number edit moves nothing, so every other auto cue keeps its number (D11).
+                if (numberChanged) renumberAutoCues(cue.cueStack, standardCueIds(cue.cueStack))
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
@@ -297,6 +300,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
                 val stack = cue.cueStack
+                val before = standardCueIds(stack)
                 deleteCueChildren(cue)
                 // Its scenery and its events die with it, but not with an edit, which
                 // `deleteCueChildren` also serves.
@@ -306,7 +310,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val pageIds = deleteCueReferences(cue)
                 cue.delete()
                 // The cues that followed have shifted up the derived sequence.
-                renumberAutoCues(stack)
+                renumberAutoCues(stack, before)
                 removedAnchors to pageIds
             }
 
@@ -369,6 +373,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             // Every cue must live in a stack. A cross-project copy lands in the target project's
             // "Unsorted" stack (created on demand); the operator can move it afterwards.
             val targetStack = getOrCreateUnsortedStack(targetProject)
+            val before = standardCueIds(targetStack)
             val newCue = DaoCue.new {
                 name = cueName
                 project = targetProject
@@ -464,7 +469,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
 
             // The copy carries no cue number, so it picks one up from where it landed.
-            renumberAutoCues(targetStack)
+            renumberAutoCues(targetStack, before)
 
             CopyCueResponse(
                 cueId = newCue.id.value,

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -322,5 +323,130 @@ class CueNumberingTest {
             mapOf(1 to "S1-1", 2 to "S1-2"),
             auto(explicit("intro"), blank(), blank(), explicit("S1-3")),
         )
+    }
+
+    // ─── D11: an auto number stays put while its cue does ───────────────
+    //
+    // venue-visit plan D11, carried onto stack entries unchanged by cue-model plan D14 (§3.3). The
+    // three number-edit cases are the plan's: a number edit moves nothing, so the handler passes
+    // the order as it stands and every other auto cue is `kept`.
+
+    private fun autoOf(vararg cues: AutoNumberInput): Map<Int, String> = computeAutoCueNumbers(cues.toList())
+
+    /** An auto cue at the same place as before the change, holding [number]. */
+    private fun kept(number: String?) = AutoNumberInput(number, auto = true, keep = true)
+
+    /** An auto cue the change moved (or shifted), still holding the number it had. */
+    private fun moved(number: String?) = AutoNumberInput(number, auto = true, keep = false)
+
+    private fun explicitCue(number: String) = AutoNumberInput(number, auto = false)
+
+    /** The stack as it reads: each cue's explicit number, else the label it was given. */
+    private fun reads(cues: List<AutoNumberInput>, labels: Map<Int, String>): List<String?> =
+        cues.mapIndexed { i, c -> if (!c.auto && !c.number.isNullOrEmpty()) c.number else labels[i] }
+
+    @Test
+    fun `D11 — five auto cues, cue 2 set to 4·5, reads 1, 4·5, 3, 4, 5 and out of order`() {
+        val cues = listOf(kept("1"), explicitCue("4.5"), kept("3"), kept("4"), kept("5"))
+        val read = reads(cues, autoOf(*cues.toTypedArray()))
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), read)
+        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
+    }
+
+    @Test
+    fun `D11 — five auto cues, cue 3 set to 10, reads 1, 2, 10, 4, 5 and out of order`() {
+        val cues = listOf(kept("1"), kept("2"), explicitCue("10"), kept("4"), kept("5"))
+        val read = reads(cues, autoOf(*cues.toTypedArray()))
+        assertEquals(listOf("1", "2", "10", "4", "5"), read)
+        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
+    }
+
+    @Test
+    fun `D11 — five auto cues, cue 3 set to 1, takes cue 1's number and leaves the rest`() {
+        // `releaseAutoNumber` freed "1" from cue 1, which is the one cue that has to move: the
+        // highest free integer below its neighbour is 0. Cues 2, 4 and 5 keep theirs.
+        val cues = listOf(kept(null), kept("2"), explicitCue("1"), kept("4"), kept("5"))
+        val read = reads(cues, autoOf(*cues.toTypedArray()))
+        assertEquals(listOf("0", "2", "1", "4", "5"), read)
+        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
+    }
+
+    @Test
+    fun `D11 — Fix Order moves the renumbered cue and the cues it passed follow their places`() {
+        // After `sort-by-cue-number`: the cues whose index the sort changed are not kept.
+        val afterHalf = listOf(kept("1"), moved("3"), moved("4"), explicitCue("4.5"), kept("5"))
+        assertEquals(listOf("1", "2", "3", "4.5", "5"), reads(afterHalf, autoOf(*afterHalf.toTypedArray())))
+
+        val afterTen = listOf(kept("1"), kept("2"), moved("4"), moved("5"), explicitCue("10"))
+        assertEquals(listOf("1", "2", "3", "4", "10"), reads(afterTen, autoOf(*afterTen.toTypedArray())))
+
+        val afterOne = listOf(kept("0"), explicitCue("1"), moved("2"), kept("4"), kept("5"))
+        val read = reads(afterOne, autoOf(*afterOne.toTypedArray()))
+        assertEquals(listOf("0", "1", "2", "4", "5"), read)
+        assertFalse(detectCueNumbersOutOfOrder(read))
+    }
+
+    @Test
+    fun `D11 — an out-of-order renumber neither anchors nor bounds a later relabel`() {
+        // A cue inserted above the renumbered one shifts everything after it, and the shifted cues
+        // count through the 10 rather than continuing from it — anchoring on it would relabel them
+        // 11, 12 and quietly put the stack back in order around a cue nobody moved.
+        val cues = listOf(kept("1"), moved(null), moved("2"), explicitCue("10"), moved("4"), moved("5"))
+        assertEquals(
+            listOf("1", "2", "3", "10", "5", "6"),
+            reads(cues, autoOf(*cues.toTypedArray())),
+        )
+        // And a cue appended to the renumbered stack takes the next number, nothing else moving.
+        val appended = listOf(kept("1"), explicitCue("4.5"), kept("3"), kept("4"), kept("5"), moved(null))
+        assertEquals(
+            listOf("1", "4.5", "3", "4", "5", "6"),
+            reads(appended, autoOf(*appended.toTypedArray())),
+        )
+    }
+
+    @Test
+    fun `D11 — an insert, a delete or a move still relabels the cues it shifts`() {
+        val inserted = listOf(kept("1"), moved(null), moved("2"), moved("3"))
+        assertEquals(listOf("1", "2", "3", "4"), reads(inserted, autoOf(*inserted.toTypedArray())))
+
+        val deleted = listOf(kept("1"), kept("2"), moved("4"), moved("5"))
+        assertEquals(listOf("1", "2", "3", "4"), reads(deleted, autoOf(*deleted.toTypedArray())))
+
+        val swapped = listOf(kept("1"), moved("3"), moved("2"), kept("4"), kept("5"))
+        assertEquals(listOf("1", "2", "3", "4", "5"), reads(swapped, autoOf(*swapped.toTypedArray())))
+    }
+
+    @Test
+    fun `D11 — a stack the old rule numbered reads the same under the new one`() {
+        // An existing show's numbers must not change on upgrade. Every shape below is what the
+        // derive-from-scratch rule wrote; kept, each is left exactly as it is.
+        val act1 = listOf(
+            kept("S1-0"),
+            explicitCue("S1-1"), explicitCue("S1-2"), explicitCue("S1-3.1"),
+            explicitCue("S1-3.2"), explicitCue("S1-4"),
+            kept("S1-5"), kept("S1-6"), kept("S1-7"),
+        )
+        assertEquals(
+            listOf("S1-0", "S1-1", "S1-2", "S1-3.1", "S1-3.2", "S1-4", "S1-5", "S1-6", "S1-7"),
+            reads(act1, autoOf(*act1.toTypedArray())),
+        )
+        // The old rule's answer to "cue 3 set to 10": a relabelled stack, now in order, stays so.
+        val oldTen = listOf(kept("8"), kept("9"), explicitCue("10"), kept("11"), kept("12"), moved(null))
+        assertEquals(
+            listOf("8", "9", "10", "11", "12", "13"),
+            reads(oldTen, autoOf(*oldTen.toTypedArray())),
+        )
+        // Derived from scratch, an in-order explicit number still anchors the run after it.
+        val scratch = listOf(explicitCue("14"), moved(null), moved(null))
+        assertEquals(listOf("14", "15", "16"), reads(scratch, autoOf(*scratch.toTypedArray())))
+    }
+
+    @Test
+    fun `D11 — a kept number an explicit one has since claimed is relabelled`() {
+        // `releaseAutoNumber` normally clears it first; this is the backstop if it did not.
+        val cues = listOf(kept("1"), kept("2"), explicitCue("2"))
+        val labels = autoOf(*cues.toTypedArray())
+        assertEquals("1", labels[0])
+        assertNotEquals("2", labels[1])
     }
 }

@@ -130,58 +130,119 @@ internal fun <T> groupAwareCueOrder(entries: List<T>, numberOf: (T) -> String?):
 
 // ─── Auto numbering ────────────────────────────────────────────────────
 
-/** One cue's current numbering state, as [computeAutoCueNumbers] needs to see it. */
-internal data class AutoNumberInput(val number: String?, val auto: Boolean)
+/**
+ * One cue's current numbering state, as [computeAutoCueNumbers] needs to see it.
+ *
+ * @property keep this cue is where it was before the change being renumbered for, so an auto
+ *   number it already holds stays put (D11). False — the default, and what a pure "derive this
+ *   stack from scratch" means — relabels it from its position like any other auto cue.
+ */
+internal data class AutoNumberInput(val number: String?, val auto: Boolean, val keep: Boolean = false)
 
 private fun AutoNumberInput.isExplicit(): Boolean = !auto && !number.isNullOrEmpty()
 
 /**
  * Derive a display number for every cue that hasn't got an explicit one.
  *
- * [cues] must be the stack's STANDARD cues in `sortOrder`. Each maximal run of auto /
- * unnumbered cues is labelled from the nearest preceding explicit number: normally by bumping
+ * [cues] must be the stack's STANDARD cues in `sortOrder`.
+ *
+ * **An auto number stays put while its cue does** (venue-visit plan D11). A cue flagged [keep] —
+ * at the same place in the stack as before the change — keeps the auto number it holds, as long as
+ * no explicit number and no earlier kept cue has claimed it. So an explicit renumber, which moves
+ * nothing, never relabels its auto neighbours: in five auto cues, cue 2 set to `4.5` reads
+ * 1, 4.5, 3, 4, 5, and the stack reports itself out of order until *Fix Order* moves it.
+ *
+ * Every other auto cue — new, moved, shifted by an insert or a delete, or one whose number an
+ * explicit claim took — is labelled from its neighbours. Each maximal run of them is labelled from
+ * the nearest preceding *fixed* number (an explicit one, or a kept auto one): normally by bumping
  * its trailing decimal (`S1-3` → `S1-4`, `S1-5`), but by inserting a decimal level beneath it
- * (`S1-3.1`, `S1-3.2`) whenever bumping would land on a number the operator has already used
- * elsewhere or would run past the next explicit cue.
+ * (`S1-3.1`, `S1-3.2`) whenever bumping would land on a number already used or would run past the
+ * next fixed cue.
  *
- * A run with nothing explicit before it counts *up to* the cue that follows — two cues before
- * `S1-3` are `S1-1` and `S1-2`, and a lone cue before `S1-1` is `S1-0`. With nothing either side
- * the run is starting the series, so a fresh stack numbers `1`, `2`, `3`.
+ * **An explicit number that reads out of order against the auto numbers around it neither anchors
+ * nor bounds a run** — the run passes through it, counting its place. It is the operator's renumber
+ * still waiting for *Fix Order*, and anchoring on it would relabel the cues around it the moment
+ * anything else in the stack changed, which is the relabelling D11 forbids made one gesture later.
  *
- * Returns the label for each auto cue, keyed by its index in [cues]. An index is absent when no
- * label could be derived that both fits the column and still orders before the following cue —
- * that cue stays blank rather than carrying a number that reads as out of order.
+ * A run with nothing fixed before it counts *up to* the cue that follows — two cues before `S1-3`
+ * are `S1-1` and `S1-2`, and a lone cue before `S1-1` is `S1-0`. With nothing either side the run
+ * is starting the series, so a fresh stack numbers `1`, `2`, `3`.
+ *
+ * Returns the label for each auto cue, keyed by its index in [cues] — a kept cue's own number
+ * included. An index is absent when no label could be derived that both fits the column and still
+ * orders before the following cue — that cue stays blank rather than carrying a number that reads
+ * as out of order.
  */
 internal fun computeAutoCueNumbers(cues: List<AutoNumberInput>): Map<Int, String> {
     val taken = cues.filter { it.isExplicit() }.mapTo(HashSet()) { it.number!!.lowercase() }
     val labels = HashMap<Int, String>()
 
+    // The kept auto numbers first: they are fixed points the runs are labelled around, and taken
+    // like an explicit number, since the unique index sees every number in the stack.
+    val fixed = BooleanArray(cues.size)
+    cues.forEachIndexed { index, cue ->
+        val number = cue.number
+        if (cue.isExplicit() || !cue.keep || number.isNullOrEmpty()) return@forEachIndexed
+        if (number.length > MAX_CUE_NUMBER_LENGTH || !taken.add(number.lowercase())) return@forEachIndexed
+        fixed[index] = true
+        labels[index] = number
+    }
+    cues.forEachIndexed { index, cue ->
+        if (cue.isExplicit() && !readsOutOfPlace(cues, index)) fixed[index] = true
+    }
+
     var index = 0
     while (index < cues.size) {
-        if (cues[index].isExplicit()) {
+        if (fixed[index]) {
             index++
             continue
         }
         var end = index
-        while (end < cues.size && !cues[end].isExplicit()) end++
+        while (end < cues.size && !fixed[end]) end++
 
-        val previous = cues.subList(0, index).lastOrNull { it.isExplicit() }?.number
-        val next = cues.subList(end, cues.size).firstOrNull { it.isExplicit() }?.number
+        // A run made only of out-of-place explicit numbers has nothing to label.
+        if ((index until end).any { !cues[it].isExplicit() }) {
+            val previous = (index - 1 downTo 0).firstOrNull { fixed[it] }?.let { cues[it].number }
+            val next = (end until cues.size).firstOrNull { fixed[it] }?.let { cues[it].number }
 
-        // Anchor the run on the preceding explicit number. With none — or one that has no decimal
-        // run to bump, like "intro" — borrow the following cue's prefix so the labels still read
-        // as part of the same series.
-        val anchor = previous?.let { parseCueNumber(it) }
-        val prefix = anchor?.prefix
-            ?: next?.let { parseCueNumber(it) }?.prefix
-            ?: ""
+            // Anchor the run on the preceding fixed number. With none — or one that has no decimal
+            // run to bump, like "intro" — borrow the following cue's prefix so the labels still
+            // read as part of the same series.
+            val anchor = previous?.let { parseCueNumber(it) }
+            val prefix = anchor?.prefix
+                ?: next?.let { parseCueNumber(it) }?.prefix
+                ?: ""
 
-        runLabels(anchor, prefix, next, end - index, taken)
-            .forEachIndexed { offset, label -> labels[index + offset] = label }
+            runLabels(anchor, prefix, next, end - index, taken)
+                .forEachIndexed { offset, label ->
+                    // An out-of-place explicit cue takes its step in the run and keeps its number.
+                    if (!cues[index + offset].isExplicit()) labels[index + offset] = label
+                }
+        }
 
         index = end
     }
     return labels
+}
+
+/**
+ * Whether the explicit number at [index] descends against the auto numbers beside it in its own
+ * group — the nearest one before it is not below it, or the nearest one after it is not above it.
+ * Only *auto* neighbours are read: two explicit numbers out of order are the operator's to fix and
+ * anchor as they always did, where an explicit number out of order against the auto sequence is a
+ * renumber waiting for *Fix Order* (D11).
+ */
+private fun readsOutOfPlace(cues: List<AutoNumberInput>, index: Int): Boolean {
+    val parsed = parseCueNumber(cues[index].number ?: return false) ?: return false
+    val group = parsed.prefix.lowercase()
+    fun autoNeighbour(range: IntProgression): ParsedCueNumber? = range.asSequence()
+        .filter { !cues[it].isExplicit() }
+        .mapNotNull { cues[it].number?.let(::parseCueNumber) }
+        .firstOrNull { it.prefix.lowercase() == group }
+    val before = autoNeighbour(index - 1 downTo 0)
+    val after = autoNeighbour(index + 1 until cues.size)
+    return (before != null && compareWithinGroup(before, parsed) >= 0) ||
+        (after != null && compareWithinGroup(after, parsed) <= 0)
 }
 
 /**
@@ -245,9 +306,10 @@ private fun runLabels(
     // Highest integer still ordering below the boundary: "S1-3" leaves "S1-2", but a boundary
     // that is itself a decimal insert ("S1-3.2") leaves the whole "S1-3" above it usable.
     val highest = if (boundary.segments.size > 1) boundary.segments[0] else boundary.segments[0] - 1
-    val first = highest - count + 1
-    if (first >= 0) {
-        val upToBoundary = (first..highest).map { "$prefix$it" }
+    // Highest block of integers first; a lower one when a number in it is already taken — a lone
+    // cue before "2" whose "1" an explicit renumber claimed reads "0" (D11's third case), not "0.1".
+    for (first in (highest - count + 1) downTo 0) {
+        val upToBoundary = (first until first + count).map { "$prefix$it" }
         if (usable(upToBoundary)) return upToBoundary
     }
     return beneath("${prefix}0")
@@ -301,24 +363,49 @@ internal fun releaseAutoNumber(stack: DaoCueStack, number: String?, exceptCueId:
 }
 
 /**
+ * [stack]'s STANDARD cues in playback order. `id` breaks a `sort_order` tie, so two reads of an
+ * unchanged stack always agree — which [renumberAutoCues]'s comparison against a [standardCueIds]
+ * snapshot depends on.
+ */
+private fun standardCuesInOrder(stack: DaoCueStack): List<DaoCue> =
+    DaoCue.find { DaoCues.cueStack eq stack.id }
+        .orderBy(DaoCues.sortOrder to SortOrder.ASC, DaoCues.id to SortOrder.ASC)
+        .filter { it.cueType == CueType.STANDARD.name }
+
+/**
+ * The ids of [stack]'s STANDARD cues in playback order: the snapshot a handler takes **before**
+ * it changes the stack's list, to hand [renumberAutoCues] afterwards.
+ */
+internal fun standardCueIds(stack: DaoCueStack): List<Int> {
+    flushPendingCueWrites()
+    return standardCuesInOrder(stack).map { it.id.value }
+}
+
+/**
  * Recompute [stack]'s auto cue numbers in place. Explicit numbers are never touched. Call this
- * from anything that changes the stack's membership or order — the labels are derived from
- * position, so they have to move when positions do.
+ * from anything that changes the stack's membership, order or numbers.
+ *
+ * [before] is [standardCueIds] as it stood before the change (venue-visit plan D11). A cue still
+ * at the same place in it keeps the auto number it holds; every other auto cue is labelled again
+ * from its neighbours, so the cues after an insert, a delete or a move follow their new positions
+ * while the ones before it stay put. A handler that moves nothing — a number edit — passes the
+ * order as it stands, so no auto cue moves but the one whose number was taken or cleared. An empty
+ * list relabels every auto cue from scratch.
  *
  * Writes in two passes with a flush between them: `uq_cue_number_per_stack` would otherwise
  * reject the transient duplicate you get when two auto numbers swap places.
  */
-internal fun renumberAutoCues(stack: DaoCueStack) {
+internal fun renumberAutoCues(stack: DaoCueStack, before: List<Int>) {
     // Callers have almost always just written sort orders; the ORDER BY below has to see them.
     flushPendingCueWrites()
 
-    val standard = DaoCue.find { DaoCues.cueStack eq stack.id }
-        .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-        .filter { it.cueType == CueType.STANDARD.name }
+    val standard = standardCuesInOrder(stack)
     if (standard.isEmpty()) return
 
     val labels = computeAutoCueNumbers(
-        standard.map { AutoNumberInput(it.cueNumber, it.cueNumberAuto) },
+        standard.mapIndexed { index, cue ->
+            AutoNumberInput(cue.cueNumber, cue.cueNumberAuto, keep = before.getOrNull(index) == cue.id.value)
+        },
     )
     val targets = standard.withIndex().filterNot { (_, cue) -> cue.hasExplicitNumber() }
     if (targets.none { (index, cue) -> cue.cueNumber != labels[index] }) return

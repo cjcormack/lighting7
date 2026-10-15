@@ -1716,11 +1716,11 @@ already holds through `useShowBarProps`, whose whole result the route threads do
 transport. Its display state is `hooks/useRunnerDisplay.ts`, lifted out of `ShowPage` so the tab
 and the phone cannot disagree about which cue is next; *Make live* is `useMakeStackLive`, lifted
 beside it for the same reason, because the tab's picker **browses** as the phone's does and
-`OffPlayheadBanner` says so, with requeue inert there. `RunMobile` gained two props for it: a
-`strip` slot, where the tab puts `ProgrammerIndicator` (the blind report and value count the bar
-carried), and `defaultExpansion`, `null` from the tab — **the cards open collapsed here** (D2),
-because the rig band is the stage on this view and two mini-stages a column apart would read as
-two answers; the phone still opens Current in Stage. BACK · GO is the tab's static footer, the way
+`OffPlayheadBanner` says so, with requeue inert there. `RunMobile` gained a `strip` slot for it,
+where the tab puts `ProgrammerIndicator` (the blind report and value count the bar carried). **The
+cards open collapsed here** (D2), because the rig band is the stage on this view; it took a
+`defaultExpansion` prop while the phone opened Current in Stage, and since venue-visit plan S3 took
+the cards' stage map away both hosts open collapsed and the prop is gone. BACK · GO is the tab's static footer, the way
 Colour and Spread keep their verbs, and DBO is still inert (`FU-FE-DBO-INERT`). **No transport
 keys on the busk view** (D5): Space on a focused pad presses the pad, and a key that also fired GO
 would be two effects from one press on a live rig — GO is the footer, a MIDI `go` binding, or the
@@ -2115,7 +2115,7 @@ beside the Positions panel's chips, the side sheet's fold (one leaf for the sele
 and the colour editor's **hidden leaf per parent fixture of the heads it is editing**
 (`components/editor/ColourEditor.tsx`, the busk Colour tab's and the programmer's colour cell's
 alike since the editor kit's session 2), which reports into `lib/liveAppearance.ts` for *Pick*
-(§Focus and the side sheet, §The editor kit); the cues' `MiniStage` borrows only its default colour — and a cell or run tile draws its own cells' colours off
+(§Focus and the side sheet, §The editor kit) — and a cell or run tile draws its own cells' colours off
 the parent's per-element `segments` by the element's **position in the patch's cell list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
 
@@ -5213,14 +5213,26 @@ live.
 
 **Cue numbers** are free-form display labels (`sortOrder` is the authoritative playback order). They are parsed as **prefix + decimal run + suffix** (`S1-3.1` → `("S1-", [3,1], "")`) and only ever compared *within a prefix group*, so `Pre-show 1, Pre-show 2, T2-1, S-1, S-2` is correctly ordered. `src/lib/cueNumber.ts` holds that model and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which performs the fix — **keep the two in step**.
 
-A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), recomputed by the backend whenever the stack changes. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto.
+A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), kept by the backend while the cue stays where it is and derived again when a change to the list moves it. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto. **An explicit renumber never relabels its auto neighbours** (venue-visit plan D11): in five auto cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, `detectOutOfOrder` sees the descent and draws the banner, and *Fix Order* (`sort-by-cue-number`) moves the cue to where its number says rather than renumbering anything — the rule is lighting7's, `docs/cue-stacks-engineering.md` §"Auto Numbering".
 
 **A cue is read-only, and edited by Include.** Session 2a deleted the three-pane inline editor
 (Targets · Cue properties · Layers) and its tab chrome: those panes restated, in a different shape,
 what a value grid and a layer stack already say, and two renderings of one state do not stay in step.
 An expanded cue row now shows `CueDetailContent` — transition, notes, **its composed
 values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Edit in Programmer** (which
-Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences worth knowing:
+Includes it) and **Cue properties…** (`CuePropertiesSheet`). It draws **no stage map**: the 2D
+`MiniStage` went from the cards on desktop and phone in venue-visit plan S3, with `StageBackdrop`,
+its last user, so the phone card's toggle is *Details* alone and the phone runner, the busk Show
+tab and the Prompt Book rail all open their cards collapsed. Consequences worth knowing:
+
+- **Edit in Programmer opens the programmer** once the Include lands (venue-visit plan S3); a
+  refused Include leaves the operator on the cue, with `useInclude`'s toast. The view switcher's
+  Show pill brings them back to the stack and the card (§"The Show position").
+- **Duplicate appends the copy to the end of the stack** and opens it (venue-visit plan S3;
+  show-cue-editing plan D12 adopts it). `ShowPage`'s `handleDuplicate` sends `buildCueInput` with
+  `sortOrder` cleared, so the desk puts it at `max + 1` — the original's `sortOrder` shared the
+  source's slot — and the copy, sent with no number, takes the next auto number with nothing else
+  in the stack moving.
 
 - **`CueValueGrid` reads `GET /{projectId}/cues/{cueId}/cooked`**, which wraps the same
   `buildCombinedCueLayerRows` the GO path runs. Do **not** compose a cue's values client-side —
@@ -5243,6 +5255,35 @@ Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences wort
   and the Diagnostics `cueEdit` histogram panel are all gone too. Don't reintroduce any of it:
   a cue is edited by Include, and `EditorContext.tsx`'s doc comment is the record of why.
   `INCLUDE_TARGET_GONE` is Update's own 409 and is unrelated — that one is live.
+
+#### The Show position
+
+**The way back to Show returns to the stack and the card this window last had open there**
+(venue-visit plan S3, `lib/showPosition.ts`). The position is `ShowPage`'s to write — the drilled
+stack and the `?cue=` it holds, per project, whenever they settle; on the stack list the project's
+entry is dropped — and it is **per window**, in `sessionStorage` under `show.position`, like every
+other fact about how this window is being worked (§"Windows, full screen and the hand"). Only what
+exists is written: a stack the list does not hold is about to be redirected away from, and a
+`?cue=` that names no cue in its stack opens no card, so neither is handed back. A cue the list has
+not caught up with yet — a duplicate's, just created — is written once the refetch brings it.
+
+**Three doors read it, and they are the ones that mean "back to Show"**: the view switcher's Show
+pill (`ViewSwitcher`, through `useShowViewPath`, so a link drawn before the position moved still
+follows it), and the sidebar's Show entry with its ⌘K twin (`navigation.ts`'s `path`, which both
+call at the press, through `showViewPath`). **The rest deliberately do not**, because each names a
+place of its own: the Prompt Book's *Edit cue*, the cue table's read-outs and a busk cue pad's
+*View* (a stack and `?cue=`), ⌘K's *New Cue Stack* (the stack list), and the doors that land on
+bare `/show` and so on the live stack while one runs — a cue slot's *View*, and `windows.show`,
+another screen putting this one on the show — and the legacy `/program*` and `/run*` redirects, whose targets are frozen
+(§"What may live in `routes/`") and still carry their search string. Each of them writes the
+position when it lands, so the next return goes where that door left the window.
+
+**What a remembered position meets on arrival is the Show view's ordinary handling**: a stack that
+has gone redirects to `/show` (the stale-stack effect) and is then forgotten; a cue that has gone
+opens no card and is forgotten; another project's entry is never read, being keyed by project, and
+a window on a project that is not current is redirected to the current one's `/show` as before.
+`ShowPage.cueActions.test.tsx` drives the round trip through the real switcher, and the stale
+cases with the stored position seeded.
 
 #### Scenery in the cue table and the Prompt Book
 
@@ -5543,6 +5584,9 @@ path may quietly change where it lands.
   cue/stack authoring surface and the runner. `/program*` and `/run*` both redirect to
   the `/show` equivalent, and `/program*` **carries the search string**, because
   `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
+  Show's own entry is not a constant: its `path` reads the window's remembered show position, so
+  the sidebar and ⌘K return to the stack and card this window last had open (§"The Show
+  position"); the redirects deliberately do not.
 
   **Busk is `/projects/:id/busk`** (`routes/Busk.tsx` → `components/busking/BuskingView`):
   the rig band, the page the operator built and the side sheet, under the same `ShowHeader` as

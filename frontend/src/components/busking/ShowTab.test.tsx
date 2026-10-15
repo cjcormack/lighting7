@@ -97,12 +97,11 @@ afterEach(() => {
 })
 
 describe('ShowTab', () => {
-  it('mounts the phone runner over the route’s transport, the programmer chip in its strip, cards collapsed (D1, D2)', () => {
+  it('mounts the phone runner over the route’s transport, the programmer chip in its strip (D1)', () => {
     const show = source()
     render(<ShowTab projectId={1} show={show} />)
     expect(screen.getByTestId('strip').querySelector('[data-testid="programmer-chip"]')).not.toBeNull()
     const props = runnerProps.mock.calls.at(-1)![0]
-    expect(props.defaultExpansion).toBeNull()
     expect(props.stack).toBe(stacks[0])
     expect(props.selectedStackId).toBe(1)
     expect(props.multiStack).toBe(true)

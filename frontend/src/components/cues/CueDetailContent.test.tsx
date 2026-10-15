@@ -21,9 +21,6 @@ vi.mock('@/store/templates', () => ({
 // The Values section fetches the cue's cook. Stubbed out: what this suite is about is the read
 // surface's *structure*, and `cueCookedRows.test.ts` covers the mapping behind that grid.
 vi.mock('./CueValueGrid', () => ({ CueValueGrid: () => <div data-testid="cue-values" /> }))
-// The stage map reads the projected patch and the fixture lookup, neither of which this suite is
-// about — and both of which need the store.
-vi.mock('./MiniStage', () => ({ MiniStage: () => <div data-testid="mini-stage" /> }))
 
 import { CueDetailContent } from './CueDetailContent'
 
@@ -159,6 +156,13 @@ describe('CueDetailContent', () => {
   it('says a layer with no targets takes them from the look', () => {
     render(<CueDetailContent cue={cue({ layers: [layer({ targets: [] })] })} projectId={1} />)
     expect(screen.getByText(/look’s own targets/)).toBeInTheDocument()
+  })
+
+  it('draws no stage map, however many heads the cue touches (venue-visit S3)', () => {
+    render(
+      <CueDetailContent cue={cue({ layers: [layer({ targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'group', key: 'front' }] })] })} projectId={1} />,
+    )
+    expect(screen.queryByText('Stage')).not.toBeInTheDocument()
   })
 
   it('offers an empty state rather than a blank section', () => {

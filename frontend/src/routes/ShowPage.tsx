@@ -7,6 +7,7 @@ import { useCreateProjectCueMutation } from '../store/cues'
 import { useProjectProgramStateQuery } from '../store/cueStacks'
 import type { Cue } from '../api/cuesApi'
 import { buildCueInput } from '../lib/cueUtils'
+import { setShowPosition } from '../lib/showPosition'
 import { useShowBarProps } from '../hooks/useShowBarProps'
 import { useEditLock } from '../hooks/useEditLock'
 import { useCueExpansion } from '../hooks/useCueExpansion'
@@ -281,6 +282,11 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
         input.name = cue.name + ' (copy)'
         input.cueNumber = null
         input.cueStackId = drillStackId
+        // **The copy goes to the end of the stack** (venue-visit plan S3; show-cue-editing plan D12
+        // adopts it). The original's `sortOrder` put it beside the source — sharing that slot, so
+        // which of the two played first was the database's choice. With none the desk appends at
+        // `max + 1`, and the copy takes the next auto number while every other cue keeps its own.
+        input.sortOrder = undefined
         const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
         setExpandedCueId(result.id)
       } catch {
@@ -294,7 +300,21 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
 
   const handleRecordIntoStack = useCallback((stackId: number) => setRecordStackId(stackId), [])
 
-  const handleIncludeCue = useCallback((cueId: number) => void includeCue(cueId), [includeCue])
+  /**
+   * *Edit in Programmer* is Include **and then the programmer** (venue-visit plan S3): the cue is
+   * changed there, so staying on Show after loading it left the operator one more click from the
+   * thing they had asked for. Only once the Include has landed — a refusal is toasted by
+   * `useInclude` and leaves them here, on the cue they pressed. The way back is the view switcher,
+   * which returns to this stack and this cue (`lib/showPosition.ts`).
+   */
+  const handleIncludeCue = useCallback(
+    (cueId: number) => {
+      void includeCue(cueId).then((response) => {
+        if (response != null) navigate(`/projects/${projectIdNum}/programmer`)
+      })
+    },
+    [includeCue, navigate, projectIdNum],
+  )
 
   /**
    * The sheet's read-outs open a cue's *card*: the cards view with `?cue=` — tagged as the
@@ -403,6 +423,26 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
       navigate(`/projects/${projectIdNum}/show`, { replace: true })
     }
   }, [drillStackId, stacks, stacksFetching, navigate, projectIdNum])
+
+  /**
+   * Remember where this window is, for the doors back to Show (`lib/showPosition.ts`): the stack
+   * and the open card, or nothing on the stack list. Only what exists is written — a stack the
+   * list does not hold is about to be redirected away from, and a `?cue=` naming no cue in it opens
+   * no card — so a stale address is never remembered and handed back. A cue the list has not
+   * caught up with yet (a duplicate's, just created) is written once the refetch brings it.
+   */
+  const viewingAnotherProject = currentProject != null && projectIdNum !== currentProject.id
+  useEffect(() => {
+    if (!stacks || viewingAnotherProject) return
+    if (drillStackId == null) {
+      setShowPosition(projectIdNum, null)
+      return
+    }
+    const stack = stacks.find((s) => s.id === drillStackId)
+    if (stack == null) return
+    const cueId = openedCueId != null && stack.cues?.some((c) => c.id === openedCueId) ? openedCueId : null
+    setShowPosition(projectIdNum, { stackId: drillStackId, cueId })
+  }, [stacks, viewingAnotherProject, drillStackId, openedCueId, projectIdNum])
 
   // Loading / redirect guards
   if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {

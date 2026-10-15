@@ -169,14 +169,15 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val priorities = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
                     ?: return@transaction emptyMap<Int, Int>()
+                val before = standardCueIds(stack)
                 for ((index, cueId) in request.cueIds.withIndex()) {
                     val cue = DaoCue.findById(cueId) ?: continue
                     if (cue.cueStack.id.value == resource.parent.stackId) {
                         cue.sortOrder = index
                     }
                 }
-                // Auto numbers are derived from position, so they move with the order.
-                renumberAutoCues(stack)
+                // Auto numbers are derived from position, so the moved cues take new ones.
+                renumberAutoCues(stack, before)
                 stackCuePriorities(stack)
             }
             // Cue priority is derived from stack position; keep anything already on stage in step.
@@ -197,6 +198,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple("Cannot add cues to a separator", null, null)
                 val cue = DaoCue.findById(request.cueId) ?: return@transaction Triple("Cue not found", null, null)
                 if (cue.project.id != project.id) return@transaction Triple("Cue does not belong to project", null, null)
+                val before = standardCueIds(stack)
 
                 // Every cue already in the stack, MARKERs included — the shift below has to move
                 // separators too, or they drift away from the cues they label.
@@ -244,7 +246,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     cue.sortOrder = request.sortOrder ?: ((existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
 
-                renumberAutoCues(stack)
+                renumberAutoCues(stack, before)
                 Triple(
                     null,
                     stack.toCueStackDetails(isCurrentProject = true, manager),
@@ -402,6 +404,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
+                val before = standardCueIds(stack)
                 val standardCues = DaoCue.find { DaoCues.cueStack eq stack.id }
                     .orderBy(DaoCues.sortOrder to SortOrder.ASC)
                     .filter { it.cueType == CueType.STANDARD.name }
@@ -423,7 +426,9 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
                 val unnumbered = standardCues.count { it.cueNumber.isNullOrEmpty() }
 
-                renumberAutoCues(stack)
+                // The cues the sort moved take numbers from where they landed; the rest keep theirs,
+                // so *Fix Order* moves an out-of-order cue rather than renumbering its neighbours.
+                renumberAutoCues(stack, before)
 
                 val details = stack.toCueStackDetails(isCurrentProject = true, manager)
                 SortByNumberResponse(

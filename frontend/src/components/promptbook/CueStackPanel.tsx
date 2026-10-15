@@ -38,7 +38,7 @@ interface CueStackPanelProps {
   /** Whether a cue's card is open — a predicate, because several can be. See `useCueExpansion`. */
   isExpanded: (cueId: number) => boolean
   onToggleExpanded: (cueId: number) => void
-  /** Stage/Details mode per cue — the page owns it so it persists across cue changes. */
+  /** Details open or not, per cue — the page owns it so it persists across cue changes. */
   modeOf: (cueId: number, status: CueRunStatus) => ExpansionMode | null
   onCueModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
   /**

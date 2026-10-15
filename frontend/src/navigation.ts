@@ -41,6 +41,7 @@ import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import type { DeskWindow } from "./api/windowsApi"
 import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from "./lib/windowViews"
+import { showViewPath } from "./lib/showPosition"
 import { BUSK_FOCUSES, VIEW_OPTION_PAGE_FOLLOWS, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
 import { VIEW_OPTION_IMMERSIVE, setImmersive, useImmersive } from "./lib/immersive"
@@ -220,7 +221,9 @@ export const navItems: NavItem[] = [
     // Scoped to the active project — running cues from here needs the project live.
     label: "Show",
     icon: Theater,
-    path: (p) => `/projects/${p}/show`,
+    // Back to the stack and cue this window last had open on Show (`lib/showPosition.ts`), read
+    // when the entry is pressed — the sidebar and ⌘K both call `path` at the press.
+    path: (p) => showViewPath(p),
     visibility: "active-only",
     pathMatch: "/show",
     group: "live",

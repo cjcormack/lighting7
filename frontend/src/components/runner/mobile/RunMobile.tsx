@@ -50,28 +50,18 @@ interface RunMobileProps {
    * used to carry (busk-chrome plan D1, D10). The phone passes nothing.
    */
   strip?: ReactNode
-  /**
-   * Which card opens on mount, and in which mode. The phone opens Current in Stage, because there
-   * the card *is* the stage; the busk view's Show tab passes `null` — collapsed — because there the
-   * rig band is, and two mini-stages a column apart would read as two answers (busk-chrome plan
-   * D2). Read once: the toggle on the card owns it from then on.
-   */
-  defaultExpansion?: MobileExpansion | null
 }
-
-/** The phone's own default: Current, in Stage. */
-const PHONE_EXPANSION: MobileExpansion = { card: 'cur', mode: 'stage' }
 
 /**
  * Mobile takeover for the Run view. Replaces the previous `ShowRunnerMobile`
  * hero-and-standby layout with the Run-redesign's stacked Current + Next cards
- * (each with an internal Stage / Details toggle), a bottom-sheet picker for
+ * (each with an internal Details toggle), a bottom-sheet picker for
  * re-queueing, and a fixed BACK + GO transport.
  *
  * **Two hosts since the busk-chrome plan's session A**: the phone branch of `ShowPage`, and the
  * busk view's side-sheet Show tab (`components/busking/ShowTab.tsx`), which mounts this same
  * component in a 320px column — one component, not a copy, so the two cannot disagree about what
- * the runner shows. The two differ only through [strip] and [defaultExpansion]; the cue list is
+ * the runner shows. The two differ only through [strip]; the cue list is
  * the same Radix bottom sheet over the whole window in both, since a 320px column is not the place
  * to draw a list of a hundred cues beside two cards.
  */
@@ -92,12 +82,14 @@ export function RunMobile({
   activeLocation,
   standbyLocation,
   strip,
-  defaultExpansion = PHONE_EXPANSION,
 }: RunMobileProps) {
   const cues = useMemo<CueStackCueEntry[]>(() => stack?.cues ?? [], [stack?.cues])
   const [stackPickerOpen, setStackPickerOpen] = useState(false)
   const [cueListOpen, setCueListOpen] = useState(false)
-  const [expansion, setExpansion] = useState<MobileExpansion | null>(defaultExpansion)
+  // Both cards open collapsed, in both hosts. The phone opened Current in Stage until venue-visit
+  // plan S3 took the cards' `MiniStage` away — the card *was* the stage there — and the busk view's
+  // Show tab already opened collapsed, the rig band being its stage (busk-chrome plan D2).
+  const [expansion, setExpansion] = useState<MobileExpansion | null>(null)
 
   const { activeCue, standbyCue, nextStack } = display
 

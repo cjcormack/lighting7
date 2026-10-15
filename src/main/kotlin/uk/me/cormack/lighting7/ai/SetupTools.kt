@@ -60,6 +60,7 @@ import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.renumberAutoCues
+import uk.me.cormack.lighting7.routes.standardCueIds
 import uk.me.cormack.lighting7.routes.unlinkRegionFromPlatforms
 import uk.me.cormack.lighting7.routes.validateCueChildren
 import uk.me.cormack.lighting7.routes.validateRiggingPose
@@ -1673,6 +1674,7 @@ class SetupTools(
                 type = CueStackType.STACK.name
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
+            val before = standardCueIds(stack)
             var sortOrder = (stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 1
             val created = cues.map { spec ->
                 val cue = DaoCue.new {
@@ -1695,7 +1697,7 @@ class SetupTools(
             }
             stackSet?.let { replaceStackScenery(stack, it) }
             // Unnumbered cues take their labels from their numbered neighbours.
-            renumberAutoCues(stack)
+            renumberAutoCues(stack, before)
 
             var anchors = 0
             val book = if (created.any { it.second.place != null }) {
