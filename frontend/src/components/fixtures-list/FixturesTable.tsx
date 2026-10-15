@@ -730,7 +730,7 @@ const RowView = React.memo(function RowView({
   const effectDivision =
     templateEffect == null
       ? null
-      : effectSpeedLabel(templateEffect.beatDivision, templateEffect.timingSource)
+      : effectSpeedLabel(templateEffect.beatDivision, templateEffect.timingSource, templateEffect.seconds)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
   // Every fixture this row covers — a group row's members, a fixture row's own key. The same
   // expansion the cells were resolved through, so "is this row in the layer's targets?" and "what

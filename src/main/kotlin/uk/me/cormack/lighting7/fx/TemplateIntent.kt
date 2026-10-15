@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
+import kotlin.math.roundToInt
+
 /**
  * How a colour intent uses a head's white / amber / UV emitters, on the heads that have them.
  *
@@ -55,13 +57,15 @@ enum class WhitePolicy {
  * | [Colour] | `#FF9D4A;policy=extract` | colour |
  * | [Level] | `dmx:180` | colour — the bundled white / amber / UV emitters |
  * | [Percent] | `pct:75` | intensity (dimmer *and* strobe), and the continuous beam roles |
- * | [Position] | `deg:45.0,12.5` | position — **degrees**, never DMX |
+ * | [Position] | `pos:-12,30` | position — centre-relative coarse DMX, `-128..127`, 0 at DMX 128 |
+ * | [Position] (stored only) | `deg:45.0,12.5` | position — travel **degrees**, the unit before `pos:` |
  * | [Switch] | `on` / `off` | prism |
  *
  * **[Level] is a literal where everything else here is an intent, and that is deliberate.** The
  * grammar exists so a value can mean the same thing on heads that differ; a percentage answers "how
- * far up its own range", degrees answer "where in the room". An emitter has neither — it is one LED
- * of one colour, its slider is 0–255 on every head in this rig, and the operator setting it is
+ * far up its own range", a centre-relative position "how far along its own travel". An emitter has
+ * neither — it is one LED of one colour, its slider is 0–255 on every head in this rig, and the
+ * operator setting it is
  * matching a colour by eye against a rig that is already lit. There is nothing to re-derive per
  * head, so `pct:` would only have added a rounding trip. The one thing that *is* per head is
  * whether the emitter exists at all, and that is answered by resolution, not by the value.
@@ -90,7 +94,7 @@ enum class WhitePolicy {
  *   ([parseExtendedColour] here, `parseExtendedColour` in `components/fx/colourUtils.ts`) ignore an
  *   unrecognised `;`-token. So every existing swatch, preview and cell renderer already draws it —
  *   as the RGB-only reading, which is the safe one.
- * - `pct:` / `deg:` / `dmx:` / `on` all fail `toUByteParam()` in
+ * - `pct:` / `pos:` / `deg:` / `dmx:` / `on` all fail `toUByteParam()` in
  *   [CueAssignmentResolver.parseAssignmentValue], which returns null and makes its caller **skip
  *   the row with a warn**. Loudly doing nothing is right; a stray reader must never turn `pct:75`
  *   into a DMX 75. `dmx:180` keeps the prefix for exactly that reason even though its payload
@@ -116,9 +120,24 @@ sealed interface TemplateIntent {
         override fun serialize(): String = "pct:${trimNumber(value)}"
     }
 
-    /** Pan and tilt in **degrees**, resolved through each head's own annotated range. */
-    data class Position(val panDeg: Double, val tiltDeg: Double) : TemplateIntent {
-        override fun serialize(): String = "deg:${trimNumber(panDeg)},${trimNumber(tiltDeg)}"
+    /**
+     * Pan and tilt, in one of two units (venue-visit plan D3, P3).
+     *
+     * [PositionUnit.CENTRE] — `pos:` — is what every write makes: centre-relative coarse DMX,
+     * `-128..127` with 0 at DMX 128, so a generic palette means the same *fraction of travel* on
+     * every head, annotated or not. [PositionUnit.DEGREES] — `deg:` — is the unit palettes were
+     * stored in before it: travel degrees through each head's own annotated range. It keeps
+     * resolving as angles, because there are no migrations; nothing new writes it.
+     */
+    data class Position(
+        val pan: Double,
+        val tilt: Double,
+        val unit: PositionUnit = PositionUnit.CENTRE,
+    ) : TemplateIntent {
+        override fun serialize(): String = when (unit) {
+            PositionUnit.CENTRE -> "pos:${centreStep(pan)},${centreStep(tilt)}"
+            PositionUnit.DEGREES -> "deg:${trimNumber(pan)},${trimNumber(tilt)}"
+        }
     }
 
     /**
@@ -139,7 +158,25 @@ sealed interface TemplateIntent {
     }
 }
 
+/**
+ * The unit a [TemplateIntent.Position] is in.
+ *
+ * [CENTRE] is whole coarse DMX steps about the centre of travel — the fine channel is not part of
+ * the scale and is left to its own writes (aim, a raw channel). [DEGREES] is the stored-only legacy
+ * unit; see [TemplateIntent.Position].
+ */
+enum class PositionUnit { CENTRE, DEGREES }
+
+/** The centre-relative scale's ends: DMX 0 is `-128`, DMX 255 is `127`, the centre (128) is 0. */
+const val POSITION_CENTRE_MIN = -128
+const val POSITION_CENTRE_MAX = 127
+
+/** A centre-relative value as the whole coarse step it stands for, clamped to the scale. */
+fun centreStep(value: Double): Int =
+    value.roundToInt().coerceIn(POSITION_CENTRE_MIN, POSITION_CENTRE_MAX)
+
 private const val PERCENT_PREFIX = "pct:"
+private const val CENTRE_PREFIX = "pos:"
 private const val DEGREES_PREFIX = "deg:"
 private const val LEVEL_PREFIX = "dmx:"
 private const val POLICY_TOKEN = "policy="
@@ -187,14 +224,28 @@ fun parseTemplateIntent(raw: String): TemplateIntent? {
         val value = lower.removePrefix(LEVEL_PREFIX).trim().toIntOrNull() ?: return null
         return TemplateIntent.Level(value.coerceIn(0, 255))
     }
+    if (lower.startsWith(CENTRE_PREFIX)) {
+        val (pan, tilt) = parseAxes(lower.removePrefix(CENTRE_PREFIX)) ?: return null
+        return TemplateIntent.Position(
+            centreStep(pan).toDouble(),
+            centreStep(tilt).toDouble(),
+            PositionUnit.CENTRE,
+        )
+    }
     if (lower.startsWith(DEGREES_PREFIX)) {
-        val axes = lower.removePrefix(DEGREES_PREFIX).split(",")
-        if (axes.size != 2) return null
-        val pan = axes[0].trim().toDoubleOrNull() ?: return null
-        val tilt = axes[1].trim().toDoubleOrNull() ?: return null
-        return TemplateIntent.Position(pan, tilt)
+        val (pan, tilt) = parseAxes(lower.removePrefix(DEGREES_PREFIX)) ?: return null
+        return TemplateIntent.Position(pan, tilt, PositionUnit.DEGREES)
     }
     return null
+}
+
+/** `a,b` as two finite numbers, or null. */
+private fun parseAxes(raw: String): Pair<Double, Double>? {
+    val axes = raw.split(",")
+    if (axes.size != 2) return null
+    val pan = axes[0].trim().toDoubleOrNull()?.takeIf { it.isFinite() } ?: return null
+    val tilt = axes[1].trim().toDoubleOrNull()?.takeIf { it.isFinite() } ?: return null
+    return pan to tilt
 }
 
 /** `45.0` → `"45"`, `12.5` → `"12.5"`. Keeps a stored intent readable and diff-stable. */

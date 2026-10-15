@@ -511,6 +511,12 @@ data class KeyStackLayerDto(
     val running: Boolean? = null,
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * The two effect kinds: the loop the effect runs on (`BEAT` | `WALL_CLOCK`) and whether it is on
+     * *Seconds* (venue-visit plan D7) — so [beatDivision] reads as seconds rather than beats.
+     */
+    val timingSource: String? = null,
+    val seconds: Boolean? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
     val cueId: Int? = null,
@@ -1346,6 +1352,8 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             running = dto?.isRunning,
             speedMasterUuid = dto?.speedMasterUuid,
             rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
+            timingSource = dto?.timingSource,
+            seconds = dto?.seconds,
             heldBack = if (effect != null) layer.heldBack else null,
             cueId = layer.cueId,
             cueStackId = layer.cueStackId,

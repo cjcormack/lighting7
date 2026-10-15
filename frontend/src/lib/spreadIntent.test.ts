@@ -28,10 +28,10 @@ describe('spreadIntent', () => {
     expect(serializeSpreadEndpoint(colour)).toBe(serializeTemplateIntent(colour))
     expect(serializeSpreadEndpoint(colour)).toBe('#F5B342;policy=extract')
     expect(serializeSpreadEndpoint({ kind: 'percent', value: 37.25 })).toBe('pct:37.3')
-    expect(serializeSpreadEndpoint({ kind: 'position', panDeg: -30, tiltDeg: 12.5 })).toBe('deg:-30,12.5')
+    expect(serializeSpreadEndpoint({ kind: 'position', pan: -30, tilt: 12, unit: 'centre' })).toBe('pos:-30,12')
     expect(serializeSpreadEndpoint({ kind: 'level', value: 300 })).toBe('dmx:255')
     // Each round-trips through the parser the library rows use, so the desk's parser will take it.
-    for (const endpoint of [colour, { kind: 'percent', value: 50 }, { kind: 'position', panDeg: 1, tiltDeg: 2 }, { kind: 'level', value: 7 }] as const) {
+    for (const endpoint of [colour, { kind: 'percent', value: 50 }, { kind: 'position', pan: 1, tilt: 2, unit: 'centre' }, { kind: 'level', value: 7 }] as const) {
       expect(parseTemplateIntent(serializeSpreadEndpoint(endpoint))).not.toBeNull()
     }
   })
@@ -70,12 +70,11 @@ describe('spreadIntent', () => {
     // An emitter's default runs the whole byte; a level the whole percent.
     expect(defaultSpreadEndpoints(templatePropertyFor('white')!)).toEqual({ from: { kind: 'level', value: 0 }, to: { kind: 'level', value: 255 } })
     expect(defaultSpreadEndpoints(templatePropertyFor('dimmer')!)).toEqual({ from: { kind: 'percent', value: 0 }, to: { kind: 'percent', value: 100 } })
-    // A position is absolute degrees in each head's own range, so the default swings about the
-    // desk's centre (270 / 135, TemplateEditor's convention) rather than about zero, which is a
-    // head's hard stop.
+    // A position is centre-relative (venue-visit plan D3), so the default swings about 0 — the
+    // centre of travel on every head.
     expect(defaultSpreadEndpoints(templatePropertyFor('position')!)).toEqual({
-      from: { kind: 'position', panDeg: 240, tiltDeg: 135 },
-      to: { kind: 'position', panDeg: 300, tiltDeg: 135 },
+      from: { kind: 'position', pan: -16, tilt: 0, unit: 'centre' },
+      to: { kind: 'position', pan: 16, tilt: 0, unit: 'centre' },
     })
   })
 
@@ -87,7 +86,7 @@ describe('spreadIntent', () => {
   it('refuses an endpoint the desk could not take', () => {
     expect(isCompleteSpreadEndpoint({ kind: 'colour', hex: '#abc', policy: 'extract' })).toBe(false)
     expect(isCompleteSpreadEndpoint({ kind: 'percent', value: Number.NaN })).toBe(false)
-    expect(isCompleteSpreadEndpoint({ kind: 'position', panDeg: 1, tiltDeg: Number.NaN })).toBe(false)
+    expect(isCompleteSpreadEndpoint({ kind: 'position', pan: 1, tilt: Number.NaN, unit: 'centre' })).toBe(false)
     expect(isCompleteSpreadEndpoint({ kind: 'template', uuid: ' ' })).toBe(false)
   })
 

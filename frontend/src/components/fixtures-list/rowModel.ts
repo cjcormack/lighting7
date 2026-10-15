@@ -8,7 +8,7 @@ import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
 import { EMITTER_PROPERTIES, templatePropertyFor, type TemplateProperty } from '../../lib/templateIntent'
 import { spreadPropertiesFor } from '../../lib/spreadIntent'
-import { degreesToDmx } from '../../lib/axisDegrees'
+import { centreToDmx } from '../../lib/positionScale'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -205,14 +205,14 @@ export type CellCommit =
    *  pan nudge on a batch selection doesn't overwrite every target's tilt
    *  with one row's aggregate.
    *
-   *  An axis is said **either** as a byte (`pan`) **or** in travel degrees
-   *  (`panDeg`), never both. Degrees are the position editor's unit on a head
-   *  that annotates its range (editor-kit plan D14), and they are resolved to
-   *  each target's own byte in `clampCommitToResolution` — the one place with
-   *  the target descriptor in hand — because 270° is byte 128 on a 540° mover
-   *  and byte 109 on a 630° one. A target whose axis carries no annotation
-   *  cannot take a degree, and that axis is left untouched on it. */
-  | { kind: 'position'; pan?: number; tilt?: number; panDeg?: number; tiltDeg?: number }
+   *  An axis is said **either** as a byte (`pan`) **or** centre-relative
+   *  (`panCentre`, venue-visit plan D3), never both. Centre-relative is the
+   *  position editor's unit — `-128..127`, 0 the centre of travel — and it is
+   *  resolved to each target's own byte in `clampCommitToResolution`, the one
+   *  place with the target descriptor in hand: the same fraction of that
+   *  head's travel (`lib/positionScale.ts`), exactly `128 + value` on the
+   *  0–255 axis every head in this rig has. */
+  | { kind: 'position'; pan?: number; tilt?: number; panCentre?: number; tiltCentre?: number }
   | { kind: 'setting'; level: number }
 
 /**
@@ -679,19 +679,18 @@ export function clampCommitToResolution(
     return { kind: 'slider', value: clamp(commit.value, min, max) }
   }
   if (commit.kind === 'position' && resolution.kind === 'position') {
-    // A degree resolves through the target's own annotation, and only there: the editor only
-    // sends degrees when every head in its batch annotates, so a null here is a head the editor
-    // never saw — and leaving the axis alone is safer than inventing a byte for it.
-    const panFromDeg =
-      commit.panDeg === undefined || resolution.panProperty == null
+    // A centre-relative value resolves through the target's own axis range, so a batch over
+    // heads of different ranges lands each at the same fraction of its own travel.
+    const panFromCentre =
+      commit.panCentre === undefined
         ? undefined
-        : (degreesToDmx(commit.panDeg, resolution.panProperty) ?? undefined)
-    const tiltFromDeg =
-      commit.tiltDeg === undefined || resolution.tiltProperty == null
+        : centreToDmx(commit.panCentre, { min: resolution.panMin, max: resolution.panMax })
+    const tiltFromCentre =
+      commit.tiltCentre === undefined
         ? undefined
-        : (degreesToDmx(commit.tiltDeg, resolution.tiltProperty) ?? undefined)
-    const pan = commit.pan ?? panFromDeg
-    const tilt = commit.tilt ?? tiltFromDeg
+        : centreToDmx(commit.tiltCentre, { min: resolution.tiltMin, max: resolution.tiltMax })
+    const pan = commit.pan ?? panFromCentre
+    const tilt = commit.tilt ?? tiltFromCentre
     return {
       kind: 'position',
       pan: pan === undefined ? undefined : clamp(pan, resolution.panMin, resolution.panMax),
@@ -710,7 +709,7 @@ export function clampCommitToResolution(
  * the column — a marquee is geometric and sweeps the par's empty Gobo cell along with the spot's —
  * and is what the read-out says (*2 heads have no gobo · skipped*). [resolutions] is what the
  * editor reads its ranges and annotations off: whether every head's dimmer is 0–255, whether every
- * mover annotates its pan in degrees.
+ * head's position axes share a range.
  */
 export interface CellBatch {
   count: number
@@ -742,11 +741,11 @@ export function batchForTargets(targets: readonly WriteTarget[], col: ColumnKey)
 /**
  * Two position commits inside one throttle window, as one: the later commit's axis wins where it
  * says one, the earlier one's is kept where it does not — so a pan tick does not discard a pending
- * tilt tick (or vice versa). **Per axis, one unit**: an axis said in degrees clears the byte the
- * pending commit carried for it, and a byte clears the degree, because `clampCommitToResolution`
- * reads the byte first and a stale byte beside a fresh degree would win. Before this existed the
- * container's merge copied `pan` / `tilt` alone and the degree arm's third commit in a window
- * became an empty write (editor-kit session 1 review, finding 1).
+ * tilt tick (or vice versa). **Per axis, one unit**: an axis said centre-relative clears the byte
+ * the pending commit carried for it, and a byte clears the centre value, because
+ * `clampCommitToResolution` reads the byte first and a stale byte beside a fresh centre value
+ * would win. Before this existed the container's merge copied `pan` / `tilt` alone and the
+ * editor's third commit in a window became an empty write (editor-kit session 1 review, finding 1).
  */
 export function mergePositionCommits(
   prev: Extract<CellCommit, { kind: 'position' }>,
@@ -754,13 +753,13 @@ export function mergePositionCommits(
 ): Extract<CellCommit, { kind: 'position' }> {
   const out: Extract<CellCommit, { kind: 'position' }> = { kind: 'position' }
   if (next.pan !== undefined) out.pan = next.pan
-  else if (next.panDeg !== undefined) out.panDeg = next.panDeg
+  else if (next.panCentre !== undefined) out.panCentre = next.panCentre
   else if (prev.pan !== undefined) out.pan = prev.pan
-  else if (prev.panDeg !== undefined) out.panDeg = prev.panDeg
+  else if (prev.panCentre !== undefined) out.panCentre = prev.panCentre
   if (next.tilt !== undefined) out.tilt = next.tilt
-  else if (next.tiltDeg !== undefined) out.tiltDeg = next.tiltDeg
+  else if (next.tiltCentre !== undefined) out.tiltCentre = next.tiltCentre
   else if (prev.tilt !== undefined) out.tilt = prev.tilt
-  else if (prev.tiltDeg !== undefined) out.tiltDeg = prev.tiltDeg
+  else if (prev.tiltCentre !== undefined) out.tiltCentre = prev.tiltCentre
   return out
 }
 

@@ -265,7 +265,7 @@ describe('the scope arm (D6)', () => {
   })
 
   it('tells an intent string from a literal by shape', () => {
-    for (const intent of ['pct:50', 'deg:240,135', 'dmx:40', 'tmpl:0b2a4c6e-1111-2222-3333-444455556666', '#FF0000;policy=extract', '#ff0000;policy=rgbonly']) {
+    for (const intent of ['pct:50', 'pos:-12,30', 'deg:240,135', 'dmx:40', 'tmpl:0b2a4c6e-1111-2222-3333-444455556666', '#FF0000;policy=extract', '#ff0000;policy=rgbonly']) {
       expect(isIntentString(intent)).toBe(true)
     }
     for (const literal of ['0', '128', '255', '#ff0000', '#bb4400;w68', '#0044bb;w68;a10;uv200', '128,64']) {

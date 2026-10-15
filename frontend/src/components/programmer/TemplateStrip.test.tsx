@@ -357,6 +357,24 @@ describe('TemplateStrip', () => {
    * either way — the order is what says which half you are in, since the tooltip is the only other
    * thing that differs.
    */
+  it('names a per-fixture palette by its head count, never by one head\'s row', () => {
+    // Each row is one head's own value, so describing the first would describe one head — and a
+    // stored `deg:` row could only be read through a range that is not that head's (S11).
+    templates = [
+      template({
+        name: 'Specials',
+        family: 'POSITION',
+        isGeneric: false,
+        rows: [
+          { targetType: 'fixture', targetKey: 'mover-1', propertyName: 'position', value: 'deg:12,-8' },
+          { targetType: 'fixture', targetKey: 'mover-2', propertyName: 'position', value: 'pos:-14,-8' },
+        ],
+      }),
+    ]
+    render(strip([{ rowId: 'fixture:hex-1', col: 'position' }]))
+    expect(screen.getByText('2 heads')).toBeInTheDocument()
+  })
+
   it('puts effect chips after the values, in library order', () => {
     templates = [BREATHE, AMBER]
     render(strip(COLOUR_CELL))

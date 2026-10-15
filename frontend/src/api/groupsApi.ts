@@ -83,6 +83,8 @@ export interface ApplyFxRequest {
   speedMasterUuid?: string
   /** Wall-clock rate master, as the master's uuid (omitted → unscaled). */
   rateSpeedMasterUuid?: string
+  /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
+  seconds?: boolean
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -114,6 +116,8 @@ export interface GroupActiveEffect {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
+  /** D7's reading: follows no master. */
+  seconds?: boolean
 }
 
 // === Group Property Types ===

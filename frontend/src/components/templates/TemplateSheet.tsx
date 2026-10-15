@@ -28,6 +28,7 @@ import { handPickUp } from '@/store/hand'
 import { useCopyTemplateMutation, useSaveTemplateMutation } from '@/store/templates'
 import type { TemplateEffect, TemplateInput, TemplateSummary } from '@/api/templatesApi'
 import type { SpeedMaster } from '@/api/speedMastersApi'
+import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/effectTiming'
 import { useTemplateDelete } from './useTemplateDelete'
 import { TemplateValueCell, type TemplateValueDraft, type TemplateValueLanding } from './TemplateValueCell'
 import { applyValueChanges, seedValues, templateRowsFromValues, templateRowsKey } from './familyControls/templateRows'
@@ -47,8 +48,12 @@ export function templateRowId(templateId: number): string {
   return `tmpl:${templateId}`
 }
 
-/** The Master column's choice for a wall-clock effect's null rate master. Never on the wire. */
-export const UNSCALED = 'unscaled'
+/**
+ * The Master column's *Seconds* (venue-visit plan D7): the effect follows no master — a beat effect's
+ * division read as seconds, a wall-clock effect's rate master null. Never on the wire; the wire says
+ * `seconds`.
+ */
+export const SECONDS = 'seconds'
 
 /**
  * Master 1 before the bank has loaded — a beat effect's null master, which is master 1 whether or
@@ -82,7 +87,7 @@ export interface TemplateSheetProps {
  * family dividers; this draws the columns and the bar.
  *
  * - **Holds** is a read-out. **Value** reads the template's own grammar in one line — the swatch
- *   and `#FF9D4A · Extract white`, `50%`, `270° / 135°` for a generic value; *4 heads · per
+ *   and `#FF9D4A · Extract white`, `50%`, `-20 / +10` (a position, centre-relative) for a generic value; *4 heads · per
  *   fixture*; the effect and its speed — read from `rows ?? []`, since an effect template's empty
  *   list is omitted on the wire. On a **generic value** template it is `TemplateValueCell` (session
  *   3, D6): the editor's own family controls, `PUT {rows}` through the lifted rows builder, the
@@ -126,8 +131,9 @@ export function TemplateSheet({
     () => masters.map((m) => ({ value: m.uuid, label: `M${m.masterIndex} · ${m.name}` })),
     [masters],
   )
-  const rateOptions = useMemo<SheetOption[]>(
-    () => [{ value: UNSCALED, label: 'Unscaled' }, ...beatOptions],
+  /** Seconds, then every master — one question for every effect, as the editor's chip asks it. */
+  const timingOptions = useMemo<SheetOption[]>(
+    () => [{ value: SECONDS, label: 'Seconds' }, ...beatOptions],
     [beatOptions],
   )
 
@@ -142,41 +148,68 @@ export function TemplateSheet({
   )
 
   /**
-   * The Master column's value for one effect template — the stored uuid, **canonical**: a beat
-   * effect's null is master 1, so it reads as M1's uuid and an M1 commit writes null back; a
-   * wall-clock effect's null is `unscaled`. Undefined where the effect type is unknown.
+   * The Master column's value for one effect template — `seconds` when it follows no master (D7),
+   * else the stored uuid, **canonical**: a beat effect's null is master 1, so it reads as M1's uuid
+   * and an M1 commit writes null back. Undefined where the effect type is unknown.
    */
   const masterValue = useCallback(
     (effect: TemplateEffect): string | undefined => {
-      if (effect.timingSource === 'BEAT') return effect.speedMasterUuid ?? master1?.uuid ?? MASTER_1
-      if (effect.timingSource === 'WALL_CLOCK') return effect.rateSpeedMasterUuid ?? UNSCALED
-      return undefined
+      if (effect.timingSource == null) return undefined
+      if (isOnSeconds(effect, effect.timingSource)) return SECONDS
+      if (effect.timingSource === 'WALL_CLOCK') return effect.rateSpeedMasterUuid ?? SECONDS
+      return effect.speedMasterUuid ?? master1?.uuid ?? MASTER_1
     },
     [master1],
   )
 
   /**
-   * The effect with its master changed — the one field, and only if it moves. Null where the
-   * choice cannot apply to this effect: `unscaled` on a beat effect (a beat effect always runs on a
-   * master), or a master this project does not have.
+   * The effect with its timing changed, and only if it moves. Null where the choice cannot apply:
+   * a master this project does not have, or an effect whose type no longer resolves.
+   *
+   * A **beat** effect moving between Seconds and a master keeps its speed — the division converted
+   * at the master's stored tempo, the one this sheet reads — so a pad does not change speed under a
+   * timing edit. A wall-clock effect's number is seconds either way, and its master is its rate
+   * master.
    */
   const effectWithMaster = useCallback(
     (effect: TemplateEffect, choice: string): TemplateEffect | null | 'same' => {
-      if (choice !== UNSCALED && choice !== MASTER_1 && !masterByUuid.has(choice)) return null
-      if (effect.timingSource === 'BEAT') {
-        if (choice === UNSCALED) return null
-        // Master 1 has two spellings — its uuid and the null that means it — so both sides are
-        // compared canonically, and M1 is written as null, the spelling every other writer uses.
-        const current = canonicalBeat(effect.speedMasterUuid, master1)
-        const next = canonicalBeat(choice, master1)
-        return current === next ? 'same' : { ...effect, speedMasterUuid: next }
+      if (choice !== SECONDS && choice !== MASTER_1 && !masterByUuid.has(choice)) return null
+      if (effect.timingSource == null) return null
+      const wallClock = effect.timingSource === 'WALL_CLOCK'
+      const onSeconds = isOnSeconds(effect, effect.timingSource)
+      const bpmOf = (uuid: string | null | undefined) =>
+        (uuid != null && uuid !== MASTER_1 ? masterByUuid.get(uuid) : master1)?.bpm ?? 0
+      // The flag is written only where it moves, so an edit of a palette that never used it sends
+      // the effect as it was with the one field changed. A wall-clock effect's Seconds is its null
+      // rate master, which needs no flag.
+      const offSeconds = effect.seconds === true ? { seconds: false } : {}
+      if (choice === SECONDS) {
+        if (onSeconds) return 'same'
+        if (wallClock) return { ...effect, rateSpeedMasterUuid: null }
+        return {
+          ...effect,
+          seconds: true,
+          speedMasterUuid: null,
+          rateSpeedMasterUuid: null,
+          beatDivision: beatsToSeconds(effect.beatDivision, bpmOf(effect.speedMasterUuid)),
+        }
       }
-      if (effect.timingSource === 'WALL_CLOCK') {
-        const next = choice === UNSCALED ? null : choice
-        if ((effect.rateSpeedMasterUuid ?? null) === next) return 'same'
-        return { ...effect, rateSpeedMasterUuid: next }
+      if (wallClock) {
+        const next = choice === MASTER_1 ? (master1?.uuid ?? null) : choice
+        if (next == null) return null
+        if (!onSeconds && effect.rateSpeedMasterUuid === next) return 'same'
+        return { ...effect, ...offSeconds, rateSpeedMasterUuid: next }
       }
-      return null
+      // Master 1 has two spellings — its uuid and the null that means it — so both sides are
+      // compared canonically, and M1 is written as null, the spelling every other writer uses.
+      const next = canonicalBeat(choice, master1)
+      if (!onSeconds && canonicalBeat(effect.speedMasterUuid, master1) === next) return 'same'
+      return {
+        ...effect,
+        ...offSeconds,
+        speedMasterUuid: next,
+        ...(onSeconds ? { beatDivision: secondsToBeats(effect.beatDivision, bpmOf(choice)) } : {}),
+      }
     },
     [master1, masterByUuid],
   )
@@ -378,19 +411,20 @@ export function TemplateSheet({
         cell: (row, props) => {
           const effect = row.template?.effect
           const wallClock = effect?.timingSource === 'WALL_CLOCK'
+          const seconds = effect != null && isOnSeconds(effect, effect.timingSource)
           const uuid = wallClock ? effect?.rateSpeedMasterUuid : (effect?.speedMasterUuid ?? master1?.uuid)
-          const master = uuid != null ? masterByUuid.get(uuid) : undefined
+          const master = !seconds && uuid != null ? masterByUuid.get(uuid) : undefined
           return (
             <OptionCell
               {...(props as React.ComponentProps<typeof OptionCell>)}
-              options={wallClock ? rateOptions : beatOptions}
+              options={timingOptions}
               face={
                 master != null ? (
                   <span className="mx-1.5 truncate text-xs">
                     <span className="font-mono font-bold">M{master.masterIndex}</span> {master.name}
                   </span>
                 ) : (
-                  <span className="mx-1.5 text-xs text-muted-foreground">{wallClock && uuid == null ? 'unscaled' : 'M1'}</span>
+                  <span className="mx-1.5 text-xs text-muted-foreground">{seconds ? 'Seconds' : 'M1'}</span>
                 )
               }
             />
@@ -415,7 +449,7 @@ export function TemplateSheet({
           }
           if (refused.length > 0) {
             toast.info(
-              `${listNames(refused, 'palette')} skipped — a beat effect always runs on a master, so it cannot be unscaled`,
+              `${listNames(refused, 'palette')} skipped — the master is not this project's, or the effect is unknown here`,
               { id: 'sheet-write:templates:master-skip' },
             )
           }
@@ -425,12 +459,9 @@ export function TemplateSheet({
           for (const row of batch as MemberRow[]) {
             const effect = row.template.effect
             if (effect == null) continue
-            // The stored null on either field: M1 for a beat effect, unscaled for a wall-clock one.
-            if (effect.timingSource === 'BEAT' && canonicalBeat(effect.speedMasterUuid, master1) != null) {
-              put(row.template, 'master', { effect: { ...effect, speedMasterUuid: null } })
-            } else if (effect.timingSource === 'WALL_CLOCK' && effect.rateSpeedMasterUuid != null) {
-              put(row.template, 'master', { effect: { ...effect, rateSpeedMasterUuid: null } })
-            }
+            // Each kind's default: master 1 for a beat effect, Seconds (unscaled) for a wall-clock one.
+            const next = effectWithMaster(effect, effect.timingSource === 'WALL_CLOCK' ? SECONDS : MASTER_1)
+            if (next != null && next !== 'same') put(row.template, 'master', { effect: next })
           }
         },
         cellTitle: (row) =>
@@ -513,7 +544,7 @@ export function TemplateSheet({
         display: (row) => (row.template ? <PressedAgo at={row.template.lastPressedAt} /> : null),
       },
     ],
-    [beatOptions, effectLibrary, effectWithMaster, master1, masterByUuid, masterValue, put, rateOptions],
+    [effectLibrary, effectWithMaster, master1, masterByUuid, masterValue, put, timingOptions],
   )
 
   const openRow = useCallback(
@@ -780,7 +811,7 @@ function centreValue(template: TemplateSummary, library: readonly EffectLibraryE
 function TemplateValue({ template }: { template: TemplateSummary }) {
   if (template.kind === 'effect') {
     const effect = template.effect
-    const speed = effect == null ? null : effectSpeedLabel(effect.beatDivision, effect.timingSource)
+    const speed = effect == null ? null : effectSpeedLabel(effect.beatDivision, effect.timingSource, effect.seconds)
     const around = effect != null && isAroundSpelling(effect) ? 'around' : null
     const text = effect == null ? 'Effect' : [effect.effectType, speed, around].filter((p) => p != null && p !== '').join(' · ')
     return (

@@ -99,6 +99,20 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a position takes both units — pos centre-relative, a stored deg through the head's own range`() {
+        patchRig()
+        // Venue-visit plan D3, P3: `pos:` is coarse DMX about 128 on any head; `deg:` still resolves
+        // through the MAC 250's annotated 540° pan and 257° tilt.
+        assertTrue(call("create_look", look("Centre", "pos:-20,40")).success)
+        assertEquals(listOf(LookRowDto("fixture", "mac-1", "position", "108,168")), storedRows("Centre"))
+        assertTrue(call("create_look", look("Degrees", "deg:270,0")).success)
+        assertEquals(listOf(LookRowDto("fixture", "mac-1", "position", "128,0")), storedRows("Degrees"))
+    }
+
+    private fun look(name: String, position: String) =
+        """{"name":"$name","values":[{"target":{"type":"fixture","key":"mac-1"},"propertyName":"position","value":"$position"}]}"""
+
+    @Test
     fun `a colour value keeps the emitter levels it names, where the head has them`() {
         patchRig()
         val created = call(

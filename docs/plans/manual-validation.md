@@ -16,6 +16,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
@@ -92,6 +94,76 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S15`
+
+**What it proves**: *an effect can run on its own cycle* — venue-visit plan S15 (D7, D16): an effect
+on *Seconds* follows no master, and a new effect is one bar on the master tagged for its family's
+usage.
+
+**Why it is here**: the tests drive the engine's two loops by hand and render the editor in jsdom.
+Nothing in review watched a breathe on a real rig hold its speed while the operator tapped the tempo,
+or a desk's own masters stamp a new effect.
+
+**Test**, on the hall's rig:
+
+1. **Tag a master.** On Speed Masters give M2 the usage *Dimmer* at 90 BPM.
+2. **A new effect.** On a fixture sheet press *+ Effect* → Pulse: its chip reads `M2 · 90` and its
+   speed `1 bar`. A Colour Cycle on a colour head starts on M1 (none is tagged colour), also one bar.
+3. **Onto Seconds.** Open the Pulse, pick *Seconds* on the chip: the speed reads about `2.67 s` and
+   the light does not jump. Tap M2 up to 150: the Seconds Pulse keeps its speed, a second Pulse on M2
+   speeds up.
+4. **Back.** Pick M2 again: the speed reads in beats and does not jump. *Revert* puts it back as it
+   opened.
+5. **Fluorescent Flicker.** Start one, give its chip M2, then pick *Seconds*: it is unscaled. Revert
+   from M2 lands *Seconds* again (the old `FU-FX-RATE-MASTER-CLEAR`).
+6. **Record and run.** Record the Seconds Pulse into a cue, clear, GO the cue: it runs on Seconds at
+   the same cycle. Include the cue: the editor reads *Seconds*. Make an effect palette from it: the
+   pad reads `Pulse · 2.67 s`.
+7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer rail says the
+   speed as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
+
+If a Seconds effect drifts with the tempo anywhere (a cue layer over it, a busk press), promote it to
+a `FU-` item in `followups.md`.
+
+15 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S11`
+
+**What it proves**: *position is centre-relative DMX* — venue-visit plan S11 (D3, P3): every surface
+an operator types or reads position on shows `-128..127` with 0 at the centre of travel (DMX 128); a
+generic palette means the same fraction of travel on every head; a palette stored in degrees keeps
+resolving as angles and becomes centre-relative only when it is edited.
+
+**Why it is here**: the tests pin the arithmetic and the strings. Whether 0 *is* the middle of each
+real mover's travel, and whether "the same fraction" reads as the same place on two models, is the
+rig's to say.
+
+**Test**, on the hall's rig with a MAC 250 and a Shehds (or the Robe) patched:
+
+1. **The centre.** Locate a mover: the programmer's Position cell, the fixture sheet's Position row
+   and the cue value grid all read `0,0`; the Channels sheet reads 128 on pan and tilt.
+2. **Typing.** In the cell, type pan `-20`, Enter: the head swings left of centre and Channels reads
+   108. Type `-128` and `127`: the head reaches each end stop.
+3. **A generic palette on two models.** Make a position palette at `-40 / +30` from the palette
+   editor and press it on both movers: they land on the same bytes (88 / 158), each at the same
+   share of its own travel. Record *New from selection* over them and it comes out *Generic*.
+4. **An old palette.** Press a position palette saved before this session (a `deg:` row): it lands
+   where it always did. Open it: the editor shows it on the new scale with *Saved in degrees*. Rename
+   it and save: it still lands in the same place. Move its pan and save: it now reads centre-relative.
+5. **Spread and FX.** A Position spread from `-16` to `+16` fans the selection about the centre; a
+   Circle in *Absolute* shows its centre as `0` at DMX 128 and its radius in steps.
+6. **Aim.** *Aim…* still appears on a mover and lands on the point; `aim_fixtures` with
+   `saveAsPalette` makes a palette whose press puts the heads back on the aim.
+
+If a mover's centre of travel is not DMX 128, or a model's travel is not the same share for the same
+value, promote it to a `FU-` item in `followups.md`.
+
+15 minutes.
 
 ---
 
@@ -1619,7 +1691,9 @@ has more checks than the others.
    move. ⌥click, then retune — they must.
 4. **A position template in degrees across two ranges.** The Shehds tilts 0–270°, the MAC 250
    0–257°: the same degrees must land on different DMX, and a clamp must be reported in the panel
-   *and* true on stage.
+   *and* true on stage. (Since venue-visit S11 this is a palette **stored** in degrees, `deg:`, which
+   still resolves this way; a new palette is centre-relative and lands the same DMX on both —
+   [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11).)
 5. **The white/amber policy on a head that has both.** Extract should look brighter and cleaner
    than RGB-only at the same hue, which is the whole claim.
 6. **A beam template says out loud that it cannot carry a gobo** — the disabled rows with their

@@ -608,6 +608,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // to be remapped for a clone to point at its own master.
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
         sortOrder = 0
     }
 
@@ -651,11 +655,17 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         parameters = mapOf("colours" to "tmpl:${colourTemplate.uuid}", "depth" to "0.6")
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
     }
 
-    // A **per-fixture** template — a focus position, where each head holds its own degrees. Seeded
+    // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
     // as well as the generic one because the two row shapes are the case the library labels
     // *Generic* / *Per fixture*, and a copier that handles one and not the other must be caught.
+    // One row in each position unit (venue-visit plan P3): a `deg:` row stored before v28 and a
+    // centre-relative `pos:` one, so a round trip that rewrote either unit would show.
     val positionTemplate = DaoTemplate.new {
         this.project = project
         name = "downstage-centre"
@@ -666,7 +676,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoTemplateRow.new {
         template = positionTemplate; targetType = "fixture"; targetKey = "hex-2"
-        propertyName = "position"; value = "deg:-14,-8"; sortOrder = 1
+        propertyName = "position"; value = "pos:-14,-8"; sortOrder = 1
     }
 
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
@@ -753,6 +763,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 3
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
+        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
+        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
+        // test's remap still has a reference to rewrite.
+        seconds = true
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.

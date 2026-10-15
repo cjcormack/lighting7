@@ -489,7 +489,9 @@ function TemplateGroup({
                     ? 'Generic'
                     : `Per fixture · ${template.rows?.length ?? 0}`}
               </span>
-              {(template.rows?.length ?? 0) > 0 && (
+              {/* A per-fixture palette's rows are each a head's own value — the label above already
+                  says how many — so only a generic one's rows are described. */}
+              {template.isGeneric && (template.rows?.length ?? 0) > 0 && (
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                   {/* The whole row set, not `rows[0]`: a colour template may hold a hex plus
                       explicit white / amber / uv rows, and row order is authoring order — so

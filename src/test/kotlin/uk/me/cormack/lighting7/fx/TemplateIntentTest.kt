@@ -28,7 +28,9 @@ class TemplateIntentTest {
         roundTrip(TemplateIntent.Level(0))
         roundTrip(TemplateIntent.Percent(75.0))
         roundTrip(TemplateIntent.Percent(12.5))
-        roundTrip(TemplateIntent.Position(45.0, -12.5))
+        roundTrip(TemplateIntent.Position(45.0, -12.5, PositionUnit.DEGREES))
+        roundTrip(TemplateIntent.Position(-12.0, 30.0))
+        roundTrip(TemplateIntent.Position(-128.0, 127.0))
         roundTrip(TemplateIntent.Switch(true))
         roundTrip(TemplateIntent.Switch(false))
     }
@@ -65,7 +67,7 @@ class TemplateIntentTest {
     fun `the literal parser refuses an intent rather than misreading it`() {
         // The second deliberate degradation, and the more important one: `pct:75` must never become
         // a DMX 75. `CueAssignmentResolver` answers null, and its callers skip the row with a warn.
-        for (raw in listOf("pct:75", "deg:45,12.5", "dmx:180", "on", "off")) {
+        for (raw in listOf("pct:75", "pos:-12,30", "deg:45,12.5", "dmx:180", "on", "off")) {
             assertNull(
                 CueAssignmentResolver.parseAssignmentValue(PropertyCategoryForTest.DIMMER, "dimmer", raw),
                 "'$raw' must not parse as a literal",
@@ -76,7 +78,7 @@ class TemplateIntentTest {
     @Test
     fun `garbage is null, not a guess`() {
         for (raw in listOf(
-            "", "   ", "#GGGGGG", "pct:", "deg:45", "deg:a,b", "#12345", "maybe",
+            "", "   ", "#GGGGGG", "pct:", "deg:45", "deg:a,b", "pos:12", "pos:1,2,3", "pos:,", "pos:nan,0", "#12345", "maybe",
             // A bare number is *not* a level intent, which is the whole reason `dmx:` carries a
             // prefix its payload does not need: `180` is what the literal parser reads, so the two
             // grammars would agree on some rows and silently disagree on others.
@@ -84,6 +86,17 @@ class TemplateIntentTest {
         )) {
             assertNull(parseTemplateIntent(raw), "'$raw'")
         }
+    }
+
+    @Test
+    fun `a position's two units parse apart, and a centre value is whole steps on the scale`() {
+        // Venue-visit plan P3: `deg:` is still read as degrees; `pos:` is centre-relative coarse DMX,
+        // rounded to a whole step and clamped to -128..127 on the way in, as `pct:` is to 0..100.
+        assertEquals(TemplateIntent.Position(45.0, 12.5, PositionUnit.DEGREES), parseTemplateIntent("deg:45,12.5"))
+        assertEquals(TemplateIntent.Position(-12.0, 30.0, PositionUnit.CENTRE), parseTemplateIntent("pos:-12,30"))
+        assertEquals(TemplateIntent.Position(13.0, -128.0), parseTemplateIntent(" POS: 12.6 , -400 "))
+        assertEquals("pos:127,-128", TemplateIntent.Position(300.0, -300.0).serialize())
+        assertEquals("pos:3,-2", TemplateIntent.Position(2.6, -2.4).serialize())
     }
 
     @Test

@@ -636,8 +636,8 @@ Release folds to its glyph and the scope line drops the fade.
   row over its colour — no "Virtual" badge — but **a fixture's heads never do** (`headRowOptions`):
   a head has no dimmer channel, and the row only repeated what its colour row sets.
 - **Controls are the editor kit's** (D7): a slider beside an `EditorField` in the row's unit — a
-  **percent** for a level, as the grid reads; **degrees** for a Position whose axes annotate travel,
-  bytes otherwise. A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
+  **percent** for a level, as the grid reads; **centre-relative** for a Position on every head
+  (`lib/positionScale.ts`, §The editor kit). A field **commits on Enter**, not per keystroke (`SheetField`): a sheet write
   takes the programmer fade, and `8` on the way to `80` would be a fade of its own; a drag writes as
   it moves, at no fade. A setting row mounts the grid's `SettingCell` — one type-ahead for a step on
   both surfaces. **Colour and Position open inline, one row at a time** (call 5): the colour row
@@ -645,14 +645,14 @@ Release folds to its glyph and the scope line drops the fade.
   The colour row's swatch is how the head **looks** — dimmed by its dimmer (a head's own, else the
   fixture's), with the UV dot — and the text beside it is the value.
 - **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
-  goes through `clampCommitToResolution`'s degree rule, so 270° lands where the programmer's position
+  goes through `clampCommitToResolution`'s centre rule, so `-20` lands where the programmer's position
   cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
   the wire. A raw pan landed in the sideband, held nothing back and read *Programmer* while an effect
   was on stage — the bug that started the plan.
 - **Source marks** (D4): `useRowSource` subscribes per key (`subscribeToKey`) and joins `getKeyState`
   with the active-effect list through `rowSourceOf` (pure) — a 3px edge and a `SourceChip` in the
   grid's colours: *Programmer* (filled once touched), *Night · pressed* for a pressed layer, the effect
-  as *Pulse · ¼ · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
+  as *Pulse · 1 beat · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
   something under the winner is held back, by `lib/heldBack.ts` — the desk's
   `EffectSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
   programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
@@ -681,7 +681,8 @@ Release folds to its glyph and the scope line drops the fade.
   open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement effect starting *Around*. **Another tap swaps it** through `updateFx` — the new
+  it), a movement effect starting *Around*, every effect starting on **one bar** on the master tagged
+  for its family's usage (venue-visit plan D16; a wall-clock effect on four seconds). **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *property* cannot be a swap (an instance keeps
   its target), so it stops the auditioned effect and starts afresh. An effect offered through a
@@ -695,21 +696,25 @@ Release folds to its glyph and the scope line drops the fade.
   time, a distribution, element field or master only once the operator has set it, since the DTO
   leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
   (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
-  (a never-assigned master as master 1's uuid — the frame cannot say null; a rate master once set
-  cannot be put back to *unscaled* the same way, so the chip keeps naming it —
-  `FU-FX-RATE-MASTER-CLEAR`); **Done** comes back
+  (a never-assigned master as master 1's uuid — the frame cannot say null; an effect that opened
+  on *Seconds* gets `seconds: true` back, which is also how a wall-clock effect returns to
+  unscaled, `FU-FX-RATE-MASTER-CLEAR`'s close); **Done** comes back
   to the list, landing any move the floor still held; **×** stops the effect, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
   refetch never pulls a slider back under a finger; hosts key it on the effect's id *and* type, so
-  the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** (⅛ … 16), any other
-  division typed beside it (the chips elsewhere still speak note values, `FU-FE-FX-SPEED-SPELLING`),
-  with the master as a chip; a wall-clock effect types seconds and its chip is the rate master. A movement
+  the picker's swap opens a fresh one. Speed is a segment in **beats a cycle** — `⅛ beat` … `4 bars`,
+  `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too (`FU-FE-FX-SPEED-SPELLING`,
+  settled by venue-visit plan S15) — any other division typed beside it, with the **timing** as a
+  chip: *Seconds* or a master (venue-visit plan D7; `TimingChip`, `timingChoicePatch`). On Seconds the
+  effect types its cycle in seconds and follows no master; a wall-clock effect types seconds either
+  way, its master being its rate master. Moving a beat effect between the two converts the division
+  at the master's live tempo, so its speed holds (`lib/effectTiming.ts`). A movement
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
-  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is
-  **degrees of travel** where every head annotates both axes (`positionAxesOf`), bytes elsewhere, and
-  a centre or a sweep's end a position on its axis. Curves, switches and ratios beside levels sit
+  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is a
+  distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
+  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
   behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
   blend (every effect, so nothing is out of reach), and — on a group or a fixture with heads — step
   timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
@@ -875,8 +880,12 @@ programmer — a deferred one on the desk selection — for Update to write an e
 pad, since a pad supplies the targets on the press.
 
 **A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
-white/amber policy, a level or beam role as a percentage of each head's own range, a position in
-**degrees**. `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
+white/amber policy, a level or beam role as a percentage of each head's own range, a position
+**centre-relative** (`pos:pan,tilt`, `-128..127` about the centre of travel, the same fraction of
+travel on every head — venue-visit plan D3). A position stored before D3 is `deg:` travel degrees:
+the desk keeps resolving it as angles, an editor shows it on the centre scale (a generic one through
+the old editor's 540° / 270°, a per-fixture row through its own head — `positionOnScale`) and saves
+it as `pos:` only once it is moved (P3). `fx/TemplateIntent.kt` owns the grammar and `lib/templateIntent.ts` mirrors it — the
 client half serialises and parses only, and **never resolves**, because
 `fx/TemplateResolver.kt` must be the single answer to what the rig will do (§6 of the plan). All
 three consumers go through it: cook, `POST /palettes/{id}/apply`, and the editor's resolves-to
@@ -1202,7 +1211,7 @@ palette is generic and single-row — `templateSwatch` in `components/busking/pa
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
 `rows[0]` under a name covering several rows states one of them as the whole thing. An effect
 palette has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
-(`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller:
+(`Colour Pulse · ½ beat · M2`). That detail is a **component** and not a string built by the caller:
 the master's label is a live value, hooks cannot be conditional, and a hook in the loop would make
 every value pad in the library subscribe to the master bank. (The palette sheet's Master column
 answers the same question the other way — it names masters from the project's *stored* bank,
@@ -1213,8 +1222,8 @@ plan D16, session 5) — D12's question, through the live editor's own rules (`f
 re-exported by `fxEditorModel.ts`) rather than a second copy. `TemplateEditor`'s effect branch
 mounts **`FxEffectFields`** — the live editor's fields over the palette's draft (`templateDraftOf`
 / `withTemplateDraft`), with no target: distribution under Advanced, no step timing, element mode,
-head filter or degrees (there is no head to read a travel from), and a rate master that can be set
-back to *Unscaled*, which a draft can hold and a live frame cannot. **`EffectParameterForm` is
+head filter, and the same timing chip — *Seconds* or a master — as the live editor.
+**`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an effect starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement effect
 starts **Around** — `ADDITIVE` with both centres pinned at 128 and the centre hidden — and anything
@@ -1957,7 +1966,7 @@ what it wrote. Only the desk knows a group's member order, each head's range, wh
 has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
 serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per family over
 `templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference through
-`colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an emitter) and
+`colourUtils`; `pct:` for a level or a beam role; centre-relative `pos:` for a position; `dmx:` for an emitter) and
 `spreadIntent.test.ts` asserts its import list reaches no resolver — and the panel's and the
 popover's reach no lerp but `rawValues`, from the raw arm alone. **There is no preview strip**
 (2026-09-21): there was one, drawn from `written[]` and `skipped[]` — one bar per head in the desk's
@@ -1976,9 +1985,8 @@ for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row wi
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
 is Rig again), offering it as something it is not would be worse than withholding it, and a
 disabled item in the row wrapped at 288px and read as a control that was merely off. A position
-spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
-convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
-hard stop. *Over: Cells* carries the cell count where a selected fixture has elements, and stays pressable
+spread's defaults are **±16 about the centre of travel**, centre-relative (`pos:`, venue-visit plan
+D3), so they never sit against a hard stop. *Over: Cells* carries the cell count where a selected fixture has elements, and stays pressable
 where none does — the choice survives a change of selection, an empty one included (it is the
 window's, `lib/spreadOver.ts`), and over heads with no cells the request says Heads
 (`effectiveSpreadOver` — the desk would make the same substitution, each fixture without elements
@@ -2891,7 +2899,7 @@ palette vocabulary: two intents of one property's shape, a curve, an order, part
 over-switch go to `POST /programmer/spread`, and one literal per head lands in Local (D3: the
 programmer's rows are heads the desk knows better than the browser does — a group's member order,
 each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
-are intents — a percent, a colour + policy or a `tmpl:` reference, degrees — so a spread from 0 to
+are intents — a percent, a colour + policy or a `tmpl:` reference, a centre-relative position — so a spread from 0 to
 full is *0% → 100%* on every head whatever its range, which the byte form never was, and the old
 position exclusion went with the byte lerp it objected to. **`raw`** — bytes on a column outside
 the vocabulary, Speed alone (D15; `rawValues` in `editor/spreadPlans.ts` is `fanValues` renamed and
@@ -2956,7 +2964,7 @@ resolves exactly as it does for Local and answers without writing, and `SpreadPo
 `"pan,tilt"`), which the route answers since session 3 in place of the interpolated intent — in the
 layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope edit
 does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the intent is
-told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `deg:` / `dmx:` /
+told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `pos:` / `deg:` / `dmx:` /
 `tmpl:` prefix or a `;policy=` tag — `parseProgrammerValue` alone would take a colour intent as a
 colour, since it splits on `;` and tests only the head) and refused with a toast naming the desk
 rather than landing an intent in a Look row; in practice such a desk 400s the request first, its
@@ -3467,15 +3475,18 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   `fadeDurationMsPresent: true`; Spread is the kit's `duration` plan. Set and Spread compare a null
   fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
   An effect palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
-- **Master is one field of `PUT {effect}`, and which field is the effect's timing.**
-  `speedMasterUuid` on a `BEAT` effect, `rateSpeedMasterUuid` on a `WALL_CLOCK` one; the body is
-  the whole effect with that field changed, since the PUT replaces the effect half — and it
-  **recreates the effect**, so a running instance restarts (the cell's title says so). A beat
-  effect's null is master 1, compared canonically and written back as null — and it reads as master 1
-  even before the bank has loaded (a `master-1` stand-in, never on the wire), or a marquee over it
-  would skip a row that takes a master; a wall-clock effect's null is **unscaled**, which it alone
-  offers. An effect whose type no longer resolves has no
-  `timingSource`, so which field to write is unknown: its Master is blank and skipped.
+- **Master is the effect's timing in `PUT {effect}`: *Seconds* or a master** (venue-visit plan D7),
+  offered first on every effect. A master is `speedMasterUuid` on a `BEAT` effect,
+  `rateSpeedMasterUuid` on a `WALL_CLOCK` one; Seconds is `seconds: true` with no master on a beat
+  effect (its division converted at the master's **stored** tempo, so its speed holds) and a null rate
+  master on a wall-clock one. The body is the whole effect with the timing changed — the flag only
+  where it moves — since the PUT replaces the effect half, and it **recreates the effect**, so a
+  running instance restarts (the cell's title says so). A beat effect's null is master 1, compared
+  canonically and written back as null — and it reads as master 1 even before the bank has loaded (a
+  `master-1` stand-in, never on the wire), or a marquee over it would skip a row that takes a master.
+  Clear is each kind's default: master 1 on a beat effect, Seconds on a wall-clock one. An effect
+  whose type no longer resolves has no `timingSource`, so which field to write is unknown: its Master
+  is blank and skipped.
 - **Value reads `rows ?? []`** and never resolves (`templateIntent.ts`'s rule): the swatch and
   `describeTemplateRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
 
@@ -3755,7 +3766,7 @@ along with the rest) and the resolutions — from `FixturesListContainer`'s `bat
 editor says about the batch must be that column's, not the marquee's total — summed, the Dimmer
 editor said "1 head has no dimmer · skipped" for a par the *Gobo* column skipped. `scopeLabel` rides
 beside it from the scope and the Look store's `lookName`. The container's own 33 ms position merge
-goes through `mergePositionCommits`, which keeps `panDeg` / `tiltDeg` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
+goes through `mergePositionCommits`, which keeps `panCentre` / `tiltCentre` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
 silently drop it. `ColourCell` takes the same `CellBatch` since session 2, and `CellBatch`
 gained the **`targets`** themselves beside the count — a count and a resolution list cannot name a
 head, and the colour editor needs the heads for its emitter union, its leaves and the palette
@@ -3771,17 +3782,20 @@ percent for the same reason — a palette of them is a percent already. The one 
 setting cell listing the steps, and a palette's percent on it snaps to the step nearest that
 proportion of its angles.
 
-**Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
-draws a 120px XY pad beside Pan · Tilt — a drag writes both axes in one commit — and where **every**
-head in the batch carries `degMin` / `degMax` on both its pan and tilt sliders (the movers, 10 of
-the 28 models; a `position` descriptor carries none of its own, so `resolveCell` attaches the axis
-sliders on its channels beside it), the fields and sliders are in travel degrees and the commit
-carries **`panDeg` / `tiltDeg`** rather than bytes. `clampCommitToResolution`
-resolves a degree to **each head's own byte** — 270° is 128 on a 540° mover and 109 on a 630° one —
-through `lib/axisDegrees.ts`, which is `dmxToDegrees` (moved out of `stageCoords.ts`, re-exported
-there) beside its inverse; a head whose axis carries no annotation is left alone on that axis. A
-batch mixing annotated and silent heads keeps bytes for all of them rather than two units in one
-editor; the cell keeps its byte read-out either way. The field's range is the lead head's.
+**Position is centre-relative DMX on every head** (venue-visit plan D3, which replaced editor-kit
+D14's degrees). `lib/positionScale.ts` is the one conversion every surface takes for display and
+entry — the programmer's cells, the fixture sheet, cue values, Spread, the FX editor and palettes:
+`-128..127` on each axis, 0 at the centre of travel (DMX 128), one unit a coarse step, so DMX 1 reads
+-127, 255 reads +127 and 0 reads -128 (Chris's call: exact, with -128 typeable). The fine channel is
+not part of the scale — no surface but aim writes it, as before. `PositionCell` draws a 120px XY pad
+beside Pan · Tilt — a drag writes both axes in one commit — the cell itself reads `-20,+40`, the
+read-out keeps the DMX bytes underneath, and the commit carries **`panCentre` / `tiltCentre`**, which
+`clampCommitToResolution` resolves to **each head's own byte** as the same fraction of its own axis
+range: `128 + value` on every 0–255 axis this rig has, so a batch never splits into two units and a
+head with no degree annotation takes the same scale. The literal on the wire is unchanged — a
+programmer entry, cue row or Look row is still `"pan,tilt"` bytes. `lib/axisDegrees.ts` is no longer
+for display or entry: it stays for the Stage view, aim (*Aim…* is offered where both axes annotate,
+`sheetRows`' `aimable`) and `positionOnScale`'s one read of a palette stored in degrees.
 
 **Widths by content** (D17): `w-72` for level, position, text and address (the busk endpoint editors'
 two fields plus a gutter, up from `w-64`), `w-64` for the setting and option lists and `w-[352px]`
@@ -4679,12 +4693,16 @@ The effect editor gates on the library entry's `timingSource` (as `EffectParamet
 fixture-fx-sheets session 5, did): a wall-clock effect gets its cycle in seconds and the rate
 master, a beat effect beats a cycle and the speed master. Showing both to both was the pre-existing
 bug — a wall-clock effect's "Speed Master" did nothing at all. **The live effect editor keeps that
-gate and draws the master as a chip** (`FxEditor`'s `MasterChip`, fixture-fx-sheets D11): on a beat effect it is
-the speed master (`M2 · 96`, master 1 when none is stored), on a wall-clock one the **rate**
-master (*Rate M2 · 96*, or *Unscaled*), beside the Speed label rather than as a select under it.
-It lists the live bank and always sends a concrete uuid — choosing M1 sends master 1's uuid,
-`SpeedMasterSelect`'s rule, because `updateFx`'s absent field means "keep" — and it reads the live
-BPM, never the stored one.
+gate and draws the timing as a chip** (`FxEffectFields`' `TimingChip`, fixture-fx-sheets D11 and
+venue-visit plan D7): *Seconds* first, then every master — on a beat effect the speed master (`M2 ·
+96`, master 1 when none is stored), on a wall-clock one the **rate** master (*Rate M2 · 96*) —
+beside the Speed label rather than as a select under it. *Seconds* is an effect's own cycle with no
+master (`seconds` on the wire; a wall-clock effect's Seconds is no rate master). It lists the live
+bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
+because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.
+**A new effect is one bar on the master tagged for its family's usage, else master 1** (venue-visit
+plan D16): `FxPicker` and `TemplateEditor` stamp it through `useSpeedMasterForCategory` at creation,
+so `null` still means master 1 everywhere; a wall-clock effect starts on its own Seconds (4 s).
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
 legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the

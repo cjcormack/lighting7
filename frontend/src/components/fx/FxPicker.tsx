@@ -27,6 +27,8 @@ import {
 } from '@/store/fixtureFx'
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
+import { useSpeedMasterForCategory } from '@/store/speedMasters'
+import { NEW_EFFECT_DIVISION, isOnSeconds } from '@/lib/effectTiming'
 import type { BlendMode } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
@@ -136,6 +138,7 @@ export function FxPicker({
   // effect and orphan the first.
   const [justStarted, setJustStarted] = useState<number | null>(null)
   const runningEffect = current != null ? (active ?? []).find((e) => e.id === current.effectId) : undefined
+  const masterForCategory = useSpeedMasterForCategory()
   const running = current != null && (runningEffect != null || justStarted === current.effectId) ? current : null
   useEffect(() => {
     if (justStarted != null && (active ?? []).some((e) => e.id === justStarted)) setJustStarted(null)
@@ -164,12 +167,15 @@ export function FxPicker({
 
     if (running != null && running.propertyName === propertyName) {
       if (normalizeEffectName(running.effectType) === normalizeEffectName(entry.name)) return
-      // A swap across timing sources (a beat effect for a wall-clock flicker) would carry the number
-      // across units — 16 beats becoming 16 seconds — so it lands on the start's 1, as a fresh
-      // effect would; a swap within one source keeps the operator's speed.
-      const fromSource = runningEffect?.timingSource ?? 'BEAT'
-      const toSource = entry.timingSource ?? 'BEAT'
-      const speed = fromSource === toSource ? {} : { beatDivision: 1 }
+      // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
+      // them — 16 beats becoming 16 seconds — so it lands on a new effect's one bar; a swap within
+      // one unit keeps the operator's speed. The desk keeps the swapped effect's timing choice
+      // (D7), so a beat effect on Seconds stays in seconds whichever type it becomes, and the
+      // running effect's loop already reads `WALL_CLOCK` for one.
+      const runningOnSeconds = runningEffect != null && isOnSeconds(runningEffect, runningEffect.timingSource)
+      const fromUnit = (runningEffect?.timingSource ?? 'BEAT') === 'WALL_CLOCK' ? 'seconds' : 'beats'
+      const toUnit = entry.timingSource === 'WALL_CLOCK' || runningOnSeconds ? 'seconds' : 'beats'
+      const speed = fromUnit === toUnit ? {} : { beatDivision: NEW_EFFECT_DIVISION }
       if (lightingApi.fx.updateFx(running.effectId, { effectType: entry.name, ...spec, ...speed })) {
         onCurrent({ ...running, effectType: entry.name })
       }
@@ -195,7 +201,13 @@ export function FxPicker({
         {
           effectType: entry.name,
           propertyName,
-          beatDivision: 1,
+          // A new effect is one bar on the master tagged for its family's usage, else master 1
+          // (venue-visit plan D16) — stamped here, as the palette editor stamps one, so a null
+          // still means master 1 everywhere. A wall-clock effect starts on its own Seconds.
+          beatDivision: NEW_EFFECT_DIVISION,
+          ...(entry.timingSource === 'WALL_CLOCK'
+            ? {}
+            : { speedMasterUuid: masterForCategory(entry.category) }),
           blendMode: spec.blendMode as BlendMode,
           phaseOffset: 0,
           parameters: spec.parameters,

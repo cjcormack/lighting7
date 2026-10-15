@@ -60,8 +60,11 @@ internal fun Route.routeApiRestFx(state: State) {
                 registration?.timingSource?.let { instance.timingSource = it }
                 instance.registrationId = registration?.id
 
+                secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
+                    ?.let { throw IllegalArgumentException(it) }
                 instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
                 instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
+                instance.applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
 
                 markProgrammerOwned(instance, request.programmerOwned)
 
@@ -164,7 +167,8 @@ data class AddEffectRequest(
     val effectType: String,
     val fixtureKey: String,
     val propertyName: String,
-    val beatDivision: Double = BeatDivision.QUARTER,
+    /** One bar when omitted — venue-visit plan D16's default for a new effect. */
+    val beatDivision: Double = BeatDivision.ONE_BAR,
     val blendMode: String = "OVERRIDE",
     val startOnBeat: Boolean = true,
     val phaseOffset: Double = 0.0,
@@ -180,6 +184,11 @@ data class AddEffectRequest(
      * WALL_CLOCK effects; it coexists with [speedMasterUuid] rather than replacing it.
      */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * Run on *Seconds* (venue-visit plan D7): [beatDivision] is the cycle in seconds and the effect
+     * follows no master. Refused beside either master.
+     */
+    val seconds: Boolean = false,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
@@ -221,6 +230,8 @@ data class IndirectEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
+    /** D7's reading — see [EffectDto.seconds]. */
+    val seconds: Boolean = false,
 )
 
 @Serializable
@@ -242,6 +253,18 @@ data class UpdateEffectRequest(
     val speedMasterUuid: String? = null,
     /** Reassign the wall-clock rate master; null = no change, as above. */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * Move the effect between *Seconds* and a master (venue-visit plan D7); null = no change.
+     *
+     * `true` puts it on Seconds: a beat effect runs its division as seconds with no master, and a
+     * wall-clock effect drops its rate master — the explicit *unscaled* `FU-FX-RATE-MASTER-CLEAR`
+     * asked for, since a null [rateSpeedMasterUuid] can only mean "no change". Refused beside either
+     * master. `false` puts it on a master: [speedMasterUuid] for a beat effect (absent → master 1),
+     * [rateSpeedMasterUuid] for a wall-clock one, which must then be named. Naming a master without
+     * this field also leaves Seconds. A move between Seconds and a master changes the loop the effect
+     * runs on, so it is a swap: the id is kept but the phase restarts.
+     */
+    val seconds: Boolean? = null,
 )
 
 
@@ -302,6 +325,23 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
         // type's timing source with it, as the add path does, or a beat effect swapped for a
         // wall-clock one would run on the beat loop.
         val registration = request.effectType?.let { state.show.fxRegistry.getRegistration(it) }
+        val newTimingSource = request.effectType?.let { registration?.timingSource ?: TimingSource.BEAT }
+
+        // D7. Seconds and a master are two answers to one question, so both is refused; a master
+        // named on an effect that is on Seconds takes it off Seconds.
+        secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
+            ?.let { return EffectUpdateOutcome.Refused(it) }
+        val kind = newTimingSource ?: existing.registrationTimingSource
+        val namesItsMaster = if (kind == TimingSource.BEAT) newSpeedMaster != null else newRateSpeedMaster != null
+        val newSeconds = request.seconds ?: if (namesItsMaster && existing.onSeconds) false else null
+        // A wall-clock effect's master *is* its rate master, so leaving Seconds has to say which.
+        if (newSeconds == false && kind == TimingSource.WALL_CLOCK && newRateSpeedMaster == null &&
+            existing.rateSpeedMasterUuid == null
+        ) {
+            return EffectUpdateOutcome.Refused(
+                "seconds: false on a wall-clock effect names its master — send rateSpeedMasterUuid",
+            )
+        }
 
         val updated = engine.updateEffect(
             effectId = effectId,
@@ -316,7 +356,8 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             newSpeedMasterUuid = newSpeedMaster,
             newRateSpeedMasterUuid = newRateSpeedMaster,
             newRegistrationId = registration?.id,
-            newTimingSource = request.effectType?.let { registration?.timingSource ?: TimingSource.BEAT },
+            newTimingSource = newTimingSource,
+            newSeconds = newSeconds,
         )
         if (updated != null) EffectUpdateOutcome.Updated(updated) else EffectUpdateOutcome.NotFound
     } catch (e: Exception) {
@@ -364,6 +405,7 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     intensityMultiplier = intensityMultiplier,
     speedMasterUuid = reportedSpeedMasterUuid,
     rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
+    seconds = onSeconds,
 )
 
 private fun createTargetFromRequest(

@@ -193,7 +193,7 @@ describe('FxEditor', () => {
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '200' } })
     fireEvent.pointerUp(size)
-    fireEvent.click(screen.getByRole('radio', { name: '4 beats a cycle' }))
+    fireEvent.click(screen.getByRole('radio', { name: '1 bar a cycle' }))
     updateFx.mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
@@ -206,13 +206,29 @@ describe('FxEditor', () => {
     })
   })
 
+  it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
+    render(<FxEditor effect={makeActiveEffect({ effectType: 'Pulse', propertyName: 'dimmer', beatDivision: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Timing: Seconds' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /M1 · Main/ }))
+    expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
+    updateFx.mockClear()
+
+    const revert = screen.getByRole('button', { name: 'Revert' })
+    fireEvent.click(revert)
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(lastFrame()).toMatchObject({ seconds: true, beatDivision: 2 })
+    expect(lastFrame()).not.toHaveProperty('speedMasterUuid')
+    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('reads a stored Additive with the centre at 128 as Around, and hides the centre', () => {
     render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Around current position' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.queryByRole('slider', { name: 'Pan' })).toBeNull()
     expect(screen.queryByRole('slider', { name: 'Tilt' })).toBeNull()
-    // Sizes in degrees: both axes annotate. 64 of 255 on a 540° pan is 136°.
-    expect((screen.getByRole('spinbutton', { name: 'Pan size degrees' }) as HTMLInputElement).value).toBe('136')
+    // A size is a distance in DMX steps (venue-visit plan D3), never offset to the centre.
+    expect((screen.getByRole('spinbutton', { name: 'Pan size' }) as HTMLInputElement).value).toBe('64')
   })
 
   it('sends Around as Additive with the centre at 128 and hides the centre; Absolute is Override with it shown', () => {
@@ -227,6 +243,8 @@ describe('FxEditor', () => {
     render(<FxEditor effect={absolute} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Absolute' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('slider', { name: 'Pan' })).toBeTruthy()
+    // An absolute centre reads centre-relative (D3): byte 60 is 68 steps left of centre.
+    expect((screen.getByRole('spinbutton', { name: 'Pan' }) as HTMLInputElement).value).toBe('-68')
 
     fireEvent.click(screen.getByRole('radio', { name: 'Around current position' }))
     expect(lastFrame()).toMatchObject({

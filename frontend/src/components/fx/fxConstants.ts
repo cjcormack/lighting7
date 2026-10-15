@@ -1,15 +1,37 @@
 import { Sun, Palette, Move, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 
-export const BEAT_DIVISION_OPTIONS = [
-  { value: 0.125, label: '1/32', description: 'Thirty-second note' },
-  { value: 0.25, label: '1/16', description: 'Sixteenth note' },
-  { value: 0.333, label: 'Trip', description: 'Triplet' },
-  { value: 0.5, label: '1/8', description: 'Eighth note' },
-  { value: 1.0, label: '1/4', description: 'Quarter note (1 beat)' },
-  { value: 2.0, label: '1/2', description: 'Half note (2 beats)' },
-  { value: 4.0, label: '1 Bar', description: 'Full bar (4 beats)' },
-  { value: 8.0, label: '2 Bars', description: '2 bars (8 beats)' },
-] as const
+/**
+ * An effect's speed, in **beats a cycle** — the one spelling every surface uses
+ * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's speed segment draws
+ * these labels and every chip reads them through [getBeatDivisionLabel], so a speed is never *1*
+ * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
+ * long cycles say bars.
+ *
+ * The note values (`1/4` for one beat, `1/32` for an eighth of one) are gone: they read the same
+ * glyph-shape as the segment's fractions for a different number.
+ */
+export const SPEED_STEPS: readonly { value: number; label: string }[] = [
+  { value: 0.125, label: '⅛ beat' },
+  { value: 0.25, label: '¼ beat' },
+  { value: 0.5, label: '½ beat' },
+  { value: 1, label: '1 beat' },
+  { value: 2, label: '2 beats' },
+  { value: 4, label: '1 bar' },
+  { value: 8, label: '2 bars' },
+  { value: 16, label: '4 bars' },
+]
+
+/** The fractions a division off the eight is still said with — a triplet's ⅓. */
+const FRACTION_GLYPHS: readonly { value: number; glyph: string }[] = [
+  { value: 1 / 3, glyph: '⅓' },
+  { value: 2 / 3, glyph: '⅔' },
+  { value: 0.75, glyph: '¾' },
+]
+
+/** A number as a label writes it: at most three decimals, no trailing zeros. */
+export function trimNumber(n: number): string {
+  return String(Math.round(n * 1000) / 1000)
+}
 
 export const BLEND_MODE_OPTIONS = [
   { value: 'OVERRIDE', label: 'Override', description: 'Replace current value' },
@@ -100,30 +122,43 @@ export function getDistributionLabel(strategy: string): string {
 }
 
 /**
- * An effect's speed as a label, with its **unit resolved** — the beat division for a `BEAT` effect,
- * seconds for a `WALL_CLOCK` one.
+ * An effect's speed as a label, with its **unit resolved** — beats a cycle for an effect that
+ * follows a master, seconds for one on *Seconds* (venue-visit plan D7): a beat effect with
+ * [seconds] set, or any `WALL_CLOCK` effect, whose division is seconds already.
  *
  * `beatDivision` carries both readings on one field, and they are a tempo apart: `2` is two beats
- * or two seconds, and only `timingSource` says which. Everything that renders a speed away from
- * the live editor's fields (`FxEffectFields`, which have the library entry in hand and label the
- * input themselves) goes through this, so no surface has to re-derive the rule and none can get it half right.
+ * or two seconds, and only the timing says which. Everything that renders a speed away from the
+ * live editor's fields (`FxEffectFields`, which have the library entry in hand and label the input
+ * themselves) goes through this, so no surface has to re-derive the rule and none can get it half
+ * right.
  *
  * **Null when the timing source is unknown**, and callers should then say nothing about the speed.
  * That happens for a template whose stored `effectType` no longer resolves in the registry — an
  * import from a desk carrying script-registered effects this one does not have. A confident
- * "2 Bars" for a two-second cycle is worse than an absent clause.
+ * "2 bars" for a two-second cycle is worse than an absent clause.
  */
 export function effectSpeedLabel(
   beatDivision: number,
   timingSource: string | null | undefined,
+  seconds = false,
 ): string | null {
   if (timingSource == null) return null
-  return timingSource === 'WALL_CLOCK' ? `${beatDivision}s` : getBeatDivisionLabel(beatDivision)
+  return seconds || timingSource === 'WALL_CLOCK' ? secondsLabel(beatDivision) : getBeatDivisionLabel(beatDivision)
 }
 
+/** A cycle in seconds — `4 s`, `0.5 s`. */
+export function secondsLabel(seconds: number): string {
+  return `${trimNumber(seconds)} s`
+}
+
+/** A division in beats a cycle, from [SPEED_STEPS] — `1 bar`, `½ beat`, `3 beats` off the table. */
 export function getBeatDivisionLabel(beatDivision: number): string {
-  const option = BEAT_DIVISION_OPTIONS.find(
-    (o) => Math.abs(o.value - beatDivision) < 0.01
-  )
-  return option?.label ?? `${beatDivision}x`
+  const step = SPEED_STEPS.find((o) => Math.abs(o.value - beatDivision) < 0.001)
+  if (step) return step.label
+  const fraction = FRACTION_GLYPHS.find((f) => Math.abs(f.value - beatDivision) < 0.001)
+  if (fraction) return `${fraction.glyph} beat`
+  if (beatDivision >= 4 && Math.abs(beatDivision / 4 - Math.round(beatDivision / 4)) < 0.001) {
+    return `${Math.round(beatDivision / 4)} bars`
+  }
+  return `${trimNumber(beatDivision)} ${beatDivision === 1 ? 'beat' : 'beats'}`
 }

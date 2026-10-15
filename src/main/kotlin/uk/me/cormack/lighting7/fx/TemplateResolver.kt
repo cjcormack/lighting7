@@ -442,11 +442,15 @@ object TemplateResolver {
     // ─── Position ───────────────────────────────────────────────────────────
 
     /**
-     * Degrees to DMX, through this head's own annotated range.
+     * A position intent to this head's coarse pan and tilt, in either unit (venue-visit plan P3).
      *
-     * A head with no `degMin`/`degMax` on its pan or tilt reports [Note.Unsupported] rather than
-     * guessing a range. That is visible in the editor's panel, which is the point: a silent
-     * mid-range default would aim a light somewhere nobody asked for.
+     * **Centre-relative** (`pos:`, every new write): the same fraction of each axis's own travel on
+     * every head — [centreToDmx] — so it needs no degree annotation and lands on any DMX-backed
+     * mover. **Degrees** (`deg:`, stored before D3): through this head's own annotated range, as it
+     * always resolved. A head with no `degMin`/`degMax` on its pan or tilt reports
+     * [Note.Unsupported] for a degree intent rather than guessing a range — a silent mid-range
+     * default would aim a light somewhere nobody asked for. Only the coarse channels are written:
+     * the fine channel is not part of either scale.
      */
     private fun resolvePosition(
         fixture: GroupableFixture,
@@ -456,26 +460,35 @@ object TemplateResolver {
         if (fixture !is WithPosition) {
             return Resolution(null, propertyName, Note.Unsupported("fixed head — no pan or tilt"))
         }
-        // The degree range lives on the `@FixtureProperty` annotation, which only the fixture-level
-        // catalogue carries — elements keep name and category alone. A template has no element
-        // rows, so this is the whole story rather than a gap.
-        val catalogue = (fixture as? Fixture)?.fixtureProperties
-            ?: return Resolution(null, propertyName, Note.Unsupported("no property catalogue"))
-        val pan = catalogue.firstOrNull { it.category == PropertyCategory.PAN }
-        val tilt = catalogue.firstOrNull { it.category == PropertyCategory.TILT }
         val panSlider = fixture.pan as? DmxSlider
         val tiltSlider = fixture.tilt as? DmxSlider
-        if (pan == null || tilt == null || panSlider == null || tiltSlider == null) {
+        if (panSlider == null || tiltSlider == null) {
             return Resolution(null, propertyName, Note.Unsupported("position is not DMX-backed"))
         }
-        val panDmx = degreesToDmx(intent.panDeg, pan.degMin, pan.degMax, pan.inverted, panSlider)
-            ?: return Resolution(null, propertyName, Note.Unsupported("pan has no degree range annotated"))
-        val tiltDmx = degreesToDmx(intent.tiltDeg, tilt.degMin, tilt.degMax, tilt.inverted, tiltSlider)
-            ?: return Resolution(null, propertyName, Note.Unsupported("tilt has no degree range annotated"))
+        val (panDmx, tiltDmx) = when (intent.unit) {
+            PositionUnit.CENTRE -> centreToDmx(intent.pan, panSlider) to centreToDmx(intent.tilt, tiltSlider)
+            PositionUnit.DEGREES -> {
+                // The degree range lives on the `@FixtureProperty` annotation, which only the
+                // fixture-level catalogue carries — elements keep name and category alone. A
+                // template has no element rows, so this is the whole story rather than a gap.
+                val catalogue = (fixture as? Fixture)?.fixtureProperties
+                    ?: return Resolution(null, propertyName, Note.Unsupported("no property catalogue"))
+                val pan = catalogue.firstOrNull { it.category == PropertyCategory.PAN }
+                val tilt = catalogue.firstOrNull { it.category == PropertyCategory.TILT }
+                if (pan == null || tilt == null) {
+                    return Resolution(null, propertyName, Note.Unsupported("position is not DMX-backed"))
+                }
+                val panDegrees = degreesToDmx(intent.pan, pan.degMin, pan.degMax, pan.inverted, panSlider)
+                    ?: return Resolution(null, propertyName, Note.Unsupported("pan has no degree range annotated"))
+                val tiltDegrees = degreesToDmx(intent.tilt, tilt.degMin, tilt.degMax, tilt.inverted, tiltSlider)
+                    ?: return Resolution(null, propertyName, Note.Unsupported("tilt has no degree range annotated"))
+                panDegrees to tiltDegrees
+            }
+        }
 
         val clamps = buildList {
-            panDmx.clampedTo?.let { add("pan ${formatDegrees(it)}") }
-            tiltDmx.clampedTo?.let { add("tilt ${formatDegrees(it)}") }
+            panDmx.clampedTo?.let { add("pan ${formatAxis(it, intent.unit)}") }
+            tiltDmx.clampedTo?.let { add("tilt ${formatAxis(it, intent.unit)}") }
         }
         return Resolution(
             CueAssignmentResolver.PropertyValue.Position(panDmx.value, tiltDmx.value),
@@ -487,6 +500,50 @@ object TemplateResolver {
     }
 
     private data class AxisValue(val value: UByte, val clampedTo: Double?)
+
+    /**
+     * The inverse of a centre-relative resolution: a head's coarse pan/tilt as the `pos:` intent
+     * that lands back on exactly those bytes — what Record into a palette and aim's
+     * `saveAsPalette` store (every new position write is centre-relative, P3). Null on a head
+     * whose pan or tilt is not a DMX slider, where a centre has nothing to be relative to.
+     */
+    fun centreIntentOf(
+        fixture: GroupableFixture,
+        value: CueAssignmentResolver.PropertyValue.Position,
+    ): TemplateIntent.Position? {
+        if (fixture !is WithPosition) return null
+        val panSlider = fixture.pan as? DmxSlider ?: return null
+        val tiltSlider = fixture.tilt as? DmxSlider ?: return null
+        return TemplateIntent.Position(
+            dmxToCentre(value.pan.toInt(), panSlider).toDouble(),
+            dmxToCentre(value.tilt.toInt(), tiltSlider).toDouble(),
+            PositionUnit.CENTRE,
+        )
+    }
+
+    /** [centreToDmx]'s inverse on one axis: exactly `dmx - 128` on a 0–255 slider. */
+    private fun dmxToCentre(dmx: Int, slider: DmxSlider): Int {
+        val min = slider.min.toInt()
+        val max = slider.max.toInt()
+        if (max <= min) return 0
+        val fraction = ((dmx - min).toDouble() / (max - min)).coerceIn(0.0, 1.0)
+        return centreStep(POSITION_CENTRE_MIN + fraction * (POSITION_CENTRE_MAX - POSITION_CENTRE_MIN))
+    }
+
+    /**
+     * A centre-relative value to this axis's coarse byte: `-128` is the slider's min, `127` its
+     * max, and 0 its centre — on a 0–255 slider exactly `128 + value`, one unit a DMX step. Every
+     * pan and tilt in this rig is 0–255; a narrower slider takes the same fraction of its own range,
+     * which is what makes a generic palette the same fraction of travel on every head (D3).
+     */
+    private fun centreToDmx(value: Double, slider: DmxSlider): AxisValue {
+        val clamped = value.coerceIn(POSITION_CENTRE_MIN.toDouble(), POSITION_CENTRE_MAX.toDouble())
+        val min = slider.min.toInt()
+        val max = slider.max.toInt()
+        val fraction = (clamped - POSITION_CENTRE_MIN) / (POSITION_CENTRE_MAX - POSITION_CENTRE_MIN)
+        val dmx = (min + fraction * (max - min)).roundToInt().coerceIn(min, max)
+        return AxisValue(dmx.toUByte(), clamped.takeIf { abs(it - value) > 0.05 })
+    }
 
     private fun degreesToDmx(
         degrees: Double,
@@ -734,6 +791,9 @@ object TemplateResolver {
     private fun labDistance(a: Lab, b: Lab): Double =
         sqrt((a.l - b.l) * (a.l - b.l) + (a.a - b.a) * (a.a - b.a) + (a.b - b.b) * (a.b - b.b))
 
-    private fun formatDegrees(value: Double): String =
-        if (value == Math.floor(value)) "${value.toLong()}°" else String.format("%.1f°", value)
+    private fun formatAxis(value: Double, unit: PositionUnit): String = when (unit) {
+        PositionUnit.CENTRE -> centreStep(value).let { if (it > 0) "+$it" else "$it" }
+        PositionUnit.DEGREES ->
+            if (value == Math.floor(value)) "${value.toLong()}°" else String.format("%.1f°", value)
+    }
 }

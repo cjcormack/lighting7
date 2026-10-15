@@ -10,7 +10,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { dmxToDegrees, degreesToDmx } from '@/lib/axisDegrees'
+import { CENTRE_MAX, CENTRE_MIN, centreToDmx, dmxToCentre } from '@/lib/positionScale'
 import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import type { SettingPropertyDescriptor } from '@/store/fixtures'
@@ -21,42 +21,31 @@ import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
 import type { detectExtendedChannels } from './colourUtils'
-import { BLEND_MODE_OPTIONS, DISTRIBUTION_STRATEGY_OPTIONS, ELEMENT_FILTER_OPTIONS, ELEMENT_MODE_OPTIONS } from './fxConstants'
+import {
+  BLEND_MODE_OPTIONS,
+  DISTRIBUTION_STRATEGY_OPTIONS,
+  ELEMENT_FILTER_OPTIONS,
+  ELEMENT_MODE_OPTIONS,
+  SPEED_STEPS,
+  getBeatDivisionLabel,
+} from './fxConstants'
 import {
   blendForLevelMode,
   centreModeOf,
   clampByte,
   defaultParameters,
-  degreesToSize,
   hasCentre,
   isLevelEffect,
   isRatioParam,
   levelModeOf,
-  paramAxis,
   paramRole,
-  sizeToDegrees,
+  timingChoicePatch,
   withCentreMode,
   type CentreMode,
   type FxDraft,
   type FxScope,
   type LevelMode,
-  type PositionAxes,
 } from './fxEditorModel'
-
-/**
- * The speed segment, in beats a cycle (Fx board) — ⅛ to 16. A stored division outside the eight
- * (a triplet) presses none of them and the read-out still says what it is.
- */
-const SPEED_BEATS: readonly { value: number; label: string }[] = [
-  { value: 0.125, label: '⅛' },
-  { value: 0.25, label: '¼' },
-  { value: 0.5, label: '½' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 4, label: '4' },
-  { value: 8, label: '8' },
-  { value: 16, label: '16' },
-]
 
 const CURVES = [
   'LINEAR',
@@ -112,11 +101,9 @@ export function FxEffectFields({
   timingSource,
   draft,
   scope,
-  axes,
   extendedChannels,
   settingProperty,
   readOnly,
-  allowUnscaledRate = false,
   set,
   setParam,
 }: {
@@ -125,15 +112,9 @@ export function FxEffectFields({
   timingSource: string | null | undefined
   draft: FxDraft
   scope: FxScope
-  axes: PositionAxes | null
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingProperty: SettingPropertyDescriptor | undefined
   readOnly: boolean
-  /**
-   * The rate master's chip offers *Unscaled* — a draft can hold null where a live frame cannot say
-   * it (session 3's amendment), so only a draft host turns this on.
-   */
-  allowUnscaledRate?: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
   setParam: (name: string, value: string, release: boolean) => void
 }) {
@@ -157,7 +138,6 @@ export function FxEffectFields({
       param={param}
       role={role}
       value={draft.parameters[param.name] ?? param.defaultValue}
-      axes={axes}
       extendedChannels={extendedChannels}
       settingProperty={param.name === 'level' ? settingProperty : undefined}
       readOnly={readOnly}
@@ -172,7 +152,6 @@ export function FxEffectFields({
         entry={entry}
         draft={draft}
         readOnly={readOnly}
-        allowUnscaledRate={allowUnscaledRate}
         set={set}
       />
 
@@ -302,40 +281,55 @@ export function FxEffectFields({
 
 // ─── Speed ────────────────────────────────────────────────────────────────────────────────────
 
+/** The chip menu's value for *Seconds*. Never on the wire — the wire says `seconds`. */
+const SECONDS_VALUE = '__seconds__'
+
 /**
- * Speed is a segment, with the master as a chip (Fx board). A beat effect's segment is beats a
- * cycle and its chip the speed master; a wall-clock effect's speed is seconds a cycle (typed — its
- * division is seconds, not beats) and its chip the **rate** master, which scales the cycle. The
- * chip names a concrete master: the frame cannot say null, so a pick of M1 sends master 1's uuid,
- * which the desk treats as the default (`SpeedMasterSelect`'s rule).
+ * Speed is a segment with the timing as a chip (Fx board; venue-visit plan D7). The chip is one
+ * question for every effect — *Seconds*, or a master — and the body follows it:
+ *
+ * - **A master**: a beat effect's segment is beats a cycle ([SPEED_STEPS], the one spelling the
+ *   chips read too), with any other division typed beside it. A wall-clock effect's master is its
+ *   rate master, which scales the seconds it types by `bpm / 120`.
+ * - **Seconds**: the cycle in seconds, typed, with no master.
+ *
+ * Moving a beat effect between the two keeps its speed: the division is converted at the master's
+ * live tempo (4 beats at 120 BPM is 2 s), so the light does not jump. A wall-clock effect's number
+ * is seconds either way and is left alone. The chip names a concrete master — a pick of M1 sends
+ * master 1's uuid, which the desk treats as the default (`SpeedMasterSelect`'s rule).
  */
 function SpeedSection({
   timingSource,
   entry,
   draft,
   readOnly,
-  allowUnscaledRate,
   set,
 }: {
   timingSource: string | null | undefined
   entry: EffectLibraryEntry
   draft: FxDraft
   readOnly: boolean
-  allowUnscaledRate: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
 }) {
+  const { data: masters } = useSpeedMasterLiveQuery(undefined)
+  const listable = (masters ?? []).filter((m) => m.uuid != null)
   const wallClock = (entry.timingSource ?? timingSource) === 'WALL_CLOCK'
+  // A draft built by hand may leave the flag out for a wall-clock effect's Seconds; read it as D7 does.
+  const seconds = draft.seconds || (wallClock && draft.rateSpeedMasterUuid == null)
   const masterUuid = wallClock ? draft.rateSpeedMasterUuid : draft.speedMasterUuid
+  const bpmOf = (uuid: string | null) =>
+    (uuid != null ? listable.find((m) => m.uuid === uuid) : listable.find((m) => m.index === 1))?.bpm ?? 0
+
   const chip = (
-    <MasterChip
-      kind={wallClock ? 'rate' : 'speed'}
+    <TimingChip
+      wallClock={wallClock}
+      seconds={seconds}
       value={masterUuid}
       readOnly={readOnly}
-      allowUnscaled={wallClock && allowUnscaledRate}
-      onChange={(uuid) => set(wallClock ? { rateSpeedMasterUuid: uuid } : { speedMasterUuid: uuid })}
+      onChange={(uuid) => set(timingChoicePatch({ ...draft, seconds }, wallClock, uuid, bpmOf), true)}
     />
   )
-  const pressed = SPEED_BEATS.find((o) => Math.abs(o.value - draft.beatDivision) < 0.001)
+  const pressed = SPEED_STEPS.find((o) => Math.abs(o.value - draft.beatDivision) < 0.001)
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -344,7 +338,7 @@ function SpeedSection({
         <span className="flex-1" />
         {chip}
       </div>
-      {wallClock ? (
+      {seconds || wallClock ? (
         <div className="flex items-center gap-2">
           <SheetField
             label="Cycle seconds"
@@ -356,7 +350,9 @@ function SpeedSection({
             disabled={readOnly}
             onEnter={(n) => n > 0 && set({ beatDivision: n })}
           />
-          <EditorReadout>seconds a cycle</EditorReadout>
+          <EditorReadout>
+            {seconds ? 'seconds a cycle · follows no master' : 'seconds a cycle at 120 BPM, scaled by the master'}
+          </EditorReadout>
         </div>
       ) : (
         <>
@@ -367,21 +363,22 @@ function SpeedSection({
             disabled={readOnly}
             onValueChange={(v) => v && set({ beatDivision: Number(v) })}
             aria-label="Speed"
-            className="flex w-full flex-wrap justify-start"
+            // Two rows of four: `h-auto` lifts the group's one-row `h-8`, which the second row overran.
+            className="grid h-auto w-full grid-cols-4 gap-px"
           >
-            {SPEED_BEATS.map((option) => (
+            {SPEED_STEPS.map((option) => (
               <ToggleGroupItem
                 key={option.value}
                 value={String(option.value)}
-                aria-label={`${option.label} ${option.value === 1 ? 'beat' : 'beats'} a cycle`}
-                className="min-w-8 flex-1 px-1.5 text-xs"
+                aria-label={`${option.label} a cycle`}
+                className="min-w-0 px-1 text-[11px] whitespace-nowrap"
               >
                 {option.label}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          {/* Any division the segment does not name — a triplet's ⅓ — is typed here, as the old
-              form's note values reached it; the segment is the common eight. */}
+          {/* Any division the segment does not name — a triplet's ⅓ — is typed here; the segment is
+              the common eight. */}
           <div className="flex items-center gap-2">
             <SheetField
               label="Beats a cycle"
@@ -392,7 +389,7 @@ function SpeedSection({
               disabled={readOnly}
               onEnter={(n) => n > 0 && set({ beatDivision: n })}
             />
-            <EditorReadout>{pressed ? 'beats a cycle' : 'beats a cycle — not one of the eight'}</EditorReadout>
+            <EditorReadout>{pressed ? 'beats a cycle' : `${getBeatDivisionLabel(draft.beatDivision)} a cycle`}</EditorReadout>
           </div>
         </>
       )}
@@ -400,60 +397,58 @@ function SpeedSection({
   )
 }
 
-/** The chip menu's value for a null rate master. Never on the wire. */
-const UNSCALED_VALUE = '__unscaled__'
-
-/** The master as a chip — `M2 · 96`, `Unscaled` for a wall-clock effect with no rate master. */
-function MasterChip({
-  kind,
+/**
+ * The timing as a chip — `M2 · 96`, `Rate M2 · 96` on a wall-clock effect, or `Seconds` (D7). Its
+ * menu is *Seconds* and then every master: one question for every effect, where a wall-clock
+ * effect's master is its rate master.
+ */
+function TimingChip({
+  wallClock,
+  seconds,
   value,
   readOnly,
-  allowUnscaled = false,
   onChange,
 }: {
-  kind: 'speed' | 'rate'
+  wallClock: boolean
+  seconds: boolean
   value: string | null
   readOnly: boolean
-  /** Offer *Unscaled* (null) — a draft's rate master only. */
-  allowUnscaled?: boolean
   onChange: (uuid: string | null) => void
 }) {
   const { data: masters } = useSpeedMasterLiveQuery(undefined)
   const listable = (masters ?? []).filter((m) => m.uuid != null)
-  const current =
-    value != null ? listable.find((m) => m.uuid === value) : kind === 'speed' ? listable.find((m) => m.index === 1) : undefined
-  // A stored master the bank does not hold (not loaded yet, or a uuid a sync left dangling) runs on
-  // master 1 — the desk's `SpeedMasterBank.slotFor` — for a rate master as much as a speed one;
-  // only a null rate master is *Unscaled*.
-  const label = current
-    ? `M${current.index} · ${Math.round(current.bpm)}`
-    : kind === 'rate' && value == null
-      ? 'Unscaled'
-      : 'M1'
+  // A beat effect's null master is master 1. A stored master the bank does not hold (not loaded
+  // yet, or a uuid a sync left dangling) runs on master 1 — the desk's `SpeedMasterBank.slotFor`.
+  const current = seconds
+    ? undefined
+    : (value != null ? listable.find((m) => m.uuid === value) : undefined) ?? listable.find((m) => m.index === 1)
+  const label = seconds ? 'Seconds' : current ? `M${current.index} · ${Math.round(current.bpm)}` : 'M1'
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          // Disabled until the bank has loaded too: a move onto or off Seconds converts the division
+          // at the master's tempo, and with no tempo to read it would keep the number and change the
+          // speed.
           disabled={readOnly || listable.length === 0}
-          aria-label={kind === 'rate' ? `Rate master: ${label}` : `Speed master: ${label}`}
+          aria-label={`Timing: ${wallClock && !seconds ? 'rate ' : ''}${label}`}
           className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border px-2 font-mono text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
         >
-          {kind === 'rate' && <span className="font-sans">Rate</span>}
+          {wallClock && !seconds && <span className="font-sans">Rate</span>}
           {label}
           <ChevronDown className="size-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
-          value={current?.uuid ?? (allowUnscaled ? UNSCALED_VALUE : '')}
-          onValueChange={(v) => onChange(v === UNSCALED_VALUE ? null : v)}
+          value={seconds ? SECONDS_VALUE : (current?.uuid ?? '')}
+          onValueChange={(v) => onChange(v === SECONDS_VALUE ? null : v)}
         >
-          {allowUnscaled && (
-            <DropdownMenuRadioItem value={UNSCALED_VALUE} className="text-xs">
-              Unscaled
-            </DropdownMenuRadioItem>
-          )}
+          <DropdownMenuRadioItem value={SECONDS_VALUE} className="text-xs">
+            Seconds
+            <span className="ml-2 text-muted-foreground">its own cycle, no master</span>
+          </DropdownMenuRadioItem>
           {listable.map((m) => (
             <DropdownMenuRadioItem key={m.uuid} value={m.uuid!} className="text-xs">
               M{m.index} · {m.name}
@@ -640,15 +635,14 @@ function SelectRow({
 }
 
 /**
- * One parameter, in its role's unit (`paramRole`): a level as a percent, a size in degrees of travel
- * where the head annotates and bytes elsewhere, a centre or a sweep's end as a position on its axis,
+ * One parameter, in its role's unit (`paramRole`): a level as a percent, a size in DMX steps, a
+ * centre or a sweep's end centre-relative on its axis,
  * a ratio as a percent, a curve as a list, a colour through the FX colour pickers.
  */
 function ParamControl({
   param,
   role,
   value,
-  axes,
   extendedChannels,
   settingProperty,
   readOnly,
@@ -657,7 +651,6 @@ function ParamControl({
   param: EffectParameterDef
   role: ReturnType<typeof paramRole>
   value: string
-  axes: PositionAxes | null
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingProperty: SettingPropertyDescriptor | undefined
   readOnly: boolean
@@ -680,39 +673,23 @@ function ParamControl({
   }
 
   if (type === 'ubyte') {
-    const axisName = paramAxis(param.name)
-    const axis = axes != null && axisName != null ? axes[axisName] : null
-    if ((role === 'size') && axis != null) {
+    // A centre or a sweep's end is a point on its axis, read centre-relative on every head
+    // (venue-visit plan D3): `-128..127`, 0 the centre of travel (DMX 128, where Around pins it).
+    // A size (a radius, a range) is a distance and stays in DMX steps — never offset. The value is
+    // raw DMX either way, so no head's range is consulted.
+    if (role === 'centre' || role === 'axis') {
       return (
         <SliderRow
           label={label}
           description={param.description || undefined}
-          unit="°"
           value={num}
           min={0}
           max={255}
           step={1}
-          display={(v) => Math.round(sizeToDegrees(v, axis))}
-          fromDisplay={(d) => degreesToSize(d, axis)}
-          readOnly={readOnly}
-          onChange={(v, release) => onChange(String(clampByte(v)), release)}
-        />
-      )
-    }
-    if ((role === 'centre' || role === 'axis') && axis != null) {
-      return (
-        <SliderRow
-          label={label}
-          description={param.description || undefined}
-          unit="°"
-          value={num}
-          min={0}
-          max={255}
-          step={1}
-          display={(v) => Math.round(dmxToDegrees(v, axis) ?? 0)}
-          fromDisplay={(d) => degreesToDmx(d, axis) ?? 0}
-          displayMin={Math.min(axis.degMin, axis.degMax)}
-          displayMax={Math.max(axis.degMin, axis.degMax)}
+          display={(v) => dmxToCentre(v)}
+          fromDisplay={(d) => centreToDmx(d)}
+          displayMin={CENTRE_MIN}
+          displayMax={CENTRE_MAX}
           readOnly={readOnly}
           onChange={(v, release) => onChange(String(clampByte(v)), release)}
         />

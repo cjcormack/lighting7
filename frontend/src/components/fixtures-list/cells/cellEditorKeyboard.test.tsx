@@ -207,7 +207,8 @@ describe('the position editor', () => {
     )
     const pan = await screen.findByRole('spinbutton', { name: 'Pan' })
     expect(pan).toHaveFocus()
-    expect(onCommit).toHaveBeenCalledWith({ kind: 'position', pan: 6 })
+    // Centre-relative (venue-visit plan D3): the typed 6 is six steps right of centre.
+    expect(onCommit).toHaveBeenCalledWith({ kind: 'position', panCentre: 6 })
 
     onCommit.mockClear()
     // `fireEvent` reports a default-prevented event as false: the comma is consumed by the step
@@ -219,7 +220,7 @@ describe('the position editor', () => {
     fireEvent.change(tilt, { target: { value: '9' } })
     // Per-axis: the tilt write carries no pan, or every batch target's pan would be flattened to
     // this row's aggregate.
-    expect(onCommit).toHaveBeenCalledWith({ kind: 'position', tilt: 9 })
+    expect(onCommit).toHaveBeenCalledWith({ kind: 'position', tiltCentre: 9 })
   })
 })
 

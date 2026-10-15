@@ -54,7 +54,7 @@ MCP tools, and the runtime and frontend. The plan's §1 holds the findings with 
   live in two stacks collides today. Priority is stamped from the cue's home stack.
 - **Nothing persisted names a stack with a cue**: pads, slots, anchors, events, scenery and
   `FireCue` name the cue alone. Only the include target carries a stack.
-- **Sync stores membership in `CueJson`**, at `formatVersion` 27; merges are per record and know
+- **Sync stores membership in `CueJson`**, at `formatVersion` 29; merges are per record and know
   nothing about order. `FU-SYNC-ORDINAL-DOUBLE` asks to land with the next bump.
 - **There is no all-cues view**; the old `/cues` routes redirect to the Show view.
 - **The REST cross-project cue copy leaks** the source project's Look and template ids onto the

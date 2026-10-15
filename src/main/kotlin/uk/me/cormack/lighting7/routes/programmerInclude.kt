@@ -355,6 +355,11 @@ internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     elementFilter = elementFilter,
     stepTiming = stepTiming,
     parameters = parameters,
+    // The timing travels with the child: Include runs it as the cue does, and Update writes back
+    // what the operator changed (venue-visit plan S15 — the masters were dropped here before it).
+    speedMasterUuid = speedMasterUuid,
+    rateSpeedMasterUuid = rateSpeedMasterUuid,
+    seconds = seconds,
 )
 
 /** The include target for [cueData], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */

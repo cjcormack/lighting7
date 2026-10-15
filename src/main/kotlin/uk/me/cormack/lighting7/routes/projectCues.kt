@@ -432,6 +432,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     sortOrder = effect.sortOrder
                     speedMasterUuid = effect.speedMasterUuid
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                    seconds = effect.seconds
                 }
             }
 

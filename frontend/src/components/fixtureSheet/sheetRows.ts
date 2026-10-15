@@ -60,7 +60,7 @@ export type SheetRow =
    * axes. Keyed `position` first: a Circle is keyed `position`, so that is the key whose entry holds
    * it back (session 1 amendment); the axis names follow because an older write may hold them.
    */
-  | { kind: 'position'; id: string; family: SheetFamily; label: string; keys: string[]; resolution: PositionResolution; degrees: boolean }
+  | { kind: 'position'; id: string; family: SheetFamily; label: string; keys: string[]; resolution: PositionResolution; aimable: boolean }
 
 export interface SheetRowGroup {
   family: SheetFamily
@@ -120,7 +120,9 @@ export function buildSheetRows(
         label: 'Position',
         keys: ['position', ...axisKeys.filter((n) => n !== 'position')],
         resolution: position,
-        degrees: annotatesDegrees(position.panProperty) && annotatesDegrees(position.tiltProperty),
+        // Aim solves pan and tilt from the travel degrees a type annotates, so only such a head
+        // offers *Aim…*. The row's own values are centre-relative on every head (D3).
+        aimable: annotatesDegrees(position.panProperty) && annotatesDegrees(position.tiltProperty),
       })
       continue
     }

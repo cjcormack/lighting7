@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useMaster1Uuid, useSpeedMasterBpm, useSpeedMasterDisplay } from '@/store/speedMasters'
+import { isOnSeconds } from '@/lib/effectTiming'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isTemplateRef, resolveColourToHex } from '@/components/fx/colourUtils'
 import { useColourTemplates } from '@/components/fx/FxColourTemplates'
@@ -68,7 +69,10 @@ export function TemplateRunsOn({
   const colours = useColourTemplates()
 
   const heads = useMemo(() => fixturesSupportingFamily(fixtures, family), [fixtures, family])
-  const isWallClock = entry?.timingSource === 'WALL_CLOCK'
+  // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — its cycle is what the
+  // strip is, with no beat ruler under it.
+  const isWallClock = entry?.timingSource === 'WALL_CLOCK' || effect.seconds === true
+  const onSeconds = isOnSeconds(effect, entry?.timingSource)
 
   /**
    * Up to two colours off the effect's own `colour` parameters, so a colour effect previews in the
@@ -101,12 +105,12 @@ export function TemplateRunsOn({
 
   // No entry means no timing source, and `effectSpeedLabel` answers null for exactly that — the
   // two readings of `beatDivision` are a tempo apart, so the number is dropped rather than guessed.
-  const division = entry == null ? null : effectSpeedLabel(effect.beatDivision, entry.timingSource ?? 'BEAT')
+  const division = entry == null ? null : effectSpeedLabel(effect.beatDivision, entry.timingSource ?? 'BEAT', effect.seconds)
   const cycleWord = isWallClock ? 'One cycle' : 'One bar'
   const speedLabel = division == null ? cycleWord : `${cycleWord} · ${division}`
   const masterLabel = isWallClock
-    ? effect.rateSpeedMasterUuid == null
-      ? 'Unscaled'
+    ? onSeconds
+      ? 'Seconds — no master'
       : rateDisplay
         ? `M${rateDisplay.index} · ${rateDisplay.name}`
         : 'M1'

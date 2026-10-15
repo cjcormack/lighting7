@@ -18,7 +18,7 @@ import { EditorLabel } from './EditorLabel'
  * stops sharing anything.
  *
  * **One unit per row.** [min], [max], [value] and [onChange] are all in the row's unit — bytes on
- * a spread, degrees on an annotated mover's position — and the caller converts on both sides, so the
+ * a spread, centre-relative steps on a position — and the caller converts on both sides, so the
  * box and the slider can never disagree about what a number means. The field owns the draft rule
  * (`EditorField`); the caller owns the clamp, because a position's bounds come from its resolution
  * while a raw spread's ends are flat bytes.

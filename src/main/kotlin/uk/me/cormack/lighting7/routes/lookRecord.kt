@@ -558,6 +558,7 @@ private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
     parameters = settings.parameters
     speedMasterUuid = settings.speedMasterUuid
     rateSpeedMasterUuid = settings.rateSpeedMasterUuid
+    seconds = settings.seconds
 }
 
 /**
@@ -583,8 +584,17 @@ private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: Look
     if (edited.elementMode != baseline.elementMode) elementMode = edited.elementMode
     if (edited.elementFilter != baseline.elementFilter) elementFilter = edited.elementFilter
     if (edited.stepTiming != baseline.stepTiming) stepTiming = edited.stepTiming
-    if (edited.speedMasterUuid != baseline.speedMasterUuid) speedMasterUuid = edited.speedMasterUuid
-    if (edited.rateSpeedMasterUuid != baseline.rateSpeedMasterUuid) rateSpeedMasterUuid = edited.rateSpeedMasterUuid
+    // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
+    // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
+    // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.
+    val timingMoved = edited.seconds != baseline.seconds ||
+        edited.speedMasterUuid != baseline.speedMasterUuid ||
+        edited.rateSpeedMasterUuid != baseline.rateSpeedMasterUuid
+    if (timingMoved) {
+        speedMasterUuid = edited.speedMasterUuid
+        rateSpeedMasterUuid = edited.rateSpeedMasterUuid
+        seconds = edited.seconds
+    }
 }
 
 /**

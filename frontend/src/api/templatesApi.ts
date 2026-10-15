@@ -39,7 +39,7 @@ export interface TemplateRow {
   targetKey: string
   /** One of `TEMPLATE_PROPERTIES` — the closed vocabulary; see `templateIntent.ts`. */
   propertyName: string
-  /** A serialised intent: `#FF9D4A;policy=extract`, `pct:75`, `deg:45,12.5`, `on`. */
+  /** A serialised intent: `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (or a stored `deg:45,12.5`), `on`. */
   value: string
   sortOrder?: number
   /** Resolved server-side on read; ignored on write. */
@@ -81,6 +81,12 @@ export interface TemplateEffect {
   /** Stamped at authoring time from the family's usage master (D8); null still means master 1. */
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
+  /**
+   * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
+   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   */
+  seconds?: boolean
   /**
    * `BEAT` or `WALL_CLOCK` — **resolved server-side on read and ignored on write**, the same
    * contract `TemplateRow.health` has.

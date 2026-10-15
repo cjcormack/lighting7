@@ -1,8 +1,6 @@
 import type { UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveEffect, EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
-import type { Fixture, SliderPropertyDescriptor } from '@/store/fixtures'
-import { findPanProperty, findTiltProperty } from '@/store/fixtures'
-import { annotatesDegrees } from '@/lib/axisDegrees'
+import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/effectTiming'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 
 export {
@@ -20,7 +18,7 @@ export {
  * The live effect editor's rules, pure (fixture-fx-sheets plan D11, D12, D12a; §3.3).
  *
  * `FxEditor` and `FxPicker` only draw: which question an effect asks, what a stored blend reads back
- * as, which parameters are the effect's *shape*, how a size is said in degrees and what one write
+ * as, which parameters are the effect's *shape*, which are a position on its axis and what one write
  * sends are all answered here, where a test can reach them without a store.
  */
 
@@ -59,8 +57,9 @@ export function startingSpec(
  * What a parameter is to the editor, which decides where it is drawn and in what unit.
  *
  * - `centre` — a movement effect's centre: hidden in Around, an absolute position in Absolute.
- * - `size` — a radius or a range on an axis: degrees where the head annotates, else bytes.
- * - `axis` — any other position byte (a sweep's ends): an absolute position on its axis.
+ * - `size` — a radius or a range on an axis: a distance, in coarse DMX steps.
+ * - `axis` — any other position byte (a sweep's ends): a position on its axis, centre-relative
+ *   (`-128..127`, venue-visit plan D3), as the centre is.
  * - `level` — a byte anywhere else: a percent, as the level row reads.
  * - `shape` — a curve, a switch, or a ratio beside levels: behind the Shape disclosure.
  * - `main` — everything else, drawn with the levels.
@@ -89,7 +88,7 @@ export function paramRole(entry: Pick<EffectLibraryEntry, 'category' | 'paramete
 /**
  * Which axis a position parameter moves, from its name — `pan` / `tilt` as a camelCase word
  * (`panCenter`, `startPan`, `pan`), never a substring, so a script's `spanWidth` or `expansion` is
- * not read as a pan axis and drawn in degrees.
+ * not read as a pan axis and drawn on the position scale.
  */
 export function paramAxis(name: string): 'pan' | 'tilt' | null {
   if (/(^pan|Pan)(?![a-z])/.test(name)) return 'pan'
@@ -101,50 +100,6 @@ export function paramAxis(name: string): 'pan' | 'tilt' | null {
 export function isRatioParam(param: EffectParameterDef): boolean {
   const type = param.type.toLowerCase()
   return (type === 'double' || type === 'float') && Number(param.defaultValue) <= 1
-}
-
-// ─── Degrees ────────────────────────────────────────────────────────────────────────────────────
-
-/** The annotated pan and tilt a position effect's degrees are read through. */
-export interface PositionAxes {
-  pan: SliderPropertyDescriptor & { degMin: number; degMax: number }
-  tilt: SliderPropertyDescriptor & { degMin: number; degMax: number }
-}
-
-/**
- * The axes the editor speaks degrees through, or null for bytes (D14's rule, the position cell's):
- * every fixture the effect moves must annotate **both** pan and tilt, and the first one's ranges
- * are the field's. A target mixing an annotated mover and a silent head keeps bytes for all of
- * them rather than two units in one editor.
- */
-export function positionAxesOf(fixtures: readonly Fixture[]): PositionAxes | null {
-  let lead: PositionAxes | null = null
-  for (const fixture of fixtures) {
-    const props = [...(fixture.properties ?? []), ...(fixture.elementGroupProperties ?? [])] as Fixture['properties']
-    const pan = findPanProperty(props)
-    const tilt = findTiltProperty(props)
-    if (pan == null && tilt == null) continue
-    if (!annotatesDegrees(pan) || !annotatesDegrees(tilt)) return null
-    lead ??= { pan, tilt }
-  }
-  return lead
-}
-
-/**
- * A size in bytes as degrees of travel — 28 of 255 is 59° on a 540° pan (Fx board, note 3). A size
- * is a distance, so it is the byte's share of the axis's span, never a position on it.
- */
-export function sizeToDegrees(bytes: number, axis: SliderPropertyDescriptor & { degMin: number; degMax: number }): number {
-  const span = axis.max - axis.min
-  if (span <= 0) return 0
-  return (bytes * Math.abs(axis.degMax - axis.degMin)) / span
-}
-
-/** The inverse, rounded to a whole byte and held to 0–255. */
-export function degreesToSize(deg: number, axis: SliderPropertyDescriptor & { degMin: number; degMax: number }): number {
-  const degSpan = Math.abs(axis.degMax - axis.degMin)
-  if (degSpan === 0) return 0
-  return clampByte(Math.round((deg * (axis.max - axis.min)) / degSpan))
 }
 
 export function clampByte(n: number): number {
@@ -167,6 +122,12 @@ export interface FxDraft {
   speedMasterUuid: string | null
   /** Null → unscaled. */
   rateSpeedMasterUuid: string | null
+  /**
+   * D7's *Seconds* (venue-visit plan S15): the effect follows no master. A beat effect's
+   * [beatDivision] is then seconds and both masters are null; a wall-clock effect's division is
+   * seconds either way, and its Seconds is a null [rateSpeedMasterUuid].
+   */
+  seconds: boolean
 }
 
 /**
@@ -186,6 +147,9 @@ export function draftOf(effect: ActiveEffect): FxDraft {
     elementFilter: effect.elementFilter ?? 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
+    // The desk reports D7's reading; a desk before S15 does not, and then a wall-clock effect with
+    // no rate master is the only Seconds there is.
+    seconds: isOnSeconds(effect, effect.timingSource),
   }
 }
 
@@ -212,6 +176,7 @@ export type OptionalField =
   | 'elementFilter'
   | 'speedMasterUuid'
   | 'rateSpeedMasterUuid'
+  | 'seconds'
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'stepTiming',
@@ -220,6 +185,7 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'elementFilter',
   'speedMasterUuid',
   'rateSpeedMasterUuid',
+  'seconds',
 ]
 
 /**
@@ -234,7 +200,12 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
  * holds. Once touched, a field rides every later write — Revert's included, which is how Revert
  * puts it back. A null speed master is spelled [nullMasterAs] — Revert passes master 1's uuid, which
  * the desk treats as the null default, because the frame's absent field means "keep"; a null rate
- * master has no such spelling (unscaled is not a master) and is left absent.
+ * master is left absent, since *unscaled* is said by `seconds` (below).
+ *
+ * The timing (venue-visit plan D7) rides once touched too: `seconds: true` puts the effect on
+ * Seconds and sends **no** master beside it — the desk refuses both — which is also how Revert puts
+ * a wall-clock effect back to *unscaled* (`FU-FX-RATE-MASTER-CLEAR`, closed by S15); `seconds:
+ * false` sends the master beside it.
  */
 export function updateRequestOf(
   draft: FxDraft,
@@ -242,6 +213,7 @@ export function updateRequestOf(
   nullMasterAs: string | null = null,
 ): UpdateFxRequest {
   const speedMasterUuid = draft.speedMasterUuid ?? nullMasterAs
+  const onSeconds = touched.has('seconds') && draft.seconds
   return {
     parameters: { ...draft.parameters },
     beatDivision: draft.beatDivision,
@@ -251,10 +223,42 @@ export function updateRequestOf(
     ...(touched.has('distributionStrategy') ? { distributionStrategy: draft.distributionStrategy } : {}),
     ...(touched.has('elementMode') ? { elementMode: draft.elementMode } : {}),
     ...(touched.has('elementFilter') ? { elementFilter: draft.elementFilter } : {}),
-    ...(touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
-    ...(touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
+    ...(touched.has('seconds') ? { seconds: draft.seconds } : {}),
+    ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
+    ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
       : {}),
+  }
+}
+
+/**
+ * The draft patch for the timing chip's choice (venue-visit plan D7): [choice] null is *Seconds*,
+ * else a master's uuid. Each patch names the timing **and** the master fields, so the editor marks
+ * all of them set and Revert can put every one of them back.
+ *
+ * Moving a **beat** effect between Seconds and a master keeps its speed — the division converted at
+ * the master's tempo ([bpmOf], the live bank's; 4 beats at 120 BPM is 2 s). A wall-clock effect's
+ * number is seconds either way, and its master is its rate master.
+ */
+export function timingChoicePatch(
+  draft: Pick<FxDraft, 'beatDivision' | 'seconds' | 'speedMasterUuid' | 'rateSpeedMasterUuid'>,
+  wallClock: boolean,
+  choice: string | null,
+  bpmOf: (uuid: string | null) => number,
+): Partial<FxDraft> {
+  if (choice == null) {
+    return {
+      seconds: true,
+      speedMasterUuid: null,
+      rateSpeedMasterUuid: null,
+      ...(!wallClock && !draft.seconds ? { beatDivision: beatsToSeconds(draft.beatDivision, bpmOf(draft.speedMasterUuid)) } : {}),
+    }
+  }
+  if (wallClock) return { seconds: false, rateSpeedMasterUuid: choice }
+  return {
+    seconds: false,
+    speedMasterUuid: choice,
+    ...(draft.seconds ? { beatDivision: secondsToBeats(draft.beatDivision, bpmOf(choice)) } : {}),
   }
 }
 
@@ -322,6 +326,10 @@ export interface TemplateEffectFields {
   phaseOffset?: number
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
+  /** D7's flag as stored — see `isOnSeconds`. */
+  seconds?: boolean
+  /** The palette's resolved timing source, where the desk has said it. */
+  timingSource?: string | null
 }
 
 /**
@@ -330,7 +338,7 @@ export interface TemplateEffectFields {
  * fields a template has no answer for — step timing, element mode, the head filter — read as their
  * defaults and are never written back ([withTemplateDraft]).
  */
-export function templateDraftOf(effect: TemplateEffectFields): FxDraft {
+export function templateDraftOf(effect: TemplateEffectFields, timingSource?: string | null): FxDraft {
   return {
     parameters: { ...effect.parameters },
     beatDivision: effect.beatDivision,
@@ -342,6 +350,7 @@ export function templateDraftOf(effect: TemplateEffectFields): FxDraft {
     elementFilter: 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
+    seconds: isOnSeconds(effect, timingSource ?? effect.timingSource),
   }
 }
 
@@ -363,8 +372,11 @@ export function withTemplateDraft<E extends TemplateEffectFields>(
     blendMode: draft.blendMode,
     phaseOffset: draft.phaseOffset,
     distribution: distribution ? draft.distributionStrategy : effect.distribution,
-    speedMasterUuid: draft.speedMasterUuid,
-    rateSpeedMasterUuid: draft.rateSpeedMasterUuid,
+    // Seconds follows no master (D7), so a draft on Seconds stores none beside the flag.
+    speedMasterUuid: draft.seconds ? null : draft.speedMasterUuid,
+    rateSpeedMasterUuid: draft.seconds ? null : draft.rateSpeedMasterUuid,
+    // Written where it says something — a palette that never used Seconds stays as it was stored.
+    ...(draft.seconds || effect.seconds != null ? { seconds: draft.seconds } : {}),
   }
 }
 
@@ -409,6 +421,7 @@ export function differsFromTemplate(
   if (distribution && draft.distributionStrategy !== effect.distribution) return true
   if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
   if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
+  if (draft.seconds !== isOnSeconds(effect, effect.timingSource)) return true
   const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
   for (const name of names) {
     if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true

@@ -733,8 +733,8 @@ describe('FixturesTable scopes', () => {
     expect(screen.getAllByText('0%').length).toBe(ROWS.length)
     expect(cellWrapper().className).toContain('ring-primary/70')
     expect(container.querySelector('svg.lucide-audio-waveform')).not.toBeNull()
-    // 0.5 beats is an eighth note — the label the whole desk uses for that division.
-    expect(screen.getAllByText('1/8').length).toBeGreaterThan(0)
+    // 0.5 beats is half a beat — the one spelling the whole desk uses for that division.
+    expect(screen.getAllByText('½ beat').length).toBeGreaterThan(0)
   })
 
   it('shows nothing per fixture on a value palette layer', () => {

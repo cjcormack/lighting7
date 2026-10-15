@@ -262,6 +262,9 @@ export interface KeyStackLayer {
   running?: boolean | null
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
+  /** The two effect kinds: the loop, and whether the effect is on Seconds (its division is seconds). */
+  timingSource?: string | null
+  seconds?: boolean | null
   /** The two effect kinds: running, but not painting this key — the desk's own suppression answer. */
   heldBack?: boolean | null
   cueId?: number | null

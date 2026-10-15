@@ -808,6 +808,16 @@ class FxEngine(
          * two single-master parameters when given.
          */
         replaceMasters: MasterAssignment? = null,
+        /**
+         * Move the effect between *Seconds* and a master (venue-visit plan D7): true onto Seconds,
+         * false onto a master, null = keep. A beat effect moving either way changes loop, so this
+         * takes the swap path; see [applyTimingChoice] for what each state is. Leaving Seconds puts
+         * a beat effect on [newSpeedMasterUuid] (null → master 1) and a wall-clock effect on
+         * [newRateSpeedMasterUuid] — the route refuses a wall-clock move that names none, since a
+         * null rate master *is* Seconds. A type swap ([newTimingSource]) keeps the choice the
+         * instance had.
+         */
+        newSeconds: Boolean? = null,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -828,8 +838,13 @@ class FxEngine(
             }
         }
 
+        // D7: a timing move or a type swap decides the loop and which masters can stand.
+        val timingMove = if (newSeconds != null || newTimingSource != null) {
+            (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
+        } else null
+
         // Determine if we need an atomic swap (immutable fields changed)
-        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null || newTimingSource != null
+        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null || timingMove != null
 
         val updated = if (needsSwap) {
             FxInstance(
@@ -866,7 +881,8 @@ class FxEngine(
                 // would snap an edited wall-clock effect back to the start of its cycle —
                 // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
                 accumulatedScaledMs = existing.accumulatedScaledMs
-                timingSource = newTimingSource ?: existing.timingSource
+                timingSource = existing.timingSource
+                seconds = existing.seconds
                 // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
                 // it on first read, which costs one walk and is the safe direction. Carrying it
                 // would survive a future `updateEffect` that learns to retarget, and the effect
@@ -888,6 +904,13 @@ class FxEngine(
                     existing.rateMasterSlot
                 }
                 replaceMasters?.let { assignMasters(this, it) }
+                // After the masters: Seconds clears whichever master its kind cannot have, and the
+                // slots are bound again from what is left.
+                timingMove?.let { (registrationSource, seconds) ->
+                    applyTimingChoice(registrationSource, seconds)
+                    speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
+                    rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+                }
             }
         } else {
             newSpeedMasterUuid?.let {

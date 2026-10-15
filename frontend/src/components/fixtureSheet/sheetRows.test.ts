@@ -58,18 +58,18 @@ describe('buildSheetRows', () => {
     const position = groups[0].rows[0]
     expect(position.kind).toBe('position')
     expect(position.keys).toEqual(['position', 'pan', 'tilt'])
-    expect(position.kind === 'position' && position.degrees).toBe(true)
+    expect(position.kind === 'position' && position.aimable).toBe(true)
     expect(groups[1].rows.map((r) => r.id)).toEqual(['focus'])
   })
 
-  it('reads a real position descriptor in bytes', () => {
+  it('offers no aim on a position descriptor whose axes annotate no travel', () => {
     const [group] = buildSheetRows([positionProp('position', chan(1), chan(2))])
     const row = group.rows[0]
-    expect(row.kind === 'position' && row.degrees).toBe(false)
+    expect(row.kind === 'position' && row.aimable).toBe(false)
     expect(row.keys).toEqual(['position'])
   })
 
-  it('reads a position descriptor in degrees where its axes annotate travel', () => {
+  it('offers aim on a position descriptor whose axes annotate travel', () => {
     const [group] = buildSheetRows([
       positionProp('position', chan(1), chan(3)),
       sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 530 }),
@@ -79,7 +79,7 @@ describe('buildSheetRows', () => {
     ])
     expect(group.rows.map((r) => r.id)).toEqual(['position'])
     const row = group.rows[0]
-    expect(row.kind === 'position' && row.degrees).toBe(true)
+    expect(row.kind === 'position' && row.aimable).toBe(true)
     expect(row.keys).toEqual(['position', 'pan', 'tilt'])
   })
 

@@ -298,7 +298,8 @@ venue's at `venueValue` standing again). In a venue both are admin-only, as ever
 
 `create_look` authors a Look's **values** as well as its deferred effects and scenery (`ai/LookValues.kt`):
 `values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
-always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `deg:`, `dmx:`,
+always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `pos:` — a
+centre-relative position, `-128..127` with 0 the centre of travel — or a stored `deg:`, `dmx:`,
 `on`/`off`), or a setting's option name for a gobo or a wheel slot — and each is resolved per head
 through `TemplateResolver`, the resolver a palette press uses, into the literal a Look row stores;
 `pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the palette vocabulary. A
@@ -329,9 +330,8 @@ A colour value may carry the head's own emitter levels as the desk's colour lite
 the resolved mix only where the head bundles that emitter with its colour (`bundleWithColour`). A
 `;policy=extract|additive|rgbonly` token is the palette grammar's white policy (`TemplateResolver.mixColour`),
 absent reading as `rgbonly`, so a colour with neither sets W/A/UV to zero; a named level wins over the
-policy's; pan and
-tilt take `pct:` / `dmx:` on their own, which is how a head with no annotated degree range is
-positioned.
+policy's; a `position` takes `pos:` (or a stored `deg:`), which reaches every DMX-backed head,
+annotated or not, and pan and tilt also take `pct:` / `dmx:` each on its own.
 
 `update_look` edits a Look as the REST `PUT /looks/{id}` does: a new name (refused when another
 Look holds it) and notes, and each of `values`, `effects` and `scenery` given replaces that part
@@ -399,7 +399,7 @@ reconnect to see the new names; a call to an old name is refused as an unknown t
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
 `dryRun` that answers each head's degrees and writes nothing, and a `saveAsPalette` that also
-records the aims as a new position palette (one fixture row per head, in degrees), since an aim
+records the aims as a new position palette (one fixture row per head, centre-relative `pos:`), since an aim
 left only in the programmer is lost at the operator's next Clear. It is the setup-time answer to "focus
 the specials on DSC": a model reading a plot knows where a region or a mark is in stage metres (from
 `get_patch`) and has no way to turn that into DMX itself. Heads it cannot aim come back by name

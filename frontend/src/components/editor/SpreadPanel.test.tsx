@@ -512,7 +512,7 @@ describe('the four kinds', () => {
     expect(apply).toHaveBeenCalledWith([1000, 2000, 3000, 4000])
   })
 
-  it('intent: a position spreads in degrees and a level in percent; Enter applies and comma steps From → To', () => {
+  it('intent: a position spreads centre-relative and a level in percent; Enter applies and comma steps From → To', () => {
     const plan = intentPlan({
       families: ['INTENSITY', 'POSITION'],
       initial: { family: 'POSITION' },
@@ -523,10 +523,12 @@ describe('the four kinds', () => {
     })
     render(<SpreadPanel host="popover" plans={[plan]} />)
     open()
-    const pan = screen.getByRole('spinbutton', { name: 'From pan, degrees' })
-    fireEvent.change(pan, { target: { value: '200' } })
+    // Centre-relative (venue-visit plan D3): the default swings ±16 about the centre of travel.
+    const pan = screen.getByRole('spinbutton', { name: 'From pan' })
+    expect(pan).toHaveValue(-16)
+    fireEvent.change(pan, { target: { value: '-40' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
-    expect(lastBody()).toMatchObject({ property: 'position', from: 'deg:200,135', to: 'deg:300,135' })
+    expect(lastBody()).toMatchObject({ property: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
     // Enter applied and closed the popover.
     expect(document.querySelector('[data-spread-panel]')).toBeNull()
   })

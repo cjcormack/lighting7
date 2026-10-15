@@ -48,6 +48,21 @@ private val valueTargetSchema = buildJsonObject {
     put("required", buildJsonArray { add("type"); add("key") })
 }
 
+/** An effect's cycle, where the tools describe one. One bar is venue-visit plan D16's default. */
+private const val BEAT_DIVISION_DESCRIPTION =
+    "Effect cycle length in beats: 0.25=16th, 0.5=8th, 1.0=one beat, 2.0=half a bar, 4.0=one bar, 8.0=two bars. " +
+        "With seconds: true, the cycle in seconds instead. Omit for one bar (4.0)."
+
+/** The speed-master field's words, shared by every effect schema. */
+private const val SPEED_MASTER_DESCRIPTION =
+    "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose usage " +
+        "matches the effect's family (dimmer, colour or position), else master 1, the global tempo. Leave it out with seconds."
+
+/** D7's Seconds, in the tools' words. */
+private const val SECONDS_DESCRIPTION =
+    "Run on Seconds: beatDivision is the cycle in seconds and the effect follows no speed master (for a slow breathe " +
+        "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
+
 private val lookEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -62,7 +77,7 @@ private val lookEffectSchema = buildJsonObject {
         })
         put("beatDivision", buildJsonObject {
             put("type", "number")
-            put("description", "Effect cycle length in beats: 0.25=16th, 0.5=8th, 1.0=quarter, 2.0=half, 4.0=bar, 8.0=2bars")
+            put("description", BEAT_DIVISION_DESCRIPTION)
         })
         put("blendMode", buildJsonObject {
             put("type", "string")
@@ -90,11 +105,15 @@ private val lookEffectSchema = buildJsonObject {
         })
         put("speedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Speed master whose tempo this effect follows, named by the uuid from the Speed Masters list. Omit for master 1, the global tempo.")
+            put("description", SPEED_MASTER_DESCRIPTION)
         })
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
             put("description", "Speed master scaling this effect's wall-clock rate, named by uuid. Only wall-clock effects read it. Omit to leave the effect unscaled.")
+        })
+        put("seconds", buildJsonObject {
+            put("type", "boolean")
+            put("description", SECONDS_DESCRIPTION)
         })
         put("parameters", buildJsonObject {
             put("type", "object")
@@ -103,7 +122,7 @@ private val lookEffectSchema = buildJsonObject {
         })
     })
     put("required", buildJsonArray {
-        add("effectType"); add("category"); add("beatDivision"); add("blendMode"); add("parameters")
+        add("effectType"); add("category"); add("blendMode"); add("parameters")
     })
 }
 
@@ -235,7 +254,7 @@ internal val applyLookTool = ToolDef(
             })
             put("beatDivision", buildJsonObject {
                 put("type", "number")
-                put("description", "Optional beat division override for all effects")
+                put("description", "Optional beat division override for the Look's effects that follow a speed master; an effect on Seconds keeps its own cycle")
             })
         })
         put("required", buildJsonArray { add("lookId") })
@@ -402,10 +421,11 @@ internal val aimFixturesTool = ToolDef(
                 put(
                     "description",
                     "Also save the aims as a new position palette with this name: one row per aimed head, " +
-                        "in pan/tilt degrees, so it outlives the programmer. The name must be unused — a taken " +
+                        "centre-relative (pos:), so it outlives the programmer. The name must be unused — a taken " +
                         "name refuses the call before any head moves. For heads aimed at different points in " +
                         "one palette, dryRun each aim and pass the positions to create_palette " +
-                        "(value 'deg:<panDeg>,<tiltDeg>', targetKey the fixture).",
+                        "(value 'pos:<pan>,<tilt>' from each written value 'pan,tilt' as pan − 128, tilt − 128; " +
+                        "targetKey the fixture).",
                 )
             })
         })
@@ -463,7 +483,10 @@ private val adHocEffectSchema = buildJsonObject {
             put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("controls") })
         })
         put("propertyName", buildJsonObject { put("type", "string") })
-        put("beatDivision", buildJsonObject { put("type", "number") })
+        put("beatDivision", buildJsonObject {
+            put("type", "number")
+            put("description", BEAT_DIVISION_DESCRIPTION)
+        })
         put("blendMode", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("OVERRIDE"); add("ADDITIVE"); add("MULTIPLY"); add("MAX"); add("MIN") })
@@ -487,11 +510,15 @@ private val adHocEffectSchema = buildJsonObject {
         put("stepTiming", buildJsonObject { put("type", "boolean") })
         put("speedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Speed master whose tempo this effect follows, by uuid. Omit for master 1.")
+            put("description", SPEED_MASTER_DESCRIPTION)
         })
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
             put("description", "Speed master scaling this effect's wall-clock rate, by uuid. Omit to leave it unscaled.")
+        })
+        put("seconds", buildJsonObject {
+            put("type", "boolean")
+            put("description", SECONDS_DESCRIPTION)
         })
         put("parameters", buildJsonObject {
             put("type", "object")
@@ -500,7 +527,7 @@ private val adHocEffectSchema = buildJsonObject {
     })
     put("required", buildJsonArray {
         add("targetType"); add("targetKey"); add("effectType"); add("category")
-        add("beatDivision"); add("blendMode"); add("parameters")
+        add("blendMode"); add("parameters")
     })
 }
 
@@ -883,7 +910,7 @@ private val templateEffectSchema = buildJsonObject {
             put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position") })
         })
     })
-    put("required", buildJsonArray { add("effectType"); add("category"); add("beatDivision"); add("blendMode") })
+    put("required", buildJsonArray { add("effectType"); add("category"); add("blendMode") })
 }
 
 internal val createTemplateTool = ToolDef(
@@ -918,7 +945,7 @@ internal val createTemplateTool = ToolDef(
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
-                            put("description", "The value as an intent, not a DMX literal: '#ff8800' for rgbColour, 'pct:75' for dimmer, strobe, zoom, focus, iris or frost, 'deg:<pan>,<tilt>' for position (travel degrees, what aim_fixtures reports), 'dmx:180' for white, amber or uv, 'on' / 'off' for prism.")
+                            put("description", "The value as an intent, not a DMX literal: '#ff8800' for rgbColour, 'pct:75' for dimmer, strobe, zoom, focus, iris or frost, 'pos:<pan>,<tilt>' for position (centre-relative DMX, -128 to 127 on each axis, 0 the centre of travel at DMX 128: the same fraction of travel on every head; 'deg:<pan>,<tilt>', travel degrees, is what older palettes hold and is still read), 'dmx:180' for white, amber or uv, 'on' / 'off' for prism.")
                         })
                         put("targetKey", buildJsonObject {
                             put("type", "string")

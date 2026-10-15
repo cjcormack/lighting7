@@ -267,6 +267,9 @@ object DaoTemplateEffects : IntIdTable("template_effects") {
      */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
+
+    /** D7's *Seconds* for a beat effect; see [TemplateEffectDto.seconds]. */
+    val seconds = bool("seconds").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -293,6 +296,7 @@ class DaoTemplateEffect(id: EntityID<Int>) : IntEntity(id) {
     var parameters by DaoTemplateEffects.parameters
     var speedMasterUuid by DaoTemplateEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoTemplateEffects.rateSpeedMasterUuid
+    var seconds by DaoTemplateEffects.seconds
     var uuid by DaoTemplateEffects.uuid
 }
 
@@ -321,6 +325,13 @@ data class TemplateEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
+     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
+     * See `fx/EffectTiming.kt`.
+     */
+    val seconds: Boolean = false,
     /**
      * `BEAT` or `WALL_CLOCK`, **resolved server-side on read and ignored on write** — the same
      * contract [TemplateRowDto.health] has, and for the same reason: it is the registry's answer
