@@ -374,7 +374,7 @@ onward needs R1 sessions 1–4 (entries, holds, sharing and explicit delete), ve
 position and *Edit in programmer* opening the programmer) and S4 (the palette rename, so the new copy
 says palette).
 
-### Session 1 — Blind holds the programmer's effects (backend + reporters)
+### Session 1 — Blind holds the programmer's effects (backend + reporters) — done, `6f86273f`
 
 - §3.6: the tick skips a programmer-band instance's apply while blind and keeps its phase;
   `keyStack`'s `heldBack` reason; the reporters' wording; the FX tray's and FX band's *held · Blind*.
