@@ -1,6 +1,6 @@
 # Editing a cue in the Show view — the programmer's tables, writing the stored cue
 
-> **Document status: DRAFT, 2026-10-14 — awaiting Chris's agreement.** This is design session R2 of
+> **Document status: AGREED, 2026-10-15.** This is design session R2 of
 > [`venue-visit-plan.md`](venue-visit-plan.md). It follows R1, [`cue-model-plan.md`](cue-model-plan.md),
 > and designs against that model: a cue is a shared project record, a stack is an ordered list of
 > entries, and delete is its own explicit operation. The questions asked and their answers are in
@@ -395,7 +395,7 @@ says palette).
 
 - §5: `CueActions` in the card strip, the cue sheet's bar and the phone ⋯; the split button and its
   run-state face; Load; Record; Duplicate on its new route (this takes the duplicate route from R1
-  session 6, which then builds only the cross-project copy); Remove from stack; Delete… on R1's
+  session 6, which then builds only the cross-project copy, as R1 §3.8 now notes); Remove from stack; Delete… on R1's
   confirm; ⋯; the locked rule; *← Show*.
 - **Tests:** the face flips with the run state; locked, Blind edit sends Blind then Include and every
   other action asks to unlock; Blind edit with a cue holding an effect sends nothing to the stage

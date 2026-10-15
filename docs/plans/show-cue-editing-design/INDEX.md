@@ -8,7 +8,7 @@ behave like the programmer's and never send output, how that looks in the card a
 one action set for both. It follows R1, [`../cue-model-plan.md`](../cue-model-plan.md), and draws
 against that model: shared cues, stacks of entries, delete as its own act.
 
-**Status: draft, 2026-10-14, awaiting Chris's agreement.** The implementation plan is
+**Status: approved 2026-10-15.** The implementation plan is
 [`../show-cue-editing-plan.md`](../show-cue-editing-plan.md). A one-page copy for human readers is
 [`show-cue-editing.html`](show-cue-editing.html), with a live copy at
 <https://claude.ai/artifact/N3Acyq477Lj9i9r4p6YWzm>, private to Chris and a convenience; the files
