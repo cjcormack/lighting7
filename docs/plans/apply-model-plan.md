@@ -473,7 +473,7 @@ Each session is one PR (P1).
   as values — since the toggle and apply routes take it without refusing (§4.1's "no client
   pre-refusal" assumed they refuse).
 
-### Session 4 — One mask (backend + frontend)
+### Session 4 — One mask (backend + frontend) — done, `0172c210`
 
 - §4.4: the pill's picker, the busk summary's pill, and the five sheets opening on the selection's mask.
 - **Tests:**
