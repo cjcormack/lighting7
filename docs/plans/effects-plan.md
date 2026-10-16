@@ -329,7 +329,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 
 ## 8. Implementation — seven sessions
 
-### Session 1 — Size, direction and N-shot (backend + editor)
+### Session 1 — Size, direction and N-shot (backend + editor) — done, `02b1c4a4`
 
 - `FxDynamics` gains `size`, `direction`, `nShot`; P3's weight replaces the raw-output scaling, with
   `intensityMultiplier` becoming the envelope (§3.5 uses it in session 4).
