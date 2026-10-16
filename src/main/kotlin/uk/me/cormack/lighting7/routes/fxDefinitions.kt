@@ -303,6 +303,14 @@ internal fun validateCompatibleProperties(
         "compatibleProperties entry '$prop' cannot take a $outputType output — it would be " +
             "discarded, leaving the effect with no visible result. Expected $expected."
 
+    // A step effect is not a custom effect's to be (effects plan §3.6): its lists name the desk's
+    // palettes and settings, resolved per head by the targets, and a definition syncs to desks
+    // that predate the output type. So neither built-in can be forked, and no definition says it.
+    if (outputType == FxOutputType.STEPS) {
+        return "A custom effect cannot have a STEPS output — Palette Steps and Slot Steps are the " +
+            "desk's own and cannot be forked"
+    }
+
     for (prop in compatibleProperties) {
         when (outputType) {
             FxOutputType.POSITION ->
@@ -315,6 +323,8 @@ internal fun validateCompatibleProperties(
                 if (canonicalPropertyName(prop) == "rgbColour")
                     return bad(prop, "a slider or setting property, not the colour bundle")
             }
+            // Refused above: no definition has a STEPS output.
+            FxOutputType.STEPS -> Unit
         }
     }
     return null

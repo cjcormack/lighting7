@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router'
 import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,9 @@ import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
 import { familyForEffectCategory } from '@/lib/attributeFamily'
+import { stepEffectPaletteShape } from '@/lib/stepEffects'
+import { useTemplateListQuery } from '@/store/templates'
+import type { TemplateSummary } from '@/api/templatesApi'
 import { findEffectEntry } from '../busking/buskingTypes'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
 import { HeldBlindMark } from '../fx/HeldBlindMark'
@@ -56,6 +60,12 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
   const { data: library } = useEffectLibraryQuery()
+  // A step effect's family is its palettes' or its setting's, not its library category's (effects
+  // plan §3.6), so *Save as palette…* reads the palette list too — one shared cache entry, and only
+  // the project in the route's.
+  const { projectId } = useParams<{ projectId: string }>()
+  const projectIdNum = projectId ? Number(projectId) : NaN
+  const { data: templates } = useTemplateListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
   // One read for the band, not one per row: Blind holds every programmer effect (show-cue-editing
   // plan D7), and each held row says so.
   const blind = useProgrammerBlind()
@@ -106,7 +116,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
               effect={effect}
               home={homeOf(effect, layerHomes)}
               heldByBlind={isHeldByBlind(effect, blind)}
-              saveAsTemplate={saveAsTemplateOffer(effect, library)}
+              saveAsTemplate={saveAsTemplateOffer(effect, library, templates)}
               onEdit={(row) => {
                 editAnchor.current = row
                 setEditingId(effect.id)
@@ -158,6 +168,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
 function saveAsTemplateOffer(
   effect: ActiveEffect,
   library: EffectLibraryEntry[] | undefined,
+  templates: TemplateSummary[] | undefined,
 ): { enabled: boolean; reason?: string } {
   if (!effect.programmerOwned || effect.lookId != null || effect.templateId != null || effect.programmerLayerId != null) {
     return {
@@ -180,6 +191,10 @@ function saveAsTemplateOffer(
       reason: `“${effect.effectType}” is not in this desk's effect library, so its category — and so the palette's family — cannot be read.`,
     }
   }
+  // A step effect is banked by its palettes' family or as Beam on its setting, never by its library
+  // category — Palette Steps' `palette` names no family at all.
+  const step = stepEffectPaletteShape(effect, templates)
+  if (step != null) return step.reason != null ? { enabled: false, reason: step.reason } : { enabled: true }
   const family = familyForEffectCategory(entry.category)
   if (family == null) {
     return {

@@ -15,6 +15,7 @@ import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 import { isOnSeconds } from '@/lib/effectTiming'
 import { effectTargetLabel, parseSelectionKey } from '@/lib/effectTargets'
+import { parseStepList } from '@/lib/stepEffects'
 
 export interface EffectSummaryProps {
   /** Normalised effect data */
@@ -204,6 +205,13 @@ interface Swatch {
  * shows the colour the template *currently* holds — and names it on hover, because the whole reason
  * to reference one is that it has a name.
  */
+/** A stored slot name as words: `GOBO_3` reads *Gobo 3*, `Gobo 3` stays as it is. */
+function slotLabel(name: string): string {
+  if (!/^[A-Z0-9_]+$/.test(name)) return name
+  const words = name.toLowerCase().split('_').filter(Boolean).join(' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 function getCustomParams(
   effect: EffectSummaryData,
   colourTemplates: ColourTemplates,
@@ -230,6 +238,19 @@ function getCustomParams(
       if (colourSwatches.length < maxSwatches) {
         colourSwatches.push(swatchFor(value))
       }
+    } else if (paramType === 'palettelist') {
+      // Palette Steps' palettes (effects plan §3.6): references, never text worth reading — a count,
+      // and a swatch for each colour palette among them.
+      const palettes = parseStepList(value)
+      textParams.push({ label: 'Steps', value: `${palettes.length} palette${palettes.length === 1 ? '' : 's'}` })
+      for (const ref of palettes) {
+        if (colourSwatches.length >= maxSwatches) break
+        const hex = colourTemplates.swatchFor(ref)
+        if (hex != null) colourSwatches.push({ hex, title: colourTemplates.labelFor(ref) })
+      }
+    } else if (paramType === 'slotlist') {
+      // Slot Steps' slots, by name as an operator reads one: `GOBO_3` is *Gobo 3*.
+      textParams.push({ label: 'Slots', value: parseStepList(value).map(slotLabel).join(' · ') })
     } else if (paramType === 'colourlist') {
       const colours = value.split(',').map((c) => c.trim()).filter(Boolean)
       for (const c of colours) {

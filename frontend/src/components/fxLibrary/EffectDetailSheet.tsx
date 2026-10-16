@@ -21,17 +21,20 @@ import {
  *
  * [onFork] draws *Fork* in the footer — the bar's verb for the row that is open, since a built-in is
  * changed only by forking it (D9). Absent where Fork is refused: off the running project, or for an
- * entry that is not a built-in.
+ * entry that is not a built-in. [forkRefusal] draws it disabled with its reason instead — a built-in
+ * the desk will not fork (a step effect), where an absent button would leave the operator guessing.
  */
 export function EffectDetailSheet({
   effect,
   source,
   onFork,
+  forkRefusal,
   forking = false,
 }: {
   effect: EffectLibraryEntry
   source: FxSource
   onFork?: () => void
+  forkRefusal?: string | null
   forking?: boolean
 }) {
   const name = displayName(effect.name)
@@ -102,9 +105,14 @@ export function EffectDetailSheet({
         )}
       </SheetBody>
 
-      {onFork && (
-        <SheetFooter className="flex-row justify-end gap-2">
-          <Button onClick={onFork} disabled={forking} title={`Make a custom copy of ${name} you can edit`}>
+      {(onFork || forkRefusal) && (
+        <SheetFooter className="flex-row items-center justify-end gap-2">
+          {forkRefusal && <p className="mr-auto text-[11px] text-muted-foreground">{forkRefusal}</p>}
+          <Button
+            onClick={onFork}
+            disabled={forking || forkRefusal != null || onFork == null}
+            title={forkRefusal ?? `Make a custom copy of ${name} you can edit`}
+          >
             <GitFork className="size-4" />
             {forking ? 'Forking…' : 'Fork'}
           </Button>

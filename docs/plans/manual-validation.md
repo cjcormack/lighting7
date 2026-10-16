@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
@@ -143,6 +144,36 @@ both following the desk, and a Colour and a Position palette:
    toggles take a finger, and the desk screens' pills follow.
 7. **Unlinked.** Unlink the busk window and pick *Position* there: the programmer's pill stays as it
    was, and a press on that busk window carries Position.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-NAV-4`
+
+**What it proves**: *a show's home and its one set of actions on a real desk* — venue-visit Nav.4,
+navigation plan session 4 (§5.1, §6): the home's status block reads the rig as the banners and the
+switcher do, and the Projects card, the home, the switcher and ⌘K offer one show the same actions.
+
+**Why it is here**: the tests pin the lines and the action sets against stubbed state; only a desk
+shows the held line beside a stage that is held, a *Sync now* against a real repo, the live cue
+moving as a GO lands, and the home's folds on the iPad and a phone.
+
+**Test**, on Sleeping Beauty (held behind TCH venue), TCH Test and a show whose venue version the
+desk lacks:
+
+1. **Held.** With Sleeping Beauty on the rig and held, its home's Venue line reads *On TCH venue v7 ·
+   held* in red with *Review update*, *Run against v7…* and *Open venue*; *Run against* lifts the hold
+   and the line turns amber with *Hold output*.
+2. **Live and sync.** GO a cue: the Live line names it within a moment, and a busk cue pad's press
+   adds it as *Loose*. *Sync now* on an admin's home
+   syncs and the line's time resets; an operator's home has no Sync line.
+3. **Sections.** The cards are the sidebar's rows less Desk, Show reads *2 stacks · 35 cues* as the
+   Show view counts them, and on TCH Test (off the rig) the Programmer, Stage and Fixtures cards are
+   muted with the hollow dot; one opens the *not on the rig* page.
+4. **Actions.** TCH Test's ⋮ on its card, on its home and in ⌘K (viewing it) offer the same items;
+   the switcher's row offers Open and Make current. On the show whose venue is missing,
+   *Make current* is refused with its reason in all four, and nothing switches.
+5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
+   *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
 
 ---
 

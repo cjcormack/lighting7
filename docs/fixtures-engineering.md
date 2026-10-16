@@ -293,6 +293,16 @@ fixture.mode.setting = ProgramMode.SOUND_ACTIVE
 
 The `valueForLevel()` method finds the appropriate enum value for a raw DMX level (useful when reading back state).
 
+**As an effect's target** (`SettingTarget`, `fx/FxTarget.kt`) a setting takes a byte, discrete: always
+written over what is underneath whatever the blend, and only from half weight up (`weighDiscrete`),
+since a slot has no halfway. A level effect on one writes raw bytes and lands on whichever option
+holds them. **Slot Steps** (effects plan session 7, `docs/fx-engineering.md` §"Step Effects") steps
+one by **option name** instead: each name is looked up in the head's own options — the enum's name,
+ignoring case, spaces, underscores and dashes, so *Gobo 3* is `GOBO_3` — so two models carrying the
+slot at different levels each land on their own, and a head without it holds what is underneath on
+that step. The name is the one model-independent handle a slot has, which is why the options are
+named and why a palette may still not carry a slot (it would be one model's level).
+
 ## Annotations
 
 ### @FixtureType

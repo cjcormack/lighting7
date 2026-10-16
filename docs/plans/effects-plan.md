@@ -455,7 +455,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   and presses; a Beam master takes a new beam effect by S15's default.
 - **Docs:** `fx-engineering.md` §"Effect Types", `lighting-composition-model.md`.
 
-### Session 7 — Palette Steps and Slot Steps (backend + editor)
+### Session 7 — Palette Steps and Slot Steps (backend + editor) — done, `b56faf0`
 
 - `FxOutput.Steps` and per-head resolution in the slider, colour, position and setting targets (§3.6);
   the two built-ins.

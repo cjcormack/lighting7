@@ -51,6 +51,7 @@ class TypedParams(
     private val floatCache = ConcurrentHashMap<String, Float>()
     private val booleanCache = ConcurrentHashMap<String, Boolean>()
     private val easingCurveCache = ConcurrentHashMap<String, EasingCurve>()
+    private val slotStepsCache = ConcurrentHashMap<String, StepList>()
 
     /**
      * The colour caches and the source version they resolve against, published as ONE
@@ -62,6 +63,7 @@ class TypedParams(
     private class ColourCaches(val sourceVersion: Long) {
         val colours = ConcurrentHashMap<String, ExtendedColour>()
         val colourLists = ConcurrentHashMap<String, List<ExtendedColour>>()
+        val paletteSteps = ConcurrentHashMap<String, StepList>()
     }
 
     @Volatile private var colourCaches = ColourCaches(sourceVersion = -1L)
@@ -157,6 +159,38 @@ class TypedParams(
                 }
             }
         }
+    }
+
+    /**
+     * Palette Steps' list (effects plan §3.6): a comma-separated list of `tmpl:{uuid}` references to
+     * generic value palettes, each read off the palette as its rows' intents and resolved per head by
+     * the target. Cached against the colour source's version, as a colour list is, so retuning a
+     * palette moves the running steps without rebuilding the effect.
+     *
+     * The palettes are read through the colour source when it is a [TemplateSource] — the one every
+     * spawn site passes (`createEffectWithTemplates`). Without one (a bare `createEffect`, a test)
+     * there is nothing to read them from, and the list is empty. An entry that cannot be a step is
+     * **dropped**, as a colour list drops a reference it cannot honour.
+     */
+    fun paletteSteps(name: String): StepList {
+        return currentColourCaches().paletteSteps.getOrPut(name) {
+            val source = resolveColourSource as? TemplateSource
+            val value = raw(name)
+            if (source == null || value.isBlank()) {
+                StepList.EMPTY
+            } else {
+                PaletteStepList(source.paletteStepsOf(value))
+            }
+        }
+    }
+
+    /**
+     * Slot Steps' list (effects plan §3.6): a comma-separated list of a setting's option names
+     * (`GOBO_3`, or as the editor shows it, `Gobo 3`), looked up per head in its own options.
+     */
+    fun slotSteps(name: String): StepList = slotStepsCache.getOrPut(name) {
+        val names = raw(name).split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (names.isEmpty()) StepList.EMPTY else SlotStepList(names)
     }
 
     /** Parse an EasingCurve parameter. */

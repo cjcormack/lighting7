@@ -57,7 +57,8 @@ fun secondsTimingConflict(seconds: Boolean?, speedMasterUuid: String?, rateSpeed
 
 /**
  * Venue-visit plan D16's default master for a new effect of [effectType]: the speed master whose
- * `usage` is the effect's family — its registration's category, else [fallbackCategory] — or null,
+ * `usage` is the effect's family — its registration's category, else [fallbackCategory] (always for
+ * Palette Steps, whose `palette` category names no family) — or null,
  * which is master 1. Null too for a wall-clock effect, whose Seconds is having no rate master, since
  * "one bar on a master" means nothing to an effect timed in seconds.
  *
@@ -74,6 +75,7 @@ fun usageMasterUuidFor(
 ): java.util.UUID? {
     val registration = registry.getRegistration(effectType)
     if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
-    val family = registration?.category ?: fallbackCategory ?: return null
+    // Palette Steps is filed under its palettes' family, which only the caller can name.
+    val family = registration?.category?.takeUnless { it == PALETTE_STEPS_CATEGORY } ?: fallbackCategory ?: return null
     return speedMasters.masterStates().firstOrNull { it.usage == family }?.uuid
 }

@@ -714,8 +714,18 @@ Release folds to its glyph and the scope line drops the fade.
   heads (`effectsReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
   Position · Beam · Controls, a family the target cannot take disabled; Beam lists the beam
-  built-ins, each only where a head has its one property, effects plan §4.4) opening on the family of the row
-  open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
+  built-ins, each only where a head has its one property, and Slot Steps on a setting; Palette Steps
+  sits in every family with two generic value palettes or more naming a property the target has,
+  effects plan §4.4) opening on the family of the row
+  open on the sheet, and the effect rows. **The step effects start stepping** (session 7,
+  `lib/stepEffects.ts`, which never resolves — the desk does, per head): Palette Steps on that
+  family's palettes, in name order, its master by the family's usage; Slot Steps on the row's
+  setting — from any other row the gobo wheel where the head has one, else its first setting — on
+  its first two slots past its open one. Neither can be forked (the FX Library says why), and *Save
+  as palette…* banks one by its palettes' family or as Beam on its setting (`stepEffectPaletteShape`). The editor edits their lists with
+  `FxStepListPickers.tsx` — `paletteList` (palettes by reference, one family once one is chosen)
+  and `slotList` (the setting's options, a name the head lacks dashed; on an effect palette every
+  patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
   it), a movement effect starting *Around*, every effect starting on **one bar** on the master tagged
@@ -941,8 +951,9 @@ effect half narrow, and each removes a way for it to complicate the cook: **a va
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
 Every family may hold an effect — a **Beam** one a beam built-in (Zoom Breathe, Iris Pulse, Frost
-Pulse, Focus Pull; effects plan D6) — and the backend refuses `controls` and `composite` **by name**,
-since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
+Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
+over that family's palettes (session 7, `lib/stepEffects.ts`'s `stepEffectPaletteShape`) — and the
+backend refuses `controls` and `composite` **by name**, since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -3623,13 +3634,15 @@ it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited i
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
   generalised (it is gone) and still controlled, folding to a select below its `fold` of its
   **own** `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row.
-  **Two measured folds, chosen per chip set**: **400**, the default — the palette family's five
+  **Measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
-  the row leaves them ~430 — and **560** for the FX Library (six categories, 483px; 513 with a
-  three-digit *All*) and Scripts (all six types in their short labels, 542). Session 2 wrote "one
-  number for every library, re-measured"; measured in session 4, one number moved to 560 would fold
-  the palettes on an iPad where they fit, so the fold became a choice of two literal class pairs
-  (`FOLD_CLASSES` — Tailwind never emits a class built from `${}`).
+  the row leaves them ~430 — **560** for Scripts (all six types in their short labels, 542), and
+  **640** for the FX Library (seven categories since Palette Steps added *Palette*, effects plan
+  session 7: 619px with *All · 30*; at 560, which its six took, they ran under *New effect* in
+  1300–1349px windows). Session 2 wrote "one number for every library, re-measured"; measured in
+  session 4, one number moved to 560 would fold the palettes on an iPad where they fit, so the fold
+  became a choice of literal class pairs (`FOLD_CLASSES` — Tailwind never emits a class built from
+  `${}`).
 - **`usePartitionView.ts`** (session 4) — the partition as a view, never a route: a `?param=` plus
   a remembered value, the first render reading the stored one and never writing it back on arrival,
   a `?param=` arriving winning and being remembered, a change mirrored into the URL with `replace`.
@@ -6425,10 +6438,12 @@ breadcrumb name the viewed one. `document.title` is *Show · Desk name* from the
 **The menu** (`SwitcherMenu`, cmdk inside a popover): *Find a show or venue*, then **On the rig**,
 **Shows** and **Venues**, each by name (`switcherGroupsOf` — the filter is the switcher's own, a
 name substring, so cmdk's scoring cannot reorder the groups; `shouldFilter={false}`). A row reads
-*name · detail* (`switcherDetailOf`: the pin, *no venue*, or a venue's *v8 · 2 shows*) with *Open*
-and, on every project but the current one, *Make current* — or *Venue not here* for a show whose
-pinned version is not on this desk (`venue.id == null`, `makeCurrentRefusal`). The row's own press
-is Open. **Enter opens the highlighted row's home** — the first match while typing, since a search
+*name · detail* (`switcherDetailOf`: the pin, *no venue*, or a venue's *v8 · 2 shows*) with its
+project's **rig** actions from `projectActions` (below): *Open*, *Make current* on every project but
+the current one — or *Venue not here* for a show whose pinned version is not on this desk (the
+action's `refusalLabel`, its reason on the title). *Settings* is left off a row, which has room for
+two buttons beside a venue's name on a phone; it is a press away on the home, the sidebar and ⌘K.
+The row's own press is Open. **Enter opens the highlighted row's home** — the first match while typing, since a search
 re-highlights the first row drawn — and **⌥Enter makes it current** through the confirmation (the
 menu's `onKeyDown` runs before cmdk's and prevents its Enter). cmdk's root takes Enter for the
 highlighted row whatever has focus, so the row and footer buttons stop their own Enter and Space
@@ -6450,11 +6465,86 @@ with *Undo* on its banner. The park count and the blackout come from the project
 knew another project's parks or blackout). A desk without them says the rule with no count.
 
 **⌘K** lists *Go to <name>* and, for every project not on the rig that can be, *Make <name>
-current* through the same confirmation — the only door while immersive, which hides the app bar.
-*Create New Project* opens `CreateProjectDialog` and then the new project's home, and *Telemetry…* goes
-to `/install#telemetry`, which `TelemetryCard` scrolls to — offered to a signed-in admin only, as
-`InstallSettings` draws the card. The static `<title>` in `index.html` is *Lighting desk*, what the
-tab says before `Layout` mounts (sign-in, boot).
+current* through the same confirmation — the only door while immersive, which hides the app bar. Its
+**Project · <name>** group is the viewed project's actions (below), so the viewed project's *Make
+current* is there and not in the list. *Create New Project* opens `CreateProjectDialog` and then the
+new project's home, an admin's *Import project…* and *Add venue…* are the Projects page's two
+buttons, and *Telemetry…* goes to `/install#telemetry`, which `TelemetryCard` scrolls to — keyed on
+the location as well as the hash, so choosing it again while already there scrolls again — offered
+to a signed-in admin only, as `InstallSettings` draws the card. The static `<title>` in `index.html`
+is *Lighting desk*, what the tab says before `Layout` mounts (sign-in, boot).
+
+**One set of project actions** (navigation plan §6, P3; `lib/projectActions.ts`).
+`projectActions(project, ctx)` answers every action a project has — `id`, `label`, `group` (`rig |
+copy | venue | danger`), `visible`, `enabled` with its `reason`, and `run` — and four places render
+from it, none with a copy of a rule: the Projects card's ⋮ and the home's ⋮ (`ProjectActionsMenu`,
+a group to a separator, a refused item disabled with its reason under its label, since a disabled
+item takes no hover), the switcher's rows (the *rig* group less Settings) and ⌘K (the Project group,
+and the list's *Go to* / *Make current*). ⌘K draws no *Project Settings* navigation row beside the
+group's *Settings*, which takes its words. The table:
+
+| Action | Offered | Group |
+|---|---|---|
+| Open | the switcher and ⌘K — a card is itself the way in, and a home is where it leads | rig |
+| Make current | not on the rig; refused with the reason for a show whose venue version is not here | rig |
+| Settings | always (it was the overview's *Configure*) | rig |
+| Clone… | a show, or an admin on a venue; refused for a show whose venue version is not here | copy |
+| Export… | an admin | copy |
+| Update venue to vN… | a show on a venue it is behind | venue |
+| Detach from venue… | a show on a venue this desk holds | venue |
+| Attach to venue… | a standalone show — a disabled slot until `venue-attach-plan.md` builds it | venue |
+| Extract a venue… | an admin, a standalone show | venue |
+| History · Publish vN… | an admin on a venue; Publish refused with nothing to publish | venue |
+| Delete… | a show, or an admin on a venue; refused on the project on the rig | danger |
+
+*Scripts* left the ⋮: the Library section has it. The rules are pure; an action's `run` goes through
+the host a place hands in. `useProjectActions(project, place)` in `components/projectActions/` is the
+host the card, the home and ⌘K share — the navigation, the dialog state, the venue history *Publish*
+reads — and answers the actions and the dialogs to mount, each mounted only while asked for. The
+switcher calls `projectActions` with its own host, whose one dialog is its confirmation. The
+predicates are what is offered, never a permission: the desk refuses whatever it refuses.
+`projectActions.test.ts` pins the table per kind, role and state; `ProjectActionPlaces.test.tsx`
+renders the four places and pins that the card, the home's ⋮ and ⌘K offer one set, and that a show
+whose venue is missing offers no working *Make current* in any of them.
+
+### A project's home
+
+**`/projects/:id` is a show's home** (navigation plan D2, §5.1; `routes/ProjectHome.tsx`), and it
+leads with status. The header (`ProjectHomeHeader`) is the name and description, then **On the rig**
+(green) or **Make current** (refused for a missing venue version, with the reason under it), then the
+⋮. The status block is one line per fact:
+
+- **Venue** (`venueLineOf` in `lib/projectHome.ts`): *On TCH venue v7 · v8 published*, the pin
+  chip's words, coloured as the behind banner is — red held, amber behind on output, neutral for
+  drawing only or up to date, red for a version not on this desk — with the banner's own actions,
+  `VenueBehindActions` (*Review update*, *Run against v7…* while held on the rig, *Hold output*
+  while running against; the banner keeps *Later*), and *Open venue*. A standalone show reads *No
+  venue* beside the attach slot.
+- **Sync**, for an admin only, since every cloud-sync route is an admin's: *Synced · owner/repo · 2
+  min ago* or *Not synced*, and *Sync now* through `useSyncNow` (`components/cloudSync/`), the hook
+  the Sync tab's Status panel presses too. Its toasts share the global toaster's id, so a run and
+  its `cloudSyncDone` frame are one toast; the line re-reads the config on that frame, wherever the
+  run started. Why *Sync now* is refused is written under the line, not left on a hover.
+- **Live**, only on the rig: each runnable stack's live cue — its live **entry**'s row, so a cue
+  placed twice reads the right number — from the stack list the `cueRunStateChanged` frames patch
+  (`liveCuesOf`), then each cue a press holds loose (`looseCuesOf`, from `cueHolds.state`, *Loose
+  Storm*), *Blind*, and *Held by its venue*. *No cue live* only when nothing holds a cue.
+
+**The sections are the sidebar's**: `homeSectionsOf(filterNavItems(…))` in `navigation.ts`, the
+sidebar's own rows for the same project less Desk, drawn as cards — never a hand-picked list, so a
+new row reaches the home by being in the registry. A card is the row's icon and label and its
+`NavItem.homeCount`, read from `useHomeCounts` (`components/projectHome/`), every count from a query
+the frontend already made (P5). **Show counts its stacks and the project's cues once each** — *2
+stacks · 35 cues*, the cue list's length — because a cue can sit in several stacks or in none, so
+a count per stack would count a shared cue twice and miss a loose one (Chris's call, 2026-10-16); the
+cues move to the Cues row when it lands. The cue list and not `ProjectDetail.cueCount`, because the
+list's tag is the one a cue write invalidates. Off the rig the `needsRig` cards take D4's treatment —
+muted, `OffRigDot`, *Needs the project on the rig* — and their counts (Show's, fixtures, groups,
+universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
+because the list shows them. A **venue** keeps the old overview's cards (`VenueOverview`) under the
+same header and ⋮ until its own home (§5.2). `ProjectHome.test.tsx` pins the sections against the
+rendered sidebar, the held show's *Review update* and *Run against*, the counts and the off-rig
+cards; `projectHome.test.ts` the lines.
 
 `lib/projectSwitch.test.ts` pins the words and the order; `AppBarSwitcher.test.tsx` the button and
 its hold, the menu's order, search with Enter and ⌥Enter through the confirmation (which names the

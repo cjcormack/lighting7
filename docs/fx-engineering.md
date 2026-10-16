@@ -84,7 +84,8 @@ Two nullable per-master settings, added for the busk view (see
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
   meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
-  routable; effects in those categories land on master 1. One master per usage per project,
+  routable; effects in those categories land on master 1. Nor is `palette`: a Palette Steps is
+  stamped by its palettes' family's usage instead. One master per usage per project,
   enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
 - **`follow_num` / `follow_den` / `follow_target_uuid`** make the master a *follower* of
   another master (null target = master 1). Following is **phase lock, not just tempo**: a
@@ -279,17 +280,104 @@ in `compatibleProperties`, so the picker offers it only on a head that has that 
 | `FocusPull` | `focus` | Sweep between two focus levels | `start`, `end`, `curve`, `pingPong` |
 
 The values are raw DMX, as every level effect's are. A stepped zoom (the Robe's) is a setting, so
-Zoom Breathe on it writes the byte and lands on whichever step that is.
+Zoom Breathe on it writes the byte and lands on whichever step that is. To step one by name, use
+Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
+which snaps to the step nearest that share of its angles, as a palette does (below).
 
 A stored beam effect that names no property — an effect palette's, a Look's deferred effect — lands
 on the one property its registration declares (`EffectSpawner`'s `beam` arm), on a group only where
 every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's effect must
-declare exactly one property by name (`validateTemplateEffect`). A group or selection is resolved
+name one property, its own `propertyName` or else the one its registration declares, never a
+sentinel (`validateTemplateEffect`) — Slot Steps names the setting it steps. A group or selection is resolved
 through its first head that has the property (`referenceFixtureFor(target, property)`), so a
 selection that starts on a head without zoom still drives the zooms after it. Record files an
-effect on `zoom`, `iris`, `frost` or `focus` as category `beam` (`categoryFromPropertyName`), so a
-recorded Look's families include Beam. A speed master may take `usage: beam`, and a Beam effect
+effect on `zoom`, `iris`, `frost` or `focus` as category `beam` (`categoryFromPropertyName`; a step
+effect by `recordedEffectCategory`, below), so a recorded Look's families include Beam. A speed master may take `usage: beam`, and a Beam effect
 palette holds one of them (`TEMPLATE_EFFECT_FAMILIES`).
+
+### Step Effects (`FxOutput.Steps`)
+
+Effects plan session 7 (D8, §3.6): two built-ins step through **named things**, each resolved for the
+head in hand, which no other effect output can say. Both emit `FxOutput.Steps(from, to, blend,
+steps)` — two step indices, how far between them, and the `StepList` that says what a step is — and
+declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the routes'
+`requireOutputTypeMatch`, `FxInstance`'s warn and a palette press's skip all ask it).
+
+| Effect | Category | Steps through | Parameters |
+|--------|----------|---------------|------------|
+| `PaletteSteps` | its palettes' family | generic value palettes, `tmpl:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
+| `SlotSteps` | `beam` | one setting's option names | `slots` (`slotList`) |
+
+`stepsAt(phase, steps, fadeRatio)` is the timing, Colour Cycle's: equal segments, each step held for
+`1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
+first. Size, direction and the spread apply as to any effect, so a Backward or Bounce phase runs the
+steps back.
+
+**The target resolves a step per head** (`StepList.valueFor`, `colourFor` on the colour target):
+`SliderTarget`, `ColourTarget` and `PositionTarget` blend the two steps in proportion (a byte, an
+`ExtendedColour`, pan and tilt each), and `SettingTarget` snaps to the nearer — a slot has no halfway
+(Slot Steps' level read off the setting the target already holds, `SlotStepList.levelFor`). A head
+that cannot take a step holds what is underneath for it: nothing is written where it shows only that
+step, and part-way between a step it can take and one it cannot it crosses from what is underneath
+(`FxOutput.Steps.blendOn`, which reads what is underneath only then). The blend mode and Size apply
+after, as to any output.
+
+- **Palette Steps** (`PaletteStepList`): each palette's rows, as intents, resolved on the head through
+  `TemplateResolver` — the cook's, *Apply as values*' and the resolves-to panel's one answer — for the
+  target's property: the colour family (the hex mixed for that head's emitters, then any explicit
+  emitter row) on the colour target, the position row on the position target, else the row naming
+  the property. So a centre-relative (`pos:`) and a degree (`deg:`) position palette each land on the
+  head's own pan and tilt, a beam role on its own range (a stepped zoom snapping, `steppedZoomSlot`),
+  and an RGBW head and an RGB one each get their own mix. **A colour step is a layer's colour**: a head
+  missing an emitter the palette names takes none of it (`unmetColourRequirement`, the cook's rule),
+  and what a palette does not name stays as it is underneath (`StepColour.over`) — a UV-only palette
+  moves the UV and leaves the RGB, white and amber alone. A head is resolved once and cached by its
+  key and property, re-resolved when the model under that key changes: the engine builds fresh
+  fixture objects every tick, so an object is no key. Fitted media is not read, since it decides only
+  a **wheel** slot and a wheel head is no colour target's member. The palettes are read through the effect's colour source, which is a
+  `TemplateSource` — the one `createEffectWithTemplates` passes — so `TypedParams.paletteSteps` needs
+  no new factory argument, the references are pre-warmed by the same `templateColourRefsIn` scan, and
+  a palette's edit moves the running steps through the colour caches' version. An entry that is not a
+  generic value palette is dropped, as a colour list drops one.
+- **Slot Steps** (`SlotStepList`): each name looked up in the head's own options of the setting the
+  effect drives, ignoring case, spaces, underscores and dashes (`normaliseSlotName`), so *Gobo 3* is
+  `GOBO_3` on every head, at each head's own level. A head without the slot holds what is underneath on
+  that step. Its levels are cached per option set (a setting's options are its model's enum), so the
+  cache holds one entry per wheel model met. It declares only the `setting` sentinel: the client turns
+  it into the setting chosen.
+
+**What it is filed under.** Palette Steps registers under `category: palette`, which names no
+family on purpose: a stored one carries the family of its palettes (`dimmer`, `colour`, `position` or
+`beam`), and `paletteStepsShape` is the one statement of that shape — every palette in one family,
+and the property it drives, the colour for colour, else the first in the palette vocabulary every
+palette names (zoom, where every Beam palette names zoom and only some frost). A stored Palette Steps
+that names no property (an effect palette's, a Look's deferred effect) lands on that property
+(`EffectSpawner.drivenPropertyOf`); Slot Steps names its setting as the row's `propertyName`. An effect
+palette's write boundary (`validateTemplateEffect`) holds both: Palette Steps needs two generic value
+palettes or more, all readable, and its category must be their family's; Slot Steps needs a
+`propertyName` and two slots or more. Its master is stamped by that family's usage (the picker, the
+palette editor and the MCP tools' `usageMasterFor`), so `palette` is no usage
+(`SpeedMasterUsageVocabularyTest`). Record files a running step effect by `recordedEffectCategory`:
+Slot Steps as `beam`, Palette Steps as its palettes' family read off the property it drives (a strobe
+in an Intensity palette is `dimmer`, not `controls`).
+
+**Neither can be forked.** `/fx/definitions` refuses a `STEPS` output (`validateCompatibleProperties`):
+a step list names this desk's palettes and settings, resolved per head by the targets, and a
+definition syncs to desks that predate the output type. The FX Library draws Fork disabled on both
+with that reason (`forkRefusal`).
+
+**On the client** (`lib/stepEffects.ts`, which never resolves): the picker lists Slot Steps under
+Beam on a setting row and starts it on the setting's first two slots past its open one; it offers
+Palette Steps in each family that has two generic value palettes or more naming a property the
+target has (`paletteStepsOffers`), started on all of them, in name order; Slot Steps from anywhere
+but a setting row starts on a gobo wheel where the head has one, else its first setting. The editor's
+two parameter types are `paletteList` (`FxPaletteListPicker`: palettes in step order, by reference —
+an effect palette's own family only, else one family once one is chosen) and `slotList`
+(`FxSlotListPicker`: the target setting's options, a stored name the head lacks drawn dashed; on an
+effect palette, which names its setting from the rig, every patched head's options of that name
+(`rigSettingUnion`) and typed names besides, a dashed one on no patched head). *Save as palette…* on a
+running step effect banks it as `stepEffectPaletteShape` says — its palettes' family, or Beam naming
+its setting.
 
 ### Stateful Effects (`StatefulEffect`)
 
@@ -417,7 +505,7 @@ Each registered effect provides:
 - `id` — canonical name (e.g., "SineWave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
-- `category` — UI category ("dimmer", "colour", "position", "beam", "composite", "controls")
+- `category` — UI category ("dimmer", "colour", "position", "beam", "palette", "composite", "controls"; `palette` is Palette Steps' alone)
 - `outputType` — primary output type
 - `effectMode` — `STANDARD`, `STATEFUL`, or `COMPOSITE`
 - `parameters` — schema for the API/UI
@@ -447,8 +535,9 @@ table always requires a `project_id` since every user effect belongs to a projec
 fx_definitions table (user effects only):
 ├── effect_id         — canonical ID (e.g., "MyCustomPulse")
 ├── name              — display name (e.g., "My Custom Pulse")
-├── category          — "dimmer", "colour", "position", "beam", "composite", "controls"
-├── output_type       — SLIDER, COLOUR, or POSITION
+├── category          — "dimmer", "colour", "position", "composite", "controls" ("beam" and
+│                       "palette" are the built-ins' own; the New effect sheet offers neither)
+├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step Effects)
 ├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
 ├── compatible_properties — JSON array of property names
@@ -1724,8 +1813,9 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
-| `fx/TemplateColourSource.kt` | Colour-palette resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (30 files) |
+| `fx/TemplateColourSource.kt` | Colour-palette resolution, `TemplateSource` (also Palette Steps' palette lookup), and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `fx/StepList.kt` | The step effects' lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
 | `fx/TemplateRegistry.kt` | Palette snapshots cached by uuid — rows, or the one effect an effect palette holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
 | `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |

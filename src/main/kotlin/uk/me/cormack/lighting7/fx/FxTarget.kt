@@ -108,6 +108,13 @@ sealed class FxTarget {
      */
     abstract val acceptedOutputType: FxOutputType
 
+    /**
+     * Whether this target applies an effect of [type]: its own [acceptedOutputType], or
+     * [FxOutputType.STEPS], which every target resolves per head (effects plan §3.6) — a step is a
+     * value of whatever property the target drives.
+     */
+    fun accepts(type: FxOutputType): Boolean = type == acceptedOutputType || type == FxOutputType.STEPS
+
     /** Target key (fixture key or group name) */
     val targetKey: String get() = targetRef.targetKey
 
@@ -263,12 +270,19 @@ data class SliderTarget(
         blendMode: BlendMode,
         weight: Double,
     ) {
-        if (output !is FxOutput.Slider) return
-
         val slider = getSlider(fixture) ?: return
 
         val baseValue = slider.value ?: 0u
-        val newValue = weigh(baseValue, applyBlendMode(baseValue, output.value, blendMode), weight)
+        val effectValue = when (output) {
+            is FxOutput.Slider -> output.value
+            is FxOutput.Steps -> output.blendOn(
+                { baseValue },
+                { stepByte(output.steps.valueFor(it, fixture, propertyName)) },
+                ::lerpByte,
+            ) ?: return
+            else -> return
+        }
+        val newValue = weigh(baseValue, applyBlendMode(baseValue, effectValue, blendMode), weight)
         slider.value = newValue
     }
 
@@ -403,12 +417,23 @@ data class ColourTarget(
         blendMode: BlendMode,
         weight: Double,
     ) {
-        if (output !is FxOutput.Colour) return
-
         // Apply RGB channels — each weighted on its own (P3's "per channel")
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val baseColour = colour.value ?: Color.BLACK
-        val blended = applyRgbBlendMode(baseColour, output.color.color, blendMode)
+        val effectColour = when (output) {
+            is FxOutput.Colour -> output.color
+            // A step is this head's own mix of its palette (effects plan §3.6), crossed from the
+            // colour underneath — RGB and the bundled emitters both — where a step names none, and
+            // over it where a step names only part (an emitter-only palette moves that emitter).
+            is FxOutput.Steps -> {
+                var held: ExtendedColour? = null
+                val under = { held ?: currentExtended(fixture, baseColour).also { held = it } }
+                output.blendOn(under, { output.steps.colourFor(it, fixture)?.over(under) }, ::blendExtendedColours)
+                    ?: return
+            }
+            else -> return
+        }
+        val blended = applyRgbBlendMode(baseColour, effectColour.color, blendMode)
         colour.value = if (weight >= 1.0) blended else Color(
             weigh(baseColour.red, blended.red, weight),
             weigh(baseColour.green, blended.green, weight),
@@ -418,10 +443,22 @@ data class ColourTarget(
         // Apply extended channels (W/A/UV) to bundled slider properties — on a fixture *or* an
         // element: the bundle comes from the class catalogue, which both carry
         // (`FU-FX-ELEMENT-BUNDLED-COLOUR`).
-        val ext = output.color
+        val ext = effectColour
         applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode, weight)
         applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode, weight)
         applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode, weight)
+    }
+
+    /** The colour this head holds now, its bundled emitters included — what a step crosses from. */
+    private fun currentExtended(fixture: GroupableFixture, rgb: Color): ExtendedColour {
+        fun emitter(category: PropertyCategory): UByte =
+            bundledProperty(fixture, category)?.let { bundledSlider(fixture, it)?.value } ?: 0u
+        return ExtendedColour(
+            rgb,
+            white = emitter(PropertyCategory.WHITE),
+            amber = emitter(PropertyCategory.AMBER),
+            uv = emitter(PropertyCategory.UV),
+        )
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
@@ -657,17 +694,28 @@ data class PositionTarget(
         blendMode: BlendMode,
         weight: Double,
     ) {
-        if (output !is FxOutput.Position) return
-
         val positionFixture = fixture as? WithPosition ?: return
 
         val basePan = positionFixture.pan.value ?: 128u
         val baseTilt = positionFixture.tilt.value ?: 128u
+        val effectPosition = when (output) {
+            is FxOutput.Position -> output
+            // A step is this head's own pan and tilt for its palette (effects plan §3.6).
+            is FxOutput.Steps -> output.blendOn(
+                { FxOutput.Position(basePan, baseTilt) },
+                {
+                    (output.steps.valueFor(it, fixture, propertyName) as? CueAssignmentResolver.PropertyValue.Position)
+                        ?.let { p -> FxOutput.Position(p.pan, p.tilt) }
+                },
+                { a, b, t -> FxOutput.Position(lerpByte(a.pan, b.pan, t), lerpByte(a.tilt, b.tilt, t)) },
+            ) ?: return
+            else -> return
+        }
 
         // An Around effect (ADDITIVE about 128) weighted after its blend has its offset scaled, so
         // a circle at 50 % has half its radius about the position underneath (P3).
-        val newPan = weigh(basePan, applyBlendMode(basePan, output.pan, blendMode), weight)
-        val newTilt = weigh(baseTilt, applyBlendMode(baseTilt, output.tilt, blendMode), weight)
+        val newPan = weigh(basePan, applyBlendMode(basePan, effectPosition.pan, blendMode), weight)
+        val newTilt = weigh(baseTilt, applyBlendMode(baseTilt, effectPosition.tilt, blendMode), weight)
 
         positionFixture.pan.value = newPan
         positionFixture.tilt.value = newTilt
@@ -776,15 +824,27 @@ data class SettingTarget(
         blendMode: BlendMode,
         weight: Double,
     ) {
-        if (output !is FxOutput.Slider) return
         // A slot has no halfway: below half weight the setting underneath stands.
         if (!weighDiscrete(weight)) return
 
         val setting = getSetting(fixture) ?: return
         val transaction = setting.transaction ?: return
 
+        val level = when (output) {
+            is FxOutput.Slider -> output.value
+            // A step snaps (effects plan §3.6): the step it is nearer, this head's own level for it,
+            // and a head without that slot holds what is underneath.
+            is FxOutput.Steps -> {
+                val steps = output.steps
+                // Slot Steps reads this head's own setting, which is in hand here: no second walk.
+                if (steps is SlotStepList) steps.levelFor(output.snapped, setting) ?: return
+                else stepByte(steps.valueFor(output.snapped, fixture, propertyName)) ?: return
+            }
+            else -> return
+        }
+
         // Settings are discrete — always override regardless of blend mode
-        transaction.setValue(setting.universe, setting.channelNo, output.value)
+        transaction.setValue(setting.universe, setting.channelNo, level)
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
@@ -860,3 +920,40 @@ internal fun weigh(before: UByte, blended: UByte, weight: Double): UByte =
  * an envelope moving through 0.5 switches it, as a cue fade switches a discrete value part-way.
  */
 internal fun weighDiscrete(weight: Double): Boolean = weight >= 0.5
+
+/**
+ * This step pair, blended by [lerp] — [at] answering each step on the head in hand — or null where
+ * the head shows only a step it cannot take, so the caller writes nothing and what is underneath
+ * stands. Part-way between a step it can take and one it cannot, the head crosses between that step
+ * and [base], what is underneath — read only then, since reading it can cost a reflective walk the
+ * tick need not pay.
+ */
+internal inline fun <T : Any> FxOutput.Steps.blendOn(
+    base: () -> T,
+    at: (Int) -> T?,
+    lerp: (T, T, Double) -> T,
+): T? {
+    if (steps.size == 0) return null
+    val a = if (blend < 1.0) at(from) else null
+    val b = if (blend > 0.0) at(to) else null
+    return when {
+        blend <= 0.0 -> a
+        blend >= 1.0 -> b
+        a == null && b == null -> null
+        else -> lerp(a ?: base(), b ?: base(), blend)
+    }
+}
+
+/** The step a discrete property shows: the nearer of the two — a slot has no halfway. */
+internal val FxOutput.Steps.snapped: Int get() = if (blend < 0.5) from else to
+
+/** A resolved step as one channel's byte: a level, or a setting's slot level. */
+internal fun stepByte(value: CueAssignmentResolver.PropertyValue?): UByte? = when (value) {
+    is CueAssignmentResolver.PropertyValue.Slider -> value.value
+    is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue
+    else -> null
+}
+
+/** [a] to [b] by [t], rounded. */
+internal fun lerpByte(a: UByte, b: UByte, t: Double): UByte =
+    (a.toInt() + (b.toInt() - a.toInt()) * t).roundToInt().coerceIn(0, 255).toUByte()

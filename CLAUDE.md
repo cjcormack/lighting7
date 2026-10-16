@@ -139,7 +139,7 @@ write disguises itself as a serialization regression. The suite runs in two fork
 claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
 The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
-one), warm or cold alike. The first run after any code change recompiles the 28 built-in FX
+one), warm or cold alike. The first run after any code change recompiles the 30 built-in FX
 effects (editing a source file changes the classpath fingerprint, which invalidates the
 compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
 each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
@@ -404,7 +404,7 @@ Effect interfaces:
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 - **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
-Built-in effect types — **all 28 live as `.fx.kts` resources** under
+Built-in effect types — **all 30 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in effect classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
@@ -414,6 +414,10 @@ once it had drifted a file behind the resources and nothing but tests constructe
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
 - **Beam**: ZoomBreathe, IrisPulse, FrostPulse, FocusPull — one property each (`zoom`, `iris`,
   `frost`, `focus`), offered only on a head that has it (effects plan D6)
+- **Steps**: PaletteSteps (through generic value palettes of one family, filed under that family)
+  and SlotSteps (a setting's option names, `beam`) — `FxOutput.Steps`, which the **target**
+  resolves per head, so each head lands on its own value for each step (effects plan D8;
+  `docs/fx-engineering.md` §"Step Effects")
 - **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
 
 There is no static effect. A fixed level, colour, position or setting is a **value** on the
@@ -426,7 +430,8 @@ named effect. It is always generic (it names no target; the layer's targets are 
 exactly one effect, and never both an effect and rows: which one a palette holds is its identity,
 refused at the write boundary if a write would flip it. Its family is derived from the effect's
 library `category` via `familyForEffectCategory`, so `controls` and `composite` are refused by name;
-a Beam effect palette holds a beam built-in. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
+a Beam effect palette holds a beam built-in or Slot Steps (naming the setting it steps), and a
+Palette Steps palette is its palettes' family, not its `palette` category's. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
 palette's one effect goes down the same *deferred* arm a Look's does. See
 `docs/lighting-composition-model.md` §"A palette holds a value *or* an effect". A press is per
 target on **both** arms and is the exact inverse of the pad's lit ring: "already on" is the record
