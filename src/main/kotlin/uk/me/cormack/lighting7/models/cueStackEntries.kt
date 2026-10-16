@@ -107,7 +107,21 @@ class DaoCueStackEntry(id: EntityID<Int>) : IntEntity(id) {
  * desk in whatever order an import reads its files, so two desks holding the same entries (two
  * inserts into one gap, merged) would otherwise play them in different orders.
  */
-val ENTRY_ORDER: Comparator<DaoCueStackEntry> = compareBy<DaoCueStackEntry>({ it.ordinal }, { it.uuid.toString() })
+val ENTRY_ORDER: Comparator<DaoCueStackEntry> = Comparator { a, b ->
+    val byOrdinal = a.ordinal.compareTo(b.ordinal)
+    if (byOrdinal != 0) byOrdinal else compareUuidsAsText(a.uuid, b.uuid)
+}
+
+/**
+ * [a] against [b] as their canonical (lowercase, fixed-width hex) text compares — the 128 bits read
+ * unsigned — without building either string. `UUID.compareTo` is not it: it compares the halves
+ * signed. Every entry list is sorted through [ENTRY_ORDER], so a sort no longer allocates two
+ * strings per comparison.
+ */
+internal fun compareUuidsAsText(a: java.util.UUID, b: java.util.UUID): Int {
+    val high = java.lang.Long.compareUnsigned(a.mostSignificantBits, b.mostSignificantBits)
+    return if (high != 0) high else java.lang.Long.compareUnsigned(a.leastSignificantBits, b.leastSignificantBits)
+}
 
 /** [stack]'s entries in playback order ([ENTRY_ORDER]), markers included. */
 fun entriesOf(stack: DaoCueStack): List<DaoCueStackEntry> = entriesOfStack(stack.id)

@@ -502,6 +502,23 @@ class RemoteSyncEngine(
     }
 
     /**
+     * The merged tree starts as the remote's and only records are laid over it, so its
+     * `formatVersion.json` would stay the remote's — and a desk that writes a newer format than the
+     * remote (the first sync after an upgrade) would push this desk's newer-shaped records under the
+     * older number. For v32 that is exactly the hazard the bump exists to stop: a v31 reader would
+     * import every overlaid cue file (no `cueStackUuid` any more) with no stack and push every stack
+     * empty. So the merge says this desk's writer version whenever it is the newer; a remote newer
+     * than this desk supports was refused before any merge ([configureAndExchange]).
+     */
+    private fun stampFormatVersion(tree: Path) {
+        val path = tree.resolve("formatVersion.json")
+        val ours = FormatVersionJson()
+        val theirs = runCatching { canonicalDecode(FormatVersionJson.serializer(), Files.readString(path)) }.getOrNull()
+        if (theirs != null && theirs.formatVersion >= ours.formatVersion) return
+        Files.writeString(path, canonicalEncode(FormatVersionJson.serializer(), ours))
+    }
+
+    /**
      * Refuse to pull [remote] into project [projectId] when it is another kind of project, or a show
      * pinned to a venue version this desk does not hold (`VENUE_MISSING`, naming the venue and the
      * repo it syncs from).
@@ -650,6 +667,7 @@ class RemoteSyncEngine(
         // never touches it and the remote's would win — undoing a pin this desk set (an Extract
         // on a show that already synced) and taking its rig with it. Merge the pin three-way.
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
+        stampFormatVersion(workingTreePath)
 
         importTree(projectId, workingTreePath)
 
