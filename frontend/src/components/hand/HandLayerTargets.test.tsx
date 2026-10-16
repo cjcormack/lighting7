@@ -64,7 +64,7 @@ const hold = (kind: 'TEMPLATE' | 'LOOK' | 'CUE', over: Record<string, unknown> =
   uuid: `${kind.toLowerCase()}-uuid-8`,
   template: kind === 'TEMPLATE' ? { id: 8, name: 'Amber', kind: 'value', isGeneric: true, rows: [] } : null,
   look: kind === 'LOOK' ? { id: 8, name: 'Warm Wash', effectCount: 0, rowCount: 2 } : null,
-  cue: kind === 'CUE' ? { id: 8, name: 'Verse', cueNumber: '3', cueStackId: 1, cueStackName: 'Act I' } : null,
+  cue: kind === 'CUE' ? { id: 8, name: 'Verse', entries: [{ stackId: 1, stackName: 'Act I', entryId: 108, cueNumber: '3' }] } : null,
   pickedUpOn: null,
   holdId: 1,
   pickedUpAtMs: 0,

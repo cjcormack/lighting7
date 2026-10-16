@@ -411,8 +411,12 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       onInspect: (pad) => {
         if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
-        else if (pad.cue != null) {
-          navigate(`/projects/${projectId}/show/stacks/${pad.cue.cueStackId}?cue=${pad.cue.id}`)
+        else {
+          // A cue opens at its first entry; a loose cue has nowhere to open yet.
+          const first = pad.cue?.entries?.[0]
+          if (pad.cue != null && first != null) {
+            navigate(`/projects/${projectId}/show/stacks/${first.stackId}?cue=${pad.cue.id}`)
+          }
         }
       },
       // *Pick up* names the **record**, not the pad: what the hand holds is the template, Look or

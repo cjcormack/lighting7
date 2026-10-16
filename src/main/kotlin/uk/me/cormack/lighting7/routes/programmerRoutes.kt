@@ -64,7 +64,7 @@ internal data class ProgrammerRecordRequest(
     val mode: String = "CREATE",
     /** [RecordSource] name. */
     val source: String = "TOUCHED",
-    /** Required for CREATE. */
+    /** CREATE's stack; absent makes a loose cue. */
     val cueStackId: Int? = null,
     /** Required for MERGE / REMOVE / UPDATE_EXISTING. */
     val cueId: Int? = null,
@@ -202,6 +202,8 @@ internal data class ProgrammerIncludeRequest(
     val projectId: String = "current",
     /** Exactly one of [cueId] / [lookId]. */
     val cueId: Int? = null,
+    /** The stack entry [cueId] is included from, if any: the indicator shows its number. */
+    val entryId: Int? = null,
     val lookId: Int? = null,
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
@@ -261,6 +263,7 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                 state, project, request.cueId, request.lookId, mask, request.fadeMs ?: 0,
                 includeFx = request.includeFx,
                 targets = request.targets,
+                entryId = request.entryId,
             )
         ) {
             is IncludeCoreResult.Failure -> call.respond(

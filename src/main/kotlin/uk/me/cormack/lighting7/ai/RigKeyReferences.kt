@@ -152,8 +152,8 @@ internal object RigKeyReferences {
         val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
         if (cues.isNotEmpty()) {
             val ids = cues.keys.toList()
-            // A cue's number and stack are its entry's — its one entry while every cue has one
-            // (cue model plan P4), read for every cue at once.
+            // A cue's number is its entry's when it has exactly one; a shared or loose cue is named
+            // alone (the cue model plan's session 7 lists every place). Read for every cue at once.
             val entryOf = DaoCueStackEntry.find { DaoCueStackEntries.cue inList ids }.toList()
                 .groupBy { it.cueId!! }.mapValues { (_, e) -> e.singleOrNull() }
             fun cueUser(id: Int) = cues.getValue(id).let { cue ->

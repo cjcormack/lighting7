@@ -1803,9 +1803,9 @@ class SetupTools(
     private fun markUpPromptBook(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
         data class Book(val id: Int, val pageCount: Int)
-        // An anchor marks an entry (cue model plan D4), and a cue id names its one entry (P4): each
-        // project cue's entry, when it has exactly one, read here so a cue without one is refused
-        // with the rest rather than skipped while counted as anchored.
+        // An anchor marks an entry (cue model plan D4); this tool still names a cue, so it reaches a
+        // cue with exactly one entry (session 7 names entries). Read here so a cue in no stack, or in
+        // several, is refused with the rest rather than skipped while counted as anchored.
         val (book, entryByCue) = transaction(state.database) {
             val cueIds = DaoCue.find { DaoCues.project eq project.id }.map { it.id.value }
             DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.let { Book(it.id.value, it.pageCount) } to

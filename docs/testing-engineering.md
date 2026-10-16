@@ -2,9 +2,8 @@
 
 How the suite is built, what makes it fast, and the traps that have actually bitten.
 
-`./gradlew test` is the pre-commit check (this project has no Makefile, so the global
-`make commit-check` rule does not apply). A recent green run earlier in the same session is
-sufficient; you do not need to re-run it just before `git commit` if nothing has changed.
+`./gradlew test` is the full suite. CI runs it on every PR; `CLAUDE.md` §"Pre-commit checks" says
+when to run it locally as well, and what to run instead the rest of the time.
 
 ## Shape of the suite
 

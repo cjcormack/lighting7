@@ -2751,7 +2751,7 @@ copies one, and *Replace from preset* swaps the show's for a fresh copy (`venue/
   leaves it without a seat — the element delete's and reshape's rule. A venue's seat view is the
   venue's and is not moved. Scenery naming the stalls follows the copy when the show had one block;
   with several, each owner might hold a row for each, so they are swept, as an element delete sweeps
-  them. Both roles, a stored show write. Project Settings' Stage tab carries it for a show on a venue.
+  them. Both roles, a stored show write. Project Settings' Regions tab carries it for a show on a venue.
 - **Names.** A Preset is out of the show's rig, so another of the show's own elements may hold its name;
   a copy that would take it — on Create or a replace — is 409 `SEATING_PRESET_NAME_TAKEN`, named, not a
   constraint error. A replace steps the show's old blocks aside first, so they never clash, and a re-copy

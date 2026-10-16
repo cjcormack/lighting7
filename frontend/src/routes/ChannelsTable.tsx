@@ -14,7 +14,7 @@ import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
 import { useGetUniverseQuery } from "../store/universes"
 import { CHANNELS_VIEW_KEY, ChannelsViewSwitcher, setStoredCardsListView } from "../components/ViewSwitcher"
 import { DmxSheet } from "../components/channels/DmxSheet"
-import { ChannelsBreadcrumbs } from "./Channels"
+import { Breadcrumbs } from "@/components/Breadcrumbs"
 
 /**
  * `/projects/:projectId/channels/:universe/table` — the DMX sheet, the cards route's sibling
@@ -119,7 +119,7 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
           `ShowHeader` did the same job at 48 until the busk-chrome plan's session B made it a 40px
           chrome row (D12); this one and `StackDetail`'s stay at 48. */}
       <SheetPage.Header>
-        <ChannelsBreadcrumbs projectName={projectName} />
+        <Breadcrumbs projectName={projectName} currentPage="Channels" />
         <div className="flex-1" />
         {parkedCount > 0 && (
           <>

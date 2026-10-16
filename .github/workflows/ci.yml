@@ -1,8 +1,9 @@
 name: CI
 
 # The PR gate: both halves of the repo, on every pull request into main and on every push to
-# main. The two jobs are the CI equivalents of the local pre-commit checks — `./gradlew test`
-# for the backend and `npm run check` in frontend/ (see "Pre-commit checks" in CLAUDE.md).
+# main. This is where the full suites run — `./gradlew build` for the backend and
+# `npm run check` in frontend/; locally only the quick checks are expected (see "Pre-commit
+# checks" in CLAUDE.md).
 #
 # No `paths:` filters, deliberately. A required status check whose workflow is skipped by a
 # path filter never reports, and GitHub then blocks the PR waiting for it forever. Running
@@ -73,8 +74,9 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  frontend:
-    name: Frontend
+  # `npm run check`, split: build and lint in one job, Vitest in three shards, all in parallel.
+  frontend-build-lint:
+    name: Frontend build and lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -95,7 +97,74 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # build (tsc + vite) + vitest + eslint --max-warnings 0 — the same gate as
-      # .githooks/pre-commit.
-      - name: Build, test and lint
-        run: npm run check
+      # Lint takes minutes cold, mostly `import/no-cycle` walking the import graph. PRs restore
+      # the cache main last saved; main lints from scratch and saves. `npm run lint` keys entries
+      # on file content, so a fresh checkout's mtimes don't invalidate them. A cached file can
+      # keep a stale cross-file result, but a new cycle always closes on an edited (re-linted)
+      # file, and main's uncached run is the backstop. tsconfig is in the key because its path
+      # aliases decide what an import resolves to.
+      - name: Restore ESLint cache
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v6
+        with:
+          path: frontend/node_modules/.cache/eslint/
+          key: eslint-${{ hashFiles('frontend/package-lock.json', 'frontend/eslint.config.*', 'frontend/tsconfig*.json') }}-${{ github.sha }}
+          restore-keys: eslint-${{ hashFiles('frontend/package-lock.json', 'frontend/eslint.config.*', 'frontend/tsconfig*.json') }}-
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Save ESLint cache
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v6
+        with:
+          path: frontend/node_modules/.cache/eslint/
+          key: eslint-${{ hashFiles('frontend/package-lock.json', 'frontend/eslint.config.*', 'frontend/tsconfig*.json') }}-${{ github.sha }}
+
+  frontend-test:
+    name: Frontend tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npx vitest run --shard=${{ matrix.shard }}/3
+
+  # The required check. Branch protection matches on this name, so the split above stays
+  # invisible to it. `always()` matters: without it a failed shard skips this job, and GitHub
+  # counts a skipped required check as passing.
+  frontend:
+    name: Frontend
+    needs: [frontend-build-lint, frontend-test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every frontend job to pass
+        run: |
+          test "${{ needs.frontend-build-lint.result }}" = success
+          test "${{ needs.frontend-test.result }}" = success

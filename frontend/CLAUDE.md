@@ -16,17 +16,28 @@ the root's, in `../CLAUDE.md` §"Git workflow". Two points bear repeating from t
 
 - A change that crosses the wire is **one PR**: the backend route and this side's client land
   together, never as two PRs that are each broken without the other.
-- CI's `Frontend` job runs exactly the gate below, `npm run check`, on every PR. The `Backend` job
-  builds this app as well (Gradle's `buildFrontend`), with Gradle's pinned Node rather than
-  `.nvmrc`'s.
+- CI's `Frontend` check runs the full gate below, `npm run check`, on every PR, split into a
+  build-and-lint job and three Vitest shards. The `Backend` job builds this app as well
+  (Gradle's `buildFrontend`), with Gradle's pinned Node rather than `.nvmrc`'s.
 
 ### Pre-commit gate
 
 ```bash
-npm run check
+npm run check:quick
 ```
 
-That's `build` + `test` + `lint`. There's no separate `type-check` step in it:
+That's `build` + the Vitest files affected by changes since `origin/main` + `lint`. The full
+suite, `npm run check`, runs in CI on every PR; run it locally only for a change CI is a slow
+place to find out about (see `../CLAUDE.md` §"Pre-commit checks"). A change to `package.json`
+or the Vite/Vitest config makes `--changed` run every test file (Vitest's `forceRerunTriggers`).
+
+Lint is cached in `node_modules/.cache/eslint/`, content-hashed: a cold run is minutes (mostly
+`import/no-cycle` walking the import graph), a warm one seconds. That rule reads other files, so
+a cached file can keep a stale result; a new cycle is still caught, because the import that
+closes it is in an edited file, which is re-linted. After changing `tsconfig` path aliases,
+delete the cache. CI's run on `main` lints without it.
+
+`check` is `build` + `test` + `lint`. There's no separate `type-check` step in it:
 `build` is `tsc && vite build`, so the standalone `npm run type-check` would run
 the same full `tsc` a second time for ~9s of nothing. Use `type-check` on its
 own during development when you want types without a build.
@@ -37,7 +48,7 @@ over it. `npm run lint` passes `--max-warnings 0`, because plain `eslint` exits
 0 on warnings and would wave them through.
 
 **A git hook enforces this.** `.githooks/pre-commit` at the repo root runs
-`npm run check` in `frontend/` and refuses the commit if it fails; it skips the
+`npm run check:quick` in `frontend/` and refuses the commit if it fails; it skips the
 run when nothing buildable under `frontend/` is staged (docs, `.idea/`, assets,
 backend-only changes). Enable it in a fresh clone with
 `git config core.hooksPath .githooks` from the repo root. Bypass a single commit with
@@ -1241,9 +1252,8 @@ and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat
 (`cuePickerRows` — markers left out, `Q12 · Act 1` from whatever the `GET /cues` row carries). The
 programmer Record menu's *An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until
 S10 it opened the sheet with only *New cue* to offer. **It reads no stack beyond what the list row
-says** — `CuePickerSource.cueStackName` is optional although every cue has one today — because the cue
-model plan's session 4 makes a cue loose or shared: a row naming no stack is still a cue, and a shared
-cue is one row because it is one cue.
+says** — `CuePickerSource.cueStackName` and `cueNumber` are null for a loose or shared cue — so a row
+naming no stack is still a cue, labelled by its name, and a shared cue is one row because it is one cue.
 
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
@@ -5278,7 +5288,7 @@ the descriptor) inside its restrike time says *Still cooling — restrike in 5:5
 confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). The card's **Remove from stack** deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, *Move to stack…* is add then remove; a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The show-editing lock
 
@@ -5787,6 +5797,24 @@ path may quietly change where it lands.
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
+- **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer ·
+  Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
+  Channels), **Library** (Looks · Palettes · Effects · Speed Masters · Scripts), **Project**
+  (Settings · Surfaces · Sync) and **Desk** (Projects, then Install Settings and its tabs). A row's
+  `section` is a `NavSection`, `NAV_SECTIONS` holds the labels, and the array is declared in section
+  order — `navigation.test.ts` pins each section's ids whole, so the array *is* the sidebar. The
+  sidebar draws a heading wherever `section` changes (`data-nav-section`) and the 64px rail a rule; a
+  section left with no visible row draws neither, which is how a venue loses Library's heading. Paths
+  never move with a row: Regions and Rigging are top-level Rig rows whose pages are still Project
+  Settings tabs (the `stage` tab says *Regions* too, since Run's Stage row is the Stage view), and the
+  FX Library row says *Effects* over `/fx-library`. **Projects** is `/projects` with `pathExact`, which
+  `mostSpecificActiveId` matches as the whole path only — `/projects` begins every project's path, so
+  a segment match would light it everywhere. ⌘K has no headings, so it lists a row by
+  `commandLabelOf(item)`: `commandLabel` names the rows whose label leans on its heading (*Project
+  sync*, *Desk sync*, *Project Settings*), and cmdk keys selection on that value, so it must be
+  unique — `navigation.test.ts` pins it. `keywords` are extra words ⌘K matches a row on, each
+  scored whole (*fx library* finds Effects). The Actions group's *Project Settings* and the Projects
+  group's *View All Projects* went, being the Settings and Projects rows a second time.
 - **The ⌘K window commands are actions, not `NavItem`s.** `useWindowCommands()` in
   `src/navigation.ts` builds ⌘K's *Screens* group from the windows registry the way
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
@@ -6082,13 +6110,22 @@ path may quietly change where it lands.
   resolved OPERATOR* as admin: during the `auth/status` round-trip, and on a
   bootstrap-open desk, the API really is reachable, and the backend refuses the
   call either way. This is presentation, never permission.
+- **A row and its page share one predicate** (navigation plan P2): who sees a row, its ⌘K item and
+  the settings tab it opens is `navItemShown`, beside the registry, and nothing else. The settings
+  pages map each tab to its row's id (`TAB_NAV_IDS` in `routes/InstallSettings.tsx` and
+  `routes/ProjectSettings.tsx`) and draw a tab only where `useShownTabs` says its row is shown — so
+  the two Sync tabs are an admin's alone, as every cloud-sync route is, and Project Settings' Surfaces
+  tab is the project on the rig's, as its `active-only` row is. A tab its row hides, reached by URL, opens General, which is
+  the row the sidebar lights there. A new tab gets its row's predicate by being in the map; a tab
+  with no row is always drawn.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
   `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
   `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in
   `routes/InstallSettings.tsx`, not `App.tsx` — and a `navItems` entry under
-  `install-settings` with the tab's role rule, in `TABS` order, so the sidebar and
-  Cmd+K offer it (`navigation.test.ts`' install cases pin every tab but General,
-  which is the parent row).
+  `install-settings` with the tab's role rule, in `TABS` order, and its id in
+  `TAB_NAV_IDS`, so the sidebar, Cmd+K and the tab strip offer it alike
+  (`navigation.test.ts`' install cases pin every tab but General, which is the parent
+  row; `routes/settingsTabs.test.tsx` pins the tabs).
 
 ### Sheets vs Dialogs
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { TriangleAlert } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -109,7 +109,11 @@ export function ScriptEditor({
   // mounted — the mount path early-returns on an already-initialized node and nothing else pushed
   // a value — so ScriptForm's Reset put `editCode` back while the editor kept the edited body,
   // and the next keystroke handed that edited body straight back.
-  useEffect(() => {
+  //
+  // A layout effect, so the write lands in the commit that changed `script.script`. A passive one
+  // can still be pending when the next keystroke arrives, and React flushes it before rendering
+  // that keystroke — writing the older body over what was just typed.
+  useLayoutEffect(() => {
     if (script.script === reportedRef.current) return
     editorRef.current?.setBody(script.script)
   }, [script.script])

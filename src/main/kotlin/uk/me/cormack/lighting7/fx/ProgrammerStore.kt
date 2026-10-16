@@ -111,13 +111,14 @@ sealed interface ProgrammerValue {
  * when no explicit targets are given (Mode A).
  *
  * [targetId] is a cue id or a Look id depending on [kind]; [cueId] / [lookId] narrow it.
- * [cueStackId] is carried so the client can name the stack in the indicator without a second
- * lookup, and [sourceUuid] so a re-import can't leave the indicator pointing at a stranger.
+ * [entryId] is the stack entry a cue was included from (cue model plan §3.5), so the indicator
+ * names that place's number; Update writes the cue, whichever entry. [sourceUuid] is carried so a
+ * re-import can't leave the indicator pointing at a stranger.
  */
 data class IncludedTarget(
     val kind: Kind,
     val targetId: Int,
-    val cueStackId: Int? = null,
+    val entryId: Int? = null,
     val sourceUuid: UUID? = null,
 ) {
     enum class Kind {
@@ -132,7 +133,7 @@ data class IncludedTarget(
     val lookId: Int? get() = targetId.takeIf { kind == Kind.LOOK }
 
     companion object {
-        fun cue(cueId: Int, cueStackId: Int?) = IncludedTarget(Kind.CUE, cueId, cueStackId)
+        fun cue(cueId: Int, entryId: Int?) = IncludedTarget(Kind.CUE, cueId, entryId)
 
         fun look(lookId: Int, lookUuid: UUID) =
             IncludedTarget(Kind.LOOK, lookId, sourceUuid = lookUuid)
@@ -272,6 +273,11 @@ class ProgrammerStore {
      */
     fun clearIncludeTargetForCue(cueId: Int) {
         _lastIncludedTarget.value = _lastIncludedTarget.value?.takeIf { it.cueId != cueId }
+    }
+
+    /** Forget the entry of a cue target included from one of [entryIds], which were removed; the cue stays the target. */
+    fun forgetIncludedEntries(entryIds: Set<Int>) {
+        _lastIncludedTarget.value = _lastIncludedTarget.value?.let { if (it.entryId in entryIds) it.copy(entryId = null) else it }
     }
 
     /** As [clearIncludeTargetForCue], for a deleted Look. */

@@ -158,24 +158,25 @@ interface ScriptViewerProps {
   fileUrl: string
   anchors: CueAnchorDto[]
   annotations: AnnotationDto[]
-  statusOf: (cueId: number) => CueRunStatus
-  /** Live cue labels from the cue stack, keyed by cueId — the anchor's cached
+  /** Run status by stack entry — an anchor is an entry's. */
+  statusOf: (entryId: number) => CueRunStatus
+  /** Live labels from the cue stack, keyed by entry — the anchor's cached
    *  label can go stale when a cue number is edited, so this wins when present. */
   cueLabels: Map<number, string>
-  /** Cue notes keyed by cueId — rendered in the right gutter beside the cue's anchor. */
+  /** Cue notes keyed by cue id — rendered in the right gutter beside the cue's anchor. */
   cueNotes: Map<number, string>
   /** Set or clear an anchored cue's note from the gutter (unlocked only). */
   onRenoteCue: (cueId: number, notes: string | null) => void
-  warningCueIds: Set<number>
+  warningEntryIds: Set<number>
   locked: boolean
   tool: PromptBookTool
-  /** Cue armed for click-to-place on a scanned page (no text layer to select). */
-  placingCueId: number | null
+  /** Entry armed for click-to-place on a scanned page (no text layer to select). */
+  placingEntryId: number | null
   /**
    * Commit a completed anchor drag (nudge). `prevRegion` is the region before the
    * drag, for the caller's single-step undo snapshot.
    */
-  onMoveAnchor: (cueId: number, region: Region, prevRegion: Region) => void
+  onMoveAnchor: (entryId: number, region: Region, prevRegion: Region) => void
   /** Place the armed cue's anchor at a clicked point (scanned-page fallback). */
   onPlaceAnchor: (region: Region) => void
   /** Open the cue picker to anchor the given selection region to a chosen cue. */
@@ -195,8 +196,8 @@ interface ScriptViewerProps {
    * marker's `Blinds` glyph and its hover (scenery-programmer plan D14). Absent or missing a cue: no glyph.
    */
   sceneryByCue?: Map<number, string>
-  /** Open a cue's card in the rail — the glyph's tap. Must be stable: this component is memoized. */
-  onOpenCueCard?: (cueId: number) => void
+  /** Open an entry's card in the rail — the glyph's tap. Must be stable: this component is memoized. */
+  onOpenCueCard?: (entryId: number) => void
 }
 
 /**
@@ -221,10 +222,10 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     cueLabels,
     cueNotes,
     onRenoteCue,
-    warningCueIds,
+    warningEntryIds,
     locked,
     tool,
-    placingCueId,
+    placingEntryId,
     onMoveAnchor,
     onPlaceAnchor,
     onAnchorRequest,
@@ -520,7 +521,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   // on pointer-up — never from inside a setState updater, which React may re-invoke);
   // the state mirror only drives rendering, coalesced to one update per frame.
   const dragRef = useRef<{
-    cueId: number
+    entryId: number
     startY: number
     origRegion: Region
     lastRegion: Region
@@ -528,7 +529,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     /** Set once the pointer moves past a threshold — a drag (nudge) vs a click (re-select). */
     moved: boolean
   } | null>(null)
-  const [dragOverride, setDragOverride] = useState<{ cueId: number; region: Region } | null>(null)
+  const [dragOverride, setDragOverride] = useState<{ entryId: number; region: Region } | null>(null)
   const rafRef = useRef<number | null>(null)
 
   const scheduleOverlayFrame = useCallback((apply: () => void) => {
@@ -552,14 +553,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       e.preventDefault()
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
       dragRef.current = {
-        cueId: anchor.cueId,
+        entryId: anchor.entryId,
         startY: e.clientY,
         origRegion: anchor.region,
         lastRegion: anchor.region,
         pageEl,
         moved: false,
       }
-      setDragOverride({ cueId: anchor.cueId, region: anchor.region })
+      setDragOverride({ entryId: anchor.entryId, region: anchor.region })
     },
     [locked, tool],
   )
@@ -583,7 +584,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       // Unknown (text layer not loaded yet) → assume text, let selection drive.
       const textPage = hasTextByPage.get(page) !== false
 
-      if (placingCueId != null) {
+      if (placingEntryId != null) {
         if (textPage) return // selecting the line will anchor the cue
         // Scanned fallback: click a point → full-width band.
         const point = clientPointToNormalized(e.clientX, e.clientY, pageEl)
@@ -602,7 +603,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       drawRef.current = { page, start, lastRect: rect, pageEl, moved: false }
       setDraftRect(rect)
     },
-    [locked, tool, placingCueId, hasTextByPage, onPlaceAnchor],
+    [locked, tool, placingEntryId, hasTextByPage, onPlaceAnchor],
   )
 
   const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -615,7 +616,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       // otherwise reconcile every <Page> on every event.
       scheduleOverlayFrame(() => {
         const current = dragRef.current
-        if (current) setDragOverride({ cueId: current.cueId, region: current.lastRegion })
+        if (current) setDragOverride({ entryId: current.entryId, region: current.lastRegion })
       })
       return
     }
@@ -642,7 +643,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       // (a stray click, or a drag returning to its origin, is ignored — re-anchoring
       // is done by selecting new text → "Anchor cue").
       const changed = drag.lastRegion.some((r, i) => r.y !== drag.origRegion[i]?.y)
-      if (drag.moved && changed) onMoveAnchor(drag.cueId, drag.lastRegion, drag.origRegion)
+      if (drag.moved && changed) onMoveAnchor(drag.entryId, drag.lastRegion, drag.origRegion)
       return
     }
     const draw = drawRef.current
@@ -677,7 +678,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   // wins until pointer-up commits.
   const effectiveAnchors = useMemo(() => {
     if (!dragOverride) return anchors
-    return anchors.map((a) => (a.cueId === dragOverride.cueId ? { ...a, region: dragOverride.region } : a))
+    return anchors.map((a) => (a.entryId === dragOverride.entryId ? { ...a, region: dragOverride.region } : a))
   }, [anchors, dragOverride])
 
   /** Shown for the document's own load and again while its pages are being measured. */
@@ -689,10 +690,10 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
 
   const anchorsByPage = useMemo(() => groupByPage(effectiveAnchors, (a) => a.region), [effectiveAnchors])
   const annotationsByPage = useMemo(() => groupByPage(annotations, (n) => n.region), [annotations])
-  // Cue run-status keyed by cueId. Memoized on `anchors` (not effectiveAnchors) so
+  // Run status keyed by entry. Memoized on `anchors` (not effectiveAnchors) so
   // the per-page render loop doesn't rebuild a status Map on every drag frame.
-  const statusByCue = useMemo(
-    () => new Map(anchors.map((a) => [a.cueId, statusOf(a.cueId)])),
+  const statusByEntry = useMemo(
+    () => new Map(anchors.map((a) => [a.entryId, statusOf(a.entryId)])),
     [anchors, statusOf],
   )
 
@@ -745,7 +746,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
               // Crosshair only where a box-draw gesture is possible; text pages
               // keep the text layer's I-beam to invite selection.
               const boxCursor =
-                !locked && (tool === 'freetext' || (!textPage && (placingCueId != null || tool !== 'move')))
+                !locked && (tool === 'freetext' || (!textPage && (placingEntryId != null || tool !== 'move')))
               // Anchor the margin rail just left of the text block and the note
               // tails just right of it — measured from the text layer, falling back
               // to a fixed lane / the gutter edge on scanned pages. laneX is clamped
@@ -783,11 +784,11 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                 ...cues
                   .filter(({ item }) => cueNotes.has(item.cueId))
                   .map(({ item, rects }) => ({
-                    key: `cue-${item.cueId}`,
+                    key: `cue-${item.entryId}`,
                     top: anchorY(rects),
                     cueId: item.cueId,
                     // Falls back to the bubble's generic tag rather than rendering an empty chip.
-                    label: cueLabels.get(item.cueId) ?? item.label ?? 'Cue',
+                    label: cueLabels.get(item.entryId) ?? item.label ?? 'Cue',
                     notes: cueNotes.get(item.cueId) ?? null,
                   })),
               ].sort((a, b) => a.top - b.top)
@@ -855,9 +856,9 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                         />
                       ))}
                       {cues.map(({ item: anchor, rects }) => {
-                        const status = statusByCue.get(anchor.cueId)!
+                        const status = statusByEntry.get(anchor.entryId)!
                         return (
-                          <CueWash key={anchor.cueId} rects={rects} status={status} isLive={status === 'live'} />
+                          <CueWash key={anchor.entryId} rects={rects} status={status} isLive={status === 'live'} />
                         )
                       })}
                       {/* Margin markers — cue/cut labels + accent bands, tight to the text. */}
@@ -872,18 +873,18 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                       ))}
                       {cues.map(({ item: anchor, rects }) => (
                         <CueMarginMarker
-                          key={anchor.cueId}
+                          key={anchor.entryId}
                           anchor={anchor}
-                          label={cueLabels.get(anchor.cueId) ?? anchor.label}
+                          label={cueLabels.get(anchor.entryId) ?? anchor.label}
                           rects={rects}
-                          status={statusByCue.get(anchor.cueId)!}
-                          hasWarning={warningCueIds.has(anchor.cueId)}
-                          locked={locked || tool !== 'move' || placingCueId != null}
-                          dragging={dragOverride?.cueId === anchor.cueId}
+                          status={statusByEntry.get(anchor.entryId)!}
+                          hasWarning={warningEntryIds.has(anchor.entryId)}
+                          locked={locked || tool !== 'move' || placingEntryId != null}
+                          dragging={dragOverride?.entryId === anchor.entryId}
                           laneX={laneX}
                           onPointerDown={(e) => onAnchorPointerDown(e, anchor, i)}
                           scenery={sceneryByCue?.get(anchor.cueId)}
-                          onSceneryClick={onOpenCueCard ? () => onOpenCueCard(anchor.cueId) : undefined}
+                          onSceneryClick={onOpenCueCard ? () => onOpenCueCard(anchor.entryId) : undefined}
                         />
                       ))}
                       {/* Notes — desktop: tail anchored to the text's right edge, bubble

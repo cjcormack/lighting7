@@ -30,7 +30,7 @@ const entry: CueStackCueRow = {
   notes: null, cueType: 'STANDARD',
 }
 const props = (over: Partial<ComponentProps<typeof PromptBookCueCard>> = {}): ComponentProps<typeof PromptBookCueCard> => ({
-  cue: { cueId: 2, label: 'Q2', name: 'Moon rise', fadeMs: 3000, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
+  cue: { entryId: 102, cueId: 2, label: 'Q2', name: 'Moon rise', fadeMs: 3000, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
   status: 'next', anchor: undefined, anchorHint: null, cueEntry: entry, projectId: 1, warnings: [], locked: false,
   placing: false, expanded: true, mode: null, onModeChange: noop, fadeStackId: null, canSetNext: false, coverPages: 0,
   onCueClick: noop, onToggleExpanded: noop, onSetStandby: noop, onRemoveAnchor: noop, onEditCue: noop,

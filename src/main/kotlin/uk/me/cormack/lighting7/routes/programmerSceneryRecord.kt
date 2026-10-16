@@ -26,6 +26,7 @@ import java.util.UUID
 import kotlin.math.abs
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.entriesOf
+import uk.me.cormack.lighting7.models.entriesOfCue
 
 /*
  * **Record, Include and Update for the programmer's scenery** (scenery-programmer plan session 3,
@@ -65,20 +66,23 @@ data class SceneryRecordOutcome(
 )
 
 /**
- * Write [held] into [cue]'s scenery under [mode] — see the file's notes for the rules. [entry] is the
- * place in a stack the comparison with what the cue tracks is read at (the caller names it, cue
- * model plan P7); null compares against the elements' bases alone. Must run inside a transaction.
+ * Write [held] into [cue]'s scenery under [mode] — see the file's notes for the rules. A held state
+ * the cue already tracks is left out only when it tracks it at **every** one of its entries, so a
+ * shared cue never loses a piece in the stack that would not show it (cue model plan P7: no entry is
+ * picked); a loose cue compares against the elements' bases. Must run inside a transaction.
  */
 internal fun writeHeldSceneryIntoCue(
     cue: DaoCue,
-    entry: DaoCueStackEntry?,
     held: Map<UUID, ProgrammerScenery.Held>,
     mode: RecordMode,
 ): SceneryRecordOutcome {
     if (held.isEmpty()) return SceneryRecordOutcome()
     val elements = elementsOf(cue.project)
     val own = DaoCueSceneryRow.find { DaoCueScenery.cue eq cue.id }.associateBy { it.element.id.value }
-    val beneath by lazy { sceneryBeneathCue(entry, elements.values.map { it.second }) }
+    val beneath by lazy {
+        val all = elements.values.map { it.second }
+        entriesOfCue(cue).ifEmpty { listOf(null) }.map { sceneryBeneathCue(it, all) }
+    }
     var nextSort = (own.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
     var written = 0
     var removed = 0
@@ -96,7 +100,7 @@ internal fun writeHeldSceneryIntoCue(
         }
         val states = SceneryResolver.only(h.state, element.keys)
         if (SceneryResolver.keysOf(states).isEmpty()) continue
-        if (existing == null && sameAs(states, beneath[element.id])) {
+        if (existing == null && beneath.all { sameAs(states, it[element.id]) }) {
             tracked++
             continue
         }

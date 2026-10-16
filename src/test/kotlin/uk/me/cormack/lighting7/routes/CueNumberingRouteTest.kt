@@ -59,7 +59,9 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
     private suspend fun names(client: HttpClient, stackId: Int): List<String> = cues(client, stackId).map { it.name }
 
     private suspend fun renumber(client: HttpClient, cueId: Int, number: String) {
-        val resp = client.patch("/api/rest/projects/$projectId/cues/$cueId") {
+        // A number is the entry's, written on the entry route (cue model plan D2).
+        val entry = client.get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().entries.single()
+        val resp = client.patch("/api/rest/projects/$projectId/cue-stacks/${entry.stackId}/entries/${entry.entryId}") {
             contentType(ContentType.Application.Json)
             setBody("""{"cueNumber":"$number"}""")
         }
@@ -133,12 +135,12 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an insert, a delete and a move still relabel the cues they shift`() = testApplication {
+    fun `an insert, a removal and a move still relabel the cues they shift`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val (stackId, ids) = fiveAutoCues(client)
+        val (stackId, _) = fiveAutoCues(client)
 
-        client.delete("/api/rest/projects/$projectId/cues/${ids[1]}")
+        client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId/entries/${cues(client, stackId)[1].entryId}")
         assertEquals(listOf("1", "2", "3", "4"), numbers(client, stackId))
 
         // Into the gap Q2 left (sortOrder 1): Q1 stays, everything after it shifts.

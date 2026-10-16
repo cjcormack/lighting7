@@ -20,7 +20,7 @@ export interface UseIncludeOptions {
  * `ProgrammerStore.lastIncludedTarget` is single-valued, so "both" has no meaning to express.
  */
 export type IncludeTargetRequest =
-  | { kind: 'CUE'; cueId: number }
+  | { kind: 'CUE'; cueId: number; entryId?: number | null }
   | { kind: 'LOOK'; lookId: number }
 
 /**
@@ -50,7 +50,9 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
       try {
         const response = await includeIntoProgrammer({
           projectId,
-          ...(target.kind === 'CUE' ? { cueId: target.cueId } : { lookId: target.lookId }),
+          ...(target.kind === 'CUE'
+            ? { cueId: target.cueId, ...(target.entryId != null ? { entryId: target.entryId } : {}) }
+            : { lookId: target.lookId }),
           mask: mask && mask.length > 0 ? mask : undefined,
         }).unwrap()
         setResult(response)
@@ -71,8 +73,10 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
     [includeIntoProgrammer, projectId, toastErrors],
   )
 
+  /** `entryId` names the stack entry the cue was included from — the indicator's number. */
   const includeCue = useCallback(
-    (cueId: number, mask?: PropertyMaskGroup[]) => include({ kind: 'CUE', cueId }, mask),
+    (cueId: number, entryId?: number | null, mask?: PropertyMaskGroup[]) =>
+      include({ kind: 'CUE', cueId, entryId }, mask),
     [include],
   )
 

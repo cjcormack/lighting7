@@ -109,7 +109,7 @@ class HandSocketTest : RouteIntegrationTest() {
             sendSerialized<InMessage>(HandPickUpInMessage("CUE", cueId))
             val cue = awaitOfType<HandStateOutMessage> { it.item?.kind == BuskPadKind.CUE }.item!!
             assertEquals("Cue 3", cue.cue?.name)
-            assertEquals("Cue 3-stack", cue.cue?.cueStackName, "a cue pad needs its stack's name")
+            assertEquals(listOf("Cue 3-stack"), cue.cue?.entries?.map { it.stackName }, "a cue pad needs its stacks' names")
         }
     }
 

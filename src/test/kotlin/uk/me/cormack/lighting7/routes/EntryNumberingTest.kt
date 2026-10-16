@@ -71,7 +71,9 @@ class EntryNumberingTest : RouteIntegrationTest() {
         rows(client, stackId).map { if (it.cueType == "MARKER") "|${it.name}|" else it.cueNumber }
 
     private suspend fun renumber(client: HttpClient, cueId: Int, number: String) {
-        val resp = client.patch("/api/rest/projects/$projectId/cues/$cueId") {
+        // A number is the entry's, written on the entry route (cue model plan D2).
+        val entry = client.get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().entries.single()
+        val resp = client.patch("/api/rest/projects/$projectId/cue-stacks/${entry.stackId}/entries/${entry.entryId}") {
             contentType(ContentType.Application.Json)
             setBody("""{"cueNumber":"$number"}""")
         }
@@ -156,7 +158,7 @@ class EntryNumberingTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `moving a cue into another stack renumbers the stack it left as well as the one it joined`() = testApplication {
+    fun `a move — add, then remove — renumbers the stack it left as well as the one it joined`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val act1 = createStack(client, "Act 1")
@@ -171,10 +173,14 @@ class EntryNumberingTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         assertEquals(listOf("B1", "B2", "A1"), rows(client, act2).map { it.name })
         assertEquals(listOf("1", "2", "3"), list(client, act2))
+        // Adding shares: Act 1 still has it (cue model plan D1).
+        assertEquals(listOf("A1", "A2", "A3"), rows(client, act1).map { it.name })
+
+        val left = rows(client, act1).first().entryId
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cue-stacks/$act1/entries/$left").status)
         // Act 1 lost its first entry, so the two that followed shift up the derived sequence.
         assertEquals(listOf("A2", "A3"), rows(client, act1).map { it.name })
         assertEquals(listOf("1", "2"), list(client, act1))
-        // One entry per cue (P4): the move took the entry, it did not copy it.
         transaction(state.database) {
             assertEquals(2, entriesOf(DaoCueStack[act1]).size)
             assertEquals(3, entriesOf(DaoCueStack[act2]).size)
@@ -182,22 +188,21 @@ class EntryNumberingTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an explicit number the target already holds refuses the move, as the unique index would`() = testApplication {
+    fun `an explicit number the target already holds refuses the add, as the unique index would`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val act1 = createStack(client, "Act 1")
         val act2 = createStack(client, "Act 2")
         val a1 = createCue(client, act1, "A1")
         val b1 = createCue(client, act2, "B1")
-        renumber(client, a1, "7")
         renumber(client, b1, "7")
 
         val resp = client.post("/api/rest/projects/$projectId/cue-stacks/$act2/add-cue") {
             contentType(ContentType.Application.Json)
-            setBody(AddCueToStackRequest(cueId = a1))
+            setBody(AddCueToStackRequest(cueId = a1, cueNumber = "7"))
         }
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        assertEquals(listOf("A1"), rows(client, act1).map { it.name }, "nothing moved")
+        assertEquals(HttpStatusCode.Conflict, resp.status)
+        assertEquals(listOf("B1"), rows(client, act2).map { it.name }, "nothing added")
     }
 
     @Test
@@ -271,7 +276,7 @@ class EntryNumberingTest : RouteIntegrationTest() {
         val ids = (1..3).map { createCue(client, stackId, "Q$it") }
         putOnStage(stackId, ids[2])
 
-        client.delete("/api/rest/projects/$projectId/cues/${ids[0]}")
+        client.delete("/api/rest/projects/$projectId/cues/${ids[0]}?force=true")
         assertEquals(cueDerivedPriority(stackId, 1), livePriority(ids[2]), "Q1 deleted: Q3 is second")
 
         val marker = addMarker(client, stackId, "Interval", at = 0)

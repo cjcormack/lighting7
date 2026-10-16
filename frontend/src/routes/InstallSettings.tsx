@@ -16,9 +16,23 @@ import { CloudSyncHubBody } from "./CloudSync"
 import { UpdatePanel } from "@/components/updates/UpdatePanel"
 import { RemoteAccessPanel } from "@/components/remoteAccess/RemoteAccessPanel"
 import { TelemetryCard } from "@/components/telemetry/TelemetryCard"
+import { useShownTabs } from "@/navigation"
 
 const TABS = ["general", "users", "sync", "remote", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
+
+/**
+ * The nav row each tab opens: a tab is offered exactly where its row is (navigation plan P2), so
+ * Users, Sync and Remote access go from an operator, whom every call behind them refuses.
+ */
+const TAB_NAV_IDS: Record<Tab, string> = {
+  general: "install-settings",
+  users: "users",
+  sync: "sync",
+  remote: "remote-access",
+  updates: "updates",
+  diagnostics: "diagnostics",
+}
 
 function isTab(value: string | undefined): value is Tab {
   return TABS.includes(value as Tab)
@@ -27,7 +41,9 @@ function isTab(value: string | undefined): value is Tab {
 export function InstallSettings() {
   const { tab } = useParams()
   const navigate = useNavigate()
-  const activeTab: Tab = isTab(tab) ? tab : "general"
+  const shown = useShownTabs(TAB_NAV_IDS)
+  // A tab its row hides, reached by URL, opens General — as the sidebar lights Install Settings.
+  const activeTab: Tab = isTab(tab) && shown.has(tab) ? tab : "general"
   const { data: authStatus } = useAuthStatusQuery()
   const isAdmin = authStatus?.user?.role === "ADMIN"
 
@@ -48,19 +64,14 @@ export function InstallSettings() {
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            {/* Hidden from operators, who would only get a 403 from every call behind it.
-                `UsersTab` still renders its own "requires an administrator" state, because
-                the tab is reachable by URL and the backend is the real enforcement. */}
-            {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-            <TabsTrigger value="sync">Sync</TabsTrigger>
-            {/* Admin only, like Users: every call behind it is `requireAdmin`, and a desk with no
-                accounts cannot turn it on anyway. The panel says so again if reached by URL. */}
-            {isAdmin && <TabsTrigger value="remote">Remote access</TabsTrigger>}
+            {shown.has("users") && <TabsTrigger value="users">Users</TabsTrigger>}
+            {shown.has("sync") && <TabsTrigger value="sync">Sync</TabsTrigger>}
+            {shown.has("remote") && <TabsTrigger value="remote">Remote access</TabsTrigger>}
             {/* Shown to everyone: the version, and whether the desk is about to restart, are
                 things anyone standing at it should be able to read. The actions inside are
                 admin-only, disabled in the panel and enforced per-route by the backend. */}
-            <TabsTrigger value="updates">Updates</TabsTrigger>
-            <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
+            {shown.has("updates") && <TabsTrigger value="updates">Updates</TabsTrigger>}
+            {shown.has("diagnostics") && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
           </TabsList>
         </Tabs>
       </div>

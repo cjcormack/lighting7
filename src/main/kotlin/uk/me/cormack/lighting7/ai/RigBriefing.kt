@@ -306,7 +306,8 @@ class RigBriefing(private val state: State) {
         val cues = transaction(state.database) {
             DaoCue.find { DaoCues.project eq project.id }
                 .map {
-                    // Its one entry's stack while every cue has one (cue model plan P4).
+                    // Its stack when it has exactly one entry; a shared or loose cue shows none until the
+                    // cue model plan's session 7 lists every place.
                     val stackInfo = soleEntryOf(it)?.let { e -> " [stack: ${e.stack.name}]" }.orEmpty()
                     "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
                 }

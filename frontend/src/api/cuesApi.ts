@@ -215,22 +215,28 @@ export interface Cue {
   adHocEffects: CueAdHocEffect[]
   propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
-  // The cue's place is its stack entry's (lighting7 cue model plan): every cue has exactly one
-  // until sharing lands, so these describe that entry. The desk answers null for a cue in no
-  // stack, which nothing makes before the plan's session 4.
-  cueStackId: number
-  cueStackName: string
-  /** The entry that places the cue in its stack. Optional: a desk that predates entries omits it. */
-  entryId?: number
+  /**
+   * The **context entry** (lighting7 cue model plan): the entry named by the read's `?entryId=`, else
+   * the cue's only entry. A cue in no stack (*loose*) or in several, read without `?entryId=`, has
+   * none, and these are null or their defaults. Its every place is `entries`.
+   */
+  cueStackId: number | null
+  cueStackName: string | null
+  /** The context entry. Optional: a desk that predates entries omits it. */
+  entryId?: number | null
   /** The entry's position in its stack's list, from 0, markers counted. */
   sortOrder: number
+  /** The entry's follow — written through the entry PATCH, never the cue's. */
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
   fadeDurationMs: number | null
   fadeCurve: string
+  /** The entry's number — written through the entry PATCH, never the cue's. */
   cueNumber: string | null
-  /** True when `cueNumber` was derived from the cue's position rather than typed by the operator. */
+  /** True when `cueNumber` was derived from the entry's position rather than typed by the operator. */
   cueNumberAuto: boolean
+  /** Every entry naming the cue, in show order. Optional: an older desk omits it. */
+  entries?: CueEntryPlace[]
   notes: string | null
   /**
    * Cue-level stomp: firing this cue removes the effects running under it, rather than layering
@@ -257,6 +263,42 @@ export interface Cue {
    * tracked: a later cue carries none of an earlier one's. Optional: the desk omits an empty list.
    */
   events?: CueEvent[]
+}
+
+/** One entry naming a cue — one place it sits in a stack's list. */
+export interface CueEntryPlace {
+  entryId: number
+  stackId: number
+  stackName: string
+  /** Position in its stack's list, from 0, markers counted. */
+  sortOrder: number
+  cueNumber: string | null
+  cueNumberAuto: boolean
+  autoAdvance: boolean
+  autoAdvanceDelayMs: number | null
+}
+
+/** Everything that names a cue — what a delete without force refuses over (`CUE_IN_USE`). */
+export interface CueUses {
+  cueId: number
+  name: string
+  entries: { stackId: number; stackName: string; entryId: number; cueNumber: string | null }[]
+  pads: { padId: number; pageId: number; pageName: string }[]
+  slots: { slotId: number; label: string }[]
+  anchors: { entryId: number; label: string | null }[]
+  bindings: { bindingId: number; label: string }[]
+}
+
+/** `POST cues/delete`. A dry run deletes nothing and answers the uses. */
+export interface DeleteCuesRequest {
+  cueIds: number[]
+  force?: boolean
+  dryRun?: boolean
+}
+
+export interface DeleteCuesResponse {
+  deleted: number[]
+  uses: CueUses[]
 }
 
 /** One cue event: a one-shot trigger on a patch, fired [offsetMs] after GO into its cue. */
@@ -288,8 +330,8 @@ export interface CueInput {
   adHocEffects: CueAdHocEffect[]
   propertyAssignments?: CuePropertyAssignment[]
   triggers?: CueTrigger[]
-  // Required — every cue belongs to a stack. (PUT/PATCH ignore it server-side; it's used on POST.)
-  cueStackId: number
+  /** POST only: the stack the new cue's entry goes in. Absent makes a loose cue. */
+  cueStackId?: number
   sortOrder?: number
   autoAdvance?: boolean
   autoAdvanceDelayMs?: number | null
@@ -303,11 +345,11 @@ export interface CueInput {
   cueType?: CueType
 }
 
-// Partial input for PATCH (inline edits — only send changed fields).
-// Excludes cueStackId/sortOrder: the stack is fixed at POST (the server ignores it on PATCH
-// anyway) and the order within one moves through `reorderCueStackCues`.
+// Partial input for PATCH (inline edits — only send changed fields). The place fields — stack,
+// order, number and follow — are the entry's: `patchCueStackEntry` writes them, and the desk
+// ignores them here.
 export type CuePatchInput = Partial<
-  Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType'>
+  Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType' | 'cueNumber' | 'autoAdvance' | 'autoAdvanceDelayMs'>
 >
 
 // Apply response
