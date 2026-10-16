@@ -208,6 +208,12 @@ export interface FixturesListContainerProps {
      * (`selectionBandState`). Two changes per gesture, not one per pointer move.
      */
     marqueeDragging: boolean
+    /**
+     * Write a new mask on the desk selection through the list's bridge, the heads this list has
+     * selected kept (apply-model plan D3) — the family pill's write. Null where the list does not
+     * bridge: the plain lists, and a tab that has unlinked from the desk.
+     */
+    remask: ((families: readonly AttributeFamily[] | null) => void) | null
   }) => React.ReactNode
   /**
    * Replace nothing — *add* a footer strip under the table, receiving the two counts only this
@@ -567,7 +573,7 @@ export function FixturesListContainer({
   // a row selection (which drops the marquee, as any row door does). The cells go with the ids:
   // a marquee is targets × families, and the families are the desk's attribute mask (D2, D3).
   const followingDesk = useDeskFollow()
-  useDeskSelectionBridge(
+  const remaskDesk = useDeskSelectionBridge(
     selectionScope === 'programmer' && followingDesk,
     rows,
     selectedRowIds,
@@ -1489,6 +1495,7 @@ export function FixturesListContainer({
           targetFamilies: templateFamilies,
           targetEmitters: templateEmitters,
           marqueeDragging,
+          remask: remaskDesk,
         })
       ) : (
         <>

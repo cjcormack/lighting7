@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { setDeskSelection, useDeskSelectionSnapshot } from '../../store/selection'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { setDeskSelection, setDeskSelectionFamilies, useDeskSelectionSnapshot } from '../../store/selection'
 import type { LocateTarget } from '../../store/locate'
 import { familiesKey, normaliseFamilies } from '../../lib/selectionMask'
+import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { CellRef } from '../sheet/cellSelectionModel'
 import { cellFamilies, type ColumnKey } from './columns'
 import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './rowModel'
@@ -73,6 +74,17 @@ import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './ro
  *   heads, masked by someone else". The `source` of any frame — echo or not — is the store's to
  *   record, not this hook's to decide; the cache is written by `store/selection.ts` before this
  *   effect runs, so the chip is right whether or not the heads were an echo.
+ *
+ * **It answers the family pill's write, `remask`** (apply-model plan D3), or null while disabled.
+ * The write is `selection.setFamilies` — the mask alone, the desk keeping its heads, so a filtered
+ * list cannot narrow them and a publish still on its way is not undone — and it goes through here,
+ * not straight to the store, because its echo must be recognised as this list's own: read back
+ * through `rowIdsForTargets`, whose lossiness is the reason the FIFO exists, it would reshape the
+ * rows for a change that touched only the mask. So the FIFO gains the frame the desk will answer
+ * with: the heads of this list's newest unacknowledged publish (the desk applies it first, in
+ * socket order), else the heads of the last frame, under the new families. A standing marquee
+ * whose columns no longer say the mask drops to its rows, under the same mute apply uses, so the
+ * drop publishes nothing over the mask just set.
  */
 export function useDeskSelectionBridge(
   enabled: boolean,
@@ -80,8 +92,10 @@ export function useDeskSelectionBridge(
   selectedIds: ReadonlySet<RowId>,
   cells: readonly CellRef<ColumnKey>[],
   setSelection: (ids: readonly RowId[]) => void,
-): void {
+): ((families: readonly AttributeFamily[] | null) => void) | null {
   const { targets, families } = useDeskSelectionSnapshot()
+  const targetsRef = useRef(targets)
+  targetsRef.current = targets
 
   // The mask this list would publish: the marquee's families, folded to the one spelling. A string
   // rather than the list so that a drag that mints a fresh `cells` array per frame changes nothing
@@ -105,6 +119,8 @@ export function useDeskSelectionBridge(
   localFamiliesRef.current = localFamilies
   const hasCellsRef = useRef(hasCells)
   hasCellsRef.current = hasCells
+  const setSelectionRef = useRef(setSelection)
+  setSelectionRef.current = setSelection
 
   /** Ids the apply effect has dispatched and is waiting to see land, or null. */
   const pendingRef = useRef<RowId[] | null>(null)
@@ -192,6 +208,27 @@ export function useDeskSelectionBridge(
     if (publishedRef.current.length > MAX_PENDING_PUBLISHES) publishedRef.current.shift()
     setDeskSelection(published, localFamiliesRef.current)
   }, [enabled, selectedIds, localKey])
+
+  const remask = useCallback((families: readonly AttributeFamily[] | null) => {
+    const next = normaliseFamilies(families)
+    const nextKey = familiesKey(next)
+    const current = selectedRef.current
+    if (hasCellsRef.current && localKeyRef.current !== nextKey) {
+      // The marquee's columns no longer say the mask: drop it to its rows, muted as apply's own
+      // dispatch is, so the publish effect sees the drop land and sends nothing over this write.
+      const ids = [...current]
+      pendingRef.current = ids
+      dispatchedOverRef.current = current
+      setSelectionRef.current(ids)
+    }
+    const sent = publishedRef.current
+    const heads = sent.length > 0 ? sent[sent.length - 1].targets : new Set(targetsRef.current.map(targetKey))
+    sent.push({ targets: heads, families: nextKey })
+    if (sent.length > MAX_PENDING_PUBLISHES) sent.shift()
+    setDeskSelectionFamilies(next)
+  }, [])
+
+  return enabled ? remask : null
 }
 
 const MAX_PENDING_PUBLISHES = 64

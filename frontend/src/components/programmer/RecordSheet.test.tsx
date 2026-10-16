@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { selectionWs } from '@/test/backendMock'
+import { resetDeskFollowStores } from '@/lib/deskFollow'
 
 /**
  * The Record sheet's S10 polish (venue-visit plan): *New stack…* in the stack select, created only
@@ -15,6 +17,8 @@ const record = vi.fn((_: unknown) => Promise.resolve({ data: undefined }))
 const createStack = vi.fn((body: { name: string }) => Promise.resolve({ data: { id: 77, name: body.name } }))
 const createState = { error: undefined as unknown }
 
+// The desk selection's frame is what the sheet opens its mask on (apply-model plan D3).
+vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
@@ -28,7 +32,14 @@ vi.mock('@/store/programmerOps', () => ({
   useRecordProgrammerMutation: () => [record, { isLoading: false, error: undefined, reset: () => {} }],
 }))
 
+import { lightingApi } from '@/api/lightingApi'
 import { RecordSheet } from './RecordSheet'
+
+afterEach(() => {
+  selectionWs.last = null
+  window.sessionStorage.clear()
+  resetDeskFollowStores()
+})
 
 beforeEach(() => {
   createState.error = undefined
@@ -196,5 +207,39 @@ describe('the mask', () => {
     fireEvent.click(recordButton())
     await waitFor(() => expect(record).toHaveBeenCalled())
     expect(record.mock.calls[0][0]).toMatchObject({ mask: undefined })
+  })
+
+  /**
+   * The sheet opens on the selection's mask (apply-model plan D3) — the desk's while this window
+   * follows it — and from then on the mask is this Record's own: a change here writes nothing to the
+   * selection, and a selection that moves while the sheet is open does not move the sheet's.
+   */
+  it('opens on the selection’s mask, and a change here leaves the selection alone', async () => {
+    // Every write that could move the selection: the whole fact, and the mask alone.
+    const writes = (['set', 'setFamilies', 'toggle', 'clear'] as const).map((name) => vi.spyOn(lightingApi.selection, name))
+    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('checkbox', { name: 'Colour' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Position' })).not.toBeChecked()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Position' }))
+    // The selection moving under the open sheet does not move the sheet's mask either.
+    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['BEAM'], source: null }
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ mask: ['POSITION', 'COLOUR'] })
+    for (const write of writes) expect(write).not.toHaveBeenCalled()
+  })
+
+  it('opens on All attributes over an unmasked selection, and on the new mask the next time it opens', () => {
+    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: null, source: null }
+    const { rerender } = render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
+    rerender(<RecordSheet open={false} onOpenChange={() => {}} projectId={6} />)
+    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['INTENSITY'], source: null }
+    rerender(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    expect(screen.getByRole('checkbox', { name: 'Intensity' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Colour' })).not.toBeChecked()
   })
 })

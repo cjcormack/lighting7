@@ -40,6 +40,12 @@ export interface SelectionBarProps {
    * name elsewhere (`Address`, `Value`, `Fade`). Null draws none. Folded on the phone arm.
    */
   family: string | null
+  /**
+   * The family pill as a control, drawn in its place instead of [family]'s badge — the
+   * programmer's mask picker (`SelectionMaskPill`, apply-model plan D3) while the window follows
+   * the desk. Folded on the phone arm like the badge. Absent on every other sheet.
+   */
+  familyControl?: ReactNode
   /** The two keyboard hints, each drawn only where the surface's permission allows the key. */
   hints: { entry: boolean; clear: boolean }
   /**
@@ -114,6 +120,7 @@ export function SelectionBar({
   cellLabel,
   cellTitle,
   family,
+  familyControl,
   hints,
   chip,
   strip,
@@ -189,9 +196,11 @@ export function SelectionBar({
       )}
       {/* The family pill sits outside the cell block: on the programmer it is the mask the next
           press carries, which while following the desk can stand over a row-only selection (the
-          bridge lands another window's mask as rows). Every other sheet passes null with no
-          cells, so nothing changes there. */}
-      {family != null && (
+          bridge lands another window's mask as rows) — and is its picker there. Every other sheet
+          passes null with no cells, so nothing changes there. */}
+      {familyControl != null ? (
+        <span className={cn('inline-flex shrink-0', PHONE_FOLDED_CLASS)}>{familyControl}</span>
+      ) : family != null && (
         <Badge
           variant="outline"
           className={cn('shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]', PHONE_FOLDED_CLASS)}

@@ -23,6 +23,7 @@ import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
 import { LookPreviewSwatches } from '@/components/looks/lookValueChips'
 import { useInclude } from './useInclude'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 
 export interface IncludeSheetProps {
   open: boolean
@@ -47,6 +48,9 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
 
   const [filter, setFilter] = useState('')
   const [mask, setMask] = useState<MaskValue>(null)
+  // Include starts from the selection's mask (apply-model plan P6, D3), read once on open; a change
+  // here is this Include's own and never moves the selection.
+  const readSelectionMask = useWindowMaskReader()
 
   // Once per open — `resetInclude` closes over RTK Query's `reset`, whose identity changes
   // with the mutation's state, so re-running on its identity would clear the "Included …"
@@ -60,9 +64,9 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
     if (openedRef.current) return
     openedRef.current = true
     setFilter('')
-    setMask(null)
+    setMask(readSelectionMask())
     resetInclude()
-  }, [open, resetInclude])
+  }, [open, resetInclude, readSelectionMask])
 
   const needle = filter.trim().toLowerCase()
 

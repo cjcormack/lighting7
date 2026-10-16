@@ -21,6 +21,7 @@ import type {
   UpdateResponse,
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
 
@@ -58,6 +59,9 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const [conflict, setConflict] = useState<ProgrammerConflict | null>(null)
   const [mask, setMask] = useState<MaskValue>(null)
   const maskKey = maskValueKey(mask)
+  // The selection's mask, read once on open (apply-model plan D3). A change here is this Update's
+  // own and never moves the selection.
+  const readSelectionMask = useWindowMaskReader()
   // Cues the operator unticked, kept across a checklist re-fetched under a new mask so narrowing
   // the mask does not tick them again behind their back.
   const untickedRef = useRef<Set<number>>(new Set())
@@ -123,15 +127,27 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
       return
     }
     if (appliedRunKeyRef.current === runKey) return
+    // Opening, as against a mode flip while open: the dialog starts on the selection's mask. The
+    // checklist fetch below runs in this same commit, still under the closed dialog's mask, so when
+    // the seed moves it the fetch is told the closed mask's checklist is already asked — it then
+    // waits one render and asks under the seed, rather than asking twice.
+    if (appliedRunKeyRef.current === null) {
+      const seed = readSelectionMask()
+      setMask(seed)
+      checklistMaskKeyRef.current = maskValueKey(seed) === maskKey ? null : maskKey
+    } else {
+      checklistMaskKeyRef.current = null
+    }
     appliedRunKeyRef.current = runKey
     setChecklist(null)
     setSelected(new Set())
     setResult(null)
     setConflict(null)
     untickedRef.current = new Set()
-    checklistMaskKeyRef.current = null
     reset()
-  }, [runKey, reset])
+    // `maskKey` is read as the mask the closed dialog holds, never a reason to re-run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runKey, reset, readSelectionMask])
 
   // With no include target there is nothing to confirm yet — fetch the checklist so the dialog
   // opens onto the actual decision rather than a spinner behind a button press. Fetched again when

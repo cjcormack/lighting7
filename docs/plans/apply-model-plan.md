@@ -347,7 +347,8 @@ showed the strip, now show the band too, since it is the family's offer and the 
     switched off. It knows nothing of the selection, so the pill mounts it as it is, through
     S10's `useMaskDraft` — the selection's `families` folds all four to none and cannot hold
     "none ticked", so the draft holds the switch's state and writes only a real change.
-  - It writes `selection.set` with the current targets and the new families.
+  - It writes `selection.set` with the current targets and the new families. *(As built:
+    `selection.setFamilies`, the mask alone with the heads kept — see Session 4.)*
   - The marquee still sets it; a rows-only click still clears it.
 - Record, Record Look, Include, Make layer and Update open their `MaskPicker` on the selection's mask.
   A change there is the sheet's own and does not move the selection.
@@ -472,15 +473,21 @@ Each session is one PR (P1).
   as values — since the toggle and apply routes take it without refusing (§4.1's "no client
   pre-refusal" assumed they refuse).
 
-### Session 4 — One mask (frontend)
+### Session 4 — One mask (backend + frontend)
 
 - §4.4: the pill's picker, the busk summary's pill, and the five sheets opening on the selection's mask.
 - **Tests:**
-  - The pill writes `selection.set` with the targets kept.
+  - The pill writes `selection.setFamilies`, the targets kept.
   - *All attributes* clears it.
   - Record opens on the selection's mask, and a change in the sheet leaves the selection alone.
 - **Docs:** the frontend CLAUDE.md's selection paragraphs; `lighting-composition-model.md` §"A press
   carries the selection's attribute mask".
+- The pill writes a mask-only desk frame (decided during session 4): `selection.setFamilies`
+  (`DeskSelection.setFamilies`, the mask replaced and the heads kept) rather than §4.4's
+  `selection.set` with the current targets, which would send back heads the window may have heard
+  of late and undo a toggle still on its way. The programmer's goes through its list bridge's
+  `remask`, so the echo is known as its own. Every sheet opens on the selection's mask wherever it
+  is opened from, Show's and the Prompt Book's Record and Update included — D3 as written.
 
 ### Session 5 — The palette popup and the one picker (frontend)
 

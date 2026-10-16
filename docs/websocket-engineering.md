@@ -329,14 +329,18 @@ Switching project is REST; the socket only reports it (`projectChanged`).
 |---|---|---|
 | `selection.set` | `targets: [{type, key}]`, `families?: [String]`, `sourceName?: String` | none — `selection.state` broadcast |
 | `selection.toggle` | `target: {type, key}`, `sourceName?: String` | none — `selection.state` broadcast |
+| `selection.setFamilies` | `families?: [String]` (absent or empty = every attribute), `sourceName?: String` | none — `selection.state` broadcast |
 | `selection.clear` | — | none — `selection.state` broadcast |
 | `selection.subselect` | `mode: String` (`ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `NEXT` · `PREV` · `MASTERS`), `sourceName?: String` | none — `selection.state` broadcast; an unknown mode is dropped with a log line |
 
 The desk's one shared selection (`state/DeskSelection.kt`, `docs/lighting-composition-model.md`
 §"Layer 2"). `toggle` is head-by-head: a group all of whose members are selected is "in", and
 toggling it off narrows the entries that covered it (`fx/TargetCoverage.kt`, the rule a busk press
-applies to a sibling layer). A write that changes nothing sends no frame. No resync request: the
-family is `StateFlow`-backed, so a subscription is the snapshot.
+applies to a sibling layer). `setFamilies` is the family pill's write (apply-model plan D3): the
+mask alone, the heads kept, so a client never sends back heads it may have heard of late — a `set`
+from the pill would undo a toggle of the same window's still on its way. A write that changes
+nothing sends no frame. No resync request: the family is `StateFlow`-backed, so a subscription is
+the snapshot.
 
 **`subselect` rewrites the targets over the rig order** (busk-further plan D12,
 `docs/lighting-composition-model.md` §"The rig"): the Cells chip and the `SelectionCells` /
@@ -1295,7 +1299,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |
-| `plugins/SelectionSocket.kt` | The desk selection: snapshot + broadcast, and the three writes |
+| `plugins/SelectionSocket.kt` | The desk selection: snapshot + broadcast, and its writes |
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |

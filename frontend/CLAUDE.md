@@ -1230,7 +1230,14 @@ usually does want everything you busked, a Look named "Warm Amber" almost never 
 **Every mask a sheet takes is one picker with an *All attributes* switch** (venue-visit plan S10):
 `MaskPicker` in `programmer/maskPicker.tsx` — a label, `MaskToggles`, and a sentence under them — on
 Record, Record Look (the busk Spread sheet's *Save as Look…* included), Include, Make layer, Update and
-a layer's popover in `LookStack`. **The switch is on for every attribute and hides the four family
+a layer's popover in `LookStack`. **The five sheets open on the selection's mask** (apply-model plan
+D3), read once on open by `useWindowMaskReader` — the desk's while the window follows it; unlinked, the
+programmer's marquee (the marquee store is provided above `ProgrammerSheetsProvider` for this) or the
+busk tab's own copy — and **a change in a sheet is that sheet's own**: it never writes the selection,
+and a selection moved while the sheet is open never moves it. Read, not subscribed, because four of
+the five stay mounted while closed and a subscription would re-render them per marquee frame. Make
+layer's unsaved-changes guard compares against the mask it opened on, and Update's Mode B asks for its
+checklist once, under the opening mask, rather than first under the closed dialog's. **The switch is on for every attribute and hides the four family
 checkboxes**; switching it off shows them **all ticked**, which is not yet a narrowing — the operator
 unticks what the write should leave alone. The switch moves only when pressed: unticking the last
 family leaves it off with nothing ticked, and ticking all four back leaves it off too, so nothing
@@ -1246,10 +1253,11 @@ attribute.* A host that writes on every change cannot hold that state in what it
 **`useMaskDraft(stored, write)`**: the picker's own draft, writing only a change to the folded mask and
 never an empty one, and following the stored mask only when it changes to something it did not send
 itself (it keeps the keys it has sent and not yet seen back, so its own echoes — even one landing after
-a newer gesture, Colour unticked and ticked straight back — leave the draft alone). `LookStack`'s `LayerMaskPicker` is the one
-today. **`MaskToggles` is the mountable half on purpose** — no label, no sentence, nothing about the
-selection — so the apply-model plan's session 4 can put it in the selection bar's family pill through
-`useMaskDraft`, writing `selection.set` with the targets kept. `UpdateDialog` gained the picker with
+a newer gesture, Colour unticked and ticked straight back — leave the draft alone). `LookStack`'s
+`LayerMaskPicker` is one; the selection's family pill is the other (§The desk selection has a mask).
+**`MaskToggles` is the mountable half on purpose** — no label, no sentence, nothing about the
+selection — which is how `SelectionMaskPill` mounts it in a popover, through `useMaskDraft`, writing
+the selection's mask with its targets kept. `UpdateDialog` gained the picker with
 S10: Mode A sends the mask on the write; in Mode B the mask also decides which cues the programmer is
 over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a stale answer dropped by
 a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
@@ -1733,8 +1741,8 @@ verbs, then the family pill, the **`BLIND` pill** and the desk chip **left-ancho
 verbs**, the gap, and the host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by
 `BuskingView` — right-anchored, in Split and Rig. The blind pill (`busking/BlindMarks.tsx`) is a
 **reporter, never a toggle** — Blind is switched on the programmer's action bar and nowhere else —
-drawn in the indicator's amber only while `ProgrammerSummary.blind` holds, on the family pill's
-terms (absent means nothing to say), its hover saying *values and effects held* — Blind holds the
+drawn in the indicator's amber only while `ProgrammerSummary.blind` holds, on the terms the family
+pill had until it became the mask's picker (absent means nothing to say), its hover saying *values and effects held* — Blind holds the
 programmer's effects as well as its values (show-cue-editing plan D7), read through `hooks/useProgrammerBlind.ts`'s narrowed
 subscription so the band does not re-render on the programmer's entry churn; in Pads the pad row
 carries it in the same place, and off the desk board `RigStripContent` — the compact strip and the
@@ -2383,8 +2391,8 @@ label, the page tabs **at the rig row's control size** (an `h-7 p-0.5` group of 
 items — the Focus control's segmented look; they were larger and rounder than everything beside
 them) with the **page mark** beside them (§The busk layout: the link badge naming the windows paged
 with this one, or *Page: Own*), **Spread · Locate · Highlight** as icon verbs, the selection summary in the gap (`min-w-0`,
-truncating, its whole text on the title — nothing else says it in Pads), the family pill while a
-mask is set, the selection's **link badge** (Pads always follows the desk selection — desk-follow
+truncating, its whole text on the title — nothing else says it in Pads), the family pill — the
+mask's picker (§The desk selection has a mask) — the selection's **link badge** (Pads always follows the desk selection — desk-follow
 D2 — so here the desk chip is only ever the badge; D17 put the chip on this row since there is no
 rig row to carry it), then the host's Focus control and
 *Edit layout* / *Done*. **No Cells menu, no steps, no Clear**: those act on a selection made on the tiles, and the
@@ -3003,6 +3011,34 @@ same pair** (`shownFamilies` in `programmer/SelectionBar.tsx`), drawn over a row
 too, so the one state where the two differ (another window's mask landed here as rows) is said on
 the bar rather than discovered from a 400. The kit's bar draws the pill outside its cell block for
 that reason; the plain lists keep the marquee's own reading, never bridging.
+
+**The family pill is the mask's picker** (apply-model plan D3, §4.4; `programmer/SelectionMaskPill.tsx`):
+press it and S10's `MaskToggles` opens in a popover — the *All attributes* switch, and the four
+families while it is off. The pill's face is always the stored mask (`All` while there is none), never
+the picker's draft, and the toggles go through `useMaskDraft`, since the selection's `families` folds
+all four ticked to none and has no word for none ticked: switching *All attributes* off ticks all four
+and writes nothing, an untick writes the narrowing, all four ticked back writes "no mask" with the
+switch left off, and unticking the last family writes nothing and says *Pick at least one attribute.
+The selection stays …*. **Every write keeps the targets**: following, it is
+`selection.setFamilies` (`setDeskSelectionFamilies` in `store/selection.ts`) — the mask alone, the
+desk keeping its heads, so no heads heard of late are sent back to undo a toggle or a publish still
+on its way. On the programmer it goes through the list's own bridge — `useDeskSelectionBridge`
+answers `remask`, handed to the bar through `renderToolbar` — because its echo must be known as the
+list's own: the FIFO gains the frame the desk will answer with (the newest unacknowledged publish's
+heads, else the last frame's, under the new families), so the echo is acknowledged rather than read
+back through `rowIdsForTargets`, whose lossiness would reshape the rows (a fixture under two expanded
+groups, a parent and its element rows). A standing marquee whose columns no longer say the mask drops
+to its rows, under apply's mute, so the drop publishes nothing over the mask just set. An **unlinked
+programmer keeps a plain badge** (the bridge answers no write there): its own selection is the list's,
+whose only mask is the marquee's columns, so there is no fact for a picker to write. The marquee still sets the mask and a
+rows-only click still clears it; the picker's draft follows either as a write from elsewhere. **The
+busk view carries the same picker** on every row that draws the pill — the rig row in Split and Rig,
+the compact row, the rig strip and the pad row in Pads — as `busking/BuskFamilyPill.tsx`, writing
+through `useBuskingSelection`'s `setFamilies` — `selection.setFamilies` while following, the tab's
+own copy with its targets kept when not. Since the rig has no marquee, the busk picker is drawn **whenever
+something is selected**, `All` while unmasked, and with a mask but nothing selected — no longer only
+while a mask is set. The sheets that take a mask
+open on this one (§Looks, palettes and layers, *Every mask a sheet takes*).
 
 What the desk does under a mask, per kind: a **palette** is one family, so it lands whole or is
 400 `PALETTE_OUTSIDE_MASK` on every door, apply and layer alike; a **Look** spans families, so its

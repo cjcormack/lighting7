@@ -764,7 +764,7 @@ From `State.kt`:
 | `surfaceLearn.begin` | `{ sessionId, targetContext }` |
 | `surfaceLearn.cancel` | `{ sessionId }` |
 | `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
-| `selection.set` / `.toggle` / `.clear` | `{ targets }` / `{ target }` / — (`SelectionSocket.kt`) |
+| `selection.set` / `.toggle` / `.setFamilies` / `.clear` | `{ targets }` / `{ target }` / `{ families? }` / — (`SelectionSocket.kt`) |
 | `busk.setPage` | `{ pageId }` — the showing busk page (`BuskSocket.kt`) |
 
 ### Outbound
