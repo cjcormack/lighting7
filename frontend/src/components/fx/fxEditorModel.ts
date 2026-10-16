@@ -1,4 +1,4 @@
-import type { UpdateFxRequest } from '@/api/fxApi'
+import type { EffectDirection, UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveEffect, EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/effectTiming'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
@@ -128,6 +128,12 @@ export interface FxDraft {
    * seconds either way, and its Seconds is a null [rateSpeedMasterUuid].
    */
   seconds: boolean
+  /** Size (effects plan D2), 0–1 — how much of the effect reaches the stage over what is underneath. */
+  size: number
+  /** Direction (D5): which way each head runs its cycle. */
+  direction: EffectDirection
+  /** Runs (D9): stop after this many cycles; null runs forever. */
+  nShot: number | null
 }
 
 /**
@@ -150,6 +156,11 @@ export function draftOf(effect: ActiveEffect): FxDraft {
     // The desk reports D7's reading; a desk before S15 does not, and then a wall-clock effect with
     // no rate master is the only Seconds there is.
     seconds: isOnSeconds(effect, effect.timingSource),
+    // Absent on the wire at their defaults (the desk's socket encodes no default), and from a desk
+    // before effects plan session 1.
+    size: effect.size ?? 1,
+    direction: effect.direction ?? 'FORWARD',
+    nShot: effect.nShot ?? null,
   }
 }
 
@@ -177,6 +188,9 @@ export type OptionalField =
   | 'speedMasterUuid'
   | 'rateSpeedMasterUuid'
   | 'seconds'
+  | 'size'
+  | 'direction'
+  | 'nShot'
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'stepTiming',
@@ -186,6 +200,9 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'speedMasterUuid',
   'rateSpeedMasterUuid',
   'seconds',
+  'size',
+  'direction',
+  'nShot',
 ]
 
 /**
@@ -206,6 +223,10 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
  * Seconds and sends **no** master beside it — the desk refuses both — which is also how Revert puts
  * a wall-clock effect back to *unscaled* (`FU-FX-RATE-MASTER-CLEAR`, closed by S15); `seconds:
  * false` sends the master beside it.
+ *
+ * Size, direction and runs (effects plan D2, D5, D9) ride once touched too, which keeps a frame to
+ * a desk that predates them the shape it always was; a null count is said as `runForever`, since
+ * the frame's absent `nShot` means "keep".
  */
 export function updateRequestOf(
   draft: FxDraft,
@@ -224,6 +245,9 @@ export function updateRequestOf(
     ...(touched.has('elementMode') ? { elementMode: draft.elementMode } : {}),
     ...(touched.has('elementFilter') ? { elementFilter: draft.elementFilter } : {}),
     ...(touched.has('seconds') ? { seconds: draft.seconds } : {}),
+    ...(touched.has('size') ? { size: draft.size } : {}),
+    ...(touched.has('direction') ? { direction: draft.direction } : {}),
+    ...(touched.has('nShot') ? (draft.nShot == null ? { runForever: true } : { nShot: draft.nShot }) : {}),
     ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
     ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
@@ -260,6 +284,11 @@ export function timingChoicePatch(
     speedMasterUuid: choice,
     ...(draft.seconds ? { beatDivision: secondsToBeats(draft.beatDivision, bpmOf(choice)) } : {}),
   }
+}
+
+/** `1 run`, `3 runs` — the editor's Advanced summary and the pad face's word for an N-shot (D9). */
+export function runsWord(nShot: number): string {
+  return `${nShot} run${nShot === 1 ? '' : 's'}`
 }
 
 /** Two writes are the same write — `useLivePush`'s dedupe over a whole request. */
@@ -328,6 +357,10 @@ export interface TemplateEffectFields {
   rateSpeedMasterUuid?: string | null
   /** D7's flag as stored — see `isOnSeconds`. */
   seconds?: boolean
+  /** Size, direction and runs as stored (effects plan D2, D5, D9); absent at their defaults. */
+  size?: number
+  direction?: EffectDirection
+  nShot?: number | null
   /** The palette's resolved timing source, where the desk has said it. */
   timingSource?: string | null
 }
@@ -351,6 +384,9 @@ export function templateDraftOf(effect: TemplateEffectFields, timingSource?: str
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
     seconds: isOnSeconds(effect, timingSource ?? effect.timingSource),
+    size: effect.size ?? 1,
+    direction: effect.direction ?? 'FORWARD',
+    nShot: effect.nShot ?? null,
   }
 }
 
@@ -377,6 +413,11 @@ export function withTemplateDraft<E extends TemplateEffectFields>(
     rateSpeedMasterUuid: draft.seconds ? null : draft.rateSpeedMasterUuid,
     // Written where it says something — a palette that never used Seconds stays as it was stored.
     ...(draft.seconds || effect.seconds != null ? { seconds: draft.seconds } : {}),
+    // The same rule for size, direction and runs: said where they are not the default, or where the
+    // palette already said them — a palette that never used them saves as it was stored.
+    ...(draft.size !== 1 || effect.size != null ? { size: draft.size } : {}),
+    ...(draft.direction !== 'FORWARD' || effect.direction != null ? { direction: draft.direction } : {}),
+    ...(draft.nShot != null || effect.nShot != null ? { nShot: draft.nShot } : {}),
   }
 }
 
@@ -422,6 +463,9 @@ export function differsFromTemplate(
   if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
   if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
   if (draft.seconds !== isOnSeconds(effect, effect.timingSource)) return true
+  if (Math.abs(draft.size - (effect.size ?? 1)) > 1e-6) return true
+  if (draft.direction !== (effect.direction ?? 'FORWARD')) return true
+  if ((draft.nShot ?? null) !== (effect.nShot ?? null)) return true
   const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
   for (const name of names) {
     if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true

@@ -130,6 +130,10 @@ internal fun Route.routeApiRestGroups(state: State) {
                         speedMasterUuid = instance.reportedSpeedMasterUuid,
                         rateSpeedMasterUuid = instance.reportedRateSpeedMasterUuid,
                         seconds = instance.onSeconds,
+                        size = instance.dynamics.size,
+                        direction = instance.dynamics.direction.name,
+                        nShot = instance.dynamics.nShot,
+                        spent = instance.spent,
                     )
                 }
                 call.respond(dtos)
@@ -219,6 +223,12 @@ data class AddGroupFxRequest(
     val rateSpeedMasterUuid: String? = null,
     /** On *Seconds* (D7) — see [AddEffectRequest.seconds]. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 — see [AddEffectRequest.size]. */
+    val size: Double = 1.0,
+    /** Direction (D5) — see [AddEffectRequest.direction]. */
+    val direction: String = "FORWARD",
+    /** Runs (D9) — see [AddEffectRequest.nShot]. */
+    val nShot: Int? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
@@ -249,7 +259,7 @@ data class GroupEffectDto(
     val cueId: Int? = null,
     /** True when this effect sits in the programmer's reserved priority band. */
     val programmerOwned: Boolean = false,
-    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    /** The envelope — see [uk.me.cormack.lighting7.fx.EffectDto.intensityMultiplier]. */
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
@@ -257,6 +267,11 @@ data class GroupEffectDto(
     val rateSpeedMasterUuid: String? = null,
     /** D7's reading — see [uk.me.cormack.lighting7.fx.EffectDto.seconds]. */
     val seconds: Boolean = false,
+    /** See [uk.me.cormack.lighting7.fx.EffectDto.size] and its three siblings. */
+    val size: Double = 1.0,
+    val direction: String = "FORWARD",
+    val nShot: Int? = null,
+    val spent: Boolean = false,
 )
 
 @Serializable
@@ -367,6 +382,7 @@ private fun applyGroupEffect(
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elFilter
+        applyRequestedDynamics(request.size, request.direction, request.nShot)
         request.stepTiming?.let { this.stepTiming = it }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
         rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)

@@ -32,6 +32,14 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v30: Size, direction and N-shot (effects plan session 1, venue-visit R4.1). `LookEffectJson`,
+    // `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction` (default
+    // `FORWARD`) and `nShot` (default null), each omitted at its default. The writer's number moves by
+    // the sharp-edge rule: a v29 reader would run a 40 % breathe at full size, a backward cycle
+    // forward and a one-shot forever, and its next wipe-then-export push would write all three away.
+    // `minReader` stays at **5** — every field defaults to what an older row meant. See
+    // `docs/sync-engineering.md` §"Version 30 — Size, direction and N-shot".
+    //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
     // then seconds. The writer's number moves by the sharp-edge rule: a v28 reader would import a
@@ -247,7 +255,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 29,
+    val formatVersion: Int = 30,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -395,6 +403,12 @@ data class LookEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
     val sortOrder: Int = 0,
 )
 
@@ -471,6 +485,12 @@ data class TemplateEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
 )
 
 /**
@@ -840,6 +860,12 @@ data class CueAdHocEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
 )
 
 @Serializable

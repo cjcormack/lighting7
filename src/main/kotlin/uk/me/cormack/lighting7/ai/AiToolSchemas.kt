@@ -63,6 +63,36 @@ private const val SECONDS_DESCRIPTION =
     "Run on Seconds: beatDivision is the cycle in seconds and the effect follows no speed master (for a slow breathe " +
         "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
 
+/**
+ * Size, Direction and Runs (effects plan D2, D5, D9), the same three on every effect schema — added
+ * where each schema lists its timing.
+ */
+private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
+    put("size", buildJsonObject {
+        put("type", "number")
+        put(
+            "description",
+            "Size, 0.0–1.0: how much of the effect reaches the stage over what is underneath (0.5 = halfway between " +
+                "the level underneath and the effect; a movement effect's radius halves about the position underneath). " +
+                "Omit for 1.0, the whole effect.",
+        )
+    })
+    put("direction", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { add("FORWARD"); add("BACKWARD"); add("BOUNCE") })
+        put("description", "Which way each head runs the cycle: BACKWARD runs it end to start, BOUNCE forward then back. Omit for FORWARD.")
+    })
+    put("nShot", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 1)
+        put(
+            "description",
+            "Run this many cycles and stop, each head handing back to what is underneath after its own — a flash on cue " +
+                "is 1. Omit to run forever.",
+        )
+    })
+}
+
 private val lookEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -115,6 +145,7 @@ private val lookEffectSchema = buildJsonObject {
             put("type", "boolean")
             put("description", SECONDS_DESCRIPTION)
         })
+        putEffectDynamics()
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
@@ -520,6 +551,7 @@ private val adHocEffectSchema = buildJsonObject {
             put("type", "boolean")
             put("description", SECONDS_DESCRIPTION)
         })
+        putEffectDynamics()
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })

@@ -270,6 +270,15 @@ object DaoTemplateEffects : IntIdTable("template_effects") {
 
     /** D7's *Seconds* for a beat effect; see [TemplateEffectDto.seconds]. */
     val seconds = bool("seconds").default(false)
+
+    /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
+    val size = double("size").default(1.0)
+
+    /** Direction (D5) by name; see [LookEffectSpec.direction]. */
+    val direction = varchar("direction", 16).default("FORWARD")
+
+    /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
+    val nShot = integer("n_shot").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -297,6 +306,9 @@ class DaoTemplateEffect(id: EntityID<Int>) : IntEntity(id) {
     var speedMasterUuid by DaoTemplateEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoTemplateEffects.rateSpeedMasterUuid
     var seconds by DaoTemplateEffects.seconds
+    var size by DaoTemplateEffects.size
+    var direction by DaoTemplateEffects.direction
+    var nShot by DaoTemplateEffects.nShot
     var uuid by DaoTemplateEffects.uuid
 }
 
@@ -332,6 +344,15 @@ data class TemplateEffectDto(
      * See `fx/EffectTiming.kt`.
      */
     val seconds: Boolean = false,
+    /**
+     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
+     */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
+    val nShot: Int? = null,
     /**
      * `BEAT` or `WALL_CLOCK`, **resolved server-side on read and ignored on write** — the same
      * contract [TemplateRowDto.health] has, and for the same reason: it is the registry's answer

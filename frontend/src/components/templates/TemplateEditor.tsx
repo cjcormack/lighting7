@@ -219,7 +219,7 @@ export function TemplateEditor({
    * Parameters reset to the new effect's declared defaults rather than carrying over: they are named
    * per effect, so keeping a `colourA` from the last one would be luck rather than intent. The
    * timing fields *do* carry over — a division and a distribution mean the same thing whichever
-   * effect is running — and the speed master is re-stamped, because it is the family's default
+   * effect is running, as do size, direction and runs — and the speed master is re-stamped, because it is the family's default
    * (D8) and the family has not moved.
    */
   const chooseEffect = useCallback(
@@ -256,6 +256,11 @@ export function TemplateEditor({
           speedMasterUuid: seconds ? null : masterForCategory(entry.category),
           rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
           seconds,
+          // Size, direction and runs carry over like the phase: each means the same thing whichever
+          // effect is running (effects plan D2, D5, D9), and the live editor's swap keeps them too.
+          ...(prev?.size != null ? { size: prev.size } : {}),
+          ...(prev?.direction != null ? { direction: prev.direction } : {}),
+          ...(prev?.nShot != null ? { nShot: prev.nShot } : {}),
           // The draft's own reading of its kind, until the desk answers with the registry's: what
           // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
           timingSource: entry.timingSource ?? 'BEAT',
@@ -665,6 +670,10 @@ function effectKey(effect: TemplateEffect | null): string {
     effect.speedMasterUuid ?? null,
     effect.rateSpeedMasterUuid ?? null,
     effect.seconds === true,
+    // Size, direction and runs (effects plan D2, D5, D9), read at their defaults when unsaid.
+    effect.size ?? 1,
+    effect.direction ?? 'FORWARD',
+    effect.nShot ?? null,
     Object.entries(effect.parameters).sort(([a], [b]) => a.localeCompare(b)),
   ])
 }

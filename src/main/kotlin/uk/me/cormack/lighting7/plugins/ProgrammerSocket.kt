@@ -519,6 +519,12 @@ data class KeyStackLayerDto(
      */
     val timingSource: String? = null,
     val seconds: Boolean? = null,
+    /**
+     * The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what [onStage] already
+     * weighs, so the sheet can say *why* a 0 % effect is not on stage.
+     */
+    val size: Double? = null,
+    val direction: String? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
     /**
@@ -1369,6 +1375,8 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
             timingSource = dto?.timingSource,
             seconds = dto?.seconds,
+            size = dto?.size,
+            direction = dto?.direction,
             heldBack = if (effect != null) layer.heldBack else null,
             heldBackReason = layer.heldBackReason?.name,
             cueId = layer.cueId,

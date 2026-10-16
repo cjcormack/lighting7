@@ -265,6 +265,9 @@ export interface KeyStackLayer {
   /** The two effect kinds: the loop, and whether the effect is on Seconds (its division is seconds). */
   timingSource?: string | null
   seconds?: boolean | null
+  /** The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what `onStage` already weighs. */
+  size?: number | null
+  direction?: string | null
   /** The two effect kinds: running, but not painting this key — the desk's own suppression answer. */
   heldBack?: boolean | null
   /**

@@ -1,5 +1,6 @@
 import type { SceneryChange, TrackedScenery } from './sceneryApi'
 import type { CueType } from './cueStacksApi'
+import type { EffectDirection } from './fxApi'
 
 // Cue target (fixture or group)
 export interface CueTarget {
@@ -121,6 +122,12 @@ export interface CueAdHocEffect {
    * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
    */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; absent at 1. */
+  size?: number
+  /** Direction (D5); absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9); absent or null runs forever. */
+  nShot?: number | null
   /**
    * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
    * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.

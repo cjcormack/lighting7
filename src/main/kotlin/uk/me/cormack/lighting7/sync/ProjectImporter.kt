@@ -170,6 +170,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v30 added `size`, `direction` and `nShot` to the three stored effect shapes — `LookEffectJson`,
+// `TemplateEffectJson` and `CueAdHocEffectJson` (effects plan session 1, D2, D5, D9). SUPPORTED moved
+// for v14's reason — a v29 reader would run a 40 % effect at full size, a backward one forward and a
+// one-shot forever, and write all three away on its next push; MIN stays at 5 because each field
+// defaults to what a row without it meant.
+//
 // v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
 // beat effect's `beatDivision` is then its cycle in seconds. SUPPORTED moved for v14's reason — a v28
@@ -250,7 +256,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 29
+internal const val SUPPORTED_FORMAT_VERSION = 30
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -834,6 +840,9 @@ class ProjectImporter(private val state: State) {
                     speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                     rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                     seconds = e.seconds
+                    size = e.size
+                    direction = e.direction
+                    nShot = e.nShot
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
@@ -1348,6 +1357,9 @@ class ProjectImporter(private val state: State) {
                     speedMasterUuid = e.speedMasterUuid?.let { m -> UUID.fromString(m) }
                     rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { m -> UUID.fromString(m) }
                     seconds = e.seconds
+                    size = e.size
+                    direction = e.direction
+                    nShot = e.nShot
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
@@ -1447,6 +1459,9 @@ class ProjectImporter(private val state: State) {
                 speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                 rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                 seconds = e.seconds
+                size = e.size
+                direction = e.direction
+                nShot = e.nShot
                 this.uuid = uuid
             }
             uuid to Unit

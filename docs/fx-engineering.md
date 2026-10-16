@@ -610,6 +610,71 @@ How effect output combines with fixture's base value:
 | `MAX` | Maximum of both | Ensure minimums |
 | `MIN` | Minimum of both | Limit maximums |
 
+### Size, direction and N-shot (effects plan session 1)
+
+Three fields of every running effect, edited in place (they are `FxDynamics` fields, so an edit
+keeps the phase), stored on the four effect homes — a live instance, `look_effects`,
+`cue_ad_hoc_effects` and an effect palette (`template_effects`) — and carried by `LookEffectSpec`,
+`EffectEntry` and `LookEffectSettings` between them, so Record and Include keep them. They sync
+from `formatVersion` 30 (`docs/sync-engineering.md` §"Version 30"). The desk owns every rule (the
+effects plan's P2); the editor only writes the three fields.
+
+- **Size** (D2), 0–1: how much of the effect reaches the stage over what is underneath. It is a
+  **weight applied after the blend**, per channel (P3): `out = before + (blended − before) × w`,
+  where `before` is what the property already holds this pass — the reset baseline and any
+  lower-priority effect already applied — and `w = size × envelope` (`FxInstance.weight`), clamped
+  to 0–1. A Replace dimmer at 50 % therefore sits halfway between the level underneath and the
+  effect, never at half the effect's raw value; an Around movement (`ADDITIVE` about 128) has its
+  offset scaled, so a circle at 50 % has half its radius about the position underneath; a colour is
+  weighed channel by channel, white, amber and UV included. `FxTarget.applyValueToFixture` takes the
+  weight and `weigh` is the one formula. A **setting** is discrete — a slot has no halfway — so it
+  takes the effect's value from half weight up and holds what is underneath below (`weighDiscrete`).
+  At weight 0 nothing is written. A size outside 0–1 is refused at every write boundary
+  (`EffectSpecCoercion.Strict.sizeProblem`); a stored one is clamped with a warn. Size stops at
+  100 % (`FU-FX-SIZE-OVER-100`).
+- **The envelope** is `FxInstance.intensityMultiplier`, the runtime factor of the weight a fade
+  moves — the effects plan's session 4 (§3.5), and session 5's stack size multiplies in beside it.
+  It **no longer scales the effect's raw output**: `FxOutput.scaled()` is gone, and with it the
+  scaling that dropped an `OVERRIDE` effect to 0. Nothing in session 1 moves it from 1; it is never
+  stored and never recorded.
+- **Direction** (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, applied to each member's phase after the
+  spread (§3.3 step 6, `EffectDirection.apply`): Backward is `1 − p`, kept inside `[0, 1)` so an
+  effect indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on
+  even cycles and Backward on odd ones, counted on the member's own clock (its offset taken off). It
+  reaches every phase an effect reads; a **stateful** effect (`calculateStateful`) reads no phase,
+  so direction does nothing to it. The built-ins keep their shapes (P6): Ramp Down and the sweeps'
+  `pingPong` stay, and no stored effect changes meaning.
+- **N-shot** (D9): `nShot`, at least 1, null for forever. The count runs on the effect's clock from
+  its first pass with a count — a master's tick (`FxInstance.nShotStartTick`) for a beat effect, the
+  scaled accumulator (`nShotStartScaledMs`) for a wall-clock one — so a count given to a running
+  effect runs from then, and its first cycle starts at the top whatever the master's bar. A member
+  runs while its own clock, the effect's less its distribution offset, is in `[0, N)`: it holds what
+  is underneath before its offset comes round and after its own N, so a one-shot chase ripples in
+  and out rather than showing a tail at the start. The phase functions answer `NaN` for a holding
+  member (`FxInstance.isHolding`) and the engine applies nothing for it. The effect is **spent** once
+  the clock has run N cycles past the largest member offset — some member's phase was computed on
+  the pass and none has runs left (`nShotPending` / `nShotEvaluated`, tick-loop owned) — and
+  `FxEngine.finishNShots` ends it after the pass's frame is out: removed, which resets what it alone
+  covered, **unless a programmer layer spawned it**, which is kept `spent`, painting nothing, because
+  the layer's recook would otherwise spawn it afresh and fire it again on the next unrelated
+  programmer write; the layer's release removes it. A new count (`updateEffect`'s `newNShot`, or
+  `clearNShot` for forever) re-anchors from the next pass and wakes a spent instance. An effect that
+  is **held** — Blind, a stomp, the programmer's value — still computes its phases, so its count runs
+  on while it is held, as its clock does; a **paused** one is not processed and does not finish. An
+  expansion with no members evaluates nothing, so a group emptied by a reload does not end an
+  effect.
+- **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `size`, `direction` and `nShot`;
+  `PUT /fx/{id}` and `updateFx` take all three with null meaning keep, plus `runForever: true` to
+  clear a count (beside an `nShot`, refused). `EffectDto` (and the group and indirect DTOs) reports
+  `size`, `direction`, `nShot` and `spent`; `programmer.keyStack`'s effect layers report `size` and
+  `direction`. The MCP effect schemas take the three (`AiToolSchemas.putEffectDynamics`, parsed by
+  `AiTools.parseEffectDynamics`), and `describe_rig` and `get_current_state` say them where they are
+  not the default.
+- **`KeyStackLayer.onStage` weighs it**: an effect weighted to nothing (a 0 % size, a spent N-shot)
+  is not on stage, and only a **full-weight** `OVERRIDE` covers the layers below it — under full
+  size it is a mix with what is underneath, so both are on stage (a setting covers from half weight
+  up, as it writes).
+
 ### What the UI calls them: *Around* and *Within*
 
 The live effect editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows the operator
@@ -812,7 +877,7 @@ lock-free.
 
 The per-instance parameters that request threads may change while the tick loops read them —
 `isRunning`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `elementMode`,
-`elementFilter` — live in one immutable `FxDynamics` value behind a single atomic reference
+`elementFilter`, and since the effects plan's session 1 `size`, `direction` and `nShot` — live in one immutable `FxDynamics` value behind a single atomic reference
 (`FxInstance.dynamics`), not in individual fields. A tick pass reads the snapshot once per
 effect and works from it throughout (the member phase functions *require* it as a parameter),
 so a concurrent edit lands wholly on one pass or the next, never half-way through; writers
@@ -820,8 +885,10 @@ replace the whole value atomically, so `updateEffect`'s multi-field changes are 
 The cell is shared across `updateEffect`'s instance swap, which is what makes a pause/resume
 racing a swap unlosable. Everything else on `FxInstance` is either immutable, written only
 before the instance is published to the engine (`timingSource`), an independent `@Volatile`
-scalar with no cross-field coupling (`intensityMultiplier`, `priority`, the master slots,
-`accumulatedScaledMs`), or tick-written diagnostics (`lastPhase`, stored once per pass).
+scalar with no cross-field coupling (`intensityMultiplier` — the envelope, §"Size, direction and
+N-shot" — `priority`, the master slots, `accumulatedScaledMs`, `spent`), tick-loop-owned plain fields
+(the N-shot anchors and per-pass flags), or tick-written diagnostics (`lastPhase`, stored once per
+pass).
 
 Anything that persists or reports several dynamics fields together (Record, programmer
 capture, cue capture) must also read them from one snapshot — the `!= default → else null`
@@ -851,6 +918,13 @@ memberPhase = (remappedClock + phaseOffset - distOffset) % 1.0
 
 The scaling to `(slots - 1) / slots` ensures the sweep reaches the last element without
 wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0).
+
+Then, on that phase, the effect's **direction** and **N-shot** (§"Size, direction and N-shot"): a
+member outside its runs answers `NaN` and paints nothing, and Backward and Bounce read the phase
+backward on the member's own cycles. For an N-shot the clock is counted from the effect's start
+rather than the master's tick 0. A forever effect's phase is exactly what it was — the clock is
+still split into whole cycles and a fraction in integer arithmetic — and the whole-target form
+(`calculatePhase`) is the same function at offset 0.
 
 ### EffectContext
 
@@ -1281,7 +1355,9 @@ replacement, so a tick pass never observes half of an update. `speedMasterUuid` 
 convention, and to return an effect to the default, send master 1's uuid (master 1 always exists
 and behaves identically to the null default). `seconds` moves the effect between *Seconds* and a
 master — see [Seconds](#seconds--an-effects-own-cycle-venue-visit-plan-d7) — and is the only way to
-put a wall-clock effect back to unscaled.
+put a wall-clock effect back to unscaled. `size`, `direction` and `nShot` are dynamics fields, edited
+in place with the phase kept; `runForever: true` clears a count, which a null `nShot` (no change)
+cannot say. See §"Size, direction and N-shot".
 
 ## WebSocket Messages
 

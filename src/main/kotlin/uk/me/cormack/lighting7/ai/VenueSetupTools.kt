@@ -503,6 +503,9 @@ internal class VenueSetupTools(private val state: State) {
                     speedMasterUuid = master(e.speedMasterUuid, by)
                     rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
                     seconds = e.seconds
+                    size = e.size
+                    direction = e.direction
+                    nShot = e.nShot
                     sortOrder = e.sortOrder
                 }
             }
@@ -556,6 +559,9 @@ internal class VenueSetupTools(private val state: State) {
                     speedMasterUuid = master(e.speedMasterUuid, by)
                     rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
                     seconds = e.seconds
+                    size = e.size
+                    direction = e.direction
+                    nShot = e.nShot
                 }
             }
             templateMap[t.id.value] = copy
@@ -651,6 +657,9 @@ internal class VenueSetupTools(private val state: State) {
                         speedMasterUuid = master(e.speedMasterUuid, by)
                         rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
                         seconds = e.seconds
+                        size = e.size
+                        direction = e.direction
+                        nShot = e.nShot
                     }
                 }
                 c.propertyAssignments.forEach { a ->

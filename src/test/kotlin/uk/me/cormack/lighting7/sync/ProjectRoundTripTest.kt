@@ -197,6 +197,37 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * Size, direction and runs (effects plan session 1, formatVersion 30) travel on all three stored
+     * effect shapes, each at the non-default `RichProjectFixture` gives it. Asserted on the export
+     * text for the reason the Seconds test above gives.
+     */
+    @Test
+    fun `effect size, direction and runs export on every stored shape`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun <T> docs(folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                    .map { canonicalDecode(serializer, Files.readString(it)) }
+            }
+
+        val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+            .single { it.name == "warm-pulse" }.effects.single()
+        assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.size, lookEffect.direction, lookEffect.nShot))
+        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+        assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.size, templateEffect.direction, templateEffect.nShot))
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.size, adHoc.direction, adHoc.nShot))
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 30, "size, direction and runs sync from v30")
+    }
+
+    /**
      * A paired dimmer's other lanterns travel inside their patch's document, in order, with the
      * rigging named by uuid. The byte-for-byte test proves the importer keeps what the exporter
      * writes; this pins what the exporter writes — and that a patch with none carries no key.

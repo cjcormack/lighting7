@@ -548,6 +548,9 @@ class ProvenanceService internal constructor(
      * is running, but it is not painting there, so reporting it would name a winner the operator
      * cannot see. Skipping per key rather than per instance is what lets a lower-priority effect on
      * the same key be reported instead, which is the honest answer when one exists.
+     *
+     * An effect weighted to nothing — a 0 % size, or a programmer layer's spent N-shot (effects plan
+     * D2, D9) — is skipped for the same reason, as [keyStack] reports it not on stage.
      */
     private fun highestPriorityEffectByKey(
         include: (FxInstance) -> Boolean = { true },
@@ -555,6 +558,7 @@ class ProvenanceService internal constructor(
         val effectByKey = HashMap<Pair<String, String>, FxInstance>()
         for (effect in activeEffects()) {
             if (!effect.isRunning) continue
+            if (effect.spent || effect.weight(effect.dynamics) <= 0.0) continue
             if (!include(effect)) continue
             val propertyName = effect.target.propertyName
             for (fixtureKey in coverageKeys(effect)) {
@@ -629,8 +633,9 @@ class ProvenanceService internal constructor(
      * - the base is [LayerResolver.baselineFor].
      *
      * [KeyStackLayer.onStage] walks the output order — park, effects by priority, the programmer,
-     * the cue, the base — with an on-stage OVERRIDE effect, a programmer value, a cue value or a
-     * full park covering everything below it. The layers are then *listed* in the plan's order,
+     * the cue, the base — with an on-stage full-weight OVERRIDE effect, a programmer value, a cue
+     * value or a full park covering everything below it. An effect weighted to nothing (a 0 % Size, a
+     * spent N-shot) is not on stage; one under full weight is, beside what it mixes with. The layers are then *listed* in the plan's order,
      * which puts the programmer's own effects above its slots and the others below: on a key the
      * programmer holds, those are exactly the ones it is holding back.
      *
@@ -751,9 +756,16 @@ class ProvenanceService internal constructor(
         var covered = fullyParked
         val effectOnStage = HashMap<FxInstance, Boolean>()
         for (effect in onKey) {
-            val on = !covered && effect.isRunning && heldBack[effect] == null
+            // Size (effects plan P3): an effect weighted to nothing — a 0 % Size, a spent N-shot —
+            // puts nothing on stage, and one under full weight is a mix with what is underneath, so
+            // only a full-weight OVERRIDE covers the layers below it. A setting has no mix: it is on
+            // stage, and covers, from half weight up, as its target writes it ([weighDiscrete]).
+            val weight = if (effect.spent) 0.0 else effect.weight(effect.dynamics)
+            val discrete = effect.target is SettingTarget
+            val paints = if (discrete) weighDiscrete(weight) else weight > 0.0
+            val on = !covered && effect.isRunning && heldBack[effect] == null && paints
             effectOnStage[effect] = on
-            if (on && effect.blendMode == BlendMode.OVERRIDE) covered = true
+            if (on && effect.blendMode == BlendMode.OVERRIDE && (discrete || weight >= 1.0)) covered = true
         }
         // Within the programmer, recency arbitrates across granularities (`ProgrammerStore.Slot.seq`):
         // a sideband slot newer than the top property slot is what its channel carries. On a

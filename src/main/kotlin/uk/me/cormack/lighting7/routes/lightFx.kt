@@ -54,6 +54,7 @@ internal fun Route.routeApiRestFx(state: State) {
                 request.stepTiming?.let {
                     instance.stepTiming = it
                 }
+                instance.applyRequestedDynamics(request.size, request.direction, request.nShot)
 
                 // Propagate timing source and identity from the effect's registration
                 val registration = state.show.fxRegistry.getRegistration(request.effectType)
@@ -189,6 +190,12 @@ data class AddEffectRequest(
      * follows no master. Refused beside either master.
      */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1; refused outside it. */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): stop after this many cycles, at least 1; absent runs forever. */
+    val nShot: Int? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
@@ -224,7 +231,7 @@ data class IndirectEffectDto(
     val stepTiming: Boolean = false,
     /** True when this effect sits in the programmer's reserved priority band. */
     val programmerOwned: Boolean = false,
-    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    /** The envelope — see [EffectDto.intensityMultiplier]. */
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
@@ -232,6 +239,11 @@ data class IndirectEffectDto(
     val rateSpeedMasterUuid: String? = null,
     /** D7's reading — see [EffectDto.seconds]. */
     val seconds: Boolean = false,
+    /** See [EffectDto.size], [EffectDto.direction], [EffectDto.nShot] and [EffectDto.spent]. */
+    val size: Double = 1.0,
+    val direction: String = "FORWARD",
+    val nShot: Int? = null,
+    val spent: Boolean = false,
 )
 
 @Serializable
@@ -265,6 +277,17 @@ data class UpdateEffectRequest(
      * runs on, so it is a swap: the id is kept but the phase restarts.
      */
     val seconds: Boolean? = null,
+    /** Size (effects plan D2), 0–1; null = no change. Edited in place, phase kept. */
+    val size: Double? = null,
+    /** Direction (D5); null = no change. Edited in place. */
+    val direction: String? = null,
+    /**
+     * Runs (D9), at least 1; null = no change, so [runForever] is how an N-shot goes back to
+     * running forever. A new count runs from the next pass, and wakes a spent effect.
+     */
+    val nShot: Int? = null,
+    /** True clears [nShot]: the effect runs forever. Refused beside an [nShot]. */
+    val runForever: Boolean = false,
 )
 
 
@@ -320,6 +343,12 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
         val newElementFilter = request.elementFilter?.let { EffectSpecCoercion.Strict.elementFilter(it) }
         val newSpeedMaster = requireSpeedMasterUuid(request.speedMasterUuid)
         val newRateSpeedMaster = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
+        val newSize = request.size?.let { EffectSpecCoercion.Strict.size(it) }
+        val newDirection = request.direction?.let { EffectSpecCoercion.Strict.direction(it) }
+        val newNShot = EffectSpecCoercion.Strict.nShot(request.nShot)
+        if (request.runForever && newNShot != null) {
+            return EffectUpdateOutcome.Refused("nShot and runForever are two answers to one question — send one")
+        }
         // Only when the client actually renamed the type; a parameters-only edit leaves the
         // instance's registration id — and the clock it runs on — alone. A type swap takes the new
         // type's timing source with it, as the add path does, or a beat effect swapped for a
@@ -358,11 +387,27 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             newRegistrationId = registration?.id,
             newTimingSource = newTimingSource,
             newSeconds = newSeconds,
+            newSize = newSize,
+            newDirection = newDirection,
+            newNShot = newNShot,
+            clearNShot = request.runForever,
         )
         if (updated != null) EffectUpdateOutcome.Updated(updated) else EffectUpdateOutcome.NotFound
     } catch (e: Exception) {
         EffectUpdateOutcome.Refused(e.message ?: "Failed to update effect")
     }
+}
+
+/**
+ * A new effect's Size, Direction and Runs (effects plan D2, D5, D9) from a request, strictly: a size
+ * outside 0–1, an unknown direction or a count below one throws for the add route's 400. Shared by
+ * the fixture and group add routes, as [markProgrammerOwned] is.
+ */
+internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String, nShot: Int?) {
+    val checkedSize = EffectSpecCoercion.Strict.size(size)
+    val checkedDirection = EffectSpecCoercion.Strict.direction(direction)
+    val checkedNShot = EffectSpecCoercion.Strict.nShot(nShot)
+    updateDynamics { it.copy(size = checkedSize, direction = checkedDirection, nShot = checkedNShot) }
 }
 
 /**
@@ -406,6 +451,10 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     speedMasterUuid = reportedSpeedMasterUuid,
     rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
     seconds = onSeconds,
+    size = dynamics.size,
+    direction = dynamics.direction.name,
+    nShot = dynamics.nShot,
+    spent = spent,
 )
 
 private fun createTargetFromRequest(

@@ -60,8 +60,22 @@ data class EffectDto(
     val timingSource: String = "BEAT",
     /** True when this effect sits in the programmer's reserved priority band. */
     val programmerOwned: Boolean = false,
-    /** Fade envelope in `[0, 1]`; the effect's output is scaled by this before blending. */
+    /**
+     * The envelope in `[0, 1]` ([FxInstance.intensityMultiplier]): the runtime factor of the effect's
+     * weight a fade moves, beside [size] (effects plan P3). 1 until session 4's fades move it.
+     */
     val intensityMultiplier: Double = 1.0,
+    /** Size (effects plan D2), 0–1: how much of the effect reaches the stage over what is underneath. */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): the cycles an N-shot runs before it stops; null runs forever. */
+    val nShot: Int? = null,
+    /**
+     * An N-shot that has run its count and is kept, painting nothing, until its programmer layer
+     * goes ([FxInstance.spent]). Any other spent N-shot has already left the list.
+     */
+    val spent: Boolean = false,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
     /** 1-based display index of that master — what the FX-sheet chip renders. */
@@ -121,6 +135,7 @@ internal fun FxInstance.toEffectDto(
     isMultiElementExpanded: Boolean,
 ): EffectDto {
     val showDistribution = isGroupEffect || isMultiElementExpanded
+    val dyn = dynamics
     return EffectDto(
         id = id,
         effectType = effectTypeId,
@@ -146,6 +161,10 @@ internal fun FxInstance.toEffectDto(
         timingSource = timingSource.name,
         programmerOwned = FxEngine.isProgrammerFxPriority(priority),
         intensityMultiplier = intensityMultiplier,
+        size = dyn.size,
+        direction = dyn.direction.name,
+        nShot = dyn.nShot,
+        spent = spent,
         speedMasterUuid = reportedSpeedMasterUuid,
         speedMasterIndex = masterStates.getOrNull(speedMasterSlot)?.index ?: 1,
         rateSpeedMasterUuid = reportedRateSpeedMasterUuid,

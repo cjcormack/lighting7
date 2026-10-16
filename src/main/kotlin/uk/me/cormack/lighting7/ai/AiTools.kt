@@ -557,6 +557,11 @@ class AiTools(private val state: State) {
                             put("beatDivision", effect.timing.beatDivision)
                             // D7: the division is seconds and no master is followed.
                             if (effect.onSeconds) put("seconds", true)
+                            // Effects plan D2, D5, D9 — each said only where it is not the default.
+                            val dyn = effect.dynamics
+                            if (dyn.size != 1.0) put("size", dyn.size)
+                            if (dyn.direction != EffectDirection.FORWARD) put("direction", dyn.direction.name)
+                            dyn.nShot?.let { put("nShot", it) }
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             effect.cueId?.let { put("cueId", it) }
@@ -1972,6 +1977,9 @@ class AiTools(private val state: State) {
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
                 seconds = spec.seconds,
+                size = spec.size,
+                direction = spec.direction,
+                nShot = spec.nShot,
             )
         }
         // Said here rather than left to the write boundary only because the model reads this
@@ -2024,6 +2032,7 @@ class AiTools(private val state: State) {
      */
     private fun parseLookEffect(obj: JsonObject, at: String): LookEffectSpec {
         val timing = parseEffectTiming(obj, at)
+        val dynamics = parseEffectDynamics(obj, at)
         val spec = LookEffectSpec(
             effectType = obj.requiredString("effectType", at),
             category = obj.requiredString("category", at),
@@ -2039,12 +2048,18 @@ class AiTools(private val state: State) {
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
             seconds = timing.seconds,
+            size = dynamics.size,
+            direction = dynamics.direction,
+            nShot = dynamics.nShot,
         )
         EffectSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
             distribution = spec.distribution,
             elementMode = spec.elementMode,
             elementFilter = spec.elementFilter,
+            direction = spec.direction,
+            size = spec.size,
+            nShot = spec.nShot,
         )?.let { throw IllegalArgumentException(it) }
         return spec
     }
@@ -2058,6 +2073,7 @@ class AiTools(private val state: State) {
      */
     private fun parseAdHocEffectFromJson(obj: JsonObject, at: String): CueAdHocEffectDto {
         val timing = parseEffectTiming(obj, at)
+        val dynamics = parseEffectDynamics(obj, at)
         return CueAdHocEffectDto(
             targetType = obj.requiredString("targetType", at),
             targetKey = obj.requiredString("targetKey", at),
@@ -2075,7 +2091,37 @@ class AiTools(private val state: State) {
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
             seconds = timing.seconds,
+            size = dynamics.size,
+            direction = dynamics.direction,
+            nShot = dynamics.nShot,
         )
+    }
+
+    /** Size, Direction and Runs as a tool call gives them (effects plan D2, D5, D9), defaults filled in. */
+    private data class ParsedEffectDynamics(val size: Double, val direction: String, val nShot: Int?)
+
+    /**
+     * The three out of one effect in a tool call, each refused by name when malformed — a size outside
+     * 0–1, an unknown direction, a count below one — so the model is told which and can retry.
+     */
+    private fun parseEffectDynamics(obj: JsonObject, at: String): ParsedEffectDynamics {
+        val size = obj.present("size")?.let {
+            (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
+                ?: throw IllegalArgumentException("$at: 'size' must be a number from 0 to 1")
+        } ?: 1.0
+        EffectSpecCoercion.Strict.sizeProblem(size)?.let { throw IllegalArgumentException("$at: $it") }
+        val direction = obj.present("direction")?.let {
+            val raw = (it as? JsonPrimitive)?.contentOrNull
+                ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE")
+            EffectSpecCoercion.Names.direction(raw)?.name
+                ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE, got '$raw'")
+        } ?: EffectDirection.FORWARD.name
+        val nShot = obj.present("nShot")?.let {
+            (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
+                ?: throw IllegalArgumentException("$at: 'nShot' must be a whole number of cycles")
+        }
+        nShot?.let { n -> EffectSpecCoercion.Strict.nShotProblem(n)?.let { throw IllegalArgumentException("$at: $it") } }
+        return ParsedEffectDynamics(size, direction, nShot)
     }
 
     /** An effect's timing as a tool call gives it, with venue-visit plan D16's defaults filled in. */
@@ -2147,6 +2193,9 @@ class AiTools(private val state: State) {
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
                 seconds = spec.seconds,
+                size = spec.size,
+                direction = spec.direction,
+                nShot = spec.nShot,
                 sortOrder = index,
             )
         }

@@ -614,6 +614,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.4
+        direction = "BACKWARD"
+        nShot = 2
         sortOrder = 0
     }
 
@@ -661,6 +666,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.75
+        direction = "BOUNCE"
+        nShot = 3
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -773,6 +783,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.6
+        direction = "BACKWARD"
+        nShot = 1
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.

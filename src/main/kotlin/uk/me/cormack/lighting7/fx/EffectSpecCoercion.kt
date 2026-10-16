@@ -38,6 +38,14 @@ object EffectSpecCoercion {
 
         fun distribution(raw: String): DistributionStrategy? = DistributionStrategy.byName(raw)
 
+        fun direction(raw: String): EffectDirection? = EffectDirection.byName(raw.trim())
+
+        /**
+         * [raw] as the name a row stores — `"backward"` as `BACKWARD` — for a value a write boundary
+         * has already checked with [Strict.problem]; an unknown one is passed through unchanged.
+         */
+        fun canonicalDirection(raw: String): String = direction(raw)?.name ?: raw
+
         private fun <E : Enum<E>> enumByName(entries: List<E>, raw: String): E? =
             entries.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) }
     }
@@ -68,6 +76,9 @@ object EffectSpecCoercion {
         fun distribution(raw: String): DistributionStrategy =
             Names.distribution(raw) ?: fail("distributionStrategy", raw, DistributionStrategy.availableStrategies)
 
+        fun direction(raw: String): EffectDirection =
+            Names.direction(raw) ?: fail("direction", raw, EffectDirection.entries.map { it.name })
+
         /**
          * The message the four functions above would throw for the first unrecognised value, or
          * null when every value supplied parses. **A null argument is "absent"** and takes no
@@ -83,6 +94,9 @@ object EffectSpecCoercion {
             distribution: String? = null,
             elementMode: String? = null,
             elementFilter: String? = null,
+            direction: String? = null,
+            size: Double? = null,
+            nShot: Int? = null,
         ): String? {
             blendMode?.let { raw ->
                 Names.blendMode(raw) ?: return message("blendMode", raw, BlendMode.entries.map { it.name })
@@ -98,8 +112,26 @@ object EffectSpecCoercion {
                 Names.elementFilter(raw)
                     ?: return message("elementFilter", raw, ElementFilter.entries.map { it.name })
             }
+            direction?.let { raw ->
+                Names.direction(raw) ?: return message("direction", raw, EffectDirection.entries.map { it.name })
+            }
+            size?.let { sizeProblem(it)?.let { problem -> return problem } }
+            nShot?.let { nShotProblem(it)?.let { problem -> return problem } }
             return null
         }
+
+        /** Why [size] is not a Size (effects plan D2: 0.0–1.0 — `FU-FX-SIZE-OVER-100`), or null. */
+        fun sizeProblem(size: Double): String? =
+            if (size.isNaN() || size < 0.0 || size > 1.0) "size must be between 0 and 1 (0–100 %), got $size" else null
+
+        /** Why [nShot] is not a count of runs (D9: at least one), or null. */
+        fun nShotProblem(nShot: Int): String? =
+            if (nShot < 1) "nShot must be at least 1 (or absent to run forever), got $nShot" else null
+
+        /** [sizeProblem] / [nShotProblem] as the [IllegalArgumentException] the apply routes answer 400 with. */
+        fun size(size: Double): Double = size.also { v -> sizeProblem(v)?.let { throw IllegalArgumentException(it) } }
+
+        fun nShot(nShot: Int?): Int? = nShot?.also { v -> nShotProblem(v)?.let { throw IllegalArgumentException(it) } }
 
         private fun fail(field: String, raw: String, valid: List<String>): Nothing =
             throw IllegalArgumentException(message(field, raw, valid))
@@ -130,6 +162,23 @@ object EffectSpecCoercion {
 
         fun distribution(raw: String?, context: () -> String): DistributionStrategy =
             resolve(raw, context, "distributionStrategy", DistributionStrategy.LINEAR, Names::distribution)
+
+        fun direction(raw: String?, context: () -> String): EffectDirection =
+            resolve(raw, context, "direction", EffectDirection.FORWARD, Names::direction)
+
+        /** A stored Size outside 0–1 (hand-edited, or a newer desk's oversize) clamps, with a warn. */
+        fun size(raw: Double, context: () -> String): Double {
+            if (raw in 0.0..1.0) return raw
+            logger.warn("{}: size {} outside 0–1 — clamping", context(), raw)
+            return if (raw.isNaN()) 1.0 else raw.coerceIn(0.0, 1.0)
+        }
+
+        /** A stored count below one runs forever, with a warn. */
+        fun nShot(raw: Int?, context: () -> String): Int? {
+            if (raw == null || raw >= 1) return raw
+            logger.warn("{}: nShot {} below 1 — running forever", context(), raw)
+            return null
+        }
 
         /**
          * **Null is absent; blank is a fault.** An optional field left unset is nobody's mistake
