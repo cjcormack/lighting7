@@ -18,6 +18,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.and
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
@@ -562,6 +563,11 @@ class AiTools(private val state: State) {
                             if (dyn.size != 1.0) put("size", dyn.size)
                             if (dyn.direction != EffectDirection.FORWARD) put("direction", dyn.direction.name)
                             dyn.nShot?.let { put("nShot", it) }
+                            // D4's shape, likewise.
+                            if (dyn.spread != 1.0) put("spread", dyn.spread)
+                            if (dyn.wings != 1) put("wings", dyn.wings)
+                            if (dyn.blocks != 1) put("blocks", dyn.blocks)
+                            if (dyn.groups != 0) put("groups", dyn.groups)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             effect.cueId?.let { put("cueId", it) }
@@ -1980,6 +1986,10 @@ class AiTools(private val state: State) {
                 size = spec.size,
                 direction = spec.direction,
                 nShot = spec.nShot,
+                spread = spec.spread,
+                wings = spec.wings,
+                blocks = spec.blocks,
+                groups = spec.groups,
             )
         }
         // Said here rather than left to the write boundary only because the model reads this
@@ -2051,6 +2061,10 @@ class AiTools(private val state: State) {
             size = dynamics.size,
             direction = dynamics.direction,
             nShot = dynamics.nShot,
+            spread = dynamics.spread,
+            wings = dynamics.wings,
+            blocks = dynamics.blocks,
+            groups = dynamics.groups,
         )
         EffectSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
@@ -2060,6 +2074,10 @@ class AiTools(private val state: State) {
             direction = spec.direction,
             size = spec.size,
             nShot = spec.nShot,
+            spread = spec.spread,
+            wings = spec.wings,
+            blocks = spec.blocks,
+            groups = spec.groups,
         )?.let { throw IllegalArgumentException(it) }
         return spec
     }
@@ -2094,15 +2112,32 @@ class AiTools(private val state: State) {
             size = dynamics.size,
             direction = dynamics.direction,
             nShot = dynamics.nShot,
+            spread = dynamics.spread,
+            wings = dynamics.wings,
+            blocks = dynamics.blocks,
+            groups = dynamics.groups,
         )
     }
 
-    /** Size, Direction and Runs as a tool call gives them (effects plan D2, D5, D9), defaults filled in. */
-    private data class ParsedEffectDynamics(val size: Double, val direction: String, val nShot: Int?)
+    /**
+     * Size, Direction, Runs and the spread's shape as a tool call gives them (effects plan D2, D5, D9,
+     * D4), defaults filled in.
+     */
+    private data class ParsedEffectDynamics(
+        val size: Double,
+        val direction: String,
+        val nShot: Int?,
+        val spread: Double = 1.0,
+        val wings: Int = 1,
+        val blocks: Int = 1,
+        val groups: Int = 0,
+    )
 
     /**
-     * The three out of one effect in a tool call, each refused by name when malformed — a size outside
-     * 0–1, an unknown direction, a count below one — so the model is told which and can retry.
+     * Those out of one effect in a tool call, each refused by name when malformed — a size outside
+     * 0–1, an unknown direction, a count below one, a spread outside 0–2 or a count of wings, blocks
+     * or groups out of range — so the model is told which and can retry. Wings under a mirrored order
+     * are refused by the spec's own check ([EffectSpecCoercion.Strict.problem]), which has the order.
      */
     private fun parseEffectDynamics(obj: JsonObject, at: String): ParsedEffectDynamics {
         val size = obj.present("size")?.let {
@@ -2121,7 +2156,20 @@ class AiTools(private val state: State) {
                 ?: throw IllegalArgumentException("$at: 'nShot' must be a whole number of cycles")
         }
         nShot?.let { n -> EffectSpecCoercion.Strict.nShotProblem(n)?.let { throw IllegalArgumentException("$at: $it") } }
-        return ParsedEffectDynamics(size, direction, nShot)
+        val spread = obj.present("spread")?.let {
+            (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
+                ?: throw IllegalArgumentException("$at: 'spread' must be a number from 0 to 2")
+        } ?: 1.0
+        fun count(field: String, default: Int): Int = obj.present(field)?.let {
+            (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
+                ?: throw IllegalArgumentException("$at: '$field' must be a whole number")
+        } ?: default
+        val wings = count("wings", 1)
+        val blocks = count("blocks", 1)
+        val groups = count("groups", 0)
+        EffectSpecCoercion.Strict.spreadProblem(spread, wings, blocks, groups, DistributionStrategy.LINEAR)
+            ?.let { throw IllegalArgumentException("$at: $it") }
+        return ParsedEffectDynamics(size, direction, nShot, spread, wings, blocks, groups)
     }
 
     /** An effect's timing as a tool call gives it, with venue-visit plan D16's defaults filled in. */
@@ -2196,6 +2244,10 @@ class AiTools(private val state: State) {
                 size = spec.size,
                 direction = spec.direction,
                 nShot = spec.nShot,
+                spread = spec.spread,
+                wings = spec.wings,
+                blocks = spec.blocks,
+                groups = spec.groups,
                 sortOrder = index,
             )
         }

@@ -54,7 +54,10 @@ internal fun Route.routeApiRestFx(state: State) {
                 request.stepTiming?.let {
                     instance.stepTiming = it
                 }
-                instance.applyRequestedDynamics(request.size, request.direction, request.nShot)
+                instance.applyRequestedDynamics(
+                    request.size, request.direction, request.nShot,
+                    SpreadShape(request.spread, request.wings, request.blocks, request.groups),
+                )
 
                 // Propagate timing source and identity from the effect's registration
                 val registration = state.show.fxRegistry.getRegistration(request.effectType)
@@ -197,6 +200,14 @@ data class AddEffectRequest(
     /** Runs (D9): stop after this many cycles, at least 1; absent runs forever. */
     val nShot: Int? = null,
     /**
+     * The spread's shape (effects plan D4): Spread 0–2, Wings and Blocks at least 1, Groups 0 (off) or
+     * more. Refused out of range, and Wings above 1 under a mirrored order (Centre out, Edges in, Split).
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
+    /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
      * effects compose *on top of* programmer values instead of being suppressed by them,
@@ -245,6 +256,11 @@ data class IndirectEffectDto(
     val nShot: Int? = null,
     val spent: Boolean = false,
 )
+    /** See [EffectDto.spread] and its three siblings. */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 
 @Serializable
 data class UpdateEffectRequest(
@@ -288,6 +304,15 @@ data class UpdateEffectRequest(
     val nShot: Int? = null,
     /** True clears [nShot]: the effect runs forever. Refused beside an [nShot]. */
     val runForever: Boolean = false,
+    /**
+     * The spread's shape (effects plan D4); each null = no change. Groups 0 turns it off. Edited in
+     * place like the Order, phase kept. Checked against the order the effect will run under — this
+     * request's [distributionStrategy] or the one it has: Wings above 1 under a mirrored one is refused.
+     */
+    val spread: Double? = null,
+    val wings: Int? = null,
+    val blocks: Int? = null,
+    val groups: Int? = null,
 )
 
 
@@ -349,6 +374,18 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
         if (request.runForever && newNShot != null) {
             return EffectUpdateOutcome.Refused("nShot and runForever are two answers to one question — send one")
         }
+        // The spread's shape (D4), checked as the effect will run it: this request's Order or the one
+        // it has, and the wings it is sent or has — so moving a winged effect onto Centre out is
+        // refused as surely as sending wings to one.
+        if (request.spread != null || request.wings != null || request.blocks != null || request.groups != null ||
+            newDistribution != null
+        ) {
+            val dyn = existing.dynamics
+            val order = newDistribution ?: dyn.distributionStrategy
+            val wings = request.wings ?: dyn.wings
+            EffectSpecCoercion.Strict.spreadProblem(request.spread, wings, request.blocks, request.groups, order)
+                ?.let { return EffectUpdateOutcome.Refused(it) }
+        }
         // Only when the client actually renamed the type; a parameters-only edit leaves the
         // instance's registration id — and the clock it runs on — alone. A type swap takes the new
         // type's timing source with it, as the add path does, or a beat effect swapped for a
@@ -391,6 +428,10 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             newDirection = newDirection,
             newNShot = newNShot,
             clearNShot = request.runForever,
+            newSpread = request.spread,
+            newWings = request.wings,
+            newBlocks = request.blocks,
+            newGroups = request.groups,
         )
         if (updated != null) EffectUpdateOutcome.Updated(updated) else EffectUpdateOutcome.NotFound
     } catch (e: Exception) {
@@ -399,15 +440,23 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
 }
 
 /**
- * A new effect's Size, Direction and Runs (effects plan D2, D5, D9) from a request, strictly: a size
- * outside 0–1, an unknown direction or a count below one throws for the add route's 400. Shared by
- * the fixture and group add routes, as [markProgrammerOwned] is.
+ * A new effect's Size, Direction, Runs and spread shape (effects plan D2, D5, D9, D4) from a request,
+ * strictly: a size outside 0–1, an unknown direction, a count below one or a shape out of range (or
+ * wings under a mirrored order — read from the instance, so its Order is set first) throws for the
+ * add route's 400. Shared by the fixture and group add routes, as [markProgrammerOwned] is.
  */
-internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String, nShot: Int?) {
+internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String, nShot: Int?, shape: SpreadShape) {
     val checkedSize = EffectSpecCoercion.Strict.size(size)
     val checkedDirection = EffectSpecCoercion.Strict.direction(direction)
     val checkedNShot = EffectSpecCoercion.Strict.nShot(nShot)
-    updateDynamics { it.copy(size = checkedSize, direction = checkedDirection, nShot = checkedNShot) }
+    val checkedShape = EffectSpecCoercion.Strict.spreadShape(shape, distributionStrategy)
+    updateDynamics {
+        it.copy(
+            size = checkedSize, direction = checkedDirection, nShot = checkedNShot,
+            spread = checkedShape.spread, wings = checkedShape.wings,
+            blocks = checkedShape.blocks, groups = checkedShape.groups,
+        )
+    }
 }
 
 /**
@@ -454,6 +503,10 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     size = dynamics.size,
     direction = dynamics.direction.name,
     nShot = dynamics.nShot,
+    spread = dynamics.spread,
+    wings = dynamics.wings,
+    blocks = dynamics.blocks,
+    groups = dynamics.groups,
     spent = spent,
 )
 

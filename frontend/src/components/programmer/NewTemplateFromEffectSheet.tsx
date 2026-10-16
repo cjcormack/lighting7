@@ -128,6 +128,11 @@ export function NewTemplateFromEffectSheet({
       ...(effect.size != null && effect.size !== 1 ? { size: effect.size } : {}),
       ...(effect.direction != null && effect.direction !== 'FORWARD' ? { direction: effect.direction } : {}),
       ...(effect.nShot != null ? { nShot: effect.nShot } : {}),
+      // And the spread's shape (effects plan D4), likewise.
+      ...(effect.spread != null && effect.spread !== 1 ? { spread: effect.spread } : {}),
+      ...(effect.wings != null && effect.wings !== 1 ? { wings: effect.wings } : {}),
+      ...(effect.blocks != null && effect.blocks !== 1 ? { blocks: effect.blocks } : {}),
+      ...(effect.groups != null && effect.groups !== 0 ? { groups: effect.groups } : {}),
     }
     try {
       const created = await create({ projectId: projectIdNum, name: name.trim(), effect: body }).unwrap()

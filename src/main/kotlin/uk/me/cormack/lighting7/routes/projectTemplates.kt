@@ -558,6 +558,10 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                         size = effect.size
                         direction = effect.direction
                         nShot = effect.nShot
+                        this.spread = effect.spread
+                        this.wings = effect.wings
+                        this.blocks = effect.blocks
+                        this.groups = effect.groups
                     }
                 }
                 CopyTemplateOutcome.Copied(
@@ -1217,6 +1221,10 @@ private fun validateTemplateEffect(
         direction = effect.direction,
         size = effect.size,
         nShot = effect.nShot,
+        spread = effect.spread,
+        wings = effect.wings,
+        blocks = effect.blocks,
+        groups = effect.groups,
     )?.let { return it }
 
     // Rule 5 (D12): a template naming itself would recurse in `createEffectWithTemplates`. The
@@ -1311,6 +1319,10 @@ private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDt
         size = effect.size
         direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
         nShot = effect.nShot
+        this.spread = effect.spread
+        this.wings = effect.wings
+        this.blocks = effect.blocks
+        this.groups = effect.groups
     }
 }
 
@@ -1454,6 +1466,10 @@ internal fun DaoTemplateEffect.toDto(registry: FxRegistry) = TemplateEffectDto(
     size = size,
     direction = direction,
     nShot = nShot,
+    spread = spread,
+    wings = wings,
+    blocks = blocks,
+    groups = groups,
     // The registry is the authority, exactly as it is for `category` — which the write boundary
     // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
     // timing source is a property of the *effect type*, so a column would be a second copy that a

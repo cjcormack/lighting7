@@ -94,6 +94,11 @@ export interface TemplateEffect {
   direction?: EffectDirection
   /** Runs (D9); absent or null runs forever. */
   nShot?: number | null
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * `BEAT` or `WALL_CLOCK` — **resolved server-side on read and ignored on write**, the same
    * contract `TemplateRow.health` has.

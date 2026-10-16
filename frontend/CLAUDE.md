@@ -743,7 +743,20 @@ Release folds to its glyph and the scope line drops the fade.
   blend (every effect, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
   which each head hands back to what is underneath (effects plan D9; a null count is sent as
   `runForever: true`, since the frame's absent `nShot` means keep) — and — on a group or a fixture with
-  heads — step timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
+  heads — step timing, Element mode and the head filter. **The distribution is the *Spread*
+  section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
+  fixture with heads, and always on an effect palette: *Order* (the strategy, worded *Rig · Reverse ·
+  Centre out…* by `lib/spreadShape.ts`'s `ORDER_LABELS`, the stored name unchanged), *Spread* %,
+  *Wings* (hidden under a mirrored Order — Centre out, Edges in, Split — and set back to 1 in the same
+  write when one is chosen, `orderPatch`, since the desk refuses wings there), *Blocks* and *Groups*
+  (0 off), and a row of **phase dials** — eight notional heads on a palette, the effect's own live
+  (`FxScope.headCount`, `spreadHeadCount`: members, or elements as the element mode and head filter
+  narrow them; sixteen dials, then *+n*). Its summary says the non-defaults: *Rig · 50 % · 2 wings*.
+  The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `groups: 0` turning them off. **The
+  dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
+  `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
+  `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
+  so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
   The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
   (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
   a sheet (`FxAddSheet`, whose Done closes it; in a focused Look layer the effect is absorbed into the

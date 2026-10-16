@@ -848,6 +848,16 @@ class FxEngine(
          */
         newNShot: Int? = null,
         clearNShot: Boolean = false,
+        /**
+         * The spread's shape (effects plan D4): Spread 0.0–2.0, Wings and Blocks at least 1, Groups 0
+         * (off) or more; each null = keep. Dynamics fields, edited in place like the Order, phase kept.
+         * The caller has checked them against the Order they will run under (Wings refused under a
+         * mirrored one) — [SpreadShaping] ignores such wings anyway.
+         */
+        newSpread: Double? = null,
+        newWings: Int? = null,
+        newBlocks: Int? = null,
+        newGroups: Int? = null,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
         val nShotChanged = (clearNShot && existing.dynamics.nShot != null) ||
@@ -858,7 +868,8 @@ class FxEngine(
         // tick pass sees either none of this update or all of it, never half.
         if (newPhaseOffset != null || newDistributionStrategy != null || newElementMode != null ||
             newElementFilter != null || newStepTiming != null || newSize != null || newDirection != null ||
-            newNShot != null || clearNShot
+            newNShot != null || clearNShot || newSpread != null || newWings != null || newBlocks != null ||
+            newGroups != null
         ) {
             existing.updateDynamics { dyn ->
                 dyn.copy(
@@ -870,6 +881,10 @@ class FxEngine(
                     size = newSize ?: dyn.size,
                     direction = newDirection ?: dyn.direction,
                     nShot = if (clearNShot) null else newNShot ?: dyn.nShot,
+                    spread = newSpread ?: dyn.spread,
+                    wings = newWings ?: dyn.wings,
+                    blocks = newBlocks ?: dyn.blocks,
+                    groups = newGroups ?: dyn.groups,
                 )
             }
         }
@@ -1842,7 +1857,7 @@ class FxEngine(
         if (uuid == null) FxInstance.NO_RATE_MASTER else speedMasters.slotFor(uuid)
 
     /**
-     * The distribution plans for [expansion] under this pass's strategy — see
+     * The distribution plans for [expansion] under this pass's strategy and spread shape — see
      * [FxInstance.distributionPlans]. Same cache-then-validate shape as [expansionFor], and
      * checked against the *identity* of the expansion the caller already resolved, so the two
      * caches cannot disagree about which generation of the register they describe.
@@ -1854,10 +1869,15 @@ class FxEngine(
     ): FxDistributionPlans {
         val strategy = dyn.distributionStrategy
         val cached = effect.distributionPlans
-        if (cached != null && cached.expansion === expansion && cached.strategy == strategy) {
+        // The shape's four fields compared one by one rather than through `dyn.spreadShape`, which
+        // would allocate on every pass for a cache hit.
+        if (cached != null && cached.expansion === expansion && cached.strategy == strategy &&
+            cached.shape.spread == dyn.spread && cached.shape.wings == dyn.wings &&
+            cached.shape.blocks == dyn.blocks && cached.shape.groups == dyn.groups
+        ) {
             return cached
         }
-        return FxDistributionPlans.build(expansion, strategy).also { effect.distributionPlans = it }
+        return FxDistributionPlans.build(expansion, strategy, dyn.spreadShape).also { effect.distributionPlans = it }
     }
 
     /**

@@ -229,6 +229,49 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * The spread's shape (effects plan session 2, formatVersion 32) travels on all three stored effect
+     * shapes, each at the non-default `RichProjectFixture` gives it (the byte-for-byte round trip
+     * above is what proves the importer keeps it), and a default shape writes no key.
+     */
+    @Test
+    fun `the spread's shape exports on every stored shape and round-trips`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun <T> docs(folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                    .map { canonicalDecode(serializer, Files.readString(it)) }
+            }
+        data class Shape(val spread: Double, val wings: Int, val blocks: Int, val groups: Int)
+
+        val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+            .single { it.name == "warm-pulse" }.effects.single()
+        assertEquals(Shape(0.5, 2, 3, 4), Shape(lookEffect.spread, lookEffect.wings, lookEffect.blocks, lookEffect.groups))
+        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+        assertEquals(
+            Shape(1.5, 3, 2, 2),
+            Shape(templateEffect.spread, templateEffect.wings, templateEffect.blocks, templateEffect.groups),
+        )
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        assertEquals(Shape(0.25, 1, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 32, "the spread's shape syncs from v32")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 32, "and this desk reads it")
+
+        // A default shape writes no key, so a show that shapes nothing exports as before.
+        val lookText = Files.walk(exportDirA.resolve("looks")).use { stream ->
+            stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }.map { Files.readString(it) }
+        }
+        assertTrue(lookText.size > 1, "the fixture has more than the one shaped Look")
+        assertEquals(1, lookText.count { "\"wings\"" in it }, "only the shaped Look carries the keys")
+    }
+
+    /**
      * A paired dimmer's other lanterns travel inside their patch's document, in order, with the
      * rigging named by uuid. The byte-for-byte test proves the importer keeps what the exporter
      * writes; this pins what the exporter writes — and that a patch with none carries no key.

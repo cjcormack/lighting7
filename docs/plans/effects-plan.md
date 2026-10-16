@@ -176,7 +176,7 @@ The plan adds its own:
 | Where | What |
 |---|---|
 | `look_effects`, `cue_ad_hoc_effects`, a palette's effect, `LookEffectSpec`, the programmer's effects | `size` (double, default 1.0), `direction` (`FORWARD \| BACKWARD \| BOUNCE`, default `FORWARD`), `n_shot` (int, nullable) — session 1 |
-| the same | `spread` (double, default 1.0), `wings`, `blocks`, `groups` (int, default 1) — session 2 |
+| the same | `spread` (double, default 1.0), `wings`, `blocks` (int, default 1), `groups` (int, default 0 — off) — session 2 (columns `spread`, `spread_wings`, `spread_blocks`, `spread_groups`: `GROUPS` is an SQLite keyword) |
 | `TargetRef` | a third kind, `selection`, for effects only: its key is the canonical JSON of the ordered `[{type, key}]` list — session 3 |
 | `speed_masters.usage` | gains `beam` — session 6 |
 
@@ -188,10 +188,13 @@ bump is for the readers, which refuse a value they cannot parse.
 For each member `i` of an effect's expansion (`FxDistributionPlan`):
 
 1. **Order** gives its rank `r` (today's strategies).
-2. **Blocks** `B`: `r ← floor(r / B)`, over `ceil(n / B)` ranks.
+2. **Blocks** `B`: `r ← floor(r / B)`, over `ceil(n / B)` ranks (`ceil(R / B)` for an Order with `R`
+   ranks — the same under an asymmetric one).
 3. **Wings** `W` (only under an asymmetric order — Centre out, Edges in and Split are two wings
-   already): the ranks split into `W` runs of `m`; in odd runs `r ← m − 1 − r`; over `m` ranks.
-4. **Groups** `G`: `r ← r mod G`, over `G` ranks.
+   already): the ranks split into `W` runs of `m = ceil(R / W)`; in odd runs `r ← m − 1 − r`; over `m`
+   ranks. Session 2 mirrors a short last run within its own length (`len − 1 − r`), so seven heads in
+   two wings are 0 1 2 3 2 1 0 and the outer pair shares a rank.
+4. **Groups** `G`: `r ← r mod G`, over `G` ranks — when `G` is below the rank count (Groups off is 0).
 5. **Spread** `s`: `offset = s × r / ranks`.
 
 `distinctSlots` is the number of ranks left after step 4, so a step chase's window and step timing
@@ -363,6 +366,9 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - The programmer's *+ Effect* and ⌘K *Apply FX* start one effect over the marquee's or selection's
   targets in order, where today they take the first group or fixture.
 - R3's plan note and `FU-FX-SELECTION-DISTRIBUTION` (§6).
+- The expansion's members go through `DistributionPlan.of` like a group's, so session 2's spread shape
+  (Spread, Wings, Blocks, Groups) applies to a selection unchanged — rank in selection order, then
+  shaped.
 - **Tests:** eight loose pars and a group of four make one instance of twelve members in order; a
   head in both counts once; a value row naming `selection` is 400; a recorded cue brings the effect
   back as one.

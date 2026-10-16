@@ -363,6 +363,10 @@ internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     size = size,
     direction = direction,
     nShot = nShot,
+    spread = spread,
+    wings = wings,
+    blocks = blocks,
+    groups = groups,
 )
 
 /** The include target for [cueData], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */

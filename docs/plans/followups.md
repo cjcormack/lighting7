@@ -38,6 +38,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
+| [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -480,6 +481,27 @@ declined *amplitude 0–200 %* of the plan's Question 2.
 
 **Trigger**: an operator wants an effect bigger than it was written and the effect's own parameters
 (a radius, a range) are not the way they want to reach it.
+
+---
+
+### `FU-FX-SPLIT-DUPLICATE`
+
+**`SPLIT` and `EDGES_IN` are one Order under two names** · Ready · effects plan session 2 (§10),
+2026-10-16
+
+`DistributionStrategy.SPLIT` ranks a member `min(i, N−1−i)` over `⌈N/2⌉` slots; `EDGES_IN` inverts
+Centre out's rank over the same slots, which is the same distance from the nearer end. The two give
+identical offsets at every group size (`docs/fx-engineering.md` §"Distribution Strategies"), so the
+editor's Order select offers one thing twice, and the busk Spread tab's Split-like curve is a third
+spelling of the same idea.
+
+The shape: keep both names readable (P6 — a stored effect names either), map `SPLIT` to `EDGES_IN` at
+the one parse (`DistributionStrategy.byName`), drop *Split* from the Order select and the MCP schema's
+description, and say in `fx-engineering.md` that a stored `SPLIT` is Edges in. No `formatVersion`: no
+field changes and no stored effect changes what it plays. `SpreadShapeTest`'s vector cases for Split
+stay valid, since its offsets are Edges in's.
+
+**Ready**: nothing to wait for; it is a tidy-up the plan chose not to fold into session 2.
 
 ---
 

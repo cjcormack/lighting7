@@ -549,6 +549,10 @@ class ProjectExporter(private val state: State) {
                             size = e.size,
                             direction = e.direction,
                             nShot = e.nShot,
+                            spread = e.spread,
+                            wings = e.wings,
+                            blocks = e.blocks,
+                            groups = e.groups,
                             sortOrder = e.sortOrder,
                         )
                     }
@@ -601,6 +605,10 @@ class ProjectExporter(private val state: State) {
                             size = e.size,
                             direction = e.direction,
                             nShot = e.nShot,
+                            spread = e.spread,
+                            wings = e.wings,
+                            blocks = e.blocks,
+                            groups = e.groups,
                         )
                     },
                 )
@@ -902,6 +910,10 @@ class ProjectExporter(private val state: State) {
                         size = e.size,
                         direction = e.direction,
                         nShot = e.nShot,
+                        spread = e.spread,
+                        wings = e.wings,
+                        blocks = e.blocks,
+                        groups = e.groups,
                     ),
                 )
                 liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))

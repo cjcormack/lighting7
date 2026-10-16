@@ -107,6 +107,10 @@ internal fun captureCurrentState(state: State): CapturedState {
                 size = dyn.size,
                 direction = dyn.direction.name,
                 nShot = dyn.nShot,
+                spread = dyn.spread,
+                wings = dyn.wings,
+                blocks = dyn.blocks,
+                groups = dyn.groups,
             ))
         }
     }
@@ -478,6 +482,10 @@ internal fun validateCueChildren(
             direction = effect.direction,
             size = effect.size,
             nShot = effect.nShot,
+            spread = effect.spread,
+            wings = effect.wings,
+            blocks = effect.blocks,
+            groups = effect.groups,
         )?.let { return it }
     }
     return null
@@ -712,6 +720,10 @@ internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     size = effect.size
     direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
     nShot = effect.nShot
+    this.spread = effect.spread
+    this.wings = effect.wings
+    this.blocks = effect.blocks
+    this.groups = effect.groups
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */

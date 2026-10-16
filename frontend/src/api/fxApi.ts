@@ -61,6 +61,11 @@ export interface FxEffectState {
   direction?: EffectDirection
   /** Runs (D9): the cycles an N-shot runs; absent or null runs forever. */
   nShot?: number | null
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   // `speedMasterIndex` and `rateSpeedMasterIndex` — the 1-based display positions the server
   // numbered the bank at — were declared beside the two uuids and never read. The FX-sheet chip
   // resolves both indices from the live master list, which is the only way they can't drift from a
@@ -115,6 +120,14 @@ export interface UpdateFxRequest {
   nShot?: number
   /** True puts an N-shot back to running forever; never beside [nShot]. */
   runForever?: boolean
+  /**
+   * The spread's shape (effects plan D4); each absent keeps it, groups 0 turns them off. Edited in
+   * place like the Order, phase kept; wings under a mirrored order are refused.
+   */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
 }
 
 /**

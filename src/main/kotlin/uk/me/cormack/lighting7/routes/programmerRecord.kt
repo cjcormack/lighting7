@@ -434,6 +434,10 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
     size = dto.size
     direction = EffectSpecCoercion.Names.canonicalDirection(dto.direction)
     nShot = dto.nShot
+    this.spread = dto.spread
+    this.wings = dto.wings
+    this.blocks = dto.blocks
+    this.groups = dto.groups
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */

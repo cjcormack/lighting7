@@ -68,6 +68,10 @@ data class UpdateFxInMessage(
     val direction: String? = null,
     val nShot: Int? = null,
     val runForever: Boolean = false,
+    val spread: Double? = null,
+    val wings: Int? = null,
+    val blocks: Int? = null,
+    val groups: Int? = null,
 ) : FxInMessage() {
     fun toRequest() = UpdateEffectRequest(
         effectType = effectType,
@@ -85,6 +89,10 @@ data class UpdateFxInMessage(
         size = size,
         direction = direction,
         nShot = nShot,
+        spread = spread,
+        wings = wings,
+        blocks = blocks,
+        groups = groups,
         runForever = runForever,
     )
 }

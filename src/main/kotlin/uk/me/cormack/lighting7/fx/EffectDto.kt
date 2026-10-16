@@ -72,6 +72,14 @@ data class EffectDto(
     /** Runs (D9): the cycles an N-shot runs before it stops; null runs forever. */
     val nShot: Int? = null,
     /**
+     * The spread's shape (effects plan D4): Spread 0–2 (1 the Order's own offsets), Wings, Blocks, and
+     * Groups (0 off). Reported for every effect, as the Order is; only a spread effect is shaped by it.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
+    /**
      * An N-shot that has run its count and is kept, painting nothing, until its programmer layer
      * goes ([FxInstance.spent]). Any other spent N-shot has already left the list.
      */
@@ -164,6 +172,10 @@ internal fun FxInstance.toEffectDto(
         size = dyn.size,
         direction = dyn.direction.name,
         nShot = dyn.nShot,
+        spread = dyn.spread,
+        wings = dyn.wings,
+        blocks = dyn.blocks,
+        groups = dyn.groups,
         spent = spent,
         speedMasterUuid = reportedSpeedMasterUuid,
         speedMasterIndex = masterStates.getOrNull(speedMasterSlot)?.index ?: 1,

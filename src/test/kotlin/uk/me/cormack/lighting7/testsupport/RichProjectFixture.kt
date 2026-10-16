@@ -624,6 +624,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         size = 0.4
         direction = "BACKWARD"
         nShot = 2
+        // The spread's shape (effects plan session 2, formatVersion 32), likewise.
+        spread = 0.5
+        wings = 2
+        blocks = 3
+        groups = 4
         sortOrder = 0
     }
 
@@ -676,6 +681,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         size = 0.75
         direction = "BOUNCE"
         nShot = 3
+        spread = 1.5
+        wings = 3
+        blocks = 2
+        groups = 2
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -793,6 +802,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         size = 0.6
         direction = "BACKWARD"
         nShot = 1
+        spread = 0.25
+        wings = 1
+        blocks = 4
+        groups = 3
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.

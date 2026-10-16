@@ -84,10 +84,14 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   size: 1,
   direction: 'FORWARD',
   nShot: null,
+  spread: 1,
+  wings: 1,
+  blocks: 1,
+  groups: 0,
   ...over,
 })
 
-function fields(entry: EffectLibraryEntry, d: FxDraft) {
+function fields(entry: EffectLibraryEntry, d: FxDraft, scope: FxScope = SCOPE) {
   const set = vi.fn()
   const setParam = vi.fn()
   render(
@@ -95,7 +99,7 @@ function fields(entry: EffectLibraryEntry, d: FxDraft) {
       entry={entry}
       timingSource={entry.timingSource}
       draft={d}
-      scope={SCOPE}
+      scope={scope}
       extendedChannels={undefined}
       settingProperty={undefined}
       readOnly={false}
@@ -195,4 +199,72 @@ describe('FxEffectFields', () => {
     expect(screen.getByText('How long one flicker lasts')).toBeTruthy()
     expect(screen.getByText('The brightest a flicker reaches')).toBeTruthy()
   })
+
+  // ─── Spread (effects plan D11, §4.1) ───────────────────────────────────────────────────────────
+
+  const HEADS: FxScope = { heads: true, elementMode: false, elementFilter: false }
+
+  it('draws Spread only where there are heads, and moves the Order out of Advanced into it', () => {
+    fields(PULSE, draft())
+    expect(screen.queryByRole('button', { name: /^Spread/ })).toBeNull()
+    cleanup()
+    fields(PULSE, draft({ distributionStrategy: 'LINEAR', spread: 0.5, wings: 2 }), HEADS)
+    // Folded, the summary says the non-defaults.
+    expect(screen.getByRole('button', { name: 'Spread · Rig · 50 % · 2 wings' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.queryByRole('combobox', { name: 'Distribution' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
+    expect(screen.getByRole('combobox', { name: 'Order' })).toBeTruthy()
+  })
+
+  it('writes Spread in percent and the three counts on Enter, refusing a count out of range', () => {
+    const { set } = fields(PULSE, draft(), HEADS)
+    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
+    const spread = screen.getByRole('spinbutton', { name: /Spread percent/ }) as HTMLInputElement
+    expect(spread.value).toBe('100')
+    fireEvent.change(spread, { target: { value: '50' } })
+    fireEvent.keyDown(spread, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ spread: 0.5 }, true)
+
+    const wings = screen.getByRole('spinbutton', { name: 'Wings' })
+    fireEvent.change(wings, { target: { value: '2' } })
+    fireEvent.keyDown(wings, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ wings: 2 })
+
+    const groups = screen.getByRole('spinbutton', { name: 'Groups' })
+    fireEvent.change(groups, { target: { value: '0' } })
+    fireEvent.keyDown(groups, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ groups: 0 })
+
+    set.mockClear()
+    const blocks = screen.getByRole('spinbutton', { name: 'Blocks' })
+    fireEvent.change(blocks, { target: { value: '0' } })
+    fireEvent.keyDown(blocks, { key: 'Enter' })
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it('hides Wings under a mirrored order, which is two wings already', () => {
+    fields(PULSE, draft({ distributionStrategy: 'CENTER_OUT' }), HEADS)
+    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
+    expect(screen.queryByRole('spinbutton', { name: 'Wings' })).toBeNull()
+    expect(screen.getByText('two already')).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: 'Blocks' })).toBeTruthy()
+  })
+
+  it('previews an effect palette over eight notional heads, and a live effect over its own up to sixteen', () => {
+    fields(PULSE, draft({ spread: 0.5 }), HEADS)
+    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
+    const dials = screen.getByRole('img', { name: /^Phase of 8 heads/ })
+    // Spread 50 % over eight: an eighth of a half-cycle apart.
+    expect(dials.getAttribute('aria-label')).toBe('Phase of 8 heads: 0°, 23°, 45°, 68°, 90°, 113°, 135°, 158°')
+    expect(screen.getByText('Previewed over eight heads')).toBeTruthy()
+    cleanup()
+    fields(PULSE, draft(), { ...HEADS, headCount: 20 })
+    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
+    const live = screen.getByRole('img', { name: /^Phase of 20 heads/ })
+    expect(live.querySelectorAll('svg')).toHaveLength(16)
+    expect(screen.getByText('+4')).toBeTruthy()
+    expect(screen.getByText('Over its 20 heads')).toBeTruthy()
+  })
 })
+

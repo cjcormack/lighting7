@@ -64,8 +64,8 @@ private const val SECONDS_DESCRIPTION =
         "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
 
 /**
- * Size, Direction and Runs (effects plan D2, D5, D9), the same three on every effect schema — added
- * where each schema lists its timing.
+ * Size, Direction, Runs (effects plan D2, D5, D9) and the spread's shape (D4), the same on every
+ * effect schema — added where each schema lists its timing.
  */
 private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
     put("size", buildJsonObject {
@@ -89,6 +89,39 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
             "description",
             "Run this many cycles and stop, each head handing back to what is underneath after its own — a flash on cue " +
                 "is 1. Omit to run forever.",
+        )
+    })
+    put("spread", buildJsonObject {
+        put("type", "number")
+        put("minimum", 0)
+        put("maximum", 2)
+        put(
+            "description",
+            "How much of the cycle the heads cover, 0.0–2.0, over the distribution order: 1.0 spreads them over one " +
+                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0.",
+        )
+    })
+    put("wings", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 1)
+        put(
+            "description",
+            "Split the heads into this many wings, alternate wings mirrored (2 = a ripple from both ends meeting in the " +
+                "middle). Only with LINEAR, REVERSE, RANDOM, PING_PONG or POSITIONAL: CENTER_OUT, EDGES_IN and SPLIT are " +
+                "two wings already and refuse it. Omit for 1.",
+        )
+    })
+    put("blocks", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 1)
+        put("description", "This many neighbouring heads move as one (3 = the heads in threes). Omit for 1.")
+    })
+    put("groups", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 0)
+        put(
+            "description",
+            "Repeat the spread every this many heads (2 = alternate heads, odd against even). Omit or 0 for off.",
         )
     })
 }
