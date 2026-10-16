@@ -373,7 +373,8 @@ internal val createSpeedMasterTool = ToolDef(
 
 internal val clearEffectsTool = ToolDef(
     name = "clear_effects",
-    description = "Clear active effects. Omit targets to clear ALL effects globally.",
+    description = "Clear active effects. Omit targets to clear ALL effects globally. Naming targets clears " +
+        "their own effects, and an effect over a selection only when every item it names is among them.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -552,6 +553,16 @@ private val adHocEffectSchema = buildJsonObject {
             put("enum", buildJsonArray { add("group"); add("fixture") })
         })
         put("targetKey", buildJsonObject { put("type", "string") })
+        put("targets", buildJsonObject {
+            put("type", "array")
+            put("items", targetSchema)
+            put(
+                "description",
+                "Instead of targetType and targetKey: one effect over these fixtures and groups, spread across them in this " +
+                    "order as a group's members are (a group contributes its members in its own order; a fixture named twice " +
+                    "counts once).",
+            )
+        })
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
@@ -602,7 +613,7 @@ private val adHocEffectSchema = buildJsonObject {
         })
     })
     put("required", buildJsonArray {
-        add("targetType"); add("targetKey"); add("effectType"); add("category")
+        add("effectType"); add("category")
         add("blendMode"); add("parameters")
     })
 }
@@ -963,7 +974,8 @@ internal val updateFromProgrammerTool = ToolDef(
 )
 
 /**
- * The effect an *effect template* holds — [adHocEffectSchema] minus `targetType` / `targetKey`.
+ * The effect an *effect template* holds — [adHocEffectSchema] minus `targetType`, `targetKey` and
+ * `targets`.
  *
  * A template effect names no target (fx-templates D3): it fans over whatever applies it, so
  * offering the model a target field would invite it to write one the write boundary then refuses.
@@ -973,7 +985,7 @@ private val templateEffectSchema = buildJsonObject {
     put("description", "One effect. It has no target — an effect palette runs on whatever the layer names.")
     put("properties", buildJsonObject {
         adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
-            if (key != "targetType" && key != "targetKey" && key != "category") put(key, value)
+            if (key !in setOf("targetType", "targetKey", "targets", "category")) put(key, value)
         }
         // Narrowed from the ad-hoc enum: `controls` and `composite` belong to no attribute family
         // and the library has no beam effects, so the write boundary refuses all three (D4).

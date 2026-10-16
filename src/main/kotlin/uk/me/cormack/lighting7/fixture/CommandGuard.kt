@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.models.EffectTargetRef
 
 /**
  * A write that names a fixture command, refused by name (fixture optics plan session 7, D13). An
@@ -63,6 +64,10 @@ class CommandIndex private constructor(
                 val reserved = groups[targetKey] ?: return null
                 reserved.matching(name)?.let { message(where, it, "a member of group '$targetKey'") }
             }
+            // An effect over a selection (effects plan D3): refused for the first item that would be.
+            EffectTargetRef.Selection.TYPE ->
+                EffectTargetRef.Selection.parseKey(targetKey.orEmpty())
+                    ?.firstNotNullOfOrNull { refusal(it.discriminator, it.key, name, where) }
             else -> FixtureCommands.allReservedNames.matching(name)?.let {
                 "$where: '$it' is a fixture command's name, and a row with no target of its own lands on " +
                     "whatever is selected — so it cannot name one. A command runs from the fixture panel's " +

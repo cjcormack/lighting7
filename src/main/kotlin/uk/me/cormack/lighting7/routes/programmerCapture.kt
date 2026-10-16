@@ -25,12 +25,14 @@ import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 import java.awt.Color
 import kotlin.reflect.KProperty1
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.routes.programmerCapture")
 
@@ -395,6 +397,10 @@ internal fun targetInScope(fixtures: Fixtures, target: TargetRef, scope: Set<Str
     }
 }
 
+/** [targetInScope] for an effect's target: a selection is in scope when every item it names is. */
+internal fun effectTargetInScope(fixtures: Fixtures, target: EffectTargetRef, scope: Set<String>?): Boolean =
+    target.items.all { targetInScope(fixtures, it, scope) }
+
 /**
  * Collect a full recording for [source], with the group-shape collapse already applied.
  *
@@ -444,7 +450,7 @@ internal fun collectProgrammerRecording(
             adHocEffects = if (includeFx) {
                 captured.adHocEffects.filter {
                     maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
-                        targetInScope(fixtures, it.target, scope)
+                        effectTargetInScope(fixtures, it.target, scope)
                 }
             } else emptyList(),
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
@@ -501,23 +507,14 @@ private fun renumber(rows: List<CuePropertyAssignmentDto>): List<CuePropertyAssi
  * means, and for the destructive `UPDATE_EXISTING` pass it deliberately means "leave alone".
  */
 internal fun maskGroupForRow(fixtures: Fixtures, row: CuePropertyAssignmentDto): PropertyMaskGroup? {
-    val fixture = referenceFixtureFor(fixtures, row.target) ?: return null
+    val fixture = fixtures.referenceFixtureFor(row.target) ?: return null
     return maskGroupForProperty(fixture, row.propertyName)
 }
 
 private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): PropertyMaskGroup? {
     val propertyName = effect.propertyName ?: return null
-    val fixture = referenceFixtureFor(fixtures, effect.target) ?: return null
+    val fixture = fixtures.referenceFixtureFor(effect.target) ?: return null
     return maskGroupForProperty(fixture, propertyName)
-}
-
-private fun referenceFixtureFor(fixtures: Fixtures, target: TargetRef): GroupableFixture? = try {
-    when (target) {
-        is TargetRef.Group -> fixtures.untypedGroup(target.key).fixtures.firstOrNull()
-        is TargetRef.Fixture -> fixtures.untypedGroupableFixture(target.key)
-    }
-} catch (_: Exception) {
-    null
 }
 
 /**
@@ -551,16 +548,16 @@ internal fun fxInstancesToCueChildren(
         // Owned by a layer: recorded as part of that layer, not as a loose child.
         if (effect.programmerLayerId != null) continue
 
-        val targetType = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
+        val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
-        val target = TargetRef.of(targetType, targetKey)
+        val target = EffectTargetRef.of(targetType, targetKey)
 
-        if (!targetInScope(fixtures, target, scope)) continue
+        if (!effectTargetInScope(fixtures, target, scope)) continue
 
         // An FX is masked by the property it drives, so "record only the colours" doesn't drag
         // a position wave along with them.
         if (mask != null) {
-            val fixture = referenceFixtureFor(fixtures, target)
+            val fixture = fixtures.referenceFixtureFor(target)
             val group = fixture?.let { maskGroupForProperty(it, effect.target.propertyName) }
             if (!maskAllows(mask, group)) continue
         }
@@ -580,7 +577,7 @@ internal fun fxInstancesToCueChildren(
                     blendMode = effect.blendMode.name,
                     distribution = dyn.distributionStrategy.javaClass.simpleName,
                     phaseOffset = dyn.phaseOffset,
-                    elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null,
+                    elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                     elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
                         dyn.elementFilter.name
                     } else null,

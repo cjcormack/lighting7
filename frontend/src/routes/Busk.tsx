@@ -1,10 +1,10 @@
-import { Navigate, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { ShowHeader } from '@/components/ShowHeader'
 import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import { BuskingView } from '../components/busking/BuskingView'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
@@ -43,20 +43,13 @@ export function BuskRedirect() {
 export function ProjectBusk() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const show = useShowBarProps(projectIdNum, { frameRateProgress: false })
   const { showHeaderProps } = show
 
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    // Deliberately without the search string, unlike `/program*` → `/show`: `?page=` names a busk
-    // page **id**, which is scoped to a project, so carrying it to another one would name nothing.
-    return <Navigate to={`/projects/${currentProject.id}/busk`} replace />
-  }
-
   // Both arms draw the immersive glyph over the card: with no header there would otherwise be no
   // way back on a touch screen (`ImmersiveEscape`).
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <>
         <ImmersiveEscape />

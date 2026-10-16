@@ -249,11 +249,11 @@ priority(cue) = the highest of its holds:
 |---|---|---|
 | Stack list | `cues.cue_stack_id` + `sort_order` | `cue_stack_entries` (D1). Done, session 1. |
 | Busk pad, cue slot, `FireCue`, the hand | the cue; press GOes in its stack | the cue; press holds it loose (D6, D11). Done, session 2. |
-| Prompt-book anchor | the cue (unique per book) | the entry (D4). Stored by entry since session 1; the routes, the book and the MCP tools still name the cue. |
+| Prompt-book anchor | the cue (unique per book) | the entry (D4). Stored by entry since session 1, the routes and the book since session 4; the MCP tools name the cue until session 7. |
 | Cue events, cue scenery, layers, values, effects, triggers | the cue | the cue (content) |
 | Stack scenery (the set) | the stack | the stack |
-| Include target | `(cueId, cueStackId)` | `(cueId, entryId?)`: the entry it was included from, for the indicator; Update writes the cue |
-| Record CREATE | needs a stack | a stack is optional; without one the new cue is loose |
+| Include target | `(cueId, cueStackId)` | `(cueId, entryId?)`: the entry it was included from, for the indicator; Update writes the cue. Done on REST and in the Show view, session 4; MCP `include_into_programmer` in session 7. |
+| Record CREATE | needs a stack | a stack is optional; without one the new cue is loose. Done on REST and `record_cue`, session 4; the Record sheet's *No stack* in session 5. |
 | Standby, GO TO, preview, `activate` at a cue | a cue id in the stack | an entry id (P2). REST since sessions 1–2; the MCP tools in session 7. |
 | `projects.active_stack_id` | the playhead stack | unchanged |
 | MIDI `CueStackGo/Back/Pause` | the stack | unchanged |
@@ -280,7 +280,15 @@ priority(cue) = the highest of its holds:
 
 A library view, `/projects/:id/cues`, registered in `navigation.ts` beside Looks and Palettes
 (the navigation plan's Library section), and in `lib/windowViews.ts` so the Screens sheet can open it. It reclaims the
-path the `/cues` redirects hold today (`App.tsx:222-242`).
+path the `/cues` redirects hold today.
+
+Since Nav.1 the row is `section: "library"` after Looks, with `hiddenInVenue: true` as the rest of
+Library, and `navigation.test.ts` pins Library's ids and the venue-hidden ids, so both lists gain
+`cues`. `lib/windowViews.ts` is seven views today (`windowViews.test.ts` pins them), so Cues makes
+eight and the Screens sheet's list does change. The `/cues` redirects are now `App.tsx:234-253`:
+`/projects/:id/cues…` go to `CuesLegacyRedirect`, bare `/cues` to `ShowRedirect`. By the frontend's
+routes rules, bare `/cues` becomes the table's "which project?" redirect, and `legacyRedirects.tsx`
+and the rule-3 sentence naming `/cues` change with it.
 
 - **Columns:** name; *In*, each entry as `Stack · Q14` (a chip per entry, *Loose* when none); fade;
   layers; FX; scenery; events; *Used by*, pads, slots and bindings; notes. The live state comes from
@@ -317,6 +325,10 @@ after the source's entry in that stack, or loose.
 > **Revised by R2** ([`show-cue-editing-plan.md`](show-cue-editing-plan.md) D12): Duplicate appends the
 > copy to the **end** of the stack, `POST /cues/{id}/duplicate {stackId?}` with no `after`, and R2's
 > session 3 builds the route, so session 6 here builds only the cross-project copy.
+>
+> **Landed with R2 session 3.** `POST /cues/{id}/duplicate {stackId?}` copies through
+> `copyCueRecord` (`routes/projectCuesHelpers.kt`), which the REST copy now shares, so session 6's
+> cross-project copy starts from it.
 
 **Any project can be the source** (D18). The venue's uuid matching applies only when both projects
 are on the same venue; otherwise every record falls back to key and name.
@@ -368,7 +380,8 @@ That is the number an operator reads off the Show view, and it is unique in its 
 | `describe_rig` | Each cue lists `in: Act 1 Q14, Act 2 Q3`, or `loose`. The briefing says a cue may be shared, and that delete is explicit. |
 | `get_prompt_book`, `mark_up_prompt_book` | Anchors name an entry: `{stackId, number}` or `entryId`. |
 | `delete_cue_stacks` | The stack's cues stay; the answer counts those left loose. |
-| `include_into_programmer`, `update_from_programmer`, `set_cue_events`, `set_scenery` | Unchanged: they name the cue. Update's preview lists each cue once, with its entries. |
+| `include_into_programmer` | Names the cue, and optionally the entry it is included from (`entryId` or `{stackId, number}`), so the include target carries it as the Show view's does (session 4). |
+| `update_from_programmer`, `set_cue_events`, `set_scenery` | Unchanged: they name the cue. Update's preview lists each cue once, with its entries. |
 
 ## 4. UX
 
@@ -381,6 +394,10 @@ the model forces:
   cue is still in the Cues table.
 - ***Add to stack…*** on a card or a table row shares the cue. ***Move to stack…*** is add, then
   remove. A drag between stacks in the stack list moves.
+
+  > **Revised by R2 session 3** (Chris, 2026-10-16): *Move to stack…* moves the entry whole, through
+  > `POST /cue-stacks/{id}/entries/{entryId}/move {toStackId}`, so its uuid, explicit number, follow
+  > and prompt-book anchor go with it. Add then remove dropped all four.
 - **A cue pad's ring** follows D11: solid, outline, or off. A pad's face shows the cue's name, and
   its numbers when it has any.
 - **The busk view's "open cue"** (`BuskingView.tsx:415`) opens the cue's first entry, or the Cues
@@ -501,15 +518,22 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   to the entries too.
 - **The Record sheet's stack select gains *No stack*** (§10, 19): Record CREATE without a stack has
   made a loose cue since session 4, and this session's table is where one is found.
+- **A loose cue's pad opens the table.** The busk view's "open cue" opens a cue's first entry, and
+  does nothing for a loose cue since session 4 (§4); it opens the Cues table filtered to that cue.
+- **D8's cue confirm** exists: R2 session 3 built `CueDeleteDialog`
+  (`frontend/src/components/cues/CueDeleteDialog.tsx`) on `cueDeletePreview`, one confirm for one cue
+  or several that lists every entry, pad, slot, anchor and binding, then deletes with `force`. The
+  table's multi-select *Delete…* mounts it.
 - **Tests:** frontend tests for the filters and the multi-select actions; a route test for the
   list's shape.
-- **Docs:** `frontend/CLAUDE.md`'s views, `desk-screens.md` if the Screens sheet's list changes.
+- **Docs:** `frontend/CLAUDE.md`'s views (§Navigation Registry, its ⌘K count of the seven views, the
+  routes rules, and §Windows' `WINDOW_VIEWS` entries).
 
 ### Session 6 — copy from another show (backend + frontend)
 
-- §3.8: the route, *Copy from another show…* in the Cues table, *Duplicate*. The REST
-  `/cues/{id}/copy` goes. *Duplicate* and its route are R2 session 3's if that has landed first
-  (R2 D12: appended to the end of the stack); otherwise this session builds them to R2's rule.
+- §3.8: the route and *Copy from another show…* in the Cues table. The REST `/cues/{id}/copy` goes.
+  *Duplicate* and its route landed with R2 session 3, so this session builds only the cross-project
+  copy, from the `copyCueRecord` helper the duplicate and the old copy share.
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;
@@ -519,8 +543,14 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 ### Session 7 — the MCP tools (backend)
 
 - §3.10, with the briefing (`RigBriefing.keyConcepts`) rewritten for shared cues and explicit delete
-  (session 2 wrote the loose hold's part). The briefing and `mark_up_prompt_book` move off
-  `soleEntryOf`, which then goes.
+  (session 2 wrote the loose hold's part).
+- **`soleEntryOf`'s last callers**, which name a cue's number only while it has one entry: the
+  briefing's cue list (`RigBriefing.kt`), `mark_up_prompt_book` (`soleEntryOfCueId`, so it refuses a
+  shared or loose cue) and `RigKeyReferences`' cue label (its own `singleOrNull`). Each lists every
+  entry or takes one from its caller, and the function goes. The MCP stack tools' `entryInStack`
+  bridge (the first entry of the cue in that stack) gives way to `entryId` or `number` (§3.10).
+- **`include_into_programmer` names an entry**, so an AI include sets the target's `entryId` as the
+  Show view's does.
 - **Tests:** each new tool, and each changed one naming an entry by number.
 - **Docs:** `mcp-engineering.md`, `cue-stacks-engineering.md` §"MCP tools".
 

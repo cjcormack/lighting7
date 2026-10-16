@@ -38,6 +38,7 @@ vi.mock('./useListSelection', async () => {
   return {
     listSelectionIntentFor: actual.listSelectionIntentFor,
     usePublishSelectionTargets: () => {},
+    usePublishRowTargets: () => {},
     useListSelection: () => ({
       selectedIds: rowSelection.ids,
       orderedSelected: [...rowSelection.ids],
@@ -80,6 +81,11 @@ vi.mock('../../store/fixtures', async (importOriginal) => ({
   useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
 vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
+// Release stops a selection effect it released whole through the REST delete; nothing here runs one.
+vi.mock('@/store/fixtureFx', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
+  useRemoveFxMutation: () => [() => ({ unwrap: () => Promise.resolve() })],
+}))
 /** Every `programmer.clearTarget` *Release n* sent — the frame the desk's W2 answers. */
 const releaseFrames = vi.hoisted(() => ({ calls: [] as unknown[][] }))
 vi.mock('@/api/lightingApi', async () => {

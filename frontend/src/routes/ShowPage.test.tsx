@@ -464,11 +464,6 @@ describe('ShowPage URL contract', () => {
     draw(['/projects/1/show/stacks/10'])
     expect(screen.getByTestId('show-bar')).toBeTruthy()
   })
-
-  it('redirects to the current project when addressed with another one', () => {
-    draw(['/projects/7/show'])
-    expect(where()).toBe('/projects/1/show')
-  })
 })
 
 describe('ShowPage as the merged run/edit surface', () => {

@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils"
 import { mostSpecificActiveId } from './lib/navMatch'
 import { useProjectListQuery } from "./store/projects"
 import { useOAuthReauthState } from "./store/oauthGithub"
-import { useNavItems, filterNavItems, useIsNavAdmin, NAV_SECTIONS, type NavItem as NavEntry, type NavSection } from "./navigation"
+import { useNavItems, filterNavItems, useIsNavAdmin, NAV_SECTIONS, OFF_RIG_LABEL, type NavItem as NavEntry, type NavSection } from "./navigation"
+import { OffRigDot } from "./components/NotOnRig"
 import { VenueTag } from "./components/venue/VenueTag"
 
 interface ProjectSwitcherProps {
@@ -107,6 +108,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                 collapsed
                 onClick={() => navigate(item.path(viewedProject.id))}
                 muted={isInstallRow(item)}
+                offRig={item.offRig}
                 attention={needsAttention(item.id)}
                 attentionLabel={ATTENTION_LABEL}
               />
@@ -124,14 +126,15 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
       <div className="px-2 pb-2 mb-2 border-b">
         <button
           onClick={() => navigate(`/projects/${viewedProject.id}`)}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent min-w-0"
+          // Wraps, so a venue's tag and *Not on the rig* drop to a second line before the name truncates.
+          className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent min-w-0"
         >
           <FolderOpen className="size-4 text-muted-foreground shrink-0" />
           <span className="font-semibold truncate">{viewedProject.name}</span>
           {isVenue && <VenueTag className="flex-shrink-0" />}
           {!isViewingActiveProject && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0 ml-auto">
-              Inactive
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0 ml-auto text-muted-foreground">
+              Not on the rig
             </Badge>
           )}
         </button>
@@ -159,6 +162,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               collapsed={false}
               onClick={() => navigate(item.path(viewedProject.id))}
               muted={isInstallRow(item)}
+              offRig={item.offRig}
               indent={item.parent != null}
               attention={needsAttention(item.id)}
               attentionLabel={ATTENTION_LABEL}
@@ -188,6 +192,11 @@ interface NavItemProps {
   collapsed: boolean
   onClick: () => void
   muted?: boolean
+  /**
+   * The row needs its project on the rig and the viewed project is not on it (navigation plan D4):
+   * muted, with a hollow dot where [attention]'s sits, and [OFF_RIG_LABEL] on its tooltip.
+   */
+  offRig?: boolean
   indent?: boolean
   /** Show a destructive dot: this destination has something the user needs to deal with. */
   attention?: boolean
@@ -202,6 +211,7 @@ export function NavItem({
   collapsed,
   onClick,
   muted,
+  offRig,
   indent,
   attention,
   attentionLabel,
@@ -217,6 +227,7 @@ export function NavItem({
       )}
     />
   )
+  const offRigDot = <OffRigDot className={collapsed ? "absolute right-1.5 top-1" : "ml-auto mr-0.5"} />
   const button = (
     <button
       onClick={onClick}
@@ -225,15 +236,16 @@ export function NavItem({
         "hover:bg-accent hover:text-accent-foreground",
         isActive && "bg-accent text-accent-foreground",
         collapsed ? "justify-center px-2" : (indent ? "pl-7 pr-3" : "px-3"),
-        muted && "text-muted-foreground",
+        (muted || offRig) && "text-muted-foreground",
         // Only positioned when it has to be — an unconditional `relative` would change
         // stacking for every row in the sidebar.
-        attention && collapsed && "relative"
+        (attention || offRig) && collapsed && "relative"
       )}
+      data-off-rig={offRig ? "" : undefined}
     >
       <span className="flex-shrink-0">{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}
-      {attention && dot}
+      {attention ? dot : offRig && offRigDot}
     </button>
   )
 
@@ -244,8 +256,21 @@ export function NavItem({
         {/* Collapsed, the label *is* the tooltip, so the reason has to ride along with it —
             otherwise a red dot on an icon is a puzzle rather than a warning. */}
         <TooltipContent side="right">
-          {attention && attentionLabel ? `${label} — ${attentionLabel}` : label}
+          {attention && attentionLabel
+            ? `${label} — ${attentionLabel}`
+            : offRig
+              ? `${label} — ${OFF_RIG_LABEL}`
+              : label}
         </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  if (offRig) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{OFF_RIG_LABEL}</TooltipContent>
       </Tooltip>
     )
   }

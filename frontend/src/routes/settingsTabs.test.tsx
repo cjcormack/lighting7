@@ -5,12 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Navigation plan P2: a settings tab is offered exactly where the nav row it opens is. The Sync
- * tabs go from an operator, whom every cloud-sync route refuses; Surfaces follows its row onto the
- * project on the rig; and Project Settings' `stage` tab says Regions, as its Rig row does.
+ * tabs go from an operator, whom every cloud-sync route refuses; Surfaces is offered off the rig as
+ * its row is, with D4's dot over a `NotOnRig` body; and Project Settings' `stage` tab says Regions,
+ * as its Rig row does.
  */
 
 let role: 'ADMIN' | 'OPERATOR' = 'ADMIN'
 let project = { id: 7, name: 'Show', description: null, isCurrent: true, kind: 'SHOW' as const }
+/** The show on the rig while [project] is not. */
+const onTheRig = { id: 1, name: 'Sleeping Beauty', description: null, isCurrent: true, kind: 'SHOW' as const }
 
 vi.mock('@/store/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/auth')>()),
@@ -23,10 +26,12 @@ vi.mock('@/store/installs', () => ({
 vi.mock('@/store/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/projects')>()),
   useProjectQuery: () => ({ data: project, isLoading: false }),
-  useProjectListQuery: () => ({ data: [project] }),
+  useProjectListQuery: () => ({ data: project.isCurrent ? [project] : [project, onTheRig] }),
   useUpdateProjectMutation: () => [vi.fn(), {}],
+  useSetCurrentProjectMutation: () => [vi.fn(), { isLoading: false }],
 }))
-vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdit: true }) }))
+let venueMode = { isVenue: false, canEdit: true }
+vi.mock('@/store/venues', () => ({ useVenueMode: () => venueMode }))
 vi.mock('./CloudSync', () => ({
   CloudSyncHubBody: () => <div>sync hub</div>,
   ProjectSyncContent: () => <div>project sync</div>,
@@ -71,6 +76,7 @@ function renderProject(path = '/projects/7/settings') {
 beforeEach(() => {
   role = 'ADMIN'
   project = { id: 7, name: 'Show', description: null, isCurrent: true, kind: 'SHOW' }
+  venueMode = { isVenue: false, canEdit: true }
 })
 afterEach(cleanup)
 
@@ -112,10 +118,29 @@ describe('Project Settings tabs', () => {
     expect(screen.queryByText('project sync')).toBeNull()
   })
 
-  it('offers Surfaces only where its row is, on the project on the rig', () => {
+  it('offers Surfaces off the rig with its dot, over a NotOnRig body naming the show on it', () => {
     project = { ...project, isCurrent: false }
     renderProject('/projects/7/settings/surfaces')
-    expect(tabs()).toEqual(['General', 'Regions', 'Rigging', 'Sync'])
+    expect(tabs()).toEqual(['General', 'Surfaces', 'Regions', 'Rigging', 'Sync'])
+    const surfaces = screen.getByRole('tab', { name: 'Surfaces' })
+    expect(surfaces.querySelector('[data-off-rig-dot]')).not.toBeNull()
+    expect(surfaces.getAttribute('title')).toBe('Needs the project on the rig')
     expect(screen.queryByText('surfaces body')).toBeNull()
+    expect(screen.getByText(/isn.t on the rig/).textContent).toContain('Show')
+    expect(screen.getByText('Sleeping Beauty')).toBeTruthy()
+  })
+
+  it('leaves Make current pressable for an operator on a venue, whose other tabs are read-only', () => {
+    role = 'OPERATOR'
+    project = { ...project, isCurrent: false }
+    venueMode = { isVenue: true, canEdit: false }
+    renderProject('/projects/7/settings/surfaces')
+    expect(screen.getByRole('button', { name: 'Make Show current' }).matches(':disabled')).toBe(false)
+  })
+
+  it('draws Surfaces with no dot on the project on the rig', () => {
+    renderProject('/projects/7/settings/surfaces')
+    expect(screen.getByRole('tab', { name: 'Surfaces' }).querySelector('[data-off-rig-dot]')).toBeNull()
+    expect(screen.getByText('surfaces body')).toBeTruthy()
   })
 })

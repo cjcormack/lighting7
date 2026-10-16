@@ -115,6 +115,21 @@ describe('effectsReaching', () => {
     expect(effectsReaching([own, group, other, otherGroup], ['spot-3'], ['Front wash']).map((e) => e.id)).toEqual([1, 2])
   })
 
+  it('takes an effect over a selection that names the head or one of its groups', () => {
+    const names = makeActiveEffect({
+      id: 6, targetKey: '[…]', targetType: 'selection',
+      targets: [{ type: 'fixture', key: 'spot-9' }, { type: 'fixture', key: 'spot-3' }],
+    })
+    const viaGroup = makeActiveEffect({
+      id: 7, targetKey: '[…]', targetType: 'selection',
+      targets: [{ type: 'group', key: 'Front wash' }, { type: 'fixture', key: 'spot-9' }],
+    })
+    const neither = makeActiveEffect({
+      id: 8, targetKey: '[…]', targetType: 'selection', targets: [{ type: 'fixture', key: 'spot-9' }],
+    })
+    expect(effectsReaching([names, viaGroup, neither], ['spot-3'], ['Front wash']).map((e) => e.id)).toEqual([6, 7])
+  })
+
   it("lets a head's row see an effect on its fixture, which the desk paints onto the heads", () => {
     const onBar = makeActiveEffect({ id: 5, targetKey: 'bar-1', propertyName: 'rgbColour', programmerOwned: false })
     const reaching = effectsReaching([onBar], ['bar-1.cell-2', 'bar-1'], [])

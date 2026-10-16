@@ -85,6 +85,18 @@ describe('the grid’s reach and its cell rule (D19)', () => {
     )
   })
 
+  it('reaches a selection’s items — a group’s members, a fixture’s heads — and never its key', () => {
+    const targets = [
+      { type: 'fixture' as const, key: 'spot' },
+      { type: 'group' as const, key: 'Bars' },
+    ]
+    const key = JSON.stringify(targets.map((t) => ({ key: t.key, type: t.type })))
+    const reach = heldBackReach([effect({ targetKey: key, targetType: 'selection', targets })], [bar, spot])
+    expect([...reach].sort()).toEqual(
+      ['spot', 'bar', 'bar.1', 'bar.2'].map((head) => heldBackKey(head, 'dimmer')).sort(),
+    )
+  })
+
   it('marks a cell only where the programmer holds a reached key, and never while blind', () => {
     const reach = new Set([heldBackKey('bar.1', 'dimmer')])
     const keys = [

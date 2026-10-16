@@ -227,8 +227,14 @@ val buildFrontend = tasks.register<com.github.gradle.node.npm.task.NpmTask>("bui
     inputs.file(frontendDir.resolve("tsconfig.json")).optional()
     inputs.file(frontendDir.resolve("eslint.config.js")).optional()
     inputs.file(frontendDir.resolve("index.html")).optional()
+    inputs.file(frontendDir.resolve("tsconfig.node.json")).optional()
     inputs.dir(frontendDir.resolve("src")).withPropertyName("frontendSrc")
+    inputs.dir(frontendDir.resolve("public")).withPropertyName("frontendPublic").optional()
+    inputs.property("viteSocketUrl", providers.environmentVariable("VITE_SOCKET_URL").orElse(""))
     outputs.dir(frontendDir.resolve("dist")).withPropertyName("frontendDist")
+    // Cacheable, so a PR that leaves the frontend alone gets main's bundle back. Not when the
+    // build uploads source maps: a cache hit would skip the upload.
+    outputs.cacheIf { System.getenv("SENTRY_AUTH_TOKEN").isNullOrBlank() }
 }
 
 // `Sync`, not `Copy`: Vite emits content-hashed filenames (`index-<hash>.js`), so every
@@ -993,6 +999,16 @@ tasks.test {
     // whichever `State.<init>` happens to run next, which surfaces as a handful of *unrelated*
     // tests failing differently on each run rather than as anything that points at memory.
     maxHeapSize = "1g"
+
+    // Two forks, each in its own data directory under the pinned one below (AppDataDir.kt's
+    // `lighting7.dataDir.slots`). Forks sharing a directory would tear each other's
+    // compiled-script jars, which are written in place with no lock. Two rather than more: the
+    // wall-clock tests in docs/testing-engineering.md are the first to fail on a busy machine,
+    // and CI's runner has four vCPUs. See that doc's "Two forks" for the measurements.
+    // `-PtestForks=1` runs the suite in one JVM again, for chasing an order dependence.
+    val testForks = (findProperty("testForks") as String?)?.toInt() ?: 2
+    maxParallelForks = testForks
+    systemProperty("lighting7.dataDir.slots", testForks.toString())
 
     // Pin the data directory at a build-local path for the whole suite. Every integration test
     // constructs a `State`, and `State` resolves the compiled-script cache, the prompt-book PDF

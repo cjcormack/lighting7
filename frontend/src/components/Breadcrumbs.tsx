@@ -7,7 +7,6 @@ import { VenueTag } from '@/components/venue/VenueTag'
 
 interface BreadcrumbsProps {
   projectName: string
-  isActive?: boolean
   /** Current page name (e.g. "Fixtures", "Scripts"). Omit for project overview. */
   currentPage?: string
   /**
@@ -35,14 +34,31 @@ interface BreadcrumbsProps {
  * unbounded length — the project name — truncates, the way the collapsed label already did. The
  * `overflow-hidden` would clip the segments' focus outlines, which the UA paints outside the box,
  * so each button draws its outline inset (`focus-visible:outline-offset-[-2px]`).
+ *
+ * Off the rig the project segment also carries *Not on the rig*, which must never shrink to a
+ * stub or paint over the chevron after it. So the segment wraps, clipped to its first line
+ * (`NAME_GROUP_CLASS`): the name's `8ch` basis is what it keeps beside the badge, and once the
+ * two no longer fit the badge wraps out of sight and the name has the segment to itself.
  */
 
-export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurrentPageClick, collapsedLabel }: BreadcrumbsProps) {
+const NAME_GROUP_CLASS = 'flex flex-wrap items-center gap-x-2 gap-y-4 h-[22px] min-w-0 overflow-hidden'
+
+export function Breadcrumbs({ projectName, currentPage, onCurrentPageClick, collapsedLabel }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
   // A venue says so on every view of it (venue plan session 2): the tag beside its name.
   const { data: projects } = useProjectListQuery()
-  const isVenue = projects?.find((p) => String(p.id) === projectId)?.kind === 'VENUE'
+  const viewed = projects?.find((p) => String(p.id) === projectId)
+  const isVenue = viewed?.kind === 'VENUE'
+  const notOnRig = viewed !== undefined && !viewed.isCurrent
+
+  const nameParts = (
+    <>
+      <span className="truncate basis-[8ch] grow">{projectName}</span>
+      {isVenue && <VenueTag className="shrink-0" />}
+      {notOnRig && <Badge variant="outline">Not on the rig</Badge>}
+    </>
+  )
 
   return (
     <>
@@ -67,24 +83,17 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
 
       {/* Project name - final segment if no currentPage */}
       {!currentPage ? (
-        <span className="font-medium flex items-center gap-2 min-w-0">
-          <span className="truncate">{projectName}</span>
-          {isVenue && <VenueTag className="shrink-0" />}
-          <Badge variant={isActive ? "default" : "outline"} className="text-xs">
-            {isActive ? "active" : "inactive"}
-          </Badge>
-        </span>
+        <span className={cn('font-medium', NAME_GROUP_CLASS)}>{nameParts}</span>
       ) : (
         <>
           <button
             onClick={() => navigate(`/projects/${projectId}`)}
-            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2 min-w-0 focus-visible:outline-offset-[-2px]"
+            className={cn(
+              'text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-offset-[-2px]',
+              NAME_GROUP_CLASS,
+            )}
           >
-            <span className="truncate">{projectName}</span>
-            {isVenue && <VenueTag className="shrink-0" />}
-            <Badge variant={isActive ? "default" : "outline"} className="text-xs">
-              {isActive ? "active" : "inactive"}
-            </Badge>
+            {nameParts}
           </button>
           <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
 

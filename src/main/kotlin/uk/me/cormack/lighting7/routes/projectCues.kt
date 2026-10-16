@@ -74,7 +74,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
             // No stack makes a loose cue (cue model plan D1).
             val cueStackId = newCue.cueStackId
-            validateCueChildren(newCue.adHocEffects, newCue.layers)?.let { problem ->
+            validateCueChildren(newCue.adHocEffects, newCue.layers, newCue.propertyAssignments)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -167,7 +167,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewCue>()
-            validateCueChildren(updatedData.adHocEffects, updatedData.layers)?.let { problem ->
+            validateCueChildren(updatedData.adHocEffects, updatedData.layers, updatedData.propertyAssignments)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -237,7 +237,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val layers = if (hasLayers)
                 json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
             else null
-            validateCueChildren(effects ?: emptyList(), layers ?: emptyList())?.let { problem ->
+            validateCueChildren(effects ?: emptyList(), layers ?: emptyList(), assignments ?: emptyList())?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -330,6 +330,53 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
+    // POST /{projectId}/cues/{cueId}/duplicate - A copy of the cue in this project, appended to the
+    // end of `stackId`'s list, or loose without one (show-cue-editing plan D12)
+    post<DuplicateCueResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot duplicate cues in project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val request = call.receive<DuplicateCueRequest>()
+            var priorities = emptyMap<Int, Int>()
+            var notFound = false
+            val result = transaction(state.database) {
+                val source = DaoCue.findById(resource.cueId)?.takeIf { it.project.id == project.id }
+                    ?: run { notFound = true; return@transaction null to "Cue not found" }
+                val stack = request.stackId?.let { id ->
+                    val stack = DaoCueStack.findById(id)?.takeIf { it.project.id == project.id }
+                        ?: return@transaction null to "Cue stack not found"
+                    if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
+                    stack
+                }
+                val copy = copyCueRecord(source, project, "${source.name} (copy)".take(DUPLICATE_NAME_MAX))
+                // At the end, unnumbered, so it takes the next auto number and nothing else moves.
+                val entry = stack?.let { placeCueInStack(it, copy) }
+                if (stack != null) priorities = stackEntryPriorities(stack)
+                DuplicateCueResponse(
+                    cueId = copy.id.value,
+                    name = copy.name,
+                    stackId = stack?.id?.value,
+                    entryId = entry?.id?.value,
+                ) to null
+            }
+            val (response, error) = result
+            if (response == null) {
+                call.respond(
+                    if (notFound) HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                    ErrorResponse(error ?: "Failed to duplicate cue"),
+                )
+                return@withCurrentProject
+            }
+            state.show.cueStackManager.holds.restampEntries(priorities)
+            state.show.fixtures.cueListChanged()
+            state.show.fixtures.cueStackListChanged()
+            response.stackId?.let { announceCuePadsChanged(state, cueIdsOfStack(state, it)) }
+            call.respond(HttpStatusCode.Created, response)
+        }
+    }
+
     // POST /{projectId}/cues/{cueId}/copy - Copy cue to another project
     post<CopyCueResource> { resource ->
         val sourceProject = state.resolveProject(resource.parent.projectId)
@@ -359,103 +406,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             // Every cue must live in a stack. A cross-project copy lands in the target project's
             // "Unsorted" stack (created on demand); the operator can move it afterwards.
             val targetStack = getOrCreateUnsortedStack(targetProject)
-            val newCue = DaoCue.new {
-                name = cueName
-                project = targetProject
-                fadeDuration = sourceCue.fadeDuration
-                fadeCurve = sourceCue.fadeCurve
-                stomp = sourceCue.stomp
-            }
-
-            // Copy child entities.
-            //
-            // **Both referent columns**, not just `look`. This loop copied `look` alone, so every
-            // template layer arrived in the target cue naming neither record — a row that violates
-            // `DaoCueLayers`' exactly-one invariant, and the reason the read-time `check {}` on
-            // `DaoCueLayer.source` was reachable at all: the copy wrote it and the *GO* threw.
-            for (layer in sourceCue.layers) {
-                DaoCueLayer.new {
-                    cue = newCue
-                    look = layer.look
-                    template = layer.template
-                    sortOrder = layer.sortOrder
-                    enabled = layer.enabled
-                    targets = layer.targets
-                    propertyMask = layer.propertyMask
-                    blendMode = layer.blendMode
-                    amount = layer.amount
-                    stomp = layer.stomp
-                    speedMasterUuid = layer.speedMasterUuid
-                    rateSpeedMasterUuid = layer.rateSpeedMasterUuid
-                    delay = layer.delay
-                    interval = layer.interval
-                    randomWindow = layer.randomWindow
-                }
-            }
-            for (assignment in sourceCue.propertyAssignments) {
-                DaoCuePropertyAssignment.new {
-                    cue = newCue
-                    targetType = assignment.targetType
-                    targetKey = assignment.targetKey
-                    propertyName = assignment.propertyName
-                    value = assignment.value
-                    fadeDuration = assignment.fadeDuration
-                    sortOrder = assignment.sortOrder
-                    moveInDark = assignment.moveInDark
-                }
-            }
-            for (effect in sourceCue.adHocEffects) {
-                DaoCueAdHocEffect.new {
-                    cue = newCue
-                    targetType = effect.targetType
-                    targetKey = effect.targetKey
-                    effectType = effect.effectType
-                    category = effect.category
-                    propertyName = effect.propertyName
-                    beatDivision = effect.beatDivision
-                    blendMode = effect.blendMode
-                    distribution = effect.distribution
-                    phaseOffset = effect.phaseOffset
-                    elementMode = effect.elementMode
-                    elementFilter = effect.elementFilter
-                    stepTiming = effect.stepTiming
-                    parameters = effect.parameters
-                    delay = effect.delay
-                    interval = effect.interval
-                    randomWindow = effect.randomWindow
-                    sortOrder = effect.sortOrder
-                    speedMasterUuid = effect.speedMasterUuid
-                    rateSpeedMasterUuid = effect.rateSpeedMasterUuid
-                    seconds = effect.seconds
-                    size = effect.size
-                    direction = effect.direction
-                    nShot = effect.nShot
-                    this.spread = effect.spread
-                    this.wings = effect.wings
-                    this.blocks = effect.blocks
-                    this.groups = effect.groups
-                }
-            }
-
-            for (trigger in sourceCue.triggers) {
-                DaoCueTrigger.new {
-                    cue = newCue
-                    triggerType = trigger.triggerType
-                    delay = trigger.delay
-                    interval = trigger.interval
-                    randomWindow = trigger.randomWindow
-                    script = trigger.script
-                    sortOrder = trigger.sortOrder
-                }
-            }
-
-            // Its scenery too — but only within the project: an element belongs to one project's
-            // scene, so a copy into another has nothing to name.
-            if (targetProject.id == sourceProject.id) {
-                copyCueScenery(sourceCue, newCue)
-                // A patch is a project's own, so events copy only within one.
-                copyCueEvents(sourceCue, newCue)
-            }
+            val newCue = copyCueRecord(sourceCue, targetProject, cueName)
 
             // Appended to the target's "Unsorted" stack. The copy carries no cue number, so it
             // picks one up from where it landed.
@@ -564,6 +515,9 @@ data class DeleteCuesResource(val parent: ProjectCuesResource)
 @Resource("/{cueId}/copy")
 data class CopyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
+@Resource("/{cueId}/duplicate")
+data class DuplicateCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
 @Resource("/{cueId}/apply")
 data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
@@ -657,6 +611,17 @@ data class CueEntryPlaceDto(
     val autoAdvanceDelayMs: Long? = null,
 )
 
+
+/** The stack whose list the copy is appended to; absent makes it loose. */
+@Serializable
+data class DuplicateCueRequest(val stackId: Int? = null)
+
+/** The copy, and its place when it has one — what the client opens. */
+@Serializable
+data class DuplicateCueResponse(val cueId: Int, val name: String, val stackId: Int? = null, val entryId: Int? = null)
+
+/** `cues.name`'s width. */
+private const val DUPLICATE_NAME_MAX = 255
 
 @Serializable
 data class CopyCueRequest(

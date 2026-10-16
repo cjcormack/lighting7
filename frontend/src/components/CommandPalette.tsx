@@ -1,14 +1,15 @@
-import { useEffect, useState, useCallback } from "react"
-import { useNavigate } from "react-router"
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { useLocation, useNavigate } from "react-router"
 import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
-  SlidersHorizontal,
+  ListOrdered, SlidersHorizontal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
+import { useProjectListQuery } from "@/store/projects"
+import { cn } from "@/lib/utils"
 import { useVisibleFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
@@ -24,6 +25,7 @@ import {
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/FxPicker"
+import { effectTargetOf, useWindowSelectionTargets } from "@/components/fx/selectionEffectTarget"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 
@@ -148,9 +150,24 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const [search, setSearch] = useState("")
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery(undefined, closed)
-  const { data: currentProject } = useCurrentProjectQuery(undefined, closed)
   const { data: fixtures } = useVisibleFixtureListQuery(closed)
   const { data: groups } = useGroupListQuery(undefined, closed)
+  // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
+  // on the programmer, the desk's or the busk view's own elsewhere.
+  const { pathname } = useLocation()
+  const windowSelection = useWindowSelectionTargets(pathname.includes("/programmer"))
+  const selectionTarget = useMemo(
+    () => effectTargetOf(windowSelection, fixtures, groups),
+    [windowSelection, fixtures, groups],
+  )
+  const selectionLabel =
+    selectionTarget == null
+      ? ""
+      : selectionTarget.type === "selection"
+        ? selectionTarget.label
+        : selectionTarget.type === "group"
+          ? selectionTarget.group.name
+          : selectionTarget.fixture.name
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
   const templateFamilyNavItems = useTemplateFamilyNavItems()
@@ -161,12 +178,14 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const parkedCount = parkStateList?.length ?? 0
 
   const viewedProject = useViewedProject()
-  const isViewingActiveProject = viewedProject?.id === currentProject?.id
+  // On the rig is the server's `isCurrent` (navigation plan P4), which agrees with the sidebar's answer.
+  const isViewingActiveProject = viewedProject?.isCurrent === true
   const windowCommands = useWindowCommands(viewedProject?.id ?? null)
   // A venue's palette drops the show's views, as its rail does (venue plan §4).
   const isVenue = viewedProject?.kind === "VENUE"
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin, isVenue)
-  const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
+  // A universe item names the live rig's universes, so only the project on the rig is offered them.
+  const visibleUniverseItems = isViewingActiveProject ? filterNavItems(universeNavItems, true) : []
   const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject, true, isVenue)
 
   const activePage = pages[pages.length - 1] ?? "root"
@@ -263,10 +282,14 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     value={commandLabelOf(item)}
                     keywords={item.keywords}
                     onSelect={() => runAction(() => navigate(item.path(viewedProject.id)))}
-                    className={itemClassName}
+                    className={cn(itemClassName, item.offRig && "text-muted-foreground")}
+                    data-off-rig={item.offRig ? "" : undefined}
                   >
                     <item.icon className="size-4 text-muted-foreground" />
-                    {commandLabelOf(item)}
+                    <span className="flex-1">{commandLabelOf(item)}</span>
+                    {/* Off the rig a row is still offered and opens its view's `NotOnRig` page,
+                        as the sidebar's does (navigation plan D4, P2). */}
+                    {item.offRig && <span className="text-xs text-muted-foreground">Not on the rig</span>}
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -492,9 +515,25 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
           </>
         )}
 
-        {/* Apply FX sub-page: pick a fixture or group */}
+        {/* Apply FX sub-page: the selection, or pick a fixture or group */}
         {activePage === "apply-fx" && (
           <>
+            {selectionTarget != null && (
+              <Command.Group heading="Selection" className={groupClassName}>
+                <Command.Item
+                  value={`On the selection ${selectionLabel}`}
+                  keywords={["selection", "selected", "marquee"]}
+                  onSelect={() => {
+                    if (onApplyFx) runAction(() => onApplyFx(selectionTarget))
+                  }}
+                  className={itemClassName}
+                >
+                  <ListOrdered className="size-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">On the selection</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{selectionLabel}</span>
+                </Command.Item>
+              </Command.Group>
+            )}
             {fixtures && fixtures.length > 0 && (
               <Command.Group heading="Fixtures" className={groupClassName}>
                 {fixtures.map((fixture) => (

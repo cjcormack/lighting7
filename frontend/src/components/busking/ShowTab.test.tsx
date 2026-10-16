@@ -37,7 +37,13 @@ vi.mock('@/store/promptBooks', () => ({
   useProjectCueLocationsQuery: () => ({ data: [{ cueId: 12, page: 9, y: 0.1 }] }), // page 9 zero-based reads "p. 10"
   useProjectPromptBookQuery: () => ({ data: { coverPages: 0 } }),
 }))
-vi.mock('react-redux', () => ({ useDispatch: () => vi.fn() }))
+vi.mock('react-redux', () => {
+  const dispatch = vi.fn()
+  return {
+    useDispatch: () => dispatch,
+    useSelector: (select: (state: unknown) => unknown) => select({ editLock: { lockRequested: true } }),
+  }
+})
 vi.mock('@/components/ProgrammerIndicator', () => ({
   ProgrammerIndicator: () => <span data-testid="programmer-chip" />,
 }))

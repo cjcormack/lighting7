@@ -253,6 +253,28 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     /**
+     * *Move to stack…*: the entry moves whole to the end of `toStackId` — its number, follow and
+     * prompt-book anchor go with it — rather than being added there and removed here.
+     */
+    moveCueStackEntry: build.mutation<
+      { stackId: number; entryId: number },
+      { projectId: number; stackId: number; entryId: number; cueId: number; toStackId: number }
+    >({
+      query: ({ projectId, stackId, entryId, toStackId }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/entries/${entryId}/move`,
+        method: 'POST',
+        body: { toStackId },
+      }),
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        { type: 'Cue', id: cueId },
+        'PromptBook',
+      ],
+    }),
+
+    /**
      * *Remove from stack*: deletes the entry, never the cue — a cue whose last entry this was is
      * left loose. The entry's anchor goes with it. `cueId` only keys the cue's caches.
      */
@@ -650,6 +672,7 @@ export const {
   useRenameMarkerEntryMutation,
   useAddCueToStackMutation,
   useRemoveCueStackEntryMutation,
+  useMoveCueStackEntryMutation,
   usePatchCueStackEntryMutation,
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,

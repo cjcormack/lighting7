@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import type { CueTarget } from '@/api/cuesApi'
 import type { EffectDirection } from '@/api/fxApi'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
@@ -70,7 +71,11 @@ export interface FixtureDirectEffect {
 export interface FixtureIndirectEffect {
   id: number
   effectType: string
+  /** The group reaching the fixture; a selection's canonical key when [targetType] is `selection`. */
   groupName: string
+  /** `group`, or `selection` for an effect over a selection naming the fixture. Absent before D3. */
+  targetType?: 'group' | 'selection'
+
   propertyName: string
   beatDivision: number
   blendMode: string
@@ -121,7 +126,13 @@ export interface EffectLibraryEntry {
 
 export interface AddFixtureFxRequest {
   effectType: string
-  fixtureKey: string
+  /** The fixture or cell to run on; absent beside [targets]. */
+  fixtureKey?: string
+  /**
+   * One effect over these fixtures and groups, spread across them in this order as a group's
+   * members are (effects plan D3). One item is that fixture or group alone.
+   */
+  targets?: CueTarget[]
   propertyName: string
   beatDivision: number
   blendMode: BlendMode
@@ -167,7 +178,15 @@ export interface AddFixtureFxRequest {
 export interface ActiveEffect {
   id: number
   effectType: string
+  /** A fixture's key or a group's name; a selection's canonical key, which names neither. */
   targetKey: string
+  /**
+   * `fixture`, `group` or `selection` (effects plan D3). Absent from a desk before effects plan
+   * session 3. Read through `lib/effectTargets.ts`, never by comparing [targetKey].
+   */
+  targetType?: 'fixture' | 'group' | 'selection'
+  /** A selection's fixtures and groups, in the order the effect spreads over them. */
+  targets?: CueTarget[] | null
   propertyName: string
   beatDivision: number
   blendMode: string
@@ -277,9 +296,9 @@ export const fixtureFxApi = restApi.injectEndpoints({
         method: 'POST',
         body: request,
       }),
-      invalidatesTags: (_result, _error, { fixtureKey }) => [
-        { type: 'FixtureEffects', id: fixtureKey },
-      ],
+      // A selection names several fixtures, so it invalidates every fixture's list.
+      invalidatesTags: (_result, _error, { fixtureKey }) =>
+        fixtureKey != null ? [{ type: 'FixtureEffects', id: fixtureKey }] : ['FixtureEffects'],
     }),
 
     removeFx: build.mutation<void, { id: number; fixtureKey: string }>({

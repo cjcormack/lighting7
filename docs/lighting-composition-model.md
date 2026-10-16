@@ -255,6 +255,17 @@ bodies as an inert accepted field only because the frontend still sends it on ev
 
 Tempo-synchronised `FxInstance`s that modulate property values each tick. Driven by the Master Clock (24 ticks/beat).
 
+### What an effect runs on
+
+One fixture (or one cell), one group, or a **selection** — an ordered list of fixtures and groups,
+one instance spread over them in that order as a group's members are (effects plan D3). The
+programmer's `+ Effect` and ⌘K *Apply FX* start one over the selection's rows in grid order; Record
+writes it onto a cue or a Look as one effect with its `selection` target, and Include spawns it back
+as one. Only an effect may name a selection: a value row, a layer's targets and a binding name a
+fixture or a group, and the write boundaries refuse anything else. A deferred Look or palette effect
+still fans one instance per target of its layer. The expansion is `docs/fx-engineering.md` §"Over a
+selection".
+
 ### Ordering
 
 Deterministic. Effects sort by:

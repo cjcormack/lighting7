@@ -113,9 +113,11 @@ find out: a Gradle or build-config change, a sync `formatVersion` bump, a schema
 refactor across packages. A recent green run earlier in the same session is sufficient; you do
 not need to re-run it just before `git commit` or `gh pr create` if nothing has changed since.
 
-The backend job runs `./gradlew build` rather than `test`: that adds the fat jar, whose native-payload
-verifier would otherwise first fail on a release build, and the `launcher` module's tests. It runs
-on Linux under `LC_ALL=C.UTF-8` for the reason given under §"Cloud sessions".
+The backend job runs `./gradlew check shadowJar` rather than `test`: `check` adds the `launcher`
+module's tests, and `shadowJar` the fat jar, whose native-payload verifier would otherwise first
+fail on a release build. It runs on Linux under `LC_ALL=C.UTF-8` for the reason given under
+§"Cloud sessions". The build cache is on (`gradle.properties`): CI restores the cache main's last
+run saved, so a task whose inputs haven't changed is restored rather than re-run.
 
 **Warnings fail the build.** Kotlin compiler warnings in `src/` and `launcher/`
 (`compilerOptions.allWarningsAsErrors`), in the `*.gradle.kts` scripts
@@ -133,17 +135,17 @@ be running. `testAppConfig` cannot do this job: `lighting7.dataDir` is read
 before any config is parsed. **If you ever see `FileSystemException … Operation
 not permitted` there, or a `MissingFieldException` on a route DTO, suspect that
 pin has been lost** — the route 500s and returns `ErrorResponse`, so a denied
-write disguises itself as a serialization regression.
+write disguises itself as a serialization regression. The suite runs in two forks, and each
+claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
-The suite takes ~1 minute warm, and ~55 s longer on the first run after any code
-change (editing a source file changes the classpath fingerprint, which invalidates
-the compiled-script jar cache and recompiles the 24 built-in FX effects). That cost
-lands on whichever class first builds a `Show` — currently
-`ParkSurvivesFixtureReloadTest`, a one-test class that therefore *looks* like the
-slowest thing in the suite. It is not slow; it is first. Before optimising anything
-in the test suite, read [`docs/testing-engineering.md`](docs/testing-engineering.md):
-four specific changes took it from 14 minutes to 1, and each has a guard test that
-explains why it is safe.
+The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
+one), warm or cold alike. The first run after any code change recompiles the 24 built-in FX
+effects (editing a source file changes the classpath fingerprint, which invalidates the
+compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
+each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
+anything in the test suite, read [`docs/testing-engineering.md`](docs/testing-engineering.md):
+four specific changes took it from 14 minutes to 1 when it was half its current size, and each
+has a guard test that explains why it is safe.
 
 ### Git workflow
 
@@ -158,7 +160,7 @@ hand-off to anyone.
   one PR — never a backend PR and a frontend PR that are each broken without the other. Several
   commits on the branch are fine, and each should still be a coherent step with a real message.
 - **CI must be green before merging.** `.github/workflows/ci.yml` reports two required checks on every PR:
-  `Backend` (`./gradlew build`) and `Frontend` (`npm run check` in `frontend/`, split into a
+  `Backend` (`./gradlew check shadowJar`) and `Frontend` (`npm run check` in `frontend/`, split into a
   build-and-lint job and three test shards). CI is where the full suites run; the quick local
   checks in §"Pre-commit checks" come first.
 - **Merge with a merge commit**, never squash or rebase-merge, and bring a stale branch up to
@@ -387,6 +389,7 @@ Tempo-synchronized effects for continuous animations without complex scripts:
 - **Seconds** - An effect's timing is a speed master or *Seconds*: its own cycle, `beatDivision` read as seconds, following no master (venue-visit plan D7; `fx/EffectTiming.kt`). A beat effect on Seconds runs on the wall-clock loop; a wall-clock effect's Seconds is no rate master. Stored as `seconds` on every effect home (sync `formatVersion` 29), carried by Record, Include, the effect routes and the MCP tools. A new effect is one bar on the master tagged for its family's `usage`, else master 1 (D16) — see `docs/fx-engineering.md` §"Seconds"
 - **Size, Direction, N-shot** - Every running effect has a `size` (0–1: a weight applied *after* the blend, `out = before + (blended − before) × size × envelope`, so a Replace at 50 % sits halfway over what is underneath and an Around movement's radius halves), a `direction` (Forward, Backward, Bounce, applied to each member's phase) and an optional `nShot` (run N cycles, each member handing back after its own; the instance ends N cycles past the largest offset, a programmer layer's kept *spent*). `intensityMultiplier` is the envelope a fade moves, never a scale on the raw output. Stored on every effect home, synced from `formatVersion` 30 — see `docs/fx-engineering.md` §"Size, direction and N-shot"
 - **The spread's shape** - The distribution strategy is the effect's **Order**, and four more fields shape it (effects plan D4, §3.3): `spread` (0–2, how much of the cycle the members cover; 1 is the Order's own offsets), `wings` (mirrored wings, only under an asymmetric Order — `CENTER_OUT`, `EDGES_IN` and `SPLIT` are two wings already and refuse it), `blocks` (neighbours sharing one phase) and `groups` (the spread repeating every N members; 0 is off), applied in `DistributionPlan.of` after the Order; `distinctSlots` is the rank count after Groups, so a step chase stays gap-free, and N-shot ends N cycles past the largest *shaped* offset. `FxDynamics` fields, edited in place; stored on every effect home, synced from `formatVersion` 33; the editor's phase dials are `frontend/src/lib/spreadShape.ts`, pinned to the desk by `src/test/resources/fx/spreadShape.fixture.json` — see `docs/fx-engineering.md` §"The spread's shape"
+- **One effect over a selection** - An effect may target an ordered list of fixtures and groups (effects plan D3): `EffectTargetRef.Selection` beside `TargetRef` (`models/TargetRef.kt`), effect-only, so a value row, a layer's targets and a binding cannot hold one and their write boundaries refuse it; stored as `targetType: "selection"` with the list's canonical JSON as `targetKey` on a cue's ad-hoc effects and a Look's effects, synced from `formatVersion` 34. `FxEngine.buildSelectionExpansion` flattens it in order — a group as its members, a head named twice once — into one instance's members, distributed and shaped as a group's. `POST /fx/add` takes `targets`, Record and Include keep it one effect, MCP's ad-hoc effects take `targets`; the programmer's `+ Effect` and ⌘K *Apply FX* start one over the selection's rows — see `docs/fx-engineering.md` §"Over a selection"
 - **SpeedMasterBank** - Per-show bank of named tempo buses (persisted, portable in sync); slot 0 = master 1, the global tempo the script API (`setBpm`/`tapTempo`) and a bare AI `set_bpm` mean (that tool takes an optional `speedMasterUuid` to retune any other master, and `create_speed_master` adds one). Effects subscribe via `speedMasterUuid` (null → master 1), and wall-clock effects scale their cycle via `rateSpeedMasterUuid` (null → unscaled); both are settable on every authoring surface. A master may also carry a `usage` (dimmer/colour/position — the apply-time routing default, one per project) and a follow link (`follow_num`/`follow_den`/`follow_target_uuid`: the leader *drives the follower's clock*, so its beats land on the leader's rather than free-running; chains allowed, cycles refused; tempo writes on a follower are refused with `SPEED_MASTER_FOLLOWER`) — see `docs/fx-engineering.md` §"Usage routing and follow". One engine pass per (conflated) tick wake-up, however many masters tick. `SpeedMasterBank.beats` fans every master's beat boundaries into one keyed stream (`speedMasters.beat`) — master 1 included, under its real uuid once the bank has loaded. Hardware drives masters through the `speedMasterBpm` / `speedMasterTap` binding targets.
 - **MasterClock** - One master's tempo clock (20-300 BPM), emits 24 ticks/beat; phase is a pure function of the tick counter (`MasterClock.phaseForDivision`). A *follower's* clock is driven by its leader instead of by a timer (`adoptDriven`/`driveTo`), and its derived BPM is reported unclamped — the 20–300 range guards a timer it doesn't have
 - **FxEngine** - Processes active effects, applies to fixtures via transactions
@@ -541,7 +544,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 ### FX REST Endpoints
 - `GET/POST /api/rest/projects/{id}/speed-masters` + `GET/PUT/DELETE .../{mid}` - Speed-master CRUD, and the only REST tempo surface: `PUT` with `bpm` sets the stored default *and* retunes the live clock when the project is current (delete guards: `SPEED_MASTER_PROTECTED` for master 1, `SPEED_MASTER_IN_USE` when referenced). Tap is WS-only (`speedMasters.tap`)
 - `GET /api/rest/fx/active` - List active effects
-- `POST /api/rest/fx/add` - Add effect to fixture
+- `POST /api/rest/fx/add` - Add effect to a fixture (`fixtureKey`), or one effect over `targets` — fixtures and groups in order, a selection (effects plan D3), every item checked at once
 - `DELETE /api/rest/fx/{id}` - Remove effect
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
 - `PUT /api/rest/fx/{id}` - Edit a running effect in place (id and phase kept); one parse with the `updateFx` frame (`applyEffectUpdate`), 400 `FX_UPDATE_REFUSED` / 404 `FX_NOT_FOUND`. `size` (0–1), `direction` (`FORWARD | BACKWARD | BOUNCE`) and `nShot` (≥ 1; `runForever: true` clears it) are dynamics fields, edited with the phase kept (effects plan session 1), and the add routes take all three. `spread` (0–2), `wings`, `blocks` (≥ 1) and `groups` (≥ 0, 0 off) are the spread's shape (effects plan session 2), dynamics fields too, the add routes taking them as well; wings above 1 under a mirrored Order — the request's or the effect's — is refused. `seconds` moves it onto *Seconds* or back to a master (D7) — `true` is also how a wall-clock effect goes back to unscaled; refused beside a master; that move restarts the effect's phase, since it changes the loop. `POST /fx/add` and `POST /groups/{name}/fx` take `seconds` too, and default an omitted `beatDivision` to one bar
@@ -581,7 +584,7 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 
 ### Cue Stack Run Endpoints
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{entryId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby". `reorder` (`{entryIds}`), `go-to` (`{entryId}`), `activate` (`{entryId?}`) and preview name **entries** too, and the run state is keyed by them (cue model plan session 2): a stack's list is `cue_stack_entries` (cue model plan session 1), each row a cue's place or a **marker**, and markers are `POST .../markers` + `PUT/DELETE .../markers/{entryId}`, never a cue (`POST /cues` refuses `cueType: "MARKER"`). A list plays in `(ordinal, uuid)` order (`ENTRY_ORDER`, a double ordinal, an insert or a drag taking the midpoint) and syncs as one record per entry, `cueStackEntries/{uuid}.json`, its number only when explicit or one a reader could not derive (sync `formatVersion` 32, cue model plan session 3). See `docs/cue-stacks-engineering.md` §"Database Tables"
-- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?}` - **Shares** a cue: a new entry, never a move, so one cue plays from several stacks, or twice in one (cue model plan session 4, D1, D7); editing it changes it everywhere. `PATCH .../entries/{entryId}` `{cueNumber?, autoAdvance?, autoAdvanceDelayMs?}` writes an entry's number and follow (the cue's PUT/PATCH no longer do); `DELETE .../entries/{entryId}` is *Remove from stack* — the cue stays, loose if it was its last entry, and removing the live entry moves nothing until the next GO, which fires its follower (D16). A stack delete leaves its cues (`{looseCueIds, deletedCueIds}`; `?deleteLooseCues=true` deletes the ones it left loose, D17). Deleting a cue is its own operation: `DELETE /cues/{id}` and `POST /cues/delete {cueIds, force?, dryRun?}` are 409 `CUE_IN_USE` naming every entry, pad, slot, anchor and binding until `force` (D8); `POST /cues` and Record CREATE without a stack make a loose cue. `CueDetails.entries` lists every place (`?entryId=` picks the one its place fields describe), prompt-book anchors are `PUT/DELETE /prompt-book/anchors/{entryId}`, and the include target carries `entryId`. See `docs/cues-engineering.md` §"Cue Stack Membership" and §"Delete"
+- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?}` - **Shares** a cue: a new entry, never a move, so one cue plays from several stacks, or twice in one (cue model plan session 4, D1, D7); editing it changes it everywhere. `PATCH .../entries/{entryId}` `{cueNumber?, autoAdvance?, autoAdvanceDelayMs?}` writes an entry's number and follow (the cue's PUT/PATCH no longer do); `DELETE .../entries/{entryId}` is *Remove from stack* — the cue stays, loose if it was its last entry, and removing the live entry moves nothing until the next GO, which fires its follower (D16). `POST .../entries/{entryId}/move` `{toStackId}` is *Move to stack…*: the same entry, uuid, explicit number, follow and anchor kept, to the end of the other stack (409 when it holds that number explicitly; show-cue-editing plan session 3). A stack delete leaves its cues (`{looseCueIds, deletedCueIds}`; `?deleteLooseCues=true` deletes the ones it left loose, D17). Deleting a cue is its own operation: `DELETE /cues/{id}` and `POST /cues/delete {cueIds, force?, dryRun?}` are 409 `CUE_IN_USE` naming every entry, pad, slot, anchor and binding until `force` (D8); `POST /cues` and Record CREATE without a stack make a loose cue. `POST /cues/{id}/duplicate` `{stackId?}` copies the cue — rows, layers, effects, hooks, notes, scenery and events — to the end of that stack, unnumbered, or loose without one (show-cue-editing plan D12), answering `{cueId, name, stackId?, entryId?}`. `CueDetails.entries` lists every place (`?entryId=` picks the one its place fields describe), prompt-book anchors are `PUT/DELETE /prompt-book/anchors/{entryId}`, and the include target carries `entryId`. See `docs/cues-engineering.md` §"Cue Stack Membership" and §"Delete"
 - `GET /api/rest/projects/{id}/cue-stacks/{stackId}/preview?entryId=` - Compose an entry's cue without firing it (absent → the effective next), keeping every cue another stack or a press also holds. Layer 4 only — except `scenery`, the whole stage's scenery as the GO would land it, each element with `from` and the GO's duration; see §"Preview compose"
 
 ### Scenery Endpoints

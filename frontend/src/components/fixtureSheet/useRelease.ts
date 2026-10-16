@@ -5,9 +5,20 @@ import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useProgrammerRevision } from '@/store/programmer'
 import { isLocalEffect, partialSweepMessage } from '../fixtures-list/cellEffects'
 import type { TargetCleared } from '@/api/programmerWsApi'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import { useRemoveFxMutation, type ActiveEffect } from '@/store/fixtureFx'
 import type { Fixture } from '@/store/fixtures'
 import { sheetTargetKey, type SheetTarget } from './sheetContext'
+import { parseSelectionKey, selectionItems } from '@/lib/effectTargets'
+
+/**
+ * Whether the desk's `clearTarget` stops [effect]: one on the target itself, or a selection whose
+ * every item is inside it — a selection that also drives heads outside is left running.
+ */
+function releaseStops(effect: ActiveEffect, keys: ReadonlySet<string>, ownGroup: string | null): boolean {
+  const items = selectionItems(effect)
+  if (items != null) return items.length > 0 && items.every((t) => (t.type === 'group' ? t.key === ownGroup : keys.has(t.key)))
+  return effect.isGroupTarget ? effect.targetKey === ownGroup : keys.has(effect.targetKey)
+}
 
 /** What this fixture holds in the programmer — what *Release n* takes and the scope line counts. */
 export interface HeldOnFixture {
@@ -60,7 +71,7 @@ export function heldOnTarget(target: SheetTarget, effects: readonly ActiveEffect
   }
   const ownGroup = target.type === 'group' ? target.group.name : null
   const local = (effects ?? []).filter(
-    (e) => isLocalEffect(e) && (e.isGroupTarget ? e.targetKey === ownGroup : keys.has(e.targetKey)),
+    (e) => isLocalEffect(e) && releaseStops(e, keys, ownGroup),
   ).length
   return { values, effects: local }
 }
@@ -123,11 +134,14 @@ export interface ReleaseTarget {
   name: string
 }
 
-/** The toast a Release over several targets answers with — the desk's counts, summed. */
-export function releaseAllMessage(targets: readonly ReleaseTarget[], cleared: readonly TargetCleared[]): string {
-  if (targets.length === 1 && cleared.length === 1) return releaseMessage(targets[0].name, cleared[0])
+/**
+ * The toast a Release over several targets answers with — the desk's counts, summed, and
+ * [alsoStopped] effects the release stopped over the targets together.
+ */
+export function releaseAllMessage(targets: readonly ReleaseTarget[], cleared: readonly TargetCleared[], alsoStopped = 0): string {
+  if (targets.length === 1 && cleared.length === 1 && alsoStopped === 0) return releaseMessage(targets[0].name, cleared[0])
   const values = cleared.reduce((n, c) => n + c.values, 0)
-  const effects = cleared.reduce((n, c) => n + c.effects, 0)
+  const effects = cleared.reduce((n, c) => n + c.effects, 0) + alsoStopped
   const on = `${targets.length} ${targets.length === 1 ? 'target' : 'targets'}`
   return releaseMessage(on, { targetType: 'fixture', targetKey: '', values, effects, partial: [] })
 }
@@ -139,22 +153,34 @@ export function releaseAllMessage(targets: readonly ReleaseTarget[], cleared: re
  * its values and its local effects in one pass, pad and Look layers untouched (a lit pad still goes
  * off by its own press). One toast for the lot, in the desk's summed count, and the group effects
  * it left running named as the sheet's Release names them. No confirm, like Clear (call 3).
+ *
+ * A local effect over a selection all of whose items are among the targets is stopped too: each
+ * frame alone answers it as partial, since it paints the other targets as well.
  */
 export function useReleaseTargets(targets: readonly ReleaseTarget[]): () => Promise<void> {
+  const [removeFx] = useRemoveFxMutation()
   return useCallback(async () => {
     if (targets.length === 0) return
     const fade = getProgrammerFadeMs()
     const results = await Promise.allSettled(targets.map((t) => lightingApi.programmer.clearTarget(t.type, t.key, fade)))
     const cleared = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
-    if (cleared.length > 0) toast.success(releaseAllMessage(targets, cleared))
     // A group effect left running on a member is named once — and not at all where the group itself
     // was in the selection, whose own frame stopped it.
     const groups = new Set(targets.filter((t) => t.type === 'group').map((t) => t.key))
-    const partial = [
+    const released = new Set(targets.map((t) => `${t.type}:${t.key}`))
+    const reported = [
       ...new Map(
         cleared.flatMap((c) => c.partial).filter((p) => !(p.isGroupTarget && groups.has(p.targetKey))).map((p) => [p.effectId, p]),
       ).values(),
     ]
+    const within = reported.filter((p) => {
+      const items = parseSelectionKey(p.targetKey)
+      return items.length > 0 && items.every((t) => released.has(`${t.type}:${t.key}`))
+    })
+    const stopped = await Promise.allSettled(within.map((p) => removeFx({ id: p.effectId, fixtureKey: p.targetKey }).unwrap()))
+    const stoppedIds = new Set(within.filter((_, i) => stopped[i].status === 'fulfilled').map((p) => p.effectId))
+    const partial = reported.filter((p) => !stoppedIds.has(p.effectId))
+    if (cleared.length > 0) toast.success(releaseAllMessage(targets, cleared, stoppedIds.size))
     if (partial.length > 0) {
       toast.warning(targets.length === 1 ? partialSweepMessage(partial, `this ${targets[0].type}`) : partialSweepMessage(partial))
     }
@@ -162,5 +188,5 @@ export function useReleaseTargets(targets: readonly ReleaseTarget[]): () => Prom
     // A closed socket was already toasted by the gesture send; anything else is the desk's word.
     const message = failed.map((e) => (e instanceof Error ? e.message : String(e))).find((m) => m !== 'The desk is not connected')
     if (message != null) toast.error(`Release failed: ${message}`)
-  }, [targets])
+  }, [targets, removeFx])
 }

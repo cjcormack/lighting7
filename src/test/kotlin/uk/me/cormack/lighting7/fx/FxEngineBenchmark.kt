@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.SpeedMasterSource
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.HueSweepColour
@@ -994,7 +995,7 @@ class FxEngineBenchmark {
             rows = emptyList(),
             effects = (0 until COOK_LOOK_EFFECTS).map { i ->
                 EffectEntry(
-                    target = TargetRef.Fixture(heads[i % heads.size]),
+                    target = EffectTargetRef.Single(TargetRef.Fixture(heads[i % heads.size])),
                     effectType = "SineWave",
                     category = "dimmer",
                     propertyName = "dimmer",

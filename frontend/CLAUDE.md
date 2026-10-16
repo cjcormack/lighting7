@@ -696,6 +696,12 @@ Release folds to its glyph and the scope line drops the fade.
   it left running in `partialSweepMessage`'s vocabulary (`outside: 'this fixture'`); no confirm, like
   Clear (call 3). Its count (`heldOnFixture`) is the entries on the fixture and its heads whatever the
   owner but a layer's, the sideband inside its footprint, and its local effects.
+- **An effect over a selection** (effects plan D3) reports `targetType: 'selection'` and its ordered
+  `targets`, and its `targetKey` — the list's canonical JSON — names no fixture or group: every read
+  of which heads an effect reaches goes through `lib/effectTargets.ts` (`effectNames`,
+  `effectAimKeys`, `effectTargetLabel`, the stored-row `storedEffectTargets`), never a comparison of
+  that key. The tray, the badges, Release's count, the grid's ⌫, the FX band and the busk Effects tab
+  all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
   count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ Effect**);
   **open**, the rail's two-line rows with pause and stop, up to half the sheet, scrolling itself; and
@@ -776,7 +782,11 @@ Release folds to its glyph and the scope line drops the fade.
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
   The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
   (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
-  a sheet (`FxAddSheet`, whose Done closes it; in a focused Look layer the effect is absorbed into the
+  a sheet (`FxAddSheet`, whose Done closes it; both start **one effect over the selection** — the
+  rail the programmer's rows in grid order (`selectRowTargets`, published by the list beside its
+  flattened keys), ⌘K's *On the selection* this window's pair — one row being that fixture, cell or
+  group alone, several an `FxTarget` of type `selection` sent as `POST /fx/add`'s `targets`
+  (`components/fx/selectionEffectTarget.ts`, effects plan D3); in a focused Look layer the effect is absorbed into the
   Look once the session ends — closed or unmounted — by the id the create answered, after the editor
   lands its held move). The popover is bounded by the room Radix measures beside its anchor and
   scrolls inside it. `ActiveEffectSheet`,
@@ -3404,6 +3414,12 @@ Three surface rules, each pinned by its test:
   The sheet consumes `?cue=` by selecting the addressed cue's row and scrolling to it — the
   external contract holds on both views.
 
+  **The bar carries the cue action set** after Set · Clear · Spread and before Deselect
+  (show-cue-editing plan §4.3, §"The cue action set" below), over the selected cues in row order, a
+  marker left out. So it folds as a loaded bar does — `foldForStrip`, the cell verbs' words and the
+  hints going below 1100 — Deselect's word folds below 760, and the set's own rungs were measured
+  with a cell selection, the widest the bar gets.
+
   **Unlocked, a grip in the Cue column reorders cues and separators** — `SheetTable`'s `rowDrag`,
   on the cards view's own `reorderCues`, so one gesture and one mutation serve both. The
   `DndContext` is mounted only where a surface asks for it and the rows are turned off through
@@ -3466,9 +3482,10 @@ palette strip — one component, so the two bars cannot count a marquee two ways
 at 1100 and Locate · Highlight at 800 — apply only on a bar that carries a strip**: the kit's
 `SelectionBar` marks itself `group/bar` + `data-strip` (from `foldForStrip`, defaulting to "there
 is a strip"), and `WORD_CLASS` / `STRIP_MID_FOLDED_CLASS` in `toolbarFolds.ts` are gated on it.
-Those folds exist to give the palette strip room; on the plain lists, the DMX sheet, the patch
-list and the cue sheet nothing needs it, and a 1100 fold there emptied every word at once on an
-ordinary 1160px window.
+Those folds exist to give the palette strip room; on the plain lists, the DMX sheet and the patch
+list nothing needs it, and a 1100 fold there emptied every word at once on an ordinary 1160px
+window. The cue sheet folds only while a cue row is selected, when the cue action set fills the
+bar (§"The cue action set").
 `SheetPage.Header` and `.Footer` put their `@container` on an unpadded wrapper, never on the `px-3`
 row: a size query measures the content box, and a container on the row would fire every threshold
 24px early. **Loading and not-found render inside the same `SheetPage`** — an empty header row over
@@ -5344,7 +5361,54 @@ the descriptor) inside its restrike time says *Still cooling — restrike in 5:5
 confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). The card's **Remove from stack** deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, *Move to stack…* is add then remove; a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+
+#### The cue action set
+
+**One component, three hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
+`components/runner/CueActions.tsx`): the card's strip directly under its collapsed row, the cue
+sheet's selection bar (after Set · Clear · Spread, before Deselect) and the phone card's ⋯ menu in
+`CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
+Prompt Book's rail card). It takes the rows (a cue and the entry it was opened from, several from
+the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
+hands in nothing else. It mounts its own Record sheet, delete confirm and unlock question.
+
+- **The split button follows the show** (D6). Stopped, its face is *Edit in programmer* — Include,
+  then the programmer — with *Blind edit in programmer* in its menu; running, the two swap, and the
+  face is amber while it is Blind edit. **Blind edit waits for the desk**: `programmerBlindOn`
+  (`store/programmer.ts`) sends `programmer.setBlind` at the programmer fade and resolves when the
+  desk reports Blind on, and only then is the cue Included — Blind is a WS gesture and Include a
+  REST call, which the desk does not order, so sending both at once could put the cue on stage. No
+  confirmation within 3 s loads nothing and says so. Blind holds the Include's effects too (D7).
+- **Load into programmer** Includes and stays; its title says live or blind. **Record…** opens the
+  Record sheet on the cue. **Duplicate** is the desk's route, each row in row order, the one copy
+  opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
+  (`components/cues/`): one confirm for every row, each cue's entries, pads, slots, anchors and
+  bindings from `cueDeletePreview`'s dry run, then `POST /cues/delete` with `force`; it says a
+  surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). Built for the Cues
+  table (cue model plan session 5) to mount too. **⋯** is *Add to stack…*, *Move to stack…* —
+  `useMoveCueStackEntryMutation`, the entry moved whole by the desk (Chris's call, 2026-10-16, over
+  R1.4's add then remove, which dropped the number, follow and anchor) — and *Copy link*, the
+  card's address with `?entry=`.
+- **Locked, only Blind edit works** (D8, §4.6): every other action — *Copy link* included, the
+  plan's rule — opens `UnlockShowDialog` (`components/runner/`, lifted from the cue sheet, whose
+  refused cell verbs open it too), or is disabled with the reason where the lock is not the
+  operator's (`onRequestUnlock` absent; the busk Show tab, which has no lock control, names the
+  Show view). **Over several rows** the one-cue actions — the edits, Load, Record, Copy link — are
+  disabled with *One cue at a time*.
+- **The phone's menu follows the lock itself**, not the phone runner's always-locked layout: the
+  menu is the editing chrome a phone has room for, and a locked action asks to unlock.
+- **Words fold to glyphs** on container rungs measured in the app (`FOLDS` in `CueActions.tsx`):
+  the stack group first, then Load and Record, the split button last — the card's own `@container`
+  for the strip, the sheet bar's for the bar. The menu never folds.
+- ***← Show*** (D16) is in the programmer's source box while the include target is the one this
+  window made from the Show view: `lib/showInclude.ts` records `{projectId, cueId, entryId}` per tab
+  on every Show-view Include, and the box draws the arrow only while `ProgrammerSummary.lastIncluded`
+  names that cue and entry, linking to `/show/stacks/:id?cue=…&entry=…` — so a cue twice in one
+  stack opens the right card. Its word shows from `@[800px]` of row A, the arrow alone down to
+  `@[600px]`, and below that it is not drawn: the phone's arm is `Q4 · Update · Revert` to the pixel
+  and the arrow pushed Revert out of the box at 393px, so the switcher's Show pill is the way back
+  there.
 
 #### The show-editing lock
 
@@ -5371,8 +5435,14 @@ Six things about it are load-bearing:
   therefore fires on the stopped→running *transition* and not on mount, or navigating between the two
   surfaces would re-lock and the sharing would be pointless — `useEditLock.test.tsx` pins that.
 - **Dragging is disabled through dnd-kit's own `disabled`**, per sortable, never by unmounting the
-  `DndContext` — `useSortable` needs that ancestor, so removing it breaks every row. Affordances are
-  **hidden rather than greyed out**: a row of disabled destructive buttons reads as breakage.
+  `DndContext` — `useSortable` needs that ancestor, so removing it breaks every row. The drag and
+  inline-edit affordances are **hidden rather than greyed out**: a row of disabled destructive
+  buttons reads as breakage. The cue action set is the exception, drawn whole and asking to unlock
+  (below).
+- **The cue action set is drawn whole while locked** (show-cue-editing plan D8): *Blind edit in
+  programmer* works — it sends nothing to the stage — and every other action asks to unlock, or is
+  disabled with the reason where the lock is not the operator's (§"The cue action set"). The card
+  draws it whether or not the show is locked, so a locked card is no longer a pure read surface.
 - **The lock is the cue sheet's read-only scope** (§Sheet kit): locked, the sheet's value cells
   are inert and a click on the Cue column arms the cue as next, exactly as a card's body click
   does; `useTransportKeys` keeps its `enabled: locked` and now stands aside from a key another
@@ -5516,20 +5586,22 @@ A cue without an explicit number gets one derived from its position (`cueNumberA
 (Targets · Cue properties · Layers) and its tab chrome: those panes restated, in a different shape,
 what a value grid and a layer stack already say, and two renderings of one state do not stay in step.
 An expanded cue row now shows `CueDetailContent` — transition, notes, **its composed
-values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Edit in Programmer** (which
-Includes it) and **Cue properties…** (`CuePropertiesSheet`). It draws **no stage map**: the 2D
+values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Cue properties…**
+(`CuePropertiesSheet`); *Edit in programmer*, which Includes it, is the cue action set's
+(§"The cue action set"), on the strip under the collapsed row. It draws **no stage map**: the 2D
 `MiniStage` went from the cards on desktop and phone in venue-visit plan S3, with `StageBackdrop`,
 its last user, so the phone card's toggle is *Details* alone and the phone runner, the busk Show
 tab and the Prompt Book rail all open their cards collapsed. Consequences worth knowing:
 
-- **Edit in Programmer opens the programmer** once the Include lands (venue-visit plan S3); a
+- **Edit in programmer opens the programmer** once the Include lands (venue-visit plan S3); a
   refused Include leaves the operator on the cue, with `useInclude`'s toast. The view switcher's
-  Show pill brings them back to the stack and the card (§"The Show position").
-- **Duplicate appends the copy to the end of the stack** and opens it (venue-visit plan S3;
-  show-cue-editing plan D12 adopts it). `ShowPage`'s `handleDuplicate` sends `buildCueInput` with
-  `sortOrder` cleared, so the desk puts it at `max + 1` — the original's `sortOrder` shared the
-  source's slot — and the copy, sent with no number, takes the next auto number with nothing else
-  in the stack moving.
+  Show pill brings them back to the stack and the card (§"The Show position"), and so does *← Show*
+  in the programmer's source box (§"The cue action set").
+- **Duplicate appends the copy to the end of the stack** and opens it by its entry (venue-visit plan
+  S3; show-cue-editing plan D12), on the desk's `POST /cues/{id}/duplicate {stackId}` since that
+  plan's session 3: a full copy — rows, layers, effects, hooks, notes, scenery and events — unnumbered,
+  so it takes the next auto number with nothing else in the stack moving. The client-side
+  `buildCueInput` copy it replaced carried neither scenery nor events.
 
 - **`CueValueGrid` reads `GET /{projectId}/cues/{cueId}/cooked`**, which wraps the same
   `buildCombinedCueLayerRows` the GO path runs. Do **not** compose a cue's values client-side —
@@ -5578,7 +5650,7 @@ position when it lands, so the next return goes where that door left the window.
 **What a remembered position meets on arrival is the Show view's ordinary handling**: a stack that
 has gone redirects to `/show` (the stale-stack effect) and is then forgotten; a cue that has gone
 opens no card and is forgotten; another project's entry is never read, being keyed by project, and
-a window on a project that is not current is redirected to the current one's `/show` as before.
+a window on a project that is not current draws `NotOnRig` (§Navigation Registry) and writes nothing.
 `ShowPage.cueActions.test.tsx` drives the round trip through the real switcher, and the stale
 cases with the stored position seeded.
 
@@ -6161,19 +6233,68 @@ path may quietly change where it lands.
   can read whose *actions* are admin-only: **Updates** is shown to everyone, as its
   tab is, and the panel disables what an operator cannot do.
   `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
-  them for operators so neither the sidebar nor Cmd+K offers a page that can only
+  them for operators — role and kind are the only things that drop a row — so neither the sidebar nor Cmd+K offers a page that can only
   answer 403. `useIsNavAdmin()` supplies the flag and treats *anything but a
   resolved OPERATOR* as admin: during the `auth/status` round-trip, and on a
   bootstrap-open desk, the API really is reachable, and the backend refuses the
   call either way. This is presentation, never permission.
-- **A row and its page share one predicate** (navigation plan P2): who sees a row, its ⌘K item and
-  the settings tab it opens is `navItemShown`, beside the registry, and nothing else. The settings
-  pages map each tab to its row's id (`TAB_NAV_IDS` in `routes/InstallSettings.tsx` and
-  `routes/ProjectSettings.tsx`) and draw a tab only where `useShownTabs` says its row is shown — so
-  the two Sync tabs are an admin's alone, as every cloud-sync route is, and Project Settings' Surfaces
-  tab is the project on the rig's, as its `active-only` row is. A tab its row hides, reached by URL, opens General, which is
-  the row the sidebar lights there. A new tab gets its row's predicate by being in the map; a tab
-  with no row is always drawn.
+- **A row and its page share one predicate** (navigation plan P2): how a row, its ⌘K item and the
+  settings tab it opens are offered is `navItemState` — `hidden`, `shown` or `offRig` — beside the
+  registry, and nothing else. The settings pages map each tab to its row's id (`TAB_NAV_IDS` in
+  `routes/InstallSettings.tsx` and `routes/ProjectSettings.tsx`) and draw a tab only where
+  `useShownTabs` offers its row — so the two Sync tabs are an admin's alone, as every cloud-sync
+  route is — and draw it off the rig where its row is (below). A tab its row hides, reached by URL,
+  opens General, which is the row the sidebar lights there. A new tab gets its row's predicate by
+  being in the map; a tab with no row is always drawn.
+- **Off the rig, every row stays** (navigation plan D4, Nav.2). A row whose view reads or drives the
+  live show carries `needsRig` — the nine are Programmer, Show, Prompt Book, Busk, Stage, Fixtures,
+  Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
+  `NotOnRig` says (*The Stage view draws the rig that's live*). On a project that is not on the rig
+  `filterNavItems` keeps those rows and marks them `offRig`, and three places draw the mark, all
+  from that one answer:
+  - the **sidebar** row takes the muted colour and `OffRigDot` — a 6px hollow dot where the Sync
+    row's attention dot sits, at the icon's corner on the rail — with *Needs the project on the
+    rig* (`OFF_RIG_LABEL`) on its tooltip, expanded and collapsed alike; the header's badge says
+    **Not on the rig**;
+  - **⌘K** lists the row too, muted, with *Not on the rig* as its trailing hint, and opens it as
+    the sidebar does — onto the `NotOnRig` page, not past it. A row that drew in one and not the
+    other would be two answers to one question. The per-universe items are the exception, offered
+    only on the project on the rig: they name the live rig's universes, not the viewed project's;
+  - **Project Settings' Surfaces tab** is drawn with the dot over a `NotOnRig` body, since its
+    bindings editor reads the live desk's devices — outside the tabs' disabled fieldset, because
+    *Make current* is a runtime gesture an operator may make on a venue.
+
+  **The route draws `NotOnRig` in place of the view** (`components/NotOnRig.tsx`). Every `needsRig`
+  route in `App.tsx` is wrapped in `RigGate navId=…`, which draws the view only while the project
+  in the URL is on the rig; the view never mounts otherwise, so none of its queries run for a
+  project that is not current. It replaced the redirects to the current project that eight of the
+  routes carried (Fixtures, Groups, both lists, Channels, the DMX sheet, Show and Busk) and gives
+  the three that had none — Programmer, Prompt Book and Stage, which drew the live show's state
+  under another project's name — the same answer. The page says *TCH venue isn't on the rig. The
+  Stage view draws the rig that's live, and Sleeping Beauty is on it now.*, with **Make TCH venue
+  current** (through `ProjectSwitchConfirmDialog`; withheld, with the reason, for a show whose
+  venue version is not on this desk) and **Open Sleeping Beauty's Stage** (the row's `path` on the
+  current project; withheld where that project is a venue the view is hidden in). **The URL is
+  never touched**: a `?cue=` or `?page=` deep link stays where it was, and *Make current* lands on
+  exactly the address that was asked for, since the gate draws the view the moment the project
+  list says `isCurrent`. A route's `to` is its own address on another project — the lists keep
+  `?select=`, Channels its universe and table — and is where *Open …* goes. On the rig is that
+  server fact and nothing else (P4): the gate, the sidebar and ⌘K all read the project list's
+  `isCurrent`, and nothing added here says *active*. The gate never draws the view for an id the
+  list does not hold (a venue version's snapshot is never listed) or when the list cannot be read.
+
+  **A view that was showing the project on the rig follows a switch made elsewhere** (the Projects
+  page, another window, MCP's `switch_project`) to its `to` on the new project, with `replace` —
+  the job the routes' redirects did for a desk screen, now for every routed view `RigGate` wraps —
+  and draws `NotOnRig` only where the new project has no such view (a venue). Project Settings'
+  Surfaces tab is the exception: a tab inside the settings page, never gated, it draws `NotOnRig`
+  at once on a switch, as it fell back to General before. It waits while a sheet holds unsaved edits
+  (`useHasUnsavedSheets`, the count `windows.show` declines on), keeping the view until the sheet
+  is saved or let go. A view *opened* on a project that is not on the rig never follows; that is
+  D4's page. And a command that puts another window on a view that needs the rig — the Screens
+  row's view picker, ⌘K's *Show <view> on <window>* and *Open <view> on another display* — names
+  the project on the rig (`WindowView.needsRig`, `windowViewProject`), whatever project that window
+  was left on; a library keeps the window's own.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
   `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
   `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in

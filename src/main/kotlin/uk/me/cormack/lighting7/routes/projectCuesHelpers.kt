@@ -74,15 +74,17 @@ internal fun captureCurrentState(state: State): CapturedState {
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
 
     for (effect in activeEffects) {
-        val targetType = if (effect.isGroupEffect) "group" else "fixture"
+        val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
 
         val source = effect.source
         if (source != null) {
             val targets = layerTargets.getOrPut(source.kind to source.id) { mutableListOf() }
-            val target = CueTargetDto(type = targetType, key = targetKey)
-            if (target !in targets) {
-                targets.add(target)
+            // A layer's targets are fixtures and groups, so a bound selection effect names its items.
+            val named = (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.map { CueTargetDto(it) }
+                ?: listOf(CueTargetDto(type = targetType, key = targetKey))
+            for (target in named) {
+                if (target !in targets) targets.add(target)
             }
         } else {
             // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
@@ -97,7 +99,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 blendMode = effect.blendMode.name,
                 distribution = dyn.distributionStrategy.javaClass.simpleName,
                 phaseOffset = dyn.phaseOffset,
-                elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null,
+                elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,
                 parameters = effect.effect.parameters,
@@ -482,10 +484,22 @@ internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
 internal fun validateCueChildren(
     adHocEffects: List<CueAdHocEffectDto>,
     layers: List<CueLayerDto>,
+    propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
 ): String? {
+    // A selection is an effect's target only (effects plan D3): a value row and a layer name a
+    // fixture or a group.
+    propertyAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
+        ?.let { (i, row) -> return "propertyAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
     for (layer in layers) {
+        layer.targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
+            ?.let { return "A layer's target must be a fixture or a group, not '${it.type}'" }
         EffectSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
     }
+    adHocEffects.withIndex().firstOrNull { (_, e) -> EffectTargetRef.ofOrNull(e.targetType, e.targetKey) == null }
+        ?.let { (i, e) ->
+            return "adHocEffects[$i]: unknown target '${e.targetType}' — expected 'fixture', 'group' or " +
+                "'${EffectTargetRef.Selection.TYPE}' with a list of fixtures and groups"
+        }
     for (effect in adHocEffects) {
         EffectSpecCoercion.Strict.problem(
             blendMode = effect.blendMode,
@@ -600,7 +614,7 @@ internal fun writeCueChildren(
 ) {
     val newEffects = adHocEffects.orEmpty()
     val newRows = propertyAssignments.orEmpty()
-    validateCueChildren(newEffects, layers.orEmpty())?.let { throw IllegalArgumentException(it) }
+    validateCueChildren(newEffects, layers.orEmpty(), newRows)?.let { throw IllegalArgumentException(it) }
     // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
     // problem at once, before anything is written, so the caller's transaction rolls back whole.
     // The index is queries; build it only when some name could be refused at all.
@@ -640,7 +654,7 @@ internal fun writeCueChildren(
         }
     }
     if (adHocEffects != null) {
-        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects, { it.effectKey }, { it.effectKey })
+        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects.map { it.canonicalTarget() }, { it.effectKey }, { it.effectKey })
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
             if (stored != null) {
@@ -897,4 +911,105 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
     entry.cueNumber = next
     entry.cueNumberAuto = false
     renumberAutoEntries(stack, cueEntryIds(stack))
+}
+
+/**
+ * A new cue in [targetProject] holding everything [source] holds — its fade, notes, layers, own
+ * rows, effects and script hooks, and, within one project, its scenery and events — named [name]
+ * and in no stack. The duplicate and the cross-project copy both make one. Must run inside a
+ * transaction.
+ *
+ * **Both referent columns** of a layer are copied, not just `look`: copying `look` alone once
+ * landed every template layer naming neither record, a row that breaks `DaoCueLayers`'
+ * exactly-one invariant and threw at GO.
+ */
+internal fun copyCueRecord(source: DaoCue, targetProject: DaoProject, name: String): DaoCue {
+    val copy = DaoCue.new {
+        this.name = name
+        project = targetProject
+        fadeDuration = source.fadeDuration
+        fadeCurve = source.fadeCurve
+        notes = source.notes
+        stomp = source.stomp
+    }
+    for (layer in source.layers) {
+        DaoCueLayer.new {
+            cue = copy
+            look = layer.look
+            template = layer.template
+            sortOrder = layer.sortOrder
+            enabled = layer.enabled
+            targets = layer.targets
+            propertyMask = layer.propertyMask
+            blendMode = layer.blendMode
+            amount = layer.amount
+            stomp = layer.stomp
+            speedMasterUuid = layer.speedMasterUuid
+            rateSpeedMasterUuid = layer.rateSpeedMasterUuid
+            delay = layer.delay
+            interval = layer.interval
+            randomWindow = layer.randomWindow
+        }
+    }
+    for (assignment in source.propertyAssignments) {
+        DaoCuePropertyAssignment.new {
+            cue = copy
+            targetType = assignment.targetType
+            targetKey = assignment.targetKey
+            propertyName = assignment.propertyName
+            value = assignment.value
+            fadeDuration = assignment.fadeDuration
+            sortOrder = assignment.sortOrder
+            moveInDark = assignment.moveInDark
+        }
+    }
+    for (effect in source.adHocEffects) {
+        DaoCueAdHocEffect.new {
+            cue = copy
+            targetType = effect.targetType
+            targetKey = effect.targetKey
+            effectType = effect.effectType
+            category = effect.category
+            propertyName = effect.propertyName
+            beatDivision = effect.beatDivision
+            blendMode = effect.blendMode
+            distribution = effect.distribution
+            phaseOffset = effect.phaseOffset
+            elementMode = effect.elementMode
+            elementFilter = effect.elementFilter
+            stepTiming = effect.stepTiming
+            parameters = effect.parameters
+            delay = effect.delay
+            interval = effect.interval
+            randomWindow = effect.randomWindow
+            sortOrder = effect.sortOrder
+            speedMasterUuid = effect.speedMasterUuid
+            rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+            seconds = effect.seconds
+            size = effect.size
+            direction = effect.direction
+            nShot = effect.nShot
+            spread = effect.spread
+            wings = effect.wings
+            blocks = effect.blocks
+            groups = effect.groups
+        }
+    }
+    for (trigger in source.triggers) {
+        DaoCueTrigger.new {
+            cue = copy
+            triggerType = trigger.triggerType
+            delay = trigger.delay
+            interval = trigger.interval
+            randomWindow = trigger.randomWindow
+            script = trigger.script
+            sortOrder = trigger.sortOrder
+        }
+    }
+    // A scene element and a patch are a project's own, so scenery and events copy only within one.
+    if (targetProject.id == source.project.id) {
+        copyCueScenery(source, copy)
+        copyCueEvents(source, copy)
+    }
+    return copy
 }

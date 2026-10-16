@@ -35,6 +35,12 @@ export interface WindowView {
    * Stage carries [STAGE_VIEWPOINT_OPTION], [STAGE_SOURCE_OPTION] and [STAGE_WORK_LIGHTS_OPTION].
    */
   options?: readonly WindowViewOption[]
+  /**
+   * The view needs its project on the rig (navigation plan D4; its nav row's `needsRig`, which
+   * `navigation.test.ts` pins against): a command that puts a window on it names the project on
+   * the rig, since the window's own project may be one a switch has left behind.
+   */
+  needsRig?: boolean
 }
 
 /**
@@ -157,13 +163,14 @@ export const STAGE_WORK_LIGHTS_OPTION: WindowViewOption = {
 }
 
 export const WINDOW_VIEWS: readonly WindowView[] = [
-  { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION] },
-  { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION] },
-  { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book', options: [IMMERSIVE_OPTION] },
+  { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION], needsRig: true },
+  { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION], needsRig: true },
+  { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book', options: [IMMERSIVE_OPTION], needsRig: true },
   {
     id: 'busk',
     label: 'Busk',
     segment: '/busk',
+    needsRig: true,
     options: [
       { key: 'focus', label: 'Focus', kind: 'enum', values: BUSK_FOCUSES },
       { key: 'sheet', label: 'Sheet', kind: 'enum', values: BUSK_SHEET_VALUES },
@@ -176,6 +183,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     id: 'stage',
     label: 'Stage',
     segment: '/stage',
+    needsRig: true,
     options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
@@ -205,6 +213,14 @@ export function announcedViewOptions(
 /** The route for [view] in [projectId]. */
 export function windowViewPath(view: WindowView, projectId: number): string {
   return `/projects/${projectId}${view.segment}`
+}
+
+/**
+ * The project a command puts a window on [view] in: the project on the rig for a view that needs
+ * it, else [projectId] — the window's own, or the sender's.
+ */
+export function windowViewProject(view: WindowView, projectId: number, currentProjectId: number | null): number {
+  return view.needsRig && currentProjectId != null ? currentProjectId : projectId
 }
 
 /**

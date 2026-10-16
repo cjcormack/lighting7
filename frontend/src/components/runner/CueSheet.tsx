@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Blinds, Layers, Lock, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { UnlockShowDialog } from './UnlockShowDialog'
+import { CueActions, type CueActionRow } from './CueActions'
 import { cn } from '@/lib/utils'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
@@ -81,6 +73,9 @@ const CURVE_OPTIONS: SheetOption[] = [
   { value: 'EASE_OUT', label: 'Ease Out' },
   { value: 'EASE_IN_OUT', label: 'Ease In/Out' },
 ]
+
+/** Deselect's word beside the cue action set — measured with it, on the bar's container. */
+const DESELECT_WORD_CLASS = 'hidden @[760px]:inline'
 
 /** The lock's reason, said once — the verbs' titles and the bar's strip read it. */
 const LOCKED_REASON = 'Locked — cells are read-only · L to edit'
@@ -607,6 +602,20 @@ export function CueSheet({
   )
 
   const armable = locked && onSetStandby && selectedRows.length === 1 && selectedRows[0].entry.entryId !== activeEntryId
+  /** The selected cue rows, in row order — what the action set acts on; a marker is no cue. */
+  const actionRows = useMemo<CueActionRow[]>(
+    () =>
+      selectedRows
+        .filter((row) => row.divider == null && isCueRow(row.entry))
+        .map((row) => ({
+          cueId: cueOf(row).id,
+          name: cueOf(row).name,
+          cueNumber: cueOf(row).cueNumber ?? null,
+          entryId: row.entry.entryId,
+          stackId: stack.id,
+        })),
+    [selectedRows, stack.id],
+  )
   const verbs =
     selectedRows.length > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -642,9 +651,23 @@ export function CueSheet({
             <span className={WORD_CLASS}>Arm as next</span>
           </Button>
         )}
+        {/* The cue action set, after Set · Clear · Spread and before Deselect (show-cue-editing
+            plan §4.3); a one-cue action is disabled over several rows, with the reason. */}
+        {actionRows.length > 0 && (
+          <CueActions
+            projectId={projectId}
+            host="bar"
+            rows={actionRows}
+            locked={locked}
+            onRequestUnlock={onRequestUnlock}
+            lockedReason={LOCKED_REASON}
+            fromShowView
+          />
+        )}
         <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
           <X className="size-3.5" />
-          <span className="hidden sm:inline">Deselect</span>
+          {/* Folded below the bar's last rung, beside the action set's glyphs. */}
+          <span className={actionRows.length > 0 ? DESELECT_WORD_CLASS : 'hidden sm:inline'}>Deselect</span>
         </Button>
       </div>
     ) : null
@@ -672,9 +695,10 @@ export function CueSheet({
           }
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
-          // The lock note is a short label, not a scroller: it needs no room, so the verbs keep
-          // their words as on a bar with nothing riding it.
-          foldForStrip={false}
+          // The cue action set rides the bar with the cell verbs, so the bar folds their words and
+          // its hints as any loaded bar does. With only markers selected there is no action set,
+          // and the lock note alone needs no room.
+          foldForStrip={actionRows.length > 0}
         />
       </div>
       <SheetTable<CueSheetRow, CueColumnKey>
@@ -785,28 +809,7 @@ export function CueSheet({
         anchorRef={sceneryAnchorRef}
         onClose={() => setSceneryEntryId(null)}
       />
-      <AlertDialog open={unlockAsked} onOpenChange={setUnlockAsked}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unlock the show to edit?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The show is running and locked, so a stray click cannot change it. Unlocking leaves it
-              running and re-locks itself on the next GO — your selection is kept either way.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Stay locked</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setUnlockAsked(false)
-                onRequestUnlock?.()
-              }}
-            >
-              Unlock
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <UnlockShowDialog open={unlockAsked} onOpenChange={setUnlockAsked} onUnlock={() => onRequestUnlock?.()} />
       {/* The shell's footer, and its one swatch (CLAUDE.md §List shell): each wears the tint and
           the 3px edge its row wears above, so the key teaches the mark and not a stand-in. */}
       <SheetPage.Footer>

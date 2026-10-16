@@ -144,7 +144,8 @@ sections, as today.
 | **Desk** | Projects · Install Settings › Users · Sync · Remote Access · Updates · Diagnostics | install, with Projects added |
 
 The cue model plan's all-cues table (R1 D13, its session 5) joins Library as **Cues**, after Looks,
-and is hidden in a venue like the rest of Library.
+and is hidden in a venue like the rest of Library. (`navigation.test.ts` pins Library's ids and the
+venue's hidden ids, so the row adds `cues` to both.)
 
 - **Run goes first.** Running a show is what the desk is most used for. The live-view group's order
   test (`navigation.test.ts:91-102`) becomes Run's: the four live views and then Stage.
@@ -267,6 +268,9 @@ and is hidden in a venue like the rest of Library.
     number | string`:
     - patches 60, fixtures 57, groups 24, *2 stacks · 35 cues*, looks 9, palettes 31, speed masters 4,
       surfaces 0.
+    - Since R1.4 a cue can sit in several stacks or in none, so a count of cues per stack counts a
+      shared cue twice and misses a loose one. Session 4 asks Chris whether Show counts stacks and
+      entries, with R1.5's Cues row counting distinct cues.
   - Off the rig, the `needsRig` cards take D4's treatment.
 
 ### 5.2 A venue's home
@@ -313,7 +317,7 @@ and is hidden in a venue like the rest of Library.
 - **The ⌘K Project group:**
   - Its *Projects* list gains *Make <name> current* beside *Go to <name>*.
   - *Create New Project* opens the dialog.
-  - *Project Settings* appears once.
+  - *Project Settings* appears once. (Nav.1 shipped this.)
 - **Page buttons.** *Scripts* leaves the ⋮ menu, since the Library section has it. *Import* and
   *Add venue* stay as Projects-page buttons and also join ⌘K's Actions.
 
@@ -347,7 +351,7 @@ Each session is one PR (P1). All are frontend only (P5).
   - ⌘K's labels are unique.
 - **Docs:** the frontend CLAUDE.md's §Navigation Registry, which gains sections and P2.
 
-### Session 2 — Off the rig
+### Session 2 — Off the rig — done, `1d1db07`
 
 - §3.2: `needsRig`, the muted row with its dot, `NotOnRig` on every `needsRig` route, and the header's
   *Not on the rig*.
@@ -364,6 +368,8 @@ Each session is one PR (P1). All are frontend only (P5).
   reworded confirmation.
 - `document.title`.
 - ⌘K's *Make <name> current* and *Create New Project* opening the dialog.
+- §7's *Telemetry…* ⌘K item, which no session held, and the `id="telemetry"` anchor on General's
+  card that `/install#telemetry` needs (nothing carries it yet).
 - **Tests:**
   - The button names the current project and its hold.
   - The menu orders *On the rig*, then Shows and Venues.

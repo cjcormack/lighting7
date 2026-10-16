@@ -29,8 +29,8 @@ below build on: the flag is `seconds` on the same four effect homes they extend 
 `PhaseSource` arms, which share one path already; the default master is **stamped at creation** —
 by `FxPicker`, the palette editor and the MCP tools — so session 6's "a Beam master takes a new beam
 effect by S15's default" needs only `usage` to gain `beam`. Nothing here changes timing. Sessions 1–3
-each bump `formatVersion`, each taking its number by venue-visit P5: S11 took 28, S15 29, session 1 30
-and S8 31.
+each bump `formatVersion`, each taking its number by venue-visit P5: S11 took 28, S15 29, session 1 30,
+S8 31, R1.3 32 and session 2 33.
 
 ### 1.1 The survey
 
@@ -61,8 +61,8 @@ Summarised from [`effects-design/survey.md`](effects-design/survey.md), where ea
 ### 1.2 Ours
 
 Read from `main` at `8182be4`, 2026-10-15. Since then session 1 has given every effect a size and made
-`intensityMultiplier` the envelope (§3.5), and R1.2 has put a GO on the hold registry, `fx/CueHolds.kt`;
-the two bullets that name the old code say so.
+`intensityMultiplier` the envelope (§3.5), session 2 has shaped the spread, and R1.2 has put a GO on the
+hold registry, `fx/CueHolds.kt`; the three bullets that name the old code say so.
 
 - **24 built-ins**, all `.fx.kts` (`src/main/resources/fx/`): eleven level effects, six colour, six
   position, one composite. Each takes literal parameters — `min`/`max`, a radius, a range, a colour
@@ -79,7 +79,8 @@ the two bullets that name the old code say so.
   to 0. (Session 1 replaced this with `FxInstance.weight`.)
 - **The spread is always the whole cycle.** `LINEAR` is `index / size`. The shaped orders are fixed:
   `CENTER_OUT`, `EDGES_IN` and `SPLIT` (the last two give identical offsets). There are no blocks,
-  groups or general wings.
+  groups or general wings. (Session 2 added Spread, Wings, Blocks and Groups after the Order,
+  `fx/SpreadShape.kt`.)
 - **Direction is an order, not a run.** `REVERSE` and `PING_PONG` reorder heads; a waveform runs
   backwards only where its script wrote it (Ramp Down, Colour Fade's and the sweeps' `pingPong`).
   Colour Cycle has none.
@@ -379,7 +380,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   no gap.
 - **Docs:** `fx-engineering.md` §"Distribution Strategies" (and that `SPLIT` equals `EDGES_IN`).
 
-### Session 3 — One effect over a selection (backend + programmer)
+### Session 3 — One effect over a selection (backend + programmer) — done, `3cefa3ed`
 
 - `TargetRef.Selection` and `FxTargetRef.Selection` (§3.4), the expansion, the effect-only refusal,
   Record and Include, sync (`formatVersion` bump), MCP (`targets` on the effect tools).

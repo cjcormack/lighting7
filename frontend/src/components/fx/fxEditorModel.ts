@@ -379,6 +379,50 @@ export function spreadHeadCount(
   return Math.max(...elementCounts.map((n) => filteredElementCount(n, elementFilter)))
 }
 
+/** One unit of a selection, as [selectionHeadCount] walks it. */
+export interface SelectionUnit {
+  key: string
+  properties?: readonly CarrierProperty[] | null
+  elements?: readonly { key: string; properties?: readonly CarrierProperty[] | null }[] | null
+}
+
+/**
+ * [spreadHeadCount] for an effect over a selection (effects plan D3) — the desk's
+ * `buildSelectionExpansion`, counted. Each unit, in selection order, is one member where it carries
+ * the property itself, else its heads that carry it; a head reached twice counts once, at its first
+ * place, and a unit left with nothing is skipped. With no unit its heads, the members are the count;
+ * otherwise a member is a run of one head beside each fixture's run of its heads — one strip under
+ * `FLAT`, filtered across it, else the most any run keeps. A preview's count, never sent.
+ */
+export function selectionHeadCount(
+  units: readonly SelectionUnit[],
+  propertyName: string,
+  elementMode: string,
+  elementFilter: string,
+): number {
+  const seen = new Set<string>()
+  const runs: number[] = []
+  let anyHeads = false
+  for (const unit of units) {
+    if (carriesEffectProperty(unit.properties, propertyName)) {
+      if (!seen.has(unit.key)) {
+        seen.add(unit.key)
+        runs.push(1)
+      }
+      continue
+    }
+    const heads = (unit.elements ?? []).filter((e) => carriesEffectProperty(e.properties, propertyName) && !seen.has(e.key))
+    for (const head of heads) seen.add(head.key)
+    if (heads.length > 0) {
+      runs.push(heads.length)
+      anyHeads = true
+    }
+  }
+  if (!anyHeads) return runs.length
+  if (elementMode === 'FLAT') return filteredElementCount(runs.reduce((sum, n) => sum + n, 0), elementFilter)
+  return Math.max(...runs.map((n) => filteredElementCount(n, elementFilter)))
+}
+
 /** How many of [n] elements the head filter keeps — the desk's `ElementFilter.includes`, counted. */
 export function filteredElementCount(n: number, filter: string): number {
   switch (filter) {

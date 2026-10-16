@@ -345,6 +345,46 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
+    // POST /{projectId}/cue-stacks/{stackId}/entries/{entryId}/move - Move an entry to the end of
+    // another stack whole: the same row, so its uuid, number, follow and prompt-book anchor go with
+    // it. A live entry leaves the stage alone, as a removal does (cue model plan D16).
+    post<CueStackEntryMoveResource> { resource ->
+        val entryResource = resource.parent
+        val stackId = entryResource.parent.parent.stackId
+        withCurrentProject(state, entryResource.parent.parent.parent.projectId) { project ->
+            val request = call.receive<MoveEntryRequest>()
+            var status = HttpStatusCode.BadRequest
+            val result = transaction(state.database) {
+                val entry = stackEntry(project, stackId, entryResource.entryId)?.takeIf { !it.isMarker }
+                    ?: run { status = HttpStatusCode.NotFound; return@transaction null to "Entry not found" }
+                if (request.toStackId == stackId) return@transaction null to "The entry is already in that stack"
+                val target = DaoCueStack.findById(request.toStackId)?.takeIf { it.project.id == project.id }
+                    ?: return@transaction null to "Stack not found"
+                if (target.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
+                val number = entry.cueNumber?.takeIf { !entry.cueNumberAuto && it.isNotEmpty() }
+                number?.let { explicitNumberClash(target, it) }
+                    ?.let { status = HttpStatusCode.Conflict; return@transaction null to it }
+                moveEntry(state, project, entry, target) to null
+            }
+            val (move, error) = result
+            if (move == null) {
+                call.respond(status, ErrorResponse(error ?: "Failed to move entry"))
+                return@withCurrentProject
+            }
+            val manager = state.show.cueStackManager
+            manager.holds.restampEntries(move.priorities)
+            manager.runState.clearStandbyForEntries(state, setOf(move.entryId))
+            for (id in listOf(move.fromStackId, move.toStackId)) {
+                if (manager.isStackActive(id)) manager.runState.publishRunState(state, id)
+            }
+            state.show.fixtures.cueStackListChanged()
+            state.show.fixtures.cueListChanged()
+            if (move.anchored) state.show.fixtures.promptBookChanged()
+            announceCuePadsChanged(state, cueIdsOfStack(state, move.fromStackId) + cueIdsOfStack(state, move.toStackId))
+            call.respond(MoveEntryResponse(stackId = move.toStackId, entryId = move.entryId))
+        }
+    }
+
     // POST /{projectId}/cue-stacks/{stackId}/markers - Add a marker entry
     post<CueStackMarkersResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
@@ -644,6 +684,9 @@ data class CueStackEntriesResource(val parent: ProjectCueStackResource)
 @Resource("/{entryId}")
 data class CueStackEntryResource(val parent: CueStackEntriesResource, val entryId: Int)
 
+@Resource("/move")
+data class CueStackEntryMoveResource(val parent: CueStackEntryResource)
+
 @Resource("/activate")
 data class CueStackActivateResource(val parent: ProjectCueStackResource)
 
@@ -791,6 +834,13 @@ data class AddCueToStackRequest(
 )
 
 @Serializable
+data class MoveEntryRequest(val toStackId: Int)
+
+/** Where the entry now is: the same entry, in [stackId]. */
+@Serializable
+data class MoveEntryResponse(val stackId: Int, val entryId: Int)
+
+@Serializable
 data class ActivateCueStackRequest(
     /** The entry to start at (cue model plan P2); absent starts at the armed standby, else the first cue entry. */
     val entryId: Int? = null,
@@ -932,7 +982,7 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
 }
 
 /** The cues [stackId]'s entries place, in their own transaction. */
-private fun cueIdsOfStack(state: State, stackId: Int): List<Int> = transaction(state.database) {
+internal fun cueIdsOfStack(state: State, stackId: Int): List<Int> = transaction(state.database) {
     entriesOfStack(EntityID(stackId, DaoCueStacks)).mapNotNull { it.cueId }.distinct()
 }
 
@@ -940,6 +990,59 @@ private fun cueIdsOfStack(state: State, stackId: Int): List<Int> = transaction(s
 private fun stackEntry(project: DaoProject, stackId: Int, entryId: Int): DaoCueStackEntry? {
     val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id } ?: return null
     return DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stack.id.value }
+}
+
+/** What [moveEntry] did, for the runtime and the broadcasts once the transaction has committed. */
+internal data class EntryMove(
+    val entryId: Int,
+    val fromStackId: Int,
+    val toStackId: Int,
+    /** A prompt-book anchor stands on the entry: the book shows its new place. */
+    val anchored: Boolean,
+    /** Both stacks' entries' priorities; a hold is restamped only within its own stack's band. */
+    val priorities: Map<Int, Int>,
+)
+
+/**
+ * Move cue [entry] to the end of [target], keeping the row: its uuid, explicit number, follow and
+ * prompt-book anchor stay with it, and both stacks' auto numbers follow the change. A live stack
+ * whose live entry it was keeps holding the cue and plays on from where the entry stood, as a
+ * removal does (D16), its hold at that stack's priority until its next GO (`restampEntries` restamps
+ * a hold only within its own stack's band). The caller has
+ * checked that an explicit number is free in [target]. Inside the caller's transaction.
+ */
+internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntry, target: DaoCueStack): EntryMove {
+    val source = entry.stack
+    val manager = state.show.cueStackManager
+    val current = project.id == state.projectManager.currentProject.id
+    val beforeSource = cueEntryIds(source)
+    val beforeTarget = cueEntryIds(target)
+    if (current) {
+        val list = entriesOf(source)
+        val survivors = list.mapNotNullTo(HashSet()) { e -> e.id.value.takeIf { it != entry.id.value } }
+        manager.detachEntry(source.id.value, entry.id.value, EntryPlace.of(entry, list, survivors))
+    }
+    // An explicit number goes with it, taken from any auto entry there that holds it; an auto number
+    // is source's, so the entry is labelled again where it lands.
+    if (!entry.cueNumberAuto && !entry.cueNumber.isNullOrEmpty()) {
+        releaseAutoNumber(target, entry.cueNumber, exceptEntryId = entry.id.value)
+    } else {
+        entry.cueNumber = null
+        flushPendingEntryWrites()
+    }
+    val existing = entriesOf(target)
+    entry.stack = target
+    writeEntryOrder(existing + entry, fresh = listOf(entry))
+    renumberAutoEntries(source, beforeSource)
+    renumberAutoEntries(target, beforeTarget)
+    val priorities = if (current) stackEntryPriorities(source) + stackEntryPriorities(target) else emptyMap()
+    return EntryMove(
+        entryId = entry.id.value,
+        fromStackId = source.id.value,
+        toStackId = target.id.value,
+        anchored = !DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq entry.id }.empty(),
+        priorities = priorities,
+    )
 }
 
 /** Marker entry [entryId] of stack [stackId] in [project], or null. Inside a transaction. */

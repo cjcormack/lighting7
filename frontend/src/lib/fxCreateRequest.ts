@@ -1,6 +1,7 @@
 import type { ApplyFxRequest, BlendMode, DistributionStrategy, ElementMode } from '@/api/groupsApi'
 import type { AddFixtureFxRequest } from '@/store/fixtureFx'
 import type { EffectDirection } from '@/api/fxApi'
+import type { CueTarget } from '@/api/cuesApi'
 
 /**
  * The one place that knows how "start this effect" is spelled for a fixture and for a group.
@@ -17,10 +18,14 @@ import type { EffectDirection } from '@/api/fxApi'
  * group's — there is nothing route-shaped left to share.
  */
 
-/** A target, reduced to the one field its create route addresses it by. */
+/**
+ * A target, reduced to the one field its create route addresses it by. A selection goes to the
+ * fixture route as `targets` — one effect over them all, in order (effects plan D3).
+ */
 export type FxCreateTarget =
   | { type: 'group'; groupName: string }
   | { type: 'fixture'; fixtureKey: string }
+  | { type: 'selection'; targets: CueTarget[] }
 
 export interface FxCreateRequest {
   effectType: string
@@ -117,7 +122,7 @@ export function fxCreateAddition(
     kind: 'fixture',
     payload: {
       ...shared,
-      fixtureKey: target.fixtureKey,
+      ...(target.type === 'selection' ? { targets: target.targets } : { fixtureKey: target.fixtureKey }),
       startOnBeat: request.startOnBeat ?? true,
       ...(request.distribution !== undefined
         ? { distributionStrategy: request.distribution }
