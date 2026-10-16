@@ -400,7 +400,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   back as one.
 - **Docs:** `fx-engineering.md` §"FX Targets", `lighting-composition-model.md`.
 
-### Session 4 — Fading by size (backend)
+### Session 4 — Fading by size (backend) — done, `56cc395`
 
 - §3.5 on the hold registry, as R1.2 shipped it. Today `CueHolds.bringOn` spawns a cue's effects at
   full whatever its `Arrival` (which governs rows only), `takeOff` removes them whatever its
