@@ -211,6 +211,9 @@ and a layer records both as its `targets` and `propertyMask`.
     effects. A spent N-shot (effects plan session 1) is removed instead: only a layer keeps one
     (`FxEngine.finishNShots`).
   - The layer is then removed with no republish of its keys, so the stage does not move.
+  - A Look layer's scenery passes into the programmer's own scenery, so it does not move either
+    (decided with Chris during session 1; §9's "scenery" is about addressing it through the
+    selection, which this does not do).
   - The rail's layer menu and S14's tables carry it.
 - **Apply as values** is ⌥click and the hold menu's second item:
   - for a palette, today's `POST /palettes/{id}/apply` (literals, a detached effect copy);
@@ -388,7 +391,7 @@ only on the next press.
 
 Each session is one PR (P1).
 
-### Session 1 — The press on the desk (backend)
+### Session 1 — The press on the desk (backend) — done, `5613a361`
 
 - `fx/LayerPress.kt` factored out of `ProgrammerLayerStack.toggle`, pure over a layer list.
   `toggle` becomes its caller, with no behaviour change, pinned by the existing toggle tests.
