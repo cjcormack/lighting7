@@ -260,6 +260,9 @@ The closing check moves this plan and the six R plans to `completed/`. Another e
 calls for an unscheduled check first, to file its notes into the lanes. Each check, once merged, is
 a one-line row here.
 
+- ~~K1 — after twelve sessions~~ — done, `64ab8eaf` (plans corrected for R1.1, R1.2, R4.1, S6, S8,
+  S11 and S15; Rig and output folded; Apply opened next; P5's claiming rule; no manual check run).
+
 ### Research and design — done
 
 Each produced a plan, which wins inside its scope. Their sessions are in §4.
