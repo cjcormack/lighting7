@@ -11,7 +11,8 @@ import uk.me.cormack.lighting7.fx.buildCombinedCueLayerRows
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.State
-import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.fx.cueDerivedPriority
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
 
 /**
  * "What would this cue look like?" — composes a cue's Layer 4 contribution against what is
@@ -27,7 +28,7 @@ import uk.me.cormack.lighting7.models.entryInStack
  * Three deliberate limits, all worth knowing before building a UI on this:
  *
  * 1. **Layer 4 only.** Effects in the cue band have no static value to report, and timed preset
- *    applications don't contribute (matching [buildCombinedCueLayerRows] and `applyCue`). A cue
+ *    applications don't contribute (matching [buildCombinedCueLayerRows] and a GO's first publish). A cue
  *    whose look is carried by an effect previews as whatever its assignments say, which may be
  *    nothing.
  * 2. **Assertions only.** Channels no cue asserts are absent from the response rather than
@@ -73,31 +74,36 @@ data class PreviewSceneryDto(
 )
 
 /**
- * Compose [requestedCueId] (or [stackId]'s effective next) as if it were live.
+ * Compose entry [requestedEntryId] of [stackId] (or the stack's effective next) as if it were live.
  *
- * Returns null when there is nothing on deck — end of a non-looping stack with no cue named.
- * Throws [IllegalArgumentException] when a named cue doesn't exist or belongs to another stack.
+ * Returns null when there is nothing on deck — end of a non-looping stack with no entry named.
+ * Throws [IllegalArgumentException] when a named entry isn't in the stack, or is a marker.
  */
-internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): PreviewCueResponse? {
+internal fun previewCueLook(state: State, stackId: Int, requestedEntryId: Int?): PreviewCueResponse? {
     val engine = state.show.fxEngine
-    val cueId = requestedCueId
-        ?: state.show.cueStackManager.runState.effectiveNextCueId(state, stackId)
+    val holds = state.show.cueStackManager.holds
+    val entryId = requestedEntryId
+        ?: state.show.cueStackManager.runState.effectiveNext(state, stackId)?.entryId
         ?: return null
 
     val applyData = transaction(state.database) {
-        val cue = DaoCue.findById(cueId)
-            ?: throw IllegalArgumentException("Cue not found: $cueId")
-        // The caller names the stack (cue model plan P7).
-        val entry = entryInStack(stackId, cueId)
-            ?: throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
-        buildCueApplyData(cue, entry)
+        // The caller names the stack and the entry (cue model plan P2, P7).
+        val entry = DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stackId }
+            ?: throw IllegalArgumentException("Entry $entryId is not in stack $stackId")
+        val cue = entry.cue
+            ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be previewed")
+        // At the priority the GO would give it: this entry's hold beside any the cue already has.
+        val placed = buildCueApplyData(cue, entry)
+        holds.priorityOf(cue.id.value)?.let { placed.copy(livePriority = maxOf(it, cueDerivedPriority(placed))) } ?: placed
     }
+    val cueId = applyData.cueId
 
-    // What the GO leaves alone: every published cue that isn't this stack's — see
-    // [CueAssignmentLayer.assignmentsExcludingStack] for why the filter lives in the engine.
-    val retained = engine.cueLayer.assignmentsExcludingStack(stackId)
+    // What the GO leaves alone: every published cue but the ones only this stack holds — a cue
+    // another stack or a loose press keeps live stays on stage through the GO (cue model plan D3) —
+    // and the previewed cue's own published rows, which its incoming ones stand in for.
+    val retained = engine.cueLayer.assignmentsExcludingCues(holds.cuesHeldOnlyBy(stackId) + cueId)
 
-    val incoming = buildCombinedCueLayerRows(state, cueId, applyData).rows
+    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, priority = cueDerivedPriority(applyData)).rows
 
     // A fresh resolver, not `engine.layerResolver`: [CueAssignmentResolver.resolve] is a pure
     // function of its rows, so composing here cannot disturb what is on stage.
@@ -136,7 +142,7 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
         cueId = cueId,
         channels = channels.values.sortedWith(compareBy({ it.universe }, { it.channel })),
         skipped = skipped.sorted(),
-        scenery = state.sceneryService.preview(stackId, cueId).map {
+        scenery = state.sceneryService.preview(stackId, entryId, cueId).map {
             PreviewSceneryDto(it.elementUuid.toString(), sceneryStateObject(it.state), sceneryStateObject(it.from), it.durationMs)
         },
     )

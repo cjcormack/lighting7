@@ -348,8 +348,9 @@ class EffectsService(private val state: State) {
     // ─── Cue events ──────────────────────────────────────────────────────────────────────────
 
     /**
-     * GO into [cueId]: schedule its [events]. Returns at once — this runs on every GO path, inside
-     * `activateCueInStack` and the AI's `applyCue`, and must neither block nor fail them.
+     * [cueId] came on: schedule its [events]. Returns at once — it runs on the first hold of every
+     * cue (`CueHolds.acquire`, cue model plan D15), a stack GO's or a loose press's, and must neither
+     * block nor fail them.
      *
      * Rehearsal and the arm are judged **now**: blind at GO rehearses them all; unarmed at GO skips
      * them all with one announcement, and arming a moment later does not bring them back.

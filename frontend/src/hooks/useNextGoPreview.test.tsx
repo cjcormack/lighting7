@@ -23,9 +23,10 @@ import { useNextGoSource, useNextGoStatus } from './useNextGoPreview'
  * nothing on deck (which must show plain output rather than blacking the stage out).
  */
 
+// Each cue's entry id is its cue id × 10, so a test can tell which one a request names.
 const CUES = [
-  { id: 11, name: 'Preset', cueNumber: '1', cueNumberAuto: false },
-  { id: 12, name: 'Blackout', cueNumber: '2', cueNumberAuto: false },
+  { id: 11, entryId: 110, name: 'Preset', cueNumber: '1', cueNumberAuto: false },
+  { id: 12, entryId: 120, name: 'Blackout', cueNumber: '2', cueNumberAuto: false },
 ]
 
 const stack = (nextCueId: number | null) => ({
@@ -36,8 +37,11 @@ const stack = (nextCueId: number | null) => ({
   type: 'STACK',
   label: null,
   activeCueId: 10,
+  activeEntryId: 100,
   standbyCueId: null,
+  standbyEntryId: null,
   nextCueId,
+  nextEntryId: nextCueId == null ? null : nextCueId * 10,
   canEdit: true,
   canDelete: true,
   cues: CUES,
@@ -66,6 +70,9 @@ const frame = (over: Record<string, unknown> = {}) => ({
   stackId: 7,
   activeCueId: 11,
   nextCueId: 12,
+  activeEntryId: 110,
+  nextEntryId: 120,
+  standbyEntryId: null,
   nextIsArmed: false,
   transition: true,
   fadeDurationMs: null,
@@ -112,7 +119,7 @@ describe('useNextGoSource', () => {
 
     await waitFor(() => expect(previewRequests()).toHaveLength(2))
     const url = new URL(previewRequests()[1].url)
-    expect(url.searchParams.get('cueId')).toBe('12')
+    expect(url.searchParams.get('entryId')).toBe('120')
   })
 
   it('requests nothing while disabled', async () => {

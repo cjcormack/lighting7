@@ -241,13 +241,15 @@ export const cueStacksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      // Optimistic update: immediately set activeCueId so the UI highlights correctly
-      async onQueryStarted({ projectId, stackId, cueId }, { dispatch, queryFulfilled }) {
+      // Optimistic update: immediately set the live entry so the UI highlights correctly
+      async onQueryStarted({ projectId, stackId, entryId }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
             if (stack) {
-              stack.activeCueId = cueId ?? stack.cues.find(isCueRow)?.id ?? null
+              const row = stack.cues.filter(isCueRow).find((c) => entryId == null || c.entryId === entryId)
+              stack.activeEntryId = row?.entryId ?? null
+              stack.activeCueId = row?.id ?? null
             }
           }),
         )
@@ -256,7 +258,10 @@ export const cueStacksApi = restApi.injectEndpoints({
           dispatch(
             cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
               const stack = draft.find((s) => s.id === stackId)
-              if (stack) stack.activeCueId = data.cueId
+              if (stack) {
+                stack.activeEntryId = data.entryId
+                stack.activeCueId = data.cueId
+              }
             }),
           )
         } catch {
@@ -277,12 +282,15 @@ export const cueStacksApi = restApi.injectEndpoints({
         url: `projects/${projectId}/cue-stacks/${stackId}/deactivate`,
         method: 'POST',
       }),
-      // Optimistic update: clear activeCueId immediately
+      // Optimistic update: clear the live entry and its cue immediately
       async onQueryStarted({ projectId, stackId }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
-            if (stack) stack.activeCueId = null
+            if (stack) {
+              stack.activeCueId = null
+              stack.activeEntryId = null
+            }
           }),
         )
         try {
@@ -312,10 +320,11 @@ export const cueStacksApi = restApi.injectEndpoints({
           cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
             const stack = draft.find((s) => s.id === stackId)
             if (!stack || stack.cues.length === 0) return
-            // Markers are never gone to, so the walk is over the cue entries alone.
+            // Markers are never gone to, so the walk is over the cue entries alone — by entry, since
+            // a stack may name one cue twice.
             const cues = stack.cues.filter(isCueRow)
             if (cues.length === 0) return
-            const currentIdx = cues.findIndex((c) => c.id === stack.activeCueId)
+            const currentIdx = cues.findIndex((c) => c.entryId === stack.activeEntryId)
             const delta = direction === 'FORWARD' ? 1 : -1
             let nextIdx = currentIdx + delta
             if (stack.loop) {
@@ -323,7 +332,11 @@ export const cueStacksApi = restApi.injectEndpoints({
             } else {
               nextIdx = Math.max(0, Math.min(cues.length - 1, nextIdx))
             }
-            stack.activeCueId = cues[nextIdx]?.id ?? stack.activeCueId
+            const next = cues[nextIdx]
+            if (next) {
+              stack.activeCueId = next.id
+              stack.activeEntryId = next.entryId
+            }
           }),
         )
         try {
@@ -331,7 +344,10 @@ export const cueStacksApi = restApi.injectEndpoints({
           dispatch(
             cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
               const stack = draft.find((s) => s.id === stackId)
-              if (stack) stack.activeCueId = data.cueId
+              if (stack) {
+                stack.activeCueId = data.cueId
+                stack.activeEntryId = data.entryId
+              }
             }),
           )
         } catch {
@@ -345,7 +361,7 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     // `goToCueInStack` stood here, with the same optimistic cache patch `activateCueStack`
-    // carries. Jumping to a cue *is* `activateCueStack({ cueId })` — one endpoint whether the
+    // carries. Jumping to a cue *is* `activateCueStack({ entryId })` — one endpoint whether the
     // stack was already live or not — so the go-to POST had no caller.
 
     /**
@@ -376,17 +392,18 @@ export const cueStacksApi = restApi.injectEndpoints({
      * `isError`, so the View menu can say a preview failed rather than describing a look nobody is
      * being shown.
      *
-     * `cueId` is required rather than "null means the effective next": under a query the arg *is*
-     * the cache key, and a key meaning "whatever the server currently thinks" would serve one
-     * cue's look under another cue's identity. The caller knows the id — the server broadcasts it.
+     * `entryId` (the stack entry, cue model plan P2) is required rather than "null means the
+     * effective next": under a query the arg *is* the cache key, and a key meaning "whatever the
+     * server currently thinks" would serve one cue's look under another cue's identity. The caller
+     * knows the id — the server broadcasts it.
      */
     previewCueLook: build.query<
       PreviewCueResponse,
-      { projectId: number; stackId: number; cueId: number }
+      { projectId: number; stackId: number; entryId: number }
     >({
-      query: ({ projectId, stackId, cueId }) => ({
+      query: ({ projectId, stackId, entryId }) => ({
         url: `projects/${projectId}/cue-stacks/${stackId}/preview`,
-        params: { cueId },
+        params: { entryId },
       }),
     }),
 
@@ -537,6 +554,9 @@ lightingApi.cueStacks.subscribeToRunState(function (event: CueRunStateEvent) {
       if (!stack) return
       stack.activeCueId = event.activeCueId
       stack.nextCueId = event.nextCueId
+      stack.activeEntryId = event.activeEntryId
+      stack.nextEntryId = event.nextEntryId
+      stack.standbyEntryId = event.standbyEntryId
     }),
   )
 })

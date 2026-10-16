@@ -600,7 +600,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (82)
+## Server → Client (83)
 
 ### Boot — `BootSocket.kt`
 
@@ -613,8 +613,9 @@ Outbound-only, and the only frame a client sees before the show-scoped families 
 
 ### Broadcast — `BroadcastSocket.kt`
 
-Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged`,
-`cueRunStateChanged`, `cuesRecomposed`, `palettePressed` and `busk.layoutChanged` is a **payload-free cache
+Fired from the per-project `FixturesChangeListener` — bar `cueHolds.state`, a `StateFlow`
+subscription. Everything here except `showChanged`, `cueRunStateChanged`, `cueHolds.state`,
+`cuesRecomposed`, `palettePressed` and `busk.layoutChanged` is a **payload-free cache
 invalidation**: the client refetches over REST (`busk.rigChanged` is dotted for the naming rule but
 payload-free, since one project has one rig).
 
@@ -641,7 +642,8 @@ payload-free, since one project has one rig).
 | `fixturesChanged` | — | Fixtures re-registered; `channelMappingState` follows immediately |
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
-| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally |
+| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
+| `cueHolds.state` | `projectId`, `cues: [{cueId, priority, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}]}]` | What holds every live cue (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
 happens is not obvious. The backend deliberately does **not** fire `paletteListChanged` /
@@ -684,6 +686,17 @@ for, and both are separate launches that can reach the socket in either order. B
 the socket's `CueRunStateGate`, which orders them by the server-side `CueRunState.seq` and drops a
 frame older than one already sent for its stack — the stale snapshot and the `transition = false`
 duplicate alike. See `docs/cue-stacks-engineering.md` §"WebSocket".
+
+**Cue holds.** `cueHolds.state` is the hold registry's frame (`fx/CueHolds.kt`, cue model plan P3,
+§3.4): per live cue, its priority and every hold on it — a stack's entry, or a loose press with its
+sequence number. It is a `StateFlow` hosted on `State` (`State.cueHoldsFrame`) rather than on the
+show, so the socket's subscription survives a project switch and a switch is just the next frame
+(empty, then the new show's). The registry writes a whole frame on every hold that comes or goes
+and every priority restamp, so the subscription is both the connect snapshot and the stream — no
+inbound frame exists, `FU-AUTH-WS-PER-MESSAGE` does not fire and `TraceSampling.WS_MESSAGES` needs
+no row. A client reads `projectId` against its own project: another's frame is nothing live here.
+It is what the busk cue pad's and cue slot's two rings read (D11: solid while a `LOOSE` hold is
+among its holds, outline while only stacks hold it), and what "on stage" means to the client (`useCueRings`, which replaced `useActiveCueIds`).
 
 ### Channel — `ChannelSocket.kt`
 

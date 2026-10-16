@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.fx.toggleLooseCue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
@@ -331,12 +332,14 @@ class DefaultSurfaceActions(
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     override fun fireCue(cueId: Int, cueUuid: String?) {
         val cueId = resolveCueId(cueId, cueUuid) ?: return
         try {
-            cueStackManager.fireCue(state, cueId, GlobalScope)
-            state.show.fixtures.cueStackListChanged()
+            // A press toggles the cue's loose hold (cue model plan D6, D11), as a busk cue pad does:
+            // it names the cue and no stack, and a second press lets it go.
+            if (cueStackManager.holds.toggleLooseCue(state, cueId) == null) {
+                logger.warn("Surface FIRE CUE: cue $cueId not found")
+            }
         } catch (e: Exception) {
             logger.warn("Surface FIRE CUE failed for $cueId: ${e.message}")
         }

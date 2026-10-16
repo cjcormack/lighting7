@@ -68,8 +68,8 @@ export const BUSK_WIDTH_LABELS: Readonly<Record<number, string>> = {
  * What a cue pad draws: the mono number, the name, the stack it lives in.
  *
  * Deliberately not the full cue document — a cue carries every layer and trigger, and a pad needs
- * three strings. Its **lit** state is not here either: it comes from the cue stack list's
- * `activeCueId` (`useActiveCueIds`), because a cue can be live without being the playhead.
+ * three strings. Its **lit** state is not here either: it comes from `cueHolds.state`
+ * (`useCueRings`), because a cue can be live without being any stack's playhead.
  */
 export interface BuskCue {
   id: number

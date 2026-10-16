@@ -13,8 +13,9 @@ A **Cue Stack** is a named, project-scoped entity that groups cues into an order
 
 Key behaviours:
 - Every cue has exactly one entry, so it is in exactly one stack (cue model plan P4, until its
-  session 2; there are no standalone cues, and an archive from before stacks were mandatory imports
-  its stack-less cues into an "Unsorted" stack)
+  session 4; there are no standalone cues, and an archive from before stacks were mandatory imports
+  its stack-less cues into an "Unsorted" stack). The runtime already speaks entries and holds
+  (§"Runtime"), so a cue named by several entries needs nothing more of it
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through the list's cue entries in order, markers skipped
 - Deactivating removes all effects tagged with the stack's ID
@@ -178,28 +179,75 @@ is next mutated.
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression
 - **EasingCurve enum** (LINEAR, SINE_IN_OUT, CUBIC_IN_OUT, etc.) stored as string for extensibility
 
-## Runtime: CueStackManager
+## Runtime: CueStackManager and the hold registry
 
-`CueStackManager` (`fx/CueStackManager.kt`) manages in-memory state for active stacks. It holds a reference to `FxEngine` but does not own effects — it delegates to FxEngine for effect lifecycle.
+`CueStackManager` (`fx/CueStackManager.kt`) runs stacks: which **entry** each live stack is on, its
+auto-advance timer, and GO / GO TO / BACK. It does not make a cue live itself — every path that puts
+a cue on stage or takes it off goes through the **hold registry**, `fx/CueHolds.kt`, reached as
+`cueStackManager.holds` (cue model plan P3, §3.4).
 
-Two halves of running a stack live beside it rather than in it, because neither needs the firing
-machinery:
+Three halves of running a stack live beside it rather than in it:
 
 | Class | Owns |
 |-------|------|
-| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade envelope: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop if cancelled |
+| `fx/CueHolds.kt` | What holds each live cue, its priority, and bringing a cue on (first hold) and taking it off (last release) — effects, Layer 4 rows, stomp, timed effects, triggers and events |
+| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade envelope: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop if cancelled — unless a hold has that cue again |
 | `fx/CueRunStateTracker.kt` | Standby arming, the definition of "next", `CueRunState` and its broadcast. Reached as `cueStackManager.runState` |
 
-The manager keeps the firing path and the per-stack live-cue / auto-advance bookkeeping; the
-tracker reads that bookkeeping through a `LiveStacks` snapshot rather than the mutable entry, so
-one broadcast frame can't describe two moments.
+The tracker reads the manager's bookkeeping through a `LiveStacks` snapshot rather than the mutable
+entry, so one broadcast frame can't describe two moments.
+
+### Holds
+
+A cue is live while anything **holds** it, and comes off with its last hold (D3: a cue live in two
+places is one contribution, never two). A hold is one of:
+
+- **`Stack(stackId, entryId)`** — a running stack whose live entry names the cue. A GO, GO TO, BACK,
+  activate or auto-advance moves it from entry to entry.
+- **`Loose(seq)`** — a press with no stack behind it (D6): `POST /cues/{id}/apply`, the MCP
+  `apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue` and a hand place. One loose hold per cue;
+  pressing it again re-stamps it as the newest. `/cues/{id}/stop`, `stop_cue`, a second pad or slot
+  press and a solo bank sibling let it go.
+
+The registry decides three things:
+
+- **`acquire` on a cue's first hold brings it on** — its ad-hoc and Look effects, its Layer 4 rows
+  (at weight 0 when a crossfade will bring them in), its stomp, its timed effects and triggers, and
+  its **events** (D15). Any other acquire only restamps its priority: nothing on stage moves.
+- **`release` of its last hold takes it off** — triggers stopped, effects removed, its rows dropped
+  or left at full weight for the caller's crossfade to take down. Any other release only restamps.
+- **A cue's priority is its highest hold's.** A stack hold composes at the entry's
+  `cueDerivedPriority` (the stack band plus the entry's position, markers counted); a loose hold at
+  `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
+  pressed over a running stack wins on every LTP property until it is let go, and the stack takes
+  over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
+  sort, a cue created, recorded or deleted mid-list, a marker added or removed) calls
+  `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
+
+The engine layers below stay keyed by cue — `CueAssignmentLayer`'s rows and fade weights,
+`CueTriggerManager`'s jobs, `FxInstance.cueId` — which is what D3 makes correct. An effect a cue
+brings on is tagged with the stack that brought it (`cueStackId`), for the effect list's readout;
+nothing removes effects by that tag any more (`removeEffectsForCueStack` removes only
+stack-scoped effects with no cue).
+
+The registry's lock covers the bookkeeping only; the engine work runs outside it, and reads
+(`isHeld`, `priorityOf`, `stackOf`) take a volatile view. A stack delete stops its stack inside its
+own transaction, and the pool is one SQLite connection, so a lock held across a cook (which can read
+the Look cache) would deadlock the two until Hikari timed out.
+
+What holds every live cue is published as **`cueHolds.state`** — `State.cueHoldsFrame`, a
+`StateFlow` that outlives a show so a socket survives a project switch (§"WebSocket"). Runtime only:
+never persisted, never synced. A same-project reload carries the stacks' entries, their standbys and
+the loose cues in press order (`ShowCarry`), re-taking each loose hold without firing its events; a
+project switch starts empty.
 
 ### Per-Stack State
 
 ```kotlin
-data class ActiveStackState(
+private data class ActiveStackState(
     val stackId: Int,
-    var activeCueId: Int,
+    val activeEntryId: Int,
+    val activeCueId: Int,
     var autoAdvanceJob: Job?,
     // Copied from the live cue at activation, so the run-state broadcast can describe
     // the stack without going back to the DB.
@@ -208,84 +256,107 @@ data class ActiveStackState(
     // "will it advance", not "is it configured to".
     var autoAdvance: Boolean,
     var autoAdvanceDelayMs: Long?,
-    // Null unless a real crossfade is under way — a cue that snapped (no outgoing cue to fade
-    // out of) has no elapsed time to report, and reporting one would have every client animate
-    // a fade that never happened.
+    // Null unless a real crossfade is under way — a cue that snapped, or a GO between two
+    // holds of cues that were already on and stay on, has no elapsed time to report.
     var fadeStartedAtMs: Long?,
 )
 ```
 
-Stored in a `ConcurrentHashMap<Int, ActiveStackState>`.
+Stored in a `ConcurrentHashMap<Int, ActiveStackState>`, keyed by stack. The live **entry** is the
+stack's position (P2); the cue is what that entry names.
 
 ### Standby — the armed "next"
 
 Lives in `CueRunStateTracker`, reached as `cueStackManager.runState`.
 
-`standbyCueIds: ConcurrentHashMap<Int, Int>` (`stackId → cue`) holds the cue an operator has
+`standbys: ConcurrentHashMap<Int, CueEntryRef>` (`stackId → entry`) holds the entry an operator has
 armed as the next GO. It sits **beside** `activeStacks`, not inside `ActiveStackState`, for two
-reasons: a cue can be armed before the stack is running (pre-show), and `activateCueInStack`
-replaces the whole `ActiveStackState` entry.
+reasons: an entry can be armed before the stack is running (pre-show), and activation replaces the
+whole `ActiveStackState` entry. A marker is never armed.
 
 Transient runtime state — never persisted, never synced (see `docs/sync-engineering.md`'s
 decision tree).
 
 It used to live in the browser. Each session computed "next" for itself, so a cue armed on a
 tablet was invisible to the desk and the two disagreed about what GO would fire. There is now
-one definition, `effectiveNextCueId`:
+one definition, `effectiveNext`:
 
 > the armed standby, when one is set and isn't already live — else the positional next
 > cue entry, honouring `loop`. Null at the end of a non-looping stack.
 
 Everything reads it: `advanceStack` FORWARD **fires** it (so a client calls `advance`
 unconditionally instead of choosing between `advance` and `go-to`), `activateAtFirstCue` starts a
-stopped stack on it, `CueStackDetails.nextCueId` reports it, and the run-state broadcast carries
-it. A GO consumes the standby; deactivating a stack clears it.
+stopped stack on it, `CueStackDetails.nextEntryId` / `nextCueId` report it, and the run-state
+broadcast carries it. A GO consumes the standby; deactivating a stack clears it.
 
-`orderedStandardCueIds` (the stack's cue entries' cues, in order) + `positionalCueId` are the shared primitives — `advanceStack` and
-`effectiveNextCueId` cannot drift because they walk the same list by the same rules. The one
-difference is at a non-looping boundary: `positionalCueId` returns null there, which GO reads as
-"stay on the current cue" and "next" reads as "nothing on deck".
+`orderedCueEntries` (the stack's cue entries, markers left out, as `CueEntryRef(entryId, cueId)`) +
+`positional` are the shared primitives — `advanceStack` and `effectiveNext` cannot drift because
+they walk the same list by the same rules. Both walk **entries**, so a stack that names one cue
+twice steps through both. The one difference is at a non-looping boundary: `positional` returns null
+there, which GO reads as "stay on the current entry" and "next" reads as "nothing on deck".
 
 ### Key Methods
 
 | Method | Description |
 |--------|-------------|
-| `activateCueInStack(state, stackId, cueId, scope)` | Activate a cue within a stack (handles crossfade and auto-advance) |
-| `advanceStack(state, stackId, direction, scope)` | Advance forward/backward respecting loop setting |
-| `goToCue(state, stackId, cueId, scope)` | Jump to a specific cue |
-| `deactivateStack(stackId)` | Remove all effects, cancel timers |
-| `getActiveCueId(stackId)` | Query active cue (or null) |
-| `getActiveStackIds()` | All active stack IDs |
-| `isStackActive(stackId)` | Check if active |
+| `activateEntry(state, stackId, entryId, scope, fireEvents)` | Make an entry the stack's live one (handles the crossfade and auto-advance) |
+| `advanceStack(state, stackId, direction, scope)` | Advance forward/backward respecting loop; BACKWARD fires no events |
+| `goToEntry(state, stackId, entryId, scope)` | Jump to a specific entry |
+| `go(state, stackId, scope)` / `activateAtFirstCue(...)` | GO a live stack, or start a stopped one on its effective next |
+| `deactivateStack(stackId, state)` | Release the stack's hold, cancel its fade and timers |
+| `getActiveEntryId(stackId)` / `getActiveCueId(stackId)` | The live entry, and the cue it names (or null) |
+| `getActiveStackIds()` / `isStackActive(stackId)` | Live stacks |
+
+On `cueStackManager.holds` (`CueHolds`):
+
+| Method | Description |
+|--------|-------------|
+| `isHeld(cueId)` / `looseHeld(cueId)` / `holdsOf(cueId)` / `priorityOf(cueId)` | What holds a cue and at what priority |
+| `snapshot()` | Every live cue with its holds, as `cueHolds.state` carries it |
+| `cuesHeldOnlyBy(stackId)` | The cues a stack alone holds — what preview takes out of the base |
+| `takeLooseCue(state, cueId)` / `toggleLooseCue(state, cueId)` | A press: take a loose hold (or re-stamp it as the newest), or take/let go by its current state |
+| `dropLoose(state, cueId)` / `dropAllLoose(state, exceptCueId)` / `dropAll(state, cueId)` | Let a press go; every press but one (`/apply?replaceAll`, `apply_cue`'s `replaceAll`); every hold of a deleted cue |
+| `restampEntries(entryPriorities)` | Re-rank the stack holds after a write that moved entry positions |
 
 On `cueStackManager.runState` (`CueRunStateTracker`):
 
 | Method | Description |
 |--------|-------------|
-| `setStandby(state, stackId, cueId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Rejects a cue with no entry in that stack — arming is a deferred GO. The REST route takes the **entry** and refuses a marker before it gets here |
-| `getStandbyCueId(stackId)` | The explicitly armed cue, if any |
-| `effectiveNextCueId(...)` | What the next GO fires. Two overloads: one taking the stack's already-loaded cue list (for the details DTO), one that queries |
+| `setStandby(state, stackId, entryId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Refuses an entry of another stack and a marker — arming is a deferred GO |
+| `getStandbyEntryId(stackId)` / `getStandbyCueId(stackId)` | The explicitly armed entry, and the cue it names |
+| `effectiveNext(...)` | What the next GO fires, as a `CueEntryRef`. Two overloads: one taking the stack's already-loaded entries (for the details DTO), one that queries |
 | `runStateFor(state, stackId)` | The stack's run state, for the broadcast and the connect-time snapshot |
-| `stacksWithRunState()` | Stacks that are live or hold an armed cue — what the connect snapshot walks |
+| `stacksWithRunState()` | Stacks that are live or hold an armed entry — what the connect snapshot walks |
 
 ### Activate Flow
 
-1. Cancel any in-progress crossfade and auto-advance for this stack
-2. Snapshot outgoing effects (for crossfade) — effects where `cueStackId == stackId`
-3. If crossfading: leave outgoing effects in place; if snap-cut: remove them
-4. Apply cue's effects (presets + ad-hoc) tagged with both `cueId` and `cueStackId`
-5. If crossfading: start new effects at `intensityMultiplier = 0.0`, launch crossfade coroutine
-6. If this cue has auto-advance configured: start delay timer
-7. Publish the run state, then the scenery (`SceneryService.onCueLive`) — §"Scenery" below.
+1. Cancel any in-progress crossfade and auto-advance for this stack. The driver drops the abandoned
+   fade's outgoing cue's rows unless a hold has that cue again.
+2. **Acquire the incoming entry's hold, then release the outgoing's** — in that order, so a GO
+   between two entries naming one cue (D7) never lets it go. With a fade and an outgoing stack, the
+   incoming cue arrives at weight 0 if this is its first hold, and the outgoing cue's rows are left
+   at full weight if this was its last.
+3. Fade only what moved: the incoming cue if its hold was the first, the outgoing cue if its release
+   was the last. A cue already held elsewhere stays at full on both sides, so a GO from A1 to A2 of
+   the same cue — or onto a cue another stack already holds — moves nothing, and the run state
+   reports no fade (`fadeStartedAtMs` null).
+4. Effects always snap — a cue's effects come on with its first hold and go with its last.
+5. The **incoming** entry's follow schedules the auto-advance, even when it names the cue that was
+   already live (D7).
+6. Publish the run state, then the scenery (`SceneryService.onEntryLive`) — §"Scenery" below.
    `deactivateStack` likewise ends with `onStackStopped`
-8. Then the cue's **events** (`EffectsService.onCueGo`) — §"Events" below — unless this is the
-   BACKWARD arm of `advanceStack`. `deactivateStack` drops the desk's arm (`onStackStopped`)
+7. The cue's **events** fire inside step 2's acquire — on the cue's **first** hold only (D15), and
+   never on the BACKWARD arm of `advanceStack`. A GO onto a cue another stack or a press already
+   holds fires none. `deactivateStack` drops the desk's arm (`onStackStopped`)
 
-A step "merge cue palette into stack palette" used to sit at 4, and the stack carried a positional
-colour list its cues inherited. That whole grammar is gone — an effect parameter names a colour
-palette (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack now
-carries no colour state at all, and `removeEffectsForCueStackKeepPalette` folded back into
-`removeEffectsForCueStack`.
+A loose press runs the same acquire with a `Loose` hold and no crossfade: the cue's effects, rows,
+stomp, timed effects, triggers and events come on exactly as a GO's would (the old separate apply
+path is gone), and its scenery is tracked as a loose track (`SceneryService.onLooseHeld`).
+
+A step "merge cue palette into stack palette" used to sit in this flow, and the stack carried a
+positional colour list its cues inherited. That whole grammar is gone — an effect parameter names a
+colour palette (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack
+carries no colour state at all.
 
 ## Crossfade (Option B — Intensity Envelope)
 
@@ -335,9 +406,12 @@ private suspend fun runFade(outgoingCueId, incomingCueId, durationMs, easingCurv
 }
 ```
 
-Cancelling mid-flight (a new cue activating, or the stack stopping) drops the outgoing cue's
+Cancelling mid-flight (a new entry activating, or the stack stopping) drops the outgoing cue's
 assignments too — end-of-fade would have removed them, so without that they'd linger frozen at
-whatever weight the fade had reached.
+whatever weight the fade had reached. **Unless a hold has that cue again** (`cancel(stackId,
+isHeld)`): then its rows are pinned at full instead, since another stack or a press is holding it
+on stage. The incoming cue is pinned at full. A fade's two sides are read every tick, so a cue
+that gains a hold mid-fade is taken out of it (`forgetOutgoing`) rather than faded off under it.
 
 ### Easing Curves
 
@@ -356,14 +430,14 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | DELETE | `/{stackId}` | Delete stack and its cues |
 | POST | `/{stackId}/reorder` | Reorder the list: body `{ entryIds: [3, 1, 5] }`, markers included; an entry left out keeps its relative order after the named ones |
 | POST | `/{stackId}/add-cue` | Add or move a cue to this stack: body `{ cueId, sortOrder?, insertByNumber? }` |
-| POST | `/{stackId}/activate` | Activate stack (first cue entry), optional `{ cueId }` — still a cue id until session 2 |
+| POST | `/{stackId}/activate` | Activate stack: optional `{ entryId }`; absent starts at the armed standby, else the first cue entry. HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
 | POST | `/{stackId}/advance` | Advance through cue entries only (markers skipped): body `{ direction: "FORWARD"\|"BACKWARD" }` |
-| POST | `/{stackId}/go-to` | Go to specific cue: body `{ entryId }` — HTTP 400 for a marker or another stack's entry |
+| POST | `/{stackId}/go-to` | Go to a specific entry: body `{ entryId }` — HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/standby` | Arm the next GO: body `{ entryId }`; `{ entryId: null }` disarms. HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/markers` | Add a marker entry: body `{ label, sortOrder? }` (a position; appended if omitted). 201 with its row |
 | PUT / DELETE | `/{stackId}/markers/{entryId}` | Rename (`{ label }`) or remove a marker; 404 for a cue's entry |
-| POST | `/{stackId}/preview` | Compose a cue without firing it: body `{ cueId? }` (null → the effective next). See below |
+| GET | `/{stackId}/preview?entryId=` | Compose an entry's cue without firing it (absent → the effective next). See below |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
 ### `add-cue` with `insertByNumber`
@@ -387,21 +461,21 @@ Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCoun
 unparseable numbers left in place. No longer returns 400 when nothing was eligible; a stack that
 needs no sorting simply comes back unchanged.
 
-Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority is derived from the
-entry's position — see [cues-engineering.md](cues-engineering.md) §Priority.
+Both this and `reorder` also call `holds.restampEntries`, since a stack hold's priority is derived
+from the entry's position — see [cues-engineering.md](cues-engineering.md) §Priority.
 
 ### DTOs
 
 - `NewCueStack` — name, loop
-- `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
+- `CueStackDetails` — full stack with ordered cues, `activeEntryId` / `activeCueId`, `standbyEntryId` / `standbyCueId`, `nextEntryId` / `nextCueId` (what GO fires), canEdit, canDelete
 - `CueStackCueEntry` — one **row** of the list: `entryId` (what reorder, standby and go-to name), `id` (the cue's; null on a marker), name (a marker's label), sortOrder (its position), layerCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
-- `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
+- `CueStackActivateResponse` — stackId, entryId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
 
 ## Preview compose
 
-`POST /{stackId}/preview` answers "what would this cue look like?" — the channel values a cue
+`GET /{stackId}/preview?entryId=` answers "what would this cue look like?" — the channel values a cue
 *would* produce, with nothing published. It backs the Next GO stage view (lighting-react
 `docs/stage-vis-engineering.md` §"The fourth source: Next GO"): composing a cue in the browser
 would otherwise mean reimplementing specificity, HTP/LTP, palette resolution and move-in-dark
@@ -409,13 +483,15 @@ arming client-side.
 
 `routes/cuePreview.kt`, and it is reuse end to end:
 
-1. **Retained rows** — `CueAssignmentLayer.assignmentsExcludingStack(stackId)`: every published cue
-   that isn't this stack's, because firing a cue replaces its own stack's contribution and
-   nothing else. Cues published without a stack (a cue-edit live apply) survive a stack GO, so
-   they are retained too. The filter lives in the engine so the rows and the `cueId → stackId`
-   map are read under one lock. The rows carry their *stored* weight (always 1.0 — live
-   crossfade progress lives in `cueFadeWeights`), so a cue caught mid-crossfade is previewed
-   settled, which is what a preview wants.
+1. **Retained rows** — `CueAssignmentLayer.assignmentsExcludingCues(holds.cuesHeldOnlyBy(stackId)
+   + cueId)`: every published cue but the ones only this stack holds, because a GO releases this
+   stack's hold and nothing else. A cue another stack or a loose press also holds stays on stage
+   through the GO (D3), so it is retained — and so is a cue held loose with no stack at all. The
+   previewed cue's own published rows go too: its incoming rows stand in for them. The rows carry
+   their *stored* weight (always 1.0 — live crossfade progress lives in `cueFadeWeights`), so a cue
+   caught mid-crossfade is previewed settled, which is what a preview wants. The incoming cue
+   composes at the priority the GO would give it — this entry's, or the cue's live priority when
+   another hold already ranks it higher.
 2. **Incoming rows** — `buildCombinedCueLayerRows`, the same builder `republishCueLayer` uses,
    which is what makes the preview and the GO agree by construction rather than by inspection.
 3. **Compose** — a *fresh* `CueAssignmentResolver`. `resolve` is a pure function of its rows, so
@@ -426,7 +502,7 @@ arming client-side.
 Three deliberate limits, all worth knowing before building UI on it:
 
 - **Layer 4 only.** Effects in the cue band have no static value to report, and timed preset
-  applications don't contribute (matching `applyCue`). A cue whose look is carried by an effect
+  applications don't contribute (matching a GO's first publish). A cue whose look is carried by an effect
   previews as whatever its assignments say — possibly nothing.
 - **Assertions only.** Channels no cue asserts are *absent* rather than reported as 0; the caller
   falls back to the live output the way the "Output + Programmer" vis source already overlays.
@@ -483,10 +559,12 @@ Programmer sources can draw the move the operator is rehearsing. Leaving Blind l
 name), `programmerLook` (Look and name) or `programmer` (`SceneryResolver.holderOf`).
 
 **The hook.** `state/SceneryService.kt` holds the result as a `StateFlow`, `scenery.state` on the
-socket. It recomputes on `activateCueInStack` (`onCueLive`) and `deactivateStack`
-(`onStackStopped`), so every GO path reports — REST, MIDI, busk, auto-advance — and on the AI's
-`apply_cue`, which bypasses the manager (`applyCue` calls `onCueApplied`; the cue stands in for its
-stack's live cue until the stack goes or stops, and `stop_cue` lets it go). It also follows the
+socket. It recomputes on every activation (`onEntryLive(stackId, entryId, cueId)`) and
+`deactivateStack` (`onStackStopped`), so every GO path reports — REST, MIDI, auto-advance — and on
+every loose hold (`onLooseHeld` / `onLooseReleased`): a busk pad, a cue slot, `/cues/{id}/apply`
+and the AI's `apply_cue`. A loose cue is a **track of its own** beside the stacks' (keyed `-cueId`
+so it never meets a stack id), its scenery the cue's own changes over its tracked state, ranked by
+press order like any other track; letting it go lets its pieces go. It also follows the
 programmer's layer stack (`layersFlow`), the programmer's scenery (`ProgrammerScenery.flow`), blind,
 and every cue, stack, Look and element list change, so an edit anywhere moves the stage. The elements
 resolved are those a stored change names, those the programmer holds, and those the last frame
@@ -502,7 +580,9 @@ hook records the GO beside the live table, and the run takes both at once. So an
 still queued when a GO lands moves the GO's changes on their clocks, two stacks going in one burst
 each move on their own cue's, and a second GO on a stack before the first's was read leaves the
 first cue's changes to land. The live table is the service's own, written by the hooks — not the
-manager's, which changes a stack's cue before `activateCueInStack` reaches `onCueLive`.
+manager's, which changes a stack's entry before activation reaches `onEntryLive`. A stack's track
+is tracked down to its live **entry**, so a stack naming one cue twice resolves the state at the
+entry it is on.
 
 **Clocks** (`SceneryService.durationFor`, scenery-programmer plan D6). Per state that moved, the
 longest wins, each on the first clock that applies:
@@ -580,12 +660,14 @@ A cue's **events** fire one-shot triggers — a confetti cannon's tubes — at t
 into the cue, only while the desk is armed (stage-view plan session 9; `cues-engineering.md`
 §"Cue events" is the contract). Two facts are the stack manager's:
 
-- **The hook, beside scenery's.** `activateCueInStack` builds the cue with `buildCueGoData` (the one
+- **The hook is the hold registry's.** Activation builds the cue with `buildCueGoData` (the one
   builder that carries events, so no republish or preview can fire one) inside its own read, and
-  ends with `state.effectsService.onCueGo(cueId, label, events)` — after the run state and the
-  scenery, so every GO path fires them: REST, MIDI, a busk pad, auto-advance. The AI's `apply_cue`
-  reaches the same hook from `applyCue`. `advanceStack` passes `fireEvents = false` for BACKWARD:
-  stepping back into a cue fires nothing. **The hook only schedules** — it judges the arm and blind
+  `CueHolds.acquire` calls `state.effectsService.onCueGo(cueId, label, events)` on the cue's
+  **first** hold only (D15) — so every path that brings a cue on fires them once: a GO from REST,
+  MIDI or auto-advance, and a loose press (a busk pad, a cue slot, `/cues/{id}/apply`, the AI's
+  `apply_cue`). A GO onto a cue another stack or a press already holds fires none, and neither does
+  a reload re-taking its holds. `advanceStack` passes `fireEvents = false` for BACKWARD: stepping
+  back into a cue fires nothing. **The hook only schedules** — it judges the arm and blind
   at that instant and launches one coroutine per event on the effects service's scope; nothing
   blocks the GO and nothing runs inside a caller's transaction (the pool is one SQLite connection).
   A fire touches memory and the trigger output, and the spent tube is written by the service's own
@@ -606,7 +688,8 @@ Broadcast on stack CRUD operations. Frontend subscribes and invalidates `CueStac
 
 ```json
 {"type": "cueRunStateChanged", "projectId": 1, "stackId": 4, "activeCueId": 12,
- "nextCueId": 13, "nextIsArmed": false, "transition": true, "fadeDurationMs": 2000,
+ "nextCueId": 13, "activeEntryId": 31, "nextEntryId": 32, "standbyEntryId": null,
+ "nextIsArmed": false, "transition": true, "fadeDurationMs": 2000,
  "fadeElapsedMs": 0, "autoAdvance": false, "autoAdvanceDelayMs": null}
 ```
 
@@ -614,6 +697,10 @@ A stack's run state: what is live, what the next GO fires, and how far through a
 is. **One frame per transition, not a per-tick stream** — the client animates the fade locally
 from `fadeElapsedMs` + `fadeDurationMs`, the way the session that pressed GO always did. The
 crossfade itself still ticks at 60 fps inside `FxEngine`; that never goes on the wire.
+
+The entry ids are the run state's identity (cue model plan P2): a stack that names one cue twice
+is on one of its two entries, and only `activeEntryId` says which. The cue ids beside them are what
+the entry names, kept for every reader that only asks which cue.
 
 Fired from `CueStackManager`, not from the routes, so *every* path reports: REST, the MIDI
 surface's GO binding, a cue-edit live apply, and the auto-advance timer (which previously moved
@@ -638,6 +725,18 @@ merely a cue configured for one. `pauseAutoAdvance` / `resumeAutoAdvance` publis
 exactly this reason: a cue-edit Live session cancels the timer on a cue still flagged
 `autoAdvance`, and since the client draws the countdown but no longer *drives* it (see below), a
 config-shaped answer leaves every session with a bar completing into nothing.
+
+```json
+{"type": "cueHolds.state", "projectId": 1, "cues": [
+  {"cueId": 12, "priority": 1003, "holds": [{"kind": "STACK", "stackId": 4, "entryId": 31}]},
+  {"cueId": 20, "priority": 2000000007, "holds": [
+    {"kind": "STACK", "stackId": 5, "entryId": 40}, {"kind": "LOOSE", "seq": 7}]}]}
+```
+
+What holds every live cue (§"Holds"): a `StateFlow` (`State.cueHoldsFrame`), so the subscription is
+the connect snapshot and every change is the whole frame. Outbound only. It is what the busk pad's
+and the cue slot's ring read (D11: solid while a `LOOSE` hold is among them, outline while only
+stacks hold it) and what "is this cue on stage" means everywhere (`useCueRings`, which replaced `useActiveCueIds`).
 
 ### The client no longer drives auto-advance
 

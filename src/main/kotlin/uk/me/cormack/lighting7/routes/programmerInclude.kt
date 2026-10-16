@@ -229,7 +229,7 @@ private data class IncludedFxOutcome(
  *    (suppression keys off programmer *values*), so a band duplicate would compose on top and
  *    visibly double the effect under any non-`OVERRIDE` blend mode.
  * 2. **`cueId`/`cueStackId` stay null** on spawned instances. Tagging them would let
- *    `removeEffectsForCue` sweep the operator's programmer contents out from under them when
+ *    `removeCueEffects` sweep the operator's programmer contents out from under them when
  *    the cue stops. `programmerOrigin` carries the provenance Update needs instead, and it is
  *    not something any cue-teardown path looks at.
  */
@@ -342,7 +342,7 @@ private fun spawnIncludedFx(
     return IncludedFxOutcome(spawned, alreadyRunning, timedSkipped, covered, groupKeys)
 }
 
-/** Ad-hoc children and look effects share a shape; this is the adapter `applyCue` also uses. */
+/** Ad-hoc children and look effects share a shape; this is the adapter the hold registry's bring-on also uses. */
 internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     effectType = effectType,
     category = category,

@@ -20,7 +20,8 @@ import {
 import { useHandPlace } from '@/store/hand'
 import type { HeldRecord } from '@/api/handApi'
 import { HAND_TARGET_RING, useHandOffer } from './hand/HandTarget'
-import { useApplyCueMutation, useStopCueMutation, useActiveCueIds } from '../store/cues'
+import { useApplyCueMutation, useStopCueMutation } from '../store/cues'
+import { useCueRings } from '../store/cueHolds'
 import { useToggleLookMutation } from '../store/looks'
 import { useProgrammerAppliedQuery } from '../store/programmer'
 import { lookIsApplied } from './busking/lookPresence'
@@ -91,7 +92,7 @@ function CueSlotOverviewPanelBody() {
 
   const [page, setPagePersist] = usePersistentState<number>(PAGE_STORAGE_KEY, 0)
 
-  const activeCueIds = useActiveCueIds(projectId)
+  const cueRings = useCueRings(projectId)
   // Project-wide and argument-free, so a surface with no selection can still read it. A Look tile
   // lights from the layer stack, never from cue liveness: it is a layer this tile would remove.
   const { data: applied } = useProgrammerAppliedQuery()
@@ -276,13 +277,20 @@ function CueSlotOverviewPanelBody() {
     },
   })
 
-  /** Is this tile's record on stage? Two different questions, by kind — see `slotLitClass`. */
+  /**
+   * Is this tile's record on stage? Two different questions, by kind — see `slotLitClass`. A cue is
+   * lit while a press holds it loose (D11); live only in a stack is {@link slotIsOutlined}.
+   */
   const slotIsLit = useCallback(
     (slot: CueSlot) =>
       slot.itemType === 'cue'
-        ? activeCueIds.has(slot.itemId)
+        ? cueRings.get(slot.itemId) === 'loose'
         : lookIsApplied(applied ?? [], slot.itemId),
-    [activeCueIds, applied],
+    [cueRings, applied],
+  )
+  const slotIsOutlined = useCallback(
+    (slot: CueSlot) => slot.itemType === 'cue' && cueRings.get(slot.itemId) === 'stack',
+    [cueRings],
   )
 
   const handleSlotTap = useCallback(
@@ -290,7 +298,9 @@ function CueSlotOverviewPanelBody() {
       if (!projectId) return
 
       if (slot.itemType === 'cue') {
-        if (activeCueIds.has(slot.itemId)) {
+        // A tap lets go of a loose hold, or takes one — over a stack that holds it too, the press
+        // wins until it is let go (D10). A stack's hold is the stack's to drop.
+        if (cueRings.get(slot.itemId) === 'loose') {
           stopCue({ projectId, cueId: slot.itemId })
         } else {
           applyCue({ projectId, cueId: slot.itemId })
@@ -304,7 +314,7 @@ function CueSlotOverviewPanelBody() {
       // faking one would fight it.
       void toggleLook({ projectId, lookId: slot.itemId, targets: [] })
     },
-    [projectId, activeCueIds, applyCue, stopCue, toggleLook],
+    [projectId, cueRings, applyCue, stopCue, toggleLook],
   )
 
   const handleViewSlot = useCallback(
@@ -395,6 +405,7 @@ function CueSlotOverviewPanelBody() {
               page={page}
               slotIndex={index}
               isLit={slot ? slotIsLit(slot) : false}
+              isOutlined={slot ? slotIsOutlined(slot) : false}
               isEditMode={buskEditing}
               onTap={handleSlotTap}
               onView={handleViewSlot}
@@ -440,8 +451,10 @@ interface CueSlotCellProps {
   slot: CueSlot | null
   page: number
   slotIndex: number
-  /** On stage: a live cue, or a Look present on the rig. See `slotLitClass`. */
+  /** On stage: a cue a press holds, or a Look present on the rig. See `slotLitClass`. */
   isLit: boolean
+  /** A cue live only through a stack: the outline (D11). */
+  isOutlined: boolean
   /** The **busk view's** edit mode: crosses, drags and drop targets all follow it. */
   isEditMode: boolean
   onTap: (slot: CueSlot) => void
@@ -456,6 +469,7 @@ function CueSlotCell({
   page,
   slotIndex,
   isLit,
+  isOutlined,
   isEditMode,
   onTap,
   onView,
@@ -584,7 +598,7 @@ function CueSlotCell({
           className={cn(
             'relative rounded-md border flex flex-col items-center justify-center gap-0.5 min-h-[3.5rem] px-1.5 py-1 select-none transition-all touch-none',
             isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
-            !isEditMode && slotLitClass(slot.itemType, isLit),
+            !isEditMode && slotLitClass(slot.itemType, isLit, isOutlined),
             !isLit && !isEditMode && 'hover:bg-muted/50',
             isOver &&
               (refuses ? 'ring-2 ring-destructive ring-offset-1' : 'ring-2 ring-primary ring-offset-1'),

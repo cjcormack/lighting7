@@ -312,12 +312,16 @@ class ProgrammerLayerTest {
     }
 
     @Test
-    fun `a CUE provenance entry names the stack the cue was published from`() {
+    fun `a CUE provenance entry names the stack of the cue's highest hold`() {
         // `FU-PROG-PROVENANCE-STACKID`: the cue layer is keyed by cue alone, so this used to be
         // permanently null while EFFECT sources carried it — the asymmetry Update's Mode B
-        // checklist needs closed in order to group overridden cues by stack.
+        // checklist needs closed in order to group overridden cues by stack. Since a cue can be live
+        // in several places (cue model plan D3) the stack is the hold registry's answer, which
+        // `CueHolds` installs as `holdStackOf`; this engine-only rig stands one in.
         val rig = newRig()
-        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        val holds = mutableMapOf(10 to 7)
+        rig.engine.cueLayer.holdStackOf = { holds[it] }
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
 
         val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
         assertEquals(ProvenanceSource.CUE, entry.source)
@@ -325,8 +329,8 @@ class ProgrammerLayerTest {
         assertEquals(7, entry.cueStackId)
         assertEquals(7, rig.engine.cueLayer.cueStackIdFor(10))
 
-        rig.engine.cueLayer.removeAssignments(10)
-        assertNull(rig.engine.cueLayer.cueStackIdFor(10), "the mapping goes with the assignments")
+        holds.remove(10)
+        assertNull(rig.engine.cueLayer.cueStackIdFor(10), "the answer follows the holds, not the publish")
     }
 
     @Test
@@ -338,7 +342,6 @@ class ProgrammerLayerTest {
         rig.engine.cueLayer.setAssignments(
             10,
             listOf(dimmerAssignment(10, 100u, CookWinner(index = 1, layerId = 42, source = LayerSource.look(7, warmWashUuid, "Warm Wash")))),
-            cueStackId = 7,
         )
 
         val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
@@ -394,7 +397,7 @@ class ProgrammerLayerTest {
         // Absence, not a null-valued entry: a local row is not attributable to a layer, and the
         // desk must not render an empty layer chip for one.
         val rig = newRig()
-        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
 
         val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
         assertEquals(ProvenanceSource.CUE, entry.source)
@@ -408,7 +411,8 @@ class ProgrammerLayerTest {
         // programmer on top, provenance says PROGRAMMER (correctly), so Mode B needs the
         // programmer-independent Layer 4 winner map instead.
         val rig = newRig()
-        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)), cueStackId = 7)
+        rig.engine.cueLayer.holdStackOf = { if (it == 10) 7 else null }
+        rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
         rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )

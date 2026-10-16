@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.sendSerialized
@@ -223,7 +224,7 @@ class ProgrammerSceneryRoutesTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = q1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(q1)))
         }
         press(pad)
         val frame = awaitFrame { f -> f.entries.any { it.elementUuid.toString() == legs && it.source.kind == "programmerLook" } }

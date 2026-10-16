@@ -228,7 +228,7 @@ export function BuskBankCluster({
         pad={pad}
         at={{ ...at, pad: index }}
         presence={behaviour.presenceOf(pad)}
-        isLive={behaviour.isLive(pad)}
+        cueRing={behaviour.cueRing(pad)}
         editing={editing}
         onPress={() => behaviour.onPress(pad)}
         onInspect={() => behaviour.onInspect(pad)}

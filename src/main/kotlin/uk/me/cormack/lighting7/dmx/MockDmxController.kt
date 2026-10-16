@@ -16,6 +16,8 @@ class MockDmxController(
     /** Modifiers registered on this controller. Mock lets tests inspect them without forcing transmit. */
     val transmitModifiers: List<TransmitModifier> get() = _transmitModifiers.toList()
 
+    // Both logs are appended from whatever thread writes — a GO's, the FX tick's, a crossfade's —
+    // while a test reads them from its own, so every access holds the list's monitor.
     private val _writeLog = mutableListOf<Pair<Int, UByte>>()
 
     /**
@@ -24,10 +26,10 @@ class MockDmxController(
      * expected endpoints — e.g. a crossfade-start republish that writes the outgoing value
      * without first writing the incoming value.
      */
-    val writeLog: List<Pair<Int, UByte>> get() = _writeLog.toList()
+    val writeLog: List<Pair<Int, UByte>> get() = synchronized(_writeLog) { _writeLog.toList() }
 
     /** Returns the writes to [channelNo] only, in order. */
-    fun writesTo(channelNo: Int): List<UByte> = _writeLog.filter { it.first == channelNo }.map { it.second }
+    fun writesTo(channelNo: Int): List<UByte> = writeLog.filter { it.first == channelNo }.map { it.second }
 
     private val _changeLog = mutableListOf<Pair<Int, ChannelChange>>()
 
@@ -36,11 +38,11 @@ class MockDmxController(
      * unlike [writeLog] this keeps the change's `fadeMs`, so tests can assert that a
      * publish requested a ramp rather than a snap.
      */
-    val changeLog: List<Pair<Int, ChannelChange>> get() = _changeLog.toList()
+    val changeLog: List<Pair<Int, ChannelChange>> get() = synchronized(_changeLog) { _changeLog.toList() }
 
     /** Returns the [ChannelChange]s for [channelNo] only, in order. */
     fun changesTo(channelNo: Int): List<ChannelChange> =
-        _changeLog.filter { it.first == channelNo }.map { it.second }
+        changeLog.filter { it.first == channelNo }.map { it.second }
 
     override val currentValues: Map<Int, UByte>
         get() = values.toMap()
@@ -50,21 +52,23 @@ class MockDmxController(
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         valuesToSet.forEach { (channel, change) ->
             values[channel] = change.newValue
-            _writeLog.add(channel to change.newValue)
-            _changeLog.add(channel to change)
+            log(channel, change)
         }
     }
 
     override fun setValue(channelNo: Int, channelChange: ChannelChange) {
         values[channelNo] = channelChange.newValue
-        _writeLog.add(channelNo to channelChange.newValue)
-        _changeLog.add(channelNo to channelChange)
+        log(channelNo, channelChange)
+    }
+
+    private fun log(channelNo: Int, change: ChannelChange) {
+        synchronized(_writeLog) { _writeLog.add(channelNo to change.newValue) }
+        synchronized(_changeLog) { _changeLog.add(channelNo to change) }
     }
 
     override fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long) {
         values[channelNo] = channelValue
-        _writeLog.add(channelNo to channelValue)
-        _changeLog.add(channelNo to ChannelChange(channelValue, fadeMs))
+        log(channelNo, ChannelChange(channelValue, fadeMs))
     }
 
     override fun getValue(channelNo: Int): UByte {
@@ -133,6 +137,6 @@ class MockDmxController(
     fun reset() {
         values.clear()
         _transmitModifiers.clear()
-        _writeLog.clear()
+        synchronized(_writeLog) { _writeLog.clear() }
     }
 }

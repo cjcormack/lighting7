@@ -22,7 +22,6 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import uk.me.cormack.lighting7.routes.applyCue
 import java.time.Duration
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.CueStackEntryKind
@@ -31,7 +30,7 @@ import uk.me.cormack.lighting7.models.soleEntryOf
 /**
  * `CueApplyData` has exactly one builder.
  *
- * It had three. `CueStackManager.activateCueInStack` and `AiTools.applyCue` each hand-rolled a
+ * It had three. The stack GO path and `AiTools.applyCue` each hand-rolled a
  * near-identical field-by-field construction, and each in turn shipped missing a field the other
  * had: `layers` was added to [buildCueApplyData] alone, leaving every Look layer inert on the
  * **stack GO path** — the primary firing path — while the standalone apply-cue route worked.
@@ -169,7 +168,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
         val look = seedLook("Warm Amber", "hex-1", "#ff8800")
 
-        val (stackId, cueId) = transaction(state.database) {
+        val (stackId, cueId, entryId) = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
                 this.project = project
@@ -180,25 +179,22 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 this.project = project
                 name = "layered cue"
             }
-            DaoCueStackEntry.new { this.stack = stack; this.cue = cue; ordinal = 1.0 }
+            val entry = DaoCueStackEntry.new { this.stack = stack; this.cue = cue; ordinal = 1.0 }
             DaoCueLayer.new {
                 this.cue = cue
                 this.look = look
                 sortOrder = 0; targets = emptyList()
             }
-            stack.id.value to cue.id.value
+            Triple(stack.id.value, cue.id.value, entry.id.value)
         }
 
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, entryId)
         val viaGo = cueColour("hex-1").value.toSerializedString()
         assertEquals("#ff8800", viaGo, "the GO path composed the cue's Look layer")
 
-        state.show.fxEngine.cueLayer.removeAssignments(cueId)
-        val applyData = transaction(state.database) {
-            val cue = DaoCue.findById(cueId)!!
-            buildCueApplyData(cue, soleEntryOf(cue))
-        }
-        applyCue(state, applyData, replaceAll = false)
+        // The loose path builds through the same builder: let the stack go, then hold it loose.
+        state.show.cueStackManager.deactivateStack(stackId, state)
+        state.show.cueStackManager.holds.takeLooseCue(state, cueId)
 
         assertEquals(viaGo, cueColour("hex-1").value.toSerializedString())
     }

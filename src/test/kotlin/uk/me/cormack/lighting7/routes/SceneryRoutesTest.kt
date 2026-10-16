@@ -209,7 +209,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$s/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = q1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(q1)))
         }
         assertEquals(0.0, entry(tabs).state.open, "Q1 closes the tabs")
         assertEquals(7.0, entry(moon).state.trimM, "the moon is out")
@@ -343,7 +343,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q3", change(moon, trim(3.0), transitionMs = 6000)).status)
         client.post("/api/rest/projects/$projectId/cue-stacks/$s/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = q1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(q1)))
         }
         assertEquals(7.0, entry(moon).state.trimM)
 
@@ -376,7 +376,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         val q2 = cue(client, s, "Q2")
         client.post("/api/rest/projects/$projectId/cue-stacks/$s/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = q1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(q1)))
         }
         state.sceneryService.awaitIdle()
 
@@ -408,7 +408,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         for ((stackId, cueId) in listOf(a to a1, b to b1)) {
             client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
                 contentType(ContentType.Application.Json)
-                setBody(ActivateCueStackRequest(cueId = cueId))
+                setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cueId)))
             }
         }
         state.sceneryService.awaitIdle()
@@ -481,7 +481,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         holding.await()
         val reader = Thread {
             readerStarted.countDown()
-            state.sceneryService.preview(s, q1)
+            state.sceneryService.preview(s, state.entryIdOf(q1), q1)
         }
         reader.start()
         holder.join(20_000)

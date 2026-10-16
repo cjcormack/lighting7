@@ -154,12 +154,12 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
 
         val instance = state.show.fxEngine.getActiveEffects().single()
         assertTrue(FxEngine.isProgrammerFxPriority(instance.priority))
-        // Untagged on purpose: a cue tag would let removeEffectsForCue sweep the operator's
+        // Untagged on purpose: a cue tag would let removeCueEffects sweep the operator's
         // programmer contents out from under them when the cue stops.
         assertNull(instance.cueId)
         assertEquals(cueId, instance.programmerOrigin?.cueId)
 
-        assertEquals(0, state.show.fxEngine.removeEffectsForCue(cueId), "not swept with the cue")
+        assertEquals(0, state.show.fxEngine.removeCueEffects(cueId), "not swept with the cue")
         assertEquals(1, state.show.fxEngine.getActiveEffects().size)
     }
 
