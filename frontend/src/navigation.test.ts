@@ -3,7 +3,17 @@
 // store/universes → api/lightingApi (it reads window.location at import time).
 import { describe, it, expect, vi } from "vitest"
 import { Box } from "lucide-react"
-import { navItems, templateFamilyNavItems, filterNavItems, type NavItem, buildWindowCommands, type WindowCommandInputs } from "./navigation"
+import {
+  navItems,
+  templateFamilyNavItems,
+  filterNavItems,
+  commandLabelOf,
+  NAV_SECTIONS,
+  type NavItem,
+  type NavSection,
+  buildWindowCommands,
+  type WindowCommandInputs,
+} from "./navigation"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import { mostSpecificActiveId } from "./lib/navMatch"
 
@@ -16,7 +26,7 @@ function makeItem(id: string, visibility: NavItem["visibility"]): NavItem {
     path: (p) => `/projects/${p}/${id}`,
     visibility,
     pathMatch: `/${id}`,
-    group: "live",
+    section: "run",
   }
 }
 
@@ -66,50 +76,24 @@ describe("navItems registry", () => {
   it("resolves project-scoped paths against the given project id", () => {
     for (const item of navItems) {
       const path = item.path(42)
-      if (item.group === "install") {
-        // Install-scope routes ignore the projectId arg.
-        expect(path.startsWith("/install")).toBe(true)
+      if (item.section === "desk") {
+        // Desk routes ignore the projectId arg: the projects list and the install pages.
+        expect(path === "/projects" || path.startsWith("/install")).toBe(true)
       } else {
         expect(path).toContain("/projects/42")
       }
     }
   })
 
-  // Guards the intent that Stage and Program are only reachable for the
-  // active project (they used to be "always"). See the "live" group.
-  it("scopes Stage and Program to the active project", () => {
+  // Guards the intent that Stage and Show are only reachable for the active project.
+  it("scopes Stage and Show to the active project", () => {
     const stage = navItems.find((i) => i.id === "stage-view")
     const program = navItems.find((i) => i.id === "program")
     expect(stage?.visibility).toBe("active-only")
     expect(program?.visibility).toBe("active-only")
   })
 
-  // The sidebar's four show modes must read in the same order as the in-view switcher's pills
-  // (`ShowView` / the JSX order in `components/ViewSwitcher.tsx`, which owns that order and says
-  // why). A test cannot read JSX order, so this pins the registry half against the list written
-  // out here; the two drifted apart once already, with Stage and Channels interleaved between them.
-  it("declares the four live views in ViewSwitcher order", () => {
-    // Historic ids: `program` is Show, `fx` is Busk. Both are deliberately stable handles.
-    expect(navItems.filter((i) => i.group === "live").map((i) => i.id)).toEqual([
-      "programmer",
-      "program",
-      "prompt-book",
-      "fx",
-    ])
-  })
-
-  // Stage and Channels are monitors, not show modes. The sidebar has no group headings — it draws a
-  // separator wherever `group` changes between adjacent visible items — so "their own section
-  // below the live views" *is* a distinct group plus declaration order, and both halves are pinned.
-  it("puts Stage and Channels in their own section below the live views", () => {
-    for (const id of ["stage-view", "channels"]) {
-      expect(navItems.find((i) => i.id === id)?.group).toBe("monitor")
-    }
-    const groups = navItems.map((i) => i.group)
-    expect(groups.indexOf("monitor")).toBeGreaterThan(groups.lastIndexOf("live"))
-  })
-
-  it("hides Stage/Program (and other active-only items) when viewing a non-active project", () => {
+  it("hides Stage/Show (and other active-only items) when viewing a non-active project", () => {
     const ids = filterNavItems(navItems, false).map((i) => i.id)
     expect(ids).not.toContain("stage-view")
     expect(ids).not.toContain("program")
@@ -119,11 +103,70 @@ describe("navItems registry", () => {
   })
 })
 
+/**
+ * Navigation plan D3: the sidebar is named sections by job. The registry declares rows in section
+ * order, and the sidebar draws a heading wherever `section` changes — so the order of the array
+ * *is* the sidebar, and each section's ids are pinned whole.
+ */
+describe("sections", () => {
+  const idsIn = (section: NavSection) => navItems.filter((i) => i.section === section).map((i) => i.id)
+
+  it("declares every row in section order", () => {
+    const order = NAV_SECTIONS.map((s) => s.id)
+    const sections = navItems.map((i) => order.indexOf(i.section))
+    expect(sections.every((s) => s >= 0)).toBe(true)
+    expect([...sections].sort((a, b) => a - b)).toEqual(sections)
+  })
+
+  it("names the five sections", () => {
+    expect(NAV_SECTIONS.map((s) => s.label)).toEqual(["Run", "Rig", "Library", "Project", "Desk"])
+  })
+
+  // The sidebar's four show modes must read in the same order as the in-view switcher's pills
+  // (`ShowView` / the JSX order in `components/ViewSwitcher.tsx`, which owns that order and says
+  // why). A test cannot read JSX order, so this pins the registry half against the list written
+  // out here. Stage follows them: a view used both building and running a show.
+  it("starts Run with the four live views in ViewSwitcher order, then Stage", () => {
+    // Historic ids: `program` is Show, `fx` is Busk. Both are deliberately stable handles.
+    expect(idsIn("run")).toEqual(["programmer", "program", "prompt-book", "fx", "stage-view"])
+  })
+
+  it("puts the rig in one section, Regions and Rigging included", () => {
+    expect(idsIn("rig")).toEqual(["patches", "fixtures", "groups", "stage", "rigging", "channels"])
+    // Top-level rows, though their pages are Project Settings tabs.
+    for (const id of ["stage", "rigging"]) expect(navItems.find((i) => i.id === id)?.parent).toBeUndefined()
+  })
+
+  it("orders Library, with the FX Library called Effects", () => {
+    expect(idsIn("library")).toEqual(["looks", "templates", "fx-library", "speed-masters", "scripts"])
+    expect(navItems.find((i) => i.id === "fx-library")?.label).toBe("Effects")
+  })
+
+  it("orders Project and Desk, with Projects first on the Desk", () => {
+    expect(idsIn("project")).toEqual(["project-settings", "surfaces", "project-sync"])
+    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "updates", "diagnostics"])
+  })
+
+  it("says Regions on the row Run's Stage would otherwise share a word with", () => {
+    expect(navItems.find((i) => i.id === "stage")?.label).toBe("Regions")
+    expect(navItems.find((i) => i.id === "stage-view")?.label).toBe("Stage")
+  })
+
+  it("lights the Projects row on the projects list and nowhere else", () => {
+    const visible = filterNavItems(navItems, true, true)
+    expect(mostSpecificActiveId(visible, "/projects")).toBe("projects")
+    expect(mostSpecificActiveId(visible, "/projects/")).toBe("projects")
+    // `/projects` begins every project's path, so it must not win there.
+    expect(mostSpecificActiveId(visible, "/projects/7")).toBeNull()
+    expect(mostSpecificActiveId(visible, "/projects/7/looks")).toBe("looks")
+  })
+})
+
 describe("venue mode's rail", () => {
-  it("hides exactly the show's views in a venue, and keeps the Programmer (venue plan §4)", () => {
+  it("hides exactly the show's views in a venue, and keeps the Programmer and Stage (venue plan §4)", () => {
     const shown = filterNavItems(navItems, true, true, true).map((i) => i.id)
     const all = filterNavItems(navItems, true, true).map((i) => i.id)
-    // Scripts, FX Library, Looks, Palettes, Speed Masters, Show, Prompt Book and Busk.
+    // Show, Prompt Book and Busk, and the whole Library.
     expect(all.filter((id) => !shown.includes(id)).sort()).toEqual(
       ["fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
     )
@@ -132,6 +175,36 @@ describe("venue mode's rail", () => {
     }
     // ⌘K's per-family palette links go with the Palettes row.
     expect(filterNavItems(templateFamilyNavItems, true, true, true)).toEqual([])
+  })
+
+  it("leaves Library with no row, so its heading goes", () => {
+    const sections = new Set(filterNavItems(navItems, true, true, true).map((i) => i.section))
+    expect([...sections]).toEqual(["run", "rig", "project", "desk"])
+    expect(filterNavItems(navItems, true, true, true).filter((i) => i.section === "run").map((i) => i.id)).toEqual([
+      "programmer",
+      "stage-view",
+    ])
+  })
+})
+
+/**
+ * ⌘K lists every row with no section headings, and cmdk keys selection on the item's value — so
+ * two rows with one name would be one item. `commandLabel` names the rows whose sidebar label
+ * leans on its heading.
+ */
+describe("⌘K labels", () => {
+  it("are unique across everything the Navigation group lists", () => {
+    const all = [...navItems, ...templateFamilyNavItems, ...[0, 1].map((u) => ({ label: `Universe ${u}` }) as NavItem)]
+    const labels = all.map(commandLabelOf)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it("tell the two Syncs apart and name Project's Settings", () => {
+    const label = (id: string) => commandLabelOf(navItems.find((i) => i.id === id)!)
+    expect(label("project-sync")).toBe("Project sync")
+    expect(label("sync")).toBe("Desk sync")
+    expect(label("project-settings")).toBe("Project Settings")
+    expect(navItems.find((i) => i.id === "project-settings")?.label).toBe("Settings")
   })
 })
 
@@ -191,8 +264,8 @@ describe("install navigation", () => {
     expect(mostSpecificActiveId(visible, "/install/remote")).toBe("remote-access")
     expect(mostSpecificActiveId(visible, "/install/updates")).toBe("updates")
     expect(mostSpecificActiveId(visible, "/install")).toBe("install-settings")
-    expect(item("remote-access").group).toBe("install")
-    expect(item("updates").group).toBe("install")
+    expect(item("remote-access").section).toBe("desk")
+    expect(item("updates").section).toBe("desk")
   })
 
   it("keeps Remote Access from operators and shows Updates to everyone", () => {

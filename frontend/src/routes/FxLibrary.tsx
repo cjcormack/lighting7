@@ -210,7 +210,7 @@ export function ProjectFxLibrary() {
   return (
     <SheetPage>
       <SheetPage.Header>
-        <Breadcrumbs projectName={project.name} currentPage="FX Library" />
+        <Breadcrumbs projectName={project.name} currentPage="Effects" />
       </SheetPage.Header>
       <LibraryRow
         filter={filter}

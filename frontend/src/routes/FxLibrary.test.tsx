@@ -259,7 +259,7 @@ describe('FX Library sheet', () => {
     isCurrent = false
     draw()
     selectRows('RandomFlicker')
-    const reason = 'Not the running project — the FX Library shows and edits the running show’s effects'
+    const reason = 'Not the running project — Effects shows and edits the running show’s effects'
     expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', reason)
     expect(screen.getByRole('button', { name: 'Fork' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()

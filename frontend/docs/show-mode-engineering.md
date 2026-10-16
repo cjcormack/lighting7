@@ -241,10 +241,10 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/lib/cueUtils.ts` | `buildCueInput()` -- converts a Cue to CueInput for mutations |
 
 #### Navigation
-Registered in `src/navigation.ts` with `visibility: "active-only"` and `group: "live"` — four entries
-in switcher order: `programmer`, `program` (**labelled "Show"**, id kept for stability), `run`,
-`prompt-book`. `/program*` redirects to `/show*` with the search string preserved; `/cue-stacks`
-redirects to `/run`.
+Registered in `src/navigation.ts` with `visibility: "active-only"` as the first four rows of the
+**Run** section (`section: "run"`), in switcher order: `programmer`, `program` (**labelled "Show"**,
+id kept for stability), `prompt-book`, `fx` (Busk); Stage follows them. `/program*`
+redirects to `/show*` with the search string preserved; `/run` and `/cue-stacks` land on `/show`.
 
 Note `/show` is no longer a legacy alias for `/run`: it was the old name for the *playback* view, and
 now names cue authoring, so an old bookmark lands on the better of the two answers.
