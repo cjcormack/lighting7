@@ -457,8 +457,8 @@ canvas lays each element's interpolated state over its `params.states` before bu
 (`lib/scenery.ts`'s `sceneryElements`), so the builders draw tabs and trims unchanged and **beam
 reach reads closed tabs** for free; `useSceneryClock` invalidates every frame only while a move is in
 flight. The vis source picks the scenery too (`StageSceneryContext` from `StageChannelSourceProvider`:
-Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in Cue
-properties, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
+Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in the cue
+editor's Scenery tab, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
 holding its draft over a refetch; since the scenery-programmer plan's session 2 each of its rows is
 element select · time · × over a `SceneryControl` (§"The editor kit") in `commit="release"`, so a row
 can set a range (`open 40%`, a trim between in and out) and several states at once, and let one go
@@ -500,7 +500,8 @@ the `ShowHeader` row (`components/effects/`; a tap disarms, nothing is drawn dis
 loaded/spent per tube, arm/disarm, **hold-to-fire** (`HoldToFireButton`, 700 ms, a brush fires
 nothing), a confirmed reload, and a fire **rehearsed** while the programmer is blind or this window's
 vis source is the programmer (`rehearse: true`: drawn on every window, nothing sent); and
-**`CueEventsEditor`** in Cue properties (with `CueEventsReadout` on the cue card), the session-8
+**`CueEventsEditor`** in the cue editor's Events tab (with `CueEventsReadout` on the phone and Prompt
+Book cards), the session-8
 scenery editor's shape — a whole-list save per gesture, its draft held over a refetch. The Stage view
 throws **confetti** on every fire (`stage3d/StageConfetti.tsx` over the pure `confetti.ts`): one
 instanced mesh pooled per canvas, unlit, invalidating each frame only while a flake flies — see
@@ -808,9 +809,9 @@ Release folds to its glyph and the scope line drops the fade.
 - **A cue's effect is read-only in the tray** (Fx board, *Open*; session 5, `isCueEffect`): it names
   its cue (*on Q12*) and draws no editor, pause or stop — its home is the cue, whose next GO would
   put back anything changed here. Session 3 had left it editable. **Its cue opens it** (the board's
-  *opens it*, built after the plan): the open row's *on Q12* is a button onto that cue's **Cue
-  properties**, in place, through `stage/OwnerEditor` — the Stage view's *Moves with* path, not a
-  second one — over whichever host the sheet is in, Escape or Close returning to the sheet. The
+  *opens it*, built after the plan): the open row's *on Q12* is a button onto that cue's **cue
+  editor** (`CueEditor` in a right-hand sheet), in place, through `stage/OwnerEditor` — the Stage
+  view's *Moves with* path, not a second one — over whichever host the sheet is in, Escape or Close returning to the sheet. The
   project is the current one (a cue effect is always its), and the row is a button only once the cue
   is named from that project's stack list, so a press never lands before the project has. Its name
   is its visible text, never an `aria-label`. The editor is mounted by the tray on first use and
@@ -3385,12 +3386,33 @@ Three surface rules, each pinned by its test:
   (the editor can set it), blank on a MARKER; a press opens `CueSceneryEditor` at the cell, and
   locked it asks to unlock like every refused edit (disabled with the reason where the lock is not
   the operator's), closing on a re-lock. Not a `cell` — one cue's list is not a value a marquee
-  spreads. Layers · FX are read-outs that open the card on the cards view
-  (with `CARDS_LINK_STATE`, so the sticky does not bounce it
-  back; a peek is not a change of view); **Book opens the Prompt Book** at that cue instead, through
+  spreads. **Layers · FX are read-outs that select their row and open the pane on that tab**
+  (below); **Book opens the Prompt Book** at that cue instead, through
   `?cue=`, which is that page's arrival contract and the mirror of the one it mints for Show — it is
   the one read-out that names a place in another document. **No Hooks column**: `CueStackCueEntry`
   carries no trigger count, and adding one is a backend field.
+
+  **The bottom pane holds the cue editor for the one selected row** (show-cue-editing plan D5,
+  §4.3; `runner/CueEditorPane.tsx`): drawn only while exactly one cue row is selected — no row,
+  several, or a marker fold it, and the sheet (`flex-1`) takes the height back. It sits under the
+  sheet with the busk `RigHandle`'s grip — one drag, `hooks/useHeightGrip.ts`, and one snap,
+  `snapRigHeight` — but its snap points are its own: its **160px floor and half the column**,
+  nothing else. The height
+  is this window's, `sessionStorage cueSheet.paneHeight`, null until dragged and drawn then at half
+  the column; the ceiling leaves the sheet its header and three rows (`SHEET_KEEP_PX`), clamped on
+  read. ↑ / ↓ on the grip step between the floor, half and the ceiling, and a double press restores
+  the default. The ceiling is measured from the column (less its other children), never from the
+  pane, whose content can be taller than the room. The height is written onto the pane
+  imperatively per move and committed on release, so a drag re-renders the grip and not the sheet,
+  and the edited row is scrolled into view by the least move as the pane opens or resizes. **The
+  grip and the pane are a key region** (`data-key-region`, which `keyTargetIsGuarded` stands aside
+  for, as it does for a Select's list): Escape, Enter or ⌫ pressed in the editor is never the
+  sheet's. The editor is `CueEditor` with `host="pane"` —
+  the card's own (§"Cues, Stacks & Triggers") — keyed by the entry, so its header names the stack
+  beside the number (*Act 1 · Q1*); locked it reads. A read-out's tab request is spent once the pane
+  leaves its row, so a later click opens on the window's own tab. **A follow of 0 fires at once**:
+  the Follow column and the editor's header read it through `parseFollowDelay`, blank or *off* being
+  none, where `parseFadeDuration` reads 0 as a snap.
 
   **A cell that cannot be selected is blank**, not an em-dash: the em-dash is the mark an *empty but
   settable* cell wears (Follow, Notes), and wearing it on a read-out and on a snap cue's Curve made
@@ -5362,7 +5384,7 @@ the descriptor) inside its restrike time says *Still cooling — restrike in 5:5
 confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in the cue editor's Scenery tab, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The cue action set
 
@@ -5372,7 +5394,12 @@ sheet's selection bar (after Set · Clear · Spread, before Deselect) and the ph
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
 Prompt Book's rail card). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
-hands in nothing else. It mounts its own Record sheet, delete confirm and unlock question.
+hands in nothing else. **Its Record sheet, delete confirm and unlock question live above every
+host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
+the routed page and **above its path-keyed error boundary** — because a host can go mid-gesture: a
+card open only because it is live collapses on a GO from MIDI or another window, and a GO into the
+next stack moves the Show view to that stack's path, which remounts everything under the boundary. Without a
+provider (a test drawing the set alone) the set draws them itself.
 
 - **The split button follows the show** (D6). Stopped, its face is *Edit in programmer* — Include,
   then the programmer — with *Blind edit in programmer* in its menu; running, the two swap, and the
@@ -5556,7 +5583,9 @@ would defeat that with the memo still in place, looking effective.
 
 **Each server run fact has one owner.** The RTK cache owns what the server says
 (`stack.activeCueId`, `stack.nextCueId`); the runner slice owns what is local — the animating
-cursor, the optimistic next (`standbyCueId`), done ticks, fade/auto descriptors — plus a private
+cursor, the optimistic next (`standbyCueId`, each with its entry: **the optimistic GO and BACK walk
+by entry**, show-cue-editing plan session 4, so in a stack holding one cue twice the optimistic next
+lands on the right place before the desk's `cueRunStateChanged` answers), done ticks, fade/auto descriptors — plus a private
 memory of the last frame it adopted (`serverActiveCueId`), which exists because a reducer cannot
 read the cache. That slice field is **not** a substitute for `useShowTransport`'s own
 change-tracking ref: the optimistic mutation patches move the cache with no frame, and a snapshot
@@ -5583,13 +5612,41 @@ live.
 
 A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), kept by the backend while the cue stays where it is and derived again when a change to the list moves it. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto. **An explicit renumber never relabels its auto neighbours** (venue-visit plan D11): in five auto cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, `detectOutOfOrder` sees the descent and draws the banner, and *Fix Order* (`sort-by-cue-number`) moves the cue to where its number says rather than renumbering anything — the rule is lighting7's, `docs/cue-stacks-engineering.md` §"Auto Numbering".
 
-**A cue is read-only, and edited by Include.** Session 2a deleted the three-pane inline editor
-(Targets · Cue properties · Layers) and its tab chrome: those panes restated, in a different shape,
-what a value grid and a layer stack already say, and two renderings of one state do not stay in step.
-An expanded cue row now shows `CueDetailContent` — transition, notes, **its composed
-values** (`CueValueGrid`), layers, effects, hooks — all read-only, with **Cue properties…**
-(`CuePropertiesSheet`); *Edit in programmer*, which Includes it, is the cue action set's
-(§"The cue action set"), on the strip under the collapsed row. It draws **no stage map**: the 2D
+**A cue is edited in one editor, two hosts** (show-cue-editing plan D1, §4.1–4.3, session 4;
+`components/cues/editor/CueEditor.tsx`). The open card draws its collapsed row, the cue action set's
+strip, then `CueEditor`; the cue sheet's bottom pane draws the same `CueEditor` for its one selected
+row (§Sheet kit); and `stage/OwnerEditor` mounts it in a right-hand sheet for a cue opened from
+outside the Show view — the fixture sheet FX tray's *on Q12* and the Stage view's *Moves with*.
+**Cue properties is gone** (D15): `CuePropertiesSheet` and `CuePropsPane` are deleted, and the card
+has no *Cue properties…*. Two cards can be open, each with its own editor.
+
+- **The header is one 40px chrome row** and draws the entry apart from the cue (P5): the stack, this
+  place's number and follow — written to the entry by its id, `patchCueStackEntry` — then a rule,
+  the cue's name, fade and curve (`patchProjectCue`), the shared chip from `Cue.entries`, and the
+  per-cue `SaveStatusIndicator`. A cue read with no context entry (loose, or in several places and
+  opened from none, as the sheet host can be) has no number or follow to write and says why. A
+  header field half-typed when its host goes — a GO collapsing a live card — commits
+  (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did.
+  *Edited since GO*, *Update stage…* and *Show on stage* are sessions 7 and 8, and draw nothing yet.
+- **The tabs are *Values n · Looks n · FX n · Scenery n · Events n · Cue*.** Values counts the
+  values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
+  (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and
+  a host may ask for a tab (`tabRequest`, the sheet's Layers and FX read-outs).
+- **Values, Looks and FX are read-outs for now** — `CueValueGrid`, and `CueDetailContent`'s
+  `CueLayersReadout` and `CueEffectsReadout`; the grid and the two tables are sessions 5 and 6. The
+  hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab, unlocked. **Scenery** is
+  `CueSceneryEditor`'s body (`CueSceneryEditorBody`), **Events** `CueEventsEditor`, and **Cue** the
+  notes, script hooks (`CueTriggerEditor`) and the busk-page append (`editor/CueTab.tsx`).
+- **Locked, it reads** (§4.6): the header's fields are plain text, the curve inert, and Scenery,
+  Events and Cue draw their read-outs. A cue the desk will not edit (`canEdit` false) reads the same,
+  saying it is another project's. Its field ids are its own (`useId`), so two editors of one cue
+  (a cue twice in a stack, a card under the fixture sheet's) do not share a field.
+- **It is a key region** (`data-key-region`, §4.5): the cue sheet's keyboard stands aside for a key
+  pressed in it. Session 5's grid gives the region its own listener.
+- **`CueDetailContent` stays the read-out** the phone card and the Prompt Book draw (`CueCardBody`).
+
+*Edit in programmer*, which Includes the cue, is the cue action set's (§"The cue action set"), on
+the strip under the collapsed row. The card draws **no stage map**: the 2D
 `MiniStage` went from the cards on desktop and phone in venue-visit plan S3, with `StageBackdrop`,
 its last user, so the phone card's toggle is *Details* alone and the phone runner, the busk Show
 tab and the Prompt Book rail all open their cards collapsed. Consequences worth knowing:
@@ -5614,8 +5671,6 @@ tab and the Prompt Book rail all open their cards collapsed. Consequences worth 
   `StackDetail` offers *Record into `<stack>`*. Separators and stacks keep their create buttons —
   neither is a captured state, and that is the line rather than "no new buttons". The Prompt Book's
   `CueAnchorPickerSheet` also still creates a cue at an anchor, deliberately.
-- **`CuePropsPane` survived, relocated.** It was not the problem with the three-pane editor, and a
-  per-field autosaving form is right for cue metadata; it is now the body of the properties drawer.
 - **`EditorContextValue` has no `cue` arm**, and the `cueEdit.*` protocol no longer exists on
   either side. Session 2a stopped providing the arm; 2b removed it, along with its four session
   helpers, `api/cueEditWsApi.ts` and the fifteen `kind === 'cue'` branches, having decided that
@@ -5668,8 +5723,8 @@ Scenery-programmer plan session 5 (D13, D14); the mechanism is `docs/show-mode-e
   `cueChangeLine` (`lib/scenery.ts`) are the one reader of a cue's lines — `House tabs → closed · 4 s`,
   names from the scene, an element the scene has lost left out — so the column, the glyph's hover and
   the rail cards cannot word a change three ways.
-- **One editor in place: `CueSceneryEditor`** (`components/scenery/`), Cue properties'
-  `SceneryEditor` with times inside `EditorSurface` at the button that opened it (wide in the side
+- **One editor in place: `CueSceneryEditor`** (`components/scenery/`), the cue editor's Scenery
+  tab body — `SceneryEditor` with times — inside `EditorSurface` at the button that opened it (wide in the side
   sheet), with the cue's tracked state as its header. The cue table's Scenery cell and an open rail
   card's *Scenery…* both open it; every host opens it unlocked only and closes it when a GO re-locks.
 - **The Show stack detail's header carries *Stack settings…*** unlocked, the stack form (and its set)

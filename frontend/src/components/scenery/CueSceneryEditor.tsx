@@ -24,7 +24,7 @@ export interface CueSceneryEditorCue {
 /**
  * A cue's scenery changes, edited where the cue is read rather than behind its card
  * (scenery-programmer plan D13, D14): the cue table's Scenery cell and the Prompt Book's rail card
- * open this, and both mean the same editor Cue properties hosts — `SceneryEditor` with times, each
+ * open this, and the cue editor's Scenery tab draws its body — `SceneryEditor` with times, each
  * row's `SceneryControl` writing on release and every gesture saving the cue's **whole** list.
  *
  * It opens through `EditorSurface` at [anchorRef] — the button that opened it, a popover on a desk
@@ -64,7 +64,16 @@ export function CueSceneryEditor({
   )
 }
 
-function CueSceneryEditorBody({ projectId, cue }: { projectId: number; cue: CueSceneryEditorCue }) {
+export function CueSceneryEditorBody({
+  projectId,
+  cue,
+  idPrefix = `cue-${cue.id}-scenery-surface`,
+}: {
+  projectId: number
+  cue: CueSceneryEditorCue
+  /** Its fields' ids — a host with several editors of one cue open gives each its own. */
+  idPrefix?: string
+}) {
   const { currentData: details } = useProjectCueQuery({ projectId, cueId: cue.id, entryId: cue.entryId })
   const { data: elements } = useStageElementListQuery(projectId)
   const [setCueScenery] = useSetCueSceneryMutation()
@@ -88,7 +97,7 @@ function CueSceneryEditorBody({ projectId, cue }: { projectId: number; cue: CueS
         scenery={cue.scenery ?? EMPTY_SCENERY}
         withTime
         addLabel="Add change"
-        idPrefix={`cue-${cue.id}-scenery-surface`}
+        idPrefix={idPrefix}
         onSave={(scenery) => setCueScenery({ projectId, cueId: cue.id, scenery }).unwrap()}
       />
       <p className="text-[11px] text-muted-foreground">

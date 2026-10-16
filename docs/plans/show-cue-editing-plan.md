@@ -428,7 +428,7 @@ says palette). All of them have merged.
 - **Docs:** the frontend CLAUDE.md's §"Cues, Stacks & Triggers" and §"The show-editing lock";
   CLAUDE.md's cue endpoints.
 
-### Session 4 — the editor and its two hosts (frontend)
+### Session 4 — the editor and its two hosts (frontend) — done, `a4ab679`
 
 - §4.1–4.3: `CueEditor` (header, tabs, the tab memory), the card host, the table's bottom pane with
   its grip and its fold; Scenery, Events and Cue tabs from the existing editors; `CuePropertiesSheet`

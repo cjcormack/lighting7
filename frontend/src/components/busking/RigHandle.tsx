@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import type { RefObject } from 'react'
+import { useHeightGrip } from '@/hooks/useHeightGrip'
 import { resetBuskRigHeight, setBuskRigHeight } from '@/lib/buskWindow'
 import { cn } from '@/lib/utils'
 
@@ -13,8 +14,8 @@ import { cn } from '@/lib/utils'
  * [RIG_SNAP_PX] of a line's bottom edge the height jumps to it — the region's bottom lands on the
  * line's — and everywhere else it follows the pointer. The last line's bottom is a snap point like
  * any other, so "show the whole rig" is still one drag. The arrow keys step between the same
- * edges, and a **double press** — two presses within [DOUBLE_PRESS_MS], neither of which moved —
- * returns the window to its default height. It is read off the pointer presses themselves rather
+ * edges, and a **double press** — two still presses within 400 ms — returns the window to its
+ * default height. The drag is `useHeightGrip`, shared with the cue sheet's pane. It is read off the pointer presses themselves rather
  * than `dblclick`, because the press cancels `pointerdown` (to keep the grip from starting a text
  * selection) and whether a browser still synthesises the click pair after that is the browser's
  * call: Chromium does, and the desk runs Safari.
@@ -42,8 +43,6 @@ export const RIG_MIN_HEIGHT_PX = 56
 export const PAGE_MIN_HEIGHT_PX = 120
 /** Within this of a line's bottom edge the drag snaps to it. */
 export const RIG_SNAP_PX = 10
-/** Two presses this close, neither of which moved, are the double-press that restores the default. */
-const DOUBLE_PRESS_MS = 400
 
 export function clampRigHeight(height: number, min: number, max: number): number {
   return Math.max(min, Math.min(Math.max(min, max), height))
@@ -94,13 +93,8 @@ export function lineEdges(rows: HTMLElement): number[] {
   return [...bottoms.entries()].sort((a, b) => a[0] - b[0]).map(([, bottom]) => bottom)
 }
 
-const GRIP_CLASS =
+export const GRIP_CLASS =
   'h-1.5 w-16 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50'
-
-/** The drag's per-move write — the same property the band's layout effect writes (docblock). */
-function writeHeight(rows: HTMLElement | null, px: number): void {
-  if (rows != null) rows.style.height = `${px}px`
-}
 
 export interface RigHandleProps {
   /** The rig region's height as drawn — `aria-valuenow`, and where a drag and a key step start from. */
@@ -118,71 +112,15 @@ export interface RigHandleProps {
 }
 
 export function RigHandle({ height, max, rowsRef, onDragging }: RigHandleProps) {
-  const [dragging, setDragging] = useState(false)
-  const drag = useRef<{ pointerId: number; startY: number; startHeight: number; height: number; moved: boolean } | null>(null)
-  /** When the last press that moved nothing was released — the first half of a double press. */
-  const stillPressAt = useRef<number | null>(null)
-  // Read at move time through a ref: the ceiling moves with the window mid-drag, and a dep on it
-  // would tear the listeners down and cancel the drag on every resize.
-  const maxRef = useRef(max)
-  maxRef.current = max
-
-  // The rest of the drag lives on the window, as every other drag on this desk does.
-  // `pointercancel` ends it as a release does, so a drag the browser reclaims as a pan on a
-  // touchscreen cannot leave the region at a height the fact never learned.
-  useEffect(() => {
-    if (!dragging) return
-    const onMove = (e: PointerEvent) => {
-      const state = drag.current
-      if (state == null || e.pointerId !== state.pointerId) return
-      const rows = rowsRef.current
-      if (rows == null) return
-      // Not until the pointer has moved: a `pointermove` at the press's own point is not a drag,
-      // and snapping there would let a still press commit a magnetic nudge and eat a double press.
-      if (e.clientY !== state.startY) state.moved = true
-      if (!state.moved) return
-      const raw = state.startHeight + (e.clientY - state.startY)
-      const next = snapRigHeight(raw, lineEdges(rows), RIG_MIN_HEIGHT_PX, maxRef.current)
-      if (next !== state.height) {
-        state.height = next
-        writeHeight(rows, next)
-      }
-    }
-    const onUp = (e: PointerEvent) => {
-      const state = drag.current
-      if (state == null || e.pointerId !== state.pointerId) return
-      drag.current = null
-      setDragging(false)
-      onDragging?.(false)
-      if (state.moved) {
-        // A drag is not half of a double press.
-        stillPressAt.current = null
-        setBuskRigHeight(state.height)
-      } else if (stillPressAt.current != null && Date.now() - stillPressAt.current <= DOUBLE_PRESS_MS) {
-        // The second still press: back to the default. Consumed, so a third press starts over.
-        // `Date.now()` rather than the event's `timeStamp`, which a test cannot set.
-        stillPressAt.current = null
-        resetBuskRigHeight()
-      } else stillPressAt.current = Date.now()
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', onUp)
-    // The teardown **cancels** a drag still in flight, not only the listeners: this runs when the
-    // handle unmounts mid-drag — a `focus: 'rig'` from another window or MIDI takes the whole
-    // handle away — and without it the release is never seen and the next press re-arms a phantom
-    // drag whose release anywhere on the page writes a height. The grid itself is the band's to
-    // put right (docblock), so nothing is written here.
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('pointercancel', onUp)
-      if (drag.current != null) {
-        drag.current = null
-        onDragging?.(false)
-      }
-    }
-  }, [dragging, rowsRef, onDragging])
+  const { dragging, onPointerDown } = useHeightGrip({
+    target: rowsRef,
+    direction: 1,
+    // The ceiling moves with the window mid-drag, so it is read at move time, as the edges are.
+    snap: (raw) => (rowsRef.current == null ? raw : snapRigHeight(raw, lineEdges(rowsRef.current), RIG_MIN_HEIGHT_PX, max)),
+    onCommit: setBuskRigHeight,
+    onReset: resetBuskRigHeight,
+    onDragging,
+  })
 
   const step = (direction: 1 | -1) => {
     const rows = rowsRef.current
@@ -209,24 +147,7 @@ export function RigHandle({ height, max, rowsRef, onDragging }: RigHandleProps) 
           'cursor-row-resize touch-none',
           dragging ? 'bg-primary' : 'bg-border hover:bg-muted-foreground/70',
         )}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return
-          e.preventDefault()
-          const rows = rowsRef.current
-          if (rows == null) return
-          const startHeight = rows.getBoundingClientRect().height
-          drag.current = { pointerId: e.pointerId, startY: e.clientY, startHeight, height: startHeight, moved: false }
-          setDragging(true)
-          onDragging?.(true)
-          // Captured, so a drag that runs off the bottom of the window still delivers its release.
-          // After the drag is armed and guarded: the window listeners carry the drag whether or not
-          // the capture takes, and a pointer the browser does not hold (a synthetic one) throws.
-          try {
-            e.currentTarget.setPointerCapture(e.pointerId)
-          } catch {
-            // Uncaptured: the window listeners still see every move and the release.
-          }
-        }}
+        onPointerDown={onPointerDown}
         onKeyDown={(e) => {
           // One line edge at a time; past the last edge the ceiling, above the first the floor.
           if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {

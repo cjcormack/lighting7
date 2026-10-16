@@ -60,19 +60,28 @@ vi.mock('./components/effects/EffectsAnnouncer', () => ({ EffectsAnnouncer: () =
 vi.mock('./components/screens/ScreensSheet', () => ({ ScreensSheet: () => null }))
 vi.mock('./components/stageRender/StageRenderHost', () => ({ StageRenderHost: () => null }))
 vi.mock('./components/screens/useWindowsBridge', () => ({ useWindowsBridge: () => {} }))
+// The cue action set's dialogs, held by `Layout` — here they say only which cue they are open on.
+vi.mock('./components/programmer/RecordSheet', () => ({
+  RecordSheet: (p: { targetCueId: number }) => <div data-testid="record-sheet">{p.targetCueId}</div>,
+}))
+vi.mock('./components/cues/CueDeleteDialog', () => ({ CueDeleteDialog: () => null }))
 vi.mock('./components/appBar/AppBarSwitcher', () => ({ AppBarSwitcher: () => <div data-testid="app-switcher" /> }))
 vi.mock('./components/appBar/DeskName', () => ({ DeskName: () => null, useDocumentTitle: () => {} }))
 
 import Layout from './Layout'
 import { resetImmersiveStore, setImmersive } from './lib/immersive'
 import { useOpenMobileDrawer } from './components/mobileDrawerContext'
+import { useCueActionDialogs } from './components/runner/cueActionDialogs'
 
 /** The routed page: what the `ShowHeader` does below `md` while immersive, reduced to its opener. */
 function Page() {
   const openDrawer = useOpenMobileDrawer()
+  const dialogs = useCueActionDialogs()
   return (
     <div data-testid="page">
       <button onClick={() => openDrawer?.()}>open drawer</button>
+      <button onClick={() => dialogs.openRecord(1, 12, 'Storm')}>record</button>
+      {dialogs.local}
     </div>
   )
 }
@@ -296,5 +305,18 @@ describe('below md', () => {
     const { container } = draw('/projects/1/busk')
     await screen.findByTestId('page')
     expect(appHeader(container)).not.toBeNull()
+  })
+})
+
+describe('the cue action set’s dialogs', () => {
+  it('outlive a GO that carries the Show view into the next stack — a new path', async () => {
+    const { router } = draw('/projects/1/show/stacks/1')
+    await screen.findByTestId('page')
+    fireEvent.click(screen.getByRole('button', { name: 'record' }))
+    expect(screen.getByTestId('record-sheet').textContent).toBe('12')
+    // The Show view follows the playhead with a `replace` navigation to the new stack's path,
+    // which remounts everything under the path-keyed error boundary.
+    await act(() => router.navigate('/projects/1/show/stacks/2', { replace: true }))
+    expect(screen.getByTestId('record-sheet').textContent).toBe('12')
   })
 })

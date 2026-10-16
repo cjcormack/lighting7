@@ -24,7 +24,6 @@ import { RecordSheet } from '../components/programmer/RecordSheet'
 import type { CueStack } from '../api/cueStacksApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import {
-  CARDS_LINK_STATE,
   SHOW_VIEW_KEY,
   setStoredCardsListView,
   stickyRedirectsToList,
@@ -282,21 +281,6 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   const initialDrillDoneRef = useRef(false)
 
   const handleRecordIntoStack = useCallback((stackId: number) => setRecordStackId(stackId), [])
-
-  /**
-   * The sheet's read-outs open a cue's *card*: the cards view with `?cue=` — tagged as the
-   * switcher's own Cards click, so the sticky (which still says the sheet) does not bounce it
-   * straight back. A peek at a card is not a change of view, so the sticky is left alone.
-   */
-  const handleOpenCue = useCallback(
-    (cueId: number, entryId: number) => {
-      if (drillStackId == null) return
-      navigate(`/projects/${projectIdNum}/show/stacks/${drillStackId}?cue=${cueId}&entry=${entryId}`, {
-        state: CARDS_LINK_STATE,
-      })
-    },
-    [drillStackId, navigate, projectIdNum],
-  )
 
   /**
    * The Book column's read-out opens the **Prompt Book** at that cue, not the cue's card. It is the
@@ -594,7 +578,6 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               openedEntryId={openedEntryId}
               onRecordIntoStack={handleRecordIntoStack}
               view={stackView}
-              onOpenCue={handleOpenCue}
               onOpenBook={handleOpenBook}
               // Withheld where the lock is not the operator's to lift — a project that is not
               // current cannot be edited at all, and offering an unlock that changes nothing is
