@@ -167,6 +167,15 @@ data class CueAdHocEffectDto(
      */
     val seconds: Boolean = false,
     /**
+     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
+     */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
+    val nShot: Int? = null,
+    /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
      * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored on
      * write, like [CueLayerDto.id] — an effect is matched by its target, property and type, and a
@@ -258,6 +267,15 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
 
     /** D7's *Seconds* for a beat effect; see [CueAdHocEffectDto.seconds]. */
     val seconds = bool("seconds").default(false)
+
+    /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
+    val size = double("size").default(1.0)
+
+    /** Direction (D5) by name; see [LookEffectSpec.direction]. */
+    val direction = varchar("direction", 16).default("FORWARD")
+
+    /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
+    val nShot = integer("n_shot").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -293,6 +311,9 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
     var seconds by DaoCueAdHocEffects.seconds
+    var size by DaoCueAdHocEffects.size
+    var direction by DaoCueAdHocEffects.direction
+    var nShot by DaoCueAdHocEffects.nShot
     var uuid by DaoCueAdHocEffects.uuid
 }
 
@@ -586,5 +607,8 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     seconds = seconds,
+    size = size,
+    direction = direction,
+    nShot = nShot,
     uuid = uuid.toString(),
 )

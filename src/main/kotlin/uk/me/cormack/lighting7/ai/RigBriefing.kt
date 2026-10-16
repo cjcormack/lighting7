@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fx.EffectDirection
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.fixture.FixtureCommands
@@ -185,6 +186,12 @@ class RigBriefing(private val state: State) {
                         // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
                         (if (effect.onSeconds) " (seconds=" else " (beat=") +
                         "${effect.timing.beatDivision}, blend=${effect.blendMode}" +
+                        effect.dynamics.let { dyn ->
+                            // Effects plan D2, D5, D9 — said only where not the default.
+                            (if (dyn.size != 1.0) ", size=${dyn.size}" else "") +
+                                (if (dyn.direction != EffectDirection.FORWARD) ", direction=${dyn.direction}" else "") +
+                                (dyn.nShot?.let { ", nShot=$it" } ?: "")
+                        } +
                         (effect.cueId?.let { ", cueId=$it" } ?: "") + ")")
             }
         } else {
@@ -333,6 +340,7 @@ class RigBriefing(private val state: State) {
         // Key concepts
         sb.appendLine("## Key Concepts")
         sb.appendLine("- Beat divisions are beats a cycle: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new effect is one bar unless asked otherwise.")
+        sb.appendLine("- **Size, direction and runs**: every effect takes `size` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement effect's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `nShot` (stop after that many cycles — a flash on cue is 1; omit for forever).")
         sb.appendLine("- **Seconds**: an effect may run on its own cycle instead of following a master — `seconds: true`, with `beatDivision` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN, PING_PONG, REVERSE, SPLIT, RANDOM")

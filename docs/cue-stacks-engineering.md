@@ -274,7 +274,8 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 2. Snapshot outgoing effects (for crossfade) — effects where `cueStackId == stackId`
 3. If crossfading: leave outgoing effects in place; if snap-cut: remove them
 4. Apply cue's effects (presets + ad-hoc) tagged with both `cueId` and `cueStackId`
-5. If crossfading: start new effects at `intensityMultiplier = 0.0`, launch crossfade coroutine
+5. If crossfading: launch the crossfade coroutine (it moves Layer 4 fade weights; effects snap, and the
+   effect envelope stays 1 until the effects plan's session 4)
 6. If this cue has auto-advance configured: start delay timer
 7. Publish the run state, then the scenery (`SceneryService.onCueLive`) — §"Scenery" below.
    `deactivateStack` likewise ends with `onStackStopped`
@@ -289,7 +290,7 @@ carries no colour state at all, and `removeEffectsForCueStackKeepPalette` folded
 
 ## Crossfade (Option B — Intensity Envelope)
 
-The crossfade system uses per-effect `intensityMultiplier` (0.0–1.0) to smoothly transition between outgoing and incoming cue effects.
+Each effect carries an envelope, `intensityMultiplier` (0.0–1.0), meant for fading effects across a cue transition. Nothing drives it yet — the crossfade below moves Layer 4 values only, and effects snap — until the effects plan's session 4 fades them by it.
 
 ### FxInstance Addition
 
@@ -297,15 +298,17 @@ The crossfade system uses per-effect `intensityMultiplier` (0.0–1.0) to smooth
 @Volatile var intensityMultiplier: Double = 1.0
 ```
 
-### FxOutput.scaled()
+### The envelope is a weight, not a scale
 
-The `FxOutput` sealed interface has a `scaled(multiplier: Double)` method:
-- **Slider**: scales value toward 0
-- **Colour**: scales RGB/W/A/UV toward black
-- **Position**: no scaling (snap — no meaningful position fade)
+`FxOutput.scaled()` is gone (effects plan session 1). `intensityMultiplier` is the **envelope**, one
+factor of the weight `FxInstance.weight` applies after the blend — `out = before + (blended − before)
+× size × envelope` — so an envelope going to 0 hands the property back to what is underneath rather
+than driving an `OVERRIDE` to 0. Nothing moves it yet: effects still snap at GO, and the effects
+plan's session 4 is what fades them by it (§3.5). See `docs/fx-engineering.md` §"Size, direction and
+N-shot".
 
-Applied in `FxEngine` once, inside `calculateEffectOutput`, which the three effect output
-sites all call into. Both the beat and wall-clock passes share those three, differing only in
+Applied in the target, after the blend: `calculateEffectOutput` returns the raw output, and each of
+the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxInstance.weight`). Both the beat and wall-clock passes share those three, differing only in
 the `PhaseSource` they hand them:
 1. `processFixtureEffect` — direct fixture
 2. `processGroupEffect` — group member direct

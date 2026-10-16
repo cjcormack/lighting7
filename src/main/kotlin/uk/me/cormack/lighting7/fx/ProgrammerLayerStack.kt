@@ -803,6 +803,11 @@ class ProgrammerLayerStack(
             newTimingSource = fresh.registrationTimingSource,
             replaceMasters = FxEngine.MasterAssignment(fresh.speedMasterUuid, fresh.rateSpeedMasterUuid),
             newSeconds = fresh.onSeconds,
+            // Size, direction and runs are the palette's too (effects plan D2, D5, D9).
+            newSize = fresh.dynamics.size,
+            newDirection = fresh.dynamics.direction,
+            newNShot = fresh.dynamics.nShot,
+            clearNShot = fresh.dynamics.nShot == null,
         ) ?: return ResetToTemplateOutcome.NotFound
         updated.programmerLayerEffectKey = key.copy(effect = entry)
         ResetToTemplateOutcome.Reset(updated)

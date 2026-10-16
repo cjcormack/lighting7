@@ -1,6 +1,7 @@
 import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
+import type { EffectDirection } from './fxApi'
 
 /**
  * The `targetType` discriminator marking an **effect** as deferred: it names no target of its own and
@@ -71,6 +72,12 @@ export interface LookEffect {
    * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
    */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; absent at 1. */
+  size?: number
+  /** Direction (D5); absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9); absent or null runs forever. */
+  nShot?: number | null
   sortOrder?: number
 }
 

@@ -106,6 +106,15 @@ data class LookEffectDto(
      * See `fx/EffectTiming.kt`.
      */
     val seconds: Boolean = false,
+    /**
+     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
+     */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
+    val nShot: Int? = null,
     val sortOrder: Int = 0,
 ) {
     /** True when this effect takes its targets from the referencing layer rather than naming one. */
@@ -236,6 +245,15 @@ object DaoLookEffects : IntIdTable("look_effects") {
 
     /** D7's *Seconds* for a beat effect; see [LookEffectSpec.seconds]. */
     val seconds = bool("seconds").default(false)
+
+    /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
+    val size = double("size").default(1.0)
+
+    /** Direction (D5) by name; see [LookEffectSpec.direction]. */
+    val direction = varchar("direction", 16).default("FORWARD")
+
+    /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
+    val nShot = integer("n_shot").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -289,6 +307,15 @@ data class LookEffectSpec(
      * See `fx/EffectTiming.kt`.
      */
     val seconds: Boolean = false,
+    /**
+     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
+     */
+    val size: Double = 1.0,
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    val direction: String = "FORWARD",
+    /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
+    val nShot: Int? = null,
 )
 
 /**
@@ -319,6 +346,9 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var speedMasterUuid by DaoLookEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoLookEffects.rateSpeedMasterUuid
     var seconds by DaoLookEffects.seconds
+    var size by DaoLookEffects.size
+    var direction by DaoLookEffects.direction
+    var nShot by DaoLookEffects.nShot
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 

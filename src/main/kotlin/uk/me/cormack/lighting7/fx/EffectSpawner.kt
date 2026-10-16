@@ -131,6 +131,9 @@ internal object EffectSpawner {
         val distribution = EffectSpecCoercion.Lenient.distribution(effectSpec.distribution, context)
         val elementMode = EffectSpecCoercion.Lenient.elementMode(effectSpec.elementMode, context)
         val elementFilter = EffectSpecCoercion.Lenient.elementFilter(effectSpec.elementFilter, context)
+        val direction = EffectSpecCoercion.Lenient.direction(effectSpec.direction, context)
+        val size = EffectSpecCoercion.Lenient.size(effectSpec.size, context)
+        val nShot = EffectSpecCoercion.Lenient.nShot(effectSpec.nShot, context)
 
         // Propagate timing source from the effect's registration
         val registration = state.show.fxRegistry.getRegistration(effectSpec.effectType)
@@ -147,6 +150,9 @@ internal object EffectSpawner {
             this.elementFilter = elementFilter
             this.timingSource = timingSource
             effectSpec.stepTiming?.let { this.stepTiming = it }
+            // Size, direction and runs (effects plan D2, D5, D9) — the row's own; a fade's envelope
+            // is runtime and starts at 1.
+            updateDynamics { it.copy(size = size, direction = direction, nShot = nShot) }
             speedMasterUuid = overrideSpeedMasterUuid
                 ?: speedMasterUuidOrNull(effectSpec.speedMasterUuid)
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid

@@ -81,6 +81,9 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   speedMasterUuid: null,
   rateSpeedMasterUuid: null,
   seconds: false,
+  size: 1,
+  direction: 'FORWARD',
+  nShot: null,
   ...over,
 })
 
@@ -147,6 +150,44 @@ describe('FxEffectFields', () => {
     fireEvent.change(field, { target: { value: '900' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(setParam).toHaveBeenLastCalledWith('flickerDurationMs', '400', true)
+  })
+
+  it('puts Size in percent and Direction as three glyphs beside Speed (effects plan D11)', () => {
+    const { set } = fields(PULSE, draft({ size: 0.6, direction: 'BACKWARD' }))
+    const size = screen.getByRole('spinbutton', { name: /Size/ }) as HTMLInputElement
+    expect(size.value).toBe('60')
+    fireEvent.change(size, { target: { value: '40' } })
+    fireEvent.keyDown(size, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ size: 0.4 }, true)
+    const direction = screen.getByRole('radiogroup', { name: 'Direction' })
+    expect(Array.from(direction.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Forward',
+      'Backward',
+      'Bounce',
+    ])
+    expect(screen.getByRole('radio', { name: 'Backward' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Bounce' }))
+    expect(set).toHaveBeenLastCalledWith({ direction: 'BOUNCE' })
+  })
+
+  it('keeps Runs under Advanced: Forever, or a count (effects plan D9)', () => {
+    const { set } = fields(PULSE, draft())
+    expect(screen.queryByRole('radiogroup', { name: 'Runs' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.getByRole('radio', { name: 'Forever' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Count' }))
+    expect(set).toHaveBeenLastCalledWith({ nShot: 1 })
+    cleanup()
+    const second = fields(PULSE, draft({ nShot: 3 }))
+    // Folded, the summary says the count.
+    expect(screen.getByRole('button', { name: /Advanced.*3 runs/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    const count = screen.getByRole('spinbutton', { name: 'Runs' })
+    fireEvent.change(count, { target: { value: '2' } })
+    fireEvent.keyDown(count, { key: 'Enter' })
+    expect(second.set).toHaveBeenLastCalledWith({ nShot: 2 })
+    fireEvent.click(screen.getByRole('radio', { name: 'Forever' }))
+    expect(second.set).toHaveBeenLastCalledWith({ nShot: null })
   })
 
   it("draws a parameter's own sentence under its control", () => {

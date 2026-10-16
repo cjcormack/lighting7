@@ -124,6 +124,10 @@ export function NewTemplateFromEffectSheet({
       rateSpeedMasterUuid: effect.rateSpeedMasterUuid,
       // The running effect's timing (D7): a beat effect on Seconds keeps its cycle in seconds.
       seconds: isOnSeconds(effect, effect.timingSource),
+      // Its size, direction and runs (effects plan D2, D5, D9), said only where not the default.
+      ...(effect.size != null && effect.size !== 1 ? { size: effect.size } : {}),
+      ...(effect.direction != null && effect.direction !== 'FORWARD' ? { direction: effect.direction } : {}),
+      ...(effect.nShot != null ? { nShot: effect.nShot } : {}),
     }
     try {
       const created = await create({ projectId: projectIdNum, name: name.trim(), effect: body }).unwrap()

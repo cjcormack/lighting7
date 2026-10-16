@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import type { EffectDirection } from '@/api/fxApi'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
@@ -139,6 +140,12 @@ export interface AddFixtureFxRequest {
   rateSpeedMasterUuid?: string
   /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; omitted → 1. */
+  size?: number
+  /** Direction (D5); omitted → forward. */
+  direction?: EffectDirection
+  /** Runs (D9), at least 1; omitted → forever. */
+  nShot?: number
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -197,7 +204,10 @@ export interface ActiveEffect {
   timingSource: string
   /** True when the effect sits in the programmer's priority band. */
   programmerOwned: boolean
-  /** Fade envelope in [0, 1]; the effect's output is scaled by this before blending. */
+  /**
+   * The envelope, 0–1: the runtime factor of the effect's weight a fade moves, beside [size]
+   * (effects plan P3). 1 until the cue fades move it.
+   */
   intensityMultiplier: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid: string | null
@@ -209,6 +219,17 @@ export interface ActiveEffect {
    * wall-clock effect with no rate master. Absent from a desk before S15; `isOnSeconds` reads it.
    */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
+  size?: number
+  /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. Absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9): the cycles an N-shot runs; absent or null runs forever. */
+  nShot?: number | null
+  /**
+   * An N-shot that has run its count and is kept, painting nothing, until its programmer layer goes
+   * (the desk's `FxInstance.spent`). Any other spent N-shot has already left the list.
+   */
+  spent?: boolean
   /**
    * The Look whose effect Include ran here — never `lookId`, which a busk pad lights from. Absent
    * from a desk before Include ran a Look's effects, and on every other effect.

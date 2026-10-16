@@ -433,6 +433,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     speedMasterUuid = effect.speedMasterUuid
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                     seconds = effect.seconds
+                    size = effect.size
+                    direction = effect.direction
+                    nShot = effect.nShot
                 }
             }
 

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
@@ -96,6 +97,36 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-1`
+
+**What it proves**: *Size, Direction and Runs* — venue-visit R4.1, effects plan session 1 (D2, D5,
+D9, P3): Size weighs an effect over what is underneath after the blend, Direction runs each head's
+cycle backward or bouncing, and an N-shot runs its count and hands each head back.
+
+**Why it is here**: the tests drive synthetic ticks against a mock controller and read bytes. Nothing
+in review watched a half-size breathe, a backward cycle or a one-shot ripple on real heads, or judged
+whether a weight that is linear in DMX reads as "half" to the eye.
+
+**Test**, on Sleeping Beauty, from the busk view and the programmer:
+
+1. **Size over a level.** Hold a wash group at 40 % in the programmer and busk a Pulse on it (*+
+   Effect*, Replace). At Size 100 % it runs between its low and high; drag Size to 50 %: it runs
+   halfway between 40 % and the pulse, and never drops below the level the way it would at half its
+   own output. At 0 % the group sits at 40 %, and the fixture sheet's stack reads the Pulse as not on
+   stage.
+2. **An Around circle.** Hold a mover's position, busk a Circle (*Around*). Drag Size to 50 %: the
+   circle halves its radius about the held position, centred where it was.
+3. **Direction.** Busk Colour Cycle (red · green · blue) on a group: Forward reads red → green →
+   blue; press ← (Backward): blue → green → red; press ↔ (Bounce): it runs there and back. A chase
+   over the group keeps its spread whichever way it runs.
+4. **Runs.** Under Advanced, set *Runs* to 1 on a Pulse chase over a group of four: it ripples once,
+   each head handing back to its level after its own pulse, and the effect leaves the FX list.
+   Busk it again with Blind on and wait one cycle before Blind off: it is gone, not restarted.
+5. **A palette and a cue.** Save the 50 % backward effect as a palette (*Save as palette…*): the pad's
+   face reads *· ← · 50 %*. Record it into a cue, GO the cue: it runs at the same size and direction.
 
 ---
 

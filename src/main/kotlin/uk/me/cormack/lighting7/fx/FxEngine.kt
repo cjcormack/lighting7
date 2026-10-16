@@ -827,14 +827,27 @@ class FxEngine(
          * instance had.
          */
         newSeconds: Boolean? = null,
+        /** Size (effects plan D2), 0.0–1.0; null = keep. A dynamics field: edited in place. */
+        newSize: Double? = null,
+        /** Direction (D5); null = keep. A dynamics field. */
+        newDirection: EffectDirection? = null,
+        /**
+         * Runs (D9). Null keeps the count, so [clearNShot] is how an N-shot goes back to forever. A
+         * changed count starts again from the next pass, and wakes a spent instance.
+         */
+        newNShot: Int? = null,
+        clearNShot: Boolean = false,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
+        val nShotChanged = (clearNShot && existing.dynamics.nShot != null) ||
+            (newNShot != null && newNShot != existing.dynamics.nShot)
 
         // One atomic dynamics update covering both branches: the cell is shared across the
         // swap below, so applying it up front reaches whichever instance survives — and a
         // tick pass sees either none of this update or all of it, never half.
         if (newPhaseOffset != null || newDistributionStrategy != null || newElementMode != null ||
-            newElementFilter != null || newStepTiming != null
+            newElementFilter != null || newStepTiming != null || newSize != null || newDirection != null ||
+            newNShot != null || clearNShot
         ) {
             existing.updateDynamics { dyn ->
                 dyn.copy(
@@ -843,8 +856,18 @@ class FxEngine(
                     elementMode = newElementMode ?: dyn.elementMode,
                     elementFilter = newElementFilter ?: dyn.elementFilter,
                     stepTiming = newStepTiming ?: dyn.stepTiming,
+                    size = newSize ?: dyn.size,
+                    direction = newDirection ?: dyn.direction,
+                    nShot = if (clearNShot) null else newNShot ?: dyn.nShot,
                 )
             }
+        }
+        // A new count runs from now: the anchors re-take on the next pass. Written from this request
+        // thread into tick-owned fields, which at worst re-anchors one pass late.
+        if (nShotChanged) {
+            existing.nShotStartTick = FxInstance.UNANCHORED
+            existing.nShotStartScaledMs = Double.NaN
+            existing.spent = false
         }
 
         // D7: a timing move or a type swap decides the loop and which masters can stand.
@@ -890,6 +913,10 @@ class FxEngine(
                 // would snap an edited wall-clock effect back to the start of its cycle —
                 // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
                 accumulatedScaledMs = existing.accumulatedScaledMs
+                // An N-shot's count runs on across an edit, as its phase does.
+                nShotStartTick = existing.nShotStartTick
+                nShotStartScaledMs = existing.nShotStartScaledMs
+                spent = existing.spent
                 timingSource = existing.timingSource
                 seconds = existing.seconds
                 // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
@@ -1172,6 +1199,9 @@ class FxEngine(
         val blind = programmerStore.blind
         val suppression = programmerSuppression(blind)
 
+        // N-shots that run out on this pass, ended after the pass's frame is out ([finishNShots]).
+        val spentThisPass = ArrayList<FxInstance>(0)
+
         // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
         // effects compose on top and dominate. Each effect computes phase from *its own*
         // master's tick; effects on the same master stay locked, effects on different
@@ -1184,11 +1214,13 @@ class FxEngine(
 
             val tick = frame.tick(effect.speedMasterSlot)
             try {
+                beginNShotPass(effect)
                 if (effect.isGroupEffect) {
                     processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
                 } else {
                     processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
                 }
+                if (nShotRanOut(effect, dyn)) spentThisPass += effect
                 noteTickSuccess(effect)
             } catch (t: Throwable) {
                 // Throwable, not Exception: every built-in effect is a compiled script, so a
@@ -1200,6 +1232,7 @@ class FxEngine(
         }
 
         transaction.applySuspend()
+        finishNShots(spentThisPass)
     }
 
     /**
@@ -1301,12 +1334,14 @@ class FxEngine(
         val blind = programmerStore.blind
         val suppression = programmerSuppression(blind)
 
+        val spentThisPass = ArrayList<FxInstance>(0)
         for (effect in wallClockEffects) {
             // Same one-snapshot-per-pass rule as the beat loop.
             val dyn = effect.dynamics
             if (!dyn.isRunning) continue
 
             try {
+                beginNShotPass(effect)
                 if (effect.isGroupEffect) {
                     processGroupEffect(
                         syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
@@ -1316,6 +1351,7 @@ class FxEngine(
                         syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
                     )
                 }
+                if (nShotRanOut(effect, dyn)) spentThisPass += effect
                 noteTickSuccess(effect)
             } catch (t: Throwable) {
                 // See the beat loop's catch for why this is Throwable.
@@ -1324,6 +1360,38 @@ class FxEngine(
         }
 
         transaction.applySuspend()
+        finishNShots(spentThisPass)
+    }
+
+    /** Clear [effect]'s per-pass N-shot flags before its pass; see [FxInstance.nShotPending]. */
+    private fun beginNShotPass(effect: FxInstance) {
+        effect.nShotPending = false
+        effect.nShotEvaluated = false
+    }
+
+    /**
+     * Whether [effect], an N-shot (D9), ran out on the pass just made: some member's phase was
+     * computed and none has runs left — the clock has run N cycles past the largest member offset.
+     * A held effect (Blind, a stomp, the programmer) computes its phases all the same, so its count
+     * runs on while it is held, as its clock does. An expansion with no members evaluates nothing
+     * and is never spent by this, so a group emptied by a reload does not end an effect.
+     */
+    private fun nShotRanOut(effect: FxInstance, dyn: FxDynamics): Boolean =
+        dyn.nShot != null && !effect.spent && effect.nShotEvaluated && !effect.nShotPending
+
+    /**
+     * End the N-shots a pass found spent, after its frame is out, as one mutation. A programmer
+     * layer's instance is kept, [FxInstance.spent] — the layer's recook would otherwise spawn it
+     * afresh and fire it again on the next unrelated programmer write; its members already hold
+     * underneath, and the layer's release removes it. Every other instance is removed, which resets
+     * whatever it alone covered and broadcasts the list.
+     */
+    private fun finishNShots(spent: List<FxInstance>) {
+        if (spent.isEmpty()) return
+        val (kept, ended) = spent.partition { it.programmerLayerEffectKey != null }
+        kept.forEach { it.spent = true }
+        if (ended.isNotEmpty()) removeEffects(ended.map { it.id })
+        if (kept.isNotEmpty() && ended.isEmpty()) emitStateUpdate()
     }
 
     /**
@@ -1341,13 +1409,13 @@ class FxEngine(
         phase: Double,
         context: EffectContext,
     ): FxOutput {
-        // Stateful effects
-        val raw = if (effect.effect is StatefulEffect) {
+        // The raw output, unscaled: size and the envelope weigh it after the blend, in the target
+        // (effects plan P3, [FxInstance.weight]) — scaling it here is what dropped an OVERRIDE to 0.
+        return if (effect.effect is StatefulEffect) {
             effect.effect.calculateStateful(tick, deltaMs, context)
         } else {
             effect.effect.calculate(phase, context)
         }
-        return raw.scaled(effect.intensityMultiplier)
     }
 
     /**
@@ -1523,9 +1591,11 @@ class FxEngine(
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val fixtureKey = effect.target.targetKey
                 val effectPhase = phases.single(effect, tick, dyn)
+                // An N-shot outside its runs holds what is underneath (D9).
+                if (FxInstance.isHolding(effectPhase)) return
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
-                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode)
+                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, effect.weight(dyn))
                 }
             }
 
@@ -1567,18 +1637,21 @@ class FxEngine(
         val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
-        var lastMemberPhase = 0.0
+        val weight = effect.weight(dyn)
+        var lastMemberPhase = Double.NaN
         for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val distOffset = plan.offsets[distributionIdx]
             val memberPhase = phases.member(effect, tick, filteredCount, dyn, distOffset)
+            // A member of an N-shot outside its own runs holds what is underneath (D9).
+            if (FxInstance.isHolding(memberPhase)) continue
             lastMemberPhase = memberPhase
 
             val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[distributionIdx])
             if (!isSuppressed(suppression, blind, elementKey, effect.target.propertyName, effect)) {
-                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode)
+                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, weight)
             }
         }
-        effect.lastPhase = lastMemberPhase
+        if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
     }
 
     /**
@@ -1610,17 +1683,20 @@ class FxEngine(
                 val allMembers = expansion.members
                 val groupSize = allMembers.size
                 val plan = plansFor(effect, expansion, dyn).members
-                var lastMemberPhase = 0.0
+                val weight = effect.weight(dyn)
+                var lastMemberPhase = Double.NaN
                 for ((memberIdx, member) in allMembers.withIndex()) {
                     val distOffset = plan.offsets[memberIdx]
                     val memberPhase = phases.member(effect, tick, groupSize, dyn, distOffset)
+                    // A member of an N-shot outside its own runs holds what is underneath (D9).
+                    if (FxInstance.isHolding(memberPhase)) continue
                     lastMemberPhase = memberPhase
                     val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[memberIdx])
                     if (!isSuppressed(suppression, blind, member.key, effect.target.propertyName, effect)) {
-                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode)
+                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, weight)
                     }
                 }
-                if (allMembers.isNotEmpty()) effect.lastPhase = lastMemberPhase
+                if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
             }
 
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {

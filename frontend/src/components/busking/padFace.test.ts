@@ -50,4 +50,14 @@ describe('describeTemplate — around (fixture-fx-sheets plan D16)', () => {
     // Additive with a centre of its own is neither question's answer.
     expect(describeTemplate(circle('ADDITIVE', '90'))).not.toMatch(/around/)
   })
+
+  it('adds ← or ↔ for a non-forward palette and the size where it is under 100 % (effects plan §4.1)', () => {
+    const shaped = (over: object): TemplateSummary => {
+      const base = circle('OVERRIDE', '128')
+      return { ...base, effect: { ...base.effect!, ...over } } as TemplateSummary
+    }
+    expect(describeTemplate(shaped({ direction: 'BACKWARD', size: 0.6 }))).toMatch(/· ← · 60 %$/)
+    expect(describeTemplate(shaped({ direction: 'BOUNCE' }))).toMatch(/· ↔$/)
+    expect(describeTemplate(shaped({ direction: 'FORWARD', size: 1 }))).not.toMatch(/[←↔%]/)
+  })
 })

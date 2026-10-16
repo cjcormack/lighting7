@@ -90,6 +90,32 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `size weighs on stage - a 0 percent effect is not on stage, and an Override under full size covers nothing`() =
+        testApplication {
+            mountTestApp(state)
+            LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-5ch", "spot-1", 1)
+            ProgrammerHandler.setTyped(
+                state, TargetRef.Fixture("spot-1"), "position",
+                CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
+            )
+            val circle = EffectTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+
+            // Effects plan P3: at 0 % the effect weighs nothing, so what is underneath is all the rig shows.
+            circle.updateDynamics { it.copy(size = 0.0) }
+            var layers = ask("fixture", "spot-1", "position").stacks.single().layers
+            val band = layers[0]
+            assertFalse(band.onStage, "a 0 % effect puts nothing on stage")
+            assertEquals(0.0, band.size)
+            assertTrue(layers.single { it.kind == "PROGRAMMER" }.onStage, "the held value is what the rig shows")
+
+            // Under full size an Override is a mix with what is underneath, so both are on stage.
+            circle.updateDynamics { it.copy(size = 0.5) }
+            layers = ask("fixture", "spot-1", "position").stacks.single().layers
+            assertTrue(layers[0].onStage)
+            assertTrue(layers.single { it.kind == "PROGRAMMER" }.onStage, "a 50 % Override sits halfway over the value")
+        }
+
+    @Test
     fun `a cue Pulse under a programmer dimmer is listed below it and held back`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)

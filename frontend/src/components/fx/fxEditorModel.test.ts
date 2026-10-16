@@ -15,6 +15,7 @@ import {
   paramRole,
   pickerFamilyOf,
   startingSpec,
+  templateDraftOf,
   timingChoicePatch,
   updateRequestOf,
   withCentreMode,
@@ -113,6 +114,42 @@ describe('fxEditorModel', () => {
     const request = updateRequestOf(unscaled, new Set(['seconds', 'rateSpeedMasterUuid'] as const))
     expect(request.seconds).toBe(true)
     expect(request).not.toHaveProperty('rateSpeedMasterUuid')
+  })
+
+  it('reads size, direction and runs off the wire at their defaults, and sends them once touched (D2, D5, D9)', () => {
+    const plain = draftOf(makeActiveEffect({}))
+    expect([plain.size, plain.direction, plain.nShot]).toEqual([1, 'FORWARD', null])
+    expect(updateRequestOf(plain)).not.toHaveProperty('size')
+    const shaped = draftOf(makeActiveEffect({ size: 0.5, direction: 'BOUNCE', nShot: 2 }))
+    expect([shaped.size, shaped.direction, shaped.nShot]).toEqual([0.5, 'BOUNCE', 2])
+    const touched = new Set(['size', 'direction', 'nShot'] as const)
+    expect(updateRequestOf(shaped, touched)).toMatchObject({ size: 0.5, direction: 'BOUNCE', nShot: 2 })
+    // A null count is said as runForever: the frame's absent nShot means keep.
+    const forever = updateRequestOf({ ...shaped, nShot: null }, touched)
+    expect(forever.runForever).toBe(true)
+    expect(forever).not.toHaveProperty('nShot')
+  })
+
+  it('writes a palette effect\'s size, direction and runs where they say something, and reads them as edits', () => {
+    const palette = {
+      effectType: 'Pulse',
+      category: 'dimmer',
+      beatDivision: 1,
+      blendMode: 'OVERRIDE',
+      distribution: 'LINEAR',
+      parameters: {},
+    }
+    const draft = templateDraftOf(palette)
+    expect(withTemplateDraft(palette, draft)).not.toHaveProperty('size')
+    const shaped = withTemplateDraft(palette, { ...draft, size: 0.4, direction: 'BACKWARD', nShot: 1 })
+    expect(shaped).toMatchObject({ size: 0.4, direction: 'BACKWARD', nShot: 1 })
+    expect(templateDraftOf(shaped)).toMatchObject({ size: 0.4, direction: 'BACKWARD', nShot: 1 })
+    // Put back to the defaults, a palette that had said them says them again rather than dropping them.
+    expect(withTemplateDraft(shaped, draft)).toMatchObject({ size: 1, direction: 'FORWARD', nShot: null })
+    expect(differsFromTemplate({ ...draft, size: 0.5 }, palette, 'm1', {}, { distribution: false })).toBe(true)
+    expect(differsFromTemplate({ ...draft, direction: 'BOUNCE' }, palette, 'm1', {}, { distribution: false })).toBe(true)
+    expect(differsFromTemplate({ ...draft, nShot: 2 }, palette, 'm1', {}, { distribution: false })).toBe(true)
+    expect(differsFromTemplate(draft, palette, 'm1', {}, { distribution: false })).toBe(false)
   })
 
   it('reads the desk\'s Seconds off a running effect, whatever loop it reports', () => {
