@@ -668,7 +668,7 @@ internal val cueEventItemSchema = buildJsonObject {
 
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
+    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. The new cue is in no stack: use add_cue_to_stack to place it in one, or apply_cue to activate it.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -791,7 +791,7 @@ internal val advanceCueStackTool = ToolDef(
 
 internal val addCueToStackTool = ToolDef(
     name = "add_cue_to_stack",
-    description = "Add an existing cue to a cue stack. The cue is moved into the stack (a cue can only belong to one stack). If sortOrder is omitted, the cue is appended to the end.",
+    description = "Add an existing cue to a cue stack as a new entry. A cue already in another stack (or in this one) is shared, not moved: it plays from both, and editing it changes it in both. If sortOrder is omitted, the cue is appended to the end.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -872,7 +872,7 @@ internal val recordCueTool = ToolDef(
                 put("enum", buildJsonArray { add("TOUCHED"); add("ALL"); add("STAGE_SNAPSHOT") })
                 put("description", "TOUCHED (default) records what was edited this session; STAGE_SNAPSHOT records everything on stage, running effects included.")
             })
-            put("cueStackId", buildJsonObject { put("type", "integer"); put("description", "Required for CREATE.") })
+            put("cueStackId", buildJsonObject { put("type", "integer"); put("description", "CREATE's stack. Omit to record a cue in no stack (add_cue_to_stack places it later).") })
             put("cueId", buildJsonObject { put("type", "integer"); put("description", "Required for every mode but CREATE.") })
             put("mask", maskSchema)
             put("includeFx", buildJsonObject {
@@ -880,8 +880,8 @@ internal val recordCueTool = ToolDef(
                 put("description", "Record the running effects as well as the static values. Default true.")
             })
             put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
-            put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number (CREATE). Omit to let the stack number it.") })
-            put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (CREATE). Omit to append.") })
+            put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number in cueStackId (CREATE). Omit to let the stack number it.") })
+            put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in cueStackId (CREATE). Omit to append.") })
             // No `cueType`: a marker is a stack entry, not a cue, and records nothing (cue model
             // plan D12). The tool still reads one, so an old caller naming MARKER is refused by name.
             put("targets", buildJsonObject {

@@ -791,7 +791,7 @@ class AiTools(private val state: State) {
                         put("lastIncluded", buildJsonObject {
                             put("kind", target.kind.name)
                             put("targetId", target.targetId)
-                            target.cueStackId?.let { put("cueStackId", it) }
+                            target.entryId?.let { put("entryId", it) }
                         })
                     }
                     // The scenery the programmer holds (move_scenery, the rail's Scenery band): each element
@@ -1181,16 +1181,12 @@ class AiTools(private val state: State) {
             writes
         }.orEmpty()
         val cue = transaction(state.database) {
-            // Every cue is in a stack until the cue model plan's session 4 lets one be loose; land
-            // AI-created cues in "Unsorted" (created on demand) so the operator can move them
-            // afterwards.
-            val stack = getOrCreateUnsortedStack(project)
+            // A loose cue (cue model plan D1): add_cue_to_stack places it.
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
             }
             writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
-            placeCueInStack(stack, newCue)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             newCue
@@ -1739,13 +1735,14 @@ class AiTools(private val state: State) {
             val cue = DaoCue.findById(cueId)
                 ?: return@transaction null to "Cue not found: $cueId"
 
-            // One entry per cue until sharing lands (cue model plan P4): this moves the cue's entry,
-            // to `sortOrder` (a position in the list) or the end, renumbering both stacks.
-            val entry = soleEntryOf(cue) ?: return@transaction null to "Cue $cueId is not in exactly one stack"
-            val left = entry.stack.takeIf { it.id != stack.id }
-            moveEntryTo(stack, entry, sortOrder)?.let { return@transaction null to it }
-            // Both lists' positions moved, and a live cue's priority is its position.
-            priorities = stackEntryPriorities(stack) + (left?.let { stackEntryPriorities(it) } ?: emptyMap())
+            if (stack.project.id != state.projectManager.currentProject.id || cue.project.id != stack.project.id) {
+                return@transaction null to "Cue $cueId and stack $stackId must both be in the current project"
+            }
+            if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Stack $stackId is a separator"
+            // A new entry: a cue in another stack is shared, never moved (cue model plan D1).
+            placeCueInStack(stack, cue, position = sortOrder)
+            // The positions after it moved, and a live cue's priority is its position.
+            priorities = stackEntryPriorities(stack)
 
             cue.name to null
         }

@@ -21,7 +21,7 @@ export function DesyncWarningsPanel({
       </div>
       <ul className="mt-1.5 space-y-1">
         {warnings.map((w, i) => (
-          <li key={`${w.kind}-${w.cueId}-${i}`}>
+          <li key={`${w.kind}-${w.entryId}-${i}`}>
             <button
               type="button"
               onClick={() => onWarningClick(w)}

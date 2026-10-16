@@ -31,7 +31,8 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.state.State
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.entrySlotsOf
+import uk.me.cormack.lighting7.models.EntrySlot
 
 /** 400 code: the layout document is malformed — a bad width or flow, an empty row or column, a pad naming no record or two. */
 internal const val CODE_BUSK_LAYOUT_INVALID = "BUSK_LAYOUT_INVALID"
@@ -344,10 +345,8 @@ internal data class BuskCueDto(
     val id: Int,
     val uuid: String,
     val name: String,
-    val cueNumber: String? = null,
-    /** The stack of the cue's entry; null for a cue in no stack, which nothing makes before the cue model plan's session 4. */
-    val cueStackId: Int?,
-    val cueStackName: String?,
+    /** Every entry naming the cue, in show order — each stack and number it has; empty for a loose cue. */
+    val entries: List<CueUseEntryDto> = emptyList(),
 )
 
 // ─── Write DTOs ─────────────────────────────────────────────────────────
@@ -666,6 +665,8 @@ internal class BuskRecordCache(private val state: State) {
     private var templateUsages: Map<Int, TemplateUsage>? = null
     private var lookUsages: Map<Int, LookUsage>? = null
     private var lookScenery: Map<Int, List<LookScenerySummaryDto>>? = null
+    private var primedCueIds: Set<Int> = emptySet()
+    private var cuePlaces: Map<Int, List<EntrySlot>> = emptyMap()
 
     /**
      * Read the usage every record on [pages] needs, one batched call per kind, before any DTO is
@@ -684,6 +685,8 @@ internal class BuskRecordCache(private val state: State) {
         val lookIds = pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct()
         lookUsages = lookUsageFor(lookIds)
         lookScenery = lookScenerySummariesFor(lookIds)
+        primedCueIds = pads.mapNotNullTo(HashSet()) { it.readValues[DaoBuskPads.cue]?.value }
+        cuePlaces = entrySlotsOf(primedCueIds)
     }
 
     fun template(project: DaoProject, id: Int): DaoTemplate? =
@@ -706,15 +709,14 @@ internal class BuskRecordCache(private val state: State) {
         }
 
     fun dto(cue: DaoCue): BuskCueDto = cueDtos.getOrPut(cue.id.value) {
-        // The pad names the cue; its number and stack are its one entry's (cue model plan P4).
-        val entry = soleEntryOf(cue)
+        // The pad names the cue and presses it loose; its places are every entry it has.
         BuskCueDto(
             id = cue.id.value,
             uuid = cue.uuid.toString(),
             name = cue.name,
-            cueNumber = entry?.cueNumber,
-            cueStackId = entry?.stackId,
-            cueStackName = entry?.stack?.name,
+            entries = (if (cue.id.value in primedCueIds) cuePlaces else entrySlotsOf(listOf(cue.id.value)))[cue.id.value].orEmpty().map {
+                CueUseEntryDto(it.entry.stackId, it.entry.stack.name, it.entry.id.value, it.entry.cueNumber)
+            },
         )
     }
 }

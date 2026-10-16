@@ -15,6 +15,8 @@ export interface CueSceneryEditorCue {
   id: number
   name: string
   cueNumber: string | null
+  /** The entry it was opened from: what the cue tracks is read at that place in that stack. */
+  entryId?: number
   /** The cue's own changes, off the stack list — what the editor edits. */
   scenery?: SceneryChange[]
 }
@@ -63,7 +65,7 @@ export function CueSceneryEditor({
 }
 
 function CueSceneryEditorBody({ projectId, cue }: { projectId: number; cue: CueSceneryEditorCue }) {
-  const { currentData: details } = useProjectCueQuery({ projectId, cueId: cue.id })
+  const { currentData: details } = useProjectCueQuery({ projectId, cueId: cue.id, entryId: cue.entryId })
   const { data: elements } = useStageElementListQuery(projectId)
   const [setCueScenery] = useSetCueSceneryMutation()
   const tracked = useMemo(

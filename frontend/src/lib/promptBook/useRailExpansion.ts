@@ -15,7 +15,8 @@ import { useCueExpansion } from '../../hooks/useCueExpansion'
  * accumulating a screenful of cards left over from three cues ago. Dismissed playhead cards are
  * `useCueExpansion`'s business and self-clear there.
  */
-export function useRailExpansion(activeCueId: number | null, nextCueId: number | null) {
+/** Keyed by entry, as the rail's cards are. */
+export function useRailExpansion(activeEntryId: number | null, nextEntryId: number | null) {
   const [openCueIds, setOpenCueIds] = useState<ReadonlySet<number>>(() => new Set())
 
   const onOpen = useCallback(
@@ -34,16 +35,16 @@ export function useRailExpansion(activeCueId: number | null, nextCueId: number |
   // cards re-derive on their own.
   useEffect(() => {
     setOpenCueIds((prev) => (prev.size === 0 ? prev : new Set()))
-  }, [activeCueId, nextCueId])
+  }, [activeEntryId, nextEntryId])
 
   return useCueExpansion({
     openCueIds,
     onOpen,
     onClose,
-    liveCueId: activeCueId,
-    nextCueId,
+    liveCueId: activeEntryId,
+    nextCueId: nextEntryId,
     // A dismissed *next* card would otherwise stay dismissed when the GO that makes it live keeps
     // its id — the one thing self-clearing cannot catch.
-    resetKey: activeCueId,
+    resetKey: activeEntryId,
   })
 }

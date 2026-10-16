@@ -34,8 +34,7 @@ import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.ProgrammerScenery
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
-import uk.me.cormack.lighting7.models.entryInStack
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
 
 // ── Inbound messages ────────────────────────────────────────────────────────
 
@@ -269,6 +268,8 @@ data class IncludedTargetDto(
     val kind: String,
     /** Null unless [kind] is `CUE`. */
     val cueId: Int? = null,
+    /** The entry the cue was included from, and its stack and number; null for a cue included from no stack. */
+    val entryId: Int? = null,
     val cueStackId: Int? = null,
     val cueName: String? = null,
     val cueNumber: String? = null,
@@ -706,10 +707,10 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
     val cue = target.cueId?.let { cueId ->
         try {
             transaction(state.database) {
-                // The number is the entry's in the stack the target names (cue model plan P7).
+                // The number and stack are the entry's the cue was included from (cue model plan P7).
                 DaoCue.findById(cueId)?.let { cue ->
-                    val entry = target.cueStackId?.let { entryInStack(it, cueId) } ?: soleEntryOf(cue)
-                    cue.name to entry?.cueNumber
+                    val entry = target.entryId?.let { DaoCueStackEntry.findById(it) }?.takeIf { it.cueId == cueId }
+                    Triple(cue.name, entry?.cueNumber, entry?.stackId)
                 }
             }
         } catch (_: Exception) {
@@ -728,7 +729,8 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
     return IncludedTargetDto(
         kind = target.kind.name,
         cueId = target.cueId,
-        cueStackId = target.cueStackId,
+        cueStackId = cue?.third,
+        entryId = target.entryId,
         cueName = cue?.first,
         cueNumber = cue?.second,
         lookId = target.lookId,

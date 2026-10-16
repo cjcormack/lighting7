@@ -22,25 +22,25 @@ const NO_WARNINGS: DesyncWarning[] = []
 interface CueStackPanelProps {
   /** Rail rows in show order — headers, cue cards, and separators (markers). */
   rows: ShowRailRow[]
-  anchorByCue: Map<number, CueAnchorDto>
-  /** Per-unanchored-cue hint naming the neighbour the book borrows, e.g. "follows Q12". */
-  anchorHintByCue: Map<number, string>
-  /** Full stack entries by cue id — feeds each expanded card's palette/notes/auto. */
-  cueEntryByCue: Map<number, CueStackCueRow>
-  statusOf: (cueId: number) => CueRunStatus
-  warningsByCue: Map<number, DesyncWarning[]>
+  /** Everything keyed by entry: a shared cue is a card per entry, each with its own anchor. */
+  anchorByEntry: Map<number, CueAnchorDto>
+  /** Per-unanchored-entry hint naming the neighbour the book borrows, e.g. "follows Q12". */
+  anchorHintByEntry: Map<number, string>
+  /** Full stack entries by entry id — feeds each expanded card's palette/notes/auto. */
+  entryRowByEntry: Map<number, CueStackCueRow>
+  statusOf: (entryId: number) => CueRunStatus
+  warningsByEntry: Map<number, DesyncWarning[]>
   warnings: DesyncWarning[]
   showWarnings: boolean
   locked: boolean
-  /** Cue currently armed for click-to-place on the script. */
-  placingCueId: number | null
-  /** Cue ids rendered as expanded cards (live + next by default). */
-  /** Whether a cue's card is open — a predicate, because several can be. See `useCueExpansion`. */
-  isExpanded: (cueId: number) => boolean
-  onToggleExpanded: (cueId: number) => void
-  /** Details open or not, per cue — the page owns it so it persists across cue changes. */
-  modeOf: (cueId: number, status: CueRunStatus) => ExpansionMode | null
-  onCueModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
+  /** Entry currently armed for click-to-place on the script. */
+  placingEntryId: number | null
+  /** Whether an entry's card is open — a predicate, because several can be. See `useCueExpansion`. */
+  isExpanded: (entryId: number) => boolean
+  onToggleExpanded: (entryId: number) => void
+  /** Details open or not, per entry — the page owns it so it persists across cue changes. */
+  modeOf: (entryId: number, status: CueRunStatus) => ExpansionMode | null
+  onCueModeChange: (entryId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
   /**
    * The stack the transport acts on — only its cues can be armed as the next GO, and it is
    * also the id each card gates its own `useCueFade` subscription on (only a live-stack cue
@@ -48,16 +48,16 @@ interface CueStackPanelProps {
    */
   activeStackId: number | null
   onCueClick: (cue: FlatCue) => void
-  onRemoveAnchor: (cueId: number) => void
+  onRemoveAnchor: (entryId: number) => void
   onWarningClick: (warning: DesyncWarning) => void
-  /** Arm a cue as the next GO (sets standby). */
-  onSetStandby: (cueId: number) => void
-  /** Jump to the cue's editor. */
-  onEditCue: (cueId: number) => void
+  /** Arm an entry as the next GO (sets standby). */
+  onSetStandby: (entryId: number) => void
+  /** Jump to the entry's cue in Show. */
+  onEditCue: (entryId: number) => void
   /** Rename a cue in place (unlocked only — the cards gate on `locked` themselves). */
   onRenameCue: (cueId: number, name: string) => void
-  /** Set or clear a cue's number in place (unlocked only). */
-  onRenumberCue: (cueId: number, cueNumber: string | null) => void
+  /** Set or clear an entry's number in place (unlocked only). */
+  onRenumberCue: (entryId: number, cueNumber: string | null) => void
   /** Set or clear a cue's note in place (unlocked only). */
   onRenoteCue: (cueId: number, notes: string | null) => void
   goDisabled: boolean
@@ -90,15 +90,15 @@ interface CueStackPanelProps {
  */
 export function CueStackPanel({
   rows,
-  anchorByCue,
-  anchorHintByCue,
-  cueEntryByCue,
+  anchorByEntry,
+  anchorHintByEntry,
+  entryRowByEntry,
   statusOf,
-  warningsByCue,
+  warningsByEntry,
   warnings,
   showWarnings,
   locked,
-  placingCueId,
+  placingEntryId,
   isExpanded,
   onToggleExpanded,
   modeOf,
@@ -129,11 +129,11 @@ export function CueStackPanel({
   const cueNumChars = useMemo(
     () =>
       cueNumberColumnChars(
-        [...cueEntryByCue.values()]
+        [...entryRowByEntry.values()]
           .filter((c) => c.cueType === 'STANDARD')
           .map((c) => c.cueNumber),
       ),
-    [cueEntryByCue],
+    [entryRowByEntry],
   )
 
   return (
@@ -214,24 +214,25 @@ export function CueStackPanel({
             // Key on source+id: a SEPARATOR stack and a MARKER cue can share a numeric id.
             return <MarkerRow key={`s-${row.source}-${row.id}`} name={row.name} />
           }
-          const status = statusOf(row.cue.cueId)
+          const entryId = row.cue.entryId
+          const status = statusOf(entryId)
           // Both facts below are the same underlying question — "is this row on the live
           // stack?" — computed once so they can't drift apart under a future edit.
           const isLiveStack = row.cue.stackId === activeStackId
           return (
             <PromptBookCueCard
-              key={row.cue.cueId}
+              key={entryId}
               cue={row.cue}
               status={status}
-              anchor={anchorByCue.get(row.cue.cueId)}
-              anchorHint={anchorHintByCue.get(row.cue.cueId) ?? null}
-              cueEntry={cueEntryByCue.get(row.cue.cueId)}
+              anchor={anchorByEntry.get(entryId)}
+              anchorHint={anchorHintByEntry.get(entryId) ?? null}
+              cueEntry={entryRowByEntry.get(entryId)}
               projectId={projectId}
-              warnings={warningsByCue.get(row.cue.cueId) ?? NO_WARNINGS}
+              warnings={warningsByEntry.get(entryId) ?? NO_WARNINGS}
               locked={locked}
-              placing={placingCueId === row.cue.cueId}
-              expanded={isExpanded(row.cue.cueId)}
-              mode={modeOf(row.cue.cueId, status)}
+              placing={placingEntryId === entryId}
+              expanded={isExpanded(entryId)}
+              mode={modeOf(entryId, status)}
               onModeChange={onCueModeChange}
               fadeStackId={isLiveStack ? activeStackId : null}
               canSetNext={!goDisabled && isLiveStack}

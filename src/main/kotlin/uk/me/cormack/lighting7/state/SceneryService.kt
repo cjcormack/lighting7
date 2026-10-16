@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackScenery
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.EntryPlace
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoLookScenery
@@ -481,6 +482,7 @@ class SceneryService(private val state: State) {
         val store = show.programmerStore
         val blind = store.blind
         val programmerLooks = programmerLookIds(store.layers)
+        val detached = show.cueStackManager.detachedPlaces()
         return transaction(state.database) {
             val dao = DaoProject.findById(project.id) ?: return@transaction null
             val heldByUuid = if (overlay.projectId == dao.id.value) overlay.elements else emptyMap()
@@ -508,7 +510,7 @@ class SceneryService(private val state: State) {
                 when (track) {
                     is Track.Stack -> {
                         val stack = DaoCueStack.findById(track.stackId)?.takeIf { it.project.id == dao.id } ?: return@mapNotNull null
-                        liveStack(stack, track.entryId, track.seq)
+                        liveStack(stack, track.entryId, track.cueId, track.seq, detached[track.stackId])
                     }
                     is Track.Loose -> looseStack(dao, track.cueId, track.seq)
                 }
@@ -532,24 +534,39 @@ class SceneryService(private val state: State) {
     /**
      * One live stack's set, its cue entries down to the live one, and the live cue's layered Looks.
      * Tracking walks the stack's entries down to the live **entry** (cue model plan §3.4), so a cue
-     * twice in one stack tracks from the place the stack is actually at.
+     * twice in one stack tracks from the place the stack is actually at. A live entry removed from
+     * the list ([detachedAt], D16) tracks the entries that stood before it, then its cue.
      */
-    private fun liveStack(stack: DaoCueStack, liveEntryId: Int, goSeq: Long): SceneryResolver.LiveStack? {
+    private fun liveStack(
+        stack: DaoCueStack,
+        liveEntryId: Int,
+        liveCueId: Int,
+        goSeq: Long,
+        detachedAt: EntryPlace?,
+    ): SceneryResolver.LiveStack? {
         val entries = entriesOf(stack).filter { !it.isMarker && it.cueId != null }
-        val liveIndex = entries.indexOfFirst { it.id.value == liveEntryId }.takeIf { it >= 0 } ?: return null
-        val tracked = entries.take(liveIndex + 1)
-        val cueById = DaoCue.find { DaoCues.id inList tracked.map { it.cueId!! }.distinct() }.associateBy { it.id.value }
-        val cues = tracked.mapNotNull { e -> cueById[e.cueId!!]?.let { e to it } }
+        val liveIndex = entries.indexOfFirst { it.id.value == liveEntryId }
+        val earlier = when {
+            liveIndex >= 0 -> entries.take(liveIndex)
+            detachedAt != null -> entries.take(detachedAt.cueIndexIn(entriesOf(stack)))
+            else -> return null
+        }
+        val cueById = DaoCue.find { DaoCues.id inList (earlier.map { it.cueId!! } + liveCueId).distinct() }.associateBy { it.id.value }
+        val cues = earlier.mapNotNull { e -> cueById[e.cueId!!]?.let { cue -> cue to (e.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name) } } +
+            listOfNotNull(cueById[liveCueId]?.let { cue ->
+                val live = entries.getOrNull(liveIndex)
+                cue to (live?.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name)
+            })
         val set = DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq stack.id }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
-        val rows = cueSceneryRows(cues.map { it.second })
-        val live = cueById[tracked.last().cueId!!] ?: return null
+        val rows = cueSceneryRows(cues.map { it.first })
+        val live = cueById[liveCueId] ?: return null
         return SceneryResolver.LiveStack(
             stackId = stack.id.value,
             goSeq = goSeq,
             set = set,
-            cues = cues.map { (entry, cue) -> sceneryCue(cue, entry.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name, rows) },
+            cues = cues.map { (cue, label) -> sceneryCue(cue, label, rows) },
             layeredLookIds = layeredLookIds(live),
         )
     }

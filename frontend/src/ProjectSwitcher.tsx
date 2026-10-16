@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { mostSpecificActiveId } from './lib/navMatch'
 import { useProjectListQuery } from "./store/projects"
 import { useOAuthReauthState } from "./store/oauthGithub"
-import { useNavItems, filterNavItems, useIsNavAdmin } from "./navigation"
+import { useNavItems, filterNavItems, useIsNavAdmin, NAV_SECTIONS, type NavItem as NavEntry, type NavSection } from "./navigation"
 import { VenueTag } from "./components/venue/VenueTag"
 
 interface ProjectSwitcherProps {
@@ -31,6 +31,15 @@ interface ProjectSwitcherProps {
  */
 const SYNC_NAV_IDS: ReadonlySet<string> = new Set(["sync", "project-sync"])
 const ATTENTION_LABEL = "GitHub needs reconnecting"
+
+function sectionLabel(section: NavSection): string {
+  return NAV_SECTIONS.find((s) => s.id === section)?.label ?? section
+}
+
+/** Install Settings and its tabs are drawn muted, as the machine's rather than the project's. */
+function isInstallRow(item: NavEntry): boolean {
+  return item.id === "install-settings" || item.parent === "install-settings"
+}
 
 export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
   const navigate = useNavigate()
@@ -84,11 +93,11 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
           </Tooltip>
         </div>
 
-        {/* Navigation items, grouped with separators */}
+        {/* Navigation items: on the rail a section's heading is the rule above it */}
         <div className="flex flex-col gap-1 px-2">
           {visibleItems.map((item, idx) => (
             <React.Fragment key={item.id}>
-              {idx > 0 && item.group !== visibleItems[idx - 1].group && (
+              {idx > 0 && item.section !== visibleItems[idx - 1].section && (
                 <Separator className="mx-1 my-1" />
               )}
               <NavItem
@@ -97,7 +106,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
                 isActive={activeId === item.id}
                 collapsed
                 onClick={() => navigate(item.path(viewedProject.id))}
-                muted={item.group === "install"}
+                muted={isInstallRow(item)}
                 attention={needsAttention(item.id)}
                 attentionLabel={ATTENTION_LABEL}
               />
@@ -128,12 +137,20 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
         </button>
       </div>
 
-      {/* Navigation items, grouped with separators */}
+      {/* Navigation items under their section headings; a section with no row draws no heading */}
       <div className="px-2 space-y-0.5">
         {visibleItems.map((item, idx) => (
           <React.Fragment key={item.id}>
-            {idx > 0 && item.group !== visibleItems[idx - 1].group && (
-              <Separator className="mx-1 my-2" />
+            {(idx === 0 || item.section !== visibleItems[idx - 1].section) && (
+              <div
+                data-nav-section={item.section}
+                className={cn(
+                  "px-3 pb-1 text-[9px] font-bold uppercase tracking-[0.09em] text-muted-foreground",
+                  idx === 0 ? "pt-1" : "pt-3",
+                )}
+              >
+                {sectionLabel(item.section)}
+              </div>
             )}
             <NavItem
               icon={<item.icon className="size-4" />}
@@ -141,7 +158,7 @@ export default function ProjectSwitcher({ collapsed }: ProjectSwitcherProps) {
               isActive={activeId === item.id}
               collapsed={false}
               onClick={() => navigate(item.path(viewedProject.id))}
-              muted={item.group === "install"}
+              muted={isInstallRow(item)}
               indent={item.parent != null}
               attention={needsAttention(item.id)}
               attentionLabel={ATTENTION_LABEL}

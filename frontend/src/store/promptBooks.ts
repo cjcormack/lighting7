@@ -79,26 +79,27 @@ export const promptBooksApi = restApi.injectEndpoints({
       }),
     }),
 
+    /** Anchors are addressed by stack entry; `cueId` is the entry's cue, for the optimistic row. */
     upsertAnchor: build.mutation<
       CueAnchorDto,
-      { projectId: number; cueId: number } & UpsertAnchorRequest
+      { projectId: number; entryId: number; cueId: number } & UpsertAnchorRequest
     >({
-      query: ({ projectId, cueId, ...body }) => ({
-        url: `projects/${projectId}/prompt-book/anchors/${cueId}`,
+      query: ({ projectId, entryId, cueId: _cueId, ...body }) => ({
+        url: `projects/${projectId}/prompt-book/anchors/${entryId}`,
         method: 'PUT',
         body,
       }),
       // Optimistic update: patch the anchor into the book cache immediately so a
       // drag commit doesn't snap back while waiting for the server.
-      async onQueryStarted({ projectId, cueId, region, label }, { dispatch, queryFulfilled }) {
+      async onQueryStarted({ projectId, entryId, cueId, region, label }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           promptBooksApi.util.updateQueryData('projectPromptBook', projectId, (draft) => {
-            const existing = draft.anchors.find((a) => a.cueId === cueId)
+            const existing = draft.anchors.find((a) => a.entryId === entryId)
             if (existing) {
               existing.region = region
               existing.label = label ?? null
             } else {
-              draft.anchors.push({ cueId, region, label: label ?? null })
+              draft.anchors.push({ cueId, entryId, region, label: label ?? null })
             }
           }),
         )
@@ -111,15 +112,15 @@ export const promptBooksApi = restApi.injectEndpoints({
       invalidatesTags: ['PromptBook'],
     }),
 
-    deleteAnchor: build.mutation<void, { projectId: number; cueId: number }>({
-      query: ({ projectId, cueId }) => ({
-        url: `projects/${projectId}/prompt-book/anchors/${cueId}`,
+    deleteAnchor: build.mutation<void, { projectId: number; entryId: number }>({
+      query: ({ projectId, entryId }) => ({
+        url: `projects/${projectId}/prompt-book/anchors/${entryId}`,
         method: 'DELETE',
       }),
-      async onQueryStarted({ projectId, cueId }, { dispatch, queryFulfilled }) {
+      async onQueryStarted({ projectId, entryId }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           promptBooksApi.util.updateQueryData('projectPromptBook', projectId, (draft) => {
-            draft.anchors = draft.anchors.filter((a) => a.cueId !== cueId)
+            draft.anchors = draft.anchors.filter((a) => a.entryId !== entryId)
           }),
         )
         try {

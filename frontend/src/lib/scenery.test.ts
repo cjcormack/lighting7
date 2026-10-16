@@ -205,8 +205,25 @@ describe("Moves with: the element's read as the list says it (D11)", () => {
     ])
   })
 
+  it('names a loose cue by its name, after the stacks’ cues', () => {
+    const withLoose = parseElementScenery({
+      cues: [
+        { stackId: 1, cueId: 12, label: '2', state: { trimM: 3 }, transitionMs: 4000 },
+        { stackId: null, cueId: 30, label: 'Moon only', state: { trimM: 7 }, transitionMs: null },
+      ],
+    })
+    expect(withLoose.cues[1].stackId).toBeNull()
+    expect(movesWithEntries(moon, withLoose, () => 'Main').map((e) => [e.kind, e.id, e.owner])).toEqual([
+      ['cue', 12, 'Q2'],
+      ['cue', 30, 'Loose · Moon only'],
+    ])
+  })
+
   it('parses only well-formed entries off the wire', () => {
-    const parsed = parseElementScenery({ cues: [{ cueId: 1 }, null, { stackId: 1, cueId: 2, label: 'x', state: { open: 'no' } }], sets: 'x' })
+    const parsed = parseElementScenery({
+      cues: [{ stackId: 'x', cueId: 1 }, null, { stackId: 1, cueId: 2, label: 'x', state: { open: 'no' } }],
+      sets: 'x',
+    })
     expect(parsed.cues).toEqual([{ stackId: 1, cueId: 2, label: 'x', state: {}, transitionMs: null }])
     expect(parsed.sets).toEqual([])
     expect(parsed.looks).toEqual([])

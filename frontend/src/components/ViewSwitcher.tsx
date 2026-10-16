@@ -59,7 +59,7 @@ const LABEL_AT_820 = 'hidden @[820px]:inline' // Programmer · Show · Prompt Bo
  * once the other three are done — and it is here at all because a live view reachable only from
  * the sidebar would be the one destination these pills could not get you to.
  *
- * This order is the sidebar's too: the `live` group in `navigation.ts` follows it, and
+ * This order is the sidebar's too: the Run section in `navigation.ts` follows it, and
  * `navigation.test.ts` pins the ids against this list. Each pill also carries the **same icon** as
  * its sidebar row — Show's was `Pencil` here and `Theater` there, which made one destination read
  * as two — so an icon change belongs in both files or neither.

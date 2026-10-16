@@ -23,7 +23,8 @@ import { cn } from '@/lib/utils'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
-import { CueCardEditor } from './CueCardEditor'
+import { CueCardEditor, type StackChoice } from './CueCardEditor'
+import { cuePlacesByCue } from '@/lib/cuePlaces'
 import { ShowMarkerRow } from './ShowMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
@@ -34,10 +35,13 @@ import { OwnerEditor } from '@/components/stage/OwnerEditor'
 
 interface StackDetailProps {
   stack: CueStack
+  /** The project's stacks, for the shared chip and *Add to stack…* / *Move to stack…*. */
+  stacks?: CueStack[]
   projectId: number
-  activeCueId: number | null
+  /** The live stack's live and armed entries — a row is an entry, and a cue may be twice in one stack. */
+  activeEntryId: number | null
   /** Cue queued to fire on the next GO. Only meaningful when drilled into the active stack. */
-  standbyCueId?: number | null
+  standbyEntryId?: number | null
   /**
    * The playhead's stack id, or null when this stack is not the one running — the rows use it to
    * read their own fade. Deliberately not a fade *value*: see `useCueFade` for why a 60Hz number
@@ -49,7 +53,7 @@ interface StackDetailProps {
   /** Prompt-book reading position per cue, e.g. "top of p. 9". */
   locationByCue?: Map<number, string>
   /** Arm a cue as the next GO. Absent where there is no transport. */
-  onSetStandby?: (cueId: number) => void
+  onSetStandby?: (cueId: number, entryId: number) => void
   /** Show-safe mode: no dragging, no inline edits, no destructive actions. */
   locked?: boolean
   /**
@@ -61,10 +65,10 @@ interface StackDetailProps {
    * Whether a cue's card is open. A predicate rather than an id because two cards can be: the one
    * the operator opened (`?cue=`) and the one on stage, which is derived — see `useCueExpansion`.
    */
-  isExpanded: (cueId: number) => boolean
-  onToggleExpanded: (cueId: number) => void
+  isExpanded: (entryId: number) => boolean
+  onToggleExpanded: (entryId: number) => void
   /** The cue named in the URL, if any — the one worth scrolling to. */
-  openedCueId?: number | null
+  openedEntryId?: number | null
   onBack: () => void
   /**
    * Record the programmer into a new cue in this stack — what replaced "Add Cue".
@@ -81,8 +85,8 @@ interface StackDetailProps {
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage. */
-  onIncludeCue?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
+  onIncludeCue?: (cueId: number, entryId: number) => void
   includePending?: boolean
   /**
    * Cards (the inline-expanding cue cards, draggable while unlocked) or the cue sheet
@@ -91,7 +95,7 @@ interface StackDetailProps {
    */
   view?: CardsListView
   /** Open a cue's card on the cards view — the sheet's read-outs do this. */
-  onOpenCue?: (cueId: number) => void
+  onOpenCue?: (cueId: number, entryId: number) => void
   /** Open the Prompt Book at a cue's anchor — the cue sheet's Book column. */
   onOpenBook?: (cueId: number) => void
   /** Lift the show-editing lock, where it is the operator's to lift. */
@@ -100,9 +104,10 @@ interface StackDetailProps {
 
 export function StackDetail({
   stack,
+  stacks,
   projectId,
-  activeCueId,
-  standbyCueId,
+  activeEntryId,
+  standbyEntryId,
   fadeStackId,
   completedCueIds,
   locationByCue,
@@ -111,7 +116,7 @@ export function StackDetail({
   unlockedWarning = false,
   isExpanded,
   onToggleExpanded,
-  openedCueId,
+  openedEntryId,
   onBack,
   onRecordIntoStack,
   onAddMarker,
@@ -145,23 +150,29 @@ export function StackDetail({
   // changes for this stack.
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (activeCueId == null || !listRef.current) return
-    const row = listRef.current.querySelector(`[data-cue-row="${activeCueId}"]`)
+    if (activeEntryId == null || !listRef.current) return
+    const row = listRef.current.querySelector(`[data-entry-row="${activeEntryId}"]`)
     if (row instanceof HTMLElement) {
       row.scrollIntoView({ block: 'nearest' })
     }
-  }, [stack.id, activeCueId])
+  }, [stack.id, activeEntryId])
 
   // Scroll a card the operator just opened into view. Keyed on the *addressed* cue rather than on
   // every open card: the derived live card opens on its own as the show advances, and scrolling to
   // it would drag the operator off whatever they were reading.
   useEffect(() => {
-    if (openedCueId == null || !listRef.current) return
-    const row = listRef.current.querySelector(`[data-cue-row="${openedCueId}"]`)
+    if (openedEntryId == null || !listRef.current) return
+    const row = listRef.current.querySelector(`[data-entry-row="${openedEntryId}"]`)
     if (row instanceof HTMLElement) {
       row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
-  }, [openedCueId])
+  }, [openedEntryId])
+
+  const placesByCue = useMemo(() => cuePlacesByCue(stacks ?? [stack]), [stacks, stack])
+  const stackChoices = useMemo<StackChoice[]>(
+    () => (stacks ?? []).filter((s) => s.type === 'STACK').map((s) => ({ id: s.id, name: s.name })),
+    [stacks],
+  )
 
   const standardCount = useMemo(
     () => stack.cues.filter((c) => c.cueType === 'STANDARD').length,
@@ -299,14 +310,15 @@ export function StackDetail({
         <CueSheet
           stack={stack}
           projectId={projectId}
-          activeCueId={activeCueId}
-          standbyCueId={standbyCueId}
+          activeEntryId={activeEntryId}
+          standbyEntryId={standbyEntryId}
           completedCueIds={completedCueIds}
           locationByCue={locationByCue}
           onSetStandby={onSetStandby}
           locked={locked}
-          openedCueId={openedCueId}
-          onOpenCue={(cueId) => onOpenCue?.(cueId)}
+          openedEntryId={openedEntryId}
+          placesByCue={placesByCue}
+          onOpenCue={(cueId, entryId) => onOpenCue?.(cueId, entryId)}
           onOpenBook={onOpenBook}
           onRequestUnlock={onRequestUnlock}
           onReorder={handleSheetReorder}
@@ -344,15 +356,18 @@ export function StackDetail({
                 <CueCardEditor
                   key={`entry-${cue.entryId}`}
                   cue={cue}
+                  stackId={stack.id}
                   projectId={projectId}
-                  expanded={isExpanded(cue.id)}
-                  onToggleExpanded={() => onToggleExpanded(cue.id)}
-                  isActive={cue.id === activeCueId}
-                  isStandby={cue.id === standbyCueId}
+                  places={placesByCue.get(cue.id)}
+                  stackChoices={stackChoices}
+                  expanded={isExpanded(cue.entryId)}
+                  onToggleExpanded={() => onToggleExpanded(cue.entryId)}
+                  isActive={cue.entryId === activeEntryId}
+                  isStandby={cue.entryId === standbyEntryId}
                   isDone={completedSet.has(cue.id)}
                   fadeStackId={fadeStackId}
                   location={locationByCue?.get(cue.id) ?? null}
-                  onSetStandby={onSetStandby ? () => onSetStandby(cue.id) : undefined}
+                  onSetStandby={onSetStandby ? () => onSetStandby(cue.id, cue.entryId) : undefined}
                   locked={locked}
                   onDuplicate={onDuplicate}
                   onRecordInto={onRecordInto}

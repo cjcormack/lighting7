@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { Provider } from "react-redux"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { installRelativeUrlRequest } from "@/test/backendMock"
 import type { AuthStatus } from "@/store/auth"
 
@@ -130,6 +130,12 @@ function backend(
     "rest/projects": () => projectNames.map((name, i) => ({ id: i + 1, name, description: null, isCurrent: i === 0 })),
   })
 }
+
+// The gate lazy-loads the screen, and the first test to reach it would otherwise pay for Vitest
+// transforming the screen's whole module graph inside a 1 s `findBy`.
+beforeAll(async () => {
+  await import("./OnboardingScreen")
+})
 
 beforeEach(() => {
   installRelativeUrlRequest()

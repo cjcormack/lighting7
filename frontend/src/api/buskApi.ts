@@ -64,11 +64,19 @@ export const BUSK_WIDTH_LABELS: Readonly<Record<number, string>> = {
   12: 'Full',
 }
 
+/** One place a cue sits — a stack entry — as a pad names it. */
+export interface BuskCueEntry {
+  stackId: number
+  stackName: string
+  entryId: number
+  cueNumber: string | null
+}
+
 /**
- * What a cue pad draws: the mono number, the name, the stack it lives in.
+ * What a cue pad draws: the name, and the numbers and stacks of the entries it sits in.
  *
  * Deliberately not the full cue document — a cue carries every layer and trigger, and a pad needs
- * three strings. Its **lit** state is not here either: it comes from `cueHolds.state`
+ * a few strings. Its **lit** state is not here either: it comes from `cueHolds.state`
  * (`useCueRings`), because a cue can be live without being any stack's playhead.
  */
 export interface BuskCue {
@@ -76,9 +84,8 @@ export interface BuskCue {
   /** Absent on a cue the palette has just dropped — the server answers with it. See the note above. */
   uuid?: string
   name: string
-  cueNumber: string | null
-  cueStackId: number
-  cueStackName: string
+  /** Every entry naming the cue, in show order; empty for a cue in no stack. Absent from an older desk. */
+  entries?: BuskCueEntry[]
 }
 
 /**

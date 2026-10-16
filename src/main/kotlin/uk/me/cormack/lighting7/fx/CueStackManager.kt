@@ -63,6 +63,10 @@ class CueStackManager(
         // GO between two holds of cues that were already on and stay on). Never cleared once set —
         // [CueRunStateTracker.runStateFor] treats an elapsed time past the duration as "settled".
         var fadeStartedAtMs: Long? = null,
+        // Where the live entry stood once it has been removed from the list (cue model plan D16): the
+        // stack still holds its cue, and its next GO fires the entry that followed it. Set in place,
+        // like the fields above, so a timer another thread is attaching lands on the live instance.
+        @Volatile var detachedAt: EntryPlace? = null,
     )
 
     private val activeStacks = ConcurrentHashMap<Int, ActiveStackState>()
@@ -77,6 +81,7 @@ class CueStackManager(
                 fadeStartedAtMs = it.fadeStartedAtMs,
                 autoAdvanceRunning = it.autoAdvanceJob?.isActive == true,
                 autoAdvanceDelayMs = it.autoAdvanceDelayMs,
+                detachedAt = it.detachedAt,
             )
         }
 
@@ -285,9 +290,11 @@ class CueStackManager(
                     stackId = stackId,
                     ordered = ordered,
                     loop = stack.loop,
+                    detachedAt = currentState.detachedAt,
                 )
                 AdvanceDirection.BACKWARD -> runState.positional(
                     ordered, currentState.activeEntryId, direction, stack.loop,
+                    runState.detachedIndex(stackId, currentState.detachedAt),
                 )
             } ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
         } ?: return null
@@ -389,6 +396,20 @@ class CueStackManager(
 
     /** The entry live in [stackId], or null if the stack is not active. */
     fun getActiveEntryId(stackId: Int): Int? = activeStacks[stackId]?.activeEntryId
+
+    /**
+     * Entry [entryId] is being removed from [stackId]'s list at [place] (cue model plan D16). If it is
+     * the stack's live entry, the stack keeps holding its cue — nothing on stage moves — and plays on
+     * from [place]: the next GO fires the entry that followed it and lets the detached hold go.
+     * Harmless before the removal commits: [place] is read only once the entry is gone.
+     */
+    fun detachEntry(stackId: Int, entryId: Int, place: EntryPlace) {
+        activeStacks[stackId]?.takeIf { it.activeEntryId == entryId }?.detachedAt = place
+    }
+
+    /** Every live stack whose live entry was removed, and where it stood ([detachEntry]). */
+    fun detachedPlaces(): Map<Int, EntryPlace> =
+        activeStacks.values.mapNotNull { live -> live.detachedAt?.let { live.stackId to it } }.toMap()
 
     /**
      * Get the active cue ID for a stack, or null if the stack is not active.

@@ -27,7 +27,12 @@ function pad(name: string, kind: BuskPad['kind'] = 'TEMPLATE'): BuskPad {
       id,
       uuid: `p${id}`,
       kind,
-      cue: { id, uuid: `c${id}`, name, cueNumber: String(id), cueStackId: 1, cueStackName: 'Main' },
+      cue: {
+        id,
+        uuid: `c${id}`,
+        name,
+        entries: [{ stackId: 1, stackName: 'Main', entryId: id + 100, cueNumber: String(id) }],
+      },
     }
   }
   if (kind === 'LOOK') {

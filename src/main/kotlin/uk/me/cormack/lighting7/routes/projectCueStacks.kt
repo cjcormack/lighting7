@@ -7,13 +7,19 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.resources.post
 import io.ktor.server.resources.put
+import io.ktor.server.resources.patch
+import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -143,7 +149,9 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // DELETE /{projectId}/cue-stacks/{stackId} - Delete stack (cascades its cues) or separator
+    // DELETE /{projectId}/cue-stacks/{stackId} - Delete a stack or separator. Its cues stay, loose if
+    // it was their last stack; ?deleteLooseCues=true deletes those with everything that names them
+    // (cue model plan D17).
     delete<ProjectCueStackResource> { resource ->
         withCurrentProject(
             state,
@@ -153,12 +161,12 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
-                deleteCueStackRows(state, project, stack)
+                deleteCueStackRows(state, project, stack, deleteLooseCues = resource.deleteLooseCues)
             }
 
             if (result != null) {
                 announceCueStacksDeleted(state, result)
-                call.respond(HttpStatusCode.NoContent)
+                call.respond(DeleteCueStackResponse(result.looseCueIds, result.deletion.cueIds.sorted()))
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
             }
@@ -193,11 +201,13 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/add-cue - Move a cue into this stack
+    // POST /{projectId}/cue-stacks/{stackId}/add-cue - Add a cue to this stack: a new entry, so a cue
+    // already in another stack (or this one) is shared, never moved (cue model plan D1, D7)
     post<CueStackAddCueResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val request = call.receive<AddCueToStackRequest>()
             val manager = state.show.cueStackManager
+            var numberTaken = false
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
                     ?.takeIf { it.project.id == project.id }
@@ -205,21 +215,17 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple("Cannot add cues to a separator", null, null)
                 val cue = DaoCue.findById(request.cueId) ?: return@transaction Triple("Cue not found", null, null)
                 if (cue.project.id != project.id) return@transaction Triple("Cue does not belong to project", null, null)
-
-                // One entry per cue until sharing lands (cue model plan P4): adding a cue *moves*
-                // its entry here, as it always moved the cue. Session 4 makes this an added entry.
-                val entry = soleEntryOf(cue)
-                    ?: return@transaction Triple("Cue is not in exactly one stack", null, null)
-                val left = entry.stack.takeIf { it.id != stack.id }
+                val number = request.cueNumber?.takeIf { it.isNotEmpty() }
+                number?.let { explicitNumberClash(stack, it) }?.let { numberTaken = true; return@transaction Triple(it, null, null) }
 
                 // Every entry already in the stack, markers included — the insert below has to
                 // place it among separators too, or they drift away from the cues they label.
-                val existing = entriesOf(stack).filter { it.id != entry.id }
+                val existing = entriesOf(stack)
 
                 val insertAt = if (request.insertByNumber) {
-                    val parsed = entry.cueNumber?.let { parseCueNumber(it) }
+                    val parsed = number?.let { parseCueNumber(it) }
                         ?: return@transaction Triple(
-                            "insertByNumber requires a cue number with a numeric component",
+                            "insertByNumber requires a cueNumber with a numeric component",
                             null,
                             null,
                         )
@@ -246,23 +252,95 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     request.sortOrder?.coerceIn(0, existing.size) ?: existing.size
                 }
 
-                moveEntryTo(stack, entry, insertAt)?.let { return@transaction Triple(it, null, null) }
-                val priorities = stackEntryPriorities(stack) + (left?.let { stackEntryPriorities(it) } ?: emptyMap())
+                placeCueInStack(stack, cue, cueNumber = number, position = insertAt)
                 Triple(
                     null,
                     stack.toCueStackDetails(isCurrentProject = true, manager),
-                    priorities,
+                    stackEntryPriorities(stack),
                 )
             }
 
             val (error, details, priorities) = result
             if (error != null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
+                // A number another entry holds explicitly is a conflict, as on the entry PATCH and POST /cues.
+                call.respond(if (numberTaken) HttpStatusCode.Conflict else HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
                 state.show.cueStackManager.holds.restampEntries(priorities ?: emptyMap())
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
+                // Its auto-numbered neighbours may shift too, which their pads show.
+                announceCuePadsChanged(state, cueIdsOfStack(state, resource.parent.stackId))
                 call.respond(details!!)
+            }
+        }
+    }
+
+    // DELETE /{projectId}/cue-stacks/{stackId}/entries/{entryId} - Remove an entry from the stack.
+    // Never deletes its cue, which is loose once its last entry goes; removing the live entry leaves
+    // the stage alone until the stack's next GO (cue model plan §3.6, D16).
+    delete<CueStackEntryResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.parent.projectId) { project ->
+            val removal = transaction(state.database) {
+                val entry = stackEntry(project, resource.parent.parent.stackId, resource.entryId) ?: return@transaction null
+                removeEntries(state, project, listOf(entry))
+            }
+            if (removal == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
+            } else {
+                afterEntriesRemoved(state, removal)
+                state.show.fixtures.cueStackListChanged()
+                state.show.fixtures.cueListChanged()
+                if (removal.anchorsRemoved > 0) state.show.fixtures.promptBookChanged()
+                announceCuePadsChanged(state, removal.cueIds + cueIdsOfStack(state, resource.parent.parent.stackId))
+                call.respond(HttpStatusCode.NoContent)
+            }
+        }
+    }
+
+    // PATCH /{projectId}/cue-stacks/{stackId}/entries/{entryId} - An entry's number and follow (cue
+    // model plan D2): its place, not its cue's content, so a shared cue numbers itself per stack.
+    // Only the fields present are written.
+    patch<CueStackEntryResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.parent.projectId) { project ->
+            val body = call.receive<JsonObject>()
+            var numberTaken = false
+            val result = transaction(state.database) {
+                val entry = stackEntry(project, resource.parent.parent.stackId, resource.entryId)
+                    ?.takeIf { !it.isMarker }
+                    ?: return@transaction null to "Entry not found"
+                // A typed number is explicit and wins any auto number a sibling was given; clearing
+                // it hands the entry back to the auto scheme, which fills it in again from position.
+                // An unchanged number leaves the auto flag alone, so a save that round-trips the
+                // current number cannot freeze an auto number as explicit.
+                if ("cueNumber" in body) {
+                    val incoming = body["cueNumber"].nullableString()?.takeIf { it.isNotEmpty() }
+                    if (incoming != entry.cueNumber) {
+                        incoming?.let { explicitNumberClash(entry.stack, it, entry.id.value) }
+                            ?.let { numberTaken = true; return@transaction null to it }
+                        setEntryNumber(entry, incoming)
+                    }
+                }
+                if ("autoAdvance" in body) {
+                    entry.autoAdvance = (body["autoAdvance"] as? JsonPrimitive)?.booleanOrNull
+                        ?: return@transaction null to "autoAdvance must be true or false"
+                }
+                if ("autoAdvanceDelayMs" in body) entry.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
+                entry.toCueStackCueEntry(cueSceneryByCue(listOfNotNull(entry.cue?.id))) to null
+            }
+            val renumbered = if ("cueNumber" in body) result.first?.id else null
+            val (row, error) = result
+            when {
+                row != null -> {
+                    state.show.fixtures.cueStackListChanged()
+                    state.show.fixtures.cueListChanged()
+                    // A renumber moves the auto numbers after it too, which other cues' pads show.
+                    if (renumbered != null) announceCuePadsChanged(state, cueIdsOfStack(state, resource.parent.parent.stackId))
+                    call.respond(row)
+                }
+                error == "Entry not found" -> call.respond(HttpStatusCode.NotFound, ErrorResponse(error))
+                // A number another entry holds explicitly, as the unique index would refuse it.
+                numberTaken -> call.respond(HttpStatusCode.Conflict, ErrorResponse(error ?: "Cue number taken"))
+                else -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to update entry"))
             }
         }
     }
@@ -541,7 +619,12 @@ data class ProjectCueStacksResource(val projectId: String)
 data class ProjectStacksReorderResource(val parent: ProjectCueStacksResource)
 
 @Resource("/{stackId}")
-data class ProjectCueStackResource(val parent: ProjectCueStacksResource, val stackId: Int)
+data class ProjectCueStackResource(
+    val parent: ProjectCueStacksResource,
+    val stackId: Int,
+    /** DELETE: also delete the cues the stack leaves in no stack (cue model plan D17). */
+    val deleteLooseCues: Boolean = false,
+)
 
 @Resource("/reorder")
 data class CueStackReorderResource(val parent: ProjectCueStackResource)
@@ -554,6 +637,12 @@ data class CueStackMarkersResource(val parent: ProjectCueStackResource)
 
 @Resource("/{entryId}")
 data class CueStackMarkerResource(val parent: CueStackMarkersResource, val entryId: Int)
+
+@Resource("/entries")
+data class CueStackEntriesResource(val parent: ProjectCueStackResource)
+
+@Resource("/{entryId}")
+data class CueStackEntryResource(val parent: CueStackEntriesResource, val entryId: Int)
 
 @Resource("/activate")
 data class CueStackActivateResource(val parent: ProjectCueStackResource)
@@ -693,8 +782,12 @@ data class ReorderStacksRequest(
 @Serializable
 data class AddCueToStackRequest(
     val cueId: Int,
+    /** Where the new entry goes: a position in the list; absent appends. */
     val sortOrder: Int? = null,
+    /** Place the entry by [cueNumber] among its prefix group instead of at [sortOrder]. */
     val insertByNumber: Boolean = false,
+    /** The new entry's explicit number; absent numbers it from where it lands. */
+    val cueNumber: String? = null,
 )
 
 @Serializable
@@ -838,22 +931,50 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
     )
 }
 
+/** The cues [stackId]'s entries place, in their own transaction. */
+private fun cueIdsOfStack(state: State, stackId: Int): List<Int> = transaction(state.database) {
+    entriesOfStack(EntityID(stackId, DaoCueStacks)).mapNotNull { it.cueId }.distinct()
+}
+
+/** Entry [entryId] of stack [stackId] in [project], a cue's or a marker, or null. Inside a transaction. */
+private fun stackEntry(project: DaoProject, stackId: Int, entryId: Int): DaoCueStackEntry? {
+    val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id } ?: return null
+    return DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stack.id.value }
+}
+
 /** Marker entry [entryId] of stack [stackId] in [project], or null. Inside a transaction. */
 private fun markerEntry(project: DaoProject, stackId: Int, entryId: Int): DaoCueStackEntry? {
     val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id } ?: return null
     return DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stack.id.value && it.isMarker }
 }
 
-/** What deleting cue stacks swept beyond the stacks: prompt-book anchors, and the busk pages that lost pads. */
-internal data class DeletedCueStackRows(val removedAnchors: Int, val pageIds: Set<Int>)
+/**
+ * What deleting a cue stack did beyond the stack: the cues it left in no stack, and — when asked —
+ * the deletion of those ([deletion]).
+ */
+internal data class DeletedCueStackRows(
+    /** Every cue the stack placed: their pads' faces lose a place. */
+    val cueIds: List<Int>,
+    val removedAnchors: Int,
+    val entryIds: Set<Int>,
+    val looseCueIds: List<Int>,
+    val deletion: CueDeletion,
+)
 
 /**
- * Delete [stack] of [project] with its cues and everything they own. In the current project the stack
- * is deactivated first; another project's never ran, and deactivating it would still disarm the desk
- * and recompute the live scenery. The project's playhead is cleared if it pointed here. Inside the
- * caller's transaction; [announceCueStacksDeleted] after it commits.
+ * Delete [stack] of [project]: its entries (with their anchors) and its set, never its cues (cue
+ * model plan D1). A cue whose last entry was here is left loose, or with [deleteLooseCues] deleted
+ * as a forced cue delete would (D17). In the current project the stack is deactivated first; another
+ * project's never ran, and deactivating it would still disarm the desk and recompute the live
+ * scenery. The project's playhead is cleared if it pointed here. Inside the caller's transaction;
+ * [announceCueStacksDeleted] after it commits.
  */
-internal fun deleteCueStackRows(state: State, project: DaoProject, stack: DaoCueStack): DeletedCueStackRows {
+internal fun deleteCueStackRows(
+    state: State,
+    project: DaoProject,
+    stack: DaoCueStack,
+    deleteLooseCues: Boolean = false,
+): DeletedCueStackRows {
     if (project.id == state.projectManager.currentProject.id) {
         state.show.cueStackManager.deactivateStack(stack.id.value, state)
     }
@@ -861,42 +982,37 @@ internal fun deleteCueStackRows(state: State, project: DaoProject, stack: DaoCue
         project.activeStackId = null
     }
 
-    // Every cue has one entry until sharing lands (cue model plan P4), so deleting a stack still
-    // cascades the cues its entries place, with their children. Session 4 leaves them loose.
+    val entries = entriesOf(stack)
+    val cueIds = entries.mapNotNull { it.cueId }.distinct()
     var removedAnchors = 0
-    val pageIds = mutableSetOf<Int>()
-    entriesOf(stack).forEach { entry ->
+    entries.forEach { entry ->
         removedAnchors += DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry eq entry.id }
-        val cue = entry.cue
         entry.delete()
-        if (cue == null) return@forEach
-        deleteCueChildren(cue)
-        deleteCueScenery(cue.id)
-        deleteCueEvents(cue.id)
-        removedAnchors += deletePromptBookAnchorsForCue(cue)
-        pageIds += deleteCueReferences(cue)
-        // Same reason the single-cue delete does this: a deleted cue can't be
-        // Updated into, and a surviving target leaves every client's programmer
-        // indicator offering a cue that no longer exists.
-        state.show.programmerStore.clearIncludeTargetForCue(cue.id.value)
-        // And every hold on it: a pad or slot may hold it loose, and nothing would ever let go of
-        // a deleted cue's contribution (§3.6). Another project's cues hold nothing here.
-        if (project.id == state.projectManager.currentProject.id) {
-            state.show.cueStackManager.holds.dropAll(state, cue.id.value)
-        }
-        cue.delete()
     }
-
     deleteStackScenery(stack.id)
     stack.delete()
-    return DeletedCueStackRows(removedAnchors, pageIds)
+
+    val stillPlaced = if (cueIds.isEmpty()) emptySet() else
+        DaoCueStackEntries.select(DaoCueStackEntries.cue)
+            .where { DaoCueStackEntries.cue inList cueIds }
+            .mapNotNullTo(HashSet()) { it[DaoCueStackEntries.cue]?.value }
+    val loose = cueIds.filter { it !in stillPlaced }
+    val deletion = if (deleteLooseCues) deleteCues(state, project, loose.mapNotNull { DaoCue.findById(it) }) else CueDeletion.NONE
+    return DeletedCueStackRows(
+        cueIds = cueIds,
+        removedAnchors = removedAnchors,
+        entryIds = entries.mapTo(HashSet()) { it.id.value },
+        looseCueIds = if (deleteLooseCues) emptyList() else loose,
+        deletion = deletion,
+    )
 }
 
-/** The broadcasts a stack delete owes, once its transaction has committed. */
+/** The runtime half and the broadcasts a stack delete owes, once its transaction has committed. */
 internal fun announceCueStacksDeleted(state: State, deleted: DeletedCueStackRows) {
+    state.show.programmerStore.forgetIncludedEntries(deleted.entryIds)
+    afterCuesDeleted(state, deleted.deletion)
+    announceCuePadsChanged(state, deleted.cueIds - deleted.deletion.cueIds)
     state.show.fixtures.cueStackListChanged()
     state.show.fixtures.cueListChanged()
     if (deleted.removedAnchors > 0) state.show.fixtures.promptBookChanged()
-    if (deleted.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(deleted.pageIds.toList())
-    state.show.fixtures.cueSlotListChanged()
 }

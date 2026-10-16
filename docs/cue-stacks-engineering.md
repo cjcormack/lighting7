@@ -12,11 +12,9 @@ A **Cue Stack** is a named, project-scoped entity that groups cues into an order
 - **Multiple active stacks** — several stacks can be active simultaneously
 
 Key behaviours:
-- Every cue the desk makes has exactly one entry, so it is in exactly one stack (cue model plan P4,
-  until its session 4). The one loose cue before then is an old archive's: a pre-v32 archive's cue
-  with no stack imports loose rather than into an "Unsorted" stack (§"In the sync archive"). The
-  runtime already speaks entries and holds (§"Runtime"), and the archive one record per entry, so a
-  cue named by several entries, or by none, needs nothing more of either
+- A cue may be in any number of stacks, twice in one, or in none — a **loose** cue (cue model plan
+  D1, D7). A stack's list names cues; it never owns them: removing an entry or deleting the stack
+  leaves the cue (`cues-engineering.md` §"Delete")
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through the list's cue entries in order, markers skipped
 - Deactivating removes all effects tagged with the stack's ID
@@ -128,9 +126,9 @@ prefixed number — a stack numbered `S1-1`, `S1-2`, … had *nothing* eligible 
 A cue entry with no explicit number is given one derived from its position, flagged with
 `cue_number_auto`. `renumberAutoEntries(stack, before)` recomputes them and is called from every handler
 that changes a stack's membership, order or numbers: cue create / delete / copy, `reorder`,
-`add-cue` (which renumbers the stack the cue left as well as the one it joined), `sort-by-cue-number`,
-the marker routes, Record's new cue, the AI's `build_cue_stack` (once, after it has placed every
-cue), and any PATCH/PUT that changes a cue number. Marker entries take no number and are not an auto
+`add-cue`, Remove from stack (each stack an entry left), `sort-by-cue-number`, the marker routes,
+Record's new cue, the AI's `build_cue_stack` (once, after it has placed every cue), and the entry
+`PATCH` when it changes a number. Marker entries take no number and are not an auto
 cue's neighbours.
 
 **An auto number stays put while its cue does** (venue-visit plan D11). Each handler takes
@@ -197,9 +195,10 @@ is next mutated.
 
 ### Key Design Decisions
 
-- **Every cue has one entry** (P4, for now) — moving a cue is `add-cue` to another stack, which moves
-  its entry; deleting a stack deletes its entries and their cues (with their children, scenery and
-  events). The caller always names the stack (P7) — nothing picks a cue's "home" stack
+- **A stack lists cues; it does not own them** (D1) — `add-cue` adds an entry, sharing a cue another
+  stack already holds; deleting a stack deletes its entries, their anchors and its set, and leaves
+  its cues, loose where it was their last stack (`?deleteLooseCues=true` deletes those, D17). The
+  caller always names the stack and the entry (P7) — nothing picks a cue's "home" stack
 - **Ordinal** as a double, ties broken by uuid, so an insert or a drag lands between two entries
   without rewriting the list (`writeEntryOrder`), and two desks inserting into one gap play their
   entries in the same order (sync v32, one archive file per entry)
@@ -251,7 +250,7 @@ The registry decides three things:
   `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
   pressed over a running stack wins on every LTP property until it is let go, and the stack takes
   over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
-  sort, a cue created, recorded or deleted mid-list, a marker added or removed) calls
+  sort, a cue created, recorded or deleted mid-list, an entry or a marker added or removed) calls
   `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
 
 The engine layers below stay keyed by cue — `CueAssignmentLayer`'s rows and fade weights,
@@ -460,9 +459,11 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | POST | `/` | Create stack |
 | GET | `/{stackId}` | Get stack details |
 | PUT | `/{stackId}` | Update stack settings |
-| DELETE | `/{stackId}` | Delete stack and its cues |
+| DELETE | `/{stackId}` | Delete stack, its entries and its set; its cues stay. `?deleteLooseCues=true` deletes those it left in no stack. Answers `{ looseCueIds, deletedCueIds }` |
 | POST | `/{stackId}/reorder` | Reorder the list: body `{ entryIds: [3, 1, 5] }`, markers included; an entry left out keeps its relative order after the named ones |
-| POST | `/{stackId}/add-cue` | Add or move a cue to this stack: body `{ cueId, sortOrder?, insertByNumber? }` |
+| POST | `/{stackId}/add-cue` | Add a cue to this stack as a new entry — shared, never moved: body `{ cueId, sortOrder?, insertByNumber?, cueNumber? }` |
+| PATCH | `/{stackId}/entries/{entryId}` | An entry's number and follow: `{ cueNumber?, autoAdvance?, autoAdvanceDelayMs? }`, the fields present only. Answers the row |
+| DELETE | `/{stackId}/entries/{entryId}` | Remove from stack: the entry and its anchor go, the cue stays. The live entry's removal moves nothing until the next GO (`cues-engineering.md` §"Cue Stack Membership") |
 | POST | `/{stackId}/activate` | Activate stack: optional `{ entryId }`; absent starts at the armed standby, else the first cue entry. HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
 | POST | `/{stackId}/advance` | Advance through cue entries only (markers skipped): body `{ direction: "FORWARD"\|"BACKWARD" }` |
@@ -475,12 +476,12 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 
 ### `add-cue` with `insertByNumber`
 
-When `insertByNumber: true`, the cue is inserted at its sorted position **within its own prefix
-group** — other groups say nothing about where it belongs. Returns 400 if the cue's number has no
-decimal run to position it by. Entries at or after the insertion point shift down, markers included.
-The move takes the cue's one entry with it (number, auto flag, follow); an **explicit** number the
-target stack already holds refuses the move (400) rather than tripping the unique index, an auto one
-is dropped and the cue renumbered where it lands.
+When `insertByNumber: true`, the new entry is inserted at its `cueNumber`'s sorted position
+**within its own prefix group** — other groups say nothing about where it belongs. Returns 400
+without a `cueNumber`, or one with no decimal run to position it by. Entries at or after the
+insertion point shift down, markers included. An **explicit** `cueNumber` another cue entry of the
+stack already holds explicitly is refused (409, as on the entry `PATCH` and `POST /cues`) rather than tripping the unique index; an auto one
+is released and derived again. Without `cueNumber` the entry is auto-numbered where it lands.
 
 ### `sort-by-cue-number`
 
@@ -819,7 +820,7 @@ Seven tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
 - `advance_cue_stack` — Advance forward/backward; the model is pointed at `go_cue_stack` for FORWARD
   and this for BACKWARD
 - `set_standby` — Arm (or, with no `cueId`, disarm) the cue the next GO fires, without moving a light
-- `add_cue_to_stack` — Move/add a cue into a stack
+- `add_cue_to_stack` — Add a cue to a stack as a new entry, sharing it with any stack it is already in
 
 The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info, and `cue_run` alongside it for the run state of every stack that has one — the armed-or-positional `nextCueId`, `nextIsArmed`, and the live fade. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.
 

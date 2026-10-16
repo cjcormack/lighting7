@@ -8,6 +8,8 @@ import type {
   ApplyCueResponse,
   StopCueResponse,
   CueCookedResponse,
+  DeleteCuesRequest,
+  DeleteCuesResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -35,8 +37,12 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    projectCue: build.query<Cue, { projectId: number; cueId: number }>({
-      query: ({ projectId, cueId }) => `projects/${projectId}/cues/${cueId}`,
+    /** `entryId` names the context entry — whose number, follow and stack the answer describes. */
+    projectCue: build.query<Cue, { projectId: number; cueId: number; entryId?: number | null }>({
+      query: ({ projectId, cueId, entryId }) =>
+        entryId == null
+          ? `projects/${projectId}/cues/${cueId}`
+          : { url: `projects/${projectId}/cues/${cueId}`, params: { entryId } },
       providesTags: (_result, _error, { cueId }) => [{ type: 'Cue', id: cueId }],
     }),
 
@@ -131,6 +137,19 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * Everything that names these cues, from a dry run of `POST cues/delete` — what a delete's
+     * confirm lists. A POST, but it deletes nothing, so it is read as a query.
+     */
+    cueDeletePreview: build.query<DeleteCuesResponse, { projectId: number; cueIds: number[] }>({
+      query: ({ projectId, cueIds }) => ({
+        url: `projects/${projectId}/cues/delete`,
+        method: 'POST',
+        body: { cueIds, dryRun: true } satisfies DeleteCuesRequest,
+      }),
+      keepUnusedDataFor: 0,
+    }),
+
     // `copyCue` stood here, fired by a `CopyCueDialog` that was deleted before this sweep;
     // copying a cue between projects is `cloneProject` or an export/import today. The route
     // remains server-side.
@@ -179,6 +198,7 @@ export const {
   useCreateProjectCueMutation,
   usePatchProjectCueMutation,
   useDeleteProjectCueMutation,
+  useCueDeletePreviewQuery,
   useApplyCueMutation,
   useStopCueMutation,
 } = cuesApi

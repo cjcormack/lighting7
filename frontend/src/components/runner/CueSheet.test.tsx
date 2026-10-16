@@ -14,6 +14,8 @@ import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } fr
  */
 const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
+const patchEntry = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 // The scene the Scenery column names its elements from, and its editor — the editor's own rows are
@@ -76,7 +78,7 @@ const STACK: CueStack = {
 }
 
 function draw(over: Partial<React.ComponentProps<typeof CueSheet>> = {}) {
-  return render(<CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} {...over} />)
+  return render(<CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} {...over} />)
 }
 
 /** The first column spans 0..100; Name 100..300, Fade 300..388 — rows are 36px from a 0-high header. */
@@ -135,6 +137,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   patchCue.mockClear()
+  patchEntry.mockClear()
 })
 
 describe('CueSheet', () => {
@@ -182,7 +185,25 @@ describe('CueSheet', () => {
     expect(field.value).toBe('1')
     fireEvent.change(field, { target: { value: '12A' } })
     fireEvent.keyDown(field, { key: 'Enter' })
-    expect(patchCue).toHaveBeenCalledWith({ projectId: 1, cueId: 1, cueNumber: '12A' })
+    // The number is the entry's, written on the entry.
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: '12A' })
+    expect(patchCue).not.toHaveBeenCalled()
+  })
+
+  it('marks a cue another stack shares, on its name', () => {
+    const places = new Map([
+      [
+        2,
+        [
+          { stackId: 10, stackName: 'Act 1', entryId: 102, cueNumber: '2' },
+          { stackId: 11, stackName: 'Act 2', entryId: 207, cueNumber: '7' },
+        ],
+      ],
+    ])
+    draw({ placesByCue: places })
+    const chip = within(row(2)).getByRole('img', { name: /in 2 stacks/ })
+    expect(chip).toHaveAttribute('title', 'Also Act 2 · Q7')
+    expect(within(row(1)).queryByRole('img', { name: /stacks/ })).toBeNull()
   })
 
   it('leaves a cell it cannot select blank rather than drawing an em-dash', () => {
@@ -256,12 +277,12 @@ describe('CueSheet', () => {
   it('unlocked: every row carries a reorder grip; locked, none does', () => {
     const onReorder = vi.fn()
     const { rerender } = render(
-      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={onReorder} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={onReorder} />,
     )
     // Cues and separators alike — a marker is a row of the stack and moves with them.
     expect(screen.getAllByRole('button', { name: 'Reorder row' })).toHaveLength(STACK.cues.length)
     rerender(
-      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={onReorder} locked />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={onReorder} locked />,
     )
     expect(screen.queryAllByRole('button', { name: 'Reorder row' })).toHaveLength(0)
   })
@@ -274,7 +295,7 @@ describe('CueSheet', () => {
     // started from. It is not a dead drag either way, which is what made it easy to miss: dragging
     // *up* still worked, because for an upward drag DOM order and distance order agree.
     render(
-      <CueSheet stack={STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} onReorder={vi.fn()} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={vi.fn()} />,
     )
     const wrappers = [...document.querySelectorAll('[data-row-id]')].map((r) => r.parentElement!)
     expect(wrappers.map((w) => w.style.top)).toEqual(['0px', '36px', '72px', '108px', '144px'])
@@ -282,7 +303,7 @@ describe('CueSheet', () => {
   })
 
   it('washes the live row green and the next row blue, as the cards do', () => {
-    draw({ activeCueId: 2, standbyCueId: 4 })
+    draw({ activeEntryId: 102, standbyEntryId: 104 })
     expect(row(2).className).toContain('green')
     expect(row(4).className).toContain('blue')
     expect(row(1).className).not.toContain('green')
@@ -334,7 +355,7 @@ describe('CueSheet', () => {
     // editor's read-out names it — before this, the column's `write` received it and patched a
     // curve onto a cue with no fade.
     const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 2 ? { ...c, fadeDurationMs: null } : c)) }
-    render(<CueSheet stack={stack} projectId={1} activeCueId={null} onOpenCue={() => {}} />)
+    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} onOpenCue={() => {}} />)
     const cell = within(row(1)).getAllByRole('button').find((b) => b.closest('[data-cell="curve"]'))!
     fireEvent.pointerDown(cell, { button: 0, clientX: 440, clientY: 10 })
     fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 450, clientY: 62 })
@@ -349,7 +370,7 @@ describe('CueSheet', () => {
   })
 
   it('selects and scrolls to the cue the URL names — the ?cue= contract holds on the sheet', () => {
-    draw({ openedCueId: 4 })
+    draw({ openedEntryId: 104 })
     expect(row(4)).toHaveAttribute('data-state', 'selected')
     expect(row(1)).not.toHaveAttribute('data-state', 'selected')
     expect(screen.getByText('1 cue')).toBeInTheDocument()
@@ -358,7 +379,7 @@ describe('CueSheet', () => {
   it('consumes the deep link once — a refetched stack does not wipe a marquee made since', () => {
     // Every cell commit refetches the stack and every GO re-mints its cues; neither is an arrival.
     const view = render(
-      <CueSheet stack={STACK} projectId={1} activeCueId={null} openedCueId={4} onOpenCue={() => {}} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={104} onOpenCue={() => {}} />,
     )
     expect(row(4)).toHaveAttribute('data-state', 'selected')
     dragFade(0, 1)
@@ -367,8 +388,8 @@ describe('CueSheet', () => {
       <CueSheet
         stack={{ ...STACK, cues: STACK.cues.map((c) => ({ ...c })), activeCueId: 2 }}
         projectId={1}
-        activeCueId={2}
-        openedCueId={4}
+        activeEntryId={102}
+        openedEntryId={104}
         onOpenCue={() => {}}
       />,
     )
@@ -376,7 +397,7 @@ describe('CueSheet', () => {
     expect(row(4)).not.toHaveAttribute('data-state', 'selected')
     // A new id is a new arrival.
     view.rerender(
-      <CueSheet stack={STACK} projectId={1} activeCueId={null} openedCueId={5} onOpenCue={() => {}} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={105} onOpenCue={() => {}} />,
     )
     expect(row(5)).toHaveAttribute('data-state', 'selected')
     expect(screen.queryByText('2 cells')).toBeNull()
@@ -428,12 +449,12 @@ describe('CueSheet', () => {
 
   it('locked: a click on the Cue column arms the cue as next — on the number itself, not only the margins', () => {
     const onSetStandby = vi.fn()
-    draw({ locked: true, activeCueId: 1, onSetStandby })
+    draw({ locked: true, activeEntryId: 101, onSetStandby })
     // The cue number is the largest thing in the column; locked, it is inert text and the click
     // must bubble to the column.
     // `TruncateStart` says the text twice (a measure and a display), so take the first.
     fireEvent.click(within(row(2)).getAllByText('Q2')[0])
-    expect(onSetStandby).toHaveBeenCalledWith(2)
+    expect(onSetStandby).toHaveBeenCalledWith(2, 102)
     // The live cue cannot be armed against itself.
     fireEvent.click(row(1).firstElementChild as HTMLElement)
     expect(onSetStandby).toHaveBeenCalledTimes(1)
@@ -536,10 +557,10 @@ describe('CueSheet · Scenery (scenery-programmer plan D13)', () => {
     const { rerender } = draw({ stack: SCENERY_STACK })
     fireEvent.click(scenery(2)!)
     expect(screen.getByTestId('scenery-editor')).toBeInTheDocument()
-    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} locked onRequestUnlock={() => {}} />)
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} locked onRequestUnlock={() => {}} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
     // …and does not come back with the unlock.
-    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} />)
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
   })
 })

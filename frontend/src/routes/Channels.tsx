@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import {
@@ -19,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { ChevronRight, Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Undo2 } from "lucide-react"
+import { Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Undo2 } from "lucide-react"
 import { useUpdateChannelMutation } from "../store/channels"
 import { useChannelValue } from "@/hooks/usePropertyValues"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
@@ -540,7 +541,7 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
         {/* `@container`: the view switcher's labels are a container query, and a missing ancestor
             would drop them silently. See ViewSwitcher's LABEL_AT_* constants. */}
         <div className="@container flex items-start justify-between gap-2 mb-4">
-          <ChannelsBreadcrumbs projectName={projectName} />
+          <Breadcrumbs projectName={projectName} currentPage="Channels" />
           <div className="flex items-center gap-2">
             {/* Inline buttons — hidden on narrow viewports. Kept mounted while the filter
                 is on even at zero parked channels: unparking the last one would otherwise
@@ -671,34 +672,6 @@ function ProjectChannelsContent({ projectId, projectName, universe }: { projectI
         mode={channelDialogMode ?? "set"}
       />
     </>
-  )
-}
-
-// Breadcrumbs component — shared with the table sibling (`routes/ChannelsTable.tsx`).
-export function ChannelsBreadcrumbs({ projectName }: { projectName: string }) {
-  const navigate = useNavigate()
-
-  return (
-    <nav className="flex items-center gap-1 text-sm flex-wrap">
-      <button
-        onClick={() => navigate("/projects")}
-        className="text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Projects
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <button
-        onClick={() => navigate("/projects")}
-        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-      >
-        {projectName}
-        <Badge variant="default" className="text-xs">
-          active
-        </Badge>
-      </button>
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
-      <span className="font-medium">Channels</span>
-    </nav>
   )
 }
 

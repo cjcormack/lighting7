@@ -260,6 +260,7 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
     for (const cue of stack.cues) {
       if (cue.cueType !== 'STANDARD') continue
       out.push({
+        entryId: cue.entryId,
         cueId: cue.id,
         label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
         name: cue.name,
@@ -290,15 +291,15 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
  */
 export function orderedEntryIdsForInsert(
   stack: CueStack,
-  anchorByCue: Map<number, CueAnchorDto>,
+  anchorByEntry: Map<number, CueAnchorDto>,
   region: Region,
   newEntryId: number,
 ): number[] {
   const sel = scriptPosition(region)
-  // Rows are entries: reorder names entry ids, and a marker (no cue) has no anchor to read.
+  // Rows are entries: reorder names entry ids, and a marker has no anchor to read.
   const ids = stack.cues.map((c) => c.entryId)
   const anchored = stack.cues
-    .map((c, i) => ({ i, anchor: c.id != null ? anchorByCue.get(c.id) : undefined }))
+    .map((c, i) => ({ i, anchor: anchorByEntry.get(c.entryId) }))
     .filter((e): e is { i: number; anchor: CueAnchorDto } => e.anchor != null)
   // Nothing to order against → append (natural when anchoring a stack top-to-bottom).
   if (anchored.length === 0) return [...ids, newEntryId]
@@ -335,18 +336,18 @@ export interface AnchorFallback {
  * when the cue isn't in the order or the book has no anchors at all.
  */
 export function nearestAnchoredCue(
-  cueId: number,
+  entryId: number,
   cueOrder: FlatCue[],
-  anchorByCue: Map<number, CueAnchorDto>,
+  anchorByEntry: Map<number, CueAnchorDto>,
 ): AnchorFallback | null {
-  const index = cueOrder.findIndex((c) => c.cueId === cueId)
+  const index = cueOrder.findIndex((c) => c.entryId === entryId)
   if (index < 0) return null
   for (let i = index - 1; i >= 0; i--) {
-    const anchor = anchorByCue.get(cueOrder[i].cueId)
+    const anchor = anchorByEntry.get(cueOrder[i].entryId)
     if (anchor) return { cue: cueOrder[i], region: anchor.region, direction: 'before' }
   }
   for (let i = index + 1; i < cueOrder.length; i++) {
-    const anchor = anchorByCue.get(cueOrder[i].cueId)
+    const anchor = anchorByEntry.get(cueOrder[i].entryId)
     if (anchor) return { cue: cueOrder[i], region: anchor.region, direction: 'after' }
   }
   return null
@@ -411,6 +412,7 @@ export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
         out.push({
           type: 'cue',
           cue: {
+            entryId: cue.entryId,
             cueId: cue.id,
             label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
             name: cue.name,

@@ -31,11 +31,9 @@ enum class CueStackEntryKind { CUE, MARKER }
  * holds the cue's **place** in that stack — its position, its number (and whether that number is
  * auto) and its follow — and the cue holds what it is.
  *
- * Until the cue model plan's session 4 every cue has exactly one entry (P4). Nothing here assumes
- * it, and the few callers that still have only a cue and need its stack go through [soleEntryOf],
- * which says so. The archive no longer does: from sync `formatVersion` 32 each entry is its own
- * record, `cueStackEntries/{uuid}.json` (`sync/ProjectExporter.kt`), written from these rows
- * directly — so a shared or loose cue (session 4) already travels.
+ * A cue may have any number of entries (D1, D7): several stacks, twice in one, or none — a **loose**
+ * cue. Removing an entry never deletes its cue. Each entry is its own sync record,
+ * `cueStackEntries/{uuid}.json` (`sync/ProjectExporter.kt`, `formatVersion` 32).
  *
  * Numbers are unique per stack among cue entries through the raw-SQL partial index
  * `uq_entry_number_per_stack` (`State.initDatabase`), which Exposed cannot declare.
@@ -145,46 +143,83 @@ fun entryInStack(stackId: Int, cueId: Int): DaoCueStackEntry? =
 fun entriesOfCue(cue: DaoCue): List<DaoCueStackEntry> =
     DaoCueStackEntry.find { DaoCueStackEntries.cue eq cue.id }.orderBy(DaoCueStackEntries.id to SortOrder.ASC).toList()
 
-/**
- * [cue]'s one entry, while the cue model plan's P4 holds — every cue in exactly one stack.
- *
- * **This is the P4 bridge, not a home stack.** Nothing that makes a cue live goes through it: a
- * busk cue pad, a cue slot, a MIDI `FireCue`, the hand, `/cues/{id}/apply` and MCP `apply_cue` hold
- * the cue loose (the plan's session 2, `fx/CueHolds.kt`) and need no entry. What is left are the
- * cue-shaped reads and writes that report or move a cue's stack and number (`CueDetails`, the
- * briefing, the prompt book's cue-keyed anchors, the scenery tracked into a cue, `add-cue`), which
- * take an entry from their caller as the later sessions reach them. It never chooses: a cue with no
- * entry or several answers null, which every caller treats as "this cue is in no stack" — so the day
- * session 4 lets a cue be shared, a caller still on it fails visibly rather than picking one.
- */
-fun soleEntryOf(cue: DaoCue): DaoCueStackEntry? = entriesOfCue(cue).singleOrNull()
-
-/** A cue's one entry ([soleEntryOf]) and that entry's index in its stack's list, markers counted. */
+/** One entry of a cue, with its index in its stack's list (markers counted). */
 data class EntrySlot(val entry: DaoCueStackEntry, val position: Int)
 
 /**
- * [soleEntryOf] and the entry's position for every cue in [cueIds], **batched**: two queries for
- * the whole set (the cues' entries with their stacks, then those stacks' lists), where asking per
- * cue costs two queries and a whole stack's list each — which a cue list or a republish of every
- * live cue would pay once per cue. A cue with no entry or several is absent, as [soleEntryOf]
- * answers null for it. Must run inside a transaction.
+ * Every entry of each cue in [cueIds], in **show order** — stacks as the show lists them, then each
+ * stack's playback order — with its position. Batched: one query for the entries and their stacks,
+ * one for those stacks' lists. A loose cue is absent. Must run inside a transaction.
  */
-fun soleEntrySlotsOf(cueIds: Collection<Int>): Map<Int, EntrySlot> {
+fun entrySlotsOf(cueIds: Collection<Int>): Map<Int, List<EntrySlot>> {
     if (cueIds.isEmpty()) return emptyMap()
-    val sole = DaoCueStackEntry.find { DaoCueStackEntries.cue inList cueIds.distinct() }
+    val entries = DaoCueStackEntry.find { DaoCueStackEntries.cue inList cueIds.distinct() }
         .with(DaoCueStackEntry::stack)
         .toList()
-        .groupBy { it.cueId!! }
-        .mapNotNull { (cueId, entries) -> entries.singleOrNull()?.let { cueId to it } }
-    if (sole.isEmpty()) return emptyMap()
-    val positions = DaoCueStackEntry.find { DaoCueStackEntries.stack inList sole.map { it.second.stackId }.distinct() }
+    if (entries.isEmpty()) return emptyMap()
+    val positions = DaoCueStackEntry.find { DaoCueStackEntries.stack inList entries.map { it.stackId }.distinct() }
         .toList()
         .groupBy { it.stackId }
         .values
         .flatMap { list -> list.sortedWith(ENTRY_ORDER).mapIndexed { index, entry -> entry.id.value to index } }
         .toMap()
-    return sole.associate { (cueId, entry) -> cueId to EntrySlot(entry, positions.getValue(entry.id.value)) }
+    val showOrder = compareBy<EntrySlot>({ it.entry.stack.sortOrder }, { it.entry.stack.name }, { it.entry.stackId }, { it.position })
+    return entries
+        .map { EntrySlot(it, positions.getValue(it.id.value)) }
+        .groupBy { it.entry.cueId!! }
+        .mapValues { (_, slots) -> slots.sortedWith(showOrder) }
 }
+
+/**
+ * Where an entry stood in its stack's list, remembered once the entry itself is gone: a stack whose
+ * live entry is removed plays on from here (cue model plan D16). Held by its neighbours' ids — the
+ * entries that survived the removal either side of it — because ordinals move (an insert into the
+ * gap takes the removed one's midpoint; a full gap renormalises the list). Only when both
+ * neighbours have gone too does it fall back to the removed entry's own [ordinal] and [uuid].
+ */
+data class EntryPlace(
+    val ordinal: Double,
+    val uuid: java.util.UUID,
+    /** The surviving entry just before it, a cue's or a marker; null at the top. */
+    val previousEntryId: Int? = null,
+    /** The surviving entry just after it; null at the end. */
+    val nextEntryId: Int? = null,
+) {
+    /**
+     * How many **cue** entries of [entries] (a stack's whole list, markers included, in playback
+     * order) play before this place: the index the place would have among them. Forward from the
+     * place is the cue entry at that index, back the one before it.
+     */
+    fun cueIndexIn(entries: List<DaoCueStackEntry>): Int {
+        fun cuesBefore(end: Int) = entries.take(end).count { it.cueId != null }
+        nextEntryId?.let { id -> entries.indexOfFirst { it.id.value == id }.takeIf { it >= 0 }?.let { return cuesBefore(it) } }
+        previousEntryId?.let { id -> entries.indexOfFirst { it.id.value == id }.takeIf { it >= 0 }?.let { return cuesBefore(it + 1) } }
+        return entries.count { e ->
+            e.cueId != null && e.ordinal.compareTo(ordinal).let { if (it != 0) it < 0 else compareUuidsAsText(e.uuid, uuid) < 0 }
+        }
+    }
+
+    companion object {
+        /** [entry]'s place in [list] (its stack's, in playback order), its neighbours read from [survivors]. */
+        fun of(entry: DaoCueStackEntry, list: List<DaoCueStackEntry>, survivors: Set<Int>): EntryPlace {
+            val at = list.indexOfFirst { it.id == entry.id }
+            return EntryPlace(
+                ordinal = entry.ordinal,
+                uuid = entry.uuid,
+                previousEntryId = list.take(at.coerceAtLeast(0)).lastOrNull { it.id.value in survivors }?.id?.value,
+                nextEntryId = list.drop(at + 1).firstOrNull { it.id.value in survivors }?.id?.value,
+            )
+        }
+    }
+}
+
+/**
+ * [cue]'s entry when it has exactly one, else null: a cue in several stacks, or in none, has no one
+ * place, and nothing here picks one (cue model plan P7). Left only for the MCP setup tools and the
+ * briefing until the plan's session 7 moves them onto entries; every other caller names its entry or
+ * lists them all ([entrySlotsOf]).
+ */
+fun soleEntryOf(cue: DaoCue): DaoCueStackEntry? = entriesOfCue(cue).singleOrNull()
 
 /** [soleEntryOf] by id, for a caller holding only the cue's id. */
 fun soleEntryOfCueId(cueId: Int): DaoCueStackEntry? =
