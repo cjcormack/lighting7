@@ -6,6 +6,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
@@ -173,6 +174,28 @@ private fun JsonObjectBuilder.placementProps() {
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
     focusProps("the fixture's own lantern")
     mediaProp("the fixture")
+    put("locate", buildJsonObject {
+        put("type", "array")
+        put(
+            "description",
+            "Where Locate points this moving fixture (its stored locate, as get_patch reports it): one entry per unit that pans and tilts — " +
+                "`head` left out for the fixture's own pan and tilt, else the head's index from 0 — with `pan` and `tilt` as DMX bytes 0–255 " +
+                "(128 is the centre of travel) and `panFine` / `tiltFine` where the unit has fine channels. Locate still opens the beam white at full; " +
+                "only pan and tilt move. The list replaces the stored one; null or [] clears it, so Locate centres the fixture again. " +
+                "Refused on a unit that does not pan and tilt. For a venue fixture in a show it is part of the Focus facet, so it needs Focus to be this show's first.",
+        )
+        put("items", buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject {
+                put("head", buildJsonObject { put("type", "integer") })
+                put("pan", buildJsonObject { put("type", "integer") })
+                put("tilt", buildJsonObject { put("type", "integer") })
+                put("panFine", buildJsonObject { put("type", "integer") })
+                put("tiltFine", buildJsonObject { put("type", "integer") })
+            })
+            putJsonArray("required") { add("pan"); add("tilt") }
+        })
+    })
     arrayProp(
         "alsoAt",
         alsoAtSchema,
@@ -242,6 +265,7 @@ internal val listFixtureTypesTool = ToolDef(
 internal val getPatchTool = ToolDef(
     name = "get_patch",
     description = "A project's patch and stage as stored (the current one unless projectId names another): stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
+        "A moving fixture with a stored locate (set on the desk with *Set locate from current*, or with patch_fixtures / place_fixtures) carries `locate`: per unit — `head` absent for the fixture's own pan and tilt, else the head's index from 0 — the pan and tilt Locate points it at, as DMX bytes (`pan`, `tilt`, and `panFine` / `tiltFine` where it has fine channels); a unit with none locates to the centre of its travel. " +
         "Each placed fixture and `alsoAt` lantern also carries `world`: where it actually is on stage, in world coordinates — x/y/z are offsets along the rigging when `rigging` is set, and `world` composes them with the rigging's position and rotation. It is absent for one with no x or y, which the Stage view does not draw. " +
         "Read it before changing the patch or stage, and after, to check the result. " + COORDINATES,
     inputSchema = objectSchema {
@@ -606,7 +630,7 @@ internal val placeFixturesTool = ToolDef(
     description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel — and for a generic dimmer its lantern and how it is focused (shutters, gate, iris, focus, zoom). Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " +
         "On a show on a venue, a venue fixture (owner=venue in get_patch) is placed through this show's facet overrides: its rigging and x/y/z/yaw/pitch/roll/length are its Position, " +
-        "its lantern, focus fields, beamAngleDeg, lampWatts and lampKelvin its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
+        "its lantern, focus fields, beamAngleDeg, lampWatts, lampKelvin and locate its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
         "and only the fields sent change. Its kind and stageHidden are the venue's; its `alsoAt` is the venue's lanterns, one entry each in get_patch's order, each changing only the fields it sends. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)

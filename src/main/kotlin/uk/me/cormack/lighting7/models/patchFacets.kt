@@ -11,6 +11,8 @@ import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import java.util.UUID
@@ -25,7 +27,7 @@ import java.util.UUID
  * |---|---|
  * | Address | `universeConfigUuid`, `startChannel` |
  * | Position | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
- * | Focus | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, and each placement's lantern fields |
+ * | Focus | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, `locate`, and each placement's lantern fields |
  * | Media | `gelCode`, `media`, and each placement's |
  *
  * **Placements are carried by the venue placement's uuid** (`placements: [{placementUuid, …}]`), each
@@ -93,6 +95,9 @@ data class FocusFacet(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** The stored locate (venue-visit plan D6) — the patch's alone, one entry per unit that pans and
+     *  tilts, so no placement carries one. Empty is none. */
+    val locate: List<UnitLocate> = emptyList(),
     val placements: List<PlacementFocus> = emptyList(),
 ) : FacetValue {
     override val facet: PatchFacet get() = PatchFacet.FOCUS
@@ -195,6 +200,7 @@ fun venueFacetOf(patch: DaoFixturePatch, placements: List<DaoFixturePatchPlaceme
                 lampWatts = patch.lampWatts, lampKelvin = patch.lampKelvin,
                 zoomDeg = f.zoomDeg, lampRotationDeg = f.lampRotationDeg, shutters = f.shutters,
                 gateRotationDeg = f.gateRotationDeg, iris = f.iris, focusSoftness = f.focusSoftness,
+                locate = patch.storedLocate,
                 placements = placements.map { p ->
                     val pf = p.focus
                     PlacementFocus(
@@ -238,6 +244,8 @@ class EffectivePatch internal constructor(
     val beamAngleDeg: Int?,
     val lampWatts: Int?,
     val lampKelvin: Int?,
+    /** The stored locate, the Focus override's where the show overrides Focus. */
+    val locate: List<UnitLocate>,
     /** Derived from the lantern as a write derives it (`resolvePatchFocus`): an overridden lantern's kind. */
     val kindOverride: String?,
     val gelCode: String?,

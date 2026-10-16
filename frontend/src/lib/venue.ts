@@ -47,6 +47,7 @@ const FIELD_WORDS: Record<string, string> = {
   beamAngleDeg: 'beam',
   lampWatts: 'lamp watts',
   lampKelvin: 'lamp colour temperature',
+  locate: 'locate',
   lanternType: 'lantern',
   fixtureTypeKey: 'type',
   displayName: 'name',

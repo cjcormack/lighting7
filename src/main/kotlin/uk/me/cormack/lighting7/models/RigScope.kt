@@ -11,6 +11,7 @@ import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.SizedIterable
 import org.jetbrains.exposed.v1.jdbc.select
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import java.util.UUID
 
@@ -135,6 +136,7 @@ class RigScope private constructor(
             beamAngleDeg = if (focus != null) focus.beamAngleDeg else patch.beamAngleDeg,
             lampWatts = if (focus != null) focus.lampWatts else patch.lampWatts,
             lampKelvin = if (focus != null) focus.lampKelvin else patch.lampKelvin,
+            locate = if (focus != null) focus.locate else patch.storedLocate,
             kindOverride = if (focus != null) kindUnderLantern(focus.lanternType, patch.lanternType, patch.kindOverride) else patch.kindOverride,
             gelCode = if (media != null) media.gelCode else patch.gelCode,
             fittedMedia = if (media != null) media.media else patch.fittedMedia,

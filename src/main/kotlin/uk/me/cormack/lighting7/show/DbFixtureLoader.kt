@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.show
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.MockDmxController
@@ -111,6 +112,7 @@ object DbFixtureLoader {
                         gelCode = it.gelCode,
                         infrastructure = it.infrastructure,
                         media = it.fittedMedia,
+                        locate = it.locate,
                     )
                 }
 
@@ -185,7 +187,9 @@ object DbFixtureLoader {
 
                 setPatchMetadata(
                     patch.key,
-                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure, media = patch.media),
+                    Fixtures.FixturePatchMetadata(
+                        gelCode = patch.gelCode, infrastructure = patch.infrastructure, media = patch.media, locate = patch.locate,
+                    ),
                 )
             }
 
@@ -247,6 +251,7 @@ object DbFixtureLoader {
         val gelCode: String?,
         val infrastructure: Boolean,
         val media: FittedMedia?,
+        val locate: List<UnitLocate>,
     )
 
     private data class GroupMemberData(

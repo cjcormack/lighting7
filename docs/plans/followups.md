@@ -1518,6 +1518,11 @@ a show on a venue inherit its version's parks and adds `showParkReleases/`, keye
 channel, which records nothing about who released a park. The design for machine-local users is still
 owed; flagged again rather than folded in.
 
+**v28–v31 passed without it too** (centre-relative positions, Seconds, size/direction/N-shot and
+the stored locate, venue-visit plan S11, S15, R4.1 and S8, 2026-10-15): v31 adds
+`FixturePatchJson.locate`, a unit's stored pan and tilt, which records nothing about who set it. The design for machine-local users is still owed;
+flagged again rather than folded in.
+
 ### `FU-AUTH-AUDIT-LOG`
 
 **A `user_audit` table for logins, resets and user changes** · Trigger · Multi-user-auth §out of

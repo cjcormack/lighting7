@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.testsupport
 
+import uk.me.cormack.lighting7.fixture.locate.UnitLocate
+import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
@@ -466,6 +468,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         universeConfig = u0
         fixtureTypeKey = "etc-source4-revolution-base-frame"
         key = "rev-1"; displayName = "Rev 1"; startChannel = 440; sortOrder = 9
+        // A stored locate (v31, venue-visit plan D6): off centre, fine bytes and all, so the round
+        // trip, a clone, an extract and a detach each carry it or show they lost it.
+        storedLocate = listOf(UnitLocate(head = null, pan = 140, tilt = 96, panFine = 12, tiltFine = 200))
         fittedMedia = FittedMedia(
             mapOf(
                 "gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot(gel = "R26"), "R02_BASTARD_AMBER" to FittedSlot()),

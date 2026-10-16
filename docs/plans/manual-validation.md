@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
@@ -98,6 +99,39 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S8`
+
+**What it proves**: *per-patch locate* — venue-visit plan S8 (D6, D17): a unit's stored pan and tilt,
+read from what the desk is sending, is where Locate points it; everything else Locate does is
+unchanged; on a venue it is the venue's and a show can make it its own as Focus.
+
+**Why it is here**: the tests pin the bytes, the resolver and the writes. Whether a stored aim lands
+on the same spot on the stage — fine channels and all — is the rig's to say.
+
+**Test**, on the hall's rig with a MAC 250 (or the Robe) and the Slender Beam Bar Quad in 27-channel
+mode patched:
+
+1. **Set from current.** Focus the MAC on a mark with the programmer (fine aim included), select it
+   on the programmer and choose *Set locate from current* from Locate's menu. Clear the programmer,
+   press Locate: the head lands on the mark, open white at full. The patch sheet's Locate box reads
+   its pan and tilt on the centre scale.
+2. **A head of a bar.** Aim head 2 of the bar elsewhere, set its locate from the head's own row, then
+   Locate the whole bar: head 2 lands on its point and the other three centre.
+3. **Located while focused.** Locate the MAC, nudge it with the programmer, *Set locate from current*,
+   then release the programmer value: the head stays where it was set rather than snapping back.
+4. **Clear.** *Clear locate* on the MAC: Locate centres it again.
+5. **A show on a venue.** In the venue (as an admin) set the MAC's locate and publish; in a show on it,
+   update, Locate: the venue's point. Set the show's own: the patch's Focus reads *This show*, the
+   venue's draft is unchanged. *Clear locate* in the show: Locate centres it; *Take venue's* on Focus
+   brings the venue's point back.
+
+If a stored locate lands visibly off the spot it was set on, promote it to a `FU-` item in
+`followups.md`.
+
+10 minutes.
 
 ---
 
