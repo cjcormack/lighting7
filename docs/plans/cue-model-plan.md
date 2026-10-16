@@ -459,7 +459,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   `FU-SYNC-ORDINAL-DOUBLE` to the other tables and corrects `FU-SYNC-FORMAT-MIGRATIONS`' stale
   version numbers.
 
-### Session 4 — sharing and explicit delete (backend + Show view)
+### Session 4 — sharing and explicit delete (backend + Show view) — done, `2d82cea0`
 
 - **Add shares** (D1): `add-cue` and `add_cue_to_stack` add an entry. *Move to stack* is add then
   remove. A cue may be in no stack, or twice in one (D7).
