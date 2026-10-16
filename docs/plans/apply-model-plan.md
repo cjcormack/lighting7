@@ -202,6 +202,15 @@ and a layer records both as its `targets` and `propertyMask`.
     `nShotStartScaledMs`, moved on by the member's offset), as `FxEngine.updateEffect`'s swap carries
     them (S15, effects plan session 1).
   - Refused for a layer's instance (P5) with `FX_SPLIT_LAYER_EFFECT`; a cue's instance stays read-only.
+  > *Note (session 2, as built):* the split rewrites the effect as one instance per head it paints and
+  > the named heads' copies take the edit, so the rest are narrowed the same way the replacement
+  > narrows. The member's offset is carried **beside** each copy's `phaseOffset` (`SplitMember`, with
+  > the member's group size and context), not in it: every copy keeps one phase offset, so an edit
+  > following the selection sends one value to each, and Record folds the offset into the stored phase
+  > offset. Folding it in and also moving the N-shot anchor by it, as above, would count it twice. A
+  > cue's or a manual effect's split is 409 `FX_SPLIT_NOT_LOCAL`. The family the press tests against
+  > the mask and replaces by is the driven property's group, not the library category (decided with
+  > Chris during review). See `fx-engineering.md` §"Local effects follow the selection".
 - **The Effects band and the busk Effects tab** list the effects running on the selected heads:
   Local ones editable by these rules, a palette layer's by P5, a cue's read-only.
 - **Distribution over a hand selection** is R4's, and landed with the effects plan's session 3: one
@@ -257,7 +266,7 @@ and a layer records both as its `targets` and `propertyMask`.
 | `POST /palettes/{id}/apply` `write` | 1 | `false` answers `values[].value` without writing (D7); `written` is the count. |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
 | `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`, `spread`, `wings`, `blocks`, `groups`; S15, effects plan sessions 1–2); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
-| `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |
+| `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. Answers `EffectSplitResponse {splitEffectId, edited, rest}` on a split. 409 `FX_SPLIT_LAYER_EFFECT` (a layer's), `FX_SPLIT_NOT_LOCAL` (a cue's or a manual one); 400 `FX_UPDATE_REFUSED` for a shape change with a strict subset, or targets naming none of its heads. |
 | `POST /cues/{id}/layers/press` | 8 | §3.6, the stored cue's layers. |
 
 No table, no column, no `formatVersion` change (P7).
@@ -418,7 +427,7 @@ Each session is one PR (P1).
   §"Looks, palettes and layers" (Detach, Apply as values); `mcp-engineering.md`; CLAUDE.md's
   §"Palette Endpoints".
 
-### Session 2 — Local effects follow the selection (backend)
+### Session 2 — Local effects follow the selection (backend) — done, `4212865a`
 
 - §3.4: `POST /programmer/effects`, the Local replacement, the `targets` split on `PUT /fx/{id}` and
   `updateFx`, the per-member phase carry, `FX_SPLIT_LAYER_EFFECT`.
@@ -429,6 +438,9 @@ Each session is one PR (P1).
   keeps the phase but not the cycle or the sweep. Either the split carries the parent's cycle and
   sweep, or it refuses those effects. A shape edit named with a strict subset of `targets` does
   nothing on one-head copies: refuse it or ignore it.
+  - *Answered by Chris, 2026-10-16:* the split **carries** the parent's cycle and sweep — each copy
+    remembers the size of the set it came from — and a shape edit with a strict subset is
+    **refused** (400 `FX_UPDATE_REFUSED`, only for a field that would change).
 - **Tests:**
   - A bare effect on four fixtures is one Local instance over them (effects plan D3), and on a
     group one.

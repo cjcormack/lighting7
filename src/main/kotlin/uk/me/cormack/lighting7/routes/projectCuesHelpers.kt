@@ -98,7 +98,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 beatDivision = effect.timing.beatDivision,
                 blendMode = effect.blendMode.name,
                 distribution = dyn.distributionStrategy.javaClass.simpleName,
-                phaseOffset = dyn.phaseOffset,
+                phaseOffset = effect.storedPhaseOffset(dyn),
                 elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,

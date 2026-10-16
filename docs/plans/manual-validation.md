@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
@@ -111,6 +112,42 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-R3-2`
+
+**What it proves**: *Local effects follow the selection* — venue-visit R3.2, apply-model plan
+session 2 (§3.4, D5): a bare library effect is one Local effect over the selection, a second effect
+of its family takes the pressed heads off the first, and an edit for some of an effect's heads splits
+them off at the phase they had.
+
+**Why it is here**: `EffectSplitTest` compares every channel tick for tick against a mock controller
+on synthetic ticks, and the route tests read the instances. Nothing watched a split on real heads at
+a real tempo, where a jump of one head out of a chase is what an operator would see.
+
+**Test**, on Sleeping Beauty. Until session 6 (R3.6) gives these a door in the UI, drive them from a
+terminal with `curl` against `http://localhost:8413/api/rest` (signed in; the bodies are in
+CLAUDE.md's FX REST endpoints), and watch the stage and the programmer's FX list:
+
+1. **The press.** `POST /projects/{id}/programmer/effects` with `Pulse` on `dimmer` over four hexes
+   by fixture: one effect in the FX list, a four-step chase in the order sent, on the master tagged
+   *dimmer* if there is one. With `families: ["COLOUR"]` it is refused and nothing starts.
+2. **Replacement.** Press `ColourCycle` on `rgbColour` over the four, then again over two of them:
+   those two change to the new cycle, the other two carry on exactly where they were (no step back to
+   the start), and the Pulse is untouched. Press it over all four: the first is gone.
+3. **The split.** With the Pulse running, `PUT /fx/{id}` with `beatDivision` doubled and `targets`
+   naming two of the hexes: those two slow down from where they were, the other two do not hitch,
+   and the FX list shows four effects. The same `PUT` with every hex keeps the one effect.
+4. **Step and ping-pong.** Start a Pulse with `stepTiming: true` and `distributionStrategy:
+   "PING_PONG"` over four, then split one head off with a `size` edit: it keeps its place in the
+   bounce and its step length, beside the three still running together.
+5. **Refusals.** The split with `distributionStrategy` changed is refused, nothing moved; a split of a
+   palette layer's effect is 409 `FX_SPLIT_LAYER_EFFECT`.
+6. **Clear and Record.** Record a cue with the split chase up: GO it after Clear and each head keeps its
+   place in the chase. Clear takes every copy; a fixture's *Release* takes its own.
+
+**Time**: 15 minutes.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-R2-4`
 
 **What it proves**: *the cue editor and its two hosts on a real show* — venue-visit R2.4,
@@ -139,6 +176,8 @@ stack landing where the cards say before the desk answers.
 5. **On Q12.** With a cue's effect running on a fixture, open the fixture's sheet, the tray, and press
    *on Q…*: that cue's editor opens over the sheet; Escape returns to the sheet.
 
+---
+
 ## `FU-MANUAL-VENUE-VISIT-NAV-3`
 
 **What it proves**: *the switcher on a real desk* — venue-visit Nav.3, navigation plan session 3
@@ -159,6 +198,8 @@ is doing.
    goes dark.
 4. **Back again.** Switch back to Sleeping Beauty while it is still made safe: the confirmation says
    it opens dark, and it does, with *Undo* on its banner.
+
+---
 
 ## `FU-MANUAL-VENUE-VISIT-R3-3`
 

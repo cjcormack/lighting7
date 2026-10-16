@@ -54,3 +54,26 @@ fun secondsTimingConflict(seconds: Boolean?, speedMasterUuid: String?, rateSpeed
     } else {
         null
     }
+
+/**
+ * Venue-visit plan D16's default master for a new effect of [effectType]: the speed master whose
+ * `usage` is the effect's family — its registration's category, else [fallbackCategory] — or null,
+ * which is master 1. Null too for a wall-clock effect, whose Seconds is having no rate master, since
+ * "one bar on a master" means nothing to an effect timed in seconds.
+ *
+ * A uuid stamped once, at creation, never a rule resolved later. The one reading for every door the
+ * desk stamps on: MCP's effect tools (`parseEffectTiming`) and the programmer's bare effect press
+ * (`POST /programmer/effects`, apply-model plan §3.4). The effect editor stamps the same choice
+ * client-side.
+ */
+fun usageMasterUuidFor(
+    registry: FxRegistry,
+    speedMasters: SpeedMasterBank,
+    effectType: String,
+    fallbackCategory: String? = null,
+): java.util.UUID? {
+    val registration = registry.getRegistration(effectType)
+    if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
+    val family = registration?.category ?: fallbackCategory ?: return null
+    return speedMasters.masterStates().firstOrNull { it.usage == family }?.uuid
+}

@@ -381,6 +381,7 @@ internal fun performProgrammerUpdate(
     for (cueId in cueIds) {
         val entries = plans[cueId].orEmpty()
         val recording = recordingForUpdate(state, entries, includeFx)
+        val retired = if (includeFx) splitIncludedChildren(state, cueId) else emptySet()
 
         val outcome = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
@@ -388,6 +389,7 @@ internal fun performProgrammerUpdate(
             // The stack it reports is the included entry's, in Mode A; a checklist names no entry.
             val entry = includedEntryId?.takeIf { modeLabel == "A" }?.let { DaoCueStackEntry.findById(it) }
                 ?.takeIf { it.cueId == cue.id.value }
+            cue.adHocEffects.filter { it.sortOrder in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
             if (modeLabel == "A") {
@@ -415,6 +417,11 @@ internal fun performProgrammerUpdate(
         }
 
         val (written, cueName, stackId) = outcome
+        // Their child is gone, and each copy now matches the child it was written as.
+        for (effect in state.show.fxEngine.getActiveEffects()) {
+            val origin = effect.programmerOrigin ?: continue
+            if (origin.cueId == cueId && origin.childSortOrder in retired) effect.programmerOrigin = null
+        }
         results += ProgrammerUpdateResult(
             cueId = cueId,
             cueStackId = stackId,
