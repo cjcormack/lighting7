@@ -1032,14 +1032,11 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * The toggle route is **siblingless**, and stays that way. Exclusivity moved to the busk page:
-     * a press releases something only when it goes through a solo bank's pad
-     * (`BuskPressRouteTest`). This route serves the programmer's ⌥click strip and the AI, where two
-     * templates on one head are a stack, not a conflict — so `released` is always zero and the
-     * earlier layer survives.
+     * The toggle route has no solo siblings — those are a busk bank's — but a palette still takes its
+     * heads off the other palettes of its family and kind, as it does through every door.
      */
     @Test
-    fun `the toggle route releases nothing`() = testApplication {
+    fun `the toggle route replaces a palette of the same family`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
@@ -1059,9 +1056,9 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             }.body()
 
         press(amber.id)
-        val loose = press(blue.id)
-        assertEquals(0, loose.released)
-        assertEquals(2, state.show.programmerStore.layers.size, "both layers stand")
+        val blueOn = press(blue.id)
+        assertEquals(1, blueOn.released, "a palette replaces its family's other palettes on its heads (apply-model D2)")
+        assertEquals(listOf("blue"), state.show.programmerStore.layers.map { it.source.name })
     }
 
     /**
@@ -1919,6 +1916,49 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertEquals(74u.toUByte(), zone.value.white, "extracted to the zone's own white emitter")
         assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"), "the parent has no colour to hold")
         assertNull(heldColour("shehds-2.zone-1"), "the unselected Shehds is untouched")
+    }
+
+    @Test
+    fun `apply with write false answers each zone's literal and writes nothing`() = testApplication {
+        mountTestApp(state)
+        seedShehds()
+        val client = jsonClient()
+        val template = client.amberTemplate()
+
+        val resp = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "shehds-1")), write = false))
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val body = resp.body<ApplyTemplateResponse>()
+
+        assertEquals(zones("shehds-1").toSet(), body.values.map { it.target.key }.toSet())
+        assertTrue(body.values.all { it.propertyName == "rgbColour" && it.value.startsWith("#") }, body.values.toString())
+        assertEquals(3, body.written, "what it would have written")
+        for (zone in zones("shehds-1")) assertNull(heldColour(zone), "$zone holds nothing")
+        val after = client.get("${base()}/${template.id}").body<TemplateDto>()
+        assertNull(after.lastPressedAt, "a resolve is not a press")
+    }
+
+    @Test
+    fun `apply with write false starts no effect`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val template = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "cycle", effect = colourEffect()))
+        }.body<TemplateDto>()
+        val before = state.show.fxEngine.getActiveEffects().size
+
+        val resp = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1")), write = false))
+        }
+
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        assertTrue(resp.body<ApplyTemplateResponse>().effectIds.isEmpty())
+        assertEquals(before, state.show.fxEngine.getActiveEffects().size)
     }
 
     @Test

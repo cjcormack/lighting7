@@ -1093,6 +1093,24 @@ class FxEngine(
     }
 
     /**
+     * A programmer layer's *Detach*, effect half: every instance [layerId] spawned loses its layer
+     * key and its [FxInstance.source], so it is a Local effect ([FxInstance.isLocalEffect]) that
+     * keeps its id, phase and band priority and that no recook will retract. A spent N-shot is
+     * removed instead, since only a layer keeps one. Returns how many keep running.
+     */
+    fun detachProgrammerLayerEffects(layerId: Int): Int {
+        val spawned = activeEffects.values.filter { it.programmerLayerEffectKey?.layerId == layerId }
+        if (spawned.isEmpty()) return 0
+        val (spent, running) = spawned.partition { it.spent }
+        for (effect in running) {
+            effect.programmerLayerEffectKey = null
+            effect.source = null
+        }
+        if (spent.isNotEmpty()) removeEffects(spent.map { it.id }) else emitStateUpdate()
+        return running.size
+    }
+
+    /**
      * Re-rank live programmer-layer effects in place (`instanceId → new priority`).
      *
      * Layer order *is* effect order, and it is expressed as a priority offset within the programmer

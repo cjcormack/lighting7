@@ -30,9 +30,11 @@ import java.util.UUID
  * `BuskPressRouteTest` holds a guard asserting the two agree on both arms, so a change to `toggle`'s
  * comparison fails there rather than drifting here.
  */
-internal fun pressWouldRelease(state: State, sourceUuid: UUID, targets: List<CueTargetDto>): Boolean {
+internal fun pressWouldRelease(state: State, sourceUuid: UUID, requested: List<CueTargetDto>): Boolean {
     val layers = state.show.programmerStore.layers
     val coverage = TargetCoverage { state.show.fixtures }
+    // The targets `toggle` will press: a per-fixture palette pressed with none names its rows'.
+    val targets = state.show.programmerLayerStack.pressTargets(sourceUuid, requested)
     val pressed = coverage.expand(targets).toSet()
     if (pressed.isEmpty()) {
         return layers.any { it.source.uuid == sourceUuid && sameTargets(it.targets, targets) }

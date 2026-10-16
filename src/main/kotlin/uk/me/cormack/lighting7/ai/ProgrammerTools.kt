@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.groupHintsForTargets
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -41,7 +42,6 @@ import uk.me.cormack.lighting7.routes.TemplatePressLog
 import uk.me.cormack.lighting7.routes.applyTemplateToProgrammer
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.familyOf
-import uk.me.cormack.lighting7.routes.groupHintsForTargets
 import uk.me.cormack.lighting7.routes.isGenericTemplate
 import uk.me.cormack.lighting7.routes.parseEnumOrNull
 import uk.me.cormack.lighting7.routes.performProgrammerRecordLook
@@ -209,11 +209,12 @@ internal class ProgrammerTools(private val state: State) {
 
     private fun applyTemplateUnguarded(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
-        val layer = when (val mode = input.text("mode") ?: "LITERALS") {
-            "LITERALS" -> false
-            "LAYER" -> true
-            else -> return errorResult("Unknown mode '$mode': LITERALS or LAYER")
+        // A layer that tracks the palette by default, as the desk's press is (apply-model D9). The
+        // `mode` this replaced is refused rather than ignored: ignored, LITERALS would toggle a layer.
+        if (input.present("mode") != null) {
+            return errorResult("'mode' is gone: apply_palette puts on a layer by default; pass asValues: true for literals")
         }
+        val layer = input.flag("asValues") != true
         val requested = parseTargets(input, required = false).getOrElse { return errorResult(it.message ?: "Bad arguments") }.orEmpty()
         val families = maskOf(input)
         val fadeMs = if (input.present("fadeSeconds") == null) null else fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
@@ -249,7 +250,7 @@ internal class ProgrammerTools(private val state: State) {
 
     private class Found(val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean)
 
-    /** The ⌥click: the toggle route's path, siblingless. */
+    /** The press: the toggle route's path, with no solo siblings. */
     private fun toggleTemplate(
         projectId: Int,
         found: Found,
@@ -269,15 +270,16 @@ internal class ProgrammerTools(private val state: State) {
             success = true,
             description = "${outcome.action} palette '${found.source.name}' as a layer",
             result = buildJsonObject {
-                put("mode", "LAYER")
+                put("asValues", false)
                 put("action", outcome.action)
                 put("effectCount", outcome.effectCount)
+                if (outcome.released > 0) put("released", outcome.released)
                 found.family?.let { put("propertyMask", it.name) }
             }.toString(),
         )
     }
 
-    /** The click: literals (or a detached effect copy) through [applyTemplateToProgrammer]. */
+    /** `asValues`: literals (or a detached effect copy) through [applyTemplateToProgrammer]. */
     private fun applyTemplateLiterals(
         projectId: Int,
         found: Found,
@@ -312,7 +314,7 @@ internal class ProgrammerTools(private val state: State) {
                             (if (response.skipped.isNotEmpty()) ", ${response.skipped.size} skipped" else "")
                     },
                     result = buildJsonObject {
-                        put("mode", "LITERALS")
+                        put("asValues", true)
                         put("written", response.written)
                         if (response.effectIds.isNotEmpty()) {
                             put("effectIds", buildJsonArray { response.effectIds.forEach { add(JsonPrimitive(it)) } })

@@ -478,7 +478,7 @@ class DefaultSurfaceActions(
      * A template onto the desk selection, through `toggle` with the template's own derived family
      * mask — the server derives it because which family a template layer belongs to is a fact about
      * the template, not about the press (the ⌥click rule, `CLAUDE.md` §The two apply gestures).
-     * Siblingless: a button is not in a bank. Under the desk selection's attribute mask the same
+     * No solo siblings: a button is not in a bank (the family replacement is `toggle`'s own). Under the desk selection's attribute mask the same
      * rule as every other door: a template whose family is outside it is refused by name, and the
      * refusal is a log line because a button has no reply channel (multi-screen plan D5).
      */

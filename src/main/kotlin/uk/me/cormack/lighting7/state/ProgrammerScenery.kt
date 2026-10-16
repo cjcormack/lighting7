@@ -9,6 +9,12 @@ import uk.me.cormack.lighting7.models.MAX_SCENERY_TRANSITION
 import uk.me.cormack.lighting7.models.SceneryElementInfo
 import uk.me.cormack.lighting7.models.parseSceneryState
 import java.util.UUID
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.models.DaoLookScenery
+import uk.me.cormack.lighting7.models.DaoLookSceneryRow
+import uk.me.cormack.lighting7.models.decodeSceneryState
 
 /**
  * The programmer's own scenery (scenery-programmer plan D1): a sparse overlay of element states
@@ -125,6 +131,33 @@ class ProgrammerScenery(
         return emptyList()
     }
 
+    /**
+     * A Look's scenery handed to the programmer — a layer's Detach, or a Look applied as values
+     * (apply-model plan §3.5): each state the programmer does not already hold, merged in under the
+     * ones it does, moved on each piece's own travel. [projectId] guards a Look read from a project
+     * this overlay has left. Answers how many elements gained a state.
+     */
+    fun holdUnder(projectId: Int, rows: Map<UUID, ElementStates>): Int = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != projectId) return 0
+        val elements = LinkedHashMap(current.elements)
+        var changed = 0
+        for ((uuid, state) in rows) {
+            val held = elements[uuid]
+            val merged = ElementStates(
+                visible = held?.state?.visible ?: state.visible,
+                open = held?.state?.open ?: state.open,
+                trimM = held?.state?.trimM ?: state.trimM,
+            )
+            if (merged == held?.state) continue
+            releases.remove(uuid)
+            elements[uuid] = Held(merged, held?.fadeMs, held?.transitionMs)
+            changed++
+        }
+        if (changed > 0) _flow.value = current.copy(elements = elements)
+        changed
+    }
+
     /** One element as Include loads it: the source's own states for it, and a cue row's clock. */
     data class Included(val elementUuid: UUID, val state: ElementStates, val transitionMs: Long?)
 
@@ -215,5 +248,20 @@ class ProgrammerScenery(
         val out = if (releases.isEmpty()) emptyMap() else HashMap(releases)
         if (takeReleases) releases.clear()
         _flow.value to out
+    }
+}
+
+/**
+ * Each Look's own scenery rows by Look id, element uuid to states — what a programmer Look layer
+ * shows (`SceneryService`'s `lookScenery`, keyed for [ProgrammerScenery.holdUnder]). Opens its own
+ * transaction.
+ */
+internal fun lookSceneryOf(database: Database, lookIds: Collection<Int>): Map<Int, Map<UUID, ElementStates>> {
+    if (lookIds.isEmpty()) return emptyMap()
+    return transaction(database) {
+        DaoLookSceneryRow.find { DaoLookScenery.look inList lookIds.toList() }
+            .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+            .groupBy { it.look.id.value }
+            .mapValues { (_, rows) -> rows.associate { it.element.uuid to decodeSceneryState(it.stateJson) } }
     }
 }

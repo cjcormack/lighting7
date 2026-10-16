@@ -34,6 +34,7 @@ import uk.me.cormack.lighting7.show.aimAt
 import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
 import kotlin.math.roundToInt
+import uk.me.cormack.lighting7.fx.groupHintsForTargets
 
 /**
  * 400 code: the point is not a stage coordinate — refused by [checkStageCoord], the bound a patch's
