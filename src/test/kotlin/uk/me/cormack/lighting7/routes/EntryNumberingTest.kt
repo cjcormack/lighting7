@@ -158,7 +158,7 @@ class EntryNumberingTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a move — add, then remove — renumbers the stack it left as well as the one it joined`() = testApplication {
+    fun `adding to one stack and removing from another renumbers both`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val act1 = createStack(client, "Act 1")

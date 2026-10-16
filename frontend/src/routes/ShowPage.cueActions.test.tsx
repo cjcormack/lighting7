@@ -9,11 +9,11 @@ import type { Cue } from '@/api/cuesApi'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 /**
- * Venue-visit plan S3, through the gestures an operator makes: the real view switcher there and
- * back (`ShowPage.test.tsx` covers the page's URL rules with the cue list stubbed), and the real
- * *Duplicate* and *Edit in Programmer* buttons on an expanded cue card. `ShowView`, `StackDetail`
- * and `CueCardEditor` are mounted for real; the network, the card's read surface and the transport
- * are not.
+ * Venue-visit plan S3 and show-cue-editing plan session 3, through the gestures an operator makes:
+ * the real view switcher there and back (`ShowPage.test.tsx` covers the page's URL rules with the
+ * cue list stubbed), and the real cue action set on an expanded cue card — Duplicate, the split
+ * button and the lock. `ShowView`, `StackDetail`, `CueCardEditor` and `CueActions` are mounted for
+ * real; the network, the card's read surface and the transport are not.
  */
 
 // ── Controllable data layer ──
@@ -25,7 +25,7 @@ const stacksState = {
 const programState = {
   data: { activeStackId: null as number | null, canEdit: true },
 }
-const mutation = () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))]
+const mutation = () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), { isLoading: false }]
 vi.mock('../store/cueStacks', () => ({
   useProjectCueStackListQuery: () => stacksState,
   useProjectProgramStateQuery: () => programState,
@@ -39,10 +39,15 @@ vi.mock('../store/cueStacks', () => ({
   usePatchCueStackEntryMutation: () => mutation(),
   useRemoveCueStackEntryMutation: () => mutation(),
   useAddCueToStackMutation: () => mutation(),
+  useMoveCueStackEntryMutation: () => mutation(),
 }))
-const createCue = vi.fn((_input: Record<string, unknown>) => ({ unwrap: () => Promise.resolve({ id: 77 }) }))
+const duplicateCue = vi.fn((_arg: Record<string, unknown>) => ({
+  unwrap: () => Promise.resolve({ cueId: 77, name: 'Q2 (copy)', stackId: 10, entryId: 177 }),
+}))
 vi.mock('../store/cues', () => ({
-  useCreateProjectCueMutation: () => [createCue],
+  useDuplicateCueMutation: () => [duplicateCue],
+  useDeleteCuesMutation: () => mutation(),
+  useCueDeletePreviewQuery: () => ({ data: undefined, isFetching: false, isError: false }),
   usePatchProjectCueMutation: () => mutation(),
   useProjectCueQuery: ({ cueId }: { cueId: number }) => ({ data: fullCue(cueId), isFetching: false }),
   useProjectCueListQuery: () => ({ data: [] }),
@@ -75,7 +80,20 @@ vi.mock('../hooks/useShowBarProps', () => ({
     standbyCue: null,
   }),
 }))
-const include = vi.fn((_cueId: number, _entryId?: number) => Promise.resolve<object | null>({ fixtureKeys: [], groupKeys: [], warnings: [] }))
+/** What the cue actions sent, in order — Blind edit must switch Blind on before it Includes. */
+const sent: string[] = []
+const include = vi.fn((_cueId: number, _entryId?: number) => {
+  sent.push('include')
+  return Promise.resolve<object | null>({ fixtureKeys: [], groupKeys: [], warnings: [] })
+})
+const blindOn = vi.fn((_fadeMs?: number) => {
+  sent.push('blind')
+  return Promise.resolve(true)
+})
+vi.mock('../store/programmer', () => ({
+  programmerBlindOn: (fadeMs?: number) => blindOn(fadeMs),
+  useProgrammerSummaryQuery: () => ({ data: { blind: false, entryCount: 0, lastIncluded: null } }),
+}))
 vi.mock('../components/programmer/useInclude', () => ({
   useInclude: () => ({ includeCue: include, isLoading: false }),
 }))
@@ -105,7 +123,8 @@ vi.mock('@/components/stage/OwnerEditor', () => ({ OwnerEditor: () => null }))
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
 
 import { store } from '../store'
-import { unlockRequested } from '../store/editLockSlice'
+import { lockRequested, unlockRequested } from '../store/editLockSlice'
+import { resetShowIncludeForTests } from '../lib/showInclude'
 import { resetShowPositionStore } from '../lib/showPosition'
 import { ViewSwitcher } from '../components/ViewSwitcher'
 import { ShowPage } from './ShowPage'
@@ -200,6 +219,8 @@ function pill(label: string) {
 beforeEach(() => {
   sessionStorage.clear()
   resetShowPositionStore()
+  resetShowIncludeForTests()
+  sent.length = 0
   stacksState.data = [mkStack(), mkStack({ id: 11, name: 'Act 2', sortOrder: 1, cues: [] })]
   programState.data = { activeStackId: null, canEdit: true }
   // A stopped show is editable anyway; unlocked keeps the card's action row whatever the lock says.
@@ -271,37 +292,70 @@ describe('the Show position survives a round trip through the switcher (S3)', ()
   })
 })
 
-describe('the cue card’s actions (S3)', () => {
-  it('Duplicate appends the copy to the end of the stack and opens it', async () => {
+describe('the cue card’s actions (S3, show-cue-editing plan session 3)', () => {
+  it('Duplicate appends the copy to the end of the stack and opens it by its entry', async () => {
     draw(['/projects/1/show/stacks/10?cue=42'])
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-    await waitFor(() => expect(createCue).toHaveBeenCalledTimes(1))
-    const input = createCue.mock.calls[0][0]
-    // No sortOrder: the desk appends at max + 1. The original's (1) put it beside the source.
-    expect(input.sortOrder).toBeUndefined()
-    expect(input.cueNumber).toBeNull()
-    expect(input.cueStackId).toBe(10)
-    expect(input.name).toBe('Q2 (copy)')
-    await waitFor(() => expect(where()).toBe('/projects/1/show/stacks/10?cue=77'))
+    // The desk's route: the copy goes to the end of the source's stack (D12).
+    await waitFor(() => expect(duplicateCue).toHaveBeenCalledWith({ projectId: 1, cueId: 42, stackId: 10 }))
+    await waitFor(() => expect(where()).toBe('/projects/1/show/stacks/10?cue=77&entry=177'))
   })
 
-  it('Edit in Programmer includes the cue and then opens the programmer', async () => {
+  it('Edit in programmer includes the cue and then opens the programmer', async () => {
     draw(['/projects/1/show/stacks/10?cue=42'])
-    fireEvent.click(screen.getByRole('button', { name: 'Edit in Programmer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit in programmer' }))
     // Naming the entry it was included from, so the indicator says this place's number.
     expect(include).toHaveBeenCalledWith(42, 142)
     await waitFor(() => expect(where()).toBe('/projects/1/programmer'))
+    expect(blindOn).not.toHaveBeenCalled()
     // And the switcher brings the operator back to the cue they were editing.
     pill('Show')
     expect(where()).toBe('/projects/1/show/stacks/10?cue=42')
   })
 
-  it('Edit in Programmer stays on Show when the Include is refused', async () => {
+  it('Edit in programmer stays on Show when the Include is refused', async () => {
     include.mockResolvedValueOnce(null)
     draw(['/projects/1/show/stacks/10?cue=42'])
-    fireEvent.click(screen.getByRole('button', { name: 'Edit in Programmer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit in programmer' }))
     await waitFor(() => expect(include).toHaveBeenCalledTimes(1))
     await act(async () => {})
     expect(where()).toBe('/projects/1/show/stacks/10?cue=42')
+  })
+
+  it('the split button’s face flips with the run state, amber on Blind edit (D6)', () => {
+    draw(['/projects/1/show/stacks/10?cue=42'])
+    const stopped = document.querySelector('[data-cue-actions="strip"] [data-split-face]')
+    expect(stopped?.getAttribute('data-split-face')).toBe('edit')
+    cleanup()
+    programState.data = { activeStackId: 10, canEdit: true }
+    draw(['/projects/1/show/stacks/10?cue=42'])
+    const running = document.querySelector('[data-cue-actions="strip"] [data-split-face]')
+    expect(running?.getAttribute('data-split-face')).toBe('blind')
+    expect(screen.getByRole('button', { name: 'Blind edit in programmer' }).className).toContain('bg-amber-500')
+  })
+
+  it('locked, Blind edit sends Blind and then Include, and opens the programmer', async () => {
+    programState.data = { activeStackId: 10, canEdit: true }
+    store.dispatch(lockRequested())
+    draw(['/projects/1/show/stacks/10?cue=42'])
+    fireEvent.click(screen.getByRole('button', { name: 'Blind edit in programmer' }))
+    await waitFor(() => expect(where()).toBe('/projects/1/programmer'))
+    expect(sent).toEqual(['blind', 'include'])
+    expect(include).toHaveBeenCalledWith(42, 142)
+  })
+
+  it('locked, every other action asks to unlock and does nothing', async () => {
+    programState.data = { activeStackId: 10, canEdit: true }
+    store.dispatch(lockRequested())
+    draw(['/projects/1/show/stacks/10?cue=42'])
+    for (const name of ['Load into programmer', 'Record…', 'Duplicate', 'Remove from stack', 'Delete…']) {
+      fireEvent.click(screen.getByRole('button', { name }))
+      expect(await screen.findByText('Unlock the show to edit?')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Stay locked' }))
+      await waitFor(() => expect(screen.queryByText('Unlock the show to edit?')).toBeNull())
+    }
+    expect(duplicateCue).not.toHaveBeenCalled()
+    expect(include).not.toHaveBeenCalled()
+    expect(blindOn).not.toHaveBeenCalled()
   })
 })

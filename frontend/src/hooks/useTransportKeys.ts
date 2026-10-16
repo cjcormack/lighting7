@@ -53,7 +53,7 @@ export function useTransportKeys({
       // `closest` so a keypress on a child of an editable region is caught as well. `false` is
       // excluded deliberately: `contenteditable="false"` means *not* editable.
       if (target?.closest?.('[contenteditable=""], [contenteditable="true"]')) return
-      if (target?.closest?.('[role="dialog"]')) return
+      if (target?.closest?.('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
 
       // `L` is checked *before* the activatable-element guard below, and only `L`. That guard exists
       // because a focused button takes Space as its own activation, so firing GO as well is a double

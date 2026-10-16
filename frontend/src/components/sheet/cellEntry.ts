@@ -141,7 +141,8 @@ export function marqueeOwnsKeyTarget<C extends string = string>(
 }
 
 /**
- * A key the grid must not hear at all: typed into a field, or pressed inside a dialog.
+ * A key the grid must not hear at all: typed into a field, or pressed inside a dialog or an open
+ * menu (Escape in the cue action set's menu closes the menu, not the selection).
  *
  * **Both dialog roles.** Radix's `AlertDialog` is `role="alertdialog"`, not `dialog` — the batch
  * delete's *Keep them / Delete anyway*, the cue sheet's unlock question, the sheet primitive's
@@ -151,7 +152,7 @@ export function marqueeOwnsKeyTarget<C extends string = string>(
  */
 export function keyTargetIsGuarded(target: EventTarget | null): boolean {
   if (isEditableTarget(target instanceof Element ? target : null)) return true
-  return target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"]') != null
+  return target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]') != null
 }
 
 /**

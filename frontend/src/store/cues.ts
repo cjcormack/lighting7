@@ -10,6 +10,7 @@ import type {
   CueCookedResponse,
   DeleteCuesRequest,
   DeleteCuesResponse,
+  DuplicateCueResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -150,6 +151,43 @@ export const cuesApi = restApi.injectEndpoints({
       keepUnusedDataFor: 0,
     }),
 
+    /**
+     * Delete cues after the confirm has listed every use (lighting7 cue model plan D8): `force`, so
+     * the entries, pads, slots and anchors go with them. A `FireCue` binding is left reporting its
+     * cue missing (`FU-CUE-BINDING-SWEEP`).
+     */
+    deleteCues: build.mutation<DeleteCuesResponse, { projectId: number; cueIds: number[] }>({
+      query: ({ projectId, cueIds }) => ({
+        url: `projects/${projectId}/cues/delete`,
+        method: 'POST',
+        body: { cueIds, force: true } satisfies DeleteCuesRequest,
+      }),
+      invalidatesTags: (_result, _error, { projectId, cueIds }) => [
+        { type: 'CueList', id: projectId },
+        'CueList',
+        { type: 'CueStackList', id: projectId },
+        ...cueIds.map((id) => ({ type: 'Cue' as const, id })),
+        'PromptBook',
+      ],
+    }),
+
+    /**
+     * *Duplicate*: a full copy of the cue — its rows, layers, effects, hooks, scenery and events —
+     * appended to the end of `stackId`'s list, or loose without one (show-cue-editing plan D12).
+     */
+    duplicateCue: build.mutation<DuplicateCueResponse, { projectId: number; cueId: number; stackId: number | null }>({
+      query: ({ projectId, cueId, stackId }) => ({
+        url: `projects/${projectId}/cues/${cueId}/duplicate`,
+        method: 'POST',
+        body: stackId == null ? {} : { stackId },
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueList', id: projectId },
+        'CueList',
+        { type: 'CueStackList', id: projectId },
+      ],
+    }),
+
     // `copyCue` stood here, fired by a `CopyCueDialog` that was deleted before this sweep;
     // copying a cue between projects is `cloneProject` or an export/import today. The route
     // remains server-side.
@@ -199,6 +237,8 @@ export const {
   usePatchProjectCueMutation,
   useDeleteProjectCueMutation,
   useCueDeletePreviewQuery,
+  useDeleteCuesMutation,
+  useDuplicateCueMutation,
   useApplyCueMutation,
   useStopCueMutation,
 } = cuesApi

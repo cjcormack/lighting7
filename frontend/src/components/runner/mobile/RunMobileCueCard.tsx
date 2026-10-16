@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 import { useCueFade } from '@/hooks/useCueFade'
@@ -26,6 +27,8 @@ interface RunMobileCueCardProps {
   fadeStackId?: number | null
   /** Prompt-book reading position for this cue, e.g. "top of p. 9". */
   location?: string | null
+  /** The cue's ⋯ action menu, when the host offers one. */
+  actions?: ReactNode
 }
 
 /**
@@ -44,6 +47,7 @@ export function RunMobileCueCard({
   onChange,
   fadeStackId = null,
   location,
+  actions,
 }: RunMobileCueCardProps) {
   const mode = expansion?.card === kind ? expansion.mode : null
   // A sentinel cueId when there's no cue (pre-show, or nothing on deck): no real cue has id -1,
@@ -89,6 +93,7 @@ export function RunMobileCueCard({
       onModeChange={(next) => onSetExpansion(next == null ? null : { card: kind, mode: next })}
       location={location}
       headerTrailing={headerTrailing}
+      actions={actions}
       fadeProgress={fadeProgress}
       fadeRemainMs={fadeRemainMs}
     />

@@ -18,6 +18,14 @@ const patchEntry = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+/** What the bar hands the cue action set — the actions themselves are `CueActions.test.tsx`'s. */
+const cueActions: { last?: Record<string, unknown> } = {}
+vi.mock('./CueActions', () => ({
+  CueActions: (props: Record<string, unknown>) => {
+    cueActions.last = props
+    return <div data-testid="cue-actions" />
+  },
+}))
 // The scene the Scenery column names its elements from, and its editor — the editor's own rows are
 // `SceneryEditor.test.tsx`'s; here it says only which cue it was opened on.
 const SCENE = [
@@ -562,5 +570,29 @@ describe('CueSheet · Scenery (scenery-programmer plan D13)', () => {
     // …and does not come back with the unlock.
     rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
+  })
+
+  it('carries the cue action set on the bar, over the selected cues in row order, markers left out', () => {
+    stubFlatLayout()
+    const unlock = vi.fn()
+    draw({ locked: true, onRequestUnlock: unlock })
+    expect(screen.queryByTestId('cue-actions')).toBeNull()
+    // A marquee down the Fade column from cue 2 over the Interval marker to cue 4.
+    dragFade(1, 3)
+    expect(screen.getByTestId('cue-actions')).toBeTruthy()
+    expect(cueActions.last).toMatchObject({ host: 'bar', locked: true, onRequestUnlock: unlock })
+    expect((cueActions.last!.rows as { cueId: number; entryId: number; stackId: number }[]).map((r) => [r.cueId, r.entryId, r.stackId])).toEqual([
+      [2, 102, 10],
+      [4, 104, 10],
+    ])
+    // After Set · Clear · Spread, before Deselect.
+    const bar = screen.getByTestId('cue-actions').parentElement!
+    const order = [...bar.children].map((el) => el.getAttribute('data-testid') ?? el.textContent ?? '')
+    const at = order.indexOf('cue-actions')
+    const setAt = order.findIndex((t) => t.includes('Set'))
+    const deselectAt = order.findIndex((t) => t.includes('Deselect'))
+    expect(setAt).toBeGreaterThanOrEqual(0)
+    expect(setAt).toBeLessThan(at)
+    expect(at).toBeLessThan(deselectAt)
   })
 })

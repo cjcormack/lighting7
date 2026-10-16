@@ -3,10 +3,7 @@ import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from '
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
-import { useCreateProjectCueMutation } from '../store/cues'
 import { useProjectProgramStateQuery } from '../store/cueStacks'
-import type { Cue } from '../api/cuesApi'
-import { buildCueInput } from '../lib/cueUtils'
 import { setShowPosition } from '../lib/showPosition'
 import { useShowBarProps } from '../hooks/useShowBarProps'
 import { useEditLock } from '../hooks/useEditLock'
@@ -24,7 +21,6 @@ import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { ShowBar } from '../components/ShowBar'
 import { ShowView } from '../components/runner/ShowView'
 import { RecordSheet } from '../components/programmer/RecordSheet'
-import { useInclude } from '../components/programmer/useInclude'
 import type { CueStack } from '../api/cueStacksApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import {
@@ -51,15 +47,6 @@ const STACK_LIST_STATE = { showStacks: true } as const
 
 function isStackListRequest(state: unknown): boolean {
   return typeof state === 'object' && state !== null && (state as { showStacks?: unknown }).showStacks === true
-}
-
-/** The cue's display name for the Record sheet's header, or undefined if it has vanished. */
-function cueNameFor(stacks: CueStack[] | undefined, cueId: number): string | undefined {
-  for (const stack of stacks ?? []) {
-    const cue = stack.cues?.find((c) => c.id === cueId)
-    if (cue) return cue.name
-  }
-  return undefined
 }
 
 export function ShowRedirect() {
@@ -220,19 +207,9 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   // busk view's Show tab; the hook's docblock has the three things to know about the sequence.
   const handleMakeLive = useMakeStackLive(projectIdNum, activeStackId, transport)
 
-  const [createCue] = useCreateProjectCueMutation()
-
-  // Record replaces the old "Grab live state" button. Grab-live is still reachable — it is
-  // `source: 'STAGE_SNAPSHOT'` in the Record sheet — but it is no longer the only way to get
-  // the stage into a cue, and it was the lossy one.
-  const { includeCue, isLoading: includePending } = useInclude(projectIdNum)
-  const [recordCueId, setRecordCueId] = useState<number | null>(null)
   /**
-   * Record into a *new* cue in this stack — what replaced "Add Cue".
-   *
-   * A separate piece of state from `recordCueId` rather than a union, because the two name ids from
-   * different tables: a cue id and a stack id collide freely, and `RecordSheet` keys its draft on
-   * which one it was given. Folding them together is exactly the bug `ProgrammerSheets` documents.
+   * Record into a *new* cue in this stack — what replaced "Add Cue". Recording into an existing cue
+   * is the cue's own action set's (`CueActions`), which mounts its own Record sheet.
    */
   const [recordStackId, setRecordStackId] = useState<number | null>(null)
 
@@ -305,47 +282,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
 
   const initialDrillDoneRef = useRef(false)
 
-  const handleDuplicate = useCallback(
-    async (cue: Cue) => {
-      if (drillStackId == null) return
-      try {
-        const input = buildCueInput(cue)
-        input.name = cue.name + ' (copy)'
-        input.cueNumber = null
-        input.cueStackId = drillStackId
-        // **The copy goes to the end of the stack** (venue-visit plan S3; show-cue-editing plan D12
-        // adopts it). The original's `sortOrder` put it beside the source — sharing that slot, so
-        // which of the two played first was the database's choice. With none the desk appends at
-        // `max + 1`, and the copy takes the next auto number while every other cue keeps its own.
-        input.sortOrder = undefined
-        const result = await createCue({ projectId: projectIdNum, ...input }).unwrap()
-        setExpandedCueId(result.id)
-      } catch {
-        // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
-      }
-    },
-    [drillStackId, projectIdNum, createCue, setExpandedCueId],
-  )
-
-  const handleRecordInto = useCallback((cueId: number) => setRecordCueId(cueId), [])
-
   const handleRecordIntoStack = useCallback((stackId: number) => setRecordStackId(stackId), [])
-
-  /**
-   * *Edit in Programmer* is Include **and then the programmer** (venue-visit plan S3): the cue is
-   * changed there, so staying on Show after loading it left the operator one more click from the
-   * thing they had asked for. Only once the Include has landed — a refusal is toasted by
-   * `useInclude` and leaves them here, on the cue they pressed. The way back is the view switcher,
-   * which returns to this stack and this cue (`lib/showPosition.ts`).
-   */
-  const handleIncludeCue = useCallback(
-    (cueId: number, entryId: number) => {
-      void includeCue(cueId, entryId).then((response) => {
-        if (response != null) navigate(`/projects/${projectIdNum}/programmer`)
-      })
-    },
-    [includeCue, navigate, projectIdNum],
-  )
 
   /**
    * The sheet's read-outs open a cue's *card*: the cards view with `?cue=` — tagged as the
@@ -596,6 +533,13 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
             fadeStackId={activeStackId}
             activeLocation={activeCue ? locationByCue.get(activeCue.id) ?? null : null}
             standbyLocation={standbyCue ? locationByCue.get(standbyCue.id) ?? null : null}
+            // The ⋯ menus follow the lock itself, not the phone's always-locked layout: the menu is
+            // the editing chrome that fits a phone, and a locked action asks to unlock (D8, D9).
+            cueActions={{
+              locked: editLock.locked,
+              onRequestUnlock: editLock.lockRelevant ? editLock.toggleLock : undefined,
+              fromShowView: true,
+            }}
           />
         </div>
       ) : (
@@ -655,11 +599,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               isExpanded={isExpanded}
               onToggleExpanded={toggleExpanded}
               openedEntryId={openedEntryId}
-              onDuplicate={handleDuplicate}
-              onRecordInto={handleRecordInto}
               onRecordIntoStack={handleRecordIntoStack}
-              onIncludeCue={handleIncludeCue}
-              includePending={includePending}
               view={stackView}
               onOpenCue={handleOpenCue}
               onOpenBook={handleOpenBook}
@@ -672,15 +612,6 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
         </div>
       )}
 
-      {recordCueId != null && (
-        <RecordSheet
-          open
-          onOpenChange={(open) => !open && setRecordCueId(null)}
-          projectId={projectIdNum}
-          targetCueId={recordCueId}
-          targetCueName={cueNameFor(stacks, recordCueId)}
-        />
-      )}
       {recordStackId != null && (
         <RecordSheet
           open
