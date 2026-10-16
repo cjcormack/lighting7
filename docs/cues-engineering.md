@@ -496,7 +496,8 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 
 ### Navigation
 - Cues nav item in `ProjectSwitcher.tsx` (visible for all projects)
-- `QuickNavCard` in `ProjectOverview.tsx` (current project only)
+- The Show card on a show's home (`routes/ProjectHome.tsx`), counting its stacks and the project's
+  cues once each (`NavItem.homeCount`)
 - Routes in `App.tsx`: `/projects/:projectId/cues` and `/cues` redirect
 
 ## MCP tools

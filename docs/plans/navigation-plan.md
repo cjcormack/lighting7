@@ -311,7 +311,7 @@ venue's hidden ids, so the row adds `cues` to both.)
 | Detach from venue… | a show on a venue held here | venue |
 | Attach to venue… | a standalone show (`venue-attach-plan.md`) | venue |
 | Extract a venue… | admin, a standalone show | venue |
-| History · Publish vN… | a venue (Publish: admin, with draft changes) | venue |
+| History · Publish vN… | an admin on a venue (Publish disabled, *Nothing to publish*, with no draft changes — the band's button's rule) | venue |
 | Delete | a show, or an admin on a venue; disabled when current | danger |
 
 - **The four places render from it:**

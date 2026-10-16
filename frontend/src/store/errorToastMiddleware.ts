@@ -28,7 +28,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'importProject', // src/ImportProjectDialog.tsx
   'finishOnboarding', // src/components/onboarding/OnboardingProjectsStep.tsx — inline alert
   'exportProject', // src/ExportProjectDialog.tsx
-  'deleteProject', // src/routes/Projects.tsx
+  'deleteProject', // src/components/projectActions/ProjectActions.tsx — says every refusal in its dialog
   // BUSK_PAGE_NAME_TAKEN is an ordinary step in naming a page, shown beside the field.
   'createBuskPage', // src/components/busking/BuskPageStrip.tsx
   // A saved view's duplicate name is an ordinary step in naming it, shown beside the field.

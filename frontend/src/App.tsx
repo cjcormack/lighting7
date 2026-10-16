@@ -27,7 +27,7 @@ import { BuskRedirect, ProjectBusk } from "./routes/Busk";
 import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
-import ProjectOverview, { ProjectOverviewRedirect } from "./routes/ProjectOverview";
+import ProjectHome, { ProjectHomeRedirect } from "./routes/ProjectHome";
 import { PatchesRedirect, ProjectPatches } from "./routes/Patches";
 import { ShowPage, ShowRedirect } from "./routes/ShowPage";
 import {
@@ -133,11 +133,11 @@ function getAppRouter() {
       children: [
         {
           index: true,
-          element: <ProjectOverviewRedirect />,
+          element: <ProjectHomeRedirect />,
         },
         {
           path: "projects/:projectId",
-          element: <ProjectOverview />,
+          element: <ProjectHome />,
         },
         {
           path: "projects/:projectId/fixtures/list",

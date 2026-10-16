@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
@@ -109,6 +110,33 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
+
+## `FU-MANUAL-VENUE-VISIT-NAV-4`
+
+**What it proves**: *a show's home and its one set of actions on a real desk* — venue-visit Nav.4,
+navigation plan session 4 (§5.1, §6): the home's status block reads the rig as the banners and the
+switcher do, and the Projects card, the home, the switcher and ⌘K offer one show the same actions.
+
+**Why it is here**: the tests pin the lines and the action sets against stubbed state; only a desk
+shows the held line beside a stage that is held, a *Sync now* against a real repo, the live cue
+moving as a GO lands, and the home's folds on the iPad and a phone.
+
+**Test**, on Sleeping Beauty (held behind TCH venue), TCH Test and a show whose venue version the
+desk lacks:
+
+1. **Held.** With Sleeping Beauty on the rig and held, its home's Venue line reads *On TCH venue v7 ·
+   held* in red with *Review update*, *Run against v7…* and *Open venue*; *Run against* lifts the hold
+   and the line turns amber with *Hold output*.
+2. **Live and sync.** GO a cue: the Live line names it within a moment. *Sync now* on an admin's home
+   syncs and the line's time resets; an operator's home has no Sync line.
+3. **Sections.** The cards are the sidebar's rows less Desk, Show reads *2 stacks · 35 cues* as the
+   Show view counts them, and on TCH Test (off the rig) the Programmer, Stage and Fixtures cards are
+   muted with the hollow dot; one opens the *not on the rig* page.
+4. **Actions.** TCH Test's ⋮ on its card, on its home and in ⌘K (viewing it) offer the same items;
+   the switcher's row offers Open, Make current and Settings. On the show whose venue is missing,
+   *Make current* is refused with its reason in all four, and nothing switches.
+5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
+   *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
 
 ## `FU-MANUAL-VENUE-VISIT-NAV-3`
 
