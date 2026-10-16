@@ -40,6 +40,7 @@ import {
   PAGE_FOLLOWS_OPTION,
   WINDOW_VIEWS,
   projectIdOfPath,
+  windowViewProject,
   windowViewOf,
   windowViewPath,
   type WindowView,
@@ -51,6 +52,7 @@ import { cn } from '@/lib/utils'
 import { setShowingBuskPage, useBuskPagesQuery, useBuskShowingPageQuery } from '@/store/busk'
 import { VIEW_OPTION_PAGE } from '@/lib/buskWindow'
 import { useViewedProject } from '@/ProjectSwitcher'
+import { useProjectListQuery } from '@/store/projects'
 import {
   renameWindowRow,
   setWindowFollow,
@@ -169,6 +171,8 @@ function ScreensSheetBody() {
   const meRowId = thisWindowRow(windows, windowId())?.id ?? null
   const viewedProject = useViewedProject()
   const fallbackProjectId = viewedProject?.id ?? null
+  const { data: projects } = useProjectListQuery()
+  const currentProjectId = projects?.find((p) => p.isCurrent)?.id ?? null
   const duplicateNames = useMemo(() => {
     const seen = new Map<string, number>()
     for (const w of windows) seen.set(w.name, (seen.get(w.name) ?? 0) + 1)
@@ -191,6 +195,7 @@ function ScreensSheetBody() {
               isMe={row.id === meRowId}
               showUser={duplicateNames.has(row.name)}
               fallbackProjectId={fallbackProjectId}
+              currentProjectId={currentProjectId}
             />
           ))}
         </ul>
@@ -205,11 +210,14 @@ function WindowRow({
   isMe,
   showUser,
   fallbackProjectId,
+  currentProjectId,
 }: {
   row: DeskWindow
   isMe: boolean
   showUser: boolean
   fallbackProjectId: number | null
+  /** The project on the rig, where a view that needs it is shown (navigation plan D4). */
+  currentProjectId: number | null
 }) {
   const local = useFullscreenState()
   const fullscreen = isMe ? local.active : row.fullscreen
@@ -220,7 +228,7 @@ function WindowRow({
   const onPickView = (id: string) => {
     const next = WINDOW_VIEWS.find((v) => v.id === id)
     if (next == null || projectId == null) return
-    showOnWindow(row.id, windowViewPath(next, projectId))
+    showOnWindow(row.id, windowViewPath(next, windowViewProject(next, projectId, currentProjectId)))
   }
 
   const onFullscreen = () => {

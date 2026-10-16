@@ -19,7 +19,8 @@ import { ProjectSyncContent } from "./CloudSync"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 import { useVenueMode } from "@/store/venues"
 import { SeatingPresetCard } from "@/components/venue/SeatingPresetCard"
-import { useShownTabs } from "@/navigation"
+import { OFF_RIG_LABEL, useShownTabs } from "@/navigation"
+import { NotOnRig, OffRigDot } from "@/components/NotOnRig"
 
 // No `patches`: the patch list is a routed page again at `/projects/:id/patches` (CLAUDE.md
 // §List shell), and `App.tsx` redirects `/settings/patches` there.
@@ -28,7 +29,8 @@ type Tab = (typeof TABS)[number]
 
 /**
  * The nav row each tab opens: a tab is offered exactly where its row is (navigation plan P2) —
- * Surfaces on the project on the rig, Sync to an admin.
+ * Sync to an admin, and Surfaces always, but off the rig with D4's dot over a `NotOnRig` body,
+ * since its bindings editor reads the live desk's devices.
  */
 const TAB_NAV_IDS: Record<Tab, string> = {
   general: "project-settings",
@@ -54,6 +56,7 @@ export function ProjectSettings() {
   const venueMode = useVenueMode(projectIdNum)
   const venueReadOnly = venueMode.isVenue && !venueMode.canEdit
   const shown = useShownTabs(TAB_NAV_IDS, project)
+  const offRig = (t: Tab) => shown.get(t) === "offRig"
 
   // A tab its row hides, reached by URL, opens General — as the sidebar lights Settings.
   const activeTab: Tab = isTab(tab) && shown.has(tab) ? tab : "general"
@@ -90,7 +93,12 @@ export function ProjectSettings() {
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            {shown.has("surfaces") && <TabsTrigger value="surfaces">Surfaces</TabsTrigger>}
+            {shown.has("surfaces") && (
+              <TabsTrigger value="surfaces" title={offRig("surfaces") ? OFF_RIG_LABEL : undefined}>
+                Surfaces
+                {offRig("surfaces") && <OffRigDot />}
+              </TabsTrigger>
+            )}
             {/* Regions, as its Rig row says: Run's Stage row is the Stage view. */}
             {shown.has("stage") && <TabsTrigger value="stage">Regions</TabsTrigger>}
             {shown.has("rigging") && <TabsTrigger value="rigging">Rigging</TabsTrigger>}
@@ -98,14 +106,25 @@ export function ProjectSettings() {
           </TabsList>
         </Tabs>
       </div>
+      {/* Outside the fieldset below: making a project current is a runtime gesture an operator
+          may make on a venue, which a disabled fieldset would take away. */}
+      {activeTab === "surfaces" && offRig("surfaces") && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <NotOnRig project={project} navId="surfaces" embedded />
+        </div>
+      )}
       {/* An operator looks at a venue; only an admin changes one (venue plan D3). A disabled
           fieldset turns off every control in the tabs at once; the Rigging and Regions lists
           also stop opening their editors. */}
-      <fieldset disabled={venueReadOnly} className="m-0 min-w-0 flex-1 overflow-y-auto min-h-0 border-0 p-0">
+      <fieldset
+        disabled={venueReadOnly}
+        hidden={activeTab === "surfaces" && offRig("surfaces")}
+        className="m-0 min-w-0 flex-1 overflow-y-auto min-h-0 border-0 p-0"
+      >
         {activeTab === "general" && (
           <GeneralTab projectId={projectIdNum} />
         )}
-        {activeTab === "surfaces" && <SurfacesContent projectId={projectIdNum} />}
+        {activeTab === "surfaces" && !offRig("surfaces") && <SurfacesContent projectId={projectIdNum} />}
         {activeTab === "stage" && <StageTab projectId={projectIdNum} />}
         {activeTab === "rigging" && <RiggingTab projectId={projectIdNum} />}
         {activeTab === "sync" && <ProjectSyncContent projectId={projectIdNum} />}

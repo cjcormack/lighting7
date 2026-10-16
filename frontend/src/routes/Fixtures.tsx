@@ -24,7 +24,7 @@ import { useIsDeskConnected } from "../store/status"
 import { GroupDetailModal } from "../components/fixtures/GroupDetailModal"
 import { FixtureDetailModal } from "../components/groups/FixtureDetailModal"
 import { OpenSheetButton } from "../components/fixtureSheet/OpenSheetButton"
-import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { useProjectQuery } from "../store/projects"
 import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
 
 /** The page's Properties / Channels toggle, which every card follows. */
@@ -43,14 +43,8 @@ export function FixturesRedirect() {
 export function ProjectFixtures() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const location = useLocation()
-
-  // If viewing a non-current project, redirect to the current project
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/fixtures`} replace />
-  }
 
   // Sticky view: the sidebar's single "Fixtures" entry points here, so honour
   // the last-used view. The switcher's Cards segment both rewrites the
@@ -60,7 +54,7 @@ export function ProjectFixtures() {
     return <Navigate to={`/projects/${projectIdNum}/fixtures/list`} replace />
   }
 
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
         <Loader2 className="size-6 animate-spin" />

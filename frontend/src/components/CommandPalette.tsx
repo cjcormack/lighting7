@@ -8,7 +8,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
+import { useProjectListQuery } from "@/store/projects"
+import { cn } from "@/lib/utils"
 import { useVisibleFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
@@ -148,7 +149,6 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const [search, setSearch] = useState("")
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery(undefined, closed)
-  const { data: currentProject } = useCurrentProjectQuery(undefined, closed)
   const { data: fixtures } = useVisibleFixtureListQuery(closed)
   const { data: groups } = useGroupListQuery(undefined, closed)
   const allNavItems = useNavItems()
@@ -161,12 +161,14 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const parkedCount = parkStateList?.length ?? 0
 
   const viewedProject = useViewedProject()
-  const isViewingActiveProject = viewedProject?.id === currentProject?.id
+  // On the rig is the server's `isCurrent` (navigation plan P4), which agrees with the sidebar's answer.
+  const isViewingActiveProject = viewedProject?.isCurrent === true
   const windowCommands = useWindowCommands(viewedProject?.id ?? null)
   // A venue's palette drops the show's views, as its rail does (venue plan §4).
   const isVenue = viewedProject?.kind === "VENUE"
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin, isVenue)
-  const visibleUniverseItems = filterNavItems(universeNavItems, isViewingActiveProject)
+  // A universe item names the live rig's universes, so only the project on the rig is offered them.
+  const visibleUniverseItems = isViewingActiveProject ? filterNavItems(universeNavItems, true) : []
   const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject, true, isVenue)
 
   const activePage = pages[pages.length - 1] ?? "root"
@@ -263,10 +265,14 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     value={commandLabelOf(item)}
                     keywords={item.keywords}
                     onSelect={() => runAction(() => navigate(item.path(viewedProject.id)))}
-                    className={itemClassName}
+                    className={cn(itemClassName, item.offRig && "text-muted-foreground")}
+                    data-off-rig={item.offRig ? "" : undefined}
                   >
                     <item.icon className="size-4 text-muted-foreground" />
-                    {commandLabelOf(item)}
+                    <span className="flex-1">{commandLabelOf(item)}</span>
+                    {/* Off the rig a row is still offered and opens its view's `NotOnRig` page,
+                        as the sidebar's does (navigation plan D4, P2). */}
+                    {item.offRig && <span className="text-xs text-muted-foreground">Not on the rig</span>}
                   </Command.Item>
                 ))}
               </Command.Group>
