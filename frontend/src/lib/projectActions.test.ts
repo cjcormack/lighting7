@@ -71,6 +71,15 @@ describe('who sees what (§6)', () => {
     expect(actionOf(missing, ctx(), 'clone').enabled).toBe(false)
   })
 
+  it('a show pinned past the venue’s newest version: the version, not the venue, is missing', () => {
+    const ahead = { ...onVenue(7), venue: { ...onVenue(7).venue!, version: 9, installed: 8 } }
+    expect(visibleIds(ahead, ctx())).toEqual(['make-current', 'settings', 'clone', 'export', 'delete'])
+    const make = actionOf(ahead, ctx(), 'make-current')
+    expect(make.enabled).toBe(false)
+    expect(make.reason).toBe('Its venue, TCH venue v9, isn’t on this desk')
+    expect(make.refusalLabel).toBe('Version not here')
+  })
+
   it('a venue, to an admin: history and publish, clone, export and delete', () => {
     const history = { installed: 8, draft: { changes: 3, outputChanges: 1 } }
     expect(visibleIds(venue, ctx({ venueHistory: history }))).toEqual([

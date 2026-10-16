@@ -9,7 +9,7 @@ import type { VenueHoldState } from '@/api/venueHoldApi'
 import CreateProjectDialog from '@/CreateProjectDialog'
 import ProjectSwitchConfirmDialog from '@/ProjectSwitchConfirmDialog'
 import { useIsNavAdmin } from '@/navigation'
-import { projectActions, type ProjectAction } from '@/lib/projectActions'
+import { rigRowActions, type ProjectAction } from '@/lib/projectActions'
 import {
   RIG_DOT_LABEL,
   pinChipOf,
@@ -164,7 +164,7 @@ const valueOf = (p: ProjectSummary) => `project-${p.id}`
 
 /**
  * The switcher's menu (§4.2): search, *On the rig*, Shows and Venues, each sorted by name. A row
- * offers its project's *rig* actions (`lib/projectActions.ts`, P3) — Open, Make current, Settings.
+ * offers its project's *rig* actions (`rigRowActions` in `lib/projectActions.ts`, P3) — Open and Make current.
  * Enter opens the highlighted row's home — the first match while typing — and ⌥Enter makes it
  * current.
  */
@@ -188,12 +188,7 @@ export function SwitcherMenu({
 }) {
   const isAdmin = useIsNavAdmin()
   const rigActions = (project: ProjectSummary): ProjectAction[] =>
-    projectActions(project, {
-      place: 'switcher',
-      isAdmin,
-      host: { navigate: onNavigate, open: () => onMakeCurrent(project) },
-    // A row has room for Open and Make current; Settings is a press away on the home, the sidebar and ⌘K.
-    }).filter((a) => a.group === 'rig' && a.visible && a.id !== 'settings')
+    rigRowActions(project, { isAdmin, host: { navigate: onNavigate, open: () => onMakeCurrent(project) } })
   const actionOf = (project: ProjectSummary, id: ProjectAction['id']) => rigActions(project).find((a) => a.id === id)
   const [query, setQuery] = useState('')
   const groups = switcherGroupsOf(projects, query)

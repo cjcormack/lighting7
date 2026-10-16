@@ -2421,11 +2421,16 @@ venue's paint.
 venue's, so the request's is not stored. `ProjectDto` carries `venue: {uuid, id, name, version,
 installed, behind, drawingChanges}` (`behind` below, §"Behind, the hold and Update"); the list's
 venue rows carry `venueSummary: {version, publishedAt, patches, universes, riggings, fixedSeating,
-shows, behind}`, the Projects page's venue card. **A venue a show pins cannot be deleted** (409
+shows, behind}`, the Projects page's venue card and the venue's home (`/projects/:id`, navigation
+plan §5.2), which reads its version line from it for an operator and lists the shows on the venue
+from the list's `venue` pins. **A venue a show pins cannot be deleted** (409
 `VENUE_IN_USE`, naming the shows): a show's rows link into its version's rows by id, and the venue's
 delete takes its versions; Detach (§"Detach") is the way off. A new show may also take a copy of
 one of the version's Preset seating blocks (`seatingPresetUuid`, §"Seating presets"). History answers `shows` — every show
-on the venue with its version — which the Publish sheet and History name.
+on the venue with its version — which the Publish sheet and History name. A venue's home names them
+from the project list instead, which says how far behind each is, with *Open* and *Make current*;
+beside the Projects page it is where a venue's version, draft and sync are read, and History and
+*Publish vN…* have a door there as well as on the band.
 
 ### Facet overrides
 

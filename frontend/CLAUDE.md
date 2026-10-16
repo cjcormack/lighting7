@@ -6404,8 +6404,10 @@ breadcrumb name the viewed one. `document.title` is *Show · Desk name* from the
 name substring, so cmdk's scoring cannot reorder the groups; `shouldFilter={false}`). A row reads
 *name · detail* (`switcherDetailOf`: the pin, *no venue*, or a venue's *v8 · 2 shows*) with its
 project's **rig** actions from `projectActions` (below): *Open*, *Make current* on every project but
-the current one — or *Venue not here* for a show whose pinned version is not on this desk (the
-action's `refusalLabel`, its reason on the title). *Settings* is left off a row, which has room for
+the current one — or *Venue not here* for a show whose venue is not on this desk, *Version not here*
+for one whose venue is but holds no version, or none as new as the pin (the action's
+`refusalLabel`, its reason on the title; `venueMissing` in `lib/projectSwitch.ts` is the one rule,
+the desk's `VenuePins.isMissing` as far as the list can tell). *Settings* is left off a row, which has room for
 two buttons beside a venue's name on a phone; it is a press away on the home, the sidebar and ⌘K.
 The row's own press is Open. **Enter opens the highlighted row's home** — the first match while typing, since a search
 re-highlights the first row drawn — and **⌥Enter makes it current** through the confirmation (the
@@ -6455,7 +6457,7 @@ group's *Settings*, which takes its words. The table:
 | Clone… | a show, or an admin on a venue; refused for a show whose venue version is not here | copy |
 | Export… | an admin | copy |
 | Update venue to vN… | a show on a venue it is behind | venue |
-| Detach from venue… | a show on a venue this desk holds | venue |
+| Detach from venue… | a show on a venue this desk holds at its pinned version | venue |
 | Attach to venue… | a standalone show — a disabled slot until `venue-attach-plan.md` builds it | venue |
 | Extract a venue… | an admin, a standalone show | venue |
 | History · Publish vN… | an admin on a venue; Publish refused with nothing to publish | venue |
@@ -6468,13 +6470,15 @@ reads — and answers the actions and the dialogs to mount, each mounted only wh
 switcher calls `projectActions` with its own host, whose one dialog is its confirmation. The
 predicates are what is offered, never a permission: the desk refuses whatever it refuses.
 `projectActions.test.ts` pins the table per kind, role and state; `ProjectActionPlaces.test.tsx`
-renders the four places and pins that the card, the home's ⋮ and ⌘K offer one set, and that a show
-whose venue is missing offers no working *Make current* in any of them.
+renders the four places and pins that the card, the home's ⋮ and ⌘K offer one set — a venue's too,
+to an admin and an operator — that a show whose venue is missing offers no working *Make current*
+in any of them, and that ⌘K's *History* and *Publish vN…* for a viewed venue carry their reasons and
+open the band's sheets.
 
 ### A project's home
 
-**`/projects/:id` is a show's home** (navigation plan D2, §5.1; `routes/ProjectHome.tsx`), and it
-leads with status. The header (`ProjectHomeHeader`) is the name and description, then **On the rig**
+**`/projects/:id` is a project's home** (navigation plan D2, §5.1, §5.2; `routes/ProjectHome.tsx`),
+and it leads with status. A show's is below; a venue's follows it. The header (`ProjectHomeHeader`) is the name and description, then **On the rig**
 (green) or **Make current** (refused for a missing venue version, with the reason under it), then the
 ⋮. The status block is one line per fact:
 
@@ -6505,10 +6509,41 @@ cues move to the Cues row when it lands. The cue list and not `ProjectDetail.cue
 list's tag is the one a cue write invalidates. Off the rig the `needsRig` cards take D4's treatment —
 muted, `OffRigDot`, *Needs the project on the rig* — and their counts (Show's, fixtures, groups,
 universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
-because the list shows them. A **venue** keeps the old overview's cards (`VenueOverview`) under the
-same header and ⋮ until its own home (§5.2). `ProjectHome.test.tsx` pins the sections against the
-rendered sidebar, the held show's *Review update* and *Run against*, the counts and the off-rig
-cards; `projectHome.test.ts` the lines.
+because the list shows them. A venue's home draws no Show or Library card, so it reads none of
+their lists. `ProjectHome.test.tsx` pins the sections against the rendered sidebar, the held show's
+*Review update* and *Run against*, the counts and the off-rig cards; `projectHome.test.ts` the
+lines. The status line, the Sync line and the sections are `components/projectHome/HomeParts.tsx`,
+which both homes draw from.
+
+**A venue's home** (§5.2, Nav.5; `components/projectHome/VenueHome.tsx`) has the same header — the
+name and the *Venue* tag, *On the rig* or *Make current*, the ⋮ — and the same sections, which the
+venue filter leaves as Run (Programmer, Stage), Rig and Project: there is no Library. Its status
+block is:
+
+- **Version**: *v8 · 14 Oct 2026 · “re-patched LX2”* (`venueVersionLineOf`), clamped to two lines
+  with the whole of it on the hover, since a note can run to a paragraph. An admin's is read from
+  the venue's history, which carries the note; an operator's — the history route is an admin's —
+  from the project list's `venueSummary`, which has the version and its date and no note. *History*
+  is the venue's own action from `projectActions`, opening the sheet the band and the ⋮ open.
+- **Draft**, an admin's: *Draft: 3 changes (1 changes output)* (`draftLineOf`) in the band chip's
+  colours, read through `useVenueHistory` — the band's own read, so the two count one draft. *Publish
+  v9…* is the action too, refused with *Nothing to publish* (written under the line) as the band's
+  button is, and *Discard* opens `DiscardDraftDialog` where History offers it: a version to go back to
+  and changes to lose.
+- **Sync**, an admin's: `SyncRow` with `useSyncNow`'s `isVenue` arm, so a run toasts the versions it
+  fetched and pushed.
+
+Then **Shows on this venue**: `VenueShowsList`, which History and the Publish sheet draw plain, here
+with each show's pin and how it stands (`venueShowsOf` over the project list, by name: the pin chip's
+*held*, *v8 published* or *not on this desk*, and the green dot on the one on the rig) and its *Open*
+and *Make current* — the show's own **rig** actions, `rigRowActions` in `projectActions`, which the
+switcher's rows read too — through the one `ProjectSwitchConfirmDialog`. While the project list is
+being read the list and the Version line say *Reading…*, never that the venue has no shows. So a show whose pinned version is not here shows
+*Version not here* with the reason on its title, and no button. An operator sees the version and the
+shows and no Draft, Publish, Discard or Sync. **`VenueBand` stays** across a venue's views; the home
+is History and Publish's second, permanent door. The band's sentence takes a basis rather than
+`flex-1` and its chip and two buttons wrap, so on a phone the band no longer pushes the page 56px
+wide and at 768 with the sidebar open it is two lines, not a word to a line.
 
 `lib/projectSwitch.test.ts` pins the words and the order; `AppBarSwitcher.test.tsx` the button and
 its hold, the menu's order, search with Enter and ⌥Enter through the confirmation (which names the

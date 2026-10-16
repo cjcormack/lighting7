@@ -222,7 +222,8 @@ venue's hidden ids, so the row adds `cues` to both.)
 - **Search.** The search box filters by name. Typing and then Enter opens the first match's home,
   and ⌥Enter makes it current.
 - **Make current** is shown on every project but the current one, to both roles, as Activate is
-  today. A `VENUE_MISSING` show's row shows the reason instead (`ProjectDto.venue.id == null`).
+  today. A `VENUE_MISSING` show's row shows the reason instead (`venueMissing`: the venue isn't here, or
+  holds no version at or above the pin).
 - **The footer.**
   - *New show…* opens `CreateProjectDialog`.
   - *All projects…* goes to `/projects`.
