@@ -31,7 +31,7 @@ interface PromptBookCueCardProps {
   /** Whether this card shows its Details, owned by the page so it can persist across
    *  cue changes (the live cue carries the last-used view). null = collapsed. */
   mode: ExpansionMode | null
-  onModeChange: (cueId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
+  onModeChange: (entryId: number, status: CueRunStatus, mode: ExpansionMode | null) => void
   /**
    * The live stack id, or null when this cue's own stack isn't it — gates this card's own
    * `useCueFade` subscription, which drives the amber fade bar/badge on the live (cur) card.
@@ -47,14 +47,14 @@ interface PromptBookCueCardProps {
    * fresh per-row closure on every render — which is what makes `memo` below hold.
    */
   onCueClick: (cue: FlatCue) => void
-  onToggleExpanded: (cueId: number) => void
-  onSetStandby: (cueId: number) => void
-  onRemoveAnchor: (cueId: number) => void
-  onEditCue: (cueId: number) => void
+  onToggleExpanded: (entryId: number) => void
+  onSetStandby: (entryId: number) => void
+  onRemoveAnchor: (entryId: number) => void
+  onEditCue: (entryId: number) => void
   /** Rename the cue. Only wired up while the book is unlocked. */
   onRenameCue: (cueId: number, name: string) => void
-  /** Set (or clear, with null) the cue number. Only wired up while unlocked. */
-  onRenumberCue: (cueId: number, cueNumber: string | null) => void
+  /** Set (or clear, with null) the entry's number. Only wired up while unlocked. */
+  onRenumberCue: (entryId: number, cueNumber: string | null) => void
   /** Set (or clear, with null) the cue's note. Only wired up while unlocked. */
   onRenoteCue: (cueId: number, notes: string | null) => void
   /**
@@ -180,12 +180,12 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation()
-                onRemoveAnchor(cue.cueId)
+                onRemoveAnchor(cue.entryId)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.stopPropagation()
-                  onRemoveAnchor(cue.cueId)
+                  onRemoveAnchor(cue.entryId)
                 }
               }}
               aria-label={`Remove anchor for ${cue.label}`}
@@ -205,7 +205,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        onToggleExpanded(cue.cueId)
+        onToggleExpanded(cue.entryId)
       }}
       aria-label={expanded ? `Collapse ${cue.label}` : `Expand ${cue.label}`}
       aria-expanded={expanded}
@@ -221,12 +221,12 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       tabIndex={0}
       onClick={(e) => {
         e.stopPropagation()
-        onSetStandby(cue.cueId)
+        onSetStandby(cue.entryId)
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.stopPropagation()
-          onSetStandby(cue.cueId)
+          onSetStandby(cue.entryId)
         }
       }}
       aria-label={`Set ${cue.label} as the next cue`}
@@ -238,13 +238,13 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
 
   if (expanded) {
     return (
-      <div className="my-1" data-rail-cue={cue.cueId}>
+      <div className="my-1" data-rail-entry={cue.entryId}>
         <CueCardBody
           kind={STATUS_KIND[status]}
           cue={cueEntry ?? null}
           projectId={projectId}
           mode={mode}
-          onModeChange={(m) => onModeChange(cue.cueId, status, m)}
+          onModeChange={(m) => onModeChange(cue.entryId, status, m)}
           location={
             anchored
               ? positionLabel(anchor.region, coverPages)
@@ -256,7 +256,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
           fadeProgress={fadeProgress}
           fadeRemainMs={fadeRemainMs}
           onBodyClick={() => onCueClick(cue)}
-          onCueNumberCommit={editable ? (next) => onRenumberCue(cue.cueId, next) : undefined}
+          onCueNumberCommit={editable ? (next) => onRenumberCue(cue.entryId, next) : undefined}
           onCueNameCommit={editable ? (next) => onRenameCue(cue.cueId, next) : undefined}
           onNotesCommit={editable ? (next) => onRenoteCue(cue.cueId, next) : undefined}
           headerTrailing={
@@ -301,7 +301,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onEditCue(cue.cueId)
+                  onEditCue(cue.entryId)
                 }}
                 className="inline-flex items-center gap-1 font-medium text-sky-400 hover:underline"
               >
@@ -366,7 +366,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onCueClick(cue)
       }}
-      data-rail-cue={cue.cueId}
+      data-rail-entry={cue.entryId}
       className={cn(
         'group my-0.5 flex w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 rounded-md border px-2.5 py-2 text-left',
         isLive
@@ -409,7 +409,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               // rather than `cue.label`: both come from the stack list, so clearing a number
               // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
               formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} />}
-              onCommit={(next) => onRenumberCue(cue.cueId, next.trim() || null)}
+              onCommit={(next) => onRenumberCue(cue.entryId, next.trim() || null)}
               ariaLabel="cue number"
               placeholder="Q#"
               // Whatever the cell ends up showing, in full — it is the same cell that folds

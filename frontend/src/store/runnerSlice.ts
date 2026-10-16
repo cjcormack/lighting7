@@ -21,6 +21,12 @@ interface FadeAnim extends RunnerAnimSpan {
 interface StackRunnerState {
   activeCueId: number | null
   standbyCueId: number | null
+  /**
+   * Which entry of `standbyCueId` is armed, where the slice knows it — an armed press or a server
+   * frame. Null after a local GO or BACK walk, which moves by cue; readers then fall back to the
+   * server's next entry (`entryIdOfCue`).
+   */
+  standbyEntryId: number | null
   completedCueIds: number[]
   /**
    * The live cue's fade, written once by `useRunnerAnimation` when the animation starts. Null
@@ -70,6 +76,7 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
     state.stacks[stackId] = {
       activeCueId: null,
       standbyCueId: null,
+      standbyEntryId: null,
       completedCueIds: [],
       fade: null,
       auto: null,
@@ -138,6 +145,7 @@ export const runnerSlice = createSlice({
       s.fade = null
       s.auto = null
       s.standbyCueId = nextStandardCue(cues, s.activeCueId, loop)
+      s.standbyEntryId = null
     },
 
     back(state, action: PayloadAction<{ stackId: number; cues: CueStackCueEntry[] }>) {
@@ -145,6 +153,7 @@ export const runnerSlice = createSlice({
       const s = getOrCreate(state, stackId)
       s.fade = null
       s.auto = null
+      s.standbyEntryId = null
 
       if (s.activeCueId != null) {
         // Mid-fade: return standby to the cue that was fading
@@ -235,6 +244,7 @@ export const runnerSlice = createSlice({
           // `serverNextCueId` when the caller has it (the backend owns "next"); the local walk
           // is the fallback for a caller that doesn't, e.g. a stack loaded without run state.
           standbyCueId: serverNextCueId ?? nextStandardCue(cues, serverActiveCueId, loop ?? false),
+          standbyEntryId: null,
           completedCueIds: completed,
           fade: null,
           auto: null,
@@ -248,6 +258,7 @@ export const runnerSlice = createSlice({
         state.stacks[stackId] = {
           activeCueId: null,
           standbyCueId: serverNextCueId ?? firstStandardCue(cues),
+          standbyEntryId: null,
           completedCueIds: [],
           fade: null,
           auto: null,
@@ -262,7 +273,7 @@ export const runnerSlice = createSlice({
 
     setStandby(
       state,
-      action: PayloadAction<{ stackId: number; cueId: number }>,
+      action: PayloadAction<{ stackId: number; cueId: number; entryId?: number | null }>,
     ) {
       // Re-queue: user clicked a cue to set it as the next GO target.
       // Optimistic only — the caller POSTs `/standby` and the server's `cueRunStateChanged`
@@ -270,6 +281,7 @@ export const runnerSlice = createSlice({
       // completedCueIds so the "done" tick doesn't stick around for a cue we just cued up again.
       const s = getOrCreate(state, action.payload.stackId)
       s.standbyCueId = action.payload.cueId
+      s.standbyEntryId = action.payload.entryId ?? null
       s.completedCueIds = s.completedCueIds.filter((id) => id !== action.payload.cueId)
     },
 
@@ -290,6 +302,7 @@ export const runnerSlice = createSlice({
       s.serverAutoAdvance = action.payload.autoAdvance
       s.serverAutoAdvanceDelayMs = action.payload.autoAdvanceDelayMs
       s.standbyCueId = nextCueId
+      s.standbyEntryId = action.payload.nextEntryId ?? null
       if (nextCueId != null) {
         s.completedCueIds = s.completedCueIds.filter((id) => id !== nextCueId)
       }
@@ -348,6 +361,7 @@ export const {
 const EMPTY_STACK_RUNNER: StackRunnerState = {
   activeCueId: null,
   standbyCueId: null,
+  standbyEntryId: null,
   completedCueIds: [],
   fade: null,
   auto: null,

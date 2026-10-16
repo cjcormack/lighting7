@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
@@ -104,6 +105,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
+
+## `FU-MANUAL-VENUE-VISIT-R1-4`
+
+**What it proves**: *one cue, several stacks, and delete as its own act* — venue-visit R1.4, cue model
+plan session 4 (§3.6, §4, §9): `add-cue` shares a cue rather than moving it, *Remove from stack* never
+deletes one, a stack delete leaves its cues, and deleting a cue in use is refused until forced.
+
+**Why it is here**: the route tests prove each rule on a seeded rig; nothing ran them through the
+Show view's cards and confirms against a real show, or watched the stage while the live entry went.
+
+**Test**, on a scratch copy of a show with two stacks:
+
+1. **Share.** On a card of stack A, *Add to stack…* → B. Both cards show *in 2 stacks*; rename the cue
+   on one and read the new name on the other. Give it a number in B: A's number does not change.
+2. **Remove the live entry.** GO stack A onto the shared cue, then *Remove from stack* on that card.
+   Nothing on stage moves and A reads the next cue on deck; GO, and the following cue comes in.
+3. **Delete a stack.** Delete B with *Also delete* left unticked: its cues are still in A (or loose).
+   Delete a stack again with it ticked: the confirm lists the pads and slots of the cues it would take.
+4. **Delete a cue in use.** Put a cue on a busk pad, then delete it from somewhere that offers it (the
+   Cues table from R1.5, or `DELETE /cues/{id}` until then): it is refused, naming the stack entry and
+   the pad; forced, both are gone and the pad's page redraws.
 
 ## `FU-MANUAL-VENUE-VISIT-R1-3`
 

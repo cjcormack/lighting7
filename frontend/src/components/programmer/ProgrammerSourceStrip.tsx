@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils'
 import { formatFamilyList } from '@/lib/attributeFamily'
 import { canClaimInSync, resolveProgrammerSource } from '@/lib/programmerSource'
 import type { ProgrammerSource } from '@/lib/programmerSource'
-import { includedCueId } from '@/lib/includedTarget'
+import { includedCueEntry } from '@/lib/includedTarget'
 import { useProgrammerSummaryQuery } from '@/store/programmer'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { useProjectCueListQuery } from '@/store/cues'
 import { useVenueMode } from '@/store/venues'
 import { useLookListQuery } from '@/store/looks'
 import { useIncludeBaseline } from './useIncludeBaseline'
@@ -177,21 +178,24 @@ export function ProgrammerSourceStrip({
   // Only to label the Look's families; skipped entirely when a cue (or nothing) is included.
   const { data: looks } = useLookListQuery({ projectId }, { skip: lookId == null })
 
-  const cueId = includedCueId(target)
+  const placed = useMemo(() => includedCueEntry(target, stacks), [target, stacks])
+  // A cue in no stack the list holds is loose or deleted; only the project's cue list, which holds
+  // loose cues too, can say which. Read only for that case.
+  const includedId = target?.kind === 'CUE' ? target.cueId : null
+  const { data: projectCues } = useProjectCueListQuery(projectId, { skip: placed !== null })
   const cueLocation = useMemo(() => {
-    // `undefined` while the stack list is still in flight, too: an absent list is not evidence the
-    // cue was deleted, and `resolveProgrammerSource` reads a `null` here as exactly that claim.
-    if (cueId == null || stacks == null) return undefined
-    for (const stack of stacks) {
-      const index = stack.cues.findIndex((c) => c.id === cueId)
-      if (index >= 0) {
-        return { stackName: stack.name, position: { index: index + 1, total: stack.cues.length } }
+    // `undefined` while a list is still in flight: an absent list is not evidence the cue was
+    // deleted, and `resolveProgrammerSource` reads a `null` here as exactly that claim.
+    if (placed != null) {
+      return {
+        stackName: placed.stack.name,
+        position: { index: placed.index + 1, total: placed.stack.cues.length },
+        number: placed.row.cueNumber,
       }
     }
-    // Not `undefined`: an explicit null is what tells the resolver the cue has been DELETED, as
-    // opposed to not having been looked up.
-    return null
-  }, [cueId, stacks])
+    if (placed === undefined || projectCues == null) return undefined
+    return projectCues.some((c) => c.id === includedId) ? {} : null
+  }, [placed, projectCues, includedId])
 
   const lookFamilies = useMemo(() => {
     if (lookId == null) return undefined

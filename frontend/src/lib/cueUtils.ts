@@ -107,7 +107,7 @@ export function buildCueInput(cue: Cue): CueInput {
       scriptId: t.scriptId,
       sortOrder: t.sortOrder,
     })),
-    cueStackId: cue.cueStackId,
+    cueStackId: cue.cueStackId ?? undefined,
     sortOrder: cue.sortOrder,
     autoAdvance: cue.autoAdvance,
     autoAdvanceDelayMs: cue.autoAdvanceDelayMs,

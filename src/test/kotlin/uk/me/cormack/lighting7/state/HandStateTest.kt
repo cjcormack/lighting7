@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.routes.BuskCueDto
+import uk.me.cormack.lighting7.routes.CueUseEntryDto
 import uk.me.cormack.lighting7.routes.LookDto
 import uk.me.cormack.lighting7.routes.TemplateDto
 import kotlin.test.Test
@@ -53,7 +54,7 @@ class HandStateTest {
         hasDeferredEffects = false, preview = emptyList(), layerCount = 0, buskPageCount = 0,
     )
     private val cueDto = BuskCueDto(
-        id = 11, uuid = "cue-uuid", name = "Cue 3", cueStackId = 1, cueStackName = "Main",
+        id = 11, uuid = "cue-uuid", name = "Cue 3", entries = listOf(CueUseEntryDto(1, "Main", 5, "3")),
     )
 
     private val template = HandState.Held(BuskPadKind.TEMPLATE, id = 7, uuid = "tmpl-uuid", template = templateDto)

@@ -436,6 +436,24 @@ describe('useShowTransport', () => {
     expect(posts('cue-stacks/10/standby')).toHaveLength(0)
   })
 
+  it('arms the other place of a cue that is live at one, by entry', async () => {
+    // Cue 2 sits at entries 102 and 302 of one stack and is live at 102.
+    const stack = mkStack({ cues: [cue(1), cue(2), cue(2, { entryId: 302 })], activeCueId: 2, activeEntryId: 102 })
+    const { result } = draw({ activeStackId: 10, stacks: [stack] })
+    expect(result.current.activeEntryId).toBe(102)
+    act(() => result.current.setStandby(2, 302))
+    expect(result.current.standbyEntryId).toBe(302)
+    await flush()
+    const posted = posts('cue-stacks/10/standby')
+    expect(posted).toHaveLength(1)
+    expect(JSON.parse(await posted[0].clone().text())).toEqual({ entryId: 302 })
+
+    // The live place itself is never armed.
+    act(() => result.current.setStandby(2, 102))
+    await flush()
+    expect(posts('cue-stacks/10/standby')).toHaveLength(1)
+  })
+
   // ── goDisabled ───────────────────────────────────────────────────────────────────────────────
 
   it('disables the transport when the show is stopped', () => {

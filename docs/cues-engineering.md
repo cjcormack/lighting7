@@ -159,11 +159,12 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/{projectId}/cues` | List all cues for a project |
-| POST | `/{projectId}/cues` | Create a new cue (current project only) |
-| GET | `/{projectId}/cues/{cueId}` | Get cue details |
-| PUT | `/{projectId}/cues/{cueId}` | Update a cue (current project only) |
-| DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only) |
+| GET | `/{projectId}/cues` | List all cues for a project, each with its `entries` |
+| POST | `/{projectId}/cues` | Create a new cue (current project only); without `cueStackId` it is loose |
+| GET | `/{projectId}/cues/{cueId}` | Get cue details; `?entryId=` picks the place the place fields describe |
+| PUT | `/{projectId}/cues/{cueId}` | Update a cue's content (current project only); its number and follow are the entry's |
+| DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only): 409 `CUE_IN_USE` while anything names it, `?force=true` to take those with it (§"Delete") |
+| POST | `/{projectId}/cues/delete` | `{cueIds, force?, dryRun?}` — several at once, all or none (§"Delete") |
 | POST | `/{projectId}/cues/{cueId}/copy` | Copy cue to another project |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
@@ -212,6 +213,27 @@ When a cue is stopped via `POST /{cueId}/stop` (or `stop_cue`, or a second pad o
 
 Deleting a cue drops **every** hold it has (`holds.dropAll`).
 
+### Delete
+
+Deleting a cue is its own operation (cue model plan D1, D8; `routes/cueDelete.kt`), never a side
+effect of removing an entry or deleting a stack.
+
+- **Refused while anything names it.** `DELETE /cues/{id}` on a cue with an entry, a busk pad, a
+  cue slot, a prompt-book anchor or a `FireCue` binding is 409 `CUE_IN_USE`, `{error, code, uses}`,
+  each use listed (`CueUsesDto`: `entries` `{stackId, stackName, entryId, cueNumber}`, `pads`,
+  `slots`, `anchors`, `bindings`). A loose, unused cue deletes straight away.
+- **`?force=true`** takes the cue with everything that names it: every entry (each stack renumbered,
+  a live one detached as Remove from stack detaches it), the anchors on them, its pads and slots,
+  its children, scenery and events, and every hold. A `FireCue` binding is left to report the cue
+  missing, as a binding to a deleted cue always has (`FU-CUE-BINDING-SWEEP`).
+- **Several at once:** `POST /cues/delete {cueIds, force?, dryRun?}` answers `{deleted, uses}`; any
+  cue in use without `force` is 409 `CUE_IN_USE` and nothing is deleted. `dryRun` deletes nothing and
+  lists the uses — what a confirm shows.
+- **A stack delete leaves its cues** (`DELETE /cue-stacks/{id}`): its entries, anchors and set go,
+  and it answers `{looseCueIds, deletedCueIds}`. `?deleteLooseCues=true` (D17) deletes, as a forced
+  delete would, the cues it left in no stack — and only those; a cue another stack still holds stays.
+  The Show view's confirm offers it unticked, listing those cues' pads and slots from a dry run.
+
 ### Colour resolution
 
 Every effect, wherever it is spawned from, gets the **same** colour source:
@@ -256,26 +278,44 @@ carries everything about it that is a matter of the list — its order, its numb
 follow — or a **marker entry**, a labelled divider with no cue behind it. The cue keeps only what it
 *is*: its name, fade, notes, stomp and children. See `cue-stacks-engineering.md` for the stack itself.
 
-- **One entry per cue** (plan P4), for now: every cue has exactly one cue entry, so a cue is still in
-  exactly one stack and `add-cue` still *moves* it. Session 4 lets a cue be in more than one, or none.
-- **The caller names the stack** (P7). Every route that runs or edits a cue's place in a list takes
-  the stack (and, for reorder, standby and go-to, the **entry** id), and no code path picks a "home"
-  stack for a cue. The callers that only hold a cue id — a busk pad, a cue slot, MIDI `FireCue`,
-  `POST /cues/{id}/apply`, the AI's `apply_cue`, `CueDetails`, the rig briefing and the prompt book's
-  cue-keyed routes — go through `soleEntryOf(cue)`, which answers the cue's entry only while it has
-  exactly one. It is the P4 bridge, not a home-stack rule: session 2 turns the ones that make a cue
-  live (pads, slots, `FireCue`, `/apply`, `apply_cue`) into loose holds that need no entry at all,
-  and the reads take an entry from their caller as later sessions reach them (anchors by entry, D4).
+- **A cue may have any number of entries** (plan D1, D7): one in several stacks (**shared**), twice
+  in one, or none (**loose**). Editing a cue changes it everywhere it plays; its number and follow
+  are each entry's own (D2), so a shared cue can be Q14 in one stack and Q3 in another.
+  `POST /cue-stacks/{id}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?}` **adds** an entry,
+  sharing the cue rather than moving it; *Move to stack* is add, then remove.
+- **The caller names the entry** (P7). Every route that runs or edits a cue's place in a list takes
+  the stack and the **entry** id, and nothing picks a "home" stack for a cue. A press that holds a
+  cue loose — a busk pad, a cue slot, MIDI `FireCue`, the hand, `POST /cues/{id}/apply`, the AI's
+  `apply_cue` — needs no entry at all. The include target carries the entry it was included from
+  (`IncludedTarget.entryId`, `POST /programmer/include {cueId, entryId?}`), for the indicator's
+  number. Record and Update write the cue, whichever entry: a held scenery state the cue already
+  tracks is left out only when it tracks it at **every** one of its entries
+  (`writeHeldSceneryIntoCue`), and a loose cue compares against the bases. `soleEntryOf` — a cue's
+  entry only while it has exactly one — is left only for the MCP briefing and `mark_up_prompt_book`,
+  until the plan's session 7 moves them onto entries.
+- **An entry's number and follow** are written on the entry: `PATCH /cue-stacks/{id}/entries/{entryId}`
+  `{cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`, the fields present only, answering the entry's
+  row. A typed number is explicit (409 if another cue entry of the stack has it explicitly, as on `add-cue` and `POST /cues`), a blank
+  one hands the entry back to auto-numbering, and an unchanged one leaves the auto flag alone. The
+  cue's `PUT` / `PATCH` no longer write these.
+- **Remove from stack** is `DELETE /cue-stacks/{id}/entries/{entryId}`: the entry and its prompt-book
+  anchor go, the stack renumbers, and the cue stays — loose if that was its last entry. Removing
+  the **live** entry leaves the stage alone (D16): the stack keeps holding its cue, *detached* at the
+  place it stood (`CueStackManager.detachEntry`), and its next GO fires the entry that followed it
+  (GO BACK the one before), letting the detached hold go. Its scenery still tracks the entries
+  before that place. A carried reload does not bring a detached entry back.
 - **A marker is an entry, never a cue.** `POST /cues` refuses `cueType: "MARKER"` (400, naming the
   markers route); markers are made, renamed and removed through
   `POST/PUT/DELETE /cue-stacks/{id}/markers[/{entryId}]`, and can be neither armed nor fired.
   `CueType` survives only as the wire's word for a row's kind: `CueStackCueEntry.cueType`, and a
   pre-v32 archive's cue record, which the importer still reads.
 
-`CueDetails` carries `cueStackId`, `cueStackName` and `entryId` (all from the cue's one entry), and
-`sortOrder` is the entry's **position** in its list, markers counted. `NewCue` requires `cueStackId`
-(a create without one is a 400) and takes an optional `sortOrder`, a position (appended to the end if
-omitted).
+`CueDetails.entries` lists every entry naming the cue in show order (stacks in show order, then
+position), each with its stack, position, number and follow. Its place fields — `cueStackId`,
+`cueStackName`, `entryId`, `sortOrder` (the entry's **position**, markers counted), the number,
+follow and `trackedScenery` — describe the entry `?entryId=` names, else the cue's only entry, and
+are null for a shared cue read without one, or a loose cue. `NewCue` takes an optional
+`cueStackId` (absent makes a loose cue) and `sortOrder`, a position (appended if omitted).
 
 **In the sync archive** (`formatVersion` 32, cue model plan session 3; `docs/sync-engineering.md`
 §"Version 32"): `cues/{uuid}.json` is what the cue is — name, fade, notes, stomp, scenery, events —

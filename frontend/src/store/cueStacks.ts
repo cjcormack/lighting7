@@ -22,6 +22,8 @@ import type {
   GoToStackRequest,
   ProgramActivateResponse,
   SortByCueNumberResponse,
+  CueEntryPatch,
+  DeleteCueStackResponse,
 } from '../api/cueStacksApi'
 export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 export type { CueType, StackType } from '../api/cueStacksApi'
@@ -79,21 +81,25 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
-    // Deleting a stack cascades its cues (standalone cues no longer exist). Deleting a separator
-    // just removes that divider row.
+    /**
+     * Deleting a stack deletes its entries and never its cues: those it was the last place of are
+     * left loose, unless `deleteLooseCues` deletes them too (everything naming them with them).
+     */
     deleteProjectCueStack: build.mutation<
-      void,
-      { projectId: number; stackId: number }
+      DeleteCueStackResponse,
+      { projectId: number; stackId: number; deleteLooseCues?: boolean }
     >({
-      query: ({ projectId, stackId }) => ({
-        url: `projects/${projectId}/cue-stacks/${stackId}`,
+      query: ({ projectId, stackId, deleteLooseCues }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}${deleteLooseCues ? '?deleteLooseCues=true' : ''}`,
         method: 'DELETE',
       }),
-      invalidatesTags: (_result, _error, { projectId }) => [
+      invalidatesTags: (_result, _error, { projectId, deleteLooseCues }) => [
         { type: 'CueStackList', id: projectId },
         'CueStackList',
         { type: 'CueList', id: projectId },
         'CueList',
+        'PromptBook',
+        ...(deleteLooseCues ? (['BuskPage', 'CueSlotList'] as const) : []),
       ],
     }),
 
@@ -228,9 +234,76 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
-    // `addCueToCueStack` stood here. A cue is created straight into its stack
-    // (`createProjectCue` carries `cueStackId`, the one request that honours it) and ordered
-    // within one by `reorderCueStackCues` — so nothing ever sent the add-cue POST.
+    /**
+     * *Add to stack…*: a new entry naming the cue, appended and auto-numbered. The cue's other
+     * entries are untouched — it is shared, not moved.
+     */
+    addCueToStack: build.mutation<CueStack, { projectId: number; stackId: number; cueId: number }>({
+      query: ({ projectId, stackId, cueId }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/add-cue`,
+        method: 'POST',
+        body: { cueId },
+      }),
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        { type: 'Cue', id: cueId },
+      ],
+    }),
+
+    /**
+     * *Remove from stack*: deletes the entry, never the cue — a cue whose last entry this was is
+     * left loose. The entry's anchor goes with it. `cueId` only keys the cue's caches.
+     */
+    removeCueStackEntry: build.mutation<
+      void,
+      { projectId: number; stackId: number; entryId: number; cueId: number }
+    >({
+      query: ({ projectId, stackId, entryId }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/entries/${entryId}`,
+        method: 'DELETE',
+      }),
+      async onQueryStarted({ projectId, stackId, entryId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
+            const stack = draft.find((s) => s.id === stackId)
+            if (stack) stack.cues = stack.cues.filter((c) => c.entryId !== entryId)
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patchResult.undo()
+        }
+      },
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        { type: 'Cue', id: cueId },
+        'PromptBook',
+      ],
+    }),
+
+    /**
+     * An entry's number and follow — the entry's, not the cue's, so a shared cue numbers each place
+     * on its own. Invalidates what the cue PATCH did; `cueId` keys those and the save indicator.
+     */
+    patchCueStackEntry: build.mutation<
+      CueStackCueEntry,
+      { projectId: number; stackId: number; entryId: number; cueId: number } & CueEntryPatch
+    >({
+      query: ({ projectId, stackId, entryId, cueId: _cueId, ...body }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/entries/${entryId}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'Cue', id: cueId },
+        { type: 'CueStackList', id: projectId },
+      ],
+    }),
 
     activateCueStack: build.mutation<
       CueStackActivateResponse,
@@ -575,6 +648,9 @@ export const {
   useSetCueStackStandbyMutation,
   useCreateMarkerEntryMutation,
   useRenameMarkerEntryMutation,
+  useAddCueToStackMutation,
+  useRemoveCueStackEntryMutation,
+  usePatchCueStackEntryMutation,
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
   useSortCueStackByCueNumberMutation,

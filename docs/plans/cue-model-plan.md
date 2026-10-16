@@ -483,7 +483,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   (`/prompt-book/anchors/{cueId}` today) and `useBookAnchors` name an entry.
 - **Frontend:** the `in N stacks` chip, *Remove from stack*, *Add to stack…*, *Move to stack…*
   (§4), and the stack delete's confirm with its unticked *Also delete* (D17). The Record sheet's
-  stack select (venue-visit S10) has no loose choice today; ask Chris whether it gains *No stack*.
+  stack select (venue-visit S10) gains *No stack* in session 5, with the Cues table (§10, 19).
 - **Tests:** a cue in two stacks edited once reads the same in both; removing an entry renumbers
   the stack it left; removing the live entry moves nothing until the next GO, which fires its
   follower (D16); `deleteLooseCues` deletes only the cues no other stack holds (D17); stack delete leaves its cues loose and their other entries untouched; delete
@@ -499,6 +499,8 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - §3.7, with the list endpoint gaining each cue's entries and *Used by*. `RecordCuePicker`
   (venue-visit S10) reads the same list and labels rows from `cueNumber` and `cueStackName`, so it moves
   to the entries too.
+- **The Record sheet's stack select gains *No stack*** (§10, 19): Record CREATE without a stack has
+  made a loose cue since session 4, and this session's table is where one is found.
 - **Tests:** frontend tests for the filters and the multi-select actions; a route test for the
   list's shape.
 - **Docs:** `frontend/CLAUDE.md`'s views, `desk-screens.md` if the Screens sheet's list changes.
@@ -595,3 +597,9 @@ Answered by Chris, 2026-10-16, after session 3's review:
     amended; `heldAutoNumbers`). Such a number then stops renumbering by itself.
 18. **Ties at the v32 startup step?** Kept in the order the desk played them, by id, so nothing on
     stage moves; desks that played a tie differently settle it on their first sync.
+
+Answered by Chris, 2026-10-16, during session 4:
+
+19. **Does the Record sheet's stack select gain *No stack*?** Not yet: session 5 adds it with the
+    Cues table, where a loose cue recorded that way can be found. The backend takes a stackless
+    CREATE from session 4.

@@ -187,6 +187,8 @@ export interface IncludeRequest {
   projectId: number
   /** Exactly one of `cueId` / `lookId`. The backend 400s on both or neither. */
   cueId?: number
+  /** The stack entry a cue was included from, when it was included from one. */
+  entryId?: number
   lookId?: number
   mask?: PropertyMaskGroup[]
   includeFx?: boolean

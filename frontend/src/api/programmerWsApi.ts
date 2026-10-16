@@ -196,6 +196,8 @@ export type IncludedTarget =
       kind: 'CUE'
       cueId: number
       cueStackId?: number
+      /** The stack entry it was included from; its number is the one the indicator shows. */
+      entryId?: number
       cueName?: string
       cueNumber?: string
     }

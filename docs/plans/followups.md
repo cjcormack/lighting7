@@ -148,6 +148,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SENTRY-PROFILING`](#fu-sentry-profiling) | Trigger | Perf | a Stage view or FX compile slowdown that traces and metrics cannot place |
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
+| [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -2894,6 +2895,20 @@ without it, so a grand-master level or the persisted blackout set in the last
 `LatestWinsWriter` interval is not written. **Trigger**: a level or blackout moved just before a stop
 comes back as it was before. **Then**: flush from an `ApplicationStopping` subscription in
 `Application.module()`, before the pool closes.
+
+## Cues
+
+### `FU-CUE-BINDING-SWEEP`
+
+**A forced cue delete leaves its `FireCue` bindings** · Trigger · Cue model plan session 4,
+2026-10-16
+
+`DELETE /cues/{id}?force=true` (and `POST /cues/delete`) takes the cue's entries, anchors, pads and
+slots with it (`routes/cueDelete.kt`), but a surface binding that fires it is left in place and
+reports `MissingCue`, as a binding to any deleted cue always has — the 409 lists it, so the operator
+was told. **Trigger**: an operator finds a dead binding left this way confusing. **Then**: delete the
+`FireCue` rows `cueUsesOf` already finds inside the forced delete's transaction, and reload the
+binding service's project.
 
 ## Completed
 

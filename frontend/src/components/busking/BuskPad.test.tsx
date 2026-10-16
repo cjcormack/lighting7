@@ -46,7 +46,12 @@ const cuePad: BuskPad = {
   id: 2,
   uuid: 'p2',
   kind: 'CUE',
-  cue: { id: 12, uuid: 'c12', name: 'Verse 2', cueNumber: '12', cueStackId: 3, cueStackName: 'Main Show' },
+  cue: {
+    id: 12,
+    uuid: 'c12',
+    name: 'Verse 2',
+    entries: [{ stackId: 3, stackName: 'Main Show', entryId: 112, cueNumber: '12' }],
+  },
 }
 
 function draw(

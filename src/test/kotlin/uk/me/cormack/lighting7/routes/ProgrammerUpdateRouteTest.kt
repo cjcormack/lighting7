@@ -208,8 +208,9 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
                 rows = listOf(assignment("fixture", "hex-2", "dimmer", "100")),
                 stackId = stackB,
             )
-            client.post("/api/rest/projects/$projectId/cues/$cueA/apply")
-            client.post("/api/rest/projects/$projectId/cues/$cueB/apply")
+            // Each GO'd in its stack: the stack that holds a cue is what the checklist groups it by.
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackA/activate")
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackB/activate")
 
             // Busk over both, plus one property no cue drives at all.
             setProgrammer("hex-1", "dimmer", "255")

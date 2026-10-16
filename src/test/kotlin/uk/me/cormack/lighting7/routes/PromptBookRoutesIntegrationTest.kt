@@ -133,7 +133,7 @@ class PromptBookRoutesIntegrationTest {
     }
 
     @Test
-    fun `anchor upsert is keyed by cue and validates region`() = testApplication {
+    fun `anchor upsert is keyed by entry and validates region`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
@@ -146,12 +146,13 @@ class PromptBookRoutesIntegrationTest {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cueId = client.post("/api/rest/projects/$projectId/cues") {
+        val cue = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
-        }.body<CueDetails>().id
+        }.body<CueDetails>()
+        val cueId = cue.id
 
-        val anchorUrl = "${bookUrl()}/anchors/$cueId"
+        val anchorUrl = "${bookUrl()}/anchors/${cue.entryId}"
 
         // Create
         val createResp = client.put(anchorUrl) {
@@ -161,7 +162,7 @@ class PromptBookRoutesIntegrationTest {
         assertEquals(HttpStatusCode.OK, createResp.status, createResp.bodyAsText())
         assertEquals("LX 1", createResp.body<PromptBookAnchorDto>().label)
 
-        // Upsert same cue — still one anchor, region moved
+        // Upsert the same entry — still one anchor, region moved
         val moveResp = client.put(anchorUrl) {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect(y = 0.6))))
@@ -179,15 +180,15 @@ class PromptBookRoutesIntegrationTest {
         }
         assertEquals(HttpStatusCode.BadRequest, badResp.status)
 
-        // Unknown cue → 404
+        // Unknown entry → 404
         val unknownCue = client.put("${bookUrl()}/anchors/999999") {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect())))
         }
         assertEquals(HttpStatusCode.NotFound, unknownCue.status)
 
-        // Deleting the cue removes its anchor with it
-        client.delete("/api/rest/projects/$projectId/cues/$cueId")
+        // Deleting the cue (forced: its entry and anchor name it) removes its anchor with it
+        client.delete("/api/rest/projects/$projectId/cues/$cueId?force=true")
         val afterCueDelete = client.get(bookUrl()).body<PromptBookDetails>()
         assertEquals(0, afterCueDelete.anchors.size, "cue deletion must take its anchor with it")
     }
@@ -201,12 +202,12 @@ class PromptBookRoutesIntegrationTest {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cueId = client.post("/api/rest/projects/$projectId/cues") {
+        val entryId = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
-        }.body<CueDetails>().id
+        }.body<CueDetails>().entryId
 
-        val resp = client.put("${bookUrl()}/anchors/$cueId") {
+        val resp = client.put("${bookUrl()}/anchors/$entryId") {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect())))
         }
@@ -319,23 +320,25 @@ class PromptBookRoutesIntegrationTest {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "stack-a"))
         }.body<CueStackDetails>().id
-        val cue1 = client.post("/api/rest/projects/$projectId/cues") {
+        val cue1Details = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-1", cueStackId = stackId))
-        }.body<CueDetails>().id
-        val cue2 = client.post("/api/rest/projects/$projectId/cues") {
+        }.body<CueDetails>()
+        val cue1 = cue1Details.id
+        val cue2Details = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "cue-2", cueStackId = stackId))
-        }.body<CueDetails>().id
+        }.body<CueDetails>()
+        val cue2 = cue2Details.id
 
         // cue1: single rect near the top of page 0
-        client.put("${bookUrl()}/anchors/$cue1") {
+        client.put("${bookUrl()}/anchors/${cue1Details.entryId}") {
             contentType(ContentType.Application.Json)
             setBody(UpsertAnchorRequest(region = listOf(rect(page = 0, y = 0.1))))
         }
         // cue2: a multi-rect region (spans pages + lines). The earliest rect —
         // lowest page, then topmost y — must win, regardless of list order.
-        client.put("${bookUrl()}/anchors/$cue2") {
+        client.put("${bookUrl()}/anchors/${cue2Details.entryId}") {
             contentType(ContentType.Application.Json)
             setBody(
                 UpsertAnchorRequest(

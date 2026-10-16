@@ -23,7 +23,6 @@ import uk.me.cormack.lighting7.models.entriesOfCue
 import uk.me.cormack.lighting7.models.planEntryOrdinals
 import uk.me.cormack.lighting7.models.writeEntryOrder
 import uk.me.cormack.lighting7.routes.cueEntryIds
-import uk.me.cormack.lighting7.routes.moveEntryTo
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
@@ -195,8 +194,13 @@ class CueStackEntrySyncTest {
         // Drag the sixth entry up to second; auto numbers move on the desk, but none is in the archive.
         val autoBefore = numbersOf(projectId)
         transaction(state.database) {
+            // What the reorder route does with a drag: the new order written, the auto numbers derived.
             val entry = DaoCueStackEntry.find { DaoCueStackEntries.uuid eq entries[5] }.single()
-            assertNull(moveEntryTo(entry.stack, entry, 1))
+            val stack = entry.stack
+            val before = cueEntryIds(stack)
+            val others = entriesOf(stack).filter { it.id != entry.id }
+            writeEntryOrder(others.take(1) + entry + others.drop(1))
+            renumberAutoEntries(stack, before)
         }
         assertNotEquals(autoBefore, numbersOf(projectId), "test sanity: the drag relabelled the desk's auto numbers")
         val b = export(projectId)

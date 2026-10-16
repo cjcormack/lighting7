@@ -8,6 +8,7 @@ import { cueStatusIcon } from './cueStatusIcon'
 
 interface MobileCueRowProps {
   cueId: number
+  entryId: number
   cueNumber: string | null
   /** Number was derived from position — rendered fainter to mark it provisional. */
   cueNumberAuto?: boolean
@@ -22,7 +23,7 @@ interface MobileCueRowProps {
   /** The live stack id, or null when this row's stack isn't it — gates this row's own
    *  `useCueFade`/`useCueAutoProgress` subscriptions (see `useCueFade`). */
   fadeStackId: number | null
-  onClick: (cueId: number) => void
+  onClick: (cueId: number, entryId: number) => void
 }
 
 /**
@@ -33,6 +34,7 @@ interface MobileCueRowProps {
  */
 export const MobileCueRow = memo(function MobileCueRow({
   cueId,
+  entryId,
   cueNumber,
   cueNumberAuto = false,
   name,
@@ -56,7 +58,7 @@ export const MobileCueRow = memo(function MobileCueRow({
   return (
     <button
       type="button"
-      onClick={() => onClick(cueId)}
+      onClick={() => onClick(cueId, entryId)}
       className={cn(
         'relative flex w-full items-center gap-2 h-12 px-4 border-b border-l-[3px] border-l-transparent text-left transition-colors hover:bg-muted/50',
         isDone && !isActive && !isStandby && 'opacity-40',

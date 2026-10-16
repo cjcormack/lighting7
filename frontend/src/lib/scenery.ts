@@ -514,20 +514,24 @@ export interface MovesWithEntry {
  * The read (`GET stage-elements/{id}/scenery`) as *Moves with* lists it: cues first in show order,
  * each with its clock, then the stacks' sets, then the Looks — the resolver's own order from the
  * bottom tier the read can name to the top. [stackName] names a cue's stack where the show has more
- * than one, so two *Q1*s read apart.
+ * than one, so two *Q1*s read apart; a loose cue reads *Loose · <name>*.
  */
 export function movesWithEntries(
   element: StageElementDto | undefined,
   read: {
-    cues: ReadonlyArray<{ stackId: number; cueId: number; label: string; state: SceneryState; transitionMs: number | null }>
+    cues: ReadonlyArray<{ stackId: number | null; cueId: number; label: string; state: SceneryState; transitionMs: number | null }>
     sets: ReadonlyArray<{ stackId: number; name: string; state: SceneryState }>
     looks: ReadonlyArray<{ lookId: number; name: string; state: SceneryState }>
   },
   stackName?: (stackId: number) => string | undefined,
 ): MovesWithEntry[] {
-  const stacks = new Set(read.cues.map((c) => c.stackId))
+  const stacks = new Set(read.cues.flatMap((c) => (c.stackId == null ? [] : [c.stackId])))
   return [
     ...read.cues.map((c) => {
+      // A loose cue is in no stack: it is named by its name, said to be loose.
+      if (c.stackId == null) {
+        return { kind: 'cue' as const, id: c.cueId, owner: `Loose · ${c.label}`, what: describeCueChange(element, c.state, c.transitionMs) }
+      }
       const stack = stacks.size > 1 ? stackName?.(c.stackId) : undefined
       return {
         kind: 'cue' as const,

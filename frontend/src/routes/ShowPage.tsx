@@ -110,6 +110,18 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   const cueParam = searchParams.get('cue')
   /** The cue the operator addressed. `?cue=` is an external contract — the Prompt Book mints it. */
   const openedCueId = cueParam ? Number(cueParam) : null
+  /**
+   * Which of the cue's places in the drilled stack is open: `?entry=` when a card wrote it and it
+   * places that cue here, else the cue's first place. A cue may sit twice in one stack, and a card
+   * is an entry.
+   */
+  const entryParam = searchParams.get('entry')
+  const openedEntryId = useMemo(() => {
+    if (openedCueId == null || drillStack == null) return null
+    const rows = drillStack.cues.filter((c) => c.id === openedCueId)
+    const named = entryParam ? Number(entryParam) : null
+    return (rows.find((c) => c.entryId === named) ?? rows[0])?.entryId ?? null
+  }, [openedCueId, entryParam, drillStack])
 
   /**
    * The show-editing lock, shared with the Prompt Book. This is what replaced `/run`: the two views
@@ -186,7 +198,10 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    * a fade and several hundred cue rows reconciling at frame rate.
    */
   const { setStandby } = transport
-  const handleSetStandby = useCallback((cueId: number) => setStandby(cueId), [setStandby])
+  const handleSetStandby = useCallback(
+    (cueId: number, entryId?: number) => setStandby(cueId, entryId),
+    [setStandby],
+  )
 
   // Only the phone branch below draws this; the hook memoises it, since this component re-renders
   // per fade frame. Shared with the busk view's Show tab, so the two cannot disagree about which
@@ -221,20 +236,35 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    */
   const [recordStackId, setRecordStackId] = useState<number | null>(null)
 
-  // Set/clear the `?cue=` modifier without touching the stack path (replace: no history spam).
+  // Set/clear the `?cue=` modifier (and `?entry=`, the place) without touching the stack path
+  // (replace: no history spam).
   const setExpandedCueId = useCallback(
-    (cueId: number | null) => {
+    (cueId: number | null, entryId: number | null = null) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
           if (cueId == null) next.delete('cue')
           else next.set('cue', String(cueId))
+          if (cueId == null || entryId == null) next.delete('entry')
+          else next.set('entry', String(entryId))
           return next
         },
         { replace: true },
       )
     },
     [setSearchParams],
+  )
+  /** Open an entry's card — the cue it places, and which place. */
+  const drillRows = drillStack?.cues
+  const openEntry = useCallback(
+    (entryId: number) => {
+      const row = drillRows?.find((c) => c.entryId === entryId)
+      if (row?.id == null) return
+      // `?entry=` only where the cue sits twice here; otherwise `?cue=` already names the place.
+      const places = drillRows?.filter((c) => c.id === row.id).length ?? 0
+      setExpandedCueId(row.id, places > 1 ? entryId : null)
+    },
+    [drillRows, setExpandedCueId],
   )
 
   /**
@@ -247,16 +277,17 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   // second cue replaces the first. Memoised, and the close is a memoised callback rather than an
   // inline arrow: an arrow would be a fresh identity every render, which would give
   // `toggleExpanded` one too and break `ShowView`'s memo mid-fade.
-  const openCueIds = useMemo(
-    () => (openedCueId != null ? new Set([openedCueId]) : new Set<number>()),
-    [openedCueId],
+  // Keyed by entry, as the cards are.
+  const openEntryIds = useMemo(
+    () => (openedEntryId != null ? new Set([openedEntryId]) : new Set<number>()),
+    [openedEntryId],
   )
   const closeExpandedCue = useCallback(() => setExpandedCueId(null), [setExpandedCueId])
   const { isExpanded, toggleExpanded } = useCueExpansion({
-    openCueIds,
-    onOpen: setExpandedCueId,
+    openCueIds: openEntryIds,
+    onOpen: openEntry,
     onClose: closeExpandedCue,
-    liveCueId: drillStackId === activeStackId ? transport.serverActiveCueId : null,
+    liveCueId: drillStackId === activeStackId ? transport.serverActiveEntryId : null,
     resetKey: drillStackId,
   })
 
@@ -308,8 +339,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    * which returns to this stack and this cue (`lib/showPosition.ts`).
    */
   const handleIncludeCue = useCallback(
-    (cueId: number) => {
-      void includeCue(cueId).then((response) => {
+    (cueId: number, entryId: number) => {
+      void includeCue(cueId, entryId).then((response) => {
         if (response != null) navigate(`/projects/${projectIdNum}/programmer`)
       })
     },
@@ -322,9 +353,11 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    * straight back. A peek at a card is not a change of view, so the sticky is left alone.
    */
   const handleOpenCue = useCallback(
-    (cueId: number) => {
+    (cueId: number, entryId: number) => {
       if (drillStackId == null) return
-      navigate(`/projects/${projectIdNum}/show/stacks/${drillStackId}?cue=${cueId}`, { state: CARDS_LINK_STATE })
+      navigate(`/projects/${projectIdNum}/show/stacks/${drillStackId}?cue=${cueId}&entry=${entryId}`, {
+        state: CARDS_LINK_STATE,
+      })
     },
     [drillStackId, navigate, projectIdNum],
   )
@@ -611,8 +644,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               activeStackId={activeStackId}
               // The server cursor reflects what's on stage, not the transient
               // fade cursor — so the marker stays stable during fades.
-              activeCueId={transport.serverActiveCueId}
-              standbyCueId={transport.standbyCueId}
+              activeEntryId={transport.serverActiveEntryId}
+              standbyEntryId={transport.standbyEntryId}
               fadeStackId={activeStackId}
               completedCueIds={transport.completedCueIds}
               locationByCue={locationByCue}
@@ -621,7 +654,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               unlockedWarning={unlockedWarning}
               isExpanded={isExpanded}
               onToggleExpanded={toggleExpanded}
-              openedCueId={openedCueId}
+              openedEntryId={openedEntryId}
               onDuplicate={handleDuplicate}
               onRecordInto={handleRecordInto}
               onRecordIntoStack={handleRecordIntoStack}
