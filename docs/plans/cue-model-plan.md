@@ -444,7 +444,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   §"Active Cue Tracking", `lighting-composition-model.md` (holds and the loose band),
   `websocket-engineering.md` (`cueHolds.state`).
 
-### Session 3 — sync vN (backend) — done, `4a0d116f`, `3ea86265`, `1be6a69c`
+### Session 3 — sync vN (backend) — done, `4a0d116f`, `3ea86265`, `1be6a69c`, `d8aba579`
 
 - §3.9: `cueStackEntries/`, ordinals (P6), auto numbers not exported (P5), anchors by entry, the
   pre-vN reader, the duplicate-number rule on import.
