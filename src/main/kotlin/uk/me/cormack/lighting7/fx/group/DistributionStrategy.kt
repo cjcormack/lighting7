@@ -333,5 +333,38 @@ sealed interface DistributionStrategy {
             "LINEAR", "UNIFIED", "CENTER_OUT", "EDGES_IN",
             "RANDOM", "PING_PONG", "REVERSE", "SPLIT", "POSITIONAL"
         )
+
+        /**
+         * Every named strategy's [steps] for a group of [groupSize], keyed by name — what a group's
+         * detail answers as `distributionSteps`, so the group sheet shows the order its effects and a
+         * spread over it run in without the client mirroring a formula (venue-visit plan S7).
+         */
+        fun stepsBySize(groupSize: Int): Map<String, List<Int>> =
+            availableStrategies.associateWith { fromName(it).steps(groupSize) }
     }
+}
+
+/**
+ * Member `i`'s **step** under this strategy in a group of [groupSize]: its place in the order the
+ * members come round, 1 first. Members sharing an offset share a step — a pair under `CENTER_OUT` or
+ * `SPLIT`, everyone under `UNIFIED` — so the steps run 1…[DistributionStrategy.distinctSlots].
+ *
+ * A function of the size alone, because no strategy reads more than a member's index and its
+ * `i / (n - 1)` position: a group's members are numbered in their stored order (`sort_order`), and
+ * a spread positions its steps the same way (`SpreadPlan.positions`). `RANDOM` is seed 0, the seed a
+ * group effect gets by name. It is the order over the group's **members**: an effect expanded to a
+ * multi-head member's cells (`ElementMode`) distributes over the cells' own lists instead, so there
+ * the steps say only which member comes round first.
+ */
+fun DistributionStrategy.steps(groupSize: Int): List<Int> {
+    if (groupSize <= 0) return emptyList()
+    val members = List(groupSize) { i ->
+        object : DistributionMemberInfo {
+            override val index = i
+            override val normalizedPosition = if (groupSize > 1) i.toDouble() / (groupSize - 1) else 0.5
+        }
+    }
+    val offsets = offsets(members, groupSize)
+    val distinct = offsets.distinct().sorted()
+    return offsets.map { distinct.indexOf(it) + 1 }
 }

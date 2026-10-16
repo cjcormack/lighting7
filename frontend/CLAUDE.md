@@ -850,6 +850,23 @@ Release folds to its glyph and the scope line drops the fade.
   group visualisers' Edit toggle are deleted. A group's rows come from its members' own fixture
   properties; a group of multi-head fixtures shows its members' fixture-level rows, and each member's
   heads are that member's own sheet.
+- **A group's member order** (venue-visit plan S7; lighting7 `docs/groups-engineering.md` §"Member
+  order"): the sheet's *Members* view lists the members **numbered in the group's order**, the order
+  its effects and a spread over it run in. It is dragged to reorder, and each member's **step** under
+  the strategy *Runs as* picks is shown (the desk's `distributionSteps`, never a client formula; the
+  group's own distribution first). A drop writes at once through `useReorderGroupMembersMutation`,
+  sending only the members shown. The desk keeps every other member in its place, and so does the
+  optimistic move (`lib/memberOrder.ts`'s `placeInOrder`), rolled back on a refusal.
+  `useGroupMemberReorder` joins the runtime group to its patch group by name, for the id, the owner and
+  the patch ids. A venue's group in a show, and a venue's rig for an operator, are read-only with the
+  reason, here and in Patches' *Edit Group* sheet. The card keeps its members' cards. The Groups
+  list draws member rows in the group's order (`GroupSummary.memberKeys`) with their place, and has
+  no drag of its own, by Chris's call: its rows already carry the marquee and row selection. A
+  Spread over exactly one group row whose members are all listed and none filtered out sends the
+  **group** (`wholeGroupOf`, `SpreadColumn.group`), so the desk runs it in the order the numbers
+  show; anything else is its heads, in rig order. The client's copies of the rig order
+  (`lib/cellsSubSelection.ts`, `liveAppearance.ts`'s `rigHeadOrder`) walk a group by `memberKeys`
+  as the desk does.
 
 Session 6's list: `hosts.test.tsx` — the phone host opens on a fixture tap below `sm` and no docked
 `stage` panel draws there, the desk still docks, the landscape side form (380px, no grabber), the
@@ -1385,10 +1402,12 @@ the slot and the landing place agree; testing either half alone passes with the 
 cue-slot overlay and the routed page, and the busk page joins it with `useDndMonitor` rather than
 nesting one.
 
-Three surfaces do nest one of their own, and the line between them and the busk page is whether the
+Other surfaces nest one of their own, and the line between them and the busk page is whether the
 drag has to *cross* into the shell's droppables: the show's cue cards (`StackDetail`), the stack
-list (`ShowOverview`) and the cue sheet's row drag (`SheetTable`'s `rowDrag`, mounted only for a
-sheet that asked for it) each reorder a list **within themselves**, and none of them has a gesture
+list (`ShowOverview`), the cue sheet's row drag (`SheetTable`'s `rowDrag`, mounted only for a
+sheet that asked for it), a group's member list (the group sheet's *Members* view and Patches'
+*Edit Group* sheet), `LookStack`'s layers and `FxColourListPicker`'s colours each reorder a list
+**within themselves**, and none of them has a gesture
 that ends on a cue slot. A nested context wins for its subtree, which is exactly why the busk page
 must not have one: it would hide that page from the overlay's droppables, which is exactly the drop
 the plan's session 3 needs. The overlay and the busk page coexist by
@@ -2213,9 +2232,9 @@ selection: *Cells: Odd* is only the filter last pressed here, and a step is neve
 answered** (`RigBand`'s own `rigLoaded` guard), because `effectiveRig(undefined, …)` is the show-all
 fallback and a press before the query lands would walk the wrong order with no frame to correct it — the nine modes over
 `effectiveRig`'s rows, the fixtures' `elements` and the groups' members derived from each fixture's
-`groups` in fixture-list order (`GroupSummary` carries no member list; a session 7 amendment to
-D12's "member lists it already fetches") — pure, no React, and **pinned against the server's own
-fixture**: `cellsSubSelection.test.ts` imports the backend's
+`groups`, put in the group's own order by `GroupSummary.memberKeys` (venue-visit plan S7; fixture-list
+order where a desk sends none — a session 7 amendment to D12's "member lists it already fetches") —
+pure, no React, and **pinned against the server's own fixture**: `cellsSubSelection.test.ts` imports the backend's
 `../src/test/resources/busk/subselect.fixture.json`, as `buskRig.test.ts` does the rig order's, and
 runs every case. The Spread tab's *Over: Cells* counts through the same
 module (`selectedCells`), so the chip and the tab cannot count cells two ways. Below `md` the nine

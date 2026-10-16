@@ -2,6 +2,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import type { BuskRigCellMode, BuskRigRow } from '@/api/buskRigApi'
 import type { SubselectMode } from '@/api/selectionApi'
 import { rowTiles, runsOf } from './buskRig'
+import { inGroupOrder } from './memberOrder'
 
 /**
  * The client mirror of `DeskSelection.subselect` (lighting7 `state/DeskSelection.kt`, busk-further
@@ -22,10 +23,11 @@ import { rowTiles, runsOf } from './buskRig'
  * Three things this side has to derive that the desk reads off its live registers, each a place
  * the two could disagree and each recorded here so the disagreement is a known one:
  *
- * - **A group's members are the fixtures whose `groups` name it, in fixture-list order.**
- *   `GroupSummary` carries a count and no member list; the desk walks `group.fixtures` in member
- *   order. The two agree wherever a group's member order is the patch order, which is what
- *   `createGroup { addSpread(...) }` produces.
+ * - **A group's members are the fixtures whose `groups` name it, in the group's own order.** The
+ *   desk walks `group.fixtures` in member order, and `GroupSummary.memberKeys` carries that order
+ *   (venue-visit plan S7), so a group the operator has reordered is walked as the desk walks it. A
+ *   group with no `memberKeys` (an older desk, a caller that passes only names) falls back to
+ *   fixture-list order, which agrees only where the member order is the patch order.
  * - **A cell's parent is found by lookup**, never by parsing the key: the fixture whose `elements`
  *   name it. Element keys are opaque (`rowModel.ts`'s rule).
  * - **Steps are resolved against the fixture list, not the tile's embedded patch**, as the desk
@@ -47,10 +49,10 @@ export interface CellsRig {
   rows: readonly BuskRigRow[]
   /**
    * Every group the desk has, in `GET /groups` order — the fallback's order, and how a group with
-   * no patched member is known to exist. A caller with no rig to walk may pass none: a group is
-   * also known through the fixtures that name it.
+   * no patched member is known to exist — with its members' order where the caller has it. A caller
+   * with no rig to walk may pass none: a group is also known through the fixtures that name it.
    */
-  groups: readonly { name: string }[]
+  groups: readonly { name: string; memberKeys?: readonly string[] }[]
   /** Every fixture, in `GET /fixtures` order. */
   fixtures: readonly CellsFixture[]
 }
@@ -143,6 +145,13 @@ class RigModel {
           this.membersByGroup.set(name, members)
         }
         members.push(fixture.key)
+      }
+    }
+    // The desk walks a group in its own member order, not the fixture list's.
+    for (const group of rig.groups) {
+      const members = this.membersByGroup.get(group.name)
+      if (members != null && members.length > 1) {
+        this.membersByGroup.set(group.name, inGroupOrder(members, group.memberKeys))
       }
     }
   }

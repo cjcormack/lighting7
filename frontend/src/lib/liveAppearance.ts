@@ -5,6 +5,7 @@ import type { BuskRigRow } from '@/api/buskRigApi'
 import type { Fixture } from '@/store/fixtures'
 import { parseCssRgb } from './colourMath'
 import { rowTiles } from './buskRig'
+import { inGroupOrder } from './memberOrder'
 
 /**
  * **What each head on screen looks like right now**, as a store a click handler can read.
@@ -72,7 +73,8 @@ export interface SelectedHead {
 
 /**
  * The fixture keys the rig names, in rig order: each row's tiles left to right, a group tile as
- * its members in fixture-list order, a fixture or cell tile as its patch. The desk's own order
+ * its members in the group's own order (`memberKeys`, else fixture-list order), a fixture or cell
+ * tile as its patch. The desk's own order
  * (`state/BuskRigOrder.kt`), which `effectiveRig` already produces for an empty rig.
  */
 export function rigHeadOrder(rows: readonly BuskRigRow[], fixtures: readonly Fixture[] | undefined): string[] {
@@ -87,7 +89,8 @@ export function rigHeadOrder(rows: readonly BuskRigRow[], fixtures: readonly Fix
     for (const tile of rowTiles(row)) {
       if (tile.kind === 'GROUP' && tile.group != null) {
         const name = tile.group.name
-        for (const fixture of fixtures ?? []) if (fixture.groups.includes(name)) add(fixture.key)
+        const members = (fixtures ?? []).filter((fixture) => fixture.groups.includes(name)).map((fixture) => fixture.key)
+        for (const key of inGroupOrder(members, tile.group.memberKeys)) add(key)
       } else if (tile.patch != null) {
         add(tile.patch.key)
       }

@@ -15,10 +15,11 @@ import { clearDeskSelection, useDeskSelection } from "@/store/selection"
  *
  * **The design's fixture count is deliberately absent, not forgotten.** Summing each selected
  * group's `memberCount` is wrong the moment two groups share a head — it says eight where the
- * desk will write six — and the client cannot do better: `GroupSummary` carries a count and no
- * member keys, so distinct coverage would mean a `GroupDetail` fetch per selected group from a
- * header chip. The desk already knows the answer (`DeskSelection.coverage()`); a truthful count
- * is that number reaching the wire, not arithmetic here. A wrong number on a desk is worse than
+ * desk will write six. `GroupSummary.memberKeys` (venue-visit plan S7) would let this side take
+ * the union of the keys it lists, but that is still not the desk's count — a cell, or a member this
+ * tab is not shown, is covered differently there. The desk already knows the answer
+ * (`DeskSelection.coverage()`); a truthful count is that number reaching the wire, not arithmetic
+ * here. A wrong number on a desk is worse than
  * no number, and the names beside it already say what is selected.
  */
 export function SelectionChip() {

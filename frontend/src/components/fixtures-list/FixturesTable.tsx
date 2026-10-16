@@ -840,6 +840,16 @@ const RowView = React.memo(function RowView({
             )}
           </button>
         )}
+        {/* A member row's place in its group's order (venue-visit plan S7): the order the group's
+            effects and a spread over it run in. Reordered in the group sheet's Members view. */}
+        {row.kind === 'fixture' && row.memberPosition !== undefined && (
+          <span
+            className="relative w-4 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground"
+            title={`${row.memberPosition} in ${row.parentGroup}'s order`}
+          >
+            {row.memberPosition}
+          </span>
+        )}
         {/* `font-semibold` when selected is the third of D4's three neutral signals, and the one
             that survives a colour-blind read and a badly calibrated house monitor: a 6% wash and a
             3px edge are both easy to lose, weight is not. It beats a group row's `font-medium`

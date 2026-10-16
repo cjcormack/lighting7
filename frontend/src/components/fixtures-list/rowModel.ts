@@ -37,13 +37,17 @@ export type GroupRow = {
   kind: 'group'
   id: RowId
   name: string
-  /** Member fixtures that survive the active filters, in fixture-list order.
+  /** Member fixtures that survive the active filters, in the group's order (`memberKeys`).
    *  Deliberately NOT the full membership: everything driven from a group row
    *  (aggregate cells, batch edits, the count badge) must only touch fixtures
    *  the operator can see — editing a group row while a filter is active must
    *  not write DMX to hidden fixtures. */
   members: Fixture[]
   isExpanded: boolean
+  /** Every member of the group is listed and survives the filters (venue-visit plan S7): the row
+   *  then stands for the group itself, which [wholeGroupOf] reads. False where the desk sent no
+   *  `memberKeys`, a filter hides a member, or the list leaves one out (an infrastructure head). */
+  whole?: boolean
 }
 
 export type FixtureRow = {
@@ -52,6 +56,9 @@ export type FixtureRow = {
   fixture: Fixture
   /** Set on member rows (rendered indented under their group). */
   parentGroup?: string
+  /** A member row's place in its group's order, 1-based (venue-visit plan S7) — counted over the
+   *  whole membership, so a filter or a hidden head leaves its number unchanged. */
+  memberPosition?: number
   /** True when this fixture's element sub-rows are rendered beneath it.
    *  Always false for fixtures without elements. */
   isExpanded: boolean
@@ -99,8 +106,8 @@ export interface BuildRowsOptions {
 /**
  * Flatten fixtures + groups into the visible row list.
  *
- * Order: groups in backend list order (each followed by its member rows when
- * expanded), then an "Ungrouped" divider and every fixture that belongs to no
+ * Order: groups in backend list order (each followed by its member rows, in
+ * the group's own order, when expanded), then an "Ungrouped" divider and every fixture that belongs to no
  * group. Membership comes from `fixture.groups` — no per-group properties
  * fetch. A group survives the filters if any member does; when expanded, only
  * surviving members are shown.
@@ -121,10 +128,10 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
   // whether the fixture renders top-level or as a group member. Element rows
   // are not individually filtered — they render only under a visible,
   // expanded parent.
-  const pushFixtureRows = (fixture: Fixture, id: RowId, parentGroup?: string) => {
+  const pushFixtureRows = (fixture: Fixture, id: RowId, parentGroup?: string, memberPosition?: number) => {
     const elements = fixture.elements ?? []
     const isExpanded = elements.length > 0 && (expandedFixtures?.has(fixture.key) ?? false)
-    rows.push({ kind: 'fixture', id, fixture, parentGroup, isExpanded })
+    rows.push({ kind: 'fixture', id, fixture, parentGroup, memberPosition, isExpanded })
     if (isExpanded) {
       for (const element of elements) {
         rows.push({
@@ -155,7 +162,13 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
   }
 
   for (const group of groups) {
-    const members = membersByGroup.get(group.name) ?? []
+    // The group's own order (venue-visit plan S7) — the order its effects and a spread over it run
+    // in — where the desk sends it; fixture-list order otherwise, and for a key it does not name.
+    const position = new Map((group.memberKeys ?? []).map((key, i) => [key, i]))
+    const members = (membersByGroup.get(group.name) ?? [])
+      .map((fixture, i) => ({ fixture, at: position.get(fixture.key) ?? position.size + i }))
+      .sort((a, b) => a.at - b.at)
+      .map(({ fixture }) => fixture)
     const visibleMembers = members.filter(visible)
     // A group is hidden only when filters excluded all its members; a group
     // that is genuinely empty still gets a row (it exists, and deep-links can
@@ -168,10 +181,12 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
       name: group.name,
       members: visibleMembers,
       isExpanded,
+      whole: group.memberKeys != null && group.memberKeys.length > 0 && visibleMembers.length === group.memberKeys.length,
     })
     if (isExpanded) {
       for (const member of visibleMembers) {
-        pushFixtureRows(member, memberRowId(group.name, member.key), group.name)
+        const at = position.get(member.key)
+        pushFixtureRows(member, memberRowId(group.name, member.key), group.name, at === undefined ? undefined : at + 1)
       }
     }
   }
@@ -402,6 +417,20 @@ export function spreadTargetsFor(
   return spreadTargetsOf(expandSelectionToTargets(rows, selectedIds))
 }
 
+/**
+ * The group these rows stand for **whole**, or undefined: the selection is exactly one group row and
+ * every member of the group is listed and visible ([GroupRow.whole]). A spread over it then names the
+ * group itself, so the desk runs it in the group's member order — the order the list's numbers show
+ * (venue-visit plan S7: a spread whose one target is a group). Anything else — a filtered group, two
+ * rows, a group and a fixture — spreads over its heads, in rig order.
+ */
+export function wholeGroupOf(rows: readonly Row[], selectedIds: ReadonlySet<RowId>): string | undefined {
+  const contributing = selectedContributingRows(rows, selectedIds)
+  if (contributing.length !== 1) return undefined
+  const row = contributing[0]
+  return row.kind === 'group' && row.whole === true ? row.name : undefined
+}
+
 /** [spreadTargetsFor] over write targets already expanded: every target by its own key, a cell by its element key. */
 export function spreadTargetsOf(targets: readonly WriteTarget[]): LocateTarget[] {
   const seen = new Set<string>()
@@ -611,7 +640,7 @@ export function rowIdsForTargets(
 
 /**
  * Expand a selection to the distinct write targets it covers, in visible row
- * order: group rows contribute their members (fixture-list order),
+ * order: group rows contribute their members (in the group's own order),
  * fixture/member rows contribute their fixture, element rows contribute their
  * element. Deduped by key, and element rows whose parent fixture is already
  * covered are dropped (see coveredFixtureKeys).

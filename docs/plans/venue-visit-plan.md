@@ -163,12 +163,11 @@ Grouped by area. §4 gives the order.
 - ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
 - ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
 - ~~S9 — Blinder colour (D8)~~ — done, `aeada21c`.
+- ~~S7 — Group member order in the Groups views~~ — done, `d48ff355` (drag in the group sheet's
+  Members view, the list numbered and undragged by Chris's call; each strategy's step from the desk;
+  a spread over one group runs in its member order).
 - ~~S8 — Per-patch locate (D6, D17)~~ — done, `2e6963ee` (DMX bytes per unit, read from the output;
   in a show on a venue it is the show's Focus override; MCP reads and writes it; `formatVersion` 31).
-
-**S7 — Group member order in the Groups views.**
-- Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.
-- Show the order the effects and spread will use.
 
 ### Programmer
 
@@ -179,7 +178,9 @@ Grouped by area. §4 gives the order.
 
 **S12 — Fan in and fan out.**
 - Spread gains a relative mode: a fan amount around each head's current position.
-- It works pan-only, tilt-only or both, symmetric about the selection's centre in rig order.
+- It works pan-only, tilt-only or both, symmetric about the selection's centre in rig order. A
+  selection that is one group is in that group's own member order, as a spread over one already is
+  since S7.
 - Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
 - Start with a one-board sketch of the panel. No separate design session.
 

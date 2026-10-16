@@ -493,6 +493,8 @@ function PatchListContent({
         groupName={editingGroup?.name ?? ''}
         projectId={projectId}
         patches={patches ?? []}
+        readOnly={readOnly}
+        owner={patchGroups?.find((g) => g.id === editingGroup?.id)?.owner}
       />
     </SheetPage>
   )

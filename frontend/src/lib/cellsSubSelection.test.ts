@@ -159,6 +159,21 @@ describe('subselectTargets mirrors DeskSelection.subselect', () => {
   })
 })
 
+describe('a reordered group (venue-visit plan S7)', () => {
+  // The desk walks a group in its member order; `GroupSummary.memberKeys` carries it.
+  const abc: CellsFixture[] = ['a', 'b', 'c'].map((key) => ({ key, groups: ['G'] }))
+  const reordered: CellsRig = { rows: [], groups: [{ name: 'G', memberKeys: ['c', 'a', 'b'] }], fixtures: abc }
+  const unordered: CellsRig = { rows: [], groups: [{ name: 'G' }], fixtures: abc }
+
+  it('walks its members in the group’s order, not the fixture list’s', () => {
+    expect(subselectTargets([t('group', 'G')], 'ODD', reordered)).toEqual([t('fixture', 'c'), t('fixture', 'b')])
+  })
+
+  it('falls back to the fixture list’s order where the desk sent none', () => {
+    expect(subselectTargets([t('group', 'G')], 'ODD', unordered)).toEqual([t('fixture', 'a'), t('fixture', 'c')])
+  })
+})
+
 describe('selectedCells', () => {
   it('counts a selected bar’s cells, a group’s multi-head members’ cells, a loose cell once, and no single head', () => {
     const rig = rigOf('built')

@@ -344,6 +344,7 @@ class ShowsOnVenueTest : RouteIntegrationTest() {
             { client.put("$base/stage-viewpoints/${ids["viewpoint"]}") { json("""{"name":"Mine"}""") } },
             { client.delete("$base/stage-viewpoints/${ids["viewpoint"]}") },
             { client.put("$base/patch-groups/${ids["group"]}") { json("""{"name":"Mine"}""") } },
+            { client.put("$base/patch-groups/${ids["group"]}") { json("""{"memberOrder":[${ids["patch"]}]}""") } },
             { client.delete("$base/patch-groups/${ids["group"]}") },
             { client.delete("$base/universe-configs/${ids["universe"]}") },
             { client.put("$base/universe-configs/${ids["universe"]}") { json("""{"controllerType":"ARTNET"}""") } },

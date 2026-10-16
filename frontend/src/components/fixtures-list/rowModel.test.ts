@@ -75,6 +75,18 @@ describe('buildRows', () => {
     expect(rows[1]).toMatchObject({ kind: 'fixture', parentGroup: 'Spots' })
   })
 
+  it('draws member rows in the group’s own order, numbered over the whole membership', () => {
+    const ordered = [{ ...groupSummary('Spots', 2), memberKeys: ['spotB', 'spotA'] }, groups[1]]
+    const rows = buildRows({ fixtures, groups: ordered, expandedGroups: new Set(['Spots']), textFilter: '' })
+    expect(rows.slice(0, 3).map((r) => r.id)).toEqual(['group:Spots', 'member:Spots:spotB', 'member:Spots:spotA'])
+    expect(rows[1]).toMatchObject({ memberPosition: 1 })
+    expect(rows[2]).toMatchObject({ memberPosition: 2 })
+    expect(rows[0]).toMatchObject({ members: [spotB, spotA] })
+    // A filter leaves a member's number as the group's order has it.
+    const filtered = buildRows({ fixtures, groups: ordered, expandedGroups: new Set(['Spots']), textFilter: 'spotA' })
+    expect(filtered.find((r) => r.id === 'member:Spots:spotA')).toMatchObject({ memberPosition: 2 })
+  })
+
   it('shows a fixture under every group it belongs to, with distinct row ids', () => {
     const both = makeFixture('both', dimmerOnly(), { groups: ['Spots', 'Washes'] })
     const rows = buildRows({
