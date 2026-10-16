@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
@@ -149,6 +150,23 @@ internal object RigKeyReferences {
      * value's replacement, written back and recorded in [touched].
      */
     private fun walk(project: DaoProject, touched: Touched, visit: (User, String, String) -> String?) {
+        // An effect's target may be a selection (effects plan D3): each fixture and group it names is
+        // visited, and the key rebuilt when any of them is renamed.
+        fun visitEffect(user: User, type: String, key: String): String? {
+            if (type != EffectTargetRef.Selection.TYPE) return visit(user, type, key)
+            val items = EffectTargetRef.Selection.parseKey(key) ?: return null
+            var changed = false
+            val next = items.map { item ->
+                val renamed = visit(user, item.discriminator, item.key) ?: return@map item
+                changed = true
+                when (item) {
+                    is TargetRef.Fixture -> TargetRef.Fixture(renamed)
+                    is TargetRef.Group -> TargetRef.Group(renamed)
+                }
+            }
+            return if (changed) EffectTargetRef.Selection(next).key else null
+        }
+
         val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
         if (cues.isNotEmpty()) {
             val ids = cues.keys.toList()
@@ -166,7 +184,7 @@ internal object RigKeyReferences {
             }
             DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList ids }.forEach { row ->
                 val cueId = row.readValues[DaoCueAdHocEffects.cue].value
-                visit(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
+                visitEffect(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
             }
             DaoCueLayer.find { DaoCueLayers.cue inList ids }.forEach { layer ->
                 val cueId = layer.readValues[DaoCueLayers.cue].value
@@ -191,7 +209,7 @@ internal object RigKeyReferences {
             }
             DaoLookEffect.find { DaoLookEffects.look inList ids }.forEach { row ->
                 val lookId = row.readValues[DaoLookEffects.look].value
-                visit(lookUser(lookId), row.targetType, row.targetKey)?.let { row.targetKey = it; touched.looks += looks.getValue(lookId).uuid }
+                visitEffect(lookUser(lookId), row.targetType, row.targetKey)?.let { row.targetKey = it; touched.looks += looks.getValue(lookId).uuid }
             }
         }
 

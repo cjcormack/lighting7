@@ -64,6 +64,7 @@ import { useIncludeSelectionRequest } from '../../store/includeSelection'
 import {
   listSelectionIntentFor,
   useListSelection,
+  usePublishRowTargets,
   usePublishSelectionTargets,
 } from './useListSelection'
 import type { SelectionScope } from '../../store/selectionSlice'
@@ -509,6 +510,7 @@ export function FixturesListContainer({
     () => selectedRowTargets(rows, selectedRowIds),
     [rows, selectedRowIds],
   )
+  usePublishRowTargets(selectionScope, locateTargets)
   const releaseTargets = useMemo<ReleaseTarget[]>(
     () =>
       locateTargets.map((t) => ({

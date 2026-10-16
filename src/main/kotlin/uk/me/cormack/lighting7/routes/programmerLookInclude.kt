@@ -15,8 +15,10 @@ import uk.me.cormack.lighting7.fx.toEffectSpec
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 
 private val logger = LoggerFactory.getLogger("programmerLookInclude")
 
@@ -44,6 +46,11 @@ private val logger = LoggerFactory.getLogger("programmerLookInclude")
 internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto>): Set<String> {
     val out = LinkedHashSet<String>()
     for (target in targets) {
+        // An effect's selection (effects plan D3) expands to what each of its items does.
+        if (target.type == EffectTargetRef.Selection.TYPE) {
+            EffectTargetRef.Selection.parseKey(target.key)?.let { items -> out += expandTargetsToFixtureKeys(state, items.map(::CueTargetDto)) }
+            continue
+        }
         when (val ref = TargetRef.ofOrNull(target.type, target.key)) {
             is TargetRef.Fixture -> out += ref.key
             is TargetRef.Group -> {
@@ -149,10 +156,7 @@ private fun spawnIncludedLookEffects(
             } ?: continue
 
             if (mask != null) {
-                val reference = when (val ref = target.target) {
-                    is TargetRef.Group -> runCatching { state.show.fixtures.untypedGroup(ref.key).fixtures.firstOrNull() }.getOrNull()
-                    is TargetRef.Fixture -> runCatching { state.show.fixtures.untypedGroupableFixture(ref.key) }.getOrNull()
-                }
+                val reference = state.show.fixtures.referenceFixtureFor(target.effectTarget)
                 val group = reference?.let { maskGroupForProperty(it, fxTarget.propertyName) }
                 if (!maskAllows(mask, group)) continue
             }

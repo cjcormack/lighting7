@@ -3,13 +3,17 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.models.withBeatDivisionOverride
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.state.lookSceneryOf
 
 private val logger = LoggerFactory.getLogger("ProgrammerLayerStack")
 
@@ -77,17 +81,23 @@ data class ProgrammerLayerOutcome(
  *
  * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [effectCount] is
  * the effects that moved *for this layer* (spawned on apply, retracted on remove). [released] is
- * how many **sibling** layers an apply took the pressed targets off (a solo bank's) — counting a
- * layer narrowed to the targets the press did not name as well as one dropped outright, since from
- * the pressed targets' point of view both are gone. Always 0 on a remove, and for any press with no
- * siblings to name. A press rewriting one of its **own** record's layers is not a release: that is
- * the same pad extending or clearing itself, and no other pad changed.
+ * how many **other** records' layers an apply took the pressed targets off — a solo bank's
+ * siblings, and the palettes of a pressed palette's family and kind — counting a layer narrowed to
+ * the targets the press did not name as well as one dropped outright, since from the pressed
+ * targets' point of view both are gone. Always 0 on a remove. A press rewriting one of its **own**
+ * record's layers is not a release: that is the same pad extending or clearing itself.
  */
 data class ToggleOutcome(
     val action: String,
     val effectCount: Int,
     val released: Int = 0,
 )
+
+/** What [ProgrammerLayerStack.detach] did: values written into Local, and effects that became Local. */
+data class DetachOutcome(val written: Int, val effects: Int)
+
+/** What [ProgrammerLayerStack.applyAsValues] did: values written into Local, and the Local effects it started. */
+data class ApplyValuesOutcome(val written: Int, val effectIds: List<Long>)
 
 /** What [ProgrammerLayerStack.resetEffectToTemplate] did. */
 sealed interface ResetToTemplateOutcome {
@@ -194,9 +204,11 @@ class ProgrammerLayerStack(
      * than a glitch — [FxEngine.programmerLayerEffects] keeps one instance per key, so the losing
      * twin could never be retracted by a recook and would sit on stage until a band sweep.
      *
-     * Separate from `ProgrammerStore`'s layer lock and taken *after* it, never around it: the cook
-     * must stay outside every lock (`loadLookSnapshot` opens a transaction), so two mutations can
-     * legitimately reach here concurrently.
+     * Separate from `ProgrammerStore`'s layer lock, and taken after it everywhere but [detach],
+     * which takes the layer lock inside this one so its removal and its effects' unhooking are one
+     * step; nothing takes this one inside the layer lock. The cook stays outside both
+     * (`loadLookSnapshot` opens a transaction), so two mutations can legitimately reach here
+     * concurrently.
      */
     private val effectsLock = Any()
 
@@ -224,49 +236,6 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
         fadeMs: Long = 0,
     ): Pair<ProgrammerLayer, ProgrammerLayerOutcome> {
-        val (layer, _, outcome) = addReleasing(
-            source = source,
-            targets = targets,
-            propertyMask = propertyMask,
-            blendMode = blendMode,
-            amount = amount,
-            speedMasterUuid = speedMasterUuid,
-            rateSpeedMasterUuid = rateSpeedMasterUuid,
-            sourceCueLayerId = sourceCueLayerId,
-            beatDivisionOverride = beatDivisionOverride,
-            fadeMs = fadeMs,
-        )
-        return layer to outcome
-    }
-
-    /**
-     * [add], but rewriting the existing layers through [release] **in the same store mutation** as
-     * the append — so a pad press that replaces its siblings is one `layerState` frame and one
-     * recook, with the released effects retracting in the same `syncEffects` pass the new one
-     * spawns in. [release] returns its argument to leave a layer alone, a copy to narrow it, or
-     * null to drop it; either kind of rewrite counts towards the returned release count.
-     *
-     * A mapper rather than the drop-predicate this took first, because exclusivity is per
-     * **target**, not per layer: a press on `{hex-1, hex-2}` has to take hex-1 off a sibling that
-     * also holds hex-3, rather than either dropping hex-3 with it or leaving hex-1 lit underneath.
-     * See [toggle] and [withoutTargets].
-     *
-     * Private because the only reason to release-and-add atomically is [toggle]'s exclusivity, and
-     * a caller with a mapper of its own would be a second exclusivity rule.
-     */
-    private fun addReleasing(
-        source: LayerSource,
-        targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
-        blendMode: String = "OVERRIDE",
-        amount: Double = 1.0,
-        speedMasterUuid: UUID? = null,
-        rateSpeedMasterUuid: UUID? = null,
-        sourceCueLayerId: Int? = null,
-        beatDivisionOverride: Double? = null,
-        fadeMs: Long = 0,
-        release: (ProgrammerLayer) -> ProgrammerLayer? = { it },
-    ): Triple<ProgrammerLayer, Int, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
             layerId = store.mintLayerId(),
             source = source,
@@ -280,96 +249,64 @@ class ProgrammerLayerStack(
             sourceCueLayerId = sourceCueLayerId,
             beatDivisionOverride = beatDivisionOverride,
         )
-        val (next, released) = store.mutateLayers { current ->
-            var releasedCount = 0
-            val kept = buildList {
-                for (existing in current) {
-                    val rewritten = release(existing)
-                    // A rewrite of the arriving record's *own* layer is the press tidying up after
-                    // itself — the same pad, so nothing was released. Only another record going
-                    // dark counts, which is what the route reports.
-                    if (rewritten !== existing && existing.source.uuid != source.uuid) releasedCount++
-                    if (rewritten != null) add(rewritten)
-                }
-            }
-            renumber(kept + layer) to releasedCount
-        }
-        return Triple(layer, released, recook(next, fadeMs, arrival = true))
+        val (next, _) = store.mutateLayers { current -> renumber(current + layer) to Unit }
+        return layer to recook(next, fadeMs, arrival = true)
     }
 
     /**
      * The busking pad's gesture: put this Look or template on these targets, or take it off again.
+     * The rule itself is [LayerPress], pure over the layer list; this is its programmer caller, which
+     * installs the list in one store mutation and recooks it once.
      *
-     * "Already on" means **a layer with the same source *identity* and the same target set** — the
-     * pad's own reading, and the one that lets the same Look sit on two different target sets as two
-     * independently-toggleable pads.
-     *
-     * Matched on `source.uuid`, which is neither of the two obvious things and deliberately so.
-     * Not the int `id`, because a Look and a template can share an int PK and would then cancel
-     * each other's pads. Not the whole [LayerSource] either, though that is what this did first:
-     * it is a `data class`, so its equality includes `name` — and a name is *mutable*. Rename a
-     * record while its pad is lit and the pad stopped being able to turn it off, because the
-     * layer held the old name and the press carried the new one; it stacked a second layer
-     * instead, and the first could then only be removed by id from the FX sheet. A uuid is unique
-     * across both tables and never changes, which is exactly the identity "already on" means —
-     * the same reason [recookIfReferences] matches on it alone.
+     * "Already on" is matched on `source.uuid`, which is neither of the two obvious things and
+     * deliberately so. Not the int `id`, because a Look and a template can share an int PK and would
+     * then cancel each other's pads. Not the whole [LayerSource] either, though that is what this did
+     * first: it is a `data class`, so its equality includes `name` — and a name is *mutable*. Rename a
+     * record while its pad is lit and the pad stopped being able to turn it off. A uuid is unique
+     * across both tables and never changes, the same reason [recookIfReferences] matches on it alone.
      *
      * The comparison is of **coverage**, not of target lists ([coverage]), and it is the union of
      * every layer this record already has: "already on" means the record covers *each* pressed
-     * target. That makes the press the exact inverse of the pad's own lit ring
-     * ([appliedState]) — a full ring turns off, a partial or dark one fills in — which is the rule
-     * a whole-set comparison could not express. Order-insensitivity comes free with it (a pad
-     * re-deriving its target list from a `Set` still turns its layer off), and so does the group
-     * blindness: `{group: wash}` and the `{fixture: …}` list of its members are the same press. A
-     * press naming **no** targets has no coverage to compare, so it falls back to a literal
-     * [sameTargets] twin — the one gesture where "the source's own bound rows" is the whole of what
-     * a layer says.
-     * Returns `"applied"`/`"removed"` and how many effects moved, which is the contract
-     * `togglePresetOnTargets` had and the pads still read.
+     * target. That makes the press the exact inverse of the pad's own lit ring ([appliedState]) — a
+     * full ring turns off, a partial or dark one fills in. Order-insensitivity comes free with it,
+     * and so does the group blindness: `{group: wash}` and the `{fixture: …}` list of its members are
+     * the same press. A press naming **no** targets has no coverage to compare, so it falls back to a
+     * literal [sameTargets] twin — the one gesture where "the source's own bound rows" is the whole
+     * of what a layer says.
      *
-     * Note a rows-only Look reports `0` either way, and so does a **value** template. An *effect*
-     * template reports one per target since the fx-templates plan, which is why the pads' active
-     * ring still cannot be driven from the effect list alone: the number is zero for one kind of
-     * template and non-zero for the other.
+     * Returns `"applied"`/`"removed"` and how many effects moved. A rows-only Look reports `0` either
+     * way, and so does a **value** template; an *effect* template reports one per target, which is
+     * why the pads' ring cannot be driven from the effect list alone.
      *
      * [propertyMask] applies to the *arriving* layer only. It is deliberately **not** part of the
      * "already on" comparison: a pad that re-pressed with a different mask should still take its
-     * layer off rather than stack a second one, and the mask a template layer wants is a function of
-     * the template, not of the press. A Look passes null — a Look spans families by construction.
+     * layer off rather than stack a second one. A Look passes the selection's mask narrowed to its own
+     * families, or null.
      *
-     * **Both arms are per target** ([withoutTargets]), and this is the whole of what a press
-     * means: *these targets are now this record's, or they are now nobody's.* On the off arm the
-     * pressed targets come off **every** layer of this record — one holding exactly them is
-     * dropped, one that also holds others is narrowed to those. On the on arm the same subtraction
-     * runs over the record's own layers before the new one goes on, which is what keeps the
-     * invariant that **at most one layer of a record covers any given head**.
+     * **Both arms are per target**, and this is the whole of what a press means: *these targets are
+     * now this record's, or they are now nobody's.* On the off arm the pressed targets come off
+     * **every** layer of this record. On the on arm the same subtraction runs over the record's own
+     * layers before it goes on, which keeps the invariant that **at most one layer of a record covers
+     * any given head**.
      *
-     * Whole-set equality was the first rule, on both arms, and it broke the pad in the ordinary
-     * busking case: Red on hex-1, then hex-2 added to the selection and the pad pressed — the press
-     * stacked a second Red layer over hex-1 rather than extending the first, so the *next* press
-     * removed only that one and left the pad partially lit with Red still on hex-1. Turning a pad
-     * off has to clear the record from everything the press names, or "off" means something the
-     * ring cannot show.
+     * Three things take the pressed heads off *other* records on the on arm, all counted in
+     * [ToggleOutcome.released], and none on the off arm — turning a pad off never lights anything:
      *
-     * [releaseSiblings] is a **solo bank's** exclusivity: the uuids of the records on the pressed
-     * pad's sibling pads, which give up the pressed targets in the same mutation the new layer goes
-     * on — one `layerState` frame, one recook. A sibling that only *overlaps* is narrowed rather
-     * than dropped, so Amber on the front wash and Blue on the back wash are still two pads on two
-     * rigs. The off arm ignores it entirely: turning a pad off never lights a sibling. Matched on
-     * uuid like the pad itself, so a Look's layer can never be released by a template press even
-     * where the two share an int PK — and a bank mixes kinds, so the set may hold both. Empty (the
-     * default) is a stacking bank, and is what the `/palettes/{id}/toggle` and `/looks/{id}/toggle`
-     * routes always pass; `routes/buskPress.kt` resolves the set, this class only applies it.
+     * - [releaseSiblings], a **solo bank's** exclusivity: the records on the pressed pad's sibling
+     *   pads, of any kind, resolved by `routes/buskPress.kt`. Empty for every other door.
+     * - **The family replacement** (apply-model plan D2, D6), resolved here so every palette door gets
+     *   it: a palette press takes its heads off every other palette on the stack of the **same family
+     *   and kind** — a value palette off value palettes, an effect palette off effect palettes, so
+     *   Amber Breathe runs over Red. A Look replaces nothing and is replaced by nothing (D6).
+     * - Neither drops a layer that also holds other heads: it is narrowed to them, so Amber on the
+     *   front wash and Blue on the back wash are two layers on two rigs.
      *
-     * This used to be a **template group's** exclusivity — the other templates in the pressed one's
-     * group. The busk layout retired groups and moved both order and exclusivity onto the page, so
-     * the parameter's meaning widened (any kind, resolved per bank) while its rule did not change
-     * at all: that is why the engine did not move.
+     * **Widening** (apply-model P3): when the record's newest layer is then the top of the stack with
+     * the press's settings, its targets grow rather than a second layer going on, so Red on Hex 1
+     * and then on Hex 2 is one layer — and its effects on Hex 1 keep their phase. With anything
+     * pressed on top in between it is two, so a widening never changes what a higher layer shows.
      *
-     * A layer with **empty** targets is the one thing no subtraction reaches — see
-     * [withoutTargets]. The exception is a press that itself names no targets: that is the same
-     * gesture as the layer, so it toggles its own such layer off, and takes a sibling's off
-     * outright since there is nothing to narrow it to.
+     * A layer with **empty** targets is the one thing no subtraction reaches — see [LayerPress].
      */
     fun toggle(
         source: LayerSource,
@@ -378,89 +315,109 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
         releaseSiblings: Set<UUID> = emptySet(),
     ): ToggleOutcome {
-        val pressed = coverage(targets).toSet()
-        val own = store.layers.filter { it.source.uuid == source.uuid }
-        // The union of what this record already covers — one layer answering for the whole record
-        // is the point: two presses that each covered half the selection add up to a lit pad, so
-        // the press that follows them has to read as "off".
-        val covered = own.flatMapTo(HashSet()) { coverage(it.targets) }
-        // A press naming no targets has no coverage to compare; its own such layer is the answer.
-        val twin = if (pressed.isEmpty()) own.firstOrNull { sameTargets(it.targets, targets) } else null
-
-        // `covers`, not `containsAll`: a cell pressed under a layer on its parent is already on
-        // (busk-further plan D11). The rule is [TargetCoverage]'s; this only reads it.
-        return if (twin != null || (pressed.isNotEmpty() && pressed.all { targetCoverage.covers(covered, it) })) {
-            if (twin != null) {
-                ToggleOutcome("removed", remove(twin.layerId).effectsRetracted)
-            } else {
-                // One mutation for however many layers the press clears, exactly as the apply arm
-                // does it: one `layerState` frame, one recook, one `syncEffects` pass.
-                val (next, _) = store.mutateLayers { current ->
-                    renumber(
-                        current.mapNotNull { layer ->
-                            if (layer.source.uuid == source.uuid) withoutTargets(layer, pressed) else layer
-                        },
-                    ) to Unit
-                }
-                ToggleOutcome("removed", recook(next).effectsRetracted)
-            }
-        } else {
-            val (_, released, outcome) = addReleasing(
-                source = source,
-                targets = targets,
-                propertyMask = propertyMask,
-                beatDivisionOverride = beatDivisionOverride,
-                release = { layer ->
-                    val mine = layer.source.uuid == source.uuid
-                    when {
-                        !mine && layer.source.uuid !in releaseSiblings -> layer
-                        // Nothing to subtract from a layer that names no targets — but a press
-                        // that names none either is the same gesture, so it replaces it.
-                        layer.targets.isEmpty() -> if (targets.isEmpty()) null else layer
-                        else -> withoutTargets(layer, pressed)
-                    }
-                },
-            )
-            ToggleOutcome("applied", outcome.effectsSpawned, released)
+        val pressTargets = pressTargets(source.uuid, targets)
+        val arriving = ProgrammerLayer(
+            layerId = store.mintLayerId(),
+            source = source,
+            sortOrder = 0, // renumbered below
+            targets = pressTargets,
+            propertyMask = propertyMask,
+            beatDivisionOverride = beatDivisionOverride,
+        )
+        // Resolved before the mutation: a palette snapshot can open a transaction, which must never
+        // run under the layer lock. A stale answer is harmless — it names records and their rows.
+        val replaces = familyReplacements(source)
+        val replacesOn = if (replaces.isEmpty()) null else paletteHeads(source.uuid, pressTargets)
+        val ops = LayerOps(
+            store.layers.filter { it.source.isTemplate && it.targets.isEmpty() }
+                .associate { it.source.uuid to perFixtureRowTargets(it.source.uuid) },
+        )
+        val (next, result) = store.mutateLayers { current ->
+            val result = LayerPress.press(current, arriving, ops, targetCoverage, releaseSiblings, replaces, replacesOn)
+            renumber(result.layers) to result
+        }
+        return when (result) {
+            is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next).effectsRetracted)
+            is LayerPress.Result.Applied ->
+                ToggleOutcome("applied", recook(next, arrival = true).effectsSpawned, result.released)
         }
     }
 
     /**
-     * [layer] with [pressed] taken off it: itself when the press names none of its heads, a copy
-     * narrowed to the rest when it names some, and null when it names all of them.
-     *
-     * The unit is the **head**, not the target: a press on `{hex-1}` has to take hex-1 off a layer
-     * holding `{hex-1, hex-3}` rather than either dropping hex-3 with it or leaving hex-1 asserted
-     * underneath. Returning the argument *by identity* for an untouched layer is load-bearing —
-     * [addReleasing] counts a release by identity, so an untouched sibling is not reported as one.
-     *
-     * A group the press only *partly* covers is rewritten as the members it did not name, which
-     * costs that layer the group spelling (and an effect on it the group's distribution strategy).
-     * That is the same thing the operator would have had by picking those fixtures by hand, which
-     * is the point of it; a group the press does not touch keeps its own spelling, so the ordinary
-     * case never splits. A group that no longer resolves stands for itself ([coverage]), so a press
-     * naming it still clears it and a press on a real fixture leaves it alone.
-     *
-     * A layer with **empty** targets is returned untouched. Empty means "the source's own bound
-     * rows", whose fixtures are not in the target list at all — there is nothing here to expand,
-     * and guessing at where the rows land is the cook's job rather than this one's.
+     * The palettes on the stack an *on* press of [source] replaces (apply-model D2, D6): every other
+     * palette of its family and kind. Empty for a Look, and for a palette with no family.
      */
-    private fun withoutTargets(layer: ProgrammerLayer, pressed: Set<CueTargetDto>): ProgrammerLayer? {
-        if (layer.targets.isEmpty() || pressed.isEmpty()) return layer
-        val remaining = targetCoverage.narrow(layer.targets, pressed)
-        return when {
-            remaining === layer.targets -> layer
-            remaining.isEmpty() -> null
-            else -> layer.copy(targets = remaining)
+    private fun familyReplacements(source: LayerSource): Set<UUID> {
+        if (!source.isTemplate) return emptySet()
+        val kind = paletteKind(source.uuid) ?: return emptySet()
+        return store.layers.asSequence()
+            .filter { it.source.isTemplate && it.source.uuid != source.uuid }
+            .mapTo(HashSet()) { it.source.uuid }
+            .filterTo(HashSet()) { paletteKind(it) == kind }
+    }
+
+    /**
+     * The targets a press of [sourceUuid] puts on: [targets] as given, except that a per-fixture
+     * palette pressed with none names its own rows' targets — the heads it lands on — so the press,
+     * its family replacement and the pad's ring read one set of heads. `pressWouldRelease` asks it
+     * too, so the arm the doors test is the arm [toggle] takes.
+     */
+    fun pressTargets(sourceUuid: UUID, targets: List<CueTargetDto>): List<CueTargetDto> =
+        if (targets.isNotEmpty()) targets else perFixtureRowTargets(sourceUuid) ?: targets
+
+    /** A per-fixture value palette's row targets, distinct; null for any other record. */
+    private fun perFixtureRowTargets(uuid: UUID): List<CueTargetDto>? {
+        val snapshot = templateRegistry().snapshot(uuid) ?: return null
+        if (snapshot.effect != null || snapshot.rows.isEmpty() || snapshot.rows.any { it.isDeferred }) return null
+        return snapshot.rows.mapNotNull { it.target }.distinct().map(::CueTargetDto)
+    }
+
+    /**
+     * The pressed heads a palette lands on, when that is fewer than the press names: a per-fixture
+     * palette's rows name their own heads, so only the pressed heads its rows reach (or the rows'
+     * cells within a pressed parent) are its to take off other palettes. Null — every pressed head —
+     * for a generic palette, an effect palette, and one not loaded.
+     */
+    private fun paletteHeads(uuid: UUID, targets: List<CueTargetDto>): Set<CueTargetDto>? {
+        val rowHeads = targetCoverage.expand(perFixtureRowTargets(uuid) ?: return null).toSet()
+        return coverage(targets).flatMapTo(HashSet()) { head ->
+            if (targetCoverage.covers(rowHeads, head)) listOf(head) else targetCoverage.cells(head).filter { it in rowHeads }
         }
+    }
+
+    /** A palette's family, and whether it holds an effect rather than values. */
+    private fun paletteKind(uuid: UUID): Pair<PropertyMaskGroup, Boolean>? =
+        templateRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }
+
+    /**
+     * How [LayerPress] reads a programmer layer. [boundHeads] is each per-fixture palette's row
+     * targets by uuid, for its layers that name none, read before the press takes the layer lock.
+     */
+    private class LayerOps(private val boundHeads: Map<UUID, List<CueTargetDto>?>) : LayerPress.Ops<ProgrammerLayer> {
+        override fun boundHeads(layer: ProgrammerLayer) = boundHeads[layer.source.uuid]
+        override fun sourceUuid(layer: ProgrammerLayer) = layer.source.uuid
+        override fun targets(layer: ProgrammerLayer) = layer.targets
+        override fun withTargets(layer: ProgrammerLayer, targets: List<CueTargetDto>) = layer.copy(targets = targets)
+
+        // A fresh press carries no speed masters, no stomp and full amount; a layer the operator has
+        // since retuned is theirs, and widening it would put the new heads under settings they chose
+        // for the old ones.
+        override fun sameSettings(layer: ProgrammerLayer, arriving: ProgrammerLayer) =
+            layer.enabled == arriving.enabled &&
+                layer.propertyMask == arriving.propertyMask &&
+                layer.blendMode == arriving.blendMode &&
+                layer.amount == arriving.amount &&
+                layer.stomp == arriving.stomp &&
+                layer.speedMasterUuid == arriving.speedMasterUuid &&
+                layer.rateSpeedMasterUuid == arriving.rateSpeedMasterUuid &&
+                layer.beatDivisionOverride == arriving.beatDivisionOverride
     }
 
     /**
      * [targets] with every group replaced by its member fixtures — how this class answers "do these
      * two selections mean the same heads?". The rule itself lives in [TargetCoverage], shared with
      * the desk selection so a select button and a pad press expand a group the same way; every
-     * coverage question [toggle] asks (is this pad already on, and what does a sibling press take
-     * away) is asked of the expansion rather than of the written target.
+     * coverage question [appliedState] asks is asked of the expansion rather than of the written target.
      */
     private fun coverage(targets: List<CueTargetDto>): List<CueTargetDto> = targetCoverage.expand(targets)
 
@@ -484,8 +441,8 @@ class ProgrammerLayerStack(
      * cells reports those cells and the bar as SOME. Layers are folded by source, so two layers of
      * one template on two selections answer as one record applied to both.
      *
-     * A layer with **empty** targets contributes nothing, the same blind spot [toggle] documents:
-     * its source's own bound rows decide where it lands, and that is the cook's answer to give.
+     * A layer with **empty** targets contributes the heads its per-fixture palette's rows name, as
+     * [toggle] reads it; a Look's contributes nothing, since its rows' landing is the cook's answer.
      * Enabled-ness is ignored on purpose — a disabled layer is still *on the stack*, and a pad's
      * next press still takes it off, so its ring stays lit.
      *
@@ -495,9 +452,10 @@ class ProgrammerLayerStack(
     fun appliedState(layers: List<ProgrammerLayer> = store.layers): List<AppliedSource> {
         val heads = LinkedHashMap<UUID, Pair<LayerSource, MutableSet<CueTargetDto>>>()
         for (layer in layers) {
-            if (layer.targets.isEmpty()) continue
+            val named = layer.targets.ifEmpty { if (layer.source.isTemplate) perFixtureRowTargets(layer.source.uuid).orEmpty() else emptyList() }
+            if (named.isEmpty()) continue
             heads.getOrPut(layer.source.uuid) { layer.source to LinkedHashSet() }
-                .second += coverage(layer.targets)
+                .second += coverage(named)
         }
         if (heads.isEmpty()) return emptyList()
 
@@ -583,6 +541,139 @@ class ProgrammerLayerStack(
         }
         if (dropped > 0) recook(next)
         return dropped
+    }
+
+    /**
+     * *Detach* (apply-model plan §3.5): turn layer [layerId] into Local without the stage moving.
+     *
+     * The stack is cooked with the layer and without it, and every key the two disagree on — the
+     * keys it wins, and those a higher layer blends over it — is written as a touched `WEB` value at
+     * the with-layer value. A key some other local owner shows (a Locate, a flash) takes it beneath
+     * that owner, for when it lets go; a key the operator's own `WEB` value already holds, or a raw
+     * channel slot overrides, is left as it is. A Look's scenery passes to the programmer's own
+     * scenery ([ProgrammerScenery.holdUnder]) where no higher Look layer holds it. Its effects lose
+     * their layer and keep running, phase kept, as Local effects (a spent N-shot is removed), and
+     * the layer comes off; the recook moves nothing the `WEB` slots now hold.
+     *
+     * One thing still moves: a stomping layer's suppression of the effects under it ends with it.
+     * Returns null when no such layer is on the stack.
+     */
+    fun detach(layerId: Int): DetachOutcome? {
+        val layers = store.layers
+        val layer = layers.firstOrNull { it.layerId == layerId } ?: return null
+        val rest = layers.filterNot { it.layerId == layerId }
+        val without = cookStack(rest, withEffects = false).values.rows
+            .associate { (it.targetKey to it.propertyName) to it.value }
+        val fixtures = fixtures()
+        val hints = groupHintsForTargets(fixtures, layer.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
+        val onTop = ArrayList<ProgrammerWriter.PropertyWrite>()
+        val beneath = ArrayList<ProgrammerWriter.PropertyWrite>()
+        for (row in cookStack(layers, withEffects = false).values.rows) {
+            if (without[row.targetKey to row.propertyName] == row.value) continue
+            val slots = store.slotsFor(row.targetKey, row.propertyName)
+            if (slots.any { it.owner == ProgrammerOwner.WEB }) continue
+            val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
+            if (PropertyChannelWriter.channelsFor(head, row.propertyName).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
+            val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
+            val write = ProgrammerWriter.PropertyWrite(
+                head, row.propertyName, row.value, sourceGroup = hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            )
+            if (slots.firstOrNull()?.owner == ProgrammerOwner.LAYERS) onTop += write else beneath += write
+        }
+        // Stored, not published: each key already shows the value written.
+        val eng = engine()
+        eng.programmer.storeUnpublished(ProgrammerOwner.WEB, onTop, beneathTop = false)
+        eng.programmer.storeUnpublished(ProgrammerOwner.WEB, beneath, beneathTop = true)
+        if (layer.source.kind == LayerSourceKind.LOOK) handLookSceneryOver(layer, rest)
+        // One block, so no recook from another press can see the layer gone while its effects are
+        // still keyed to it, and retract them. `mutateLayers` takes the layer lock inside this one;
+        // nothing takes them the other way round.
+        val (next, effects) = synchronized(effectsLock) {
+            val (next, _) = store.mutateLayers { current ->
+                val kept = current.filterNot { it.layerId == layerId }
+                if (kept.size == current.size) current to Unit else renumber(kept) to Unit
+            }
+            next to eng.detachProgrammerLayerEffects(layerId)
+        }
+        recook(next)
+        return DetachOutcome(onTop.size + beneath.size, effects)
+    }
+
+    /**
+     * The scenery a detached Look layer shows, into the programmer's own: each state of its Look's
+     * that no higher live Look layer also sets. Nothing when the layer showed none (disabled, at
+     * zero) or another live layer of the same Look keeps showing it.
+     */
+    private fun handLookSceneryOver(layer: ProgrammerLayer, rest: List<ProgrammerLayer>) {
+        val st = state() ?: return
+        fun live(l: ProgrammerLayer) = l.source.kind == LayerSourceKind.LOOK && l.enabled && l.amount > 0.0
+        if (!live(layer) || rest.any { live(it) && it.source.uuid == layer.source.uuid }) return
+        val higher = rest.filter { live(it) && it.sortOrder > layer.sortOrder }.map { it.source.id }
+        val scenery = lookSceneryOf(st.database, higher + layer.source.id)
+        val own = scenery[layer.source.id].orEmpty()
+        if (own.isEmpty()) return
+        val above = higher.mapNotNull { scenery[it] }
+        val rows = own.mapValues { (uuid, state) ->
+            ElementStates(
+                visible = state.visible.takeIf { above.none { it[uuid]?.visible != null } },
+                open = state.open.takeIf { above.none { it[uuid]?.open != null } },
+                trimM = state.trimM.takeIf { above.none { it[uuid]?.trimM != null } },
+            )
+        }
+        val projectId = runCatching { st.projectManager.currentProject.id.value }.getOrNull() ?: return
+        st.programmerScenery.holdUnder(projectId, rows)
+    }
+
+    /**
+     * *Apply as values* for a Look (apply-model plan §3.5): the end of a press followed by [detach],
+     * with no layer ever on the stack. The Look is cooked on top of the stack as the layer a press
+     * would add; the keys it wins are written as `WEB` values (at [fadeMs] when given, else each
+     * row's own fade, as a press's arrival is), its effects start as Local effects at the rank that
+     * layer would have had, and its scenery passes to the programmer's own.
+     */
+    fun applyAsValues(
+        source: LayerSource,
+        targets: List<CueTargetDto>,
+        propertyMask: String? = null,
+        beatDivisionOverride: Double? = null,
+        fadeMs: Long? = null,
+    ): ApplyValuesOutcome {
+        val layer = ProgrammerLayer(
+            layerId = store.mintLayerId(),
+            source = source,
+            sortOrder = Int.MAX_VALUE,
+            targets = targets,
+            propertyMask = propertyMask,
+            beatDivisionOverride = beatDivisionOverride,
+        )
+        val cooked = cookStack(store.layers + layer, withEffects = true)
+        val fixtures = fixtures()
+        val hints = groupHintsForTargets(fixtures, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
+        val byFade = LinkedHashMap<Long, MutableList<ProgrammerWriter.PropertyWrite>>()
+        for (row in cooked.values.rows) {
+            if (row.layerWinner?.layerId != layer.layerId) continue
+            val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
+            val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
+            byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.PropertyWrite(
+                head, row.propertyName, row.value, sourceGroup = hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            )
+        }
+        val eng = engine()
+        for ((fade, writes) in byFade) eng.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fade)
+        val priority = priorityFor(cooked.ranks[layer.layerId] ?: 0)
+        val instances = cooked.effects.mapNotNull { (cookLayer, effect, target) ->
+            if (cookLayer.layerId != layer.layerId) return@mapNotNull null
+            spawn(cookLayer, effect, target, beatDivisionOverride)?.also { it.priority = priority }
+        }
+        val effectIds = eng.addEffects(instances)
+        if (source.kind == LayerSourceKind.LOOK) {
+            state()?.let { st ->
+                val rows = lookSceneryOf(st.database, listOf(source.id))[source.id].orEmpty()
+                val projectId = runCatching { st.projectManager.currentProject.id.value }.getOrNull()
+                if (rows.isNotEmpty() && projectId != null) st.programmerScenery.holdUnder(projectId, rows)
+            }
+        }
+        return ApplyValuesOutcome(byFade.values.sumOf { it.size }, effectIds)
     }
 
     /** Move a layer to [toIndex], renumbering the whole list. */
@@ -1014,44 +1105,12 @@ class ProgrammerLayerStack(
     private fun build(
         layer: CookLayer,
         effect: EffectEntry,
-        target: TargetRef,
+        target: EffectTargetRef,
         key: ProgrammerLayerEffectKey,
         priority: Int,
         beatDivisionOverride: Double?,
     ): FxInstance? {
-        val st = state() ?: return null
-        val spec = effect.toEffectSpec().withBeatDivisionOverride(beatDivisionOverride)
-        val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(st, CueTargetDto(target), spec)
-        } catch (e: Exception) {
-            logger.warn(
-                "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",
-                layer.source.name, target.key, e.message,
-            )
-            null
-        } ?: return null
-
-        // [createEffectInstance] gives this a **live** colour source, unlike the frozen
-        // snapshot this path used to build for itself.
-        //
-        // The old positional colour list was captured at include time — version pinned to `0L` — so
-        // an effect on a programmer layer kept the colours it was born with. A `tmpl:` reference is
-        // a live dependency by design: the whole point of naming a template rather than stating a
-        // colour is that retuning it moves everything that follows it, and a programmer layer is no
-        // more exempt from that than a cue's.
-        val instance = try {
-            EffectSpawner.createEffectInstance(
-                spec, fxTarget, state = st,
-                overrideSpeedMasterUuid = layer.speedMasterUuid,
-                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-            )
-        } catch (e: Exception) {
-            logger.warn(
-                "programmer layer '{}': effect '{}' could not be created — {}",
-                layer.source.name, effect.effectType, e.message,
-            )
-            return null
-        }
+        val instance = spawn(layer, effect, target, beatDivisionOverride) ?: return null
         // `source` and the band key are the honest fields for where this came from — a template
         // layer reaches here too now (D5), which is why this is the whole source rather than an
         // id that could only ever mean a Look.
@@ -1062,6 +1121,42 @@ class ProgrammerLayerStack(
         instance.programmerLayerEffectKey = key
         instance.priority = priority
         return instance
+    }
+
+    /** A layer's effect on one target as a bare instance — no source, no band key, no priority. */
+    private fun spawn(
+        layer: CookLayer,
+        effect: EffectEntry,
+        target: EffectTargetRef,
+        beatDivisionOverride: Double?,
+    ): FxInstance? {
+        val st = state() ?: return null
+        val spec = effect.toEffectSpec().withBeatDivisionOverride(beatDivisionOverride)
+        val fxTarget = try {
+            EffectSpawner.resolveTargetForCue(st, target, spec)
+        } catch (e: Exception) {
+            logger.warn(
+                "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",
+                layer.source.name, target.key, e.message,
+            )
+            null
+        } ?: return null
+
+        // [createEffectInstance] gives this a **live** colour source: a `tmpl:` reference is a live
+        // dependency by design, and a programmer layer is no more exempt from that than a cue's.
+        return try {
+            EffectSpawner.createEffectInstance(
+                spec, fxTarget, state = st,
+                overrideSpeedMasterUuid = layer.speedMasterUuid,
+                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+            )
+        } catch (e: Exception) {
+            logger.warn(
+                "programmer layer '{}': effect '{}' could not be created — {}",
+                layer.source.name, effect.effectType, e.message,
+            )
+            null
+        }
     }
 
     private fun renumber(layers: List<ProgrammerLayer>): List<ProgrammerLayer> =

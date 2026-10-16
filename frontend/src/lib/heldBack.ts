@@ -22,6 +22,8 @@
  * `FxSheet`'s struck-through chips and the fixture sheet's amber dot both read this; the grid's
  * corner dot (session 5) does, through [heldBackReach].
  */
+import { effectAimKeys, type EffectTargetFields } from './effectTargets'
+
 export interface HeldBackEffect {
   programmerOwned: boolean
   propertyName: string
@@ -57,10 +59,7 @@ export function isHeldByBlind(effect: Pick<HeldBackEffect, 'programmerOwned'>, b
 }
 
 /** What [heldBackReach] needs of an effect — the wire's own fields. */
-export interface ReachingEffect extends HeldBackEffect {
-  targetKey: string
-  isGroupTarget: boolean
-}
+export interface ReachingEffect extends HeldBackEffect, EffectTargetFields {}
 
 /** What [heldBackReach] needs of a fixture. */
 export interface ReachFixture {
@@ -89,12 +88,11 @@ export function heldBackReach(effects: readonly ReachingEffect[] | undefined, fi
   const heads = (fixture: ReachFixture) => [fixture.key, ...(fixture.elements ?? []).map((e) => e.key)]
   for (const effect of effects) {
     if (effect.programmerOwned) continue
-    const reached = effect.isGroupTarget
-      ? fixtures.filter((f) => f.groups.includes(effect.targetKey)).flatMap(heads)
-      : byKey.has(effect.targetKey)
-        ? heads(byKey.get(effect.targetKey)!)
-        : [effect.targetKey]
-    for (const head of reached) out.add(heldBackKey(head, effect.propertyName))
+    const aimed = effectAimKeys(effect, (group) => fixtures.filter((f) => f.groups.includes(group)).map((f) => f.key))
+    for (const key of aimed) {
+      const fixture = byKey.get(key)
+      for (const head of fixture ? heads(fixture) : [key]) out.add(heldBackKey(head, effect.propertyName))
+    }
   }
   return out
 }

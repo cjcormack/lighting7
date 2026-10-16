@@ -540,6 +540,7 @@ always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect pa
 | `programmer.state` | — | `programmer.state` |
 | `programmer.addLayer` | exactly one of `lookId`/`templateId`, `targets`, `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
+| `programmer.detachLayer` | `layerId: Int` | `programmer.layerState` — the layer's values become Local `web` values and its effects Local effects, and it comes off with nothing on stage moving (`ProgrammerLayerStack.detach`; `lighting-composition-model.md` §"Detach and Apply as values") |
 | `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
 | `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?`, `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.setScenery` | `elementUuid`, `state: {visible?, open?, trimM?}`, `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |

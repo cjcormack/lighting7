@@ -19,6 +19,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R4-3`](#fu-manual-venue-visit-r4-3) | one effect over a hand selection on the rig — eight loose pars and a group of four ripple as one chase in the order picked, a head named twice runs once, and the chase records into a cue and a Look and comes back as one | Venue visit R4.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R4-2`](#fu-manual-venue-visit-r4-2) | the spread's shape on the rig — Spread 50 % tightens a chase into half a cycle, two wings ripple from both ends, blocks of three move as threes, groups of two alternate odd and even, and the editor's dials match what the heads do | Venue visit R4.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
@@ -155,7 +156,9 @@ desks on this build:
    two, in the **same** order, and a third sync on each changes nothing.
 5. **A drag is one file.** Drag a cue to another place in a stack on A and sync: the commit changes
    one `cueStackEntries/` file.
-6. **Clean up.** Remove the two test cues (or drop the scratch copy).
+6. **Clean up.** Drop the scratch copy. Since R1.4 *Remove from stack* leaves a cue loose and no UI
+   deletes one yet, so on a real show delete the two test cues with `DELETE /cues/{id}?force=true`
+   (without `force` a cue still in a stack is refused, `CUE_IN_USE`).
 
 ---
 
@@ -189,6 +192,35 @@ If a stored locate lands visibly off the spot it was set on, promote it to a `FU
 `followups.md`.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-3`
+
+**What it proves**: *one effect over a selection* — venue-visit R4.3, effects plan session 3 (D3):
+an effect started on a hand selection is one instance spread over it in the order picked, as a
+group's is, rather than heads running in unison.
+
+**Why it is here**: the tests read the expansion's member order and phases off synthetic ticks
+against a mock controller, and the round trips off exported files. Nothing in review watched a chase
+walk across loose fixtures in the order they were marqueed, or a recorded one come back.
+
+**Test**, on Sleeping Beauty, from the programmer:
+
+1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX band
+   shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
+   *Spread* shows eight dials.
+2. **With a group.** Select those eight rows and a group of four below them: one chase, twelve
+   steps, the group's members in the group's own order after the pars. Set Order to *Reverse*: it
+   runs back from the group's last member.
+3. **A head twice.** Add one of the group's members as its own row too: it runs once, at the group's
+   place.
+4. **Record and Include.** Record a cue: its card lists one effect *over* the twelve. Clear, GO the
+   cue: the same chase. Include it into the programmer: one effect again, editable, and Update keeps
+   an edit. Record a Look with the effect ticked: the Look sheet lists it over the selection.
+5. **⌘K.** With the selection standing, ⌘K → *Apply FX* → *On the selection*: one effect over it.
+
+**Time**: 10 minutes.
 
 ---
 
@@ -268,11 +300,10 @@ of two stacks stepped off the cue, or read the two rings on a desk screen.
 session 3 (sync `formatVersion` 32) the archive wrote a cue from one entry only, so a push dropped the
 second and a pull deleted it; on a build with session 3 a repo may stay attached:
 
-1. **One cue in two stacks.** No route puts a cue in a second stack until session 4 lets a cue be
-   shared, so add its second entry directly: note the cue's id and the second stack's id
-   (`GET /api/rest/projects/{id}/cue-stacks`), then
-   `sqlite3 <desk db> "INSERT INTO cue_stack_entries (stack_id, cue_id, kind, ordinal, cue_number_auto, auto_advance, uuid) VALUES (<stack>, <cue>, 'CUE', 99, 1, 0, randomblob(16))"`
-   and reload the Show view: the cue is listed in both stacks.
+1. **One cue in two stacks.** On a card of the first stack, *Add to stack…* → the second (R1.4 shares
+   a cue from the Show view): the cue is listed in both stacks, each card showing *in 2 stacks*. This
+   step is also step 1 of [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4), so the two run
+   well together.
 2. **GO both, step one on.** GO the first stack to the cue, then GO the second stack to its entry
    of the same cue. Nothing on the rig moves at the second GO — no fade, no events. Now step the
    first stack on to its next cue. **The cue's state stays** on the rig wherever the next cue does
@@ -283,9 +314,7 @@ second and a pull deleted it; on a build with session 3 a repo may stay attached
 4. **Outline.** With the stack running on the pad's own cue and the pad not pressed, the pad reads
    as an **outline**; pressing it turns it solid, and pressing again leaves the outline (the stack
    still holds it). A cue slot holding the same cue reads the same two ways.
-5. **Clean up.** Delete the inserted entry
-   (`DELETE FROM cue_stack_entries WHERE stack_id = <stack> AND cue_id = <cue>`), or the whole show
-   copy if it was a scratch one.
+5. **Clean up.** *Remove from stack* on the second stack's card, or drop the scratch copy.
 
 ---
 
@@ -313,8 +342,8 @@ pointing at the copy, the desk itself stopped or on another port):
    (auto numbers unchanged, explicit ones unchanged), the same follows, and its markers where they
    were. GO through a few cues; standby and GO TO work from the cue table.
 4. **Same book.** The prompt book's cue anchors sit where they did. A marker's anchor is kept but
-   not drawn until the prompt book reads anchors by entry (cue model plan D4, a later session), so
-   check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
+   not drawn: since R1.4 the book reads anchors by entry, but lists only cue entries' anchors, and no
+   session plans to draw a marker's. So check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
    cue_stack_entries e ON e.id = a.entry_id WHERE e.kind = 'MARKER'"` lists each one against its
    marker. The log's dropped-anchor count should be 0 unless an anchor named a cue already gone.
 5. **Once.** Stop and start again: no migration line, no second backup.

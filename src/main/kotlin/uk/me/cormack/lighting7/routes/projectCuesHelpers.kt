@@ -74,15 +74,17 @@ internal fun captureCurrentState(state: State): CapturedState {
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
 
     for (effect in activeEffects) {
-        val targetType = if (effect.isGroupEffect) "group" else "fixture"
+        val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
 
         val source = effect.source
         if (source != null) {
             val targets = layerTargets.getOrPut(source.kind to source.id) { mutableListOf() }
-            val target = CueTargetDto(type = targetType, key = targetKey)
-            if (target !in targets) {
-                targets.add(target)
+            // A layer's targets are fixtures and groups, so a bound selection effect names its items.
+            val named = (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.map { CueTargetDto(it) }
+                ?: listOf(CueTargetDto(type = targetType, key = targetKey))
+            for (target in named) {
+                if (target !in targets) targets.add(target)
             }
         } else {
             // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
@@ -97,7 +99,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 blendMode = effect.blendMode.name,
                 distribution = dyn.distributionStrategy.javaClass.simpleName,
                 phaseOffset = dyn.phaseOffset,
-                elementMode = if (effect.isGroupEffect) dyn.elementMode.name else null,
+                elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,
                 parameters = effect.effect.parameters,
@@ -482,10 +484,22 @@ internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
 internal fun validateCueChildren(
     adHocEffects: List<CueAdHocEffectDto>,
     layers: List<CueLayerDto>,
+    propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
 ): String? {
+    // A selection is an effect's target only (effects plan D3): a value row and a layer name a
+    // fixture or a group.
+    propertyAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
+        ?.let { (i, row) -> return "propertyAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
     for (layer in layers) {
+        layer.targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
+            ?.let { return "A layer's target must be a fixture or a group, not '${it.type}'" }
         EffectSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
     }
+    adHocEffects.withIndex().firstOrNull { (_, e) -> EffectTargetRef.ofOrNull(e.targetType, e.targetKey) == null }
+        ?.let { (i, e) ->
+            return "adHocEffects[$i]: unknown target '${e.targetType}' — expected 'fixture', 'group' or " +
+                "'${EffectTargetRef.Selection.TYPE}' with a list of fixtures and groups"
+        }
     for (effect in adHocEffects) {
         EffectSpecCoercion.Strict.problem(
             blendMode = effect.blendMode,
@@ -600,7 +614,7 @@ internal fun writeCueChildren(
 ) {
     val newEffects = adHocEffects.orEmpty()
     val newRows = propertyAssignments.orEmpty()
-    validateCueChildren(newEffects, layers.orEmpty())?.let { throw IllegalArgumentException(it) }
+    validateCueChildren(newEffects, layers.orEmpty(), newRows)?.let { throw IllegalArgumentException(it) }
     // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
     // problem at once, before anything is written, so the caller's transaction rolls back whole.
     // The index is queries; build it only when some name could be refused at all.
@@ -640,7 +654,7 @@ internal fun writeCueChildren(
         }
     }
     if (adHocEffects != null) {
-        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects, { it.effectKey }, { it.effectKey })
+        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects.map { it.canonicalTarget() }, { it.effectKey }, { it.effectKey })
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
             if (stored != null) {
@@ -783,34 +797,6 @@ internal fun deleteCueReferences(cue: DaoCue): Set<Int> {
     DaoCueSlots.deleteWhere { DaoCueSlots.cue eq cue.id }
     return pageIds
 }
-
-/**
- * `memberFixtureKey → groupKey` for every group in [targets], so a writer that fans a
- * group-scoped gesture out to members can still stamp `sourceGroup` on each programmer slot.
- *
- * Without the hint, Record sees N unrelated fixture entries and emits N cue rows where the
- * operator wrote one group row. Groups are visited in sorted key order and the first group
- * claiming a member wins, so overlapping groups produce a stable (if arbitrary) hint rather
- * than one that flips between calls.
- */
-internal fun groupHintsForTargets(
-    fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    targets: List<TargetRef>,
-): Map<String, String> {
-    val groupKeys = targets.filterIsInstance<TargetRef.Group>().map { it.key }.distinct().sorted()
-    if (groupKeys.isEmpty()) return emptyMap()
-    val out = HashMap<String, String>()
-    for (groupKey in groupKeys) {
-        val group = try {
-            fixtures.untypedGroup(groupKey)
-        } catch (_: IllegalStateException) {
-            continue
-        }
-        for (member in group.fixtures) out.putIfAbsent(member.targetKey, groupKey)
-    }
-    return out
-}
-
 
 /**
  * Resolve `elementKey` — either a full element key (`"bar-1.head-0"`) or a suffix

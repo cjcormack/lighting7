@@ -1,10 +1,12 @@
+import { useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { FxAddSheet } from '@/components/fx/FxAddSheet'
 import type { FxTarget } from '@/components/fx/FxPicker'
+import { effectTargetOf } from '@/components/fx/selectionEffectTarget'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
 import { useAbsorbLookEffectsMutation } from '@/store/looks'
-import { selectTargetKeys } from '@/store/selectionSlice'
+import { selectRowTargets } from '@/store/selectionSlice'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
 
@@ -51,9 +53,7 @@ export function useProgrammerAddEffect(): AddEffectOffer {
   const [absorb] = useAbsorbLookEffectsMutation()
   const { data: fixtures } = useFixtureListQuery()
   const { data: groups } = useGroupListQuery()
-  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
-    selectTargetKeys(s, 'programmer'),
-  )
+  const selected = useSelector((s: Parameters<typeof selectRowTargets>[0]) => selectRowTargets(s, 'programmer'))
 
   // A **template layer takes no effect from here**, and the reason has changed rather than gone.
   // It used to be D7 — a template held no effects at all. A template may now hold one
@@ -63,16 +63,10 @@ export function useProgrammerAddEffect(): AddEffectOffer {
   // absorb an effect into nothing at all.
   const templateFocused = scope?.kind === 'layer' && store == null
 
-  // An effect needs one target to be authored against. The selection is the operator's own answer
-  // to "which heads?", and the editor offers the distribution controls once it knows whether that
-  // target is multi-head — so a group beats a fixture where the selection is a group.
-  const group = groups?.find((g) => selectedKeys.includes(g.name))
-  const fixture = fixtures?.find((f) => selectedKeys.includes(f.key))
-  const target: FxTarget | null = group
-    ? { type: 'group', group }
-    : fixture
-      ? { type: 'fixture', fixture }
-      : null
+  // The selection is the operator's own answer to "which heads?", in the grid's order: one row is
+  // that fixture, cell or group alone, several are one effect spread over them in that order, as a
+  // group's members are (effects plan D3).
+  const target = useMemo(() => effectTargetOf(selected, fixtures, groups), [selected, fixtures, groups])
 
   const reason =
     scope == null || scope.kind === 'output'

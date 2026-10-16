@@ -19,6 +19,9 @@ export const DEFERRED_TARGET_TYPE = 'deferred' as const
 
 export type LookTargetType = 'fixture' | 'group' | typeof DEFERRED_TARGET_TYPE
 
+/** An effect's target that is an ordered list of fixtures and groups (effects plan D3). */
+export const SELECTION_TARGET_TYPE = 'selection' as const
+
 /**
  * One stored Look row: "for this target, this property is this value".
  *
@@ -49,7 +52,11 @@ export interface LookRow {
  * the layer applying the Look, not to the Look itself.
  */
 export interface LookEffect {
-  targetType: LookTargetType
+  /**
+   * A row's vocabulary, or `selection` (effects plan D3): one effect over an ordered list of
+   * fixtures and groups, its [targetKey] the list's canonical JSON. Only an effect may name one.
+   */
+  targetType: LookTargetType | typeof SELECTION_TARGET_TYPE
   targetKey: string
   effectType: string
   category: string

@@ -129,8 +129,13 @@ data class LookEffectDto(
     /** True when this effect takes its targets from the referencing layer rather than naming one. */
     val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
 
-    /** The effect's own target, or null when [isDeferred]. */
-    val target: TargetRef? get() = if (isDeferred) null else TargetRef.of(targetType, targetKey)
+    /** The effect's own target — a fixture, a group or a selection (effects plan D3) — or null when [isDeferred]. */
+    val target: EffectTargetRef? get() = if (isDeferred) null else EffectTargetRef.of(targetType, targetKey)
+
+    /** This effect with its target spelled as the desk stores it ([EffectTargetRef.canonical]). */
+    fun canonicalTarget(): LookEffectDto =
+        if (isDeferred) this
+        else EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
 }
 
 /**
@@ -234,8 +239,11 @@ object DaoLookEffects : IntIdTable("look_effects") {
     /** A [TargetRef] discriminator, or [DEFERRED_TARGET_TYPE]. */
     val targetType = varchar("target_type", 50)
 
-    /** Empty string when [targetType] is [DEFERRED_TARGET_TYPE]. */
-    val targetKey = varchar("target_key", 255)
+    /**
+     * Empty string when [targetType] is [DEFERRED_TARGET_TYPE]. `text`, not a `varchar(255)`: a
+     * selection's canonical key outgrows any fixed width.
+     */
+    val targetKey = text("target_key")
     val effectType = varchar("effect_type", 255)
     val category = varchar("category", 50)
     val propertyName = varchar("property_name", 255).nullable()
@@ -386,6 +394,6 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
 
     /** The effect's own target, or null when deferred or the discriminator is unknown. */
-    val target: TargetRef?
-        get() = if (isDeferred) null else TargetRef.ofOrNull(targetType, targetKey)
+    val target: EffectTargetRef?
+        get() = if (isDeferred) null else EffectTargetRef.ofOrNull(targetType, targetKey)
 }

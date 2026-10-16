@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from "react"
-import { useNavigate } from "react-router"
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { useLocation, useNavigate } from "react-router"
 import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
-  SlidersHorizontal,
+  ListOrdered, SlidersHorizontal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useProjectListQuery } from "@/store/projects"
@@ -25,6 +25,7 @@ import {
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { FxTarget } from "@/components/fx/FxPicker"
+import { effectTargetOf, useWindowSelectionTargets } from "@/components/fx/selectionEffectTarget"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 
@@ -151,6 +152,22 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const { data: projects } = useProjectListQuery(undefined, closed)
   const { data: fixtures } = useVisibleFixtureListQuery(closed)
   const { data: groups } = useGroupListQuery(undefined, closed)
+  // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
+  // on the programmer, the desk's or the busk view's own elsewhere.
+  const { pathname } = useLocation()
+  const windowSelection = useWindowSelectionTargets(pathname.includes("/programmer"))
+  const selectionTarget = useMemo(
+    () => effectTargetOf(windowSelection, fixtures, groups),
+    [windowSelection, fixtures, groups],
+  )
+  const selectionLabel =
+    selectionTarget == null
+      ? ""
+      : selectionTarget.type === "selection"
+        ? selectionTarget.label
+        : selectionTarget.type === "group"
+          ? selectionTarget.group.name
+          : selectionTarget.fixture.name
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
   const templateFamilyNavItems = useTemplateFamilyNavItems()
@@ -498,9 +515,25 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
           </>
         )}
 
-        {/* Apply FX sub-page: pick a fixture or group */}
+        {/* Apply FX sub-page: the selection, or pick a fixture or group */}
         {activePage === "apply-fx" && (
           <>
+            {selectionTarget != null && (
+              <Command.Group heading="Selection" className={groupClassName}>
+                <Command.Item
+                  value={`On the selection ${selectionLabel}`}
+                  keywords={["selection", "selected", "marquee"]}
+                  onSelect={() => {
+                    if (onApplyFx) runAction(() => onApplyFx(selectionTarget))
+                  }}
+                  className={itemClassName}
+                >
+                  <ListOrdered className="size-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">On the selection</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{selectionLabel}</span>
+                </Command.Item>
+              </Command.Group>
+            )}
             {fixtures && fixtures.length > 0 && (
               <Command.Group heading="Fixtures" className={groupClassName}>
                 {fixtures.map((fixture) => (

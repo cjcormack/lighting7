@@ -54,6 +54,11 @@ vi.mock('@/store/fixtures', () => ({
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: patches }) }))
+// Release stops a selection effect it released whole through the REST delete; nothing here runs one.
+vi.mock('@/store/fixtureFx', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
+  useRemoveFxMutation: () => [() => ({ unwrap: () => Promise.resolve() })],
+}))
 // The sheet a tile's *Fixture sheet…* opens (D21) is the fixture sheet's body, whose own suites
 // pin it; here it only says what it was opened on.
 vi.mock('@/components/fixtureSheet/FixtureSheet', () => ({

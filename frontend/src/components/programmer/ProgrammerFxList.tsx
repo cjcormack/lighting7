@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
-import { Layers, LayoutGrid, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
+import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ import { FxEditorPopover } from '../fx/FxEditorPopover'
 import { HeldBlindMark } from '../fx/HeldBlindMark'
 import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
+import { effectTargetLabel, selectionItems } from '@/lib/effectTargets'
 
 /**
  * What is running, one row per effect.
@@ -260,7 +261,8 @@ function FxRow({
   onSaveAsTemplate: () => void
   onStop: () => void
 }) {
-  const TargetGlyph = effect.isGroupTarget ? Layers : LayoutGrid
+  const selection = selectionItems(effect)
+  const TargetGlyph = selection != null ? ListOrdered : effect.isGroupTarget ? Layers : LayoutGrid
   const rowRef = useRef<HTMLDivElement>(null)
   return (
     <div
@@ -333,10 +335,16 @@ function FxRow({
         <span className="font-mono">→ {effect.propertyName}</span>
         <span
           className="flex min-w-0 items-center gap-0.5 font-mono"
-          title={effect.isGroupTarget ? `Group ${effect.targetKey}` : `Fixture ${effect.targetKey}`}
+          title={
+            selection != null
+              ? `Over ${selection.map((t) => t.key).join(', ')}, in that order`
+              : effect.isGroupTarget
+                ? `Group ${effect.targetKey}`
+                : `Fixture ${effect.targetKey}`
+          }
         >
           <TargetGlyph className="size-3 shrink-0" />
-          <span className="truncate">{effect.targetKey}</span>
+          <span className="truncate">{effectTargetLabel(effect)}</span>
         </span>
         {/* Where it lives is the answer to "why can't I delete this?". */}
         <Badge

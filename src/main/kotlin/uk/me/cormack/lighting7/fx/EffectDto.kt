@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.models.CueTargetDto
 
 /**
  * One running effect, as every transport reports it.
@@ -25,8 +26,15 @@ data class EffectDto(
      * user-defined FX definition.
      */
     val effectType: String,
-    /** The fixture or group key, *without* the property suffix — [propertyName] carries that. */
+    /**
+     * The fixture or group key, *without* the property suffix — [propertyName] carries that. A
+     * selection's is its canonical key; [targets] lists it.
+     */
     val targetKey: String,
+    /** `fixture`, `group` or `selection` (effects plan D3). */
+    val targetType: String,
+    /** A selection's fixtures and groups, in order; null for a fixture or a group. */
+    val targets: List<CueTargetDto>? = null,
     val propertyName: String,
     val beatDivision: Double,
     val blendMode: String,
@@ -142,12 +150,14 @@ internal fun FxInstance.toEffectDto(
     masterStates: List<SpeedMasterBank.MasterState>,
     isMultiElementExpanded: Boolean,
 ): EffectDto {
-    val showDistribution = isGroupEffect || isMultiElementExpanded
+    val showDistribution = spreadsOverMembers || isMultiElementExpanded
     val dyn = dynamics
     return EffectDto(
         id = id,
         effectType = effectTypeId,
         targetKey = target.targetKey,
+        targetType = target.targetRef.discriminator,
+        targets = (target.targetRef as? FxTargetRef.SelectionRef)?.items?.map { CueTargetDto(it) },
         propertyName = target.propertyName,
         beatDivision = timing.beatDivision,
         blendMode = blendMode.name,
@@ -157,7 +167,7 @@ internal fun FxInstance.toEffectDto(
         parameters = effect.parameters,
         isGroupTarget = isGroupEffect,
         distributionStrategy = if (showDistribution) distributionStrategy.javaClass.simpleName else null,
-        elementMode = if (isGroupEffect && isMultiElementExpanded) elementMode.name else null,
+        elementMode = if (spreadsOverMembers && isMultiElementExpanded) elementMode.name else null,
         elementFilter = if (showDistribution && elementFilter != ElementFilter.ALL) elementFilter.name else null,
         stepTiming = stepTiming,
         lookId = lookId,

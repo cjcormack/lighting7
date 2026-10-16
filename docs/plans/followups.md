@@ -58,6 +58,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
+| [`FU-PRESS-REPLACE-LOOKS`](#fu-press-replace-looks) | Trigger | Look | an operator expects a Look to take another off the same heads outside a solo bank |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
@@ -149,6 +150,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
+| [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -1109,6 +1111,19 @@ needs to reach it. The cost is entirely in the UI, which would go from two contr
 per property per layer. Recorded rather than silently cut.
 
 **Trigger**: an operator asks for one property of a layer to behave differently from the rest.
+
+### `FU-PRESS-REPLACE-LOOKS`
+
+**A Look pressed over a Look stacks** · Trigger · apply-model plan D6 (venue-visit R3.1)
+
+A palette press takes its heads off every other palette of its family and kind
+(`ProgrammerLayerStack.toggle`'s family replacement), but a Look replaces nothing and is replaced by
+nothing: a Look spans families, so there is no one family to replace within. Two Looks on one head
+stack, the higher winning where they overlap and the lower still lit underneath, as two palettes did
+before D2. A solo bank is the way to make two Looks exclusive today.
+
+**Trigger**: an operator expects pressing one Look to take another off the same heads outside a solo
+bank.
 
 ### `FU-LOOK-NESTED`
 
@@ -2909,6 +2924,21 @@ reports `MissingCue`, as a binding to any deleted cue always has — the 409 lis
 was told. **Trigger**: an operator finds a dead binding left this way confusing. **Then**: delete the
 `FireCue` rows `cueUsesOf` already finds inside the forced delete's transaction, and reload the
 binding service's project.
+
+### `FU-BUSK-PAD-STALE-NUMBER`
+
+**A cue pad's face can show a stale number** · Ready · Venue-visit K2, 2026-10-16
+
+A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with the busk page. R1.4's
+`announceCuePadsChanged` (`routes/cueDelete.kt`) fires `busk.layoutChanged` for the pads of the cues
+it names, from add-cue, an entry's removal, an entry's number and a stack delete. Reorder and
+sort-by-number (`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the
+other `placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack,
+the copy in `routes/projectCues.kt`, Record CREATE into a stack, and MCP `add_cue_to_stack` and
+`build_cue_stack`. The pad keeps the old number until something else refetches the page. This
+predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
+renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
+includes the shared cue itself.
 
 ## Completed
 

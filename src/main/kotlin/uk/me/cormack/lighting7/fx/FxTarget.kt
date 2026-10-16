@@ -16,6 +16,8 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
+import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.math.roundToInt
@@ -43,6 +45,28 @@ sealed class FxTargetRef {
     data class GroupRef(override val targetKey: String) : FxTargetRef() {
         override val isGroup: Boolean = true
     }
+
+    /**
+     * An ordered list of fixtures and groups (effects plan D3), expanded in that order as one
+     * group's members are. [targetKey] is the selection's canonical key, never a fixture's or a
+     * group's, so a lookup by fixture or group key never matches one.
+     */
+    data class SelectionRef(val selection: EffectTargetRef.Selection) : FxTargetRef() {
+        override val targetKey: String get() = selection.key
+        override val isGroup: Boolean = false
+        val items: List<TargetRef> get() = selection.items
+    }
+
+    /** Whether this references a [SelectionRef]. */
+    val isSelection: Boolean get() = this is SelectionRef
+
+    /** The `(targetType, targetKey)` discriminator this reference is stored and sent under. */
+    val discriminator: String
+        get() = when (this) {
+            is FixtureRef -> TargetRef.Fixture.TYPE
+            is GroupRef -> TargetRef.Group.TYPE
+            is SelectionRef -> EffectTargetRef.Selection.TYPE
+        }
 
     companion object {
         /** Create a reference to a fixture */
@@ -89,6 +113,9 @@ sealed class FxTarget {
 
     /** Whether this target references a group */
     val isGroupTarget: Boolean get() = targetRef.isGroup
+
+    /** Whether this target references a selection ([FxTargetRef.SelectionRef]) */
+    val isSelectionTarget: Boolean get() = targetRef.isSelection
 
     /**
      * Apply an effect output value to a single fixture or element.

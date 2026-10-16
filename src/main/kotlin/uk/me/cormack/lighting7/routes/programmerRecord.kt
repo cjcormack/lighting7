@@ -24,11 +24,13 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.asDuration
 import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 
 /**
  * How a recording lands on the target cue.
@@ -474,7 +476,7 @@ private fun replaceImmediateFxChildren(
     // keeping its uuid (show-cue-editing plan P3); the rest are deleted once the recording is in.
     val replacedEffects = cue.adHocEffectsInOrder().filter { effect ->
         !effect.isTimed &&
-            targetInScope(state.show.fixtures, effect.target, scope) &&
+            effectTargetInScope(state.show.fixtures, effect.target, scope) &&
             (mask == null || maskAllows(mask, maskGroupForAdHocChild(state, effect)))
     }
     // Layers, same rule as preset applications had and for the same reason: a Look can span
@@ -566,14 +568,7 @@ private fun shadowingCoverage(
 
 private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocEffect): PropertyMaskGroup? {
     val propertyName = effect.propertyName ?: return null
-    val fixture = try {
-        when (val target = effect.target) {
-            is TargetRef.Group -> state.show.fixtures.untypedGroup(target.key).fixtures.firstOrNull()
-            is TargetRef.Fixture -> state.show.fixtures.untypedGroupableFixture(target.key)
-        }
-    } catch (_: Exception) {
-        null
-    } ?: return null
+    val fixture = state.show.fixtures.referenceFixtureFor(effect.target) ?: return null
     return uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
 }
 

@@ -89,6 +89,8 @@ import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
@@ -592,6 +594,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         look = boundLook; targetType = "fixture"; targetKey = "hex-3"
         propertyName = "position"; value = "120,64"; sortOrder = 2
     }
+    // One effect over a selection (effects plan session 3, formatVersion 34): a fixture, then a
+    // group, in that order — the order the effect spreads in.
+    DaoLookEffect.new {
+        look = boundLook; targetType = EffectTargetRef.Selection.TYPE
+        targetKey = EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
+        effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
+        beatDivision = 2.0; blendMode = "OVERRIDE"; distribution = "REVERSE"
+        parameters = mapOf("min" to "40")
+        sortOrder = 0
+    }
 
     // An **effects-only** look, the shape an FX preset migrated into. Its rows would once have been
     // deferred too; session 3 moved that half of the entity out to `templates` (see the template
@@ -806,6 +818,18 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         wings = 2
         blocks = 4
         groups = 3
+    }
+    // An ad-hoc effect over a selection (formatVersion 34), the shape Record writes for a Local effect
+    // started on a marquee.
+    DaoCueAdHocEffect.new {
+        cue = cue1; targetType = EffectTargetRef.Selection.TYPE
+        targetKey = EffectTargetRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
+        effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
+        blendMode = "OVERRIDE"; distribution = "CENTER_OUT"
+        parameters = mapOf("depth" to "0.5")
+        propertyName = "dimmer"
+        elementMode = "FLAT"
+        sortOrder = 4
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.
