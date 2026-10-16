@@ -351,7 +351,7 @@ Each session is one PR (P1). All are frontend only (P5).
   - ⌘K's labels are unique.
 - **Docs:** the frontend CLAUDE.md's §Navigation Registry, which gains sections and P2.
 
-### Session 2 — Off the rig
+### Session 2 — Off the rig — done, `1d1db07`
 
 - §3.2: `needsRig`, the muted row with its dot, `NotOnRig` on every `needsRig` route, and the header's
   *Not on the rig*.
