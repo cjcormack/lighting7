@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { StrictMode, useState } from 'react'
+import { StrictMode, useLayoutEffect, useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorScriptType } from '@/store/scripts'
@@ -218,6 +218,39 @@ describe('changes', () => {
     // revert — a re-`setValue` on every keystroke would fight the operator's typing.
     expect(fragment!.codemirror.getValue()).toBe('val x = 1!')
     expect(fragment!.codemirror.getCursor()).toEqual({ line: 5, ch: 2 })
+  })
+
+  // A keystroke can land after the commit that changed `script.script` and before that commit's
+  // passive effects run. The sibling's layout effect types into that window, deterministically.
+  it('keeps a keystroke that lands in the commit a Reset made', async () => {
+    let keystroke: (() => void) | null = null
+    function TypeInCommit({ code }: { code: string }) {
+      useLayoutEffect(() => {
+        keystroke?.()
+        keystroke = null
+      }, [code])
+      return null
+    }
+    let held = ''
+    function Controlled() {
+      const [code, setCode] = useState('val x = 1 // edited')
+      held = code
+      return (
+        <>
+          <ScriptEditor script={{ name: 'S', script: code }} onScriptChange={setCode} />
+          <button onClick={() => setCode('val x = 1')}>Reset</button>
+          <TypeInCommit code={code} />
+        </>
+      )
+    }
+    render(<Controlled />)
+
+    const { fragment } = await onlyMount()
+    keystroke = () => fragment!.codemirror.type('!')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+
+    expect(fragment!.codemirror.getValue()).toBe('val x = 1!')
+    expect(held).toBe('val x = 1!')
   })
 })
 
