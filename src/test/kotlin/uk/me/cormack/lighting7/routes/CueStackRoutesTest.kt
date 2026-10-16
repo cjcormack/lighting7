@@ -62,6 +62,7 @@ class CueStackRoutesTest {
     fun `CueStackCueEntry serialization round-trips`() {
         val entry = CueStackCueEntry(
             id = 42,
+            entryId = 142,
             name = "Opening Look",
             sortOrder = 0,
             layerCount = 2,
@@ -84,8 +85,8 @@ class CueStackRoutesTest {
             type = "STACK",
             label = null,
             cues = listOf(
-                CueStackCueEntry(id = 10, name = "Scene 1", sortOrder = 0, layerCount = 1, adHocEffectCount = 0),
-                CueStackCueEntry(id = 11, name = "Scene 2", sortOrder = 1, layerCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
+                CueStackCueEntry(id = 10, entryId = 110, name = "Scene 1", sortOrder = 0, layerCount = 1, adHocEffectCount = 0),
+                CueStackCueEntry(id = 11, entryId = 111, name = "Scene 2", sortOrder = 1, layerCount = 0, adHocEffectCount = 3, fadeDurationMs = 1500, fadeCurve = "CUBIC_IN_OUT"),
             ),
             activeCueId = 10,
             standbyCueId = null,
@@ -144,11 +145,11 @@ class CueStackRoutesTest {
 
     @Test
     fun `ReorderCuesRequest serialization round-trips`() {
-        val request = ReorderCuesRequest(cueIds = listOf(3, 1, 5, 2))
+        val request = ReorderCuesRequest(entryIds = listOf(3, 1, 5, 2))
         val serialized = json.encodeToString(request)
         val deserialized = json.decodeFromString<ReorderCuesRequest>(serialized)
         assertEquals(request, deserialized)
-        assertEquals(listOf(3, 1, 5, 2), deserialized.cueIds)
+        assertEquals(listOf(3, 1, 5, 2), deserialized.entryIds)
     }
 
     @Test
@@ -220,10 +221,10 @@ class CueStackRoutesTest {
 
     @Test
     fun `GoToCueRequest serialization round-trips`() {
-        val request = GoToCueRequest(cueId = 5)
+        val request = GoToCueRequest(entryId = 5)
         val serialized = json.encodeToString(request)
         val deserialized = json.decodeFromString<GoToCueRequest>(serialized)
-        assertEquals(5, deserialized.cueId)
+        assertEquals(5, deserialized.entryId)
     }
 
     // ─── Response DTOs ────────────────────────────────────────────────────
@@ -255,6 +256,7 @@ class CueStackRoutesTest {
     fun `CueStackCueEntry with auto-advance and crossfade serializes correctly`() {
         val entry = CueStackCueEntry(
             id = 42,
+            entryId = 142,
             name = "Scene with Fade",
             sortOrder = 0,
             layerCount = 2,
@@ -279,6 +281,7 @@ class CueStackRoutesTest {
             CueStackCueEntry(
                 id = 100 + i,
                 name = "Cue ${i + 1}",
+                entryId = i + 100,
                 sortOrder = i,
                 layerCount = 1,
                 adHocEffectCount = i,
@@ -318,6 +321,7 @@ class CueStackRoutesTest {
     fun `CueStackCueEntry with cueNumber and notes serializes correctly`() {
         val entry = CueStackCueEntry(
             id = 42,
+            entryId = 142,
             name = "Scene 14",
             sortOrder = 5,
             layerCount = 2,
@@ -337,6 +341,7 @@ class CueStackRoutesTest {
     fun `CueStackCueEntry MARKER type serializes correctly`() {
         val entry = CueStackCueEntry(
             id = 43,
+            entryId = 143,
             name = "Scene 4 marker",
             sortOrder = 6,
             layerCount = 0,
@@ -354,6 +359,7 @@ class CueStackRoutesTest {
     fun `CueStackCueEntry defaults cueType to STANDARD`() {
         val entry = CueStackCueEntry(
             id = 1,
+            entryId = 101,
             name = "Test",
             sortOrder = 0,
             layerCount = 0,
@@ -386,8 +392,8 @@ class CueStackRoutesTest {
     fun `SortByNumberResponse serialization round-trips`() {
         val response = SortByNumberResponse(
             updatedCues = listOf(
-                CueStackCueEntry(id = 1, name = "Cue 1", sortOrder = 0, layerCount = 0, adHocEffectCount = 0, cueNumber = "1"),
-                CueStackCueEntry(id = 2, name = "Cue 2", sortOrder = 1, layerCount = 0, adHocEffectCount = 0, cueNumber = "2"),
+                CueStackCueEntry(id = 1, entryId = 101, name = "Cue 1", sortOrder = 0, layerCount = 0, adHocEffectCount = 0, cueNumber = "1"),
+                CueStackCueEntry(id = 2, entryId = 102, name = "Cue 2", sortOrder = 1, layerCount = 0, adHocEffectCount = 0, cueNumber = "2"),
             ),
             pinnedCount = 1,
             nullNumberCount = 0,

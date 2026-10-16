@@ -49,6 +49,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToLong
+import uk.me.cormack.lighting7.models.entriesOf
 
 private val logger = LoggerFactory.getLogger("SceneryService")
 
@@ -506,18 +507,24 @@ class SceneryService(private val state: State) {
         }
     }
 
-    /** One live stack's set, its standard cues down to the live one, and the live cue's layered Looks. */
+    /**
+     * One live stack's set, its cue entries down to the live one, and the live cue's layered Looks.
+     * Tracking walks the stack's entries (cue model plan §3.4); the live cue is the first entry
+     * naming it, which is its only one until the plan's session 2 keys the runtime on entries.
+     */
     private fun liveStack(stack: DaoCueStack, liveCueId: Int, goSeq: Long): SceneryResolver.LiveStack? {
-        val all = DaoCue.find { DaoCues.cueStack eq stack.id }.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-        val liveIndex = all.indexOfFirst { it.id.value == liveCueId }.takeIf { it >= 0 } ?: return null
-        val cues = all.take(liveIndex + 1).filter { it.cueType == CueType.STANDARD.name || it.id.value == liveCueId }
+        val entries = entriesOf(stack).filter { !it.isMarker && it.cueId != null }
+        val liveIndex = entries.indexOfFirst { it.cueId == liveCueId }.takeIf { it >= 0 } ?: return null
+        val tracked = entries.take(liveIndex + 1)
+        val cueById = DaoCue.find { DaoCues.id inList tracked.map { it.cueId!! } }.associateBy { it.id.value }
+        val cues = tracked.mapNotNull { e -> cueById[e.cueId!!]?.let { e to it } }
         val set = DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq stack.id }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
-        val rows = DaoCueSceneryRow.find { DaoCueScenery.cue inList cues.map { it.id } }
+        val rows = DaoCueSceneryRow.find { DaoCueScenery.cue inList cues.map { it.second.id } }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .groupBy { it.cue.id.value }
-        val live = all[liveIndex]
+        val live = cueById[liveCueId] ?: return null
         val layered = DaoCueLayer.find { DaoCueLayers.cue eq live.id }
             .filter { it.enabled && it.amount > 0.0 && it.delay == null && it.interval == null }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
@@ -526,11 +533,11 @@ class SceneryService(private val state: State) {
             stackId = stack.id.value,
             goSeq = goSeq,
             set = set,
-            cues = cues.map { cue ->
+            cues = cues.map { (entry, cue) ->
                 val fade = cue.fadeDuration?.toMillis() ?: 0L
                 SceneryResolver.Cue(
                     cueId = cue.id.value,
-                    label = cue.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name,
+                    label = entry.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name,
                     changes = rows[cue.id.value].orEmpty().map {
                         SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), it.transition?.toMillis() ?: fade)
                     },

@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 
 /**
  * A session that didn't cause the change still hears about it. This is the whole point of the
@@ -83,7 +84,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             // Somebody arms a different cue.
             val arm = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
                 contentType(ContentType.Application.Json)
-                setBody(SetStandbyRequest(cueId = cue3))
+                setBody(SetStandbyRequest(entryId = state.entryIdOf(cue3)))
             }
             assertEquals(HttpStatusCode.OK, arm.status)
 

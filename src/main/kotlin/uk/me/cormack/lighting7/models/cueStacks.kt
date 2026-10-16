@@ -44,5 +44,4 @@ class DaoCueStack(id: EntityID<Int>) : IntEntity(id) {
     var type by DaoCueStacks.type
     var label by DaoCueStacks.label
     var uuid by DaoCueStacks.uuid
-    val cues by DaoCue referrersOn DaoCues.cueStack
 }

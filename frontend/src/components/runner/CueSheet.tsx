@@ -42,17 +42,30 @@ import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCel
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import { cueRowById, isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
 
 export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
 
-/** One cue of the stack; a marker is a divider row. */
+/**
+ * One row of the stack's list — an **entry**: a cue, or a marker drawn as a divider. Keyed by the
+ * entry id, since a marker has no cue id and the two id spaces overlap.
+ */
 export interface CueSheetRow extends SheetRow {
-  cue: CueStackCueEntry
+  entry: CueStackCueEntry
 }
 
-export function cueRowId(cueId: number): string {
-  return `cue:${cueId}`
+export function entryRowId(entryId: number): string {
+  return `entry:${entryId}`
+}
+
+/**
+ * The cue a row places. The kit never asks a column about a divider (`takesValue`, `SheetTable`'s
+ * divider arm, the selectable-row filter), so every column reads its row through this, and a
+ * marker reaching one is a broken invariant rather than a value to draw.
+ */
+function cueOf(row: CueSheetRow): CueStackCueRow {
+  if (!isCueRow(row.entry)) throw new Error(`marker row ${row.id} reached a cue column`)
+  return row.entry
 }
 
 /** The curve vocabulary `CuePropsPane`'s select offers, in its order. */
@@ -98,7 +111,8 @@ export interface CueSheetProps {
    * Reorder the stack — every row id in its new order, separators included, which is the same
    * `reorderCues` the cards view's drag calls. Absent leaves the rows static.
    */
-  onReorder?: (cueIds: number[]) => void
+  /** Every row's entry id in its new order, markers included. */
+  onReorder?: (entryIds: number[]) => void
 }
 
 /**
@@ -167,7 +181,7 @@ export function CueSheet({
     const out = new Set<number>()
     let above = (stack.scenery?.length ?? 0) > 0
     for (const c of stack.cues) {
-      if (c.cueType === 'MARKER') continue
+      if (!isCueRow(c)) continue
       if (above) out.add(c.id)
       if ((c.scenery?.length ?? 0) > 0) above = true
     }
@@ -191,8 +205,10 @@ export function CueSheet({
 
   const rows = useMemo<CueSheetRow[]>(
     () =>
-      stack.cues.map((cue) =>
-        cue.cueType === 'MARKER' ? { id: cueRowId(cue.id), cue, divider: cue.name } : { id: cueRowId(cue.id), cue },
+      stack.cues.map((entry) =>
+        isCueRow(entry)
+          ? { id: entryRowId(entry.entryId), entry }
+          : { id: entryRowId(entry.entryId), entry, divider: entry.name },
       ),
     [stack.cues],
   )
@@ -205,10 +221,10 @@ export function CueSheet({
         label: 'Name',
         kind: 'name',
         width: 'minmax(200px, 1fr)',
-        value: (row) => row.cue.name,
+        value: (row) => cueOf(row).name,
         cell: (row, props) => {
-          const active = row.cue.id === activeCueId
-          const standby = row.cue.id === standbyCueId && !active
+          const active = cueOf(row).id === activeCueId
+          const standby = cueOf(row).id === standbyCueId && !active
           return (
             <TextCell
               {...(props as React.ComponentProps<typeof TextCell>)}
@@ -219,7 +235,7 @@ export function CueSheet({
                     active ? 'font-semibold text-green-300' : standby ? 'font-semibold text-blue-300' : 'font-medium',
                   )}
                 >
-                  {row.cue.name}
+                  {cueOf(row).name}
                 </span>
               }
             />
@@ -227,7 +243,7 @@ export function CueSheet({
         },
         write: (batch, value) => {
           if (typeof value !== 'string' || value.trim() === '') return false
-          for (const row of batch) if (value !== row.cue.name) patch(row.cue.id, { name: value })
+          for (const row of batch) if (value !== cueOf(row).name) patch(cueOf(row).id, { name: value })
           return true
         },
         clearRefusal: 'A cue has a name — it cannot be blank',
@@ -237,7 +253,7 @@ export function CueSheet({
         label: 'Fade',
         kind: 'fade',
         width: '88px',
-        value: (row) => formatFadeDuration(row.cue.fadeDurationMs),
+        value: (row) => formatFadeDuration(cueOf(row).fadeDurationMs),
         cell: (row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
@@ -246,7 +262,7 @@ export function CueSheet({
             placeholder="2s"
             face={
               <span className="mx-1.5 font-mono text-xs font-medium tabular-nums">
-                {formatFadeDuration(row.cue.fadeDurationMs) || 'SNAP'}
+                {formatFadeDuration(cueOf(row).fadeDurationMs) || 'SNAP'}
               </span>
             }
             validate={(draft) =>
@@ -258,11 +274,11 @@ export function CueSheet({
           if (typeof value !== 'string') return false
           const parsed = parseFadeDuration(value)
           if (parsed === undefined) return false
-          for (const row of batch) if (parsed !== (row.cue.fadeDurationMs ?? null)) patch(row.cue.id, { fadeDurationMs: parsed })
+          for (const row of batch) if (parsed !== (cueOf(row).fadeDurationMs ?? null)) patch(cueOf(row).id, { fadeDurationMs: parsed })
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (row.cue.fadeDurationMs != null) patch(row.cue.id, { fadeDurationMs: null })
+          for (const row of batch) if (cueOf(row).fadeDurationMs != null) patch(cueOf(row).id, { fadeDurationMs: null })
         },
         spread: (batch): SpreadPlan | null =>
           batch.length === 0
@@ -272,11 +288,11 @@ export function CueSheet({
                 col: 'fade',
                 label: 'Fade',
                 count: batch.length,
-                names: batch.map((row) => `Q${row.cue.cueNumber ?? '—'}`),
+                names: batch.map((row) => `Q${cueOf(row).cueNumber ?? '—'}`),
                 apply: (ms) => {
                   batch.forEach((row, i) => {
                     const next = ms[i] > 0 ? ms[i] : null
-                    if (next !== (row.cue.fadeDurationMs ?? null)) patch(row.cue.id, { fadeDurationMs: next })
+                    if (next !== (cueOf(row).fadeDurationMs ?? null)) patch(cueOf(row).id, { fadeDurationMs: next })
                   })
                 },
               },
@@ -286,7 +302,10 @@ export function CueSheet({
         label: 'Curve',
         kind: 'curve',
         width: '118px',
-        value: (row) => (row.cue.fadeDurationMs != null && row.cue.fadeDurationMs > 0 ? row.cue.fadeCurve : undefined),
+        value: (row) => {
+          const cue = cueOf(row)
+          return cue.fadeDurationMs != null && cue.fadeDurationMs > 0 ? cue.fadeCurve : undefined
+        },
         cell: (_row, props) => (
           <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={CURVE_OPTIONS} />
         ),
@@ -296,7 +315,7 @@ export function CueSheet({
         skipNote: (skipped) => `${listNames(skipped.map(cueRowName), 'cue')} ${skipped.length === 1 ? 'snaps' : 'snap'} · skipped`,
         write: (batch, value) => {
           if (typeof value !== 'string' || !CURVE_OPTIONS.some((o) => o.value === value)) return false
-          for (const row of batch) if (value !== row.cue.fadeCurve) patch(row.cue.id, { fadeCurve: value })
+          for (const row of batch) if (value !== cueOf(row).fadeCurve) patch(cueOf(row).id, { fadeCurve: value })
           return true
         },
         clearRefusal: 'A fade has a curve — pick one',
@@ -306,7 +325,7 @@ export function CueSheet({
         label: 'Follow',
         kind: 'follow',
         width: '96px',
-        value: (row) => (row.cue.autoAdvance ? formatMs(row.cue.autoAdvanceDelayMs ?? 0) : ''),
+        value: (row) => (cueOf(row).autoAdvance ? formatMs(cueOf(row).autoAdvanceDelayMs ?? 0) : ''),
         cell: (row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
@@ -314,10 +333,10 @@ export function CueSheet({
             allowEmpty
             placeholder="2s"
             face={
-              row.cue.autoAdvance ? (
+              cueOf(row).autoAdvance ? (
                 <span className="mx-1.5 inline-flex items-center gap-1 text-xs">
                   <span className="text-[9px] uppercase tracking-wide text-blue-500">auto</span>
-                  <span className="font-mono tabular-nums">{formatMs(row.cue.autoAdvanceDelayMs ?? 0)}</span>
+                  <span className="font-mono tabular-nums">{formatMs(cueOf(row).autoAdvanceDelayMs ?? 0)}</span>
                 </span>
               ) : (
                 <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
@@ -334,15 +353,15 @@ export function CueSheet({
           if (parsed === undefined) return false
           for (const row of batch) {
             if (parsed === null) {
-              if (row.cue.autoAdvance) patch(row.cue.id, { autoAdvance: false })
-            } else if (!row.cue.autoAdvance || parsed !== row.cue.autoAdvanceDelayMs) {
-              patch(row.cue.id, { autoAdvance: true, autoAdvanceDelayMs: parsed })
+              if (cueOf(row).autoAdvance) patch(cueOf(row).id, { autoAdvance: false })
+            } else if (!cueOf(row).autoAdvance || parsed !== cueOf(row).autoAdvanceDelayMs) {
+              patch(cueOf(row).id, { autoAdvance: true, autoAdvanceDelayMs: parsed })
             }
           }
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (row.cue.autoAdvance) patch(row.cue.id, { autoAdvance: false })
+          for (const row of batch) if (cueOf(row).autoAdvance) patch(cueOf(row).id, { autoAdvance: false })
         },
       },
       {
@@ -356,13 +375,13 @@ export function CueSheet({
         width: '108px',
         value: () => undefined,
         display: (row) => {
-          const location = locationByCue?.get(row.cue.id)
+          const location = locationByCue?.get(cueOf(row).id)
           // **The Book column opens the Prompt Book**, not the cue's card — it is the one read-out
           // that names a place in another document, and sending it to the card was answering a
           // different question from the one the column asks.
           return location ? (
             <ReadOutButton
-              onClick={() => onOpenBook?.(row.cue.id)}
+              onClick={() => onOpenBook?.(cueOf(row).id)}
               disabled={onOpenBook == null}
               title={`${location} — open the Prompt Book here`}
             >
@@ -377,9 +396,9 @@ export function CueSheet({
         width: '76px',
         value: () => undefined,
         display: (row) =>
-          row.cue.layerCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card">
-              <CountBadge n={row.cue.layerCount} />
+          cueOf(row).layerCount > 0 ? (
+            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id)} title="Open the cue's card">
+              <CountBadge n={cueOf(row).layerCount} />
               <Layers className="size-3" />
             </ReadOutButton>
           ) : null,
@@ -390,9 +409,9 @@ export function CueSheet({
         width: '56px',
         value: () => undefined,
         display: (row) =>
-          row.cue.adHocEffectCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card" className="text-violet-400">
-              <CountBadge n={row.cue.adHocEffectCount} className="border-violet-400/60" />
+          cueOf(row).adHocEffectCount > 0 ? (
+            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id)} title="Open the cue's card" className="text-violet-400">
+              <CountBadge n={cueOf(row).adHocEffectCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
             </ReadOutButton>
           ) : null,
@@ -403,22 +422,20 @@ export function CueSheet({
         width: '196px',
         value: () => undefined,
         display: (row) => {
-          // A MARKER is never live, so it has no scenery: blank, as every unsettable cell is.
-          if (row.cue.cueType === 'MARKER') return null
-          const lines = cueSceneryLines(row.cue.scenery, elementsByUuid)
+          const lines = cueSceneryLines(cueOf(row).scenery, elementsByUuid)
           const said = lines.join(' · ')
           const face =
             lines.length > 0 ? (
               <span className="truncate text-[11px] text-foreground">{said}</span>
-            ) : tracksScenery.has(row.cue.id) ? (
+            ) : tracksScenery.has(cueOf(row).id) ? (
               <span className={cn('rounded px-1.5 text-[10px] leading-4 text-muted-foreground', TRACKED_HATCH_CLASS)}>tracked</span>
             ) : (
               <span className="text-xs text-muted-foreground/60">—</span>
             )
-          const what = lines.length > 0 ? said : tracksScenery.has(row.cue.id) ? 'Changes nothing — its scenery is tracked' : 'Changes no scenery'
+          const what = lines.length > 0 ? said : tracksScenery.has(cueOf(row).id) ? 'Changes nothing — its scenery is tracked' : 'Changes no scenery'
           return (
             <ReadOutButton
-              data-scenery-cue={row.cue.id}
+              data-scenery-cue={cueOf(row).id}
               // Locked and not the operator's to lift: legible but inert, with the reason.
               disabled={locked && onRequestUnlock == null}
               title={locked ? `${what} — ${LOCKED_REASON}` : `${what} — edit the scenery this cue changes`}
@@ -430,7 +447,7 @@ export function CueSheet({
                   return
                 }
                 sceneryAnchorRef.current = e.currentTarget
-                setSceneryCueId(row.cue.id)
+                setSceneryCueId(cueOf(row).id)
               }}
             >
               {lines.length > 0 && <Blinds className="size-3 shrink-0" />}
@@ -444,14 +461,14 @@ export function CueSheet({
         label: 'Notes',
         kind: 'notes',
         width: 'minmax(200px, 1fr)',
-        value: (row) => row.cue.notes ?? '',
+        value: (row) => cueOf(row).notes ?? '',
         cell: (row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
             allowEmpty
             face={
-              row.cue.notes ? (
-                <span className="mx-1.5 truncate text-xs text-muted-foreground">{row.cue.notes}</span>
+              cueOf(row).notes ? (
+                <span className="mx-1.5 truncate text-xs text-muted-foreground">{cueOf(row).notes}</span>
               ) : (
                 <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
               )
@@ -461,11 +478,11 @@ export function CueSheet({
         write: (batch, value) => {
           if (typeof value !== 'string') return false
           const next = value.trim() === '' ? null : value
-          for (const row of batch) if (next !== (row.cue.notes ?? null)) patch(row.cue.id, { notes: next })
+          for (const row of batch) if (next !== (cueOf(row).notes ?? null)) patch(cueOf(row).id, { notes: next })
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (row.cue.notes) patch(row.cue.id, { notes: null })
+          for (const row of batch) if (cueOf(row).notes) patch(cueOf(row).id, { notes: null })
         },
       },
     ],
@@ -546,8 +563,9 @@ export function CueSheet({
       return
     }
     if (consumedCueRef.current === openedCueId) return
-    const id = cueRowId(openedCueId)
-    if (!rows.some((row) => row.id === id && row.divider == null)) return
+    const row = rows.find((r) => r.divider == null && r.entry.id === openedCueId)
+    if (row == null) return
+    const id = row.id
     consumedCueRef.current = openedCueId
     setRows([id])
     scrollTo(id)
@@ -557,8 +575,8 @@ export function CueSheet({
   const onRowClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       if (locked && onSetStandby) {
-        const row = rows.find((r) => r.id === id)
-        if (row && row.cue.id !== activeCueId) onSetStandby(row.cue.id)
+        const row = rows.find((r) => r.id === id && r.divider == null)
+        if (row && cueOf(row).id !== activeCueId) onSetStandby(cueOf(row).id)
         return
       }
       sheet.tableProps.onRowClick(id, e)
@@ -566,7 +584,7 @@ export function CueSheet({
     [activeCueId, locked, onSetStandby, rows, sheet.tableProps],
   )
 
-  const armable = locked && onSetStandby && selectedRows.length === 1 && selectedRows[0].cue.id !== activeCueId
+  const armable = locked && onSetStandby && selectedRows.length === 1 && cueOf(selectedRows[0]).id !== activeCueId
   const verbs =
     selectedRows.length > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -595,7 +613,7 @@ export function CueSheet({
             variant="outline"
             size="sm"
             disabled={!armable}
-            onClick={() => armable && onSetStandby(selectedRows[0].cue.id)}
+            onClick={() => armable && onSetStandby(cueOf(selectedRows[0]).id)}
             title={armable ? 'Arm this cue as the next GO' : 'Select one cue that is not on stage to arm it'}
           >
             <Play className="size-3.5" />
@@ -649,28 +667,31 @@ export function CueSheet({
             ? {
                 enabled: !locked,
                 onReorder: (ids) =>
-                  onReorder(ids.map((id) => Number(id.slice('cue:'.length))).filter(Number.isFinite)),
+                  onReorder(ids.map((id) => Number(id.slice('entry:'.length))).filter(Number.isFinite)),
               }
             : undefined
         }
         minWidth={`${100 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
+        // Asked of every row, dividers included — a marker is never live or next.
         rowClass={(row) =>
-          row.cue.id === activeCueId
-            ? LIVE_ROW_CLASS
-            : row.cue.id === standbyCueId
-              ? STANDBY_ROW_CLASS
-              : undefined
+          !isCueRow(row.entry)
+            ? undefined
+            : row.entry.id === activeCueId
+              ? LIVE_ROW_CLASS
+              : row.entry.id === standbyCueId
+                ? STANDBY_ROW_CLASS
+                : undefined
         }
         firstColumn={{
           label: 'Cue',
           width: '100px',
           render: (row) => {
-            const active = row.cue.id === activeCueId
-            const standby = row.cue.id === standbyCueId && !active
+            const active = cueOf(row).id === activeCueId
+            const standby = cueOf(row).id === standbyCueId && !active
             return (
-              <span className="relative flex min-w-0 items-center gap-2" data-cue-row={row.cue.id}>
+              <span className="relative flex min-w-0 items-center gap-2" data-cue-row={cueOf(row).id}>
                 <CueStatePip isActive={active} isStandby={standby} />
-                {completedSet.has(row.cue.id) && !active && (
+                {completedSet.has(cueOf(row).id) && !active && (
                   <span className="sr-only">Played</span>
                 )}
                 {/* **A double click opens it, in the same popover as every value cell on this
@@ -689,22 +710,22 @@ export function CueSheet({
                 <span
                   className={cn(
                     'min-w-0 flex-1 font-mono text-sm',
-                    row.cue.cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
+                    cueOf(row).cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
                   )}
                 >
                   {locked ? (
                     <span className="inline-block max-w-full px-0.5" title="Cue number">
-                      <TruncateStart text={row.cue.cueNumber ? `Q${row.cue.cueNumber}` : '—'} />
+                      <TruncateStart text={cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : '—'} />
                     </span>
                   ) : (
                     <TextCell
                       {...firstColumnCellProps<string>({
                         noun: 'cue',
-                        value: row.cue.cueNumber ?? '',
+                        value: cueOf(row).cueNumber ?? '',
                         label: 'Cue number',
                         onCommit: (next) => {
                           const trimmed = next || null
-                          if (trimmed !== (row.cue.cueNumber ?? null)) patch(row.cue.id, { cueNumber: trimmed })
+                          if (trimmed !== (cueOf(row).cueNumber ?? null)) patch(cueOf(row).id, { cueNumber: trimmed })
                         },
                       })}
                       mono
@@ -714,12 +735,12 @@ export function CueSheet({
                         <span
                           className="inline-block max-w-full px-0.5"
                           title={
-                            row.cue.cueNumberAuto
+                            cueOf(row).cueNumberAuto
                               ? 'Auto-numbered from position — double-click to set an explicit cue number'
                               : 'Double-click to edit the cue number'
                           }
                         >
-                          <TruncateStart text={row.cue.cueNumber ? `Q${row.cue.cueNumber}` : '—'} />
+                          <TruncateStart text={cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : '—'} />
                         </span>
                       }
                     />
@@ -734,7 +755,7 @@ export function CueSheet({
         projectId={projectId}
         // Closed by the lock as well as by its own dismissal: every edit on this sheet is an
         // unlocked gesture, and the GO that re-locks the show must not leave one open.
-        cue={locked || sceneryCueId == null ? null : (stack.cues.find((c) => c.id === sceneryCueId) ?? null)}
+        cue={locked || sceneryCueId == null ? null : cueRowById(stack.cues, sceneryCueId)}
         anchorRef={sceneryAnchorRef}
         onClose={() => setSceneryCueId(null)}
       />
@@ -782,7 +803,7 @@ export function CueSheet({
 
 /** A cue in a skip read-out — `Q14`, the number the operator reads the sheet by. */
 function cueRowName(row: CueSheetRow): string {
-  return row.cue.cueNumber ? `Q${row.cue.cueNumber}` : row.cue.name
+  return cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : cueOf(row).name
 }
 
 function CountBadge({ n, className }: { n: number; className?: string }) {

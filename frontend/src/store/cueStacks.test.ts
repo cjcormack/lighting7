@@ -86,8 +86,10 @@ describe('cueStacks program transport', () => {
  * which nothing in Program reads, and the dragged row visibly sprang back until the refetch.
  */
 describe('reorderCueStackCues optimistic patch', () => {
+  // Entry ids are the cue ids + 100: the reorder names entries.
   const cue = (id: number, sortOrder: number) => ({
     id,
+    entryId: id + 100,
     name: `cue-${id}`,
     sortOrder,
     layerCount: 0,
@@ -142,7 +144,7 @@ describe('reorderCueStackCues optimistic patch', () => {
       cueStacksApi.endpoints.reorderCueStackCues.initiate({
         projectId: 1,
         stackId: 7,
-        cueIds: [12, 10, 11],
+        entryIds: [112, 110, 111],
       }),
     )
 
@@ -164,11 +166,11 @@ describe('reorderCueStackCues optimistic patch', () => {
       cueStacksApi.endpoints.reorderCueStackCues.initiate({
         projectId: 1,
         stackId: 7,
-        cueIds: [12, 10],
+        entryIds: [112, 110],
       }),
     )
 
-    // The server only rewrites sortOrder for the ids it was given, so 11 lands after them.
+    // The server appends the entries a request leaves out, so 11 lands after them.
     expect(cueIdsInCache()).toEqual([12, 10, 11])
   })
 
@@ -180,7 +182,7 @@ describe('reorderCueStackCues optimistic patch', () => {
       cueStacksApi.endpoints.reorderCueStackCues.initiate({
         projectId: 1,
         stackId: 999,
-        cueIds: [12, 10, 11],
+        entryIds: [112, 110, 111],
       }),
     )
 
@@ -289,14 +291,14 @@ describe('cueRunStateChanged', () => {
     })
   })
 
-  it('setCueStackStandby POSTs the armed cue', async () => {
+  it('setCueStackStandby POSTs the armed entry', async () => {
     await store.dispatch(
-      cueStacksApi.endpoints.setCueStackStandby.initiate({ projectId: 1, stackId: 7, cueId: 12 }),
+      cueStacksApi.endpoints.setCueStackStandby.initiate({ projectId: 1, stackId: 7, entryId: 112 }),
     )
     const req = lastStandbyRequest()
     expect(req).toBeDefined()
     expect(req!.method).toBe('POST')
-    expect(JSON.parse(await req!.clone().text())).toEqual({ cueId: 12 })
+    expect(JSON.parse(await req!.clone().text())).toEqual({ entryId: 112 })
   })
 
   function lastStandbyRequest(): Request | undefined {

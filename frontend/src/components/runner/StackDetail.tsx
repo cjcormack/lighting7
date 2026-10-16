@@ -75,8 +75,9 @@ interface StackDetailProps {
    */
   onRecordIntoStack?: (stackId: number) => void
   onAddMarker: () => void
-  onMarkerRename: (cueId: number, name: string) => void
-  onMarkerDelete: (cueId: number) => void
+  /** A marker is an entry, so both name the marker's entry id. */
+  onMarkerRename: (entryId: number, name: string) => void
+  onMarkerDelete: (entryId: number) => void
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
@@ -195,15 +196,17 @@ export function StackDetail({
       const { active, over } = event
       if (!over || active.id === over.id) return
 
-      const oldIndex = stack.cues.findIndex((c) => c.id === active.id)
-      const newIndex = stack.cues.findIndex((c) => c.id === over.id)
+      // Rows are entries, sorted by entry id — a marker has no cue id, and the two id spaces
+      // overlap.
+      const oldIndex = stack.cues.findIndex((c) => c.entryId === active.id)
+      const newIndex = stack.cues.findIndex((c) => c.entryId === over.id)
       if (oldIndex === -1 || newIndex === -1) return
 
       const reordered = arrayMove(stack.cues, oldIndex, newIndex)
       reorderCues({
         projectId,
         stackId: stack.id,
-        cueIds: reordered.map((c) => c.id),
+        entryIds: reordered.map((c) => c.entryId),
       })
     },
     [stack, projectId, reorderCues],
@@ -211,7 +214,7 @@ export function StackDetail({
 
   /** The cue sheet's drag, on the cards view's own mutation — one reorder, two surfaces. */
   const handleSheetReorder = useCallback(
-    (cueIds: number[]) => reorderCues({ projectId, stackId: stack.id, cueIds }),
+    (entryIds: number[]) => reorderCues({ projectId, stackId: stack.id, entryIds }),
     [projectId, reorderCues, stack.id],
   )
 
@@ -321,25 +324,25 @@ export function StackDetail({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={stack.cues.map((c) => c.id)}
+            items={stack.cues.map((c) => c.entryId)}
             strategy={verticalListSortingStrategy}
           >
             {stack.cues.map((cue) => {
               if (cue.cueType === 'MARKER') {
                 return (
                   <ShowMarkerRow
-                    key={cue.id}
-                    id={cue.id}
+                    key={`entry-${cue.entryId}`}
+                    id={cue.entryId}
                     name={cue.name}
-                    onRename={(name) => onMarkerRename(cue.id, name)}
-                    onDelete={() => onMarkerDelete(cue.id)}
+                    onRename={(name) => onMarkerRename(cue.entryId, name)}
+                    onDelete={() => onMarkerDelete(cue.entryId)}
                     locked={locked}
                   />
                 )
               }
               return (
                 <CueCardEditor
-                  key={cue.id}
+                  key={`entry-${cue.entryId}`}
                   cue={cue}
                   projectId={projectId}
                   expanded={isExpanded(cue.id)}

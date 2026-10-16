@@ -5,17 +5,18 @@ This document describes the Cue Stack system — ordered containers for sequenti
 ## Overview
 
 A **Cue Stack** is a named, project-scoped entity that groups cues into an ordered sequence for theatre-style playback:
-- **Ordered cues** with `sortOrder` for sequential traversal
+- **An ordered list of entries** (`cue_stack_entries`) — each a cue's place in the stack, or a marker
 - **Looping** — wraps from last cue back to first (and vice versa)
 - **Per-cue auto-advance** — each cue can individually enable timed progression to the next cue
 - **Per-cue crossfade** — each cue can configure its own fade-in duration and easing curve
 - **Multiple active stacks** — several stacks can be active simultaneously
 
 Key behaviours:
-- Every cue belongs to exactly one stack (`cue_stack_id` FK, `NOT NULL` — there are no standalone
-  cues; an archive from before that imports its stack-less cues into an "Unsorted" stack)
+- Every cue has exactly one entry, so it is in exactly one stack (cue model plan P4, until its
+  session 2; there are no standalone cues, and an archive from before stacks were mandatory imports
+  its stack-less cues into an "Unsorted" stack)
 - Activating a stack applies the first (or specified) cue's effects
-- Advancing steps through cues in sort order
+- Advancing steps through the list's cue entries in order, markers skipped
 - Deactivating removes all effects tagged with the stack's ID
 
 ## Data Model
@@ -30,26 +31,51 @@ cue_stacks
 ├── loop (boolean, default false)
 └── unique(project_id, name)
 
-cues (modified)
-├── ... existing columns ...
-├── cue_stack_id (nullable FK → cue_stacks)
-├── sort_order (int, default 0)
-├── auto_advance (boolean, default false)
-├── auto_advance_delay (Duration, nullable — nanoseconds on disk)
-├── fade_duration (Duration, nullable — nanoseconds on disk)
-├── fade_curve (varchar 50, default "LINEAR")
+cue_stack_entries (cue model plan session 1 — `models/cueStackEntries.kt`)
+├── id (auto-increment PK)
+├── stack_id (FK → cue_stacks)
+├── cue_id (FK → cues, nullable — null exactly when kind is MARKER)
+├── kind (varchar 20 — CUE or MARKER)
+├── label (varchar 255, nullable — a marker's text)
+├── ordinal (double, default 0.0 — the list's order; ties by id)
 ├── cue_number (varchar 20, nullable — free-form display label)
 ├── cue_number_auto (boolean, default false — cue_number was derived from position)
-├── notes (text, nullable — script reference annotation)
-└── cue_type (varchar 20, default "STANDARD" — STANDARD or MARKER)
+├── auto_advance (boolean, default false — the follow)
+├── auto_advance_delay (Duration, nullable — nanoseconds on disk)
+├── uuid
+└── index(stack_id, ordinal), index(cue_id)
 
-Partial unique index: (cue_stack_id, cue_number) WHERE cue_number IS NOT NULL AND cue_type = 'STANDARD'
+Partial unique index: uq_entry_number_per_stack (stack_id, cue_number)
+                      WHERE cue_number IS NOT NULL AND kind = 'CUE'
 ```
 
-### Cue Types
+The cue itself (`cues`, `cues-engineering.md` §"Data Model") keeps only what it is — name, fade,
+notes, stomp, children; everything that is a matter of the list is its entry's. Every handler writes
+the order through `writeEntryOrder`, which renormalises the ordinals to `1.0, 2.0, …` (session 3
+adopts midpoint inserts). The wire still speaks of a **position** — `sortOrder` on `NewCue`,
+`add-cue` and the DTOs is the entry's index in the list, markers counted.
 
-- **STANDARD** — Normal cue that can be activated. Participates in advance/go-to.
-- **MARKER** — Inert section divider. Invisible to `advance` and `go-to` (returns HTTP 400). Not moved by `sort-by-cue-number`.
+#### The startup migration
+
+The entries arrived by a one-off migration, `state/CueModelMigration.kt` (cue model plan D5), which
+`State.initDatabase` runs **before** the schema is reconciled, while `cues` still has
+`cue_stack_id`. It backs the database up with `VACUUM INTO '<db>.pre-cue-model-<utc>.db'`, then in
+one transaction makes each cue an entry (its stack, its sort order renormalised per stack by
+`(sort_order, id)`, its number, auto flag and follow), each MARKER cue a marker entry labelled with
+its name and keeping its uuid (the cue and its children, pads and slots deleted), re-points every
+prompt-book anchor to its cue's entry (dropping one whose cue is gone), rebuilds `cues` and
+`prompt_book_anchors` from the model and drops `uq_cue_number_per_stack`. A converted database has
+no `cue_stack_id`, so a second start does nothing. Its KDoc explains why it is the exception to
+`InstallBootstrap.kt`'s "after the schema is created"; `CueModelMigrationTest` runs it over
+`src/test/resources/db/pre-cue-model.sql`, the old shape frozen.
+
+### Entry kinds
+
+- **CUE** — places one cue. Participates in advance, go-to and standby.
+- **MARKER** — an inert, labelled section divider with no cue behind it (cue model plan D12): made,
+  renamed and removed through `/{stackId}/markers`, never through `/cues`. Invisible to `advance`;
+  `go-to` and `standby` naming one are HTTP 400. Not moved by `sort-by-cue-number`. A row's kind
+  reaches the wire as `cueType` (`STANDARD` | `MARKER`), the archive's vocabulary.
 
 ### Cue Number Model
 
@@ -73,14 +99,16 @@ prefixed number — a stack numbered `S1-1`, `S1-2`, … had *nothing* eligible 
 
 ### Auto Numbering
 
-A cue with no explicit number is given one derived from its position, flagged with
-`cue_number_auto`. `renumberAutoCues(stack, before)` recomputes them and is called from every handler
+A cue entry with no explicit number is given one derived from its position, flagged with
+`cue_number_auto`. `renumberAutoEntries(stack, before)` recomputes them and is called from every handler
 that changes a stack's membership, order or numbers: cue create / delete / copy, `reorder`,
-`add-cue`, `sort-by-cue-number`, Record's new cue, the AI's `build_cue_stack`, and any PATCH/PUT that
-changes a cue number.
+`add-cue` (which renumbers the stack the cue left as well as the one it joined), `sort-by-cue-number`,
+the marker routes, Record's new cue, the AI's `build_cue_stack` (once, after it has placed every
+cue), and any PATCH/PUT that changes a cue number. Marker entries take no number and are not an auto
+cue's neighbours.
 
 **An auto number stays put while its cue does** (venue-visit plan D11). Each handler takes
-`standardCueIds(stack)` *before* it changes the list and hands it to `renumberAutoCues`; an auto cue
+`cueEntryIds(stack)` *before* it changes the list and hands it to `renumberAutoEntries`; an auto cue
 still at the same index keeps the number it holds (unless an explicit number has claimed it), and
 only the cues that are new, moved, or shifted by an insert or a delete are labelled again. A number
 edit moves nothing, so it passes the order as it stands and no other auto cue changes: in five auto
@@ -90,7 +118,8 @@ passed take numbers from where they land (1, 2, 3, 4.5, 5). Cue 3 set to `10` re
 and sorts to 1, 2, 3, 4, 10; cue 3 set to `1` takes cue 1's number, so cue 1 — released by
 `releaseAutoNumber` — takes the highest free integer below its neighbour and the stack reads
 0, 2, 1, 4, 5, sorting to 0, 1, 2, 4, 5. `CueNumberingTest` pins the three on the rule and
-`CueNumberingRouteTest` through the routes; cue-model plan D14 carries them onto stack entries.
+`CueNumberingRouteTest` through the routes; `EntryNumberingTest` runs them again with a marker in
+the list (cue-model plan D14).
 
 The cues that do need a label are labelled in maximal runs, each from the nearest preceding *fixed*
 number — an explicit one, or an auto one being kept:
@@ -121,14 +150,14 @@ renumber at all. A stack's auto numbers move only when an operator next changes 
 and then only for the cues that change moves.
 
 Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
-so the edit can't be rejected by `uq_cue_number_per_stack`; clearing the field hands the cue back to
-the auto scheme. `renumberAutoCues` writes in two passes with a flush between, since two auto
+so the edit can't be rejected by `uq_entry_number_per_stack`; clearing the field hands the cue back to
+the auto scheme. `renumberAutoEntries` writes in two passes with a flush between, since two auto
 numbers swapping places would otherwise be a transient duplicate.
 
 Labels that won't fit `varchar(20)` are skipped — the cue stays blank rather than carrying a
 truncated number.
 
-**Backfill (removed).** `renumberAutoCues` only runs off a mutation, so cues that predated the
+**Backfill (removed).** The renumber only runs off a mutation, so cues that predated the
 feature would have stayed blank until something touched their stack. A `backfillAutoCueNumbers()`
 walked every stack once at startup to fix that. It went with the rest of the migrations on
 2026-08-24, once the only database in existence had no blank auto numbers left — see
@@ -138,12 +167,14 @@ is next mutated.
 
 ### Key Design Decisions
 
-- **`cues.cue_stack_id` is `NOT NULL`** — every cue is in a stack, and moving a cue is `add-cue` to
-  another; deleting a stack deletes its cues (with their children, scenery and events)
-- **Sort order** as integer allows easy reordering without renumbering (gaps are fine)
+- **Every cue has one entry** (P4, for now) — moving a cue is `add-cue` to another stack, which moves
+  its entry; deleting a stack deletes its entries and their cues (with their children, scenery and
+  events). The caller always names the stack (P7) — nothing picks a cue's "home" stack
+- **Ordinal** as a double, ties broken by id, so session 3's inserts can land between two entries
+  without rewriting the list
 - **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration = null` means snap-cut
-- **`cue_number` is a display label only** — `sort_order` remains the authoritative playback order
-- **MARKER cues are invisible to advance** — `advance` and `go-to` only target `STANDARD` cues
+- **`cue_number` is a display label only** — the entries' order remains the authoritative playback order
+- **Markers are entries, not cues** — `advance`, `go-to` and standby only target cue entries
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression
 - **EasingCurve enum** (LINEAR, SINE_IN_OUT, CUBIC_IN_OUT, etc.) stored as string for extensibility
 
@@ -203,14 +234,14 @@ tablet was invisible to the desk and the two disagreed about what GO would fire.
 one definition, `effectiveNextCueId`:
 
 > the armed standby, when one is set and isn't already live — else the positional next
-> STANDARD cue, honouring `loop`. Null at the end of a non-looping stack.
+> cue entry, honouring `loop`. Null at the end of a non-looping stack.
 
 Everything reads it: `advanceStack` FORWARD **fires** it (so a client calls `advance`
 unconditionally instead of choosing between `advance` and `go-to`), `activateAtFirstCue` starts a
 stopped stack on it, `CueStackDetails.nextCueId` reports it, and the run-state broadcast carries
 it. A GO consumes the standby; deactivating a stack clears it.
 
-`orderedStandardCueIds` + `positionalCueId` are the shared primitives — `advanceStack` and
+`orderedStandardCueIds` (the stack's cue entries' cues, in order) + `positionalCueId` are the shared primitives — `advanceStack` and
 `effectiveNextCueId` cannot drift because they walk the same list by the same rules. The one
 difference is at a non-looping boundary: `positionalCueId` returns null there, which GO reads as
 "stay on the current cue" and "next" reads as "nothing on deck".
@@ -231,7 +262,7 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 
 | Method | Description |
 |--------|-------------|
-| `setStandby(state, stackId, cueId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Rejects a MARKER and a cue from another stack — arming is a deferred GO |
+| `setStandby(state, stackId, cueId)` / `clearStandby(state, stackId)` | Arm / disarm the next GO. Rejects a cue with no entry in that stack — arming is a deferred GO. The REST route takes the **entry** and refuses a marker before it gets here |
 | `getStandbyCueId(stackId)` | The explicitly armed cue, if any |
 | `effectiveNextCueId(...)` | What the next GO fires. Two overloads: one taking the stack's already-loaded cue list (for the details DTO), one that queries |
 | `runStateFor(state, stackId)` | The stack's run state, for the broadcast and the connect-time snapshot |
@@ -323,13 +354,15 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | GET | `/{stackId}` | Get stack details |
 | PUT | `/{stackId}` | Update stack settings |
 | DELETE | `/{stackId}` | Delete stack and its cues |
-| POST | `/{stackId}/reorder` | Reorder cues: body `{ cueIds: [3, 1, 5] }` |
+| POST | `/{stackId}/reorder` | Reorder the list: body `{ entryIds: [3, 1, 5] }`, markers included; an entry left out keeps its relative order after the named ones |
 | POST | `/{stackId}/add-cue` | Add or move a cue to this stack: body `{ cueId, sortOrder?, insertByNumber? }` |
-| POST | `/{stackId}/activate` | Activate stack (first STANDARD cue), optional `{ cueId }` |
+| POST | `/{stackId}/activate` | Activate stack (first cue entry), optional `{ cueId }` — still a cue id until session 2 |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
-| POST | `/{stackId}/advance` | Advance STANDARD cues only: body `{ direction: "FORWARD"\|"BACKWARD" }` |
-| POST | `/{stackId}/go-to` | Go to specific cue: body `{ cueId }` — HTTP 400 if MARKER |
-| POST | `/{stackId}/standby` | Arm the next GO: body `{ cueId }`; `{ cueId: null }` disarms. HTTP 400 for a MARKER or a cue from another stack |
+| POST | `/{stackId}/advance` | Advance through cue entries only (markers skipped): body `{ direction: "FORWARD"\|"BACKWARD" }` |
+| POST | `/{stackId}/go-to` | Go to specific cue: body `{ entryId }` — HTTP 400 for a marker or another stack's entry |
+| POST | `/{stackId}/standby` | Arm the next GO: body `{ entryId }`; `{ entryId: null }` disarms. HTTP 400 for a marker or another stack's entry |
+| POST | `/{stackId}/markers` | Add a marker entry: body `{ label, sortOrder? }` (a position; appended if omitted). 201 with its row |
+| PUT / DELETE | `/{stackId}/markers/{entryId}` | Rename (`{ label }`) or remove a marker; 404 for a cue's entry |
 | POST | `/{stackId}/preview` | Compose a cue without firing it: body `{ cueId? }` (null → the effective next). See below |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
@@ -337,12 +370,15 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 
 When `insertByNumber: true`, the cue is inserted at its sorted position **within its own prefix
 group** — other groups say nothing about where it belongs. Returns 400 if the cue's number has no
-decimal run to position it by. Cues at or after the insertion point shift down, MARKERs included.
+decimal run to position it by. Entries at or after the insertion point shift down, markers included.
+The move takes the cue's one entry with it (number, auto flag, follow); an **explicit** number the
+target stack already holds refuses the move (400) rather than tripping the unique index, an auto one
+is dropped and the cue renumbered where it lands.
 
 ### `sort-by-cue-number`
 
-Sorts each prefix group's STANDARD cues among themselves and writes them back into the `sort_order`
-slots that group already occupied, so groups keep their relative placement. MARKERs and unparseable
+Sorts each prefix group's cue entries among themselves and writes them back into the slots of the
+list that group already occupied, so groups keep their relative placement. Markers and unparseable
 numbers never move. Afterwards the cues the sort moved take auto numbers from where they landed and
 the rest keep theirs (§"Auto Numbering", D11), so *Fix Order* moves a renumbered cue rather than
 relabelling its neighbours.
@@ -351,14 +387,14 @@ Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCoun
 unparseable numbers left in place. No longer returns 400 when nothing was eligible; a stack that
 needs no sorting simply comes back unchanged.
 
-Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority is derived from
-`sort_order` — see [cues-engineering.md](cues-engineering.md) §Priority.
+Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority is derived from the
+entry's position — see [cues-engineering.md](cues-engineering.md) §Priority.
 
 ### DTOs
 
 - `NewCueStack` — name, loop
 - `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
-- `CueStackCueEntry` — id, name, sortOrder, layerCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
+- `CueStackCueEntry` — one **row** of the list: `entryId` (what reorder, standby and go-to name), `id` (the cue's; null on a marker), name (a marker's label), sortOrder (its position), layerCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
 - `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
@@ -421,7 +457,7 @@ stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state,
 
 1. the element's base (its own `params.states`);
 2. each live stack's **set**, then its **cues from the top of the list down to the live cue**
-   (STANDARD cues only), the last change winning — computed from the list, not from history, so
+   (cue entries only), the last change winning — computed from the list, not from history, so
    GO TO Q20 lands the set as if the list had been run. With two stacks live they fold in GO order,
    so the most recently GO'd wins — not the lighting resolver's database-id order;
 3. the Looks the live cues **layer** (enabled, `amount > 0`, not timed), in layer order;
@@ -488,7 +524,7 @@ A move's `from` is where the piece is drawn at that moment, so a retarget mid-mo
 **REST.** Whole-list `PUT` on `cues/{id}/scenery`, `cue-stacks/{id}/scenery` and
 `looks/{id}/scenery` (`routes/projectScenery.kt`), body `{scenery: [{elementUuid, state,
 transitionMs?}]}`, every problem at once (a state its element's kind cannot take, an element named
-twice, a `transitionMs` off a cue, a MARKER or a separator). The owners' read DTOs carry the lists:
+twice, a `transitionMs` off a cue, or a separator). The owners' read DTOs carry the lists:
 `CueDetails.scenery` (plus `trackedScenery`, what the cue shows without moving it and where from),
 `CueStackDetails.scenery`, `LookDetails.scenery` — the stack list carries every cue's **own**
 changes too, `CueStackDetails.cues[].scenery` (scenery-programmer plan D13, D14: the cue table's
@@ -508,12 +544,12 @@ cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
 `scenery: false`; no mask, source or fixture scope narrows it.
 
 - **Into a cue**, a held piece the cue has no row for is written only where it differs from what the
-  cue shows without it — `sceneryBeneathCue`: the base, the stack's set, then every earlier STANDARD
-  cue of the list, the resolver's own fold with the cue's own rows left out. Equal, it is counted as
+  cue shows without it — `sceneryBeneathCue`: the base, the stack's set, then every earlier cue entry
+  of the list, the resolver's own fold with the cue's own rows left out. Equal, it is counted as
   `sceneryAlreadyTracked` and not written. A row the cue already has is replaced, whatever it says —
   its clock kept unless the held piece carries one from Include — and a row already saying exactly
   that is left alone and not counted. MERGE and UPDATE_EXISTING are that; REMOVE deletes the cue's
-  rows for the held pieces; a MARKER records none and warns. A new cue is read at its own place in
+  rows for the held pieces. A marker is no cue and is refused by Record outright. A new cue is read at its own place in
   the list, after it is created.
 - **Into a Look**, every held state is written, merged per element over the Look's rows; REMOVE
   deletes them. A Look recorded with only scenery held is a scenery Look.
@@ -626,14 +662,14 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 ## Frontend Integration
 
 ### API Layer
-- `src/api/cueStacksApi.ts` — Type definitions for CueStack, CueStackInput, CueStackCueEntry, etc.
+- `src/api/cueStacksApi.ts` — Type definitions for CueStack, CueStackInput, CueStackCueEntry, etc. A `CueStackCueEntry` is a union keyed by `cueType`: a `CueStackCueRow` (`id` the cue's) or a `CueStackMarkerRow` (`id: null`), both carrying `entryId`; rows are keyed, sorted, reordered, armed and gone to by `entryId`, and `isCueRow` / `cueRowById` narrow to cue rows
 - `src/api/cueStacksWsApi.ts` — WebSocket subscription for `cueStackListChanged`
 - `src/api/lightingApi.ts` — Registers `cueStacks` WS API
 - `src/api/fxApi.ts` — `FxEffectState` includes `cueStackId`
-- `src/api/cuesApi.ts` — `Cue` interface includes `cueStackId`, `cueStackName`, `sortOrder`
+- `src/api/cuesApi.ts` — `Cue` interface includes `cueStackId`, `cueStackName`, `entryId`, `sortOrder`
 
 ### State Management
-- `src/store/cueStacks.ts` — RTK Query endpoints with `CueStackList` tag, all CRUD + control mutations
+- `src/store/cueStacks.ts` — RTK Query endpoints with `CueStackList` tag, all CRUD + control mutations, and the marker mutations (`createMarkerEntry`, `renameMarkerEntry`, `deleteMarkerEntry`)
 - `src/store/cues.ts` — `useActiveCueStackIds()` hook derives active stack IDs from FxState
 - `src/store/restApi.ts` — `CueStackList` added to tag types
 

@@ -5,7 +5,7 @@ import { SpeedMastersChip } from '../../SpeedMasters'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueEntry, CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
  * The **phone runner**: the takeover layout Show swaps to below 600px, always locked.
@@ -15,8 +15,8 @@ import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
  * only the phone layout, which is what `runner/mobile/` is now named for.
  */
 export interface RunnerDisplayState {
-  activeCue: CueStackCueEntry | null
-  standbyCue: CueStackCueEntry | null
+  activeCue: CueStackCueRow | null
+  standbyCue: CueStackCueRow | null
   nextStack: CueStack | null
   activeCueId: number | null
   standbyCueId: number | null

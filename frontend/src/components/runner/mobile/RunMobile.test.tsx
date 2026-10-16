@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
  * The phone runner's cards since venue-visit plan S3 took the cards' 2D `MiniStage` away: each
@@ -22,9 +22,10 @@ vi.mock('../MobileCueListSheet', () => ({ MobileCueListSheet: () => null }))
 
 import { RunMobile, type RunnerDisplayState } from './RunMobile'
 
-function entry(id: number, cueNumber: string): CueStackCueEntry {
+function entry(id: number, cueNumber: string): CueStackCueRow {
   return {
     id,
+    entryId: id + 100,
     name: `Q${cueNumber}`,
     sortOrder: id,
     layerCount: 0,

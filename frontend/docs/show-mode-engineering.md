@@ -162,7 +162,7 @@ The **Program view** is the single surface for authoring *and* assembling cues: 
 - Timing: fade duration, fade curve, auto-advance delay
 - Metadata: cue number (Q1, Q2.5), notes
 
-**Cue types**: `STANDARD` (a real cue) or `MARKER` (a visual separator *within* a stack — distinct from a SEPARATOR *stack* between stacks).
+**A stack's rows are its entries** (cue model plan session 1): each is either a cue's place in the stack (`cueType: 'STANDARD'`, a `CueStackCueRow`) or a **marker** (`cueType: 'MARKER'`, a `CueStackMarkerRow`) — a labelled visual separator *within* a stack, distinct from a SEPARATOR *stack* between stacks. A marker is an entry, not a cue: it has no cue id, is made, renamed and removed through `/cue-stacks/{sid}/markers` (`createMarkerEntry` / `renameMarkerEntry` / `deleteMarkerEntry`), and can be neither armed nor gone to. Every row carries `entryId`, which is what reorder, standby and go-to name and what the lists key on.
 
 ## Show URLs
 
@@ -282,10 +282,14 @@ interface CueStack {
   canDelete: boolean
 }
 
-interface CueStackCueEntry {
-  id: number
-  name: string
-  sortOrder: number
+// One row of a stack's list: a cue's entry or a marker, discriminated by `cueType`.
+type CueStackCueEntry = CueStackCueRow | CueStackMarkerRow
+
+interface CueStackCueRow {       // CueStackMarkerRow has the same fields with `id: null`, `cueType: 'MARKER'`
+  entryId: number                 // the entry — what reorder, standby and go-to name
+  id: number                      // the cue
+  name: string                    // a marker's label, on a marker row
+  sortOrder: number               // the row's position in the list, markers counted
   presetCount: number
   adHocEffectCount: number
   autoAdvance: boolean
@@ -294,7 +298,7 @@ interface CueStackCueEntry {
   fadeCurve: string               // LINEAR, EASE_IN_OUT, SINE_IN_OUT, etc.
   cueNumber: string | null        // Theatre cue number (Q1, Q2.5)
   notes: string | null
-  cueType: 'STANDARD' | 'MARKER'
+  cueType: 'STANDARD'
 }
 ```
 
@@ -679,14 +683,18 @@ PUT    /project/{id}/cue-stacks/{stackId}                   Update stack / separ
 DELETE /project/{id}/cue-stacks/{stackId}                   Delete stack (cascades its cues) / separator
 POST   /project/{id}/cue-stacks/reorder                     Reorder the project's stacks + separators { stackIds }
 
-POST   /project/{id}/cue-stacks/{sid}/reorder               Reorder cues within a stack
+POST   /project/{id}/cue-stacks/{sid}/reorder               Reorder the list { entryIds }, markers included
+POST   /project/{id}/cue-stacks/{sid}/markers               Add a marker { label, sortOrder? }
+PUT    /project/{id}/cue-stacks/{sid}/markers/{entryId}     Rename a marker { label }
+DELETE /project/{id}/cue-stacks/{sid}/markers/{entryId}     Remove a marker
+POST   /project/{id}/cue-stacks/{sid}/standby               Arm the next GO { entryId } (null disarms; a marker is 400)
 POST   /project/{id}/cue-stacks/{sid}/add-cue               Add / move a cue into the stack
 POST   /project/{id}/cue-stacks/{sid}/sort-by-cue-number    Sort cues by Q number
 
 POST   /project/{id}/cue-stacks/{sid}/activate              Start stack playback
 POST   /project/{id}/cue-stacks/{sid}/deactivate            Stop stack playback
 POST   /project/{id}/cue-stacks/{sid}/advance               GO forward/backward
-POST   /project/{id}/cue-stacks/{sid}/go-to                 Jump to specific cue
+POST   /project/{id}/cue-stacks/{sid}/go-to                 Jump to a specific cue { entryId } (a marker is 400)
 ```
 
 ### Cues
@@ -727,7 +735,7 @@ Several mutations apply optimistic cache patches for instant UI feedback:
 - `activateCueStack`: immediately sets `activeCueId` on the stack
 - `deactivateCueStack`: immediately clears `activeCueId`
 - `advanceCueStack`: computes next cue locally, patches cache
-- `reorderCueStackCues`: immediately rewrites `sortOrder` in cue list cache
+- `reorderCueStackCues`: immediately reorders the cached rows by the `entryIds` sent and rewrites their `sortOrder`
 
 All optimistic updates are rolled back on server error.
 

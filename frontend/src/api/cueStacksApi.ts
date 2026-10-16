@@ -10,9 +10,18 @@ export type CueType = 'STANDARD' | 'MARKER'
  */
 export type StackType = 'STACK' | 'SEPARATOR'
 
-export interface CueStackCueEntry {
-  id: number
+/**
+ * One row of a stack's list — an **entry** (lighting7 cue model plan §3.1). A cue entry places a
+ * cue: `id` is the cue's, and the entry carries the cue's content summary beside its own place in
+ * the stack (position, number, follow). A marker entry is a labelled divider and not a cue (D12):
+ * `id` is null, `cueType` is `MARKER` and `name` is its label. Key a row on `entryId`, never on
+ * `id` — a marker has none, and the two id spaces overlap.
+ */
+interface CueStackEntryBase {
+  /** The entry's own id: what reorder, standby and go-to name. */
+  entryId: number
   name: string
+  /** The entry's position in its stack's list, from 0, markers counted. */
   sortOrder: number
   /**
    * How many Look layers the cue carries. This was spelled `presetCount` here long after the
@@ -28,19 +37,42 @@ export interface CueStackCueEntry {
   fadeCurve: string
   cueNumber: string | null
   /**
-   * True when `cueNumber` was derived from the cue's position rather than typed by the operator.
-   * Auto numbers move with the cue and are rendered dimmed to mark them as provisional.
+   * True when `cueNumber` was derived from the entry's position rather than typed by the operator.
+   * Auto numbers move with the entry and are rendered dimmed to mark them as provisional.
    */
   cueNumberAuto: boolean
   notes: string | null
-  cueType: CueType
   /**
    * The cue's own scenery changes — what it moves on GO, each on its clock (scenery-programmer plan
    * D13, D14): the cue table's Scenery column, the Prompt Book's margin glyph and its rail cards.
    * Never what the cue only tracks (`CueDetails.trackedScenery`). Optional: an older desk does not
-   * send it, and a MARKER's is always empty.
+   * send it, and a marker's is always empty.
    */
   scenery?: SceneryChange[]
+}
+
+/** A cue entry: the row places cue `id`. */
+export interface CueStackCueRow extends CueStackEntryBase {
+  id: number
+  cueType: 'STANDARD'
+}
+
+/** A marker entry: a labelled divider, no cue. */
+export interface CueStackMarkerRow extends CueStackEntryBase {
+  id: null
+  cueType: 'MARKER'
+}
+
+export type CueStackCueEntry = CueStackCueRow | CueStackMarkerRow
+
+/** Whether a row of a stack's list places a cue (rather than being a marker). */
+export const isCueRow = (entry: CueStackCueEntry): entry is CueStackCueRow => entry.cueType !== 'MARKER'
+
+/** The row of [cues] that places cue [cueId] — never a marker, whose `id` is null. */
+export function cueRowById(cues: readonly CueStackCueEntry[] | undefined, cueId: number | null | undefined): CueStackCueRow | null {
+  if (cueId == null || cues == null) return null
+  for (const c of cues) if (isCueRow(c) && c.id === cueId) return c
+  return null
 }
 
 export interface CueStack {
@@ -78,8 +110,15 @@ export interface CueStackInput {
   sortOrder?: number
 }
 
+/** The stack's entries in their new order — markers included. */
 export interface ReorderCuesRequest {
-  cueIds: number[]
+  entryIds: number[]
+}
+
+/** A marker entry's label, and where a new one goes (a position in the list; absent appends). */
+export interface MarkerEntryRequest {
+  label: string
+  sortOrder?: number
 }
 
 /** Result of `POST /cue-stacks/{stackId}/sort-by-cue-number`. */

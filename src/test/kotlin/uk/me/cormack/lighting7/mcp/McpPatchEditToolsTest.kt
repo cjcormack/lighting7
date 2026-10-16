@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.mcp
 
+import uk.me.cormack.lighting7.testsupport.inStack
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -78,7 +79,7 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
         DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "foh-10"; propertyName = "dimmer"; value = "50"; sortOrder = 2 }
         DaoLookRow.new { this.look = look; targetType = "group"; targetKey = "FOH"; propertyName = "dimmer"; value = "10"; sortOrder = 3 }
         val stack = DaoCueStack.new { this.project = project; name = "Main" }
-        val cue = DaoCue.new { this.project = project; name = "Opening"; cueStack = stack; cueNumber = "1" }
+        val cue = DaoCue.new { this.project = project; name = "Opening" }.inStack(stack, cueNumber = "1")
         DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "foh-2"; propertyName = "dimmer"; value = "255" }
         DaoCueLayer.new { this.cue = cue; this.look = look; targets = listOf(CueTargetDto("fixture", "foh-1"), CueTargetDto("group", "FOH")) }
         val binding = DaoControlSurfaceBinding.new {

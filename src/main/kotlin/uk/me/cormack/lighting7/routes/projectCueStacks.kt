@@ -16,6 +16,8 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.stackCuePriorities
 import uk.me.cormack.lighting7.models.*
@@ -162,22 +164,24 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/reorder - Reorder cues
+    // POST /{projectId}/cue-stacks/{stackId}/reorder - Reorder the stack's entries
     post<CueStackReorderResource> { resource ->
-        withCurrentProject(state, resource.parent.parent.projectId) { _ ->
+        withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val request = call.receive<ReorderCuesRequest>()
             val priorities = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
+                    ?.takeIf { it.project.id == project.id }
                     ?: return@transaction emptyMap<Int, Int>()
-                val before = standardCueIds(stack)
-                for ((index, cueId) in request.cueIds.withIndex()) {
-                    val cue = DaoCue.findById(cueId) ?: continue
-                    if (cue.cueStack.id.value == resource.parent.stackId) {
-                        cue.sortOrder = index
-                    }
-                }
-                // Auto numbers are derived from position, so the moved cues take new ones.
-                renumberAutoCues(stack, before)
+                val before = cueEntryIds(stack)
+                val current = entriesOf(stack)
+                val byId = current.associateBy { it.id.value }
+                // The named entries in the order given, then any the request left out where they
+                // were — an entry of another stack, or an unknown id, is ignored.
+                val named = request.entryIds.distinct().mapNotNull { byId[it] }
+                val namedIds = named.mapTo(HashSet()) { it.id.value }
+                writeEntryOrder(named + current.filter { it.id.value !in namedIds })
+                // Auto numbers are derived from position, so the moved entries take new ones.
+                renumberAutoEntries(stack, before)
                 stackCuePriorities(stack)
             }
             // Cue priority is derived from stack position; keep anything already on stage in step.
@@ -188,27 +192,31 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/add-cue - Add/move cue to stack
+    // POST /{projectId}/cue-stacks/{stackId}/add-cue - Move a cue into this stack
     post<CueStackAddCueResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val request = call.receive<AddCueToStackRequest>()
             val manager = state.show.cueStackManager
             val result = transaction(state.database) {
-                val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction Triple("Stack not found", null, null)
+                val stack = DaoCueStack.findById(resource.parent.stackId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?: return@transaction Triple("Stack not found", null, null)
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple("Cannot add cues to a separator", null, null)
                 val cue = DaoCue.findById(request.cueId) ?: return@transaction Triple("Cue not found", null, null)
                 if (cue.project.id != project.id) return@transaction Triple("Cue does not belong to project", null, null)
-                val before = standardCueIds(stack)
 
-                // Every cue already in the stack, MARKERs included — the shift below has to move
-                // separators too, or they drift away from the cues they label.
-                val existingCues = DaoCue.find { DaoCues.cueStack eq stack.id }
-                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                    .filter { it.id.value != cue.id.value }
-                    .toList()
+                // One entry per cue until sharing lands (cue model plan P4): adding a cue *moves*
+                // its entry here, as it always moved the cue. Session 4 makes this an added entry.
+                val entry = soleEntryOf(cue)
+                    ?: return@transaction Triple("Cue is not in exactly one stack", null, null)
+                val left = entry.stack.takeIf { it.id != stack.id }
 
-                if (request.insertByNumber) {
-                    val parsed = cue.cueNumber?.let { parseCueNumber(it) }
+                // Every entry already in the stack, markers included — the insert below has to
+                // place it among separators too, or they drift away from the cues they label.
+                val existing = entriesOf(stack).filter { it.id != entry.id }
+
+                val insertAt = if (request.insertByNumber) {
+                    val parsed = entry.cueNumber?.let { parseCueNumber(it) }
                         ?: return@transaction Triple(
                             "insertByNumber requires a cue number with a numeric component",
                             null,
@@ -217,40 +225,32 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
                     // Position the cue within its own prefix group; other groups sort
                     // independently, so their numbers say nothing about where this one belongs.
-                    val group = existingCues.mapNotNull { other ->
-                        val otherParsed = other.cueNumber?.let { parseCueNumber(it) }
+                    val group = existing.withIndex().mapNotNull { (index, other) ->
+                        val otherParsed = other.cueNumber?.takeIf { !other.isMarker }?.let { parseCueNumber(it) }
                         if (otherParsed != null && otherParsed.prefix.equals(parsed.prefix, ignoreCase = true)) {
-                            other to otherParsed
+                            index to otherParsed
                         } else {
                             null
                         }
                     }
-
                     val insertAfter = group.lastOrNull { (_, other) -> compareWithinGroup(other, parsed) < 0 }
-                    val insertSortOrder = when {
-                        insertAfter != null -> insertAfter.first.sortOrder + 1
-                        group.isNotEmpty() -> group.first().first.sortOrder
+                    when {
+                        insertAfter != null -> insertAfter.first + 1
+                        group.isNotEmpty() -> group.first().first
                         // Nothing in this group yet — append.
-                        else -> (existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                        else -> existing.size
                     }
-
-                    existingCues.filter { it.sortOrder >= insertSortOrder }
-                        .forEach { it.sortOrder = it.sortOrder + 1 }
-
-                    cue.cueStack = stack
-                    cue.sortOrder = insertSortOrder
                 } else {
-                    cue.cueStack = stack
-                    // max+1, not count: sort orders are allowed to have gaps, so counting would
-                    // hand out a value an existing cue already holds.
-                    cue.sortOrder = request.sortOrder ?: ((existingCues.maxOfOrNull { it.sortOrder } ?: -1) + 1)
+                    // `sortOrder` is a position in the stack's list, as it always read in practice.
+                    request.sortOrder?.coerceIn(0, existing.size) ?: existing.size
                 }
 
-                renumberAutoCues(stack, before)
+                moveEntryTo(stack, entry, insertAt)?.let { return@transaction Triple(it, null, null) }
+                val priorities = stackCuePriorities(stack) + (left?.let { stackCuePriorities(it) } ?: emptyMap())
                 Triple(
                     null,
                     stack.toCueStackDetails(isCurrentProject = true, manager),
-                    stackCuePriorities(stack),
+                    priorities,
                 )
             }
 
@@ -262,6 +262,79 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
                 call.respond(details!!)
+            }
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/{stackId}/markers - Add a marker entry
+    post<CueStackMarkersResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId) { project ->
+            val request = call.receive<MarkerEntryRequest>()
+            val result = transaction(state.database) {
+                val stack = DaoCueStack.findById(resource.parent.stackId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?: return@transaction Triple(null, "Cue stack not found", null)
+                if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple(null, "Cannot add a marker to a separator", null)
+                val existing = entriesOf(stack)
+                val at = request.sortOrder?.coerceIn(0, existing.size) ?: existing.size
+                val marker = DaoCueStackEntry.new {
+                    this.stack = stack
+                    kind = CueStackEntryKind.MARKER.name
+                    label = request.label.ifBlank { "Separator" }.take(255)
+                    ordinal = 0.0
+                }
+                writeEntryOrder(existing.take(at) + marker + existing.drop(at))
+                // A marker counts in the positions a live cue's priority is derived from.
+                Triple(marker.toCueStackCueEntry(emptyMap()), null, stackCuePriorities(stack))
+            }
+            val (entry, error, priorities) = result
+            if (entry == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(error ?: "Cue stack not found"))
+            } else {
+                state.show.fxEngine.repriorityCues(priorities ?: emptyMap())
+                state.show.fixtures.cueStackListChanged()
+                call.respond(HttpStatusCode.Created, entry)
+            }
+        }
+    }
+
+    // PUT /{projectId}/cue-stacks/{stackId}/markers/{entryId} - Rename a marker entry
+    put<CueStackMarkerResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.parent.projectId) { project ->
+            val request = call.receive<MarkerEntryRequest>()
+            val entry = transaction(state.database) {
+                val marker = markerEntry(project, resource.parent.parent.stackId, resource.entryId) ?: return@transaction null
+                marker.label = request.label.ifBlank { "Separator" }.take(255)
+                marker.toCueStackCueEntry(emptyMap())
+            }
+            if (entry == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Marker not found"))
+            } else {
+                state.show.fixtures.cueStackListChanged()
+                call.respond(entry)
+            }
+        }
+    }
+
+    // DELETE /{projectId}/cue-stacks/{stackId}/markers/{entryId} - Remove a marker entry
+    delete<CueStackMarkerResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.parent.projectId) { project ->
+            val removed = transaction(state.database) {
+                val marker = markerEntry(project, resource.parent.parent.stackId, resource.entryId) ?: return@transaction null
+                val stack = marker.stack
+                val anchors = DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry eq marker.id }
+                marker.delete()
+                // The entries after it move up a place, and a live cue's priority is its place.
+                anchors to stackCuePriorities(stack)
+            }
+            if (removed == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Marker not found"))
+            } else {
+                val (removedAnchors, priorities) = removed
+                state.show.fxEngine.repriorityCues(priorities)
+                state.show.fixtures.cueStackListChanged()
+                if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
+                call.respond(HttpStatusCode.NoContent)
             }
         }
     }
@@ -341,7 +414,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = call.receive<GoToCueRequest>()
 
             try {
-                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, request.cueId)
+                val cueId = cueOfEntry(state, resource.parent.stackId, request.entryId)
+                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, cueId)
                 state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
             } catch (e: Exception) {
@@ -358,8 +432,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val stackId = resource.parent.stackId
 
             try {
-                if (request.cueId != null) {
-                    manager.runState.setStandby(state, stackId, request.cueId)
+                if (request.entryId != null) {
+                    manager.runState.setStandby(state, stackId, cueOfEntry(state, stackId, request.entryId))
                 } else {
                     manager.runState.clearStandby(state, stackId)
                 }
@@ -404,31 +478,30 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
-                val before = standardCueIds(stack)
-                val standardCues = DaoCue.find { DaoCues.cueStack eq stack.id }
-                    .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                    .filter { it.cueType == CueType.STANDARD.name }
+                val before = cueEntryIds(stack)
+                val all = entriesOf(stack)
+                val cueEntries = all.filter { !it.isMarker }
 
                 // Each prefix group is sorted within the slots it already occupies, so groups
-                // keep their relative placement. MARKERs and numbers with nothing to order by
+                // keep their relative placement. Markers and numbers with nothing to order by
                 // ("A", blanks) never move — that's the replacement for the old rule that a cue
                 // number had to *start* with a digit to participate, which excluded every
                 // prefixed number like "S1-3".
-                val slots = standardCues.map { it.sortOrder }
-                groupAwareCueOrder(standardCues) { it.cueNumber }
-                    .forEachIndexed { index, cue -> cue.sortOrder = slots[index] }
+                val sorted = groupAwareCueOrder(cueEntries) { it.cueNumber }.iterator()
+                writeEntryOrder(all.map { if (it.isMarker) it else sorted.next() })
 
                 // Counted before renumbering: that call is what fills blanks in, so reading these
                 // afterwards would report zero unnumbered cues no matter what came in.
-                val unparseable = standardCues.count {
+                val unparseable = cueEntries.count {
                     val number = it.cueNumber
                     !number.isNullOrEmpty() && parseCueNumber(number) == null
                 }
-                val unnumbered = standardCues.count { it.cueNumber.isNullOrEmpty() }
+                val unnumbered = cueEntries.count { it.cueNumber.isNullOrEmpty() }
 
-                // The cues the sort moved take numbers from where they landed; the rest keep theirs,
-                // so *Fix Order* moves an out-of-order cue rather than renumbering its neighbours.
-                renumberAutoCues(stack, before)
+                // The entries the sort moved take numbers from where they landed; the rest keep
+                // theirs, so *Fix Order* moves an out-of-order cue rather than renumbering its
+                // neighbours.
+                renumberAutoEntries(stack, before)
 
                 val details = stack.toCueStackDetails(isCurrentProject = true, manager)
                 SortByNumberResponse(
@@ -469,6 +542,12 @@ data class CueStackReorderResource(val parent: ProjectCueStackResource)
 
 @Resource("/add-cue")
 data class CueStackAddCueResource(val parent: ProjectCueStackResource)
+
+@Resource("/markers")
+data class CueStackMarkersResource(val parent: ProjectCueStackResource)
+
+@Resource("/{entryId}")
+data class CueStackMarkerResource(val parent: CueStackMarkersResource, val entryId: Int)
 
 @Resource("/activate")
 data class CueStackActivateResource(val parent: ProjectCueStackResource)
@@ -532,10 +611,19 @@ data class CueStackDetails(
     val scenery: List<SceneryChangeDto> = emptyList(),
 )
 
+/**
+ * One row of a stack's list — an **entry** (cue model plan §3.1). A cue entry carries its cue's
+ * content summary beside the entry's own place (position, number, follow); a marker entry
+ * (`cueType: "MARKER"`) carries only its label, as [name], and no cue.
+ */
 @Serializable
 data class CueStackCueEntry(
-    val id: Int,
+    /** The cue this entry places; null for a marker, which is an entry and not a cue (D12). */
+    val id: Int?,
+    /** The entry's own id: what reorder, standby and go-to name (P2). */
+    val entryId: Int,
     val name: String,
+    /** The entry's position in its stack's list, from 0, markers counted. */
     val sortOrder: Int,
     /**
      * How many Look layers the cue carries.
@@ -556,6 +644,7 @@ data class CueStackCueEntry(
     /** True when [cueNumber] was derived from position rather than typed by the operator. */
     val cueNumberAuto: Boolean = false,
     val notes: String? = null,
+    /** `STANDARD` for a cue entry, `MARKER` for a marker entry — the entry's kind, as the wire says it. */
     val cueType: String = "STANDARD",
     /**
      * The cue's own scenery changes — what it moves on GO, each on its clock (scenery-programmer
@@ -572,7 +661,15 @@ data class CueStackCueEntry(
 
 @Serializable
 data class ReorderCuesRequest(
-    val cueIds: List<Int>,
+    /** The stack's entries in their new order (cue model plan P2) — markers included. */
+    val entryIds: List<Int>,
+)
+
+/** A marker entry's label, and where a new one goes (a position in the list; absent appends). */
+@Serializable
+data class MarkerEntryRequest(
+    val label: String = "",
+    val sortOrder: Int? = null,
 )
 
 @Serializable
@@ -599,13 +696,14 @@ data class AdvanceCueStackRequest(
 
 @Serializable
 data class GoToCueRequest(
-    val cueId: Int,
+    /** The entry to go to (cue model plan P2). */
+    val entryId: Int,
 )
 
 @Serializable
 data class SetStandbyRequest(
-    /** The cue to arm; null disarms and leaves the positional next on deck. */
-    val cueId: Int? = null,
+    /** The entry to arm (cue model plan P2); null disarms and leaves the positional next on deck. */
+    val entryId: Int? = null,
 )
 
 @Serializable
@@ -652,27 +750,14 @@ private fun DaoCueStack.toCueStackDetails(
     isCurrentProject: Boolean,
     manager: CueStackManager,
 ): CueStackDetails {
-    val sortedCues = cues.sortedBy { it.sortOrder }
-    val sceneryByCue = cueSceneryByCue(sortedCues.map { it.id })
-    val orderedCues = sortedCues.map { cue ->
-        CueStackCueEntry(
-            id = cue.id.value,
-            name = cue.name,
-            sortOrder = cue.sortOrder,
-            layerCount = cue.layers.count().toInt(),
-            adHocEffectCount = cue.adHocEffects.count().toInt(),
-            autoAdvance = cue.autoAdvance,
-            autoAdvanceDelayMs = cue.autoAdvanceDelay?.toMillis(),
-            fadeDurationMs = cue.fadeDuration?.toMillis(),
-            fadeCurve = cue.fadeCurve,
-            cueNumber = cue.cueNumber,
-            cueNumberAuto = cue.cueNumberAuto,
-            notes = cue.notes,
-            cueType = cue.cueType,
-            scenery = sceneryByCue[cue.id.value].orEmpty().map { it.toDto() },
-        )
+    val entries = entriesOf(this)
+    val cueIds = entries.mapNotNull { it.cueId }
+    val sceneryByCue = cueSceneryByCue(cueIds.map { EntityID(it, DaoCues) })
+    val cuesById = if (cueIds.isEmpty()) emptyMap() else DaoCue.find { DaoCues.id inList cueIds }.associateBy { it.id.value }
+    val orderedCues = entries.mapIndexed { position, entry ->
+        entry.toCueStackCueEntry(sceneryByCue, position, entry.cueId?.let(cuesById::get))
     }
-    val standardCueIds = orderedCues.filter { it.cueType == CueType.STANDARD.name }.map { it.id }
+    val standardCueIds = orderedCues.mapNotNull { it.id }
     return CueStackDetails(
         id = id.value,
         name = name,
@@ -692,6 +777,64 @@ private fun DaoCueStack.toCueStackDetails(
     )
 }
 
+/**
+ * One entry as a row of its stack's list. [position] is its index in the list, read once by the
+ * caller rather than per row; [cue] likewise, when the caller has loaded the stack's cues at once.
+ */
+internal fun DaoCueStackEntry.toCueStackCueEntry(
+    sceneryByCue: Map<Int, List<DaoCueSceneryRow>>,
+    position: Int = entriesOfStack(stack.id).indexOfFirst { it.id == id }.coerceAtLeast(0),
+    cue: DaoCue? = this.cue,
+): CueStackCueEntry {
+    if (isMarker || cue == null) {
+        return CueStackCueEntry(
+            id = null,
+            entryId = id.value,
+            name = displayName,
+            sortOrder = position,
+            layerCount = 0,
+            adHocEffectCount = 0,
+            cueType = CueType.MARKER.name,
+        )
+    }
+    return CueStackCueEntry(
+        id = cue.id.value,
+        entryId = id.value,
+        name = cue.name,
+        sortOrder = position,
+        layerCount = cue.layers.count().toInt(),
+        adHocEffectCount = cue.adHocEffects.count().toInt(),
+        autoAdvance = autoAdvance,
+        autoAdvanceDelayMs = autoAdvanceDelay?.toMillis(),
+        fadeDurationMs = cue.fadeDuration?.toMillis(),
+        fadeCurve = cue.fadeCurve,
+        cueNumber = cueNumber,
+        cueNumberAuto = cueNumberAuto,
+        notes = cue.notes,
+        cueType = CueType.STANDARD.name,
+        scenery = sceneryByCue[cue.id.value].orEmpty().map { it.toDto() },
+    )
+}
+
+/**
+ * The cue entry [entryId] of stack [stackId] names, for the routes that take an entry (cue model
+ * plan P2) and hand a cue id to a runtime still keyed by cue until the plan's session 2. Throws
+ * [IllegalArgumentException] — the routes' 400 — for an unknown entry, one of another stack, or a
+ * marker, which nothing can go to or arm.
+ */
+private fun cueOfEntry(state: State, stackId: Int, entryId: Int): Int = transaction(state.database) {
+    val entry = DaoCueStackEntry.findById(entryId)
+        ?.takeIf { it.stackId == stackId }
+        ?: throw IllegalArgumentException("Entry $entryId is not in stack $stackId")
+    entry.cueId ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be gone to or armed")
+}
+
+/** Marker entry [entryId] of stack [stackId] in [project], or null. Inside a transaction. */
+private fun markerEntry(project: DaoProject, stackId: Int, entryId: Int): DaoCueStackEntry? {
+    val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id } ?: return null
+    return DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stack.id.value && it.isMarker }
+}
+
 /** What deleting cue stacks swept beyond the stacks: prompt-book anchors, and the busk pages that lost pads. */
 internal data class DeletedCueStackRows(val removedAnchors: Int, val pageIds: Set<Int>)
 
@@ -709,10 +852,15 @@ internal fun deleteCueStackRows(state: State, project: DaoProject, stack: DaoCue
         project.activeStackId = null
     }
 
-    // Every cue belongs to a stack, so deleting a stack cascades its cues + children.
+    // Every cue has one entry until sharing lands (cue model plan P4), so deleting a stack still
+    // cascades the cues its entries place, with their children. Session 4 leaves them loose.
     var removedAnchors = 0
     val pageIds = mutableSetOf<Int>()
-    stack.cues.forEach { cue ->
+    entriesOf(stack).forEach { entry ->
+        removedAnchors += DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry eq entry.id }
+        val cue = entry.cue
+        entry.delete()
+        if (cue == null) return@forEach
         deleteCueChildren(cue)
         deleteCueScenery(cue.id)
         deleteCueEvents(cue.id)

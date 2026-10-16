@@ -33,6 +33,7 @@ import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -366,14 +367,18 @@ class ProgrammerSceneryRecordTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a marker records no scenery and says so`() = testApplication {
+    fun `a marker records nothing and says so`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (_, moon) = tabsAndMoon(client)
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "Main")
         hold(moon, trim(3.0))
-        val marker = client.record(ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, cueType = "MARKER"))
-        assertTrue(marker.cue.scenery.isEmpty())
-        assertTrue(marker.warnings.any { "marker" in it.lowercase() }, marker.warnings.toString())
+        // A marker is a labelled entry, not a cue (cue model plan D12): Record refuses to make one.
+        val resp = client.post("/api/rest/programmer/record") {
+            contentType(ContentType.Application.Json)
+            setBody(ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, cueType = "MARKER"))
+        }
+        assertFalse(resp.status.isSuccess(), resp.bodyAsText())
+        assertTrue("marker" in resp.bodyAsText().lowercase(), resp.bodyAsText())
     }
 }

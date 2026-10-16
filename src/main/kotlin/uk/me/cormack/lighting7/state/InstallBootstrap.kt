@@ -34,6 +34,10 @@ private val logger = LoggerFactory.getLogger("InstallBootstrap")
  * Note the ordering constraint that bit last time: a migration that drops a `NOT NULL` column
  * must run before any migration that inserts through the DAO, or the insert omits the column and
  * fails.
+ *
+ * One migration exists again: `CueModelMigration.kt` (the cue model plan's D5), which moves a
+ * stack's list onto `cue_stack_entries`. It is the exception to "after the schema is created" —
+ * it runs before the reconciliation, outside this transaction — and its KDoc says why.
  */
 internal fun JdbcTransaction.ensureInstallRow() {
     if (DaoInstall.all().firstOrNull() != null) return

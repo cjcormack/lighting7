@@ -22,7 +22,7 @@ import {
 } from '@/store/cues'
 import { InlineEditField } from '@/components/InlineEditField'
 import type { Cue } from '@/api/cuesApi'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 import {
   formatFadeCurve,
   formatFadeDuration,
@@ -41,7 +41,8 @@ import { HandCueLayerStrip } from '@/components/hand/HandLayerTargets'
 import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
 import { useCueFade } from '@/hooks/useCueFade'
 interface CueCardEditorProps {
-  cue: CueStackCueEntry
+  /** A cue entry — a marker is drawn by `ShowMarkerRow`, never as a card. */
+  cue: CueStackCueRow
   projectId: number
   expanded: boolean
   onToggleExpanded: () => void
@@ -109,8 +110,9 @@ export function CueCardEditor({
   onIncludeCue,
   includePending = false,
 }: CueCardEditorProps) {
+  // Sorted by entry id, as the list's `SortableContext` is: rows are entries.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: cue.id,
+    id: cue.entryId,
     disabled: locked,
   })
 

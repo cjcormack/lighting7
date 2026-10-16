@@ -565,11 +565,11 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 - `POST /api/sentry` - The browser SDK's envelope tunnel, open to every caller on both listeners and outside the warm-up and auth gates: spooled to `<appDataDir>/sentry-browser/` only while telemetry is on, at most 1 MB, and only if its header names `sentry.browserDsn`; forwarded byte for byte by a worker only `module()` starts, and deleted when telemetry is turned off. See `docs/observability-engineering.md` §"The tunnel"
 
 ### Cue Stack Run Endpoints
-- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
+- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{entryId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby". `reorder` (`{entryIds}`) and `go-to` (`{entryId}`) name **entries** too: a stack's list is `cue_stack_entries` (cue model plan session 1), each row a cue's place or a **marker**, and markers are `POST .../markers` + `PUT/DELETE .../markers/{entryId}`, never a cue (`POST /cues` refuses `cueType: "MARKER"`). See `docs/cue-stacks-engineering.md` §"Database Tables"
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only — except `scenery`, the whole stage's scenery as the GO would land it, each element with `from` and the GO's duration; see §"Preview compose"
 
 ### Scenery Endpoints
-- `PUT /api/rest/projects/{id}/cues/{cid}/scenery`, `.../cue-stacks/{sid}/scenery`, `.../looks/{lid}/scenery` - An owner's **whole** scenery list (stage-view plan session 8): `{scenery: [{elementUuid, state: {visible?, open?, trimM?}, transitionMs?}]}`, answered as stored. Each state is checked against its element's kind (`open` a drawn drape's, `trimM` a flown piece's), every problem at once; `transitionMs` is a cue's only (null moves with the cue's fade); a MARKER and a separator are refused. Read through the owners' DTOs (`CueDetails.scenery` + `trackedScenery`, `CueStackDetails.scenery`, `LookDetails.scenery`), and every cue's own changes on the stack list, `CueStackDetails.cues[].scenery` (always encoded, batched by `cueSceneryByCue`; the cue table's Scenery column and the Prompt Book's glyph, cards and *On GO* line read it, scenery-programmer plan D13/D14 — so a cue scenery write fires `cueStackListChanged` as well as `cueListChanged`, and an element delete that swept scenery fires the cue, stack and Look lists); the Look list and busk pads' `LookDto` carries a summary, `scenery: [{elementUuid, elementName, state}]` (always encoded, batched by `lookScenerySummariesFor`), for the Looks sheet's Scenery column. Scenery **tracks** and sits **beside** the composition layers — never a channel, captured by Record only as what the programmer **holds** (the scenery-programmer plan's D7: into a cue a row only where it differs from what the cue tracks, into a Look every held state; Include loads an owner's own rows back and Update writes them, D8 — `routes/programmerSceneryRecord.kt`), never on a palette — resolved by `show/SceneryResolver.kt` (the programmer's own scenery over live Looks over the live stacks' cues tracked from the top of the list, over each stack's set, over the element's base; the most recently GO'd stack wins) and streamed as `scenery.state`. A move not on a cue's own clock runs at the element's optional `params.travelS` (a DRAW/FLY drape's or a flown object's full travel, scaled by the share moved), else snaps. Deleting an element sweeps its changes. The reverse read, every owner that moves one element, is `GET .../stage-elements/{eid}/scenery` (§"Stage Scene Endpoints"). See `docs/cue-stacks-engineering.md` §"Scenery"
+- `PUT /api/rest/projects/{id}/cues/{cid}/scenery`, `.../cue-stacks/{sid}/scenery`, `.../looks/{lid}/scenery` - An owner's **whole** scenery list (stage-view plan session 8): `{scenery: [{elementUuid, state: {visible?, open?, trimM?}, transitionMs?}]}`, answered as stored. Each state is checked against its element's kind (`open` a drawn drape's, `trimM` a flown piece's), every problem at once; `transitionMs` is a cue's only (null moves with the cue's fade); a separator is refused (a marker is no cue, so has no scenery). Read through the owners' DTOs (`CueDetails.scenery` + `trackedScenery`, `CueStackDetails.scenery`, `LookDetails.scenery`), and every cue's own changes on the stack list, `CueStackDetails.cues[].scenery` (always encoded, batched by `cueSceneryByCue`; the cue table's Scenery column and the Prompt Book's glyph, cards and *On GO* line read it, scenery-programmer plan D13/D14 — so a cue scenery write fires `cueStackListChanged` as well as `cueListChanged`, and an element delete that swept scenery fires the cue, stack and Look lists); the Look list and busk pads' `LookDto` carries a summary, `scenery: [{elementUuid, elementName, state}]` (always encoded, batched by `lookScenerySummariesFor`), for the Looks sheet's Scenery column. Scenery **tracks** and sits **beside** the composition layers — never a channel, captured by Record only as what the programmer **holds** (the scenery-programmer plan's D7: into a cue a row only where it differs from what the cue tracks, into a Look every held state; Include loads an owner's own rows back and Update writes them, D8 — `routes/programmerSceneryRecord.kt`), never on a palette — resolved by `show/SceneryResolver.kt` (the programmer's own scenery over live Looks over the live stacks' cues tracked from the top of the list, over each stack's set, over the element's base; the most recently GO'd stack wins) and streamed as `scenery.state`. A move not on a cue's own clock runs at the element's optional `params.travelS` (a DRAW/FLY drape's or a flown object's full travel, scaled by the share moved), else snaps. Deleting an element sweeps its changes. The reverse read, every owner that moves one element, is `GET .../stage-elements/{eid}/scenery` (§"Stage Scene Endpoints"). See `docs/cue-stacks-engineering.md` §"Scenery"
 
 ### Palette Endpoints
 Palettes are what the desk once called templates (venue-visit plan D2). Everything a person or Claude reads says
@@ -679,15 +679,25 @@ with `maximumPoolSize = 1` — SQLite has a single writer and a larger pool prod
 defaulting to `<appDataDir>/lighting7.db`. Tables auto-create on startup via
 `SchemaUtils.createMissingTablesAndColumns`.
 
-SQLite is the only supported backend, and **there are currently no schema
-migrations at all.** `StateMigrations.kt` is gone; `state/InstallBootstrap.kt`
-holds only the install-identity row, and explains what was removed and why.
+SQLite is the only supported backend. `StateMigrations.kt` is gone;
+`state/InstallBootstrap.kt` holds only the install-identity row, and explains what
+was removed and why.
 
-That is a deliberate bet on there being exactly one database (the dev desk),
-and it expires the moment a second install exists — the Windows MSI ships an
-upgrade path. Before making a non-additive schema change once anything is
-deployed, recover the migration seam from git history; `InstallBootstrap.kt`
-says where it plugs in and what ordering constraint bit last time.
+**One schema migration exists:** `state/CueModelMigration.kt` (cue model plan D5),
+which moves a stack's list off `cues` onto `cue_stack_entries`. `State.initDatabase`
+calls it **before** `createMissingTablesAndColumns` — the exception to
+`InstallBootstrap.kt`'s "after the schema is created", for the reason its KDoc gives
+— and it runs only while `cues` still has `cue_stack_id`. It backs the database up
+first (`VACUUM INTO '<db>.pre-cue-model-<utc>.db'`), then converts in one transaction
+in raw SQL, rebuilding `cues` and `prompt_book_anchors` from the model.
+`CueModelMigrationTest` runs it over `src/test/resources/db/pre-cue-model.sql`, the
+old shape frozen; never regenerate that file from a later commit.
+
+Otherwise the bet stands on there being exactly one database (the dev desk), and it
+expires the moment a second install exists — the Windows MSI ships an upgrade path.
+Before making a non-additive schema change once anything is deployed, write a
+migration; `InstallBootstrap.kt` says where it plugs in and what ordering constraint
+bit last time, and `CueModelMigration.kt` is the worked example.
 
 ### Time columns
 

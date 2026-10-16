@@ -7,7 +7,7 @@ import { cueNumberColumnChars } from '@/lib/cueNumber'
 import { MarkerRow } from '@/components/runner/MarkerRow'
 import type { ExpansionMode } from '@/components/runner/mobile/CueCardBody'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
-import type { CueStackCueEntry } from '../../api/cueStacksApi'
+import type { CueStackCueRow } from '../../api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '../../lib/promptBook/desync'
 import type { ShowRailRow } from '../../lib/promptBook/geometry'
 import type { CueRunStatus } from './AnchorOverlay'
@@ -26,7 +26,7 @@ interface CueStackPanelProps {
   /** Per-unanchored-cue hint naming the neighbour the book borrows, e.g. "follows Q12". */
   anchorHintByCue: Map<number, string>
   /** Full stack entries by cue id — feeds each expanded card's palette/notes/auto. */
-  cueEntryByCue: Map<number, CueStackCueEntry>
+  cueEntryByCue: Map<number, CueStackCueRow>
   statusOf: (cueId: number) => CueRunStatus
   warningsByCue: Map<number, DesyncWarning[]>
   warnings: DesyncWarning[]

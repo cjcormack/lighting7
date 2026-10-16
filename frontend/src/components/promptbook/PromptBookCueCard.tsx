@@ -10,7 +10,7 @@ import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/
 import { useCueFade } from '@/hooks/useCueFade'
 import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '@/lib/promptBook/desync'
 import type { CueRunStatus } from './AnchorOverlay'
 
@@ -21,7 +21,7 @@ interface PromptBookCueCardProps {
   /** Unanchored cues only: the neighbour the book borrows, e.g. "follows Q12". */
   anchorHint: string | null
   /** The full stack entry (palette/notes/auto), for the expanded card. */
-  cueEntry: CueStackCueEntry | undefined
+  cueEntry: CueStackCueRow | undefined
   projectId: number
   warnings: DesyncWarning[]
   locked: boolean
@@ -282,7 +282,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               {anchorAffordance}
               <span className="flex-1" />
               {setNextButton}
-              {editable && cueEntry.cueType !== 'MARKER' && (
+              {editable && (
                 <button
                   ref={sceneryButtonRef}
                   type="button"

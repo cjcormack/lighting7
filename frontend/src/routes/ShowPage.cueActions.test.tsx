@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { Provider } from 'react-redux'
-import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueRow } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
@@ -33,6 +33,9 @@ vi.mock('../store/cueStacks', () => ({
   useDeactivateCueStackMutation: () => mutation(),
   useReorderCueStackCuesMutation: () => mutation(),
   useSortCueStackByCueNumberMutation: () => mutation(),
+  useCreateMarkerEntryMutation: () => mutation(),
+  useRenameMarkerEntryMutation: () => mutation(),
+  useDeleteMarkerEntryMutation: () => mutation(),
 }))
 const createCue = vi.fn((_input: Record<string, unknown>) => ({ unwrap: () => Promise.resolve({ id: 77 }) }))
 vi.mock('../store/cues', () => ({
@@ -105,9 +108,10 @@ import { resetShowPositionStore } from '../lib/showPosition'
 import { ViewSwitcher } from '../components/ViewSwitcher'
 import { ShowPage } from './ShowPage'
 
-function entry(id: number, sortOrder: number, cueNumber: string): CueStackCueEntry {
+function entry(id: number, sortOrder: number, cueNumber: string): CueStackCueRow {
   return {
     id,
+    entryId: id + 100,
     name: `Q${cueNumber}`,
     sortOrder,
     layerCount: 0,

@@ -1,10 +1,10 @@
 import { memo, useCallback, useMemo } from 'react'
+import { useProjectCueListQuery } from '@/store/cues'
 import {
-  useCreateProjectCueMutation,
-  useDeleteProjectCueMutation,
-  usePatchProjectCueMutation,
-  useProjectCueListQuery,
-} from '@/store/cues'
+  useCreateMarkerEntryMutation,
+  useDeleteMarkerEntryMutation,
+  useRenameMarkerEntryMutation,
+} from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { Cue } from '@/api/cuesApi'
 import { StackDetail } from './StackDetail'
@@ -94,49 +94,49 @@ export const ShowView = memo(function ShowView({
   onOpenBook,
   onRequestUnlock,
 }: ShowViewProps) {
-  const [createCue] = useCreateProjectCueMutation()
-  const [deleteCue] = useDeleteProjectCueMutation()
-  const [patchCue] = usePatchProjectCueMutation()
+  const [createMarker] = useCreateMarkerEntryMutation()
+  const [renameMarker] = useRenameMarkerEntryMutation()
+  const [deleteMarker] = useDeleteMarkerEntryMutation()
   const { data: allCues } = useProjectCueListQuery(projectId)
 
   const drillStack = drillStackId != null ? stacks.find((s) => s.id === drillStackId) : null
 
+  // A new separator's name is fresh against the project's cues and the rows of the stack it joins
+  // — a marker is a row of one stack's list, not a cue, so the cue list alone no longer has them.
   const existingCueNames = useMemo(
-    () => new Set((allCues ?? []).map((c) => c.name)),
-    [allCues],
+    () => new Set([...(allCues ?? []).map((c) => c.name), ...(drillStack?.cues ?? []).map((c) => c.name)]),
+    [allCues, drillStack],
   )
 
+  // In-stack separators are marker *entries* (lighting7 cue model plan D12): a labelled row of
+  // the stack's list with no cue, made, renamed and removed on the stack.
   const handleAddMarker = useCallback(async () => {
     if (drillStackId == null) return
     try {
-      await createCue({
+      await createMarker({
         projectId,
-        name: nextAvailableName('New Separator', existingCueNames),
-        layers: [],
-        adHocEffects: [],
-        cueStackId: drillStackId,
-        cueType: 'MARKER',
+        stackId: drillStackId,
+        label: nextAvailableName('New Separator', existingCueNames),
       }).unwrap()
     } catch {
       // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
     }
-  }, [drillStackId, projectId, createCue, existingCueNames])
+  }, [drillStackId, projectId, createMarker, existingCueNames])
 
   const handleMarkerRename = useCallback(
-    (cueId: number, name: string) => {
-      // PATCH so we only touch the name; PUT would wipe children and risk
-      // reverting the cueType to the NewCue default.
-      patchCue({ projectId, cueId, name })
+    (entryId: number, label: string) => {
+      if (drillStackId == null) return
+      renameMarker({ projectId, stackId: drillStackId, entryId, label })
     },
-    [projectId, patchCue],
+    [projectId, drillStackId, renameMarker],
   )
 
   const handleMarkerDelete = useCallback(
-    (cueId: number) => {
-      // In-stack separators are just MARKER cues — deleting one removes the cue.
-      deleteCue({ projectId, cueId })
+    (entryId: number) => {
+      if (drillStackId == null) return
+      deleteMarker({ projectId, stackId: drillStackId, entryId })
     },
-    [projectId, deleteCue],
+    [projectId, drillStackId, deleteMarker],
   )
 
   if (drillStack) {

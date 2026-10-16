@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoCueSlots
+import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCueTriggers
 import uk.me.cormack.lighting7.models.DaoCues
@@ -167,6 +168,11 @@ class SyncCoverageTest {
         DaoFixtureGroupMembers to Disposition.Portable("fixtureGroups", "members"),
         DaoCueStacks to Disposition.Portable("cueStacks"),
         DaoCues to Disposition.Portable("cues"),
+        // Cue model plan session 1: a stack's list moved off the cue onto entries, but the
+        // archive's format did not move (P4) — each cue's one entry is still written into its cue
+        // file as `cueStackUuid`, `sortOrder`, `cueNumber` and follow, and a marker entry as a
+        // MARKER cue. Session 3 gives entries their own folder, `cueStackEntries/`.
+        DaoCueStackEntries to Disposition.Portable("cues", "cueStackUuid"),
         DaoCuePropertyAssignments to Disposition.Portable("cuePropertyAssignments"),
         DaoCueLayers to Disposition.Portable("cueLayers"),
         DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),

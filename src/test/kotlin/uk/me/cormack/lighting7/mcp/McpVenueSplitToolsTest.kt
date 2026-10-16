@@ -119,10 +119,11 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
             val sbProject = DaoProject[sb]
             val copiedStack = DaoCueStack.find { DaoCueStacks.project eq sb }.single()
             assertEquals("show-1", copiedStack.name)
-            val cues = copiedStack.cues.sortedBy { it.sortOrder }
+            val entries = entriesOf(copiedStack).filter { !it.isMarker }
+            val cues = entries.map { it.cue!! }
             assertEquals(listOf("open", "build"), cues.map { it.name })
             val open = cues.first()
-            assertEquals("1.5", open.cueNumber)
+            assertEquals("1.5", entries.first().cueNumber)
             // Scenery found by name: the venue's tabs (the pinned version's row) and the copied deck.
             val scenery = DaoCueSceneryRow.find { DaoCueScenery.cue eq open.id }.associate { it.element.name to it.element.project.id }
             val snapshot = RigScope.of(sbProject).venue!!.snapshotId

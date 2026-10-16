@@ -7,7 +7,7 @@ import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { formatFadeText } from '@/lib/cueUtils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
-import type { CueStackCueEntry } from '@/api/cueStacksApi'
+import type { CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
  * What an expanded card shows. Details only since venue-visit plan S3: the Stage body was a 2D
@@ -19,7 +19,7 @@ export type CueCardKind = 'cur' | 'nxt' | 'other'
 
 interface CueCardBodyProps {
   kind: CueCardKind
-  cue: CueStackCueEntry | null
+  cue: CueStackCueRow | null
   projectId: number
   /** Which detail body is open; null = neither (toggle bar dimmed). */
   mode: ExpansionMode | null

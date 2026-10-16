@@ -24,6 +24,8 @@ import uk.me.cormack.lighting7.state.toSceneryElement
 import java.time.Duration
 import java.util.UUID
 import kotlin.math.abs
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.entriesOf
 
 /*
  * **Record, Include and Update for the programmer's scenery** (scenery-programmer plan session 3,
@@ -63,21 +65,20 @@ data class SceneryRecordOutcome(
 )
 
 /**
- * Write [held] into [cue]'s scenery under [mode] — see the file's notes for the rules. A MARKER is
- * never live, so it records none and says so. Must run inside a transaction.
+ * Write [held] into [cue]'s scenery under [mode] — see the file's notes for the rules. [entry] is the
+ * place in a stack the comparison with what the cue tracks is read at (the caller names it, cue
+ * model plan P7); null compares against the elements' bases alone. Must run inside a transaction.
  */
 internal fun writeHeldSceneryIntoCue(
     cue: DaoCue,
+    entry: DaoCueStackEntry?,
     held: Map<UUID, ProgrammerScenery.Held>,
     mode: RecordMode,
 ): SceneryRecordOutcome {
     if (held.isEmpty()) return SceneryRecordOutcome()
-    if (cue.cueType == CueType.MARKER.name) {
-        return SceneryRecordOutcome(warnings = listOf("A marker is never live, so it records no scenery — ${held.size} held piece(s) left out"))
-    }
     val elements = elementsOf(cue.project)
     val own = DaoCueSceneryRow.find { DaoCueScenery.cue eq cue.id }.associateBy { it.element.id.value }
-    val beneath by lazy { sceneryBeneathCue(cue, elements.values.map { it.second }) }
+    val beneath by lazy { sceneryBeneathCue(entry, elements.values.map { it.second }) }
     var nextSort = (own.values.maxOfOrNull { it.sortOrder } ?: -1) + 1
     var written = 0
     var removed = 0
@@ -183,27 +184,32 @@ private fun included(element: DaoStageElement, state: ElementStates, transitionM
 }
 
 /**
- * What [cue] shows of each element were its own scenery rows gone — the element's base, then the
- * stack's set, then every earlier STANDARD cue of its stack, the last one winning: the state a held
- * piece is compared against before Record writes a row for it (D7). Every element of [elements] has
- * an entry. Must run inside a transaction.
+ * What [entry]'s cue shows of each element were its own scenery rows gone — the element's base,
+ * then the stack's set, then every earlier cue entry of its stack, the last one winning: the state a
+ * held piece is compared against before Record writes a row for it (D7). Every element of
+ * [elements] has an entry. A null [entry] — a cue in no stack — sees the bases alone. Must run
+ * inside a transaction.
  */
-internal fun sceneryBeneathCue(cue: DaoCue, elements: Collection<SceneryResolver.Element>): Map<Int, ElementStates> {
-    val stack = cue.cueStack
+internal fun sceneryBeneathCue(entry: DaoCueStackEntry?, elements: Collection<SceneryResolver.Element>): Map<Int, ElementStates> {
+    if (entry == null) {
+        return SceneryResolver.resolve(elements, emptyList(), emptyMap(), emptyList()).mapValues { it.value.state }
+    }
+    val stack = entry.stack
     val set = stackSceneryOf(stack.id).map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
-    val list = DaoCue.find { DaoCues.cueStack eq stack.id }.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-    val at = list.indexOfFirst { it.id == cue.id }
-    val earlier = (if (at < 0) list else list.take(at)).filter { it.cueType == CueType.STANDARD.name }
+    val list = entriesOf(stack)
+    val at = list.indexOfFirst { it.id == entry.id }
+    val earlier = (if (at < 0) list else list.take(at)).filter { !it.isMarker && it.cueId != null }
     val rows = if (earlier.isEmpty()) emptyMap() else {
-        DaoCueSceneryRow.find { DaoCueScenery.cue inList earlier.map { it.id } }
+        DaoCueSceneryRow.find { DaoCueScenery.cue inList earlier.map { it.cueId!! } }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .groupBy { it.cue.id.value }
     }
-    val cues = earlier.map { c ->
+    val cues = earlier.map { e ->
+        val cueId = e.cueId!!
         SceneryResolver.Cue(
-            c.id.value,
-            c.cueNumber?.takeIf { it.isNotBlank() } ?: c.name,
-            rows[c.id.value].orEmpty().map { SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), 0) },
+            cueId,
+            e.cueNumber?.takeIf { it.isNotBlank() } ?: e.cue!!.name,
+            rows[cueId].orEmpty().map { SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), 0) },
         )
     }
     return SceneryResolver.resolve(

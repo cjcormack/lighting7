@@ -72,7 +72,6 @@ internal data class CueApplyData(
  * Look-edit republish.
  */
 private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayOf(
-    DaoCue::cueStack,
     DaoCue::layers,
     DaoCueLayer::look,
     DaoCueLayer::template,
@@ -97,8 +96,8 @@ private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayO
  * `CueStackManager` reads them: leaving them at their defaults here is precisely what forced the
  * second builder into existence.
  */
-internal fun buildCueApplyData(cue: DaoCue): CueApplyData =
-    cue.load(*CUE_APPLY_RELATIONS).toCueApplyData()
+internal fun buildCueApplyData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyData =
+    cue.load(*CUE_APPLY_RELATIONS).toCueApplyData(entry?.let(::entryPlacement))
 
 /**
  * [buildCueApplyData] plus the cue's events — what a **GO** into the cue builds, and nothing else:
@@ -106,9 +105,37 @@ internal fun buildCueApplyData(cue: DaoCue): CueApplyData =
  * only (stage-view plan session 9), so the republish, preview and cook builders never carry them.
  * Must be called inside a transaction.
  */
-internal fun buildCueGoData(cue: DaoCue): CueApplyData = buildCueApplyData(cue).copy(
+internal fun buildCueGoData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyData = buildCueApplyData(cue, entry).copy(
     goEvents = cueEventsOf(cue.id).map { EffectsService.CueEventFire(it.patch.key, it.trigger, it.offset.toMillis()) },
-    cueLabel = cue.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name,
+    cueLabel = entry?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name,
+)
+
+/**
+ * Where an entry puts its cue, as [CueApplyData] carries it: the stack, the entry's position in it
+ * (which the cue's priority is derived from — [cueDerivedPriority]) and its follow.
+ */
+internal data class EntryPlacement(
+    val stackId: Int,
+    val position: Int,
+    val autoAdvance: Boolean,
+    val autoAdvanceDelayMs: Long?,
+)
+
+/**
+ * [entry]'s placement. Its position is its index in the stack's list, markers counted — the slot a
+ * cue's `sort_order` used to be — so [stackCuePriorities] and a GO derive one priority.
+ */
+internal fun entryPlacement(entry: DaoCueStackEntry): EntryPlacement =
+    entryPlacement(entry, entriesOfStack(entry.stack.id).indexOfFirst { it.id == entry.id }.coerceAtLeast(0))
+
+/** [entryPlacement] at a [position] already known — a [soleEntrySlotsOf] batch's. */
+internal fun entryPlacement(slot: EntrySlot): EntryPlacement = entryPlacement(slot.entry, slot.position)
+
+private fun entryPlacement(entry: DaoCueStackEntry, position: Int) = EntryPlacement(
+    stackId = entry.stackId,
+    position = position,
+    autoAdvance = entry.autoAdvance,
+    autoAdvanceDelayMs = entry.autoAdvanceDelay?.toMillis(),
 )
 
 /**
@@ -120,13 +147,17 @@ internal fun buildCueGoData(cue: DaoCue): CueApplyData = buildCueApplyData(cue).
  */
 internal fun buildCueApplyDataForCues(cueIds: Collection<Int>): Map<Int, CueApplyData> {
     if (cueIds.isEmpty()) return emptyMap()
-    return DaoCue.find { DaoCues.id inList cueIds.toList() }
+    val cues = DaoCue.find { DaoCues.id inList cueIds.toList() }
         .with(*CUE_APPLY_RELATIONS)
-        .associate { it.id.value to it.toCueApplyData() }
+        .toList()
+    // A republish keeps a live cue where it is: its one entry's placement (cue model plan P4;
+    // session 2's hold registry answers which hold a live cue composes at) — batched like the rest.
+    val slots = soleEntrySlotsOf(cues.map { it.id.value })
+    return cues.associate { it.id.value to it.toCueApplyData(slots[it.id.value]?.let(::entryPlacement)) }
 }
 
 /** The shared body. Assumes [CUE_APPLY_RELATIONS] are already loaded. */
-private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
+private fun DaoCue.toCueApplyData(placement: EntryPlacement?): CueApplyData = CueApplyData(
     cueId = id.value,
     cueName = name,
     adHocEffects = adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
@@ -142,13 +173,13 @@ private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
             sortOrder = trigger.sortOrder,
         )
     },
-    autoAdvance = autoAdvance,
-    autoAdvanceDelayMs = autoAdvanceDelay?.toMillis(),
+    autoAdvance = placement?.autoAdvance ?: false,
+    autoAdvanceDelayMs = placement?.autoAdvanceDelayMs,
     fadeDurationMs = fadeDuration?.toMillis(),
     fadeCurve = fadeCurve,
     stomp = stomp,
-    cueStackId = cueStack.id.value,
-    sortOrder = sortOrder,
+    cueStackId = placement?.stackId,
+    sortOrder = placement?.position ?: 0,
 )
 
 /**
@@ -192,13 +223,14 @@ internal fun cueDerivedPriority(cueStackId: Int?, sortOrder: Int): Int =
     (cueStackId ?: 0) * 1_000_000 + sortOrder * 1_000 + 1
 
 /**
- * `cueId → cueDerivedPriority` for every cue in [stack] at its current sort order. Hand the
+ * `cueId → cueDerivedPriority` for every cue in [stack] at its entry's current position. Hand the
  * result to [uk.me.cormack.lighting7.fx.FxEngine.repriorityCues] after changing the order, so
  * cues already on stage compose in the new order without needing to be re-applied.
  */
 internal fun stackCuePriorities(stack: DaoCueStack): Map<Int, Int> =
-    DaoCue.find { DaoCues.cueStack eq stack.id }
-        .associate { it.id.value to cueDerivedPriority(stack.id.value, it.sortOrder) }
+    entriesOf(stack).withIndex()
+        .mapNotNull { (position, entry) -> entry.cueId?.let { it to cueDerivedPriority(stack.id.value, position) } }
+        .toMap()
 
 /**
  * The **cue-level** (cross-cue) stomp overlap: every `(target, property)` this cue holds, from both
