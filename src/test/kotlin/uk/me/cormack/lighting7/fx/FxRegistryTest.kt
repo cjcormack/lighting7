@@ -140,6 +140,8 @@ class FxRegistryTest {
         assertNotNull(registry.getRegistration("CandleFlicker"), "CandleFlicker should be registered")
         assertNotNull(registry.getRegistration("LightningStrike"), "LightningStrike should be registered")
         assertNotNull(registry.getRegistration("ZoomBreathe"), "ZoomBreathe should be registered")
+        assertNotNull(registry.getRegistration(PALETTE_STEPS_ID), "PaletteSteps should be registered")
+        assertNotNull(registry.getRegistration(SLOT_STEPS_ID), "SlotSteps should be registered")
         // A fixed value is the fixture's own property, never an effect.
         for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition")) {
             assertEquals(null, registry.getRegistration(gone), "$gone should not be registered")

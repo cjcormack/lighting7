@@ -154,8 +154,9 @@ const val DEFAULT_SPEED_MASTER_COUNT = 4
  * vocabulary (busking-view plan D7), so apply-time routing compares like with like and no
  * parallel enum needs keeping in step. `controls` is deliberately excluded (a settings slider
  * has no tempo), and so is `composite` (spans families); effects in either category route to
- * master 1 via a null `speedMasterUuid`. Pinned against the shipped `.fx.kts` files by
- * `SpeedMasterUsageVocabularyTest`.
+ * master 1 via a null `speedMasterUuid`. So is `palette`, Palette Steps' own, which names no family:
+ * a Palette Steps is stamped by its palettes' family's usage instead (effects plan §3.6). Pinned
+ * against the shipped `.fx.kts` files by `SpeedMasterUsageVocabularyTest`.
  */
 val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position", "beam")
 

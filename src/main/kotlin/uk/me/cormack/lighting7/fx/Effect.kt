@@ -188,6 +188,7 @@ interface StatefulEffect : Effect {
             FxOutputType.SLIDER -> FxOutput.Slider(0u)
             FxOutputType.COLOUR -> FxOutput.Colour(ExtendedColour.BLACK)
             FxOutputType.POSITION -> FxOutput.Position(128u, 128u)
+            FxOutputType.STEPS -> FxOutput.Steps(0, 0, 0.0, StepList.EMPTY)
         }
     }
 }
@@ -318,7 +319,13 @@ enum class FxOutputType {
     /** RGB color value (with optional W/A/UV) */
     COLOUR,
     /** Pan/tilt position values */
-    POSITION
+    POSITION,
+    /**
+     * Two steps of a list and how far between them ([FxOutput.Steps], effects plan §3.6): what
+     * Palette Steps and Slot Steps emit. Every target accepts it ([FxTarget.accepts]) — the step
+     * is resolved per head by the target, into whatever that target applies.
+     */
+    STEPS,
 }
 
 /**
@@ -342,4 +349,14 @@ sealed interface FxOutput {
      * Pan/tilt position values.
      */
     data class Position(val pan: UByte, val tilt: UByte) : FxOutput
+
+    /**
+     * Two steps of [steps] and how far between them (effects plan §3.6): at [blend] 0 the head
+     * shows step [from], at 1 step [to]. No output says what a step *is* on a given head, which is
+     * the point — the **target** resolves each step for the head in hand
+     * ([StepList.valueFor]) and blends the two by its property's own rule: a level, a colour or a
+     * position in proportion, a setting by snapping. A head that cannot take a step holds what is
+     * underneath for it.
+     */
+    data class Steps(val from: Int, val to: Int, val blend: Double, val steps: StepList) : FxOutput
 }

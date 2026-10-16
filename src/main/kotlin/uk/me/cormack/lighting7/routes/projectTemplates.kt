@@ -31,6 +31,13 @@ import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
+import uk.me.cormack.lighting7.fx.EFFECT_PROPERTY_SENTINELS
+import uk.me.cormack.lighting7.fx.PALETTE_STEPS_ID
+import uk.me.cormack.lighting7.fx.PaletteStepsShape
+import uk.me.cormack.lighting7.fx.SLOT_STEPS_ID
+import uk.me.cormack.lighting7.fx.TemplateRegistry
+import uk.me.cormack.lighting7.fx.TemplateSource
+import uk.me.cormack.lighting7.fx.paletteStepsShape
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -223,6 +230,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                         request.effect,
                         state.show.fxRegistry,
                         template.uuid,
+                        state.show.templateRegistry,
                     )?.let { return@transaction TemplateWriteOutcome.Invalid(it) }
                 }
 
@@ -1005,7 +1013,7 @@ internal fun performTemplateCreate(
     val effect = input.effect
     // No `ownUuid`: the template does not exist yet, so it cannot name itself. The self-reference
     // rule is the update route's to enforce.
-    validateTemplateContents(rows, effect, state.show.fxRegistry)
+    validateTemplateContents(rows, effect, state.show.fxRegistry, templates = state.show.templateRegistry)
         ?.let { return TemplateCreateResult.Invalid(it) }
 
     val result = transaction(state.database) {
@@ -1073,6 +1081,8 @@ internal fun validateTemplateContents(
     effect: TemplateEffectDto?,
     registry: FxRegistry,
     ownUuid: java.util.UUID? = null,
+    /** What a Palette Steps effect's palettes are read through; null refuses one, with the reason. */
+    templates: TemplateRegistry? = null,
 ): String? {
     // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
     // which already holds rows plus deferred effects and has its own busk pool.
@@ -1080,7 +1090,7 @@ internal fun validateTemplateContents(
         return "A palette holds a value or an effect, never both — for both together, record a look"
     }
     if (rows.isEmpty() && effect == null) return "A palette must hold at least one value"
-    if (effect != null) return validateTemplateEffect(effect, registry, ownUuid)
+    if (effect != null) return validateTemplateEffect(effect, registry, ownUuid, templates)
 
     val families = LinkedHashSet<PropertyMaskGroup>()
     for (row in rows) {
@@ -1198,6 +1208,7 @@ private fun validateTemplateEffect(
     effect: TemplateEffectDto,
     registry: FxRegistry,
     ownUuid: java.util.UUID?,
+    templates: TemplateRegistry?,
 ): String? {
     // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
     // derived families use. `controls` has no tempo and `composite` spans families, so neither
@@ -1212,16 +1223,36 @@ private fun validateTemplateEffect(
     // disagree silently — the template banks under one family and runs as another.
     val registration = registry.getRegistration(effect.effectType)
         ?: return "'${effect.effectType}' is not an effect this desk knows"
-    if (!registration.category.equals(effect.category, ignoreCase = true)) {
-        return "'${effect.effectType}' is a ${registration.category} effect, not ${effect.category}"
+    // Palette Steps sits in the family of the palettes it is given (effects plan §3.6, §4.4), so
+    // what its category must agree with is that family's, read off the palettes themselves.
+    val category = if (registration.id == PALETTE_STEPS_ID) {
+        validatePaletteSteps(effect.parameters["palettes"], templates).getOrElse { return it.message }.category
+    } else {
+        registration.category
     }
-    // A palette's beam effect names no property: a press lands it on the one its registration
-    // declares, so a script-registered one must declare exactly one, by name.
-    if (family == PropertyMaskGroup.BEAM &&
-        registration.compatibleProperties.singleOrNull().let { it == null || it in EFFECT_PROPERTY_SENTINELS }
+    if (!category.equals(effect.category, ignoreCase = true)) {
+        return "'${effect.effectType}' is a $category effect, not ${effect.category}"
+    }
+    // A palette's beam effect lands, on a press, on the property the effect names or else the one
+    // its registration declares, so a script-registered one must declare exactly one, by name.
+    // Slot Steps declares only the `setting` sentinel — its slots are one setting's options, and
+    // which setting is the palette's to name (`propertyName`, the setting it steps).
+    if (family == PropertyMaskGroup.BEAM && registration.id != PALETTE_STEPS_ID) {
+        val named = effect.propertyName?.takeIf { it.isNotBlank() }
+            ?: registration.compatibleProperties.singleOrNull()?.takeUnless { it in EFFECT_PROPERTY_SENTINELS }
+        if (named == null) {
+            return if (registration.id == SLOT_STEPS_ID) {
+                "Slot Steps in a palette must name the setting it steps — a gobo or colour wheel"
+            } else {
+                "A Beam palette's effect must drive one named property — '${effect.effectType}' " +
+                    "declares ${registration.compatibleProperties.joinToString().ifEmpty { "none" }}"
+            }
+        }
+    }
+    if (registration.id == SLOT_STEPS_ID &&
+        effect.parameters["slots"].orEmpty().split(",").count { it.isNotBlank() } < 2
     ) {
-        return "A Beam palette's effect must drive one named property — '${effect.effectType}' " +
-            "declares ${registration.compatibleProperties.joinToString().ifEmpty { "none" }}"
+        return "Slot Steps steps between two slots or more"
     }
 
     // Rule 4: the enum-valued fields, exactly as `validateLookEffects` checks them and for the
@@ -1256,8 +1287,23 @@ private fun validateTemplateEffect(
     return null
 }
 
-/** The property sentinels `fxTargetProperties.ts` offers an effect through, which name no property. */
-private val EFFECT_PROPERTY_SENTINELS = setOf("slider", "setting")
+/**
+ * A Palette Steps `palettes` parameter as the write boundary sees it (effects plan §3.6): two
+ * generic value palettes or more, every one this desk can read, all of one family — the shape the
+ * effect is stored and offered under.
+ */
+private fun validatePaletteSteps(parameter: String?, templates: TemplateRegistry?): Result<PaletteStepsShape> {
+    val source = templates?.let(::TemplateSource)
+        ?: return Result.failure(IllegalStateException("Palette Steps cannot be checked here"))
+    val named = parameter.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    if (named.size < 2) return Result.failure(IllegalArgumentException("Palette Steps steps between two palettes or more"))
+    val steps = named.map { raw ->
+        source.paletteStep(raw) ?: return Result.failure(
+            IllegalArgumentException("Palette Steps names '$raw', which is not a generic value palette"),
+        )
+    }
+    return paletteStepsShape(steps)
+}
 
 /** The families an effect template can be banked under (D4): every family an effect category names. */
 private val TEMPLATE_EFFECT_FAMILIES = setOf(

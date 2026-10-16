@@ -22,7 +22,8 @@ import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isOnSeconds } from '@/lib/effectTiming'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
-import { useCreateTemplateMutation } from '@/store/templates'
+import { useCreateTemplateMutation, useTemplateListQuery } from '@/store/templates'
+import { stepEffectPaletteShape } from '@/lib/stepEffects'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
 import { FAMILY_LABELS, familyForEffectCategory } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
@@ -74,8 +75,14 @@ export function NewTemplateFromEffectSheet({
   // matches through. An exact lookup misses an effect the library really has, and every
   // gate below then reads that miss as "still loading" and disables Create for good.
   const entry = useMemo(() => findEffectEntry(library, effect?.effectType), [library, effect])
-  const category = entry?.category ?? null
-  const family = category == null ? null : familyForEffectCategory(category)
+  const { data: templates } = useTemplateListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
+  // A step effect is banked by its palettes' family, or as Beam on its setting (effects plan §3.6):
+  // its library category says neither, and Slot Steps names its setting where any other effect
+  // names no property.
+  const step = useMemo(() => (effect == null ? null : stepEffectPaletteShape(effect, templates)), [effect, templates])
+  const stepShape = step != null && step.reason == null ? step : null
+  const category = step != null ? (stepShape?.category ?? null) : (entry?.category ?? null)
+  const family = stepShape != null ? stepShape.family : category == null ? null : familyForEffectCategory(category)
   // The **instance's** own answer, not the library entry's. They agree, but a running effect
   // reports its timing source directly and that is the nearer authority for describing this one.
   const isWallClock = effect?.timingSource === 'WALL_CLOCK'
@@ -102,8 +109,9 @@ export function NewTemplateFromEffectSheet({
     const body: TemplateEffect = {
       effectType: effect.effectType,
       category,
-      // Null deliberately: a template effect names no target (D3), so it names no property on one.
-      propertyName: null,
+      // Null deliberately: a template effect names no target (D3), so it names no property on one —
+      // but for Slot Steps, which names the setting it steps (the write boundary refuses one without).
+      propertyName: stepShape?.propertyName ?? null,
       elementMode: null,
       beatDivision: effect.beatDivision,
       blendMode: effect.blendMode,
@@ -221,7 +229,8 @@ export function NewTemplateFromEffectSheet({
             <AlsoAddToBuskRow projectId={projectIdNum} target={buskTarget} onChange={setBuskTarget} />
           )}
 
-          {entry != null && family == null && (
+          {step?.reason != null && <p className="text-[11px] text-muted-foreground">{step.reason}</p>}
+          {entry != null && step == null && family == null && (
             <p className="text-[11px] text-destructive">
               A “{category}” effect cannot be a palette — an effect palette is banked by family,
               and that category has none. It can live in a recorded look instead.

@@ -512,7 +512,7 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
     fun targetTypeOf(effect: FxInstance) = effect.target.targetRef.discriminator
 
     fun DaoLookEffect.take(effect: FxInstance, sortOrder: Int) {
-        category = categoryFromPropertyName(effect.target.propertyName)
+        category = recordedEffectCategory(effect)
         propertyName = effect.target.propertyName
         takeSettings(effect.lookEffectSettings())
         this.sortOrder = sortOrder

@@ -1003,7 +1003,11 @@ The family is then **derived from the effect's library `category`**, through the
 Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `composite` spans
 families, so both answer null and are refused by name. A Beam effect palette holds one of the beam
 built-ins (effects plan D6, `fx-engineering.md` §"Beam Effects"); its stored effect names no
-property, and a press lands it on the one property the effect declares, skipping a head without it.
+property, and a press lands it on the one property the effect declares, skipping a head without it —
+but for Slot Steps, which names the setting it steps as its `propertyName`. Palette Steps is the one
+effect whose family is not its library category's (`palette`, which names none): it is its palettes'
+family, and the write boundary checks the stored category against that (`fx-engineering.md` §"Step
+Effects").
 
 Two things about the effect are the **registry's** answer rather than the author's, and both are
 checked or filled at the boundary rather than trusted. `category` is stored, and the write boundary

@@ -296,6 +296,7 @@ export function FxEditor({
           scope={spreadScope}
           extendedChannels={extendedChannels}
           settingProperty={settingProperty}
+          propertyName={effect.propertyName}
           readOnly={readOnly}
           set={set}
           setParam={setParam}

@@ -44,11 +44,12 @@ internal object EffectSpawner {
         // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
         val registration = state.show.fxRegistry.getRegistration(effectSpec.effectType)
         val outputType = registration?.outputType
-        val beamProperty = registration?.compatibleProperties?.singleOrNull()
+        // Read only when the spec names no property: Palette Steps' reads its palettes.
+        val drivenProperty by lazy { drivenPropertyOf(state, registration, effectSpec) }
         val single = when (target) {
             is EffectTargetRef.Selection -> {
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, beamProperty)
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, registration, drivenProperty)
                     ?: return null
                 return createSelectionTarget(state, target, propertyName, outputType)
             }
@@ -58,13 +59,13 @@ internal object EffectSpawner {
             is TargetRef.Group -> {
                 val group = state.show.fixtures.untypedGroup(single.key)
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForCue(effectSpec, group, beamProperty)
+                    ?: resolveEffectPropertyForCue(effectSpec, registration, group, drivenProperty)
                     ?: return null
                 createGroupTargetForCue(state, single, propertyName, outputType)
             }
             is TargetRef.Fixture -> {
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, beamProperty)
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, registration, drivenProperty)
                     ?: return null
                 createFixtureTargetForCue(single.key, propertyName, state, outputType)
             }
@@ -85,21 +86,41 @@ internal object EffectSpawner {
         FxTargetFactory.forSelection(selection, propertyName, outputType, state.show.fixtures.referenceFixtureFor(selection, propertyName))
 
     /**
-     * A beam effect (effects plan D6) drives the one property its registration declares, so a
-     * spec stored without a `propertyName` — an effect palette's, a Look's deferred effect — lands
-     * on [beamProperty].
+     * The one property an effect drives where its stored category cannot say, for a spec stored
+     * without a `propertyName` — an effect palette's, a Look's deferred effect: a beam built-in's
+     * declared one (effects plan D6), and Palette Steps' from its palettes (§3.6), which may step
+     * a strobe in an Intensity palette or a frost in a Beam one. Never a sentinel (`setting`,
+     * `slider`), which names no property: Slot Steps is stored with its setting's name.
+     */
+    private fun drivenPropertyOf(state: State, registration: EffectRegistration?, effectSpec: LookEffectSpec): String? =
+        when (registration?.id) {
+            null -> null
+            PALETTE_STEPS_ID -> paletteStepsShape(
+                TemplateSource(state.show.templateRegistry).paletteStepsOf(effectSpec.parameters["palettes"]),
+            ).getOrNull()?.property
+            else -> registration.compatibleProperties.singleOrNull()?.takeUnless { it in EFFECT_PROPERTY_SENTINELS }
+        }
+
+    /**
+     * A beam effect (effects plan D6) and Palette Steps (§3.6) drive one property, so a spec stored
+     * without a `propertyName` — an effect palette's, a Look's deferred effect — lands on
+     * [drivenProperty], on a group only where every member has it.
      */
     private fun resolveEffectPropertyForCue(
         effectSpec: LookEffectSpec,
+        registration: EffectRegistration?,
         group: FixtureGroup<*>,
-        beamProperty: String?,
+        drivenProperty: String?,
     ): String? {
+        if (registration?.id == PALETTE_STEPS_ID) {
+            return drivenProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
+        }
         val capabilities = group.detectCapabilities()
         return when (effectSpec.category) {
             "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
             "colour" -> if ("colour" in capabilities) "colour" else null
             "position" -> if ("position" in capabilities) "position" else null
-            "beam" -> beamProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
+            "beam" -> drivenProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
             "controls", "setting" -> effectSpec.propertyName
             else -> null
         }
@@ -107,13 +128,15 @@ internal object EffectSpawner {
 
     private fun resolveEffectPropertyForFixtureInCue(
         effectSpec: LookEffectSpec,
-        beamProperty: String?,
+        registration: EffectRegistration?,
+        drivenProperty: String?,
     ): String? {
+        if (registration?.id == PALETTE_STEPS_ID) return drivenProperty
         return when (effectSpec.category) {
             "dimmer" -> "dimmer"
             "colour" -> "colour"
             "position" -> "position"
-            "beam" -> beamProperty
+            "beam" -> drivenProperty
             "controls", "setting" -> effectSpec.propertyName
             else -> null
         }

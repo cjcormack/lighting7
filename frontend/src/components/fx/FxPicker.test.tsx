@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
-import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import type { TemplateSummary } from '@/api/templatesApi'
+import { chan, makeActiveEffect, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 const updateFx = vi.hoisted(() => vi.fn((_id: number, _req: unknown) => true))
 vi.mock('@/api/lightingApi', async () => {
@@ -13,7 +14,11 @@ vi.mock('@/api/lightingApi', async () => {
   return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'fx' ? fx : target[prop]) }) }
 })
 
-const wire = vi.hoisted(() => ({ library: [] as EffectLibraryEntry[], active: [] as ActiveEffect[] }))
+const wire = vi.hoisted(() => ({
+  library: [] as EffectLibraryEntry[],
+  active: [] as ActiveEffect[],
+  templates: [] as TemplateSummary[],
+}))
 const addFixtureFx = vi.hoisted(() =>
   vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 77 }) })),
 )
@@ -30,6 +35,8 @@ vi.mock('@/store/groups', () => ({
   useRemoveGroupFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
+// The palette library Palette Steps is offered from (effects plan §4.4).
+vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: wire.templates }) }))
 // Venue-visit plan D16: a master is tagged for position, none for dimmer.
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterForCategory: () => (category: string | null | undefined) =>
@@ -80,6 +87,7 @@ function Harness({ initialFamily = 'POSITION' as const }: { initialFamily?: 'POS
 beforeEach(() => {
   wire.library = [PULSE, position('Circle'), position('Figure 8')]
   wire.active = []
+  wire.templates = []
   updateFx.mockClear()
   addFixtureFx.mockClear()
   removeFx.mockClear()
@@ -256,5 +264,148 @@ describe('the Beam family (effects plan §4.4)', () => {
       beatDivision: 4,
       speedMasterUuid: 'm-beam',
     })
+  })
+})
+
+describe('the step effects (effects plan session 7, §4.4)', () => {
+  const PALETTE_STEPS: EffectLibraryEntry = {
+    name: 'PaletteSteps',
+    category: 'palette',
+    outputType: 'STEPS',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleProperties: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
+    parameters: [
+      { name: 'palettes', type: 'paletteList', defaultValue: '', description: '' },
+      { name: 'fadeRatio', type: 'double', defaultValue: '0.5', description: '' },
+    ],
+  }
+  const SLOT_STEPS: EffectLibraryEntry = {
+    name: 'SlotSteps',
+    category: 'beam',
+    outputType: 'STEPS',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleProperties: ['setting'],
+    parameters: [{ name: 'slots', type: 'slotList', defaultValue: '', description: '' }],
+  }
+  const palette = (name: string, family: TemplateSummary['family'], propertyName: string, value: string, over: Partial<TemplateSummary> = {}) =>
+    ({
+      id: name.length,
+      uuid: `uuid-${name}`,
+      name,
+      notes: null,
+      fadeDurationMs: null,
+      family,
+      isGeneric: true,
+      kind: 'value',
+      requiredEmitters: [],
+      rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
+      effect: null,
+      ...over,
+    }) as unknown as TemplateSummary
+  const MOVER = makeFixture('mover-1', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    { type: 'position', name: 'position', displayName: 'Position', category: 'pan', panChannel: chan(2), tiltChannel: chan(3), panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 } as never,
+    settingProp('gobo', 'gobo', chan(4), [
+      { name: 'OPEN', level: 0, displayName: 'Open' },
+      { name: 'GOBO_1', level: 10, displayName: 'Gobo 1' },
+      { name: 'GOBO_2', level: 20, displayName: 'Gobo 2' },
+      { name: 'GOBO_3', level: 30, displayName: 'Gobo 3' },
+    ]),
+  ])
+
+  // A colour wheel declared before its gobo wheel, so "the first setting" would be the wrong one.
+  const WHEEL_FIRST = makeFixture('mover-2', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    settingProp('colourWheel', 'colour', chan(4), [
+      { name: 'WHITE', level: 0, displayName: 'White' },
+      { name: 'RED', level: 10, displayName: 'Red' },
+      { name: 'BLUE', level: 20, displayName: 'Blue' },
+    ]),
+    settingProp('gobo', 'gobo', chan(5), [
+      { name: 'OPEN', level: 0, displayName: 'Open' },
+      { name: 'GOBO_1', level: 10, displayName: 'Gobo 1' },
+      { name: 'GOBO_2', level: 20, displayName: 'Gobo 2' },
+    ]),
+  ])
+
+  function StepHarness({
+    initialFamily,
+    preferredProperty,
+    fixture = MOVER,
+  }: {
+    initialFamily: 'POSITION' | 'BEAM' | 'INTENSITY'
+    preferredProperty?: string
+    fixture?: typeof MOVER
+  }) {
+    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    return (
+      <FxPicker
+        target={{ type: 'fixture', fixture }}
+        initialFamily={initialFamily}
+        preferredProperty={preferredProperty}
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+      />
+    )
+  }
+
+  beforeEach(() => {
+    wire.library = [PULSE, position('Circle'), PALETTE_STEPS, SLOT_STEPS]
+    wire.templates = [
+      palette('Centre', 'POSITION', 'position', 'pos:0,0'),
+      palette('Downstage', 'POSITION', 'position', 'pos:-64,32'),
+      palette('Half', 'INTENSITY', 'dimmer', 'pct:50'),
+      // Neither offered: a per-fixture position and an effect palette are no steps.
+      palette('Aimed', 'POSITION', 'position', 'pos:10,10', { isGeneric: false }),
+      palette('Orbit', 'POSITION', 'position', 'pos:0,0', { kind: 'effect' }),
+    ]
+  })
+
+  it('offers Palette Steps in a family with two generic value palettes, and not in one with fewer', () => {
+    render(<StepHarness initialFamily="POSITION" />)
+    const list = screen.getByRole('list', { name: 'Position effects' })
+    expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
+      'Circle',
+      'PaletteSteps',
+    ])
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    const intensity = screen.getByRole('list', { name: 'Intensity effects' })
+    expect(intensity.querySelector('[data-effect-pick="PaletteSteps"]')).toBeNull()
+  })
+
+  it('starts Palette Steps on the palettes’ property, stepping all of them, on the family’s master', async () => {
+    render(<StepHarness initialFamily="POSITION" />)
+    fireEvent.click(screen.getByRole('button', { name: 'PaletteSteps' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      effectType: 'PaletteSteps',
+      propertyName: 'position',
+      blendMode: 'OVERRIDE',
+      speedMasterUuid: 'm-position',
+      parameters: { palettes: 'tmpl:uuid-Centre,tmpl:uuid-Downstage', fadeRatio: '0.5' },
+    })
+  })
+
+  it('offers Slot Steps in Beam on a gobo row, and starts it on that setting’s first slots past open', async () => {
+    render(<StepHarness initialFamily="BEAM" preferredProperty="gobo" />)
+    expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      effectType: 'SlotSteps',
+      propertyName: 'gobo',
+      speedMasterUuid: 'm-beam',
+      parameters: { slots: 'GOBO_1,GOBO_2' },
+    })
+  })
+
+  it('starts Slot Steps on the gobo wheel where no setting row says otherwise, not the first setting', async () => {
+    render(<StepHarness initialFamily="BEAM" fixture={WHEEL_FIRST} />)
+    fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'SlotSteps', propertyName: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
   })
 })

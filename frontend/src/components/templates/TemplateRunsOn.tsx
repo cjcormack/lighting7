@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { EFFECT_PROPERTY_SENTINELS } from '@/lib/fxTargetProperties'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
@@ -69,8 +70,13 @@ export function TemplateRunsOn({
   const rateDisplay = useSpeedMasterDisplay(effect.rateSpeedMasterUuid)
   const colours = useColourTemplates()
 
-  // A beam effect drives the one property it declares, so it runs on the heads that have that one.
-  const beamProperty = family === 'BEAM' ? (entry?.compatibleProperties.length === 1 ? entry.compatibleProperties[0] : null) : null
+  // A beam effect drives the property the palette names (Slot Steps' setting) or else the one it
+  // declares, so it runs on the heads that have that one — never a sentinel, which names none.
+  const declared = entry?.compatibleProperties.length === 1 ? entry.compatibleProperties[0] : null
+  const beamProperty =
+    family === 'BEAM'
+      ? (effect.propertyName || (declared != null && !EFFECT_PROPERTY_SENTINELS.has(declared) ? declared : null))
+      : null
   const heads = useMemo(
     () =>
       beamProperty == null
