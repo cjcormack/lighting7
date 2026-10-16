@@ -68,8 +68,13 @@ showParkReleases/{uuid}.json   # v27+: a show on a venue's releases of venue par
 venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
-cues/{uuid}.json               # carries cueStackUuid (nullable); v20+: `scenery` embedded, each
-                               # change an elementUuid, a state object and an optional transitionMs
+cues/{uuid}.json               # what a cue is; v20+: `scenery` embedded, each change an
+                               # elementUuid, a state object and an optional transitionMs. Before
+                               # v32 it also carried its place: cueStackUuid, sortOrder, cueNumber,
+                               # cueNumberAuto, autoAdvance(DelayMs), cueType
+cueStackEntries/{uuid}.json    # v32+: one place in a stack's list — cueStackUuid, cueUuid (a cue
+                               # entry) or kind MARKER + label, a double ordinal, the number only
+                               # when explicit, the follow; see §"Version 32"
 cuePropertyAssignments/{uuid}.json   # carries cueUuid
 cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
 cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
@@ -118,7 +123,7 @@ controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
 scripts/{uuid}.meta.json       # metadata sidecar (name, scriptType)
 promptBooks/{uuid}.json        # script reference by content hash (scriptHash)
-promptBookAnchors/{uuid}.json  # carries promptBookUuid + cueUuid; normalized region rects
+promptBookAnchors/{uuid}.json  # carries entryUuid (v32+; cueUuid before); normalized region rects
 promptBookAnnotations/{uuid}.json  # carries promptBookUuid; note/strikethrough/freetext
 promptScripts/{sha256}.pdf     # the script PDF itself — binary blob, content-addressed (v4+)
 sceneImages/{sha256}.{png|jpg} # an image a cloth is painted with (v23+) or a model's part textured with (v25+) — binary blob, content-addressed
@@ -214,19 +219,35 @@ child replaced". The keys and the pairing rule are in `docs/cues-engineering.md`
 Decisions". Each child already carried its uuid in the archive, so this needed no `formatVersion`
 change; a template's rows still churn (`FU-SYNC-CHILD-UUID-CHURN`).
 
-## Ordinal contract (forward-looking)
+## Ordinal contract
 
-Phase 1 keeps `sortOrder: Int` on every ordered table. Phase 5 replaces
-this with `ordinal: Double` so concurrent multi-master inserts can pick
-midpoints without cascading renumbers; tiebreak by UUID for determinism.
-That's a `formatVersion` bump and a migration. Today, exports already sort
-embedded child arrays by `(sortOrder, uuid)` so the canonical output is
-deterministic ahead of the type change.
+**Cue stack entries** (`cueStackEntries/`, v32) carry `ordinal: Double` (cue model plan P6). Every
+desk plays a stack's list in `(ordinal, uuid)` order — `ENTRY_ORDER` in `models/cueStackEntries.kt`,
+the uuid compared as its canonical text, which is its 16 bytes unsigned — never by the local int id,
+which a desk mints in whatever order an import reads its files.
+
+* **A write changes as few entries as it can.** `writeEntryOrder` keeps the longest run of entries
+  whose ordinals already ascend in the new order and gives the others room between their kept
+  neighbours (`planEntryOrdinals`): an insert or a drag takes the midpoint, an append counts on in
+  whole numbers. The caller names a **fresh** entry — just made, or moved in from another stack — so
+  its placeholder or old-stack ordinal never counts as in order and only it is written. So a drag or
+  an insert rewrites one file. It never writes a tie, and when doubles leave no room it
+  renormalises the stack `1.0, 2.0, …` — still the order given.
+* **Two desks inserting into one gap** both take the same midpoint. The three-way diff sees two new
+  records and keeps both, and the tie plays in uuid order on every desk. The next write to that stack
+  that keeps one of the pair moves the other off the shared ordinal.
+* **A copy re-mints uuids.** `copy_to_project` writes the source's order out after copying a stack,
+  so a tie cannot flip. A clone (`ProjectCloner`) copies ordinals verbatim under fresh uuids, so two
+  entries a merge left on one ordinal may play the other way round in the clone — the only order a
+  clone does not keep, and only for entries that were inserted into one gap at once.
+
+**Every other ordered table** still keeps `sortOrder: Int` (`FU-SYNC-ORDINAL-DOUBLE`); exports sort
+their embedded child arrays by `(sortOrder, uuid)` so the canonical output is deterministic.
 
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 31`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 32`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -279,6 +300,87 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 32 — cue stack entries
+
+Cue model plan session 3 (venue-visit R1.3, §3.9): a stack's list leaves the cue files. A cue is what
+a state is (D2), and each place in a list is its own record.
+
+* `cues/{uuid}.json` drops `cueStackUuid`, `sortOrder`, `cueNumber`, `cueNumberAuto`, `autoAdvance`,
+  `autoAdvanceDelayMs` and `cueType`.
+* `cueStackEntries/{uuid}.json` (`CueStackEntryJson`), one file per entry: `{uuid, cueStackUuid,
+  cueUuid?, kind?, label?, ordinal, cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`. `kind` is
+  omitted for a cue entry; a marker says `MARKER` and carries its `label` (D12). `ordinal` is a double
+  (§"Ordinal contract"). **`cueNumber` is written when explicit, and an auto number only where a
+  reader could not derive it** (P5, as amended 2026-10-16): every reader derives the rest from position
+  (`renumberAutoEntries` from scratch, per stack, after the entries land), so a drag changes one file
+  rather than every auto-numbered entry after it. The exception is a number venue-visit D11 holds in
+  place — an explicit renumber still waiting for *Fix Order* keeps its neighbours' labels (1, 4.5, 3, 4,
+  5) where a reader starting from nothing would anchor on the 4.5 (4, 4.5, 4.6, 4.7, 4.8).
+  `heldAutoNumbers` finds those, growing the set until the reader's derivation gives every number left
+  out, and the exporter writes them; the reader takes them as explicit, so a pull or a clone shows the
+  labels this desk does, and a held number stops renumbering by itself from the first import on. A
+  stack nothing holds writes no auto number at all. The exporter writes
+  entries from the rows themselves, never through the P4 bridge (`soleEntryOf`), so a shared or loose
+  cue (session 4) already travels: several entries may name one cue, and a cue no entry names is loose.
+* `promptBookAnchors/` names the entry it marks (`entryUuid`) instead of a cue (D4).
+* One file per entry is the merge story: two desks adding to one stack add two records, a drag
+  rewrites one, and a renumber rewrites only the entries whose written number changed — the one
+  renumbered, and any neighbour whose number it now holds.
+
+`SUPPORTED_FORMAT_VERSION = 32`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. The writer's number moves
+because a v31 reader would import every cue with no stack and its next wipe-then-export push would
+write every stack empty for every peer.
+
+**The pre-v32 reader.** A v5–v31 archive (`formatVersion < CUE_ENTRIES_FORMAT_VERSION`) still imports.
+Its cue files are decoded a second time as `LegacyCuePlacementJson`, read only, and each cue becomes
+one entry in its `cueStackUuid` stack with `ordinal = sortOrder` — strictly, the place's 0-based rank
+by `(sortOrder, uuid)` in its stack, which *is* the sortOrder for any archive a desk with entries wrote
+(each cue's index in its list) and closes an older archive's gaps the same way on every desk — its
+number (explicit only when
+`cueNumberAuto` is false), its follow, and **its cue's uuid as the entry's uuid**. A MARKER cue becomes
+a marker entry labelled with its name, under the file's uuid. A cue with no stack is loose — the old
+"Unsorted" fallback is gone. An anchor's `cueUuid` resolves to the entry with that uuid, which is its
+cue's one entry or the marker. Naming the entry after its cue is what lets two desks that read one v31
+repo write v32 that agree: each writes the same `cueStackEntries/{uuid}.json` for the same place.
+
+**The entries already on a desk** were minted at random — by the cue model migration and by every v31
+import — so the desk names them the same way once, at startup (`state/CueEntryUuidMigration.kt`):
+every cue's one entry takes its cue's uuid, every entry's ordinal becomes its 0-based position in its
+stack (the session-1 migration renormalised a desk's own rows to `1.0, 2.0, …`, a pull since then
+stored the archive's `0.0, 1.0, …`, and the two must write the same bytes), and `PRAGMA user_version`
+is set to 1 so it never runs again. The positions follow the order the desk played until then —
+ordinal, then **id** — not the uuid order it plays from then on, so two entries an older archive left
+on one ordinal keep their places on stage; two desks that played such a tie differently write different
+positions, which their first sync settles as an ordinary change. It must not: from session 4 a cue's remaining entry after *Remove from stack* is not the place
+it had before the bump, and renaming it would resurrect the uuid its removed sibling's tombstone
+retired. Without it, the first sync of two desks after the bump would merge both desks' entries for
+every cue, and every cue would sit twice in its stack.
+
+**After a merge two explicit numbers can clash** in one stack (two desks each typed `14A`). The
+importer resolves every stack before a row is written: the entry with the lower uuid keeps the number
+and the other is made auto, so `uq_entry_number_per_stack` never sees the pair and a pull never aborts
+on it. Numbers compare exactly, as the index does. Each clash is answered in
+`ProjectImporter.Result.numberClashes`, returned by the engine's import (`importTree`) to the path that
+ran it, which puts it on the `SyncRunResult` it answers (a push-rejected retry that imports again
+answers its own), carried by `SyncRunResult.numberClashes` and said in the run's
+message — which the activity log and the sync-done notification (`SyncNotifications.tsx`) show; the
+Sync tab's own success toasts are fixed strings and do not — and on the two import responses. The merge
+commit itself still holds both numbers; the merging desk's next snapshot writes the loser without one,
+and every desk that reads the merged tree resolves it alike in the meantime.
+
+**What an archive can no longer abort a pull with.** An entry naming a stack or a cue the archive
+lacks — a peer's new entry merged with this side's delete — is dropped with a warning, and so is an
+anchor naming an entry that is not there, or naming none at all; of two anchors on one entry (two desks each marked it) the
+lower uuid is kept. The next snapshot writes each drop as a deletion. A v31 archive's cue naming an
+unknown stack is still refused, as before.
+
+`ExportUuidRemapper`, `ProjectCloner` and `KeptUuidCopy` needed no cue code: an entry's links are
+`…Uuid` fields and its identity is its `uuid`, so a clone re-points them blind (the order caveat is
+in §"Ordinal contract"). `copy_to_project` copies whole stacks, so a cue two copied stacks share is
+copied once and shared in the target. `RichProjectFixture` carries two markers, an explicit number
+beside an auto one, a follow, two entries sharing an ordinal, a cue in two stacks anchored at both
+places, a cue twice in one stack and a loose cue on a busk pad (§3.2 of the plan).
 
 ### Version 31 — stored locate
 

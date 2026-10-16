@@ -896,7 +896,7 @@ internal fun placeCueInStack(
         ordinal = 0.0
     }
     val at = position?.coerceIn(0, existing.size) ?: existing.size
-    writeEntryOrder(existing.take(at) + entry + existing.drop(at))
+    writeEntryOrder(existing.take(at) + entry + existing.drop(at), fresh = listOf(entry))
     if (renumber) renumberAutoEntries(stack, before)
     return entry
 }
@@ -942,7 +942,8 @@ internal fun moveEntryTo(stack: DaoCueStack, entry: DaoCueStackEntry, position: 
         entry.stack = stack
     }
     val at = position?.coerceIn(0, existing.size) ?: existing.size
-    writeEntryOrder(existing.take(at) + entry + existing.drop(at))
+    // Moved in from another stack, its ordinal is that list's, never this one's.
+    writeEntryOrder(existing.take(at) + entry + existing.drop(at), fresh = listOfNotNull(entry.takeIf { left != null }))
     renumberAutoEntries(stack, before)
     if (left != null) renumberAutoEntries(left, leftBefore!!)
     return null

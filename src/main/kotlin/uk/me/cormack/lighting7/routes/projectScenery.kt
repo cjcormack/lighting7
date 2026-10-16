@@ -241,7 +241,7 @@ internal fun elementSceneryOf(element: DaoStageElement): ElementSceneryDto {
     // entry's (cue model plan P7: the entry names the stack, never the cue).
     val cueRows = DaoCueSceneryRow.find { DaoCueScenery.element eq element.id }.toList()
         .flatMap { row -> entriesOfCue(row.cue).map { entry -> row to entry } }
-        .sortedWith(compareBy({ it.second.stack.sortOrder }, { it.second.stackId }, { it.second.ordinal }, { it.second.id.value }))
+        .sortedWith(compareBy({ it.second.stack.sortOrder }, { it.second.stackId }, { it.second.ordinal }, { it.second.uuid.toString() }))
     val setRows = DaoCueStackSceneryRow.find { DaoCueStackScenery.element eq element.id }.toList()
         .sortedWith(compareBy({ it.stack.sortOrder }, { it.stack.id.value }))
     val lookRows = DaoLookSceneryRow.find { DaoLookScenery.element eq element.id }.toList()

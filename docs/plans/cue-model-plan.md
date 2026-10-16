@@ -129,7 +129,9 @@ The plan adds its own:
   before session 4 lets a cue be shared or loose (the venue plan's P6, applied here).
 - **P5 — Auto numbers are derived, never synced.** The archive carries an entry's number only when
   it is explicit; every reader recomputes the auto ones from position. A drag then changes one
-  file, not every auto-numbered entry after it.
+  file, not every auto-numbered entry after it. *Amended 2026-10-16 (§10, 17):* an auto number a
+  reader could not derive — one venue-visit D11 holds beside an explicit renumber waiting for *Fix
+  Order* — is written too, and read back as explicit, so every desk shows the same labels.
 - **P6 — Ordinals are doubles on entries.** A new entry takes the midpoint of its neighbours, and
   two desks inserting into the same gap both keep their entries, ordered by `(ordinal, uuid)`.
   This is `FU-SYNC-ORDINAL-DOUBLE` for entries. The other ordered tables keep their integers, and
@@ -328,7 +330,7 @@ was written). Below, *vN* is that version:
   `autoAdvance`, `autoAdvanceDelayMs` and `cueType`.
 - **`cueStackEntries/{uuid}.json`**, one file per entry: `{uuid, cueStackUuid, cueUuid?, kind?,
   label?, ordinal, cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`. `cueNumber` is written only when
-  explicit (P5); `kind` is omitted for a cue entry. One file per entry is the merge story: two desks
+  explicit, or when a reader could not derive it (P5 as amended); `kind` is omitted for a cue entry. One file per entry is the merge story: two desks
   adding to one stack add two records, a drag between two entries rewrites one file, and a
   renumber rewrites only the entries whose explicit number changed.
 - `promptBookAnchors/` carries `entryUuid` instead of `cueUuid`.
@@ -445,7 +447,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   §"Active Cue Tracking", `lighting-composition-model.md` (holds and the loose band),
   `websocket-engineering.md` (`cueHolds.state`).
 
-### Session 3 — sync vN (backend)
+### Session 3 — sync vN (backend) — done, `4a0d116f`, `3ea86265`, `1be6a69c`, `d8aba579`
 
 - §3.9: `cueStackEntries/`, ordinals (P6), auto numbers not exported (P5), anchors by entry, the
   pre-vN reader, the duplicate-number rule on import.
@@ -585,3 +587,11 @@ Answered by Chris, 2026-10-14, in four rounds:
 14. **Removing the live entry?** Allowed; the stage is unchanged until the next GO (D16).
 15. **A stack delete and its loose cues?** Offered, unticked (D17).
 16. **Copy's source?** Any project (D18).
+
+Answered by Chris, 2026-10-16, after session 3's review:
+
+17. **Auto numbers across a sync?** A number D11 holds that position alone would not give is written
+    and read as explicit, so every desk shows the same labels and a pull never relabels one (P5, as
+    amended; `heldAutoNumbers`). Such a number then stops renumbering by itself.
+18. **Ties at the v32 startup step?** Kept in the order the desk played them, by id, so nothing on
+    stage moves; desks that played a tie differently settle it on their first sync.

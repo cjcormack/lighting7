@@ -198,13 +198,16 @@ class CueModelMigrationTest {
         assertEquals(
             listOf(
                 // Stack 1 by (sort_order, id): open (0, #1), build (1, #2), tie (1, #4), Interval (5, #6), gap (9, #5).
-                cueEntry(1, 1.0),
-                cueEntry(2, 2.0),
-                cueEntry(4, 3.0),
-                markerEntry(1, "Interval", 4.0),
-                cueEntry(5, 5.0),
+                // The migration renormalised them `1.0, 2.0, …`; the same start's next step
+                // (`CueEntryUuidMigration.kt`, sync v32) makes each its 0-based position, what a v31
+                // archive's sortOrder said, so every desk writes the same entry file.
+                cueEntry(1, 0.0),
+                cueEntry(2, 1.0),
+                cueEntry(4, 2.0),
+                markerEntry(1, "Interval", 3.0),
+                cueEntry(5, 4.0),
                 // Stack 2's only row was the fixture's marker.
-                markerEntry(2, "finale", 1.0),
+                markerEntry(2, "finale", 0.0),
             ),
             entries(),
         )
@@ -222,9 +225,67 @@ class CueModelMigrationTest {
             markerUuids,
             rows("SELECT label, uuid FROM cue_stack_entries WHERE kind = 'MARKER'").associate { it["label"] to it["uuid"] },
         )
-        val cueEntryUuids = rows("SELECT uuid FROM cue_stack_entries WHERE kind = 'CUE'").map { it["uuid"] }
-        assertEquals(cueEntryUuids.size, cueEntryUuids.toSet().size, "a cue's entry has a uuid of its own")
-        assertTrue(cueEntryUuids.none { it in cueUuids().values }, "never its cue's")
+        // The migration minted each cue entry a uuid of its own; the next step of the same start
+        // (`CueEntryUuidMigration.kt`, sync formatVersion 32) names it after its cue, as every desk
+        // and every pre-v32 import does, so two desks agree on the place.
+        val cueEntries = rows(
+            "SELECT e.uuid AS entry, c.uuid AS cue FROM cue_stack_entries e JOIN cues c ON c.id = e.cue_id WHERE e.kind = 'CUE'",
+        )
+        assertTrue(cueEntries.isNotEmpty())
+        assertTrue(cueEntries.all { it["entry"] == it["cue"] }, "each cue's one entry carries its cue's uuid: $cueEntries")
+    }
+
+    /**
+     * Two entries a desk played tied — an older archive's equal sortOrders, imported after cue model
+     * session 1 — become positions in the order the desk played them, by id, never by uuid, so the
+     * step moves nothing on stage (agreed 2026-10-16).
+     */
+    @Test
+    fun `entries the desk played tied become positions in the order it played them`() {
+        startDesk()
+        stopDesk()
+        // The marker of stack 1 and that stack's first cue entry, on one ordinal; the marker — the
+        // later id, and a marker's uuid is never renamed — gets the lowest uuid there is, so an order
+        // by uuid would put it first. Then the one-shot step runs again.
+        val marker = rows("SELECT id, stack_id FROM cue_stack_entries WHERE kind = 'MARKER' AND label = 'Interval'").single()
+        val markerId = (marker["id"] as Number).toInt()
+        val stackId = (marker["stack_id"] as Number).toInt()
+        val cueId = (rows("SELECT id FROM cue_stack_entries WHERE kind = 'CUE' AND stack_id = $stackId ORDER BY id LIMIT 1").single()["id"] as Number).toInt()
+        assertTrue(cueId < markerId, "test sanity: the cue entry is the earlier id")
+        DriverManager.getConnection("jdbc:sqlite:${IntegrationTestDb.path}").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.executeUpdate("UPDATE cue_stack_entries SET ordinal = 2.5 WHERE id IN ($cueId, $markerId)")
+                statement.executeUpdate("UPDATE cue_stack_entries SET uuid = zeroblob(16) WHERE id = $markerId")
+                statement.executeUpdate("PRAGMA user_version = 0")
+            }
+        }
+        startDesk()
+        stopDesk()
+        fun ordinal(id: Int) = (rows("SELECT ordinal FROM cue_stack_entries WHERE id = $id").single()["ordinal"] as Number).toDouble()
+        assertTrue(ordinal(cueId) < ordinal(markerId), "the tie keeps the order the desk played: ${ordinal(cueId)}, ${ordinal(markerId)}")
+    }
+
+    @Test
+    fun `cue entries are named after their cues once, and never again`() {
+        startDesk()
+        stopDesk()
+        assertEquals(CUE_ENTRIES_KEYED_USER_VERSION, (rows("PRAGMA user_version").single().values.single() as Number).toInt())
+
+        // An entry renamed afterwards — as a later session's entry of a shared cue would be — stays as
+        // it is on every start from now on.
+        val renamed = UUID.randomUUID()
+        val bytes = ByteBuffer.allocate(16).putLong(renamed.mostSignificantBits).putLong(renamed.leastSignificantBits).array()
+        val entryId = (rows("SELECT id FROM cue_stack_entries WHERE kind = 'CUE' ORDER BY id LIMIT 1").single()["id"] as Number).toInt()
+        DriverManager.getConnection("jdbc:sqlite:${IntegrationTestDb.path}").use { connection ->
+            connection.prepareStatement("UPDATE cue_stack_entries SET uuid = ? WHERE id = ?").use { statement ->
+                statement.setBytes(1, bytes)
+                statement.setInt(2, entryId)
+                statement.executeUpdate()
+            }
+        }
+        startDesk()
+        stopDesk()
+        assertEquals(renamed, rows("SELECT uuid FROM cue_stack_entries WHERE id = $entryId").single()["uuid"])
     }
 
     @Test

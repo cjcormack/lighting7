@@ -53,7 +53,7 @@ cue_stack_entries — one row of a stack's list (cue-stacks-engineering.md §"Da
 ├── stack_id (FK → cue_stacks)
 ├── cue_id (FK → cues, nullable — null exactly when kind is MARKER)
 ├── kind (CUE | MARKER), label (a marker's text)
-├── ordinal (double — the list's order, ties by id)
+├── ordinal (double — the list's order, ties by uuid: `ENTRY_ORDER`)
 ├── cue_number, cue_number_auto
 ├── auto_advance, auto_advance_delay (the follow; Duration, nanoseconds on disk)
 └── uuid
@@ -269,19 +269,22 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
 - **A marker is an entry, never a cue.** `POST /cues` refuses `cueType: "MARKER"` (400, naming the
   markers route); markers are made, renamed and removed through
   `POST/PUT/DELETE /cue-stacks/{id}/markers[/{entryId}]`, and can be neither armed nor fired.
-  `CueType` survives only as the wire's word for a row's kind: `CueStackCueEntry.cueType` and the
-  archive's cue record.
+  `CueType` survives only as the wire's word for a row's kind: `CueStackCueEntry.cueType`, and a
+  pre-v32 archive's cue record, which the importer still reads.
 
 `CueDetails` carries `cueStackId`, `cueStackName` and `entryId` (all from the cue's one entry), and
 `sortOrder` is the entry's **position** in its list, markers counted. `NewCue` requires `cueStackId`
 (a create without one is a 400) and takes an optional `sortOrder`, a position (appended to the end if
-omitted). An archive from before stacks were mandatory imports its stack-less cues into an
-"Unsorted" stack.
+omitted).
 
-**The archive is unchanged** (no `formatVersion` change): the exporter writes each cue as it always
-did, its `cueStackUuid`, `sortOrder` (the entry's position), number and follow read from its one
-entry, and a marker entry as a MARKER cue whose uuid is the entry's — which is why the migration
-gives a marker entry its marker cue's uuid. The importer reads a MARKER cue back as a marker entry.
+**In the sync archive** (`formatVersion` 32, cue model plan session 3; `docs/sync-engineering.md`
+§"Version 32"): `cues/{uuid}.json` is what the cue is — name, fade, notes, stomp, scenery, events —
+and nothing about where it sits. Each entry is its own record, `cueStackEntries/{uuid}.json`, written
+from the entry rows directly (never through `soleEntryOf`), so a cue several entries name, or none,
+travels as it is. An older archive's cue file still carried its one place, which the importer turns
+into an entry named with the cue's uuid; a MARKER cue becomes the marker entry under its own uuid
+(which is why the session-1 migration gave a marker entry its marker cue's uuid), and a cue with no
+stack imports **loose** — the "Unsorted" fallback is gone from the importer.
 
 Two kinds of **hold** put a cue on stage, and both go through the hold registry (`fx/CueHolds.kt`;
 `cue-stacks-engineering.md` §"Holds"):

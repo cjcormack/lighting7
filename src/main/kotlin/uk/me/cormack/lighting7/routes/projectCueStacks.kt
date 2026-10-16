@@ -284,7 +284,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     label = request.label.ifBlank { "Separator" }.take(255)
                     ordinal = 0.0
                 }
-                writeEntryOrder(existing.take(at) + marker + existing.drop(at))
+                writeEntryOrder(existing.take(at) + marker + existing.drop(at), fresh = listOf(marker))
                 // A marker counts in the positions a live cue's priority is derived from.
                 Triple(marker.toCueStackCueEntry(emptyMap()), null, stackEntryPriorities(stack))
             }

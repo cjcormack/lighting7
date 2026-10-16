@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.appDataDir
+import uk.me.cormack.lighting7.sync.CueNumberClash
 import uk.me.cormack.lighting7.sync.ImportError
 import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.ProjectImporter
@@ -42,6 +43,8 @@ data class ProjectImportResponse(
     val projectId: Int,
     val projectUuid: String,
     val name: String,
+    /** Explicit cue numbers the archive held twice in one stack, and how each was resolved (sync v32). */
+    val numberClashes: List<CueNumberClash> = emptyList(),
 )
 
 @Resource("/{id}/export")
@@ -96,6 +99,7 @@ internal fun Route.routeApiRestProjectExport(state: State) {
                     projectId = result.projectId,
                     projectUuid = result.projectUuid,
                     name = result.name,
+                    numberClashes = result.numberClashes,
                 )
             )
         } catch (e: ImportError) {
