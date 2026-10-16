@@ -26,7 +26,7 @@ data class ParkAddress(val universe: Int, val channel: Int) : Comparable<ParkAdd
  *
  * Read inside the caller's transaction. The loader (`ParkManager.loadFromDatabase`), a switch's
  * hand-over (`ParkManager.storedParks`, so a channel both shows park — two shows on one venue —
- * keeps its level) and Detach's flatten all read it.
+ * keeps its level), Detach's flatten and the project list's `parks` count all read it.
  */
 class VenueParks private constructor(
     /** The project's own rows. */

@@ -60,6 +60,8 @@ vi.mock('./components/effects/EffectsAnnouncer', () => ({ EffectsAnnouncer: () =
 vi.mock('./components/screens/ScreensSheet', () => ({ ScreensSheet: () => null }))
 vi.mock('./components/stageRender/StageRenderHost', () => ({ StageRenderHost: () => null }))
 vi.mock('./components/screens/useWindowsBridge', () => ({ useWindowsBridge: () => {} }))
+vi.mock('./components/appBar/AppBarSwitcher', () => ({ AppBarSwitcher: () => <div data-testid="app-switcher" /> }))
+vi.mock('./components/appBar/DeskName', () => ({ DeskName: () => null, useDocumentTitle: () => {} }))
 
 import Layout from './Layout'
 import { resetImmersiveStore, setImmersive } from './lib/immersive'

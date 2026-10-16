@@ -898,6 +898,12 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Whether *Make rig safe*'s blackout holds on [projectId], read without creating its holder: a
+     * project not loaded since the desk started has none, and so no blackout.
+     */
+    fun safeBlackoutHeld(projectId: Int): Boolean = scalerHolders[projectId]?.safeBlackout?.value == true
+
+    /**
      * Return the [GlobalScalerStateHolder] for [projectId], creating one on first access.
      * On creation, loads the persisted state from `project_scaler_states` (or defaults if
      * no row exists) and wires a write-through callback so subsequent toggles upsert the
