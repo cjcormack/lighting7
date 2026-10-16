@@ -26,6 +26,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
@@ -34,8 +35,9 @@ import {
   useDeletePatchGroupMutation,
   useUpdatePatchMutation,
 } from '@/store/patches'
-import type { FixturePatch, PatchGroupMember } from '@/api/patchApi'
+import type { FixturePatch, PatchGroupMember, RigOwner } from '@/api/patchApi'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import { VENUE_ADMIN_ORDER_REASON } from '@/components/groups/useGroupMemberReorder'
 
 interface EditGroupSheetProps {
   open: boolean
@@ -44,9 +46,16 @@ interface EditGroupSheetProps {
   groupName: string
   projectId: number
   patches: FixturePatch[]
+  /** A venue's rig opened by an operator: the sheet shows the group and changes nothing. */
+  readOnly?: boolean
+  /** Whose the group is, from the group list, so a venue's group opens locked before its detail loads. */
+  owner?: RigOwner
 }
 
-export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initialName, projectId, patches }: EditGroupSheetProps) {
+/** Why a venue's group cannot be changed from a show (its PUT and DELETE would be 409 `VENUE_OWNED`). */
+const VENUE_GROUP_REASON = 'The venue’s group: change it, its members and its order in the venue.'
+
+export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initialName, projectId, patches, readOnly = false, owner }: EditGroupSheetProps) {
   const { data: groupDetail } = usePatchGroupDetailQuery(
     { projectId, groupId: groupId ?? 0 },
     { skip: !groupId },
@@ -60,7 +69,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
   useEffect(() => {
@@ -86,6 +95,18 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
   }
 
   if (!groupId) return null
+
+  // Read-only, with the reason (venue-visit plan S7): a venue's group seen from a show, and a venue's
+  // rig for an operator. The group and its order are still shown. The owner comes from the list the
+  // sheet was opened from, so nothing is editable for a moment before the detail says whose it is;
+  // with neither, the sheet stays locked until the detail loads.
+  const groupOwner = groupDetail?.owner ?? owner
+  const lockedReason = groupOwner === 'VENUE'
+    ? VENUE_GROUP_REASON
+    : readOnly
+      ? VENUE_ADMIN_ORDER_REASON
+      : null
+  const locked = lockedReason != null || (groupDetail == null && owner == null)
 
   const originalOrder = groupDetail?.members.map(m => m.patchId) ?? []
   const currentOrder = members.map(m => m.patchId)
@@ -121,7 +142,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Edit Group</SheetTitle>
+          <SheetTitle>{locked ? 'Group' : 'Edit Group'}</SheetTitle>
         </SheetHeader>
 
         <SheetBody>
@@ -131,7 +152,8 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
               id="group-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
+              autoFocus={!locked}
+              disabled={locked}
             />
           </div>
 
@@ -140,7 +162,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           <div className="space-y-1.5">
             <Label>Members ({members.length})</Label>
             <p className="text-xs text-muted-foreground">
-              Drag to reorder fixtures within the group.
+              {lockedReason ?? 'Effects and a spread over the group run in this order. Drag to reorder.'}
             </p>
           </div>
 
@@ -152,13 +174,16 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             <SortableContext
               items={members.map((m) => m.patchId)}
               strategy={verticalListSortingStrategy}
+              disabled={locked}
             >
               <div className="space-y-1">
-                {members.map((member) => (
+                {members.map((member, index) => (
                   <SortableMemberRow
                     key={member.patchId}
                     member={member}
-                    onRemove={groupId ? async () => {
+                    position={index + 1}
+                    locked={locked}
+                    onRemove={groupId && !locked ? async () => {
                       await updatePatch({ projectId, patchId: member.patchId, removeFromGroupId: groupId })
                         .unwrap()
                         .catch(ignoreReportedError)
@@ -175,7 +200,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             </p>
           )}
 
-          <AddFixturesToGroup
+          {!locked && <AddFixturesToGroup
             members={members}
             patches={patches}
             onAdd={async (patchId) => {
@@ -183,12 +208,12 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
                 .unwrap()
                 .catch(ignoreReportedError)
             }}
-          />
+          />}
 
         </SheetBody>
 
         <SheetFooter className="flex-row justify-between">
-          <Button
+          {locked ? <span /> : <Button
             variant="destructive"
             size="sm"
             onClick={handleDelete}
@@ -196,14 +221,16 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           >
             <Trash2 className="size-3.5 mr-1.5" />
             {isDeleting ? 'Deleting...' : 'Delete'}
-          </Button>
+          </Button>}
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
-              Cancel
+              {locked ? 'Close' : 'Cancel'}
             </Button>
-            <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
-              {isUpdating ? 'Saving...' : 'Save'}
-            </Button>
+            {!locked && (
+              <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save'}
+              </Button>
+            )}
           </div>
         </SheetFooter>
       </SheetContent>
@@ -263,7 +290,18 @@ function AddFixturesToGroup({
   )
 }
 
-function SortableMemberRow({ member, onRemove }: { member: PatchGroupMember; onRemove?: () => void }) {
+function SortableMemberRow({
+  member,
+  position,
+  locked,
+  onRemove,
+}: {
+  member: PatchGroupMember
+  /** Its place in the group's order, 1-based: the order the group's effects and a spread run in. */
+  position: number
+  locked: boolean
+  onRemove?: () => void
+}) {
   const {
     attributes,
     listeners,
@@ -271,7 +309,7 @@ function SortableMemberRow({ member, onRemove }: { member: PatchGroupMember; onR
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: member.patchId })
+  } = useSortable({ id: member.patchId, disabled: locked })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -286,14 +324,18 @@ function SortableMemberRow({ member, onRemove }: { member: PatchGroupMember; onR
       style={style}
       className="flex items-center gap-2 p-2 rounded-md border bg-card"
     >
-      <button
-        type="button"
-        className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-4" />
-      </button>
+      {!locked && (
+        <button
+          type="button"
+          className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground"
+          aria-label={`Move ${member.fixtureName}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      )}
+      <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{position}</span>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{member.fixtureName}</div>
         <div className="text-[11px] text-muted-foreground truncate">{member.fixtureKey}</div>

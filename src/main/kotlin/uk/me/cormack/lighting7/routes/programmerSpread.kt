@@ -56,7 +56,9 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  *
  * `order` is a `DistributionStrategy` name: `LINEAR` is **rig order** (`state/BuskRigOrder.kt` — a
  * group in member order, cells in element order), `REVERSE` the other way, `RANDOM` seeded from the
- * request. `over = CELLS` spreads across every cell of every multi-head fixture in the selection;
+ * request. A spread whose one target is a group runs in **that group's member order** instead (cells
+ * in element order), because rig order places a fixture at its first appearance on the rig and can
+ * so disagree with the order the group sheet shows (venue-visit plan S7). `over = CELLS` spreads across every cell of every multi-head fixture in the selection;
  * `HEADS` treats each fixture as one step. A `tmpl:{uuid}` endpoint resolves the template's generic
  * colour, as an FX colour reference does. The selection's attribute mask is honoured the way a
  * Look's press honours it: a property outside it writes nothing and answers `skippedFamilies`.
@@ -215,8 +217,12 @@ internal fun spreadIntoProgrammer(
         heads.values.removeIf { it is FixtureElement<*> && it.parentFixture.key in heads }
     }
 
-    // Rig order first (LINEAR); the strategy then says where along the curve each sits.
-    val rigOrdered = state.buskRigOrder()
+    // Rig order first (LINEAR); the strategy then says where along the curve each sits. A spread
+    // over **one group** keeps that group's own member order (venue-visit plan S7) — what the group
+    // sheet shows and its effects run in — where rig order places each fixture at its first
+    // appearance on the rig, which an earlier group or tile holding it can put anywhere.
+    val oneGroup = request.targets.singleOrNull()?.let { TargetRef.ofOrNull(it.type, it.key) } is TargetRef.Group
+    val rigOrdered = (if (oneGroup) null else state.buskRigOrder())
         ?.sort(heads.keys.map { CueTargetDto(TargetRef.Fixture.TYPE, it) })
         ?.map { heads.getValue(it.key) }
         ?: heads.values.toList()

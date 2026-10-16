@@ -48,8 +48,8 @@ vi.mock('../../store/programmerOps', () => ({ useSpreadMutation: () => [spread] 
 vi.mock('../../lib/programmerFade', () => ({ getProgrammerFadeMs: () => 0 }))
 
 import { SpreadPopover, isIntentString, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
-import { buildRows, expandSelectionToTargets, spreadTargetsFor, type Row } from './rowModel'
-import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '@/test/fixtureFactories'
+import { buildRows, expandSelectionToTargets, spreadTargetsFor, wholeGroupOf, type Row } from './rowModel'
+import { chan, colourProp, groupSummary, makeFixture, makePixelBar, sliderProp } from '@/test/fixtureFactories'
 import { resetSpreadOverStore } from '@/lib/spreadOver'
 
 const rgb = (n: number) => colourProp('rgbColour', chan(n), chan(n + 1), chan(n + 2))
@@ -165,6 +165,27 @@ describe('the targets (D4)', () => {
       fadeMs: 0,
     })
     expect('write' in lastRequest()).toBe(false)
+  })
+
+  it('names one whole group as the group, so the desk spreads it in its member order (venue-visit plan S7)', () => {
+    const ordered = (textFilter = '') =>
+      buildRows({
+        fixtures: FIXTURES,
+        groups: [{ ...groupSummary('Front wash', 2), memberKeys: ['par-2', 'par-1'] }],
+        expandedGroups: new Set(['Front wash']),
+        textFilter,
+      })
+    const rows = ordered()
+    expect(wholeGroupOf(rows, new Set(['group:Front wash']))).toBe('Front wash')
+    // A filter hiding a member, or anything beside the group row, spreads over the heads instead.
+    expect(wholeGroupOf(ordered('par-2'), new Set(['group:Front wash']))).toBeUndefined()
+    expect(wholeGroupOf(rows, new Set(['group:Front wash', 'fixture:mover']))).toBeUndefined()
+
+    const ids = ['group:Front wash']
+    draw([{ col: 'dimmer', targets: expandSelectionToTargets(rows, new Set(ids)), group: wholeGroupOf(rows, new Set(ids)) }])
+    open()
+    apply()
+    expect(lastRequest().targets).toEqual([{ type: 'group', key: 'Front wash' }])
   })
 
   it('sends the marquee’s own families on a surface that does not bridge — the two plain lists', () => {

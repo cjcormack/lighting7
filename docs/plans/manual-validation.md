@@ -20,6 +20,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S7`](#fu-manual-venue-visit-s7) | a group dragged into a new order in its sheet runs its chases and its spreads in that order on the rig, and a venue's group in a show cannot be reordered from there | Venue visit S7, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
@@ -224,6 +225,35 @@ provenance from the desk. Nothing in review watched a held pulse land back in st
    cue's, not from the top of its cycle.
 4. **A Blind edit.** With Blind on, Include a cue that holds an effect (*Edit in programmer* after
    switching Blind on). Nothing moves on stage until Blind goes off.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S7`
+
+**What it proves**: *a group runs in the order its sheet shows*. In venue-visit plan S7, a drag in the
+group sheet's *Members* view reorders the group's members, and the group's effects and a spread over
+the group follow the new order.
+
+**Why it is here**: the tests check the stored order, the steps the desk answers and the spread's
+order. The drag itself was checked by hand in a browser against a seeded desk with no rig attached;
+no committed test drags. Nobody has yet watched a chase on real heads change its direction after a
+drag.
+
+**Test**, on the hall's rig:
+
+1. **Reorder.** Open a group of four or more heads (Groups → its row's details → *Members*) and drag
+   the last member to the top. The numbers, the Groups list's member rows and Patches' *Edit Group*
+   sheet all read the new order.
+2. **A chase.** Start a Pulse on the group at *Linear*. It runs from the member you dragged to the
+   top. *Runs as* Center Out reads the step each head fires on, and a Center Out Pulse fires those
+   steps in that order.
+3. **A spread.** Select the group alone, Spread Dimmer 0 → 100 % at *Linear*. The dragged member gets
+   0 %. Add a fixture from outside the group to the selection: the spread follows the busk rig's order
+   again.
+4. **A venue's group.** In a show on the hall, a venue group's *Members* view has no drag handles and
+   says its order is set in the venue. Patches' *Edit Group* sheet is read-only with the same reason.
+
+If an effect runs in an order the sheet does not show, promote it to a `FU-` item in `followups.md`.
 
 ---
 

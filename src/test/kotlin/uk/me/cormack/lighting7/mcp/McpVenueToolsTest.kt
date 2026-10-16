@@ -8,7 +8,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.venue.ShowHides
 import uk.me.cormack.lighting7.models.MediaFacet
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
@@ -90,6 +96,35 @@ class McpVenueToolsTest : RouteIntegrationTest() {
         val numbered = call("patch_fixtures", """{"fixtures":[{"key":"spot-10","name":"Spot","fixtureTypeKey":"uv","universe":2,"startChannel":2,"headNumber":104}]}""")
         assertFalse(numbered.success, numbered.result)
         assertEquals(VenueRigGuard.CODE_KEY_TAKEN_BY_VENUE, numbered.json()["code"]?.jsonPrimitive?.content, numbered.result)
+    }
+
+    @Test
+    fun `edit_groups reorders a show group around a venue fixture the show hides`() {
+        liveShowOnVenue()
+        val showId = state.projectManager.currentProject.id.value
+        // Two venue fixtures the show may hide, in a show group after the show's own spot.
+        val (hidden, kept) = transaction(state.database) {
+            val show = DaoProject[showId]
+            RigScope.of(show).patches().filter { ShowHides.hideRefusal(show, HideKind.PATCH, it.uuid) == null }
+                .take(2).map { it.key }
+        }.let { it[0] to it[1] }
+        assertTrue(call("patch_fixtures", """{"fixtures":[{"key":"spot-9","name":"Spot","fixtureTypeKey":"uv","universe":2,"startChannel":1,"groups":["panto"]}]}""").success)
+        val added = call("edit_groups", """{"groups":[{"name":"panto","add":["$hidden","$kept"]}]}""")
+        assertTrue(added.success, added.result)
+        transaction(state.database) {
+            val show = DaoProject[showId]
+            val uuid = RigScope.of(show).patches().single { it.key == hidden }.uuid
+            assertTrue(ShowHides.setHiddenByUuid(show, HideKind.PATCH, uuid, hidden = true))
+        }
+
+        // The show sees spot-9 and the kept one; reversing them leaves the hidden one where it was.
+        val reordered = call("edit_groups", """{"groups":[{"name":"panto","members":["$kept","spot-9"]}]}""")
+        assertTrue(reordered.success, reordered.result)
+        val stored = transaction(state.database) {
+            DaoFixtureGroup.find { (DaoFixtureGroups.project eq showId) and (DaoFixtureGroups.name eq "panto") }.single()
+                .members.sortedBy { it.sortOrder }.map { it.fixturePatch.key to it.sortOrder }
+        }
+        assertEquals(listOf(kept to 0, hidden to 1, "spot-9" to 2), stored)
     }
 
     @Test

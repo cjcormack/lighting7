@@ -125,6 +125,32 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a spread over one group keeps the group's member order where rig order would not`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        // The rig reaches hex-2 before hex-1, so rig order would put front-wash back to front.
+        val ids = transaction(state.database) {
+            listOf("hex-2", "hex-1", "hex-3").map { key -> DaoFixturePatch.find { DaoFixturePatches.key eq key }.first().id.value }
+        }
+        val rig = client.put("/api/rest/projects/$projectId/busk/rig") {
+            contentType(ContentType.Application.Json)
+            setBody(BuskRigRequest(listOf(BuskRigRowInput(name = "Mixed", tiles = ids.map { BuskRigTileInput(patchId = it) }))))
+        }
+        assertEquals(HttpStatusCode.OK, rig.status, rig.bodyAsText())
+
+        val one = client.run(SpreadRequest(targets = listOf(group("front-wash")), property = "dimmer", from = "pct:0", to = "pct:100"))
+        assertEquals(listOf("hex-1", "hex-2"), one.written.map { it.target.key })
+        assertEquals(listOf("0", "255"), one.written.map { it.value })
+
+        // Anything more than the one group is rig order again.
+        val more = client.run(
+            SpreadRequest(targets = listOf(group("front-wash"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100"),
+        )
+        assertEquals(listOf("hex-2", "hex-1", "hex-3"), more.written.map { it.target.key })
+    }
+
+    @Test
     fun `a head lacking the property is skipped by name and the rest land`() = testApplication {
         seed()
         mountTestApp(state)

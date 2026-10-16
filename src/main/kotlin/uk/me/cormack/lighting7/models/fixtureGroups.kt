@@ -49,3 +49,23 @@ class DaoFixtureGroupMember(id: EntityID<Int>) : IntEntity(id) {
     var tiltOffset by DaoFixtureGroupMembers.tiltOffset
     var uuid by DaoFixtureGroupMembers.uuid
 }
+
+/**
+ * Put the members [ordered] names (patch ids) in that order within [group], inside the caller's
+ * transaction, and number every member `0…n-1` (venue-visit plan S7). The members named fill, in the
+ * order given, the places the members named held; a member not named **keeps its place** — a venue
+ * patch the show hides, which no view of the show lists, or an infrastructure head the Groups views
+ * leave out — so a view reorders what it shows without knowing what it doesn't. An id that is not a
+ * member, and a repeat, are ignored. Ties in a stored order are broken by row id, the order they
+ * were added in.
+ */
+fun reorderGroupMembers(group: DaoFixtureGroup, ordered: List<Int>) {
+    val all = group.members.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+    val byPatch = all.associateBy { it.readValues[DaoFixtureGroupMembers.fixturePatch].value }
+    val named = ordered.distinct().mapNotNull { byPatch[it] }
+    val namedSet = named.toSet()
+    val next = named.iterator()
+    all.map { if (it in namedSet) next.next() else it }.forEachIndexed { i, member ->
+        if (member.sortOrder != i) member.sortOrder = i
+    }
+}

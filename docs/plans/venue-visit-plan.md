@@ -185,7 +185,9 @@ Grouped by area. §4 gives the order.
 
 **S12 — Fan in and fan out.**
 - Spread gains a relative mode: a fan amount around each head's current position.
-- It works pan-only, tilt-only or both, symmetric about the selection's centre in rig order.
+- It works pan-only, tilt-only or both, symmetric about the selection's centre in rig order. A
+  selection that is one group is in that group's own member order, as a spread over one already is
+  since S7.
 - Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
 - Start with a one-board sketch of the panel. No separate design session.
 

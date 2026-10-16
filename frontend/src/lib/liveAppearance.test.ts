@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { chan, colourProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
-import { targetHeads } from './liveAppearance'
+import { chan, colourProp, groupSummary, makeFixture, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
+import type { BuskRigRow } from '@/api/buskRigApi'
+import { rigHeadOrder, targetHeads } from './liveAppearance'
 
 describe('targetHeads', () => {
   it('counts a warm/cold white pair as a head the picker writes, as it does an RGB head', () => {
@@ -16,5 +17,20 @@ describe('targetHeads', () => {
       { fixtureKey: 'blinder', cellIndex: null },
       { fixtureKey: 'blinder', cellIndex: 1 },
     ])
+  })
+})
+
+describe('rigHeadOrder', () => {
+  const fixtures = ['a', 'b', 'c'].map((key) => makeFixture(key, [], { groups: ['G'] }))
+  const rowWith = (memberKeys?: string[]): BuskRigRow[] => [
+    { id: 0, uuid: 'r0', name: 'Row', tiles: [{ id: 0, uuid: 't0', kind: 'GROUP', group: { ...groupSummary('G', 3), memberKeys }, cellMode: 'PIPS' }] },
+  ]
+
+  it('draws a group tile’s members in the group’s own order (venue-visit plan S7)', () => {
+    expect(rigHeadOrder(rowWith(['c', 'a', 'b']), fixtures)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('falls back to the fixture list’s order where the desk sent none', () => {
+    expect(rigHeadOrder(rowWith(), fixtures)).toEqual(['a', 'b', 'c'])
   })
 })

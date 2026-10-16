@@ -43,6 +43,7 @@ import {
   buildRows,
   countFixtureRows,
   expandSelectionToTargets,
+  wholeGroupOf,
   fixtureRowId,
   groupRowId,
   memberRowId,
@@ -639,6 +640,7 @@ export function FixturesListContainer({
       cellSelection.byColumn().map(({ col, rowIds }) => ({
         col,
         targets: expandSelectionToTargets(rows, new Set(rowIds)),
+        group: wholeGroupOf(rows, new Set(rowIds)),
       })),
     [cellSelection, rows],
   )
@@ -964,7 +966,11 @@ export function FixturesListContainer({
 
   // The plain routes' whole-selection spread, memoised so `SpreadPopover`'s per-column plans are
   // not re-probed on every render of the container.
-  const rowSpreadColumns = useMemo(() => spreadColumnsForTargets(selectedTargets), [selectedTargets])
+  const rowSpreadGroup = useMemo(() => wholeGroupOf(rows, selectedRowIds), [rows, selectedRowIds])
+  const rowSpreadColumns = useMemo(
+    () => spreadColumnsForTargets(selectedTargets, rowSpreadGroup),
+    [selectedTargets, rowSpreadGroup],
+  )
 
   // The colour editor's *Spread…*: a one-shot the way `keyboardOpen` is one — the seed opens the
   // row C panel on Colour with *From* set to the editor's RGB (`SpreadSeed`), and the panel asks
@@ -1607,7 +1613,10 @@ function sameTargets(a: readonly WriteTarget[], b: readonly WriteTarget[]): bool
 }
 
 function sameColumns(a: readonly SpreadColumn[], b: readonly SpreadColumn[]): boolean {
-  return a.length === b.length && a.every((c, i) => c.col === b[i].col && sameTargets(c.targets, b[i].targets))
+  return (
+    a.length === b.length &&
+    a.every((c, i) => c.col === b[i].col && c.group === b[i].group && sameTargets(c.targets, b[i].targets))
+  )
 }
 
 function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {
