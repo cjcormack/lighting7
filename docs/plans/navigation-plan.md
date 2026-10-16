@@ -126,6 +126,7 @@ The plan adds its own:
     sending.
 - **P5 — Nothing stored changes.** This plan has no table, column, route or `formatVersion` change.
   The counts the home shows come from queries the frontend already makes.
+  Session 3 bends it for two read-only fields on the project list, by Chris's call (§4.3).
 
 ## 3. The sidebar (D3, D4)
 
@@ -239,6 +240,10 @@ venue's hidden ids, so the row adds `cues` to both.)
 - Since venue-visit S6 a switch also drops a bulk lamp run in flight, a staggered strike included
   (`RigSafetyService.attach`), and a show made safe and switched back to opens still blacked out, its
   *Undo* on the banner. The confirmation says each when it applies.
+- **Two read-only fields, by Chris's call (2026-10-16, session 3).** Nothing the frontend read said
+  how many channels another project parks or whether *Make rig safe*'s blackout still holds on it, so
+  the project list gained `parks` and `safeBlackout`. P5 bends for them and no further: no table,
+  column, route or `formatVersion`.
 
 ## 5. The project's home (D2)
 
@@ -334,7 +339,7 @@ venue's hidden ids, so the row adds `cues` to both.)
 
 ## 8. Implementation — five sessions
 
-Each session is one PR (P1). All are frontend only (P5).
+Each session is one PR (P1). All are frontend only (P5), but for session 3's two read-only list fields (§4.3).
 
 ### Session 1 — Sections and the registry — done, `a5b6c8c0`
 
@@ -362,7 +367,7 @@ Each session is one PR (P1). All are frontend only (P5).
   - The current project's rows have no dot.
 - **Docs:** the frontend CLAUDE.md beside §Navigation Registry.
 
-### Session 3 — The switcher
+### Session 3 — The switcher — done, `e714d86`
 
 - §4: the app bar's desk name, the switcher button and pin chip, the menu with search, and the
   reworded confirmation.

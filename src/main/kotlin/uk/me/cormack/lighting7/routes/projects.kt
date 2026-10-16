@@ -453,6 +453,13 @@ data class ProjectListDto(
     val venue: ProjectVenueDto? = null,
     /** A venue's card (venue plan session 7): its installed version and what it holds; absent for a show. */
     val venueSummary: VenueSummaryDto? = null,
+    /**
+     * The channels the project parks — its effective parks, a venue's included (`models/VenueParks.kt`):
+     * what a switch to it keeps at their parked levels, which the switch confirmation counts (navigation plan §4.3).
+     */
+    val parks: Int = 0,
+    /** *Make rig safe*'s blackout holds on the project, so it opens dark when made current again. Runtime only. */
+    val safeBlackout: Boolean = false,
 )
 
 /**
@@ -575,6 +582,8 @@ private fun DaoProject.toListDto(state: State) = ProjectListDto(
     kind = kind,
     venue = venueDto(state),
     venueSummary = venueSummaryDto(),
+    parks = VenueParks.of(id).effective.size,
+    safeBlackout = state.safeBlackoutHeld(id.value),
 )
 
 /** A venue's card, or null for anything else. Counts read the installed version (the draft before v1). Inside a transaction. */

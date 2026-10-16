@@ -18,13 +18,20 @@ type Project = {
 }
 let projects: Project[] | undefined = []
 let listError = false
-const setCurrent = vi.fn()
+const setCurrent = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const refetch = vi.fn()
 
 vi.mock('@/store/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/projects')>()),
-  useProjectListQuery: () => ({ data: projects, isLoading: false, isFetching: false, isError: listError }),
+  useProjectListQuery: () => ({ data: projects, isLoading: false, isFetching: false, isError: listError, refetch }),
   useSetCurrentProjectMutation: () => [setCurrent, { isLoading: false }],
 }))
+
+// The confirmation reads rig safety for its lamp-run line.
+vi.mock('@/store/rigSafety', async () => {
+  const { NOTHING_SAFE } = await import('@/api/rigSafetyApi')
+  return { useRigSafety: () => NOTHING_SAFE }
+})
 
 const { RigGate } = await import('./NotOnRig')
 const { setSheetUnsaved, resetUnsavedSheets } = await import('@/lib/unsavedSheets')
@@ -79,7 +86,7 @@ beforeEach(() => {
     { id: 3, name: 'TCH Test', description: null, isCurrent: false, kind: 'SHOW' },
   ]
   listError = false
-  setCurrent.mockReset()
+  setCurrent.mockClear()
   resetUnsavedSheets()
 })
 afterEach(cleanup)
@@ -116,7 +123,7 @@ describe('RigGate', () => {
     expect(dialog.textContent).toContain('TCH Test')
     expect(setCurrent).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Switch Project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Put TCH Test on the rig' }))
     expect(setCurrent).toHaveBeenCalledWith(3)
 
     // The desk answers and the project list follows: the view draws on the address asked for.
