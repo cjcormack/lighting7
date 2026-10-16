@@ -214,7 +214,8 @@ Each pair compares S with T, and with O where there is an origin (P3):
   - Overrides of records the show keeps are re-keyed to their fresh uuid (P5).
 - **Stage size.** The target's is used. A difference is listed as a drawing change.
 - **Scene images.** The show's store keeps its own images. A paired element reads the version's.
-- **Prompt book.** It is untouched: its anchors name cues, not rig records.
+- **Prompt book.** It is untouched: its anchors name entries (since cue model session 1), not rig
+  records.
 
 ### 3.6 Blockers
 

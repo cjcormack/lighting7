@@ -14,6 +14,9 @@
 > session across all of them into lanes that run in parallel (P6), and course checks fall due by
 > count and by event. P1 became a checklist, and D20 and P5 were added.
 >
+> **Checked 2026-10-16 (K1).** Twelve sessions had merged since the lanes, S7 while K1 ran. K1 corrected
+> the plans they touched, folded the Rig and output lane, opened Apply next, and gave P5 its claiming rule.
+>
 > A one-page copy for human readers is
 > [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
 > <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
@@ -83,7 +86,7 @@ Agreed with Chris, 2026-10-14:
 |---|---|
 | D1 | **One shared cue.** A cue is a project-level record, and a stack is an ordered list of references to cues. Editing a cue changes it in every stack that holds it. A cue may be in no stack. Removing a cue from a stack, or deleting the stack, never deletes the cue: delete is its own explicit operation. R1 designs the model. |
 | D2 | **Templates are renamed palettes in everything a person or Claude reads**: UI copy, REST paths, WS frame names, MCP tool names and docs. DB tables, the sync archive's `templates/` folder, `tmpl:` references and internal Kotlin/TS identifiers keep "template", so there's no `formatVersion` bump and no migration. |
-| D3 | **Position is centre-relative DMX, −127…+127**, with 0 at the centre of travel (DMX 128) and the fine channel still underneath. It applies everywhere an operator types or reads position: programmer, fixture sheet, cue values, spread, FX editor and palettes. A generic position palette means the same fraction of travel on every head, not the same angle. |
+| D3 | **Position is centre-relative DMX, −127…+127**, with 0 at the centre of travel (DMX 128) and the fine channel still underneath (S11 landed it as exactly DMX − 128, so −128…+127). It applies everywhere an operator types or reads position: programmer, fixture sheet, cue values, spread, FX editor and palettes. A generic position palette means the same fraction of travel on every head, not the same angle. |
 | D4 | **The sidebar has one state across all views.** The live/other split goes. Immersive mode (⌘K) stays as the deliberate way to hide chrome. |
 | D5 | **The grand master is a continuous 0–100 % fader in the app bar**, visible on every view. It replaces the inert DBO tile and has REST, WS and a MIDI fader binding. |
 | D6 | **Locate is stored on the patch, as part of the Focus facet.** It's set by *Set locate from current*. On a venue it belongs to the venue, and a show can override it like any Focus. |
@@ -139,9 +142,18 @@ The plan adds its own:
     edited.
 - **P4 — R sessions gate only what they must.** Anything a design session might reshape (cue
   actions, the apply model, FX parameters) waits for it. Anything it won't touch lands first.
-- **P5 — No plan names a `formatVersion`.** A session that bumps it takes the next number free when
-  it lands. Several sessions across these plans bump it: S16, possibly S8 and S15, the cue model
-  plan's session 3, the effects plan's sessions 1–3 and possibly venue-attach session 1.
+- **P5 — No plan names a `formatVersion`; merge order assigns it.** A session that bumps it:
+  - writes the next number free on `main` when it branches, and puts `sync vN` in its PR title, so
+    `gh pr list` shows two sessions on one number before either merges;
+  - if a PR with the same number merges first, renumbers in its merge of `main` (P1 step 1), in that
+    merge commit, whose message names both numbers (as S8's `37742a48` did): `SUPPORTED_FORMAT_VERSION`
+    and the writer's `formatVersion`, the importer's version comment, `sync-engineering.md`'s
+    §"Version N" (above the other's), every `formatVersion N` it wrote in CLAUDE.md, the engineering
+    docs, `followups.md` and its plan row, and `ProjectRoundTripTest` and `RichProjectFixture`;
+  - never takes or changes a number `main` already has.
+
+  Taken: S11 28, S15 29, R4.1 30, S8 31. Still to bump: the cue model plan's session 3 (R1.3), the
+  effects plan's sessions 2 and 3 (R4.2, R4.3), S16, and possibly venue-attach session 1.
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -198,6 +210,8 @@ Grouped by area. §4 gives the order.
   - Applied Looks
   - Applied Palettes
 - They share one table shell and the row actions the rail already has.
+- Applied FX reads what the desk reports: timing (a master or *Seconds*, S15), size, direction and
+  runs with *spent* (R4.1), and *held · Blind* (R2.1). Applied Palettes marks a layer's spent effect.
 - Each remembers its sort, filter and scroll, and takes them from a query string.
 - Each is registered in `lib/windowViews.ts`, so the Screens ("Windows") sheet can open it on any
   window.
@@ -213,8 +227,13 @@ Grouped by area. §4 gives the order.
 - A cue can set masters' BPM when it runs: a list of master and BPM pairs.
 - **When it applies (D15, D20).** On every GO into one of the cue's entries, GO TO it, or GO BACK
   onto it, even when another stack already holds the cue. It never tracks.
-- **It lands after the cue model plan's session 2** (holds), and hooks the entry's GO rather than the
-  hold registry: D20 fires where events, on the first hold, don't.
+- **It lands after the cue model plan's session 2** (holds, merged `595aced3`). It hooks
+  `CueStackManager.activateEntry`, which every GO, GO TO, GO BACK, auto-advance and re-fire passes
+  through, rather than the hold registry's first hold (`CueHolds.acquire`), where events fire: D20
+  fires where events don't. A reload's re-GO (`Show.resume`) sets no tempo, though it shares GO
+  BACK's `fireEvents = false`, so S16 needs its own flag (D15: a tap wins until the next cue).
+- **Ask Chris first** whether a loose press (a pad, a slot, `apply_cue`) sets tempo. Since R1.2 it
+  brings a cue on as a GO does, but D15 and D20 name only GOs.
 - It's a field of the cue, not of its entries, so a shared cue sets the same tempo from every stack.
 - It's a portable cue field, so expect a `formatVersion` bump (P5).
 
@@ -240,6 +259,9 @@ Each one:
 The closing check moves this plan and the six R plans to `completed/`. Another evening on the rig
 calls for an unscheduled check first, to file its notes into the lanes. Each check, once merged, is
 a one-line row here.
+
+- ~~K1 — after twelve sessions~~ — done, `64ab8eaf` (plans corrected for R1.1, R1.2, R4.1, S6, S8,
+  S11 and S15; Rig and output folded; Apply opened next; P5's claiming rule; no manual check run).
 
 ### Research and design — done
 
@@ -267,19 +289,19 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
-once everything in its *From other lanes* column has merged. Run three or four lanes at once, and
-keep Cues and then Cue editor moving: they are the critical path to R3.8, about twelve sessions
-deep.
+once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
+chains reach R3.8, each about seven sessions deep: Cues then Cue editor (R1.3, R1.4, R2.3–R2.6), and
+Apply (R3.1–R3.7, with R3.2 behind R4.3). Keep both moving.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
-**Cues.** The critical path. R1.1 is the startup migration: run it on a copy of the desk's database
-first. After R1.4 the lane splits into Cue editor and Cue library.
+K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
+folded the Rig and output lane (S6, S9 and S8 are done), and opened Apply next. R1.3 and R4.2 were in
+flight as it ran.
+
+**Cues.** The critical path. After R1.4 the Cue editor lane starts.
 
 | Session | From other lanes |
 |---|---|
-| R2.2 A cue's children keep their uuids | — |
-| R1.1 Entries and the migration | — |
-| R1.2 Holds | — |
 | R1.3 Sync | — |
 | R1.4 Sharing and explicit delete | — |
 
@@ -287,37 +309,26 @@ first. After R1.4 the lane splits into Cue editor and Cue library.
 
 | Session | From other lanes |
 |---|---|
-| R2.3 The action set | R1.4, R2.1 |
+| R2.3 The action set | R1.4 |
 | R2.4 The editor and its two hosts | — |
 | R2.5 The Values grid | — |
 | R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
 
-**Cue library.**
+**Cue library.** S16 can start now; R1.5 waits for R1.4.
 
 | Session | From other lanes |
 |---|---|
-| S16 Speed masters on a cue | S15, R1.2 |
+| S16 Speed masters on a cue | — |
 | R1.5 The Cues table | R1.4; Nav.1 gives it its Library row, either order |
 | R1.6 Copy from another show | R2.3 for *Duplicate*, else it builds it |
 | R1.7 The MCP tools | — |
-
-**Rig and output.**
-
-| Session | From other lanes |
-|---|---|
-| S6 Make rig safe, Undo / Quit desk | — |
-| S9 Blinder colour | — |
-| S8 Per-patch locate | S11 |
 
 **Programmer.**
 
 | Session | From other lanes |
 |---|---|
-| S11 Position scale | — |
-| S10 Record polish | — |
-| S7 Group member order | — |
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
@@ -325,24 +336,22 @@ first. After R1.4 the lane splits into Cue editor and Cue library.
 
 | Session | From other lanes |
 |---|---|
-| S15 Effect timing | — |
-| R2.1 Blind holds the programmer's effects | — |
-| R4.1 Size, direction and N-shot | — |
 | R4.2 Shaping the spread | — |
 | R4.3 One effect over a selection | — |
 | R4.6 Beam effects | — |
 | R4.7 Palette Steps and Slot Steps | — |
-| R4.4 Fading by size | R1.2 |
+| R4.4 Fading by size | — |
 | R4.5 A stack's effect size | — |
 
-**Apply.**
+**Apply.** Open it next (K1). While R3.2 waits on R4.3, R3.3–R3.5 may run ahead of it; R3.6 waits
+for R3.2 (the apply plan's P1).
 
 | Session | From other lanes |
 |---|---|
 | R3.1 The press on the desk | — |
 | R3.2 Local effects follow the selection | R4.3 |
 | R3.3 One press in the client | — |
-| R3.4 One mask | S10 |
+| R3.4 One mask | — |
 | R3.5 The palette popup and the one picker | — |
 | R3.6 Effects in the popup | — |
 | R3.7 The busk side sheets | — |
