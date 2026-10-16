@@ -940,12 +940,15 @@ class FxInstance internal constructor(
         // ALL effects (not just static ones) sweep forward then backward.
         // Scale to [0, s × (N-1)/N] to match the shaped offset range (N the slots after the
         // spread's shape, s its Spread — effects plan §3.3) and avoid wrapping artifacts at the
-        // turnaround points. At the default shape that is today's (N-1)/N.
+        // turnaround points. At the default shape that is today's (N-1)/N. A shape that leaves every
+        // member on one phase (Spread 0, or Blocks / Groups folding to one slot) has no range to
+        // sweep, so the whole cycle bounces instead — scaling by 0 would freeze the effect.
         var shaped = basePhase
         if (dynamics.distributionStrategy.usesTrianglePhase && groupSize > 1) {
             val slots = dynamics.distinctSlots(groupSize)
             val tri = if (shaped < 0.5) shaped * 2.0 else 2.0 * (1.0 - shaped)
-            shaped = tri * dynamics.spread * (slots - 1.0) / slots
+            val range = dynamics.spread * (slots - 1.0) / slots
+            shaped = if (range > 0.0) tri * range else tri
         }
 
         // Subtract distribution offset so that higher-offset members are *behind*

@@ -255,12 +255,12 @@ data class IndirectEffectDto(
     val direction: String = "FORWARD",
     val nShot: Int? = null,
     val spent: Boolean = false,
-)
     /** See [EffectDto.spread] and its three siblings. */
     val spread: Double = 1.0,
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
+)
 
 @Serializable
 data class UpdateEffectRequest(
@@ -377,12 +377,17 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
         // The spread's shape (D4), checked as the effect will run it: this request's Order or the one
         // it has, and the wings it is sent or has — so moving a winged effect onto Centre out is
         // refused as surely as sending wings to one.
+        // The instance's own wings are checked only when the Order actually moves: a stored row may
+        // hold wings under a mirrored Order (lenient on spawn, ignored by [SpreadShaping]), and an edit
+        // of its Spread, Blocks or Groups — or a frame re-sending the Order it already has — must not
+        // be refused for them.
         if (request.spread != null || request.wings != null || request.blocks != null || request.groups != null ||
             newDistribution != null
         ) {
             val dyn = existing.dynamics
             val order = newDistribution ?: dyn.distributionStrategy
-            val wings = request.wings ?: dyn.wings
+            val orderMoved = newDistribution != null && newDistribution != dyn.distributionStrategy
+            val wings = request.wings ?: dyn.wings.takeIf { orderMoved }
             EffectSpecCoercion.Strict.spreadProblem(request.spread, wings, request.blocks, request.groups, order)
                 ?.let { return EffectUpdateOutcome.Refused(it) }
         }

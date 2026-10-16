@@ -104,12 +104,9 @@ object SpreadShaping {
 
     /**
      * [Result.slots] without the ranks — what the step timing and ping-pong's turnaround read per pass
-     * from [rankCount] (the Order's own slot count), in constant time.
+     * from [rankCount] (the Order's own slot count), in constant time, over the four fields as
+     * [FxDynamics] holds them so a tick allocates no [SpreadShape].
      */
-    fun slots(rankCount: Int, shape: SpreadShape, wingsApply: Boolean): Int =
-        slots(rankCount, shape.wings, shape.blocks, shape.groups, wingsApply)
-
-    /** [slots] over the four fields as [FxDynamics] holds them, so a tick allocates no [SpreadShape]. */
     fun slots(rankCount: Int, wings: Int, blocks: Int, groups: Int, wingsApply: Boolean): Int {
         var count = max(rankCount, 1)
         if (blocks > 1) count = ceilDiv(count, blocks)

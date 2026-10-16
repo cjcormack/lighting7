@@ -98,7 +98,9 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
         put(
             "description",
             "How much of the cycle the heads cover, 0.0–2.0, over the distribution order: 1.0 spreads them over one " +
-                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0.",
+                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0. Spread, wings, " +
+                "blocks and groups shape a spreading distribution only — send one (LINEAR for a chase), since an omitted " +
+                "distribution is UNIFIED, under which every head is in step and the shape does nothing.",
         )
     })
     put("wings", buildJsonObject {
