@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
@@ -137,6 +138,27 @@ stack landing where the cards say before the desk answers.
    GO goes on to the cue after *it*.
 5. **On Q12.** With a cue's effect running on a fixture, open the fixture's sheet, the tray, and press
    *on Q…*: that cue's editor opens over the sheet; Escape returns to the sheet.
+
+## `FU-MANUAL-VENUE-VISIT-NAV-3`
+
+**What it proves**: *the switcher on a real desk* — venue-visit Nav.3, navigation plan session 3
+(§4): the dot follows the rig, and the one confirmation says what a switch does before it does it.
+
+**Why it is here**: the tests pin the words against stubbed state; only the rig shows that the parks
+the confirmation counts are the channels that stay lit, and that the dot agrees with what the stage
+is doing.
+
+**Test**, on Sleeping Beauty (held behind TCH venue) and TCH Test:
+
+1. **Held.** With Sleeping Beauty on the rig, the switcher's dot is amber and the pin chip reads
+   *TCH venue v7 · held*; the tab title is *Sleeping Beauty · <desk name>*.
+2. **Make rig safe.** Make the rig safe: the dot becomes a hollow ring until the blackout is
+   released or undone.
+3. **The confirmation.** From the switcher, ⌥Enter on TCH Test: the dialog counts TCH Test's parks
+   and says it opens held. Put it on the rig: those channels hold their level and everything else
+   goes dark.
+4. **Back again.** Switch back to Sleeping Beauty while it is still made safe: the confirmation says
+   it opens dark, and it does, with *Undo* on its banner.
 
 ## `FU-MANUAL-VENUE-VISIT-R3-3`
 

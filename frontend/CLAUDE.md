@@ -6360,6 +6360,70 @@ path may quietly change where it lands.
   (`navigation.test.ts`' install cases pin every tab but General, which is the parent
   row; `routes/settingsTabs.test.tsx` pins the tabs).
 
+### The app bar and the switcher
+
+**The app bar names the show on the rig, as a switcher** (navigation plan D1, D5, §4;
+`components/appBar/`). Left to right: the desk's friendly name (`install.friendlyName`, else
+*Lighting desk*, `lib/projectSwitch.ts`'s `deskNameOf`) small and muted with a divider, the switcher
+button, and the pin chip; the chips on the right are unchanged and never shrink. It replaced the
+hard-coded title. **On the rig is the server's `isCurrent` (P4)**: the switcher always names the
+project the list says is current, whatever the URL is viewing — the sidebar header and the
+breadcrumb name the viewed one. `document.title` is *Show · Desk name* from the same answer
+(`useDocumentTitle`, mounted in `Layout`).
+
+- **The dot** (`rigDotOf`): green while sending; amber while `venue.hold` holds the current show;
+  a **hollow ring** while *Make rig safe*'s blackout holds it (`rigSafety.state`'s `blackout` — dark
+  but nothing wrong, and it wins over the hold); grey while the desk is offline. The menu's *On the
+  rig* row repeats it. A venue on the rig wears its tag in the button.
+- **The pin chip** (`pinChipOf`), for a show on a venue: *TCH venue v7*, then *· held* (amber) while
+  held, *· v8 published* while behind (amber on output, muted for drawing only), *· not on this
+  desk* (red) for a missing version. It opens the show's home.
+- **What folds where**, measured in the app (container widths of the header's content box): the
+  desk name shows from **640**; the button's name from **440** — below it the button is the dot and
+  the chevron, the name on its label and the menu's first row, because at 375 the chips leave it
+  65px (246 of chips; 282 held, when *Blind · venue* joins them) and the name drew one letter; the
+  pin chip from **920**, because the chips grow from 366 to 541 at 760 (`ConnectionStatus`'s label,
+  the programmer chip's) and below 920 it truncated beside a show's name. Below 620
+  `ConnectionStatus` already hides itself while Connected, as before.
+
+**The menu** (`SwitcherMenu`, cmdk inside a popover): *Find a show or venue*, then **On the rig**,
+**Shows** and **Venues**, each by name (`switcherGroupsOf` — the filter is the switcher's own, a
+name substring, so cmdk's scoring cannot reorder the groups; `shouldFilter={false}`). A row reads
+*name · detail* (`switcherDetailOf`: the pin, *no venue*, or a venue's *v8 · 2 shows*) with *Open*
+and, on every project but the current one, *Make current* — or *Venue not here* for a show whose
+pinned version is not on this desk (`venue.id == null`, `makeCurrentRefusal`). The row's own press
+is Open. **Enter opens the highlighted row's home** — the first match while typing, since a search
+re-highlights the first row drawn — and **⌥Enter makes it current** through the confirmation (the
+menu's `onKeyDown` runs before cmdk's and prevents its Enter). cmdk's root takes Enter for the
+highlighted row whatever has focus, so the row and footer buttons stop their own Enter and Space
+from reaching it (`keepOwnKeys`). The footer is *All projects…*, *New venue…* for an admin and *New
+show…*, both through `CreateProjectDialog`, whose `onCreated` opens the new project's home.
+
+**One confirmation for every door** (§4.3): `ProjectSwitchConfirmDialog` takes the project to put on
+the rig and owns the switch — the switcher, ⌘K, `NotOnRig` and the Projects card all mount it with
+`project` / `onClose`. Its body is mounted only while open, so a closed one subscribes to nothing,
+and it refetches the project list as it opens. Its words are **frozen at the press**: the switch's
+`projectChanged` refetches the list before `set-current` answers, and the live read would then
+describe the incoming show replacing itself while *Switching…* and the close draw. `switchConfirmOf` is the copy: *Put TCH Test on the
+rig?* — *Sleeping Beauty's cues, programmer and effects stop, and every channel goes dark except
+those TCH Test parks (4).* — and a line for each consequence that applies: the incoming show is
+behind its venue on output, so it **opens held**; a **bulk lamp run** on the outgoing show is cut
+off where it is; the incoming show is **still blacked out** by *Make rig safe*, so it opens dark
+with *Undo* on its banner. The park count and the blackout come from the project list's `parks` and
+`safeBlackout`, two read-only fields added for this (Chris's call; nothing else the frontend read
+knew another project's parks or blackout). A desk without them says the rule with no count.
+
+**⌘K** lists *Go to <name>* and, for every project not on the rig that can be, *Make <name>
+current* through the same confirmation — the only door while immersive, which hides the app bar.
+*Create New Project* opens `CreateProjectDialog` and then the new project's home, and *Telemetry…* goes
+to `/install#telemetry`, which `TelemetryCard` scrolls to — offered to a signed-in admin only, as
+`InstallSettings` draws the card. The static `<title>` in `index.html` is *Lighting desk*, what the
+tab says before `Layout` mounts (sign-in, boot).
+
+`lib/projectSwitch.test.ts` pins the words and the order; `AppBarSwitcher.test.tsx` the button and
+its hold, the menu's order, search with Enter and ⌥Enter through the confirmation (which names the
+incoming parks and the hold), the missing-venue row, and the desk name's fold class.
+
 ### Sheets vs Dialogs
 
 Use **Sheets** (slide-in from right) for any UI that involves editing, forms, or multi-step workflows. Use **Dialogs** (centered modal) only for confirmations, alerts, and status displays.

@@ -40,12 +40,17 @@ export function roleLabel(role: CommandRole): string {
   return ROLE_WORDS[role]
 }
 
+/** How many of a run's units have ended, whatever the outcome. */
+export function unitsEnded(run: CommandRun): number {
+  return run.units.filter((u) => u.status !== 'QUEUED' && u.status !== 'WAITING' && u.status !== 'RUNNING').length
+}
+
 /**
  * A run's progress: how many are done, and the next unit waiting on its restrike, with the time left
  * counted from the frame's arrival. `2 of 6 done · MAC 2 in 4:12 (restrike)`.
  */
 export function runProgress(run: CommandRun, receivedAt: number, now: number): string {
-  const ended = run.units.filter((u) => u.status !== 'QUEUED' && u.status !== 'WAITING' && u.status !== 'RUNNING').length
+  const ended = unitsEnded(run)
   const parts = [`${ended} of ${run.units.length} done`]
   const running = run.units.filter((u) => u.status === 'RUNNING')
   if (running.length > 0) parts.push(running.length === 1 ? `${running[0].fixtureName} running` : `${running.length} running`)

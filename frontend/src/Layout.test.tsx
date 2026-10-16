@@ -65,6 +65,8 @@ vi.mock('./components/programmer/RecordSheet', () => ({
   RecordSheet: (p: { targetCueId: number }) => <div data-testid="record-sheet">{p.targetCueId}</div>,
 }))
 vi.mock('./components/cues/CueDeleteDialog', () => ({ CueDeleteDialog: () => null }))
+vi.mock('./components/appBar/AppBarSwitcher', () => ({ AppBarSwitcher: () => <div data-testid="app-switcher" /> }))
+vi.mock('./components/appBar/DeskName', () => ({ DeskName: () => null, useDocumentTitle: () => {} }))
 
 import Layout from './Layout'
 import { resetImmersiveStore, setImmersive } from './lib/immersive'
