@@ -43,6 +43,7 @@ class FxRegistrationTargetCompatibilityTest {
         val robe = RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1)
         mapOf(
             "dimmer" to hex,
+            "strobe" to hex,
             "uv" to hex,
             "rgbColour" to hex,
             "position" to spot,
@@ -52,6 +53,10 @@ class FxRegistrationTargetCompatibilityTest {
             "focus" to revolution,
             "iris" to robe,
             "frost" to robe,
+            "prism" to spot,
+            // The sentinel Slot Steps is offered through (effects plan §3.6): the client turns it
+            // into the setting chosen, so here it resolves to a setting target like any setting.
+            "setting" to robe,
         )
     }
 
@@ -109,7 +114,7 @@ class FxRegistrationTargetCompatibilityTest {
                 val target = FxTargetFactory.forFixture(
                     fixture.key, prop, outputType = null, fixture = fixture,
                 )
-                if (target.acceptedOutputType != effect.outputType) {
+                if (!target.accepts(effect.outputType)) {
                     failures += "fx/${effect.path} (${effect.id}) outputs ${effect.outputType} but " +
                         "advertises '$prop', which resolves to ${target::class.simpleName} " +
                         "accepting ${target.acceptedOutputType} — the output would be discarded"

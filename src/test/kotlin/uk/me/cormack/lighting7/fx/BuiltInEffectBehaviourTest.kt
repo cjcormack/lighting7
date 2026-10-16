@@ -67,9 +67,13 @@ class BuiltInEffectBehaviourTest {
         )
 
         // No parameter is blank for *any* built-in: a blank default is what the bug looked like.
+        // A step list is the exception, and only its default: its entries name this project's
+        // palettes or this rig's slots (effects plan §3.6), so it has none worth declaring and the
+        // editor fills it. Its type is still declared.
+        val stepLists = setOf("paletteList", "slotList")
         val blank = registry.allRegistrations
             .flatMap { reg -> reg.parameters.map { reg.id to it } }
-            .filter { (_, p) -> p.type.isBlank() || p.defaultValue.isBlank() }
+            .filter { (_, p) -> p.type.isBlank() || (p.defaultValue.isBlank() && p.type !in stepLists) }
             .map { (id, p) -> "$id.${p.name}" }
         assertEquals(emptyList(), blank, "every built-in parameter should declare a type and default")
 
@@ -533,8 +537,14 @@ class BuiltInEffectBehaviourTest {
     @Test
     fun `each beam built-in declares exactly its own property`() {
         val expected = mapOf("ZoomBreathe" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
-        val beam = registry.allRegistrations.filter { it.category == "beam" }
+        // Slot Steps is a Beam effect too (effects plan §3.6), but steps a setting its row names —
+        // it declares only the `setting` sentinel, and emits steps.
+        val beam = registry.allRegistrations.filter { it.category == "beam" && it.id != SLOT_STEPS_ID }
         assertEquals(expected.keys, beam.map { it.id }.toSet())
+        val slotSteps = registry.getRegistration(SLOT_STEPS_ID)!!
+        assertEquals("beam", slotSteps.category)
+        assertEquals(listOf("setting"), slotSteps.compatibleProperties)
+        assertEquals(FxOutputType.STEPS, slotSteps.outputType)
         for (reg in beam) {
             assertEquals(listOf(expected.getValue(reg.id)), reg.compatibleProperties, reg.id)
             assertEquals(FxOutputType.SLIDER, reg.outputType, reg.id)

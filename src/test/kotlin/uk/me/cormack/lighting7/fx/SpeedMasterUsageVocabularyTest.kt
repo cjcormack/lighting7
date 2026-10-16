@@ -33,7 +33,7 @@ class SpeedMasterUsageVocabularyTest {
     @Test
     fun `the shipped effect library's categories are exactly the known set`() {
         assertEquals(
-            setOf("dimmer", "colour", "position", "beam", "composite"),
+            setOf("dimmer", "colour", "position", "beam", "composite", PALETTE_STEPS_CATEGORY),
             builtInCategories(),
             "the built-in category vocabulary moved. If you added a category, decide whether it " +
                 "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +
@@ -61,5 +61,13 @@ class SpeedMasterUsageVocabularyTest {
         // `speedMasterUuid`, which is what an unmatched category is defined to do.
         assertTrue("composite" !in SPEED_MASTER_USAGES)
         assertTrue("controls" !in SPEED_MASTER_USAGES)
+    }
+
+    @Test
+    fun `Palette Steps routes by its palettes' family, so its registry category is no usage`() {
+        // Palette Steps registers under `palette`, which names no family: a stored one carries the
+        // family of the palettes it steps (effects plan §3.6), and that category — a usage — is
+        // what the picker and the MCP tools route its master by.
+        assertTrue(PALETTE_STEPS_CATEGORY !in SPEED_MASTER_USAGES)
     }
 }

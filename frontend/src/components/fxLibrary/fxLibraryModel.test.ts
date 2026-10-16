@@ -5,6 +5,7 @@ import {
   definitionsByEffectId,
   effectsRegisteredBy,
   entryName,
+  forkRefusal,
   forkRequest,
   fxSourceOf,
   mintForkEffectId,
@@ -75,6 +76,14 @@ describe('fxSourceOf — the definition list is the discriminator', () => {
     expect(effectsRegisteredBy(12, library, byEffectId).map((e) => e.name)).toEqual(['WarmFlicker', 'Ember'])
     // Script 7 registers nothing, though definition 7's effect carries a 7 too.
     expect(effectsRegisteredBy(7, library, byEffectId)).toEqual([])
+  })
+})
+
+describe('forkRefusal', () => {
+  it('refuses the step effects, the desk’s own, and nothing else', () => {
+    expect(forkRefusal(entry('PaletteSteps', { outputType: 'STEPS', category: 'palette' }))).toMatch(/cannot be forked/)
+    expect(forkRefusal(entry('SlotSteps', { outputType: 'STEPS', category: 'beam' }))).toMatch(/Slot Steps is the desk’s own/)
+    expect(forkRefusal(entry('Pulse'))).toBeNull()
   })
 })
 

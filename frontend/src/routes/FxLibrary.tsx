@@ -23,6 +23,7 @@ import {
   definitionsByEffectId,
   displayName,
   entryName,
+  forkRefusal,
   forkRequest,
   fxSourceOf,
   isFxCategory,
@@ -58,7 +59,8 @@ function categorySlug(category: FxCategory): string {
  * footer. It replaced a shadcn `Table` whose categories collapsed; the three sheets it opens —
  * detail, edit, new — moved to `components/fxLibrary/` beside it (D1).
  *
- * **Chips filter, dividers group** (D3): *All* and the five categories, `?category=` deep-links and
+ * **Chips filter, dividers group** (D3): *All* and the categories (six since Palette Steps added
+ * *Palette*, effects plan session 7), `?category=` deep-links and
  * the choice is remembered under `fxLibrary.category`; under *All* the rows are grouped by category
  * divider in `FX_CATEGORY_ORDER`, and the categories no longer collapse — the chips are how you
  * narrow.
@@ -219,7 +221,7 @@ export function ProjectFxLibrary() {
         chips={
           <PartitionChips<FxCategory>
             label="Category"
-            fold={560}
+            fold={640}
             value={category}
             onChange={changeCategory}
             allCount={library.length}
@@ -279,10 +281,14 @@ export function ProjectFxLibrary() {
               effect={sheetMode.entry}
               source={sheetMode.source}
               onFork={
-                isCurrentProject && sheetMode.source === 'builtIn' && sheetMode.entry.script
+                isCurrentProject &&
+                sheetMode.source === 'builtIn' &&
+                sheetMode.entry.script &&
+                forkRefusal(sheetMode.entry) == null
                   ? () => void fork(sheetMode.entry)
                   : undefined
               }
+              forkRefusal={isCurrentProject && sheetMode.source === 'builtIn' ? forkRefusal(sheetMode.entry) : null}
               forking={forking}
             />
           </SheetContent>

@@ -107,15 +107,60 @@ private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.fx.Templat
  * parameter falls back to the literal parser (which reads an unparseable string as white), and a
  * colour *list* drops the entry, because a list is allowed to be shorter but a colour is not allowed
  * to be absent.
+ *
+ * It is a [TemplateSource] — the colour resolver *and* Palette Steps' palette lookup
+ * ([TemplateSource.paletteStep]) — so the one argument every spawn site already threads through the
+ * [EffectFactory] reaches both, and the factory's shape, which scripts write against, is unchanged.
  */
-fun templateColourSource(registry: TemplateRegistry): (String) -> ExtendedColour? = { raw ->
-    val uuid = parseTemplateColourRefUuid(raw)
-    when {
-        uuid == null -> {
-            if (isTemplateColourRef(raw)) logger.warn("Malformed template colour reference '{}'", raw.trim())
-            null
+fun templateColourSource(registry: TemplateRegistry): (String) -> ExtendedColour? = TemplateSource(registry)
+
+/**
+ * What an effect's `tmpl:` parameters resolve through: one [TemplateRegistry], read from its cache.
+ * Invoked as a function it is the colour source ([templateColourSource]); [paletteStep] is the same
+ * registry read for a step of Palette Steps (effects plan §3.6), which `TypedParams.paletteSteps`
+ * reaches by asking whether its colour source is one of these.
+ */
+class TemplateSource(private val registry: TemplateRegistry) : (String) -> ExtendedColour? {
+    override fun invoke(raw: String): ExtendedColour? {
+        val uuid = parseTemplateColourRefUuid(raw)
+        return when {
+            uuid == null -> {
+                if (isTemplateColourRef(raw)) logger.warn("Malformed template colour reference '{}'", raw.trim())
+                null
+            }
+            else -> resolveTemplateColour(registry, uuid)
         }
-        else -> resolveTemplateColour(registry, uuid)
+    }
+
+    /**
+     * The palette a `tmpl:` step names, as the intents of its rows, or null — with a warn saying
+     * which way — when it cannot be a step: no such palette, an effect palette, a per-fixture one
+     * (it holds a value per head, not one for every head), or a row whose intent does not parse.
+     */
+    fun paletteStep(raw: String): PaletteStep? {
+        val uuid = parseTemplateColourRefUuid(raw) ?: run {
+            logger.warn("Palette Steps entry '{}' is not a palette reference", raw.trim())
+            return null
+        }
+        val snapshot = registry.snapshot(uuid) ?: run {
+            logger.warn("Palette Steps names no palette: {}", uuid)
+            return null
+        }
+        if (snapshot.effect != null || snapshot.rows.isEmpty() || snapshot.rows.any { !it.isDeferred }) {
+            logger.warn(
+                "Palette '{}' ({}) is not a generic value palette — Palette Steps steps through those only",
+                snapshot.name, uuid,
+            )
+            return null
+        }
+        val rows = snapshot.rows.map { row ->
+            val intent = parseTemplateIntent(row.value) ?: run {
+                logger.warn("Palette '{}' ({}) has an unreadable intent '{}'", snapshot.name, uuid, row.value)
+                return null
+            }
+            row.propertyName to intent
+        }
+        return PaletteStep(uuid, snapshot.name, rows)
     }
 }
 

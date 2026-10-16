@@ -69,12 +69,36 @@ const library: EffectLibraryEntry[] = [
     parameters: [],
     compatibleProperties: ['dimmer'],
   },
+  {
+    name: 'PaletteSteps',
+    category: 'palette',
+    outputType: 'STEPS',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [
+      { name: 'palettes', type: 'paletteList', defaultValue: '', description: '' },
+      { name: 'fadeRatio', type: 'double', defaultValue: '0.5', description: '' },
+    ],
+    compatibleProperties: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
+  },
+  {
+    name: 'SlotSteps',
+    category: 'beam',
+    outputType: 'STEPS',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [{ name: 'slots', type: 'slotList', defaultValue: '', description: '' }],
+    compatibleProperties: ['setting'],
+  },
 ]
+
+/** The palette library and the rig, which the step effects read (effects plan §3.6). */
+const wire = vi.hoisted(() => ({ templates: [] as unknown[], fixtures: [] as unknown[] }))
 
 vi.mock('@/store/fixtureFx', () => ({ useEffectLibraryQuery: () => ({ data: library }) }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: [] }),
-  useVisibleFixtureListQuery: () => ({ data: [] }),
+  useVisibleFixtureListQuery: () => ({ data: wire.fixtures }),
 }))
 vi.mock('@/store/speedMasters', () => ({
   // The D8 stamp: an effect authored under Colour picks up the master whose usage is `colour`.
@@ -90,7 +114,7 @@ vi.mock('@/store/templates', () => ({
     vi.fn(() => ({ unwrap: () => Promise.resolve({ entries: [] }) })),
     { isLoading: false },
   ],
-  useTemplateListQuery: () => ({ data: [], isLoading: false }),
+  useTemplateListQuery: () => ({ data: wire.templates, isLoading: false }),
 }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 // The footer's *Add to busk page* control subscribes to the page document. This suite is about the
@@ -150,6 +174,8 @@ function chooseEffect(name: string) {
 // Radix's Slider (the beam and intensity controls) measures its thumb; jsdom has no
 // ResizeObserver, so stub an inert one — the same stub the effect editor's own tests use.
 beforeEach(() => {
+  wire.templates = []
+  wire.fixtures = []
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -500,3 +526,81 @@ describe('size, direction and runs in a palette (effects plan session 1)', () =>
   })
 })
 
+
+describe('the step effects (effects plan session 7)', () => {
+  const position = (name: string, value: string): TemplateSummary =>
+    template({
+      id: name.length,
+      uuid: `uuid-${name}`,
+      name,
+      family: 'POSITION',
+      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value }],
+    })
+
+  it('offers Palette Steps where the family has two generic value palettes, filed under that family', async () => {
+    wire.templates = [position('Centre', 'pos:0,0'), position('Downstage', 'pos:-64,32')]
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Position' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Walk' } })
+    chooseEffect('PaletteSteps')
+    expect(screen.getByRole('list', { name: 'Palettes' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({
+      effectType: 'PaletteSteps',
+      category: 'position',
+      propertyName: null,
+      parameters: { palettes: 'tmpl:uuid-Centre,tmpl:uuid-Downstage', fadeRatio: '0.5' },
+    })
+  })
+
+  it('does not offer Palette Steps in a family with fewer than two', () => {
+    wire.templates = [position('Centre', 'pos:0,0')]
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Position' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('option', { name: 'Circle' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'PaletteSteps' })).toBeNull()
+  })
+
+  it('saves Slot Steps naming the setting it steps, from the rig, with its first slots', async () => {
+    wire.fixtures = [
+      {
+        key: 'spot-1',
+        properties: [
+          {
+            type: 'setting',
+            name: 'gobo',
+            displayName: 'Gobo wheel',
+            category: 'gobo',
+            options: [
+              { name: 'OPEN', level: 0, displayName: 'Open' },
+              { name: 'GOBO_1', level: 10, displayName: 'Gobo 1' },
+              { name: 'GOBO_2', level: 20, displayName: 'Gobo 2' },
+            ],
+          },
+        ],
+      },
+    ]
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Gobos' } })
+    chooseEffect('SlotSteps')
+    expect(screen.getByRole('combobox', { name: 'Setting' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({
+      effectType: 'SlotSteps',
+      category: 'beam',
+      propertyName: 'gobo',
+      parameters: { slots: 'GOBO_1,GOBO_2' },
+    })
+  })
+})

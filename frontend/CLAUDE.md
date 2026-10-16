@@ -713,8 +713,18 @@ Release folds to its glyph and the scope line drops the fade.
   heads (`effectsReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
   Position · Beam · Controls, a family the target cannot take disabled; Beam lists the beam
-  built-ins, each only where a head has its one property, effects plan §4.4) opening on the family of the row
-  open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
+  built-ins, each only where a head has its one property, and Slot Steps on a setting; Palette Steps
+  sits in every family with two generic value palettes or more naming a property the target has,
+  effects plan §4.4) opening on the family of the row
+  open on the sheet, and the effect rows. **The step effects start stepping** (session 7,
+  `lib/stepEffects.ts`, which never resolves — the desk does, per head): Palette Steps on that
+  family's palettes, in name order, its master by the family's usage; Slot Steps on the row's
+  setting — from any other row the gobo wheel where the head has one, else its first setting — on
+  its first two slots past its open one. Neither can be forked (the FX Library says why), and *Save
+  as palette…* banks one by its palettes' family or as Beam on its setting (`stepEffectPaletteShape`). The editor edits their lists with
+  `FxStepListPickers.tsx` — `paletteList` (palettes by reference, one family once one is chosen)
+  and `slotList` (the setting's options, a name the head lacks dashed; on an effect palette every
+  patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
   it), a movement effect starting *Around*, every effect starting on **one bar** on the master tagged
@@ -940,8 +950,9 @@ effect half narrow, and each removes a way for it to complicate the cook: **a va
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
 Every family may hold an effect — a **Beam** one a beam built-in (Zoom Breathe, Iris Pulse, Frost
-Pulse, Focus Pull; effects plan D6) — and the backend refuses `controls` and `composite` **by name**,
-since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
+Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
+over that family's palettes (session 7, `lib/stepEffects.ts`'s `stepEffectPaletteShape`) — and the
+backend refuses `controls` and `composite` **by name**, since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -3565,13 +3576,15 @@ it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited i
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
   generalised (it is gone) and still controlled, folding to a select below its `fold` of its
   **own** `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row.
-  **Two measured folds, chosen per chip set**: **400**, the default — the palette family's five
+  **Measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
-  the row leaves them ~430 — and **560** for the FX Library (six categories, 483px; 513 with a
-  three-digit *All*) and Scripts (all six types in their short labels, 542). Session 2 wrote "one
-  number for every library, re-measured"; measured in session 4, one number moved to 560 would fold
-  the palettes on an iPad where they fit, so the fold became a choice of two literal class pairs
-  (`FOLD_CLASSES` — Tailwind never emits a class built from `${}`).
+  the row leaves them ~430 — **560** for Scripts (all six types in their short labels, 542), and
+  **640** for the FX Library (seven categories since Palette Steps added *Palette*, effects plan
+  session 7: 619px with *All · 30*; at 560, which its six took, they ran under *New effect* in
+  1300–1349px windows). Session 2 wrote "one number for every library, re-measured"; measured in
+  session 4, one number moved to 560 would fold the palettes on an iPad where they fit, so the fold
+  became a choice of literal class pairs (`FOLD_CLASSES` — Tailwind never emits a class built from
+  `${}`).
 - **`usePartitionView.ts`** (session 4) — the partition as a view, never a route: a `?param=` plus
   a remembered value, the first render reading the stored one and never writing it back on arrival,
   a `?param=` arriving winning and being remembered, a change mirrored into the URL with `replace`.

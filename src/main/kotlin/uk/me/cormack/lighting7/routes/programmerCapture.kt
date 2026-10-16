@@ -571,7 +571,7 @@ internal fun fxInstancesToCueChildren(
                     targetType = targetType,
                     targetKey = targetKey,
                     effectType = effect.effectTypeId,
-                    category = categoryFromPropertyName(effect.target.propertyName),
+                    category = recordedEffectCategory(effect),
                     propertyName = effect.target.propertyName,
                     beatDivision = effect.timing.beatDivision,
                     blendMode = effect.blendMode.name,

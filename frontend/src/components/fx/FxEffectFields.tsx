@@ -21,6 +21,8 @@ import { SheetField } from '../fixtureSheet/SheetField'
 import { fromPct, toPct } from '../fixtures-list/cells/SliderCell'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
+import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { detectExtendedChannels } from './colourUtils'
 import {
   ORDER_OPTIONS,
@@ -115,6 +117,9 @@ export function FxEffectFields({
   scope,
   extendedChannels,
   settingProperty,
+  propertyName,
+  paletteFamily,
+  slotsFromRig = false,
   readOnly,
   set,
   setParam,
@@ -125,7 +130,17 @@ export function FxEffectFields({
   draft: FxDraft
   scope: FxScope
   extendedChannels: ReturnType<typeof detectExtendedChannels>
+  /** The setting the effect drives, where it drives one — a setting effect's `level`, Slot Steps' slots. */
   settingProperty: SettingPropertyDescriptor | undefined
+  /** The property the effect drives, where it has one — Palette Steps offers palettes naming it. */
+  propertyName?: string | null
+  /** An effect palette's family: Palette Steps offers only that family's palettes. */
+  paletteFamily?: AttributeFamily | null
+  /**
+   * Whether [settingProperty] stands for the whole rig rather than one head (an effect palette's):
+   * Slot Steps then takes typed names too, and a name no option matches is on no patched head.
+   */
+  slotsFromRig?: boolean
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
   setParam: (name: string, value: string, release: boolean) => void
@@ -152,6 +167,10 @@ export function FxEffectFields({
       value={draft.parameters[param.name] ?? param.defaultValue}
       extendedChannels={extendedChannels}
       settingProperty={param.name === 'level' ? settingProperty : undefined}
+      slotSetting={settingProperty}
+      propertyName={propertyName}
+      paletteFamily={paletteFamily}
+      slotsFromRig={slotsFromRig}
       readOnly={readOnly}
       onChange={(value, release) => setParam(param.name, value, release)}
     />
@@ -936,6 +955,10 @@ function ParamControl({
   value,
   extendedChannels,
   settingProperty,
+  slotSetting,
+  propertyName,
+  paletteFamily,
+  slotsFromRig = false,
   readOnly,
   onChange,
 }: {
@@ -944,6 +967,11 @@ function ParamControl({
   value: string
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingProperty: SettingPropertyDescriptor | undefined
+  /** The setting a slot list names options of, where the effect drives one. */
+  slotSetting?: SettingPropertyDescriptor
+  propertyName?: string | null
+  paletteFamily?: AttributeFamily | null
+  slotsFromRig?: boolean
   readOnly: boolean
   onChange: (value: string, release: boolean) => void
 }) {
@@ -1112,6 +1140,34 @@ function ParamControl({
         label={label}
         description={param.description}
         extendedChannels={extendedChannels}
+      />
+    )
+  }
+
+  // The step lists (effects plan §3.6): each change is a whole list, so it lands on release.
+  if (type === 'palettelist') {
+    return (
+      <FxPaletteListPicker
+        label={label}
+        description={undefined}
+        value={value}
+        propertyName={propertyName}
+        family={paletteFamily}
+        readOnly={readOnly}
+        onChange={(v) => onChange(v, true)}
+      />
+    )
+  }
+
+  if (type === 'slotlist') {
+    return (
+      <FxSlotListPicker
+        label={label}
+        value={value}
+        setting={slotSetting}
+        fromRig={slotsFromRig}
+        readOnly={readOnly}
+        onChange={(v) => onChange(v, true)}
       />
     )
   }

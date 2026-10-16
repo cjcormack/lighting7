@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Play, Trash2, Wrench } from 'lucide-react'
+import { PALETTE_STEPS_CATEGORY } from '@/lib/stepEffects'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -178,8 +179,9 @@ export function NewFxDefinitionSheet({
             <SelectContent>
               {/* The library's own vocabulary, so the form offers every category the chips and
                   dividers draw — it listed four and left Controls out. Beam is the exception: a
-                  beam effect drives one named property, and this form cannot name one. */}
-              {FX_CATEGORY_ORDER.filter((c) => c !== 'beam').map((c) => (
+                  beam effect drives one named property, and this form cannot name one. So is
+                  Palette, which is Palette Steps' alone: its family is its palettes'. */}
+              {FX_CATEGORY_ORDER.filter((c) => c !== 'beam' && c !== PALETTE_STEPS_CATEGORY).map((c) => (
                 <SelectItem key={c} value={c}>
                   {FX_CATEGORY_LABELS[c]}
                 </SelectItem>

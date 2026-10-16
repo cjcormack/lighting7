@@ -23,6 +23,7 @@ vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [mocks.removeFx],
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [mocks.removeGroupFx] }))
+vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/programmer', () => ({
   useProgrammerLayersQuery: () => ({
     data: [{ layerId: 4, source: { kind: 'LOOK', id: 1, name: 'Warm Wash' } }],

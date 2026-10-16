@@ -56,6 +56,17 @@ class FxDefinitionCompatibilityValidationTest {
     }
 
     @Test
+    fun `no custom effect has a STEPS output, so neither step built-in can be forked`() {
+        // Effects plan §3.6: a step list names the desk's palettes and settings, resolved per head,
+        // and a definition syncs to desks that predate the output type.
+        for (props in listOf(emptyList(), listOf("dimmer"), listOf("setting"), listOf("rgbColour", "position"))) {
+            val message = validateCompatibleProperties(FxOutputType.STEPS, props)
+            assertNotNull(message, props.toString())
+            assert("cannot be forked" in message)
+        }
+    }
+
+    @Test
     fun `the offending property is named in the message`() {
         val message = validateCompatibleProperties(FxOutputType.POSITION, listOf("position", "tilt"))
         assertNotNull(message)

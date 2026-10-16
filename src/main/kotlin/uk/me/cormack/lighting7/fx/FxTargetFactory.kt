@@ -146,7 +146,7 @@ object FxTargetFactory {
  * [FxInstance]'s warn instead.
  */
 fun requireOutputTypeMatch(effect: Effect, target: FxTarget) {
-    if (effect.outputType == target.acceptedOutputType) return
+    if (target.accepts(effect.outputType)) return
     throw IllegalArgumentException(
         "Effect '${effect.name}' outputs ${effect.outputType} but property " +
             "'${target.propertyName}' takes ${target.acceptedOutputType} — the output would be " +

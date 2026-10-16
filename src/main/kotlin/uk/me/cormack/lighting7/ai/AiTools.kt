@@ -2236,7 +2236,9 @@ class AiTools(private val state: State) {
         val effectType = obj["effectType"]?.jsonPrimitive?.contentOrNull ?: return null
         val registration = state.show.fxRegistry.getRegistration(effectType)
         if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
-        val family = registration?.category ?: obj["category"]?.jsonPrimitive?.contentOrNull ?: return null
+        // Palette Steps is filed under its palettes' family, which only the call names.
+        val family = registration?.category?.takeUnless { it == PALETTE_STEPS_CATEGORY }
+            ?: obj["category"]?.jsonPrimitive?.contentOrNull ?: return null
         return state.show.fxEngine.speedMasters.masterStates()
             .firstOrNull { it.usage == family }
             ?.uuid?.toString()

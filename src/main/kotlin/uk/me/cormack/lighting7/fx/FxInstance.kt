@@ -436,7 +436,7 @@ class FxInstance internal constructor(
         // A warn, not a throw: a cue firing mid-show must not die because one recorded row names
         // the wrong property. The REST add/update paths reject it up front instead
         // (`requireOutputTypeMatch`), which is where an operator can still act on it.
-        if (effect.outputType != target.acceptedOutputType) {
+        if (!target.accepts(effect.outputType)) {
             logger.warn(
                 "Effect '{}' outputs {} but target {}.{} applies {} — this effect will produce " +
                     "nothing. Check the effect's compatibleProperties.",

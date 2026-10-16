@@ -80,9 +80,12 @@ export interface PartitionOption<V extends string> {
  *   Scripts chips with all six types present 542 in their short labels (session 4, 2026-09-24).
  *   Either set would overflow its row between 400 and its own width, so they fold earlier — and
  *   the templates keep 400 rather than folding on an iPad where they fit, which is why this is a
- *   choice of two numbers and not one number moved up.
+ *   choice of numbers and not one number moved up.
+ * - **640** — the FX Library's chips once Palette Steps gave it a seventh category (*Palette*,
+ *   effects plan session 7): 619px with *All · 30*, so at 560 they overran the row's *New effect*
+ *   in 1300–1349px windows (measured 2026-10-16). Scripts keeps 560.
  *
- * Two literal class pairs rather than an interpolated width: Tailwind emits only classes it can
+ * Literal class pairs rather than an interpolated width: Tailwind emits only classes it can
  * read whole in the source, so a `@[${fold}px]` would match nothing.
  */
 export function PartitionChips<V extends string>({
@@ -160,10 +163,11 @@ export function PartitionChips<V extends string>({
   )
 }
 
-/** The two measured folds — see [PartitionChips]. */
-export type PartitionFold = 400 | 560
+/** The measured folds — see [PartitionChips]. */
+export type PartitionFold = 400 | 560 | 640
 
 const FOLD_CLASSES: Record<PartitionFold, { chips: string; select: string }> = {
   400: { chips: '@[400px]:inline-flex', select: '@[400px]:hidden' },
   560: { chips: '@[560px]:inline-flex', select: '@[560px]:hidden' },
+  640: { chips: '@[640px]:inline-flex', select: '@[640px]:hidden' },
 }

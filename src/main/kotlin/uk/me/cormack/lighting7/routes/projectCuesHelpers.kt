@@ -93,7 +93,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 targetType = targetType,
                 targetKey = targetKey,
                 effectType = effect.effectTypeId,
-                category = categoryFromPropertyName(effect.target.propertyName),
+                category = recordedEffectCategory(effect),
                 propertyName = effect.target.propertyName,
                 beatDivision = effect.timing.beatDivision,
                 blendMode = effect.blendMode.name,
@@ -830,6 +830,23 @@ private fun elementCategoryFor(
 
 private fun findElementProperty(element: FixtureElement<*>, name: String): Fixture.Property? =
     FixturePropertyCatalogue.of(element::class).byName[name]
+
+/**
+ * The category Record files a running effect under: the step effects' own (effects plan §3.6) —
+ * Slot Steps is a beam effect whatever setting it steps, Palette Steps is its palettes' family,
+ * read off the property it drives (a strobe in an Intensity palette is `dimmer`, not `controls`) —
+ * else [categoryFromPropertyName].
+ */
+internal fun recordedEffectCategory(effect: FxInstance): String {
+    val propertyName = effect.target.propertyName
+    return when {
+        effect.effectTypeId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
+        effect.effectTypeId.equals(PALETTE_STEPS_ID, ignoreCase = true) ->
+            TemplateProperty.ofOrNull(propertyName)?.family?.let(::effectCategoryForFamily)
+                ?: categoryFromPropertyName(propertyName)
+        else -> categoryFromPropertyName(propertyName)
+    }
+}
 
 /**
  * Infer effect category from property name for from-state capture.

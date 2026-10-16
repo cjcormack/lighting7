@@ -12,7 +12,7 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { useUpdateFxDefinitionMutation, type FxDefinition } from '@/store/fxDefinitions'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import { cn } from '@/lib/utils'
-import { EFFECT_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, type FxSource } from './fxLibraryModel'
+import { EFFECT_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, forkRefusal, type FxSource } from './fxLibraryModel'
 import { useFxDefinitionDelete, type FxDeleteItem } from './useFxDefinitionDelete'
 
 export type FxColumnKey = 'output' | 'mode' | 'timing' | 'params' | 'drives' | 'source'
@@ -199,9 +199,8 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
       : (oneRecordReason('Fork', 'effect', count) ??
         (one.source !== 'builtIn'
           ? `Only a built-in forks — ${one.source === 'custom' ? 'edit this custom effect directly' : 'edit the script that registers this effect'}`
-          : one.entry.script
-            ? null
-            : `${one.name} publishes no script to fork`)))
+          : (forkRefusal(one.entry) ??
+            (one.entry.script ? null : `${one.name} publishes no script to fork`)))))
   const deletable = selected.some((row) => row.source === 'custom')
   const deleteReason =
     scope.reason ??

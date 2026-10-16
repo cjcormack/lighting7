@@ -873,6 +873,8 @@ class ProvenanceService internal constructor(
             else CueAssignmentResolver.PropertyValue.Slider(value)
         is FxOutput.Colour -> CueAssignmentResolver.PropertyValue.Colour(color)
         is FxOutput.Position -> CueAssignmentResolver.PropertyValue.Position(pan, tilt)
+        // Read for a target's baseline alone, which is always a value of its own type.
+        is FxOutput.Steps -> error("A baseline is a value, never steps")
     }
 
     companion object {

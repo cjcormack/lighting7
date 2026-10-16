@@ -1544,6 +1544,106 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         }
     }
 
+    private suspend fun io.ktor.client.HttpClient.positionPalette(name: String, value: String): TemplateDto =
+        post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = name,
+                    rows = listOf(TemplateRowDto(targetType = DEFERRED_TARGET_TYPE, targetKey = "", propertyName = "position", value = value)),
+                )
+            )
+        }.body<TemplateDto>()
+
+    /**
+     * Palette Steps sits in the family of the palettes it is given (effects plan §3.6, §4.4): a
+     * palette holding it is filed under that family, refused under any other, and refused with
+     * fewer than two palettes. Pressed, it lands on the property its palettes name.
+     */
+    @Test
+    fun `a Palette Steps palette is filed under its palettes' family and presses onto their property`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-8ch", "spot-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "varytec-easymove-xl-60-spot-11ch", "spot-2", 21)
+        val client = jsonClient()
+        val down = client.positionPalette("Downstage", "pos:-64,32")
+        val centre = client.positionPalette("Centre", "deg:270,105")
+        val refs = listOf(down, centre).joinToString(",") { "tmpl:${it.uuid}" }
+        fun steps(category: String, palettes: String = refs) =
+            colourEffect(effectType = "PaletteSteps", category = category, parameters = mapOf("palettes" to palettes))
+                .copy(propertyName = null)
+
+        for ((category, problem) in listOf(
+            "colour" to "is a position effect",
+            "palette" to "has none",
+        )) {
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateInput(name = "steps-$category", effect = steps(category)))
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, "category '$category' should be refused")
+            assertTrue(resp.bodyAsText().contains(problem), resp.bodyAsText())
+        }
+        val one = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "steps-one", effect = steps("position", "tmpl:${down.uuid}")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, one.status)
+        assertTrue(one.bodyAsText().contains("two palettes or more"), one.bodyAsText())
+
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "positions", effect = steps("position")))
+        }
+        assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+        val palette = created.body<TemplateDto>()
+        assertEquals("POSITION", palette.family)
+
+        val body = client.post("${base()}/${palette.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ApplyTemplateRequest(
+                    targets = listOf(TemplateTargetDto("fixture", "spot-1"), TemplateTargetDto("fixture", "spot-2")),
+                )
+            )
+        }.body<ApplyTemplateResponse>()
+        assertEquals(2, body.effectIds.size, body.toString())
+        assertEquals(
+            setOf("position"),
+            state.show.fxEngine.getActiveEffects().map { it.target.propertyName }.toSet(),
+            "the steps drive the property the palettes name",
+        )
+    }
+
+    /** Slot Steps names a setting's options, so a palette holding it names the setting it steps. */
+    @Test
+    fun `a Slot Steps palette names the setting it steps`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        fun slots(property: String?, slots: String) =
+            colourEffect(effectType = "SlotSteps", category = "beam", parameters = mapOf("slots" to slots))
+                .copy(propertyName = property)
+
+        for ((name, effect, problem) in listOf(
+            Triple("no-setting", slots(null, "Gobo 3,Gobo 5"), "must name the setting"),
+            Triple("one-slot", slots("gobo", "Gobo 3"), "two slots or more"),
+        )) {
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateInput(name = name, effect = effect))
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, "$name should be refused")
+            assertTrue(resp.bodyAsText().contains(problem), resp.bodyAsText())
+        }
+
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "gobos", effect = slots("gobo", "Gobo 3,Gobo 5")))
+        }
+        assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+        assertEquals("BEAM", created.body<TemplateDto>().family)
+    }
+
     @Test
     fun `an unknown effect type is refused, and so is a category the library disagrees with`() =
         testApplication {

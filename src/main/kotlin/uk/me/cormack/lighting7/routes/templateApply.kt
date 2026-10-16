@@ -328,7 +328,7 @@ private fun applyEffectTemplateToProgrammer(
             skips += TemplateSkipDto(target.key, fxTarget.propertyName, "effect could not be created")
             continue
         }
-        if (instance.effect.outputType != fxTarget.acceptedOutputType) {
+        if (!fxTarget.accepts(instance.effect.outputType)) {
             // The other half of "the capability check is ours to do": `FxTargetFactory` never
             // fails, so a spec whose `propertyName` disagrees with its effect's output type
             // resolves to a target that discards every frame. `FxInstance`'s init warns, but the
