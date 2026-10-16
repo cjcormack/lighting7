@@ -15,6 +15,7 @@ import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LayerSource
@@ -61,6 +62,10 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
 
     /** hex-1's twelve channels as sent. */
     private fun channels() = (1..12).map { controller().getEffectiveValue(it) }
+
+    /** hex-1's channels as sent, by number, less [channel]. */
+    private fun channelsExcept(channel: Int) =
+        (1..12).filter { it != channel }.associateWith { controller().getEffectiveValue(it) }
 
     private suspend fun HttpClient.createLook(
         name: String,
@@ -145,11 +150,14 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         val look = jsonClient().createLook("Pulse", withEffect = true)
         press(look)
         val effect = engine.getActiveEffects().single { it.programmerLayerEffectKey != null }
-        val before = channels()
+        // The Pulse keeps moving the dimmer on master 1's live clock, so a tick between the two
+        // reads changes it whatever Detach does; that channel is the effect's, asserted below.
+        val pulsed = state.show.fixtures.fixture<HexFixture>("hex-1").dimmer.channelNo
+        val before = channelsExcept(pulsed)
 
         val outcome = assertNotNull(stack.detach(store.layers.single().layerId))
 
-        assertEquals(before, channels())
+        assertEquals(before, channelsExcept(pulsed), "every channel the Pulse does not drive stays where it was")
         assertEquals(1, outcome.effects)
         val after = assertNotNull(engine.getEffect(effect.id), "the same instance, so its phase is kept")
         assertNull(after.programmerLayerEffectKey)
