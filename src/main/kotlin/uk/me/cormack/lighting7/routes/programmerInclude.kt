@@ -253,7 +253,7 @@ private fun spawnIncludedFx(
     // Layers are counted by the caller, which knows which of them were timed.
     val timedSkipped = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null }
 
-    val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
+    val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId && !it.leaving }
 
     fun spawn(
         effectSpec: LookEffectSpec,

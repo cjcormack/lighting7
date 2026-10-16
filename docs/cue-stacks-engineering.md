@@ -1,6 +1,6 @@
 # Cue Stacks Engineering Documentation
 
-This document describes the Cue Stack system — ordered containers for sequential cue playback with looping and per-cue auto-advance and intensity envelope crossfades.
+This document describes the Cue Stack system — ordered containers for sequential cue playback with looping and per-cue auto-advance and crossfades of values and effects.
 
 ## Overview
 
@@ -220,7 +220,7 @@ Three halves of running a stack live beside it rather than in it:
 | Class | Owns |
 |-------|------|
 | `fx/CueHolds.kt` | What holds each live cue, its priority, and bringing a cue on (first hold) and taking it off (last release) — effects, Layer 4 rows, stomp, timed effects, triggers and events |
-| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade envelope: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop if cancelled — unless a hold has that cue again |
+| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade weights: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop (rows and leaving effects) if cancelled — unless a hold has that cue again. The effects' envelopes ramp on their own (`fx/EffectEnvelope.kt`) |
 | `fx/CueRunStateTracker.kt` | Standby arming, the definition of "next", `CueRunState` and its broadcast. Reached as `cueStackManager.runState` |
 
 The tracker reads the manager's bookkeeping through a `LiveStacks` snapshot rather than the mutable
@@ -240,11 +240,13 @@ places is one contribution, never two). A hold is one of:
 
 The registry decides three things:
 
-- **`acquire` on a cue's first hold brings it on** — its ad-hoc and Look effects, its Layer 4 rows
-  (at weight 0 when a crossfade will bring them in), its stomp, its timed effects and triggers, and
-  its **events** (D15). Any other acquire only restamps its priority: nothing on stage moves.
-- **`release` of its last hold takes it off** — triggers stopped, effects removed, its rows dropped
-  or left at full weight for the caller's crossfade to take down. Any other release only restamps.
+- **`acquire` on a cue's first hold brings it on** — its ad-hoc and Look effects (growing from
+  nothing over the GO's fade, effects plan D1), its Layer 4 rows (at weight 0 when a crossfade will
+  bring them in), its stomp, its timed effects and triggers, and its **events** (D15). Any other
+  acquire only restamps its priority: nothing on stage moves.
+- **`release` of its last hold takes it off** — triggers and timed effects stopped, effects removed
+  or shrinking to nothing over the GO's fade, its rows dropped or left at full weight for the
+  caller's crossfade to take down. Any other release only restamps.
 - **A cue's priority is its highest hold's.** A stack hold composes at the entry's
   `cueDerivedPriority` (the stack band plus the entry's position, markers counted); a loose hold at
   `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
@@ -252,6 +254,32 @@ The registry decides three things:
   over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
   sort, a cue created, recorded or deleted mid-list, an entry or a marker added or removed) calls
   `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
+
+So the effects' envelopes follow the holds, as the rows' weights do (effects plan §3.5): a GO between
+two entries of a cue that stays held moves no envelope, a GO onto a cue another stack or a press
+already holds moves none, and a stack moving off a cue a press still holds leaves its effects at
+full. A loose hold has no fade: its effects snap on and off with its rows. Each effect a cue coming
+on cooks to is matched by one rule (`continues`: the same stored effect row —
+`FxInstance.layerEffectUuid`, a Look's, a palette's or the cue's own ad-hoc row's uuid — on the same
+target and property, with the same `lookEffectSettings()`), and arrives one of three ways:
+
+- **Taken back.** A cue brought on again while its fade-out is still running (Chris's answer,
+  session 4) keeps its own instances: they grow from where they stand over the new hold's fade, or
+  return to full at once on a snap — no respawn, no phase jump. That covers a press, another
+  stack's GO and a GO BACK or GO TO on the same stack, whose cancel leaves the returning cue's
+  effects for its acquire. One the cue no longer cooks to (it was edited meanwhile) finishes
+  going, and one the engine retired in that instant is spawned afresh.
+- **Adopted** (P4). A GO that takes one cue off and brings another on hands the incoming acquire
+  the outgoing cue (`adoptFrom`: the outgoing cue's only hold is this stack's live entry). An
+  incoming effect matching one of its live instances takes that instance over, id and phase kept,
+  and is not faded — unless it is paused or an N-shot, which the incoming cue starts afresh. A
+  Look layered at two speed masters is two effects, so one leaves and one arrives. Should a press
+  take the outgoing cue between the two holds, or the acquire fail, the adoptions go back
+  (`giveBack`) and the incoming cue runs its own.
+- **Spawned**, growing from nothing over the fade.
+
+Instances carried over get fresh compose orders in the cue's layer order (`restampComposeOrder`),
+so a cue composes the same however it was reached.
 
 The engine layers below stay keyed by cue — `CueAssignmentLayer`'s rows and fade weights,
 `CueTriggerManager`'s jobs, `FxInstance.cueId` — which is what D3 makes correct. An effect a cue
@@ -369,8 +397,12 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
    was the last. A cue already held elsewhere stays at full on both sides, so a GO from A1 to A2 of
    the same cue — or onto a cue another stack already holds — moves nothing, and the run state
    reports no fade (`fadeStartedAtMs` null).
-4. Effects always snap — a cue's effects come on with its first hold and go with its last. The
-   effect envelope stays 1 until the effects plan's session 4 fades it.
+4. Effects fade by size with the values (effects plan D1): on a crossfading GO the incoming cue's
+   new effects grow from nothing and the outgoing cue's shrink to nothing, each instance's envelope
+   ramping on the clock over the cue's fade and curve; the effects the two cues share run on
+   (§"Holds", P4). A side with effects and no rows fades all the same — the gate is rows *or*
+   effects, so an effect-only cue fades. A 0 s fade, a first GO from a stopped stack and a re-fire
+   snap, values and effects alike.
 5. The **incoming** entry's follow schedules the auto-advance, even when it names the cue that was
    already live (D7).
 6. Publish the run state, then the scenery (`SceneryService.onEntryLive`) — §"Scenery" below.
@@ -390,22 +422,27 @@ carries no colour state at all.
 
 ## Crossfade (Option B — Intensity Envelope)
 
-Each effect carries an envelope, `intensityMultiplier` (0.0–1.0), meant for fading effects across a cue transition. Nothing drives it yet — the crossfade below moves Layer 4 values only, and effects snap — until the effects plan's session 4 fades them by it.
+A GO's fade moves two things over the same time and curve: each live cue's Layer 4 fade weight,
+which `CueCrossfadeDriver` ticks, and each of its effects' **envelope**, which ticks itself.
 
-### FxInstance Addition
+### The effect envelope
 
-```kotlin
-@Volatile var intensityMultiplier: Double = 1.0
-```
+`FxInstance.envelope` is an immutable `EffectEnvelope` (`fx/EffectEnvelope.kt`): a level, or a ramp
+from one level to another over a duration on an `EasingCurve`, read on the clock wherever the weight
+is read (`intensityMultiplier` is its level now). So the effects need no loop of their own: `CueHolds`
+sets the ramps as the holds move — `bringOn` spawns an arriving cue's effects on `0 → 1` before they
+are added, `takeOff` sets a leaving cue's on `now → 0` — and every change of fade is one
+compare-and-set on the instance. An instance on its way out is **leaving**: it belongs to no cue,
+layer or Release any more, and the engine's 50 Hz wall-clock pass removes it once it reaches 0
+(`FxEngine.retireFinishedLeaving`, which runs whatever is running, so a paused or beat-loop effect
+ends on time too).
 
 ### The envelope is a weight, not a scale
 
 `FxOutput.scaled()` is gone (effects plan session 1). `intensityMultiplier` is the **envelope**, one
 factor of the weight `FxInstance.weight` applies after the blend — `out = before + (blended − before)
 × size × envelope` — so an envelope going to 0 hands the property back to what is underneath rather
-than driving an `OVERRIDE` to 0. Nothing moves it yet: effects still snap at GO, and the effects
-plan's session 4 is what fades them by it (§3.5). See `docs/fx-engineering.md` §"Size, direction and
-N-shot".
+than driving an `OVERRIDE` to 0. See `docs/fx-engineering.md` §"Size, direction and N-shot".
 
 Applied in the target, after the blend: `calculateEffectOutput` returns the raw output, and each of
 the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxInstance.weight`). Both the beat and wall-clock passes share those three, differing only in
@@ -444,6 +481,12 @@ whatever weight the fade had reached. **Unless a hold has that cue again** (`can
 isHeld)`): then its rows are pinned at full instead, since another stack or a press is holding it
 on stage. The incoming cue is pinned at full. A fade's two sides are read every tick, so a cue
 that gains a hold mid-fade is taken out of it (`forgetOutgoing`) rather than faded off under it.
+
+`cancel` treats the effects as it treats the rows: the abandoned outgoing cue's leaving effects are
+removed at once (`FxEngine.retireLeaving`) unless a hold has it again — that hold took them back — or
+the cancelling GO is bringing it back (`returning`), whose acquire takes them back; the incoming
+cue's effects are pinned at full (`settleEffects`). The driver is started for a
+side with effects and no rows too, so that a cancel can find them; its tick moves only rows.
 
 ### Easing Curves
 

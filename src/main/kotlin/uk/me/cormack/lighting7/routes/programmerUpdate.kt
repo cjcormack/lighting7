@@ -285,7 +285,7 @@ internal fun recordingForUpdate(
     val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
     val bandEffects = if (includeFx) {
         state.show.fxEngine.getActiveEffects()
-            .filter { FxEngine.isProgrammerFxPriority(it.priority) }
+            .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
     val adHoc = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
     return ProgrammerRecording(
@@ -307,7 +307,7 @@ internal fun recordingForUpdate(
  */
 internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
     state.show.fxEngine.getActiveEffects()
-        .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId }
+        .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
         .groupBy { it.programmerOrigin!!.childSortOrder }
         .filterValues { instances -> instances.all { it.splitMember != null } }
         .keys

@@ -228,8 +228,9 @@ effect across writes. No `formatVersion` change: the archive already carries eac
 - **How.** The tick keeps advancing a held instance's phase and skips its apply while
   `programmerStore.blind`, so leaving Blind lands it mid-phase, in step with the effects it was
   started beside. The suppression rule (`fx/EffectSuppression.kt`) is unchanged.
-- **Leaving Blind** paints them on the next tick; the Blind fade does not fade an effect (effect-
-  covered channels snap, `docs/lighting-composition-model.md` §Fades).
+- **Leaving Blind** grows them from nothing over the Blind fade, like a press (effects plan §3.5,
+  session 4); one over a value the programmer holds, and every one on a 0 s Blind fade, paints on
+  the next tick at full (`docs/lighting-composition-model.md` §Fades).
 - **Reporters.** The busk band's `BLIND` pill, the Show glyph's dot and `ProgrammerIndicator` say
   *values and effects held*; the FX tray and the programmer's FX band mark a held instance *held ·
   Blind*. `programmer.keyStack` lists a held programmer effect as `heldBack` with the reason.

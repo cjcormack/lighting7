@@ -249,7 +249,9 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
   fade: its rows snap on and off (`CueHolds.takeLoose`, `dropLoose`), and so do its effects.
 - **A stack stop** fades its effects over the time it fades its values.
 - **The programmer** (D13): a layer added or removed by a press, a release (`clearTarget`,
-  `clearEntry` on an effect) and Clear move the envelope over the programmer fade.
+  `clearEntry` on an effect) and Clear move the envelope over the programmer fade — except an effect
+  over a programmer value the same gesture moves, which lands or goes at once so that value ramps
+  (§11, question 18).
 - **Blind** holds programmer effects (R2.1, `fx/BlindHold.kt`): the envelope stays 1 while held, and
   leaving Blind fades them in over the Blind fade, like a press. This replaces R2.1's "the Blind fade
   does not fade an effect" in `fx-engineering.md`, `lighting-composition-model.md` §Blind and
@@ -409,9 +411,9 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   - On `FADE_IN`, `bringOn` spawns the effects at envelope 0; on `FADE_OUT`, `takeOff` leaves them for
     the driver, which ticks each side's envelope beside its weight and removes the outgoing effects at
     0. The manager's gate widens to rows or effects.
-  - `cancel` and `forgetOutgoing` treat effects as they treat rows. **Ask Chris first** what a cue
-    brought back on mid-fade does: keep its fading instances, envelope back to 1, or remove and
-    respawn them (`afterRegister` calls `forgetOutgoing`, then `bringOn`).
+  - `cancel` and `forgetOutgoing` treat effects as they treat rows. A cue brought back on mid-fade
+    keeps its fading instances and takes the envelope back to 1 — at once on a snap, from where it
+    stands over the new hold's fade (§11, question 17).
   - A stack stop releases with `Departure.SNAP`, so its effects snap as its values do.
   - P4's continuing match; the programmer's press, release and Clear at the programmer fade; Blind.
 - Replace the "effects always snap" text: `CueStackManager`'s KDoc and its `useCrossfade` comment,
@@ -522,3 +524,14 @@ Answered by Chris, 2026-10-15, in five rounds:
 15. **Do the programmer's gestures fade effects?** Yes, at the programmer fade (D13).
 16. **Palettes cannot hold wheel slots; how do steps reach wheels?** By slot name (D8). Palette steps
     without wheels, and opening the palette vocabulary to slots, were declined.
+
+Answered in session 4, 2026-10-16:
+
+17. **What does a cue brought back on mid-fade do?** Keeps its fading instances, phase intact, and
+    takes the envelope back to 1. Removing and respawning them was declined.
+18. **A programmer gesture moves a value and fades the effect over it; which fades?** Split by what is
+    under the effect: one over a value the gesture moves lands or goes at once so the value ramps,
+    since a key an effect covers never fades; the rest fade. Accepting the snap under a fading
+    effect, the old Release order, and the engine work now (`FU-FX-VALUE-FADE-UNDER-EFFECT`) were
+    declined.
+19. **Does P4 continue a paused instance or an N-shot?** Neither: the incoming cue starts its own.

@@ -393,7 +393,7 @@ function RecordableEffects({
 }) {
   const { data: effects } = useActiveEffectsQuery()
   const candidates = (effects ?? []).filter(
-    (e) => e.programmerOwned && e.programmerLayerId == null,
+    (e) => e.programmerOwned && e.programmerLayerId == null && !e.leaving,
   )
   if (candidates.length === 0) return null
 

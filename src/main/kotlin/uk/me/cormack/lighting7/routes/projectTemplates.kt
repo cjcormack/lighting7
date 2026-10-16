@@ -263,8 +263,11 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 }
                 val effect = request.effect
                 if (effect != null) {
+                    // The row keeps its uuid across a save: a GO matches a continuing effect on it
+                    // (effects plan P4).
+                    val keptUuid = template.effects.firstOrNull()?.uuid
                     template.effects.forEach { it.delete() }
-                    createTemplateEffect(template, effect)
+                    createTemplateEffect(template, effect, keptUuid)
                 }
                 TemplateWriteOutcome.Written(
                     template.toDto(state.show.fxRegistry, templateUsage(template.id.value)),
@@ -475,6 +478,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     source = source,
                     targets = targets,
                     propertyMask = derivedMask,
+                    fadeMs = request.fadeMs ?: 0,
                 )
                 // The tap door of the press log — the **on** arm only. A second press
                 // takes the layer off, and a release is not a press (`TemplatePressLog`).
@@ -870,6 +874,12 @@ internal data class ToggleTemplateRequest(
     val propertyMask: String? = null,
     /** The selection's attribute mask, as on [ApplyTemplateRequest.families]; same refusal. */
     val families: List<String>? = null,
+    /**
+     * The programmer fade, over which a press grows its effects and a release shrinks them (effects
+     * plan D13), and which then covers every value too. Absent or 0: values at each row's own fade
+     * on the way on and a snap on the way off, effects at once — the press as it was.
+     */
+    val fadeMs: Long? = null,
 )
 
 @Serializable
@@ -1350,11 +1360,12 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
  * leniently — the same treatment a Look effect gets, so the two cannot disagree about what a
  * stored effect means.
  */
-private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDto) {
+private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDto, uuid: java.util.UUID? = null) {
     // A template's effect has no target of its own: it lands on the selection.
     TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
     CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
     DaoTemplateEffect.new {
+        if (uuid != null) this.uuid = uuid
         this.template = template
         effectType = effect.effectType
         category = effect.category

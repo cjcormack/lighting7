@@ -570,9 +570,10 @@ request/reply on the asking socket, never broadcast: only the asker has the stac
 re-asks when `provenanceState` moves. `clearTarget` is the sheet's *Release*: every owner's slot but
 a layer's, on every property of the fixture and its heads (or of every member of a group), the raw
 sideband on their channels, and the **local** effects on it — `FxInstance.isLocalEffect`, the grid
-⌫'s rule moved to the desk — the effects stopped first and then the values released in one sweep
-with one republish at `fadeMs` (`clearAll`'s order, so an effect-covered key fades rather than
-snapping), Locate's bookkeeping
+⌫'s rule moved to the desk — the effects let go first (one over a value this Release takes stopped,
+the rest shrinking to nothing over `fadeMs`, effects plan D13) and then the values released in one
+sweep with one republish at `fadeMs` (`clearAll`'s order, so a key a stopped effect covered fades
+rather than snapping), Locate's bookkeeping
 pruned as `clearEntry` prunes it. A local effect that drives heads outside the target (a group
 effect on one member's Release) is left running and named in the reply's `partial`. Both carry a
 client `requestId`, echoed so a promise resolves with its own answer, and answer a target that

@@ -74,7 +74,7 @@ class EffectSizeDirectionRoutesTest : RouteIntegrationTest() {
         assertEquals(0.4, dto.size)
         assertEquals("BOUNCE", dto.direction)
         assertEquals(3, dto.nShot)
-        assertEquals(1.0, dto.intensityMultiplier, "the envelope stays 1 until session 4's fades")
+        assertEquals(1.0, dto.intensityMultiplier, "a fresh effect's envelope is full")
     }
 
     @Test

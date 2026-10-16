@@ -54,12 +54,15 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
  *
  * Clear is specified as "programmer values **and** programmer FX" — busking effects created
  * with `programmerOwned` therefore go with the values they were modulating — and, since the
- * scenery-programmer plan's D1, the scenery the programmer holds, on the same fade.
+ * scenery-programmer plan's D1, the scenery the programmer holds, on the same fade. The effects
+ * shrink to nothing over it too (effects plan D13) and are removed at 0; a fade of 0 removes them at
+ * once, as before. While they shrink they still cover their keys, so the values under them move as
+ * the engine's reset pass reads the layer below, not on the values' publish.
  */
 internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): ProgrammerClearOutcome {
     state.show.locateManager.reset()
     state.show.programmerLayerStack.reset()
-    val effectsCleared = state.show.fxEngine.removeProgrammerBandEffects()
+    val effectsCleared = state.show.fxEngine.fadeOutProgrammerBandEffects(fadeMs)
     val entryCount = state.show.fxEngine.programmer.clearAll(fadeMs)
     // The programmer's scenery goes with its values, flying home on the same fade (scenery-programmer
     // plan D1). Here rather than in `ProgrammerStore.clearAll`, which takes no fade and which

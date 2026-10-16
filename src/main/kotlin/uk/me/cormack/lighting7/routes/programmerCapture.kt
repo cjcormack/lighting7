@@ -469,8 +469,9 @@ internal fun collectProgrammerRecording(
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
     val bandEffects = if (includeFx) {
+        // A leaving instance is a release fading out, not something the programmer holds.
         state.show.fxEngine.getActiveEffects()
-            .filter { FxEngine.isProgrammerFxPriority(it.priority) }
+            .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
     val adHoc = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
 

@@ -71,6 +71,7 @@ internal fun Route.routeApiRestBuskPress(state: State) {
             }
             val outcome = BuskPressService.apply(
                 state, plan, request.targets, families = families, beatDivision = request.beatDivision,
+                fadeMs = request.fadeMs ?: 0,
             )
             when (outcome) {
                 is BuskPressService.Outcome.Pressed -> call.respond(
@@ -105,6 +106,12 @@ internal data class BuskPressRequest(
     val targets: List<CueTargetDto> = emptyList(),
     val beatDivision: Double? = null,
     val families: List<String>? = null,
+    /**
+     * The programmer fade, over which a press grows its effects and a release shrinks them (effects
+     * plan D13), and which then covers every value too. Absent or 0: values at each row's own fade
+     * on the way on and a snap on the way off, effects at once — the press as it was.
+     */
+    val fadeMs: Long? = null,
 )
 
 @Serializable

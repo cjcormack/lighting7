@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Drives Layer 4 crossfades between an outgoing and an incoming cue, one fade per stack.
+ * Drives a GO's crossfade between an outgoing and an incoming cue, one fade per stack.
  *
  * Each tick, the per-cue fade weight is ticked through [CueAssignmentLayer.updateFadeWeights]
  * — outgoing from 1→0, incoming from 0→1 — so sliders / colours / positions blend
@@ -23,10 +23,13 @@ import java.util.concurrent.ConcurrentHashMap
  * still fading out here is taken out of the fade ([forgetOutgoing]), which is why a fade reads its
  * two cues afresh on every tick.
  *
- * Effects are NOT faded here: they are removed at the start of the cue transition (see
- * [CueHolds.release]) and incoming effects start at full intensity. This matches Eos / grandMA /
- * Hog 4 and avoids the drop-to-0 bug that came from scaling OVERRIDE-blend effect outputs by
- * `intensityMultiplier`.
+ * Effects fade by size with the cue (effects plan D1), but not by this loop: [CueHolds] gives each
+ * instance an envelope that ramps on the clock over the same time and curve ([EffectEnvelope]) — the
+ * outgoing cue's shrinking to nothing, after which the engine removes them, the incoming cue's growing
+ * from nothing — and the envelope is a factor of the effect's weight after the blend (P3), so an
+ * `OVERRIDE` effect fades into what is underneath rather than towards 0. What this class keeps for the
+ * effects is the fade's two cues: [cancel] treats their effects as it treats their rows, snapping the
+ * outgoing cue's off and pinning the incoming cue's at full.
  *
  * The driver keeps its own per-stack table rather than living in the manager's active-stack
  * entry, because that entry is *replaced wholesale* on every activation while a fade cancelled
@@ -87,28 +90,42 @@ internal class CueCrossfadeDriver(
     }
 
     /**
-     * Cancel [stackId]'s in-flight fade, if any. Its outgoing cue's Layer 4 rows are dropped —
-     * otherwise they'd linger past the cancellation, frozen at whatever weight the fade had
-     * reached — unless [isHeld] says a hold has it again, when it is pinned at full instead. Its
-     * incoming cue is pinned at full, so a cue another hold keeps live is not left part-faded by a
-     * stack that stopped or moved on.
+     * Cancel [stackId]'s in-flight fade, if any. Its outgoing cue's Layer 4 rows are dropped and its
+     * fading effects removed — otherwise they'd linger past the cancellation, the rows frozen at
+     * whatever weight the fade had reached and the effects running on to 0 under a stack that has
+     * moved on — unless [isHeld] says a hold has it again, when its rows are pinned at full instead
+     * (its effects were taken back by that hold). Its incoming cue's rows and effects are pinned at
+     * full, so a cue another hold keeps live is not left part-faded by a stack that stopped or moved on.
+     *
+     * [returning] is the cue the cancelling GO is about to bring on: if that is the outgoing cue — a
+     * GO BACK or GO TO mid-fade — its rows go as before but its effects are left for the acquire to
+     * take back, phase intact.
      */
-    fun cancel(stackId: Int, isHeld: (Int) -> Boolean) {
+    fun cancel(stackId: Int, isHeld: (Int) -> Boolean, returning: Int? = null) {
         val fade = fades.remove(stackId) ?: return
         fade.job?.cancel()
         // Mutating the removed entry is harmless: the coroutine's own clear writes to the same
         // orphaned object, and nothing reads it again.
         fade.outgoingCueId?.let { cueId ->
-            if (isHeld(cueId)) fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0)) else fxEngine.cueLayer.removeAssignments(cueId)
+            if (isHeld(cueId)) {
+                fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+            } else {
+                fxEngine.cueLayer.removeAssignments(cueId)
+                if (cueId != returning) fxEngine.retireLeaving { it.cueId == cueId }
+            }
         }
         fade.outgoingCueId = null
-        fade.incomingCueId?.let { fxEngine.cueLayer.updateFadeWeights(mapOf(it to 1.0)) }
+        fade.incomingCueId?.let { cueId ->
+            fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+            fxEngine.settleEffects(fxEngine.cueEffects(cueId))
+        }
         fade.incomingCueId = null
     }
 
     /**
      * Take [cueId] out of every fade that is fading it out — it is on again ([CueHolds.acquire]),
-     * and its new holder owns its rows and their weight from here.
+     * and its new holder owns its rows and their weight from here, and takes back the effects that
+     * fade was shrinking.
      */
     fun forgetOutgoing(cueId: Int) {
         for (fade in fades.values) {

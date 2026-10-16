@@ -17,7 +17,8 @@ import { effectAimKeys } from '@/lib/effectTargets'
  *
  *  - **Local means unowned.** An effect that came out of a Look, a template layer or a cue is that
  *    thing's, not the operator's: stopping it here would either be undone by the next recook or
- *    quietly edit a library record. [isLocalEffect] is `programmerOwned` *and* no source at all.
+ *    quietly edit a library record. [isLocalEffect] is `programmerOwned` *and* no source at all,
+ *    and not `leaving` — an effect a fade is taking off is nobody's.
  *  - **Every head, or none.** An effect drives whatever its target names — for a group target,
  *    every member — and there is no "stop it on these heads only". So it goes only when the clear
  *    covers all of them; covering some leaves it running and says so, because an effect that half
@@ -29,7 +30,8 @@ export function isLocalEffect(effect: ActiveEffect): boolean {
     effect.lookId == null &&
     effect.templateId == null &&
     effect.programmerLayerId == null &&
-    effect.cueId == null
+    effect.cueId == null &&
+    !effect.leaving
   )
 }
 
