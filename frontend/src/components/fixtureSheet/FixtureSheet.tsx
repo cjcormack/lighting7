@@ -430,7 +430,16 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
   )
   const membersView = (
     <div className="px-3 py-2">
-      <GroupMembersSection members={detail?.members} isLoading={isLoading} onFixtureClick={onOpenMember ?? (() => {})} />
+      {/* A card keeps its members' cards; the sheet lists them in order, to drag (venue-visit plan S7). */}
+      <GroupMembersSection
+        members={detail?.members}
+        isLoading={isLoading}
+        onFixtureClick={onOpenMember ?? (() => {})}
+        layout={card ? 'wrap' : 'list'}
+        groupName={group.name}
+        distributionSteps={detail?.distributionSteps}
+        defaultDistribution={detail?.defaultDistribution ?? group.defaultDistribution}
+      />
     </div>
   )
 

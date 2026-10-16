@@ -69,13 +69,8 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                     group.name = newName
                 }
 
-                // Reorder members (list of patch IDs in desired order)
-                request.memberOrder?.let { orderedPatchIds ->
-                    val members = group.members.associateBy { it.fixturePatch.id.value }
-                    orderedPatchIds.forEachIndexed { index, patchId ->
-                        members[patchId]?.let { it.sortOrder = index }
-                    }
-                }
+                // Reorder members (patch ids in the order wanted; a member not named keeps its place)
+                request.memberOrder?.let { reorderGroupMembers(group, it) }
 
                 Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(rig), null)
             }
@@ -174,7 +169,11 @@ data class PatchGroupMemberDto(
 @Serializable
 data class UpdatePatchGroupRequest(
     val name: String? = null,
-    val memberOrder: List<Int>? = null, // list of patch IDs in desired order
+    /**
+     * Patch ids in the order wanted. The members named take the places the members named held, so
+     * a member left out — a venue patch the show hides — keeps its own ([reorderGroupMembers]).
+     */
+    val memberOrder: List<Int>? = null,
 )
 
 // Helpers

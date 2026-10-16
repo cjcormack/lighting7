@@ -823,8 +823,10 @@ is the **rig order** (`state/BuskRigOrder.kt`): rows in order, tiles in order, a
 that places its members in member order, a multi-head tile as one step (`PIPS` / `WHOLE`), one step
 per cell (`PER_CELL`) or `cellSplit` contiguous runs (`HALVES`), a cell tile as that cell — and with
 no rig, every group then every fixture. It is what `selection.subselect`'s *Next* / *Prev* walk and
-what a spread's `LINEAR` order means, and `BuskRigOrderTest`'s fixture
-(`src/test/resources/busk/rigOrder.fixture.json`) is the file the client's mirror is pinned against.
+what a spread's `LINEAR` order means — except a spread whose one target is a group, which runs in
+that group's own member order (venue-visit plan S7, `docs/groups-engineering.md` §"Member order") —
+and `BuskRigOrderTest`'s fixture (`src/test/resources/busk/rigOrder.fixture.json`) is the file the
+client's mirror is pinned against.
 
 **A row is laid out the way a bank is** (2026-09-21): `busk_rig_rows` carries a `flow` — the
 bank's `BuskFlow`, which gained `SCROLL` for the sideways-scrolling line every row was before it
