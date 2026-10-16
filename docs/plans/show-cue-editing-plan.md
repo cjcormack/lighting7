@@ -407,7 +407,7 @@ says palette). All of them have merged.
 - **Docs:** `cues-engineering.md` §"Data Model", `sync-engineering.md` (what a cue write does to
   uuids).
 
-### Session 3 — the action set (frontend + duplicate route)
+### Session 3 — the action set (frontend + duplicate route) — done, `ebd029f`
 
 - §5: `CueActions` in the card strip, the cue sheet's bar and the phone ⋯; the split button and its
   run-state face; Load; Record; Duplicate on its new route (this takes the duplicate route from R1
