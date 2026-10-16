@@ -2,6 +2,8 @@
 
 A professional stage/event lighting control system built in Kotlin using Ktor. Controls physical lighting fixtures through DMX (ArtNet) and Philips Hue.
 
+@docs/claude/working-rules.md
+
 ## Tech Stack
 
 - **Kotlin 2.4.10** on JVM toolchain 24 (runs on the LTS JDK 25)
@@ -156,10 +158,11 @@ hand-off to anyone.
   branch commit's SHA survives only a merge. It also keeps the narrative where the plan rows say
   it lives: in the branch's commit messages. The PR description summarises and links; it is not
   the record.
-- **The shipping-verb rule in the global CLAUDE.md applies unchanged**, one step at a time:
-  "commit" commits on the branch, "push" pushes the branch, "open a PR" opens it
-  (`gh pr create --base main`), and only "merge" or "land" merges it. Never enable auto-merge
-  unless asked.
+- **The shipping-verb rule in [docs/claude/working-rules.md](docs/claude/working-rules.md)
+  applies unchanged**, one step at a time: "commit" commits on the branch, "push" pushes the
+  branch, "open a PR" opens it (`gh pr create --base main`), and only "merge" or "land" merges
+  it. `/verified-ship` does commit, push and open a PR on a passing gate, never merges. Never
+  enable auto-merge unless asked. PRs have no reviewers: it is a solo repo.
 
 ## Project Structure
 
