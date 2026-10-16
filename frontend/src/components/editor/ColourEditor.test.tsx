@@ -28,7 +28,22 @@ vi.mock('@/store/templates', () => ({
   useApplyTemplateMutation: () => [apply],
   useToggleTemplateMutation: () => [toggle],
 }))
-vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
+// A Recent chip is a press (`usePress`): its other routes and the ring's applied state.
+// A refused absorb into a focused Look takes the effects it started off again.
+vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/looks', () => ({
+  useApplyLookMutation: () => [vi.fn()],
+  useToggleLookMutation: () => [vi.fn()],
+  useAbsorbLookEffectsMutation: () => [vi.fn()],
+}))
+vi.mock('@/store/programmer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/programmer')>()),
+  useProgrammerAppliedQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/selection', () => ({
+  usePressFamilies: (local: unknown) => local,
+  useSelectionPair: () => ({ targets: [], families: null }),
+}))
 /** What each head is showing, keyed by patch key — what the appearance leaves report. */
 const appearances: Record<string, { color: string; intensity: number; segments?: { css: string; intensity: number }[] }> = {}
 const leafMounts = vi.fn()
@@ -362,7 +377,7 @@ describe('the footer', () => {
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
   })
 
-  it('Recent draws the colour recents most recent first, the selection’s emitters filtering, and a tap is a palette apply', () => {
+  it('Recent draws the colour recents most recent first, the selection’s emitters filtering, and a chip is a press', () => {
     templates = [
       template(1, 'Deep Blue', { lastPressedAt: '2026-09-18T09:00:00Z' }),
       template(2, 'Warm Amber'),
@@ -374,9 +389,18 @@ describe('the footer', () => {
     draw({ targets: FOUR, projectId: 1, recent: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], localFamilies: ['COLOUR'] } })
     const chips = document.querySelectorAll('[data-recent-template]')
     expect([...chips].map((c) => c.textContent)).toEqual(['Warm Amber', 'Deep Blue'])
+    // The tap puts the palette on as a layer; ⌥click applies its values (apply-model plan D1, D8).
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'))
+    expect(toggle).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 2,
+      targets: [{ type: 'fixture', key: 'par-1' }],
+      propertyMask: 'COLOUR',
+      families: ['COLOUR'],
+    })
+    expect(apply).not.toHaveBeenCalled()
+    fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'), { altKey: true })
     expect(apply).toHaveBeenCalledWith({ projectId: 1, templateId: 2, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] })
-    expect(toggle).not.toHaveBeenCalled()
   })
 })
 

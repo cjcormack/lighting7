@@ -386,7 +386,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
     // POST /projects/{id}/looks/{lookId}/toggle
     //
-    // The ⌥click / cue-slot path: put this Look on these targets, or take it off again, as a
+    // The tap / cue-slot path: put this Look on these targets, or take it off again, as a
     // **programmer layer** — the pad adds one, or removes the one it added. No solo siblings, and a
     // Look replaces nothing (apply-model D6): the busk page's press goes through
     // `POST /busk/pads/{id}/press`, which resolves the bank's siblings and calls the same `toggle`

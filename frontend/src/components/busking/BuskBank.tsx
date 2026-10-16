@@ -231,6 +231,8 @@ export function BuskBankCluster({
         cueRing={behaviour.cueRing(pad)}
         editing={editing}
         onPress={() => behaviour.onPress(pad)}
+        onApplyValues={behaviour.onApplyValues && (() => behaviour.onApplyValues?.(pad))}
+        hasSelection={behaviour.hasSelection ?? true}
         onInspect={() => behaviour.onInspect(pad)}
         onPickUp={() => behaviour.onPickUp(pad)}
         onRemove={() => commit((page) => removePad(page, { ...at, pad: index }))}

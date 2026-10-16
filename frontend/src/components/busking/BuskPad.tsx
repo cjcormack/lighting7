@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { AudioWaveform, Eye, Hand, X } from 'lucide-react'
+import { AudioWaveform, Eye, Hand, Layers, ListChecks, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ContextMenu,
@@ -26,6 +26,11 @@ import {
   type PadFace,
 } from './padFace'
 import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } from './buskDnd'
+import { tapVerb } from '@/components/press/PressGestures'
+import type { PressInto } from '@/hooks/usePress'
+
+/** A busk pad presses the programmer: it has no focused Look to write into. */
+const PROGRAMMER_INTO: PressInto = { kind: 'programmer' }
 
 /**
  * One pad, whatever it holds.
@@ -109,6 +114,10 @@ export interface BuskPadButtonProps {
   cueRing: CueRing
   editing: boolean
   onPress: () => void
+  /** ⌥click and the menu's *Apply as values* — a palette or Look pad's literals, with no layer. */
+  onApplyValues?: () => void
+  /** False when the busk pair names no target, which the menu's first verb has to say. */
+  hasSelection?: boolean
   onRemove: () => void
   /** The hold menu's *View* — the library is where a record is actually edited. */
   onInspect: () => void
@@ -123,6 +132,8 @@ export function BuskPadButton({
   cueRing,
   editing,
   onPress,
+  onApplyValues,
+  hasSelection = true,
   onRemove,
   onInspect,
   onPickUp,
@@ -160,19 +171,32 @@ export function BuskPadButton({
   /**
    * The hold opens the pad's **menu**, where it used to navigate straight to the library.
    *
-   * It has two items now — *Pick up* first, then *View* — because the hand needed a door here and
-   * a hold cannot mean two things. The dispatch is {@link dispatchSyntheticContextMenu}, shared with
+   * On a palette or Look pad it names the tap's verb first (*Put on* / *Take off these heads*), then
+   * *Apply as values*, *Pick up* and *View*; a cue pad's is *Pick up* and *View*. A hold cannot mean
+   * two things, so it is the menu and never a press. The dispatch is {@link dispatchSyntheticContextMenu}, shared with
    * `CueSlotCell`: it reaches a Radix context menu from a touch hold, leaves right-click working on
    * a mouse for free, and — the part that is not merely convenience — **clears Radix's own 700ms
    * touch timer** through the trigger's `onContextMenu`, so one finger cannot arm two hold
-   * detectors. (`TemplateStrip`'s chip has no such dispatch, which is exactly why it must not use a
-   * `ContextMenuTrigger` at all; see the note there.)
+   * detectors. (`PalettePressButton`'s chip has no such dispatch, which is exactly why it must not
+   * use a `ContextMenuTrigger` at all; see the note there.)
+   *
+   * ⌥click is *Apply as values* on a palette or Look pad (apply-model plan D8). The press fires on
+   * `pointerup`, which carries no modifier of its own here, so the down's is kept in `altRef`.
    */
-  const { handlers } = useLongPress({
+  const altRef = useRef(false)
+  const valuesOnAlt = !isCue && onApplyValues != null
+  const { handlers: holdHandlers } = useLongPress({
     onLongPress: (origin) => dispatchSyntheticContextMenu(triggerRef.current, origin),
-    onPress,
+    onPress: () => (valuesOnAlt && altRef.current ? onApplyValues?.() : onPress()),
     disabled: editing,
   })
+  const handlers = {
+    ...holdHandlers,
+    onPointerDown: (e: React.PointerEvent) => {
+      altRef.current = e.altKey
+      holdHandlers.onPointerDown(e)
+    },
+  }
 
   const body = (
     <div ref={setRef} className="relative">
@@ -226,6 +250,13 @@ export function BuskPadButton({
     </div>
   )
 
+  const verb = tapVerb(
+    PROGRAMMER_INTO,
+    presence,
+    hasSelection,
+    !(pad.kind === 'TEMPLATE' && (pad.template?.isGeneric ?? true)),
+  )
+
   // No menu while editing: there the pad is a drag handle, `useLongPress` is disabled and the only
   // gestures are drag and the cross.
   if (editing) return body
@@ -234,6 +265,23 @@ export function BuskPadButton({
     <ContextMenu>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
       <ContextMenuContent>
+        {/* The tap's verb, named, then *Apply as values* — the press gestures every chip and pad
+            share (apply-model plan §4.1). A cue pad is playback, outside the model. */}
+        {!isCue && (
+          <>
+            <ContextMenuItem onSelect={onPress}>
+              {verb.gesture === 'off' ? <Undo2 className="mr-2 size-4" /> : <Layers className="mr-2 size-4" />}
+              {verb.label}
+            </ContextMenuItem>
+            {onApplyValues != null && (
+              <ContextMenuItem onSelect={onApplyValues}>
+                <ListChecks className="mr-2 size-4" />
+                Apply as values
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onSelect={onPickUp}>
           <Hand className="mr-2 size-4" />
           Pick up

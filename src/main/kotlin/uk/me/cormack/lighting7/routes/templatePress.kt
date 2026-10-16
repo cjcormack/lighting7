@@ -17,7 +17,7 @@ private val logger = LoggerFactory.getLogger("templatePress")
  * about the **desk** rather than about whichever tab happened to make the press.
  *
  * There are four doors into "apply this template", and they are four because the gestures are
- * genuinely different — a chip click writes literals, ⌥click adds a tracking layer, a busk pad
+ * genuinely different — a chip's ⌥click writes literals, its tap adds a tracking layer, a busk pad
  * presses through its bank's solo plan, a MIDI button presses onto the desk selection. What they
  * share is the only thing recents cares about: the operator reached for this template. Recording it
  * once, here, is what stops the four drifting into four slightly different answers to "was that a

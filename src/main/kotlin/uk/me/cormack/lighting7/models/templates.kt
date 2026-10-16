@@ -89,7 +89,7 @@ object DaoTemplates : IntIdTable("templates") {
      * cleanup — a deleted template takes its stamp with it.
      *
      * **A press is an application, never a release.** The four doors that stamp it are the chip's
-     * click, ⌥click / hold, a busk pad and a MIDI `pressTemplate`, and each stamps only on the arm
+     * ⌥click (*Apply as values*), its tap, a busk pad and a MIDI `pressTemplate`, and each stamps only on the arm
      * that puts the template *on* — see `TemplatePressLog`. Toggling a layer off leaves the stamp
      * where it was, because "what I reached for" is not undone by putting it down.
      *

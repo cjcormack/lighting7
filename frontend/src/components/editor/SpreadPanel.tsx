@@ -53,7 +53,7 @@ import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positio
  * - **`intent`** — desk-resolved, the template vocabulary: two intents of one property's shape, a
  *   curve, an order, parts and an over-switch go to `POST /programmer/spread`, and the desk
  *   interpolates in the intent's own space, resolves one literal per head through the same
- *   `TemplateResolver` a template click uses, and answers what it wrote. **The client never
+ *   `TemplateResolver` *Apply as values* uses, and answers what it wrote. **The client never
  *   interpolates an intent** — only the desk knows a group's member order, each head's range, which
  *   cells a fixture has and what a colour means on a head with amber — and `spreadIntent.test.ts`
  *   pins that this file reaches `spreadPlans.ts` only for the raw arm below.

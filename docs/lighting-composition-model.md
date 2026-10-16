@@ -493,7 +493,7 @@ resolver takes both units (P3), and only an edit makes an old row `pos:`. Record
 so recording no longer needs a degree annotation, and heads at the same bytes whose degree ranges
 differ now agree and record one generic row. `fx/TemplateIntent.kt` owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
 channels, and it is asked by all three consumers — `CueComposer.applyLayer` at cook,
-`POST /palettes/{id}/apply` for the click gesture, and `POST /palettes/resolve` for the editor's
+`POST /palettes/{id}/apply` for *Apply as values*, and `POST /palettes/resolve` for the editor's
 resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
 that computed its own ΔE would promise what the rig does not do.
 
@@ -564,7 +564,7 @@ showed its value. One thing does move: a stomping layer's suppression of
 the effects under it ends with it.
 
 **Apply as values** is the same end with no layer ever on the stack. For a palette it is
-`POST /palettes/{id}/apply`, the click described above. For a Look it is `POST /looks/{id}/apply`
+`POST /palettes/{id}/apply`, described above. For a Look it is `POST /looks/{id}/apply`
 `{targets, families?, fadeMs?}` (`ProgrammerLayerStack.applyAsValues`): the Look cooked on top of
 the stack as the layer a press would add — targets and mask by the toggle's own rules — the keys it
 wins written as `WEB` values at their own fades (or `fadeMs`), its effects started as Local effects
@@ -587,15 +587,16 @@ stamp with it; and nothing needs sweeping.
 because the gestures genuinely differ, and they share a recorder because "was that a press?" must
 not get four answers:
 
-1. `applyTemplateToProgrammer` — the chip's click, both the value and the effect arm.
-2. The **toggle-on** arm of `POST /palettes/{id}/toggle` — ⌥click, or a hold on a touchscreen.
+1. `applyTemplateToProgrammer` — *Apply as values* (a chip's ⌥click or its menu), both the value and
+   the effect arm; not its `write: false` arm, which only resolves.
+2. The **toggle-on** arm of `POST /palettes/{id}/toggle` — a chip's tap, the press.
 3. `BuskPressService.apply`, for a palette pad that ended **on**.
 4. `SurfaceActions.pressTemplate`, from a MIDI button.
 
 Two rules run through all four. **A release is not a press**: both toggle doors stamp only on the
 arm that puts the layer on, because what you reached for is not undone by putting it down. And **a
 refusal is not a press**: a generic palette pressed with nothing selected, a palette that is not
-this project's, and a click that reached no head all leave the stamp where it was — the last of
+this project's, and an *Apply as values* that reached no head all leave the stamp where it was — the last of
 those being the one door that cannot say so with a status code, since it answers 200 with
 `written = 0` and a skip per head.
 
@@ -692,8 +693,8 @@ row's property lives only on a multi-head fixture's cells — the Shehds in 24-c
 colour is RGBW on three `Zone` elements while the parent holds pan, tilt, dimmer, strobe and zoom —
 a target naming the parent, or a group whose member it is, lands that row on the cells that carry
 it, each resolving on its own emitters. `fx/TemplateFanOut.kt` is the one statement of it, asked by
-every consumer that resolves a palette row onto a selection: the click (`applyTemplateToProgrammer`),
-the cook (`CueComposer.applyLayer`, so a ⌥click layer and a busk pad alike), Spread over heads (the
+every consumer that resolves a palette row onto a selection: *Apply as values* (`applyTemplateToProgrammer`),
+the cook (`CueComposer.applyLayer`, so a chip's tap and a busk pad alike), Spread over heads (the
 parent stays **one step** on the curve and its value lands on every carrying cell — a pixel bar over
 HEADS too, which used to be skipped by name) and the editor's resolves-to panel (one row per cell,
 `<fixture> · Cell n`). Four rules keep it narrow. **A parent that has the property keeps it**:
@@ -706,7 +707,7 @@ missing an emitter the palette names stays put and is refused there as a whole, 
 put a different colour on the cells under the palette's name. **Nothing carries it → the parent**,
 so the skip names the head the operator selected rather than a skip per cell. **A cell resolves
 against its parent's fitted media** (`TemplateFanOut.mediaOf`): media is loaded per patch, and
-`Fixtures.fittedMediaFor` answers nothing for an element key. A layer, a click or a spread naming a
+`Fixtures.fittedMediaFor` answers nothing for an element key. A layer, an apply or a spread naming a
 bar *and* one of its cells writes that cell once, and a fanned cell's programmer entry takes the
 group its parent arrived through as its `sourceGroup` (Record still writes such entries as cell rows:
 collapsing to a group needs every member — the parents — to hold one). It is the value-side twin of the FX engine's
@@ -789,7 +790,7 @@ any reshuffle of the page that keeps the bank alive.
 bank is **solo** — the records on its sibling pads in one transaction, then calls the same
 `ProgrammerLayerStack.toggle`
 the `/palettes/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
-`releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, with no
+`releaseSiblings`. Those two routes stay for the programmer's palette strip and the AI, with no
 solo siblings — a palette's family replacement is `toggle`'s own, so it runs on them too. A **cue** pad takes or lets go of a **loose hold** (§"Holds and the loose band"),
 exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
 drawn solid while the press holds it and as an outline while only a stack does.
@@ -831,8 +832,8 @@ window boundary: the window that saw the press keeps the pointer for the whole g
 neighbour never receives a pointer event of its own.
 
 **There is no `hand.place`.** Every target already has a mutation with its own validation —
-`POST /busk/banks/{bankId}/pads` appends a pad, `assignCueSlot` fills a slot, `programmer.addLayer`
-adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
+`POST /busk/banks/{bankId}/pads` appends a pad, `assignCueSlot` fills a slot, the palette or Look press
+(`/palettes/{id}/toggle`, `/looks/{id}/toggle`) adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
 would reimplement four of them behind one name. A place is **the placing window's own mutation
 followed by `hand.drop`**, and Undo is that window's inverse mutation. The desk's whole share of a
 place is letting go. A control surface has no mutation of its own to make, so its one place binding,
@@ -926,7 +927,7 @@ each outer end), an order (a `DistributionStrategy` name, `LINEAR` being rig
 order), `parts` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
 intent's own space — Lab for a colour, centre-relative steps for a position (both ends one unit;
 a `pos:` and a `deg:` end is `SPREAD_INVALID`), percent for a level — and resolves
-each head's literal through the same `TemplateResolver` a palette click uses, writing one batched
+each head's literal through the same `TemplateResolver` *Apply as values* uses, writing one batched
 programmer write with owner `WEB`. So Record captures it, Blind previews it and Clear releases it:
 a spread is a result, not a palette — *Save as Look…* is `record-look` over the selection.
 Since the editor-kit plan's session 3 the request carries `write` (default true): `false` runs the
@@ -1016,11 +1017,11 @@ a palette's one target-less effect goes down the same *deferred* arm a Look's do
 numbering is untouched, which the three deleted comments were all protecting: a palette layer takes
 a rank whether it contributes rows or an effect.
 
-The two **gestures** are the value palette's two, unchanged in meaning. ⌥click (and the busk pad)
+The two **gestures** are the value palette's two, unchanged in meaning. A tap (and the busk pad)
 posts to `toggle`, which adds a programmer layer that *tracks* the palette: the effect is spawned by
-the cook, carries the palette as its `LayerSource`, and Record files it as a palette layer. A plain
-click posts to `apply`, whose effect arm mints one detached programmer-band copy per target the click
-names — the effect twin of the value arm's literals. That copy deliberately carries **no**
+the cook, carries the palette as its `LayerSource`, and Record files it as a palette layer.
+*Apply as values* (⌥click) posts to `apply`, whose effect arm mints one detached programmer-band copy
+per target the press names — the effect twin of the value arm's literals. That copy deliberately carries **no**
 `LayerSource` and no `programmerLayerEffectKey`: without the key no recook can retract or retime it,
 so retuning the palette afterwards cannot move it, and without the source both Record paths file it
 as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templateApply.kt` holds the
@@ -1047,18 +1048,18 @@ hand (`FU-TMPL-FX-EDIT-NO-RETIME`). A **cue's** palette-layer instance is refuse
 effect read-only.
 
 Fan-out is the same on both gestures: `CueComposer.effectsForLayer` spawns over a layer's targets *as
-authored*, and the click arm matches it, so a group selection stays one group-targeted effect with
-its distribution intact rather than becoming one instance per member. The click arm does have to test
+authored*, and the apply arm matches it, so a group selection stays one group-targeted effect with
+its distribution intact rather than becoming one instance per member. The apply arm does have to test
 capability itself — `FxTargetFactory` never fails by design, so `"rgbColour"` resolves to a
 `ColourTarget` whether or not the head has colour — which is what `fixturesSupportProperty` is for,
 shared with the group FX route so a head and a group of one cannot disagree. It also checks the
 effect's output type against the target's, the `requireOutputTypeMatch` the FX add routes make a
 400: a spec naming `dimmer` for a colour effect resolves to a `SliderTarget` that discards every
-frame, and a click must report that rather than spawn it.
+frame, and *Apply as values* must report that rather than spawn it.
 
 The gestures do diverge in one place, and it is the capability check that causes it: the layer path
-has none at all, so on a group whose members disagree — hexes plus a hazer — a click skips the whole
-group and says so, while a ⌥click spawns one group-targeted effect that the capable heads follow.
+has none at all, so on a group whose members disagree — hexes plus a hazer — a ⌥click skips the whole
+group and says so, while a tap spawns one group-targeted effect that the capable heads follow.
 The strict all-members rule is the one the group FX route already applies, so relaxing it is a
 behaviour decision rather than a repair; `FU-TMPL-CLICK-GROUP-PARTIAL` holds the reasoning.
 
@@ -1310,8 +1311,8 @@ Two different things are called a fade here, and they operate at different scope
   [Fades](#fades) use.
 
 The per-row fade survives the cook (`CueComposer`), which is what makes a **tracked** source behave
-like an **applied** one: clicking a palette chip writes literals into the programmer with the
-palette's fade, and ⌥clicking the same chip adds a layer — which used to snap, because the field
+like an **applied** one: ⌥clicking a palette chip writes literals into the programmer with the
+palette's fade, and tapping the same chip adds a layer — which used to snap, because the field
 stopped at `SourceRow`. It belongs to the row that **won** the key, alongside `CookWinner`: one
 winning row supplies the value, the attribution and the fade. A palette's fade sits on the palette
 rather than the row, so every row of one palette moves together.
@@ -1325,7 +1326,7 @@ each for its own reason:
 | --- | --- | --- |
 | Cue GO / immediate apply | yes | the arrival the fade times |
 | Timed layer firing | yes | the layer's rows reach the stage for the first time |
-| Programmer `add` / Include | yes | ⌥click and the busking pads — the case the item exists for |
+| Programmer `add` / Include | yes | a chip's tap and the busking pads — the case the item exists for |
 | Cue GO **with** a cue-level crossfade | no | the crossfade *is* the transition; the two must not compound |
 | Crossfade weight tick | no | ~62 fps — a ramp restarted every frame never arrives |
 | Look-content edit tour | no | one drag of a colour picker would set a 2 s crossfade running |

@@ -594,7 +594,7 @@ export function withTemplateDraft<E extends TemplateEffectFields>(
  * Was this instance spawned by a **programmer** template layer — a pad's effect — and so has a
  * template to compare with, update and reset to (fixture-fx-sheets plan §3.3, D20)? A cue's
  * template-layer instance is not: W5 refuses it (`FX_NOT_FROM_PALETTE`), since the next GO
- * respawns it. A *detached* copy (a plain click on an effect template's chip) carries no source.
+ * respawns it. A *detached* copy (*Apply as values* on an effect palette's chip) carries no source.
  */
 export function isTemplateLayerInstance(effect: Pick<ActiveEffect, 'templateId' | 'programmerLayerId' | 'cueId'>): boolean {
   return effect.templateId != null && effect.programmerLayerId != null && effect.cueId == null

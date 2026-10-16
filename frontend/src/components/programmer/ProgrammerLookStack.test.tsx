@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import type { LookSummary } from '@/api/looksApi'
@@ -16,13 +16,50 @@ const mocks = vi.hoisted(() => ({
   removeLayer: vi.fn(),
   moveLayer: vi.fn(),
   patchLayer: vi.fn(),
+  detachLayer: vi.fn(),
+  applied: undefined as unknown[] | undefined,
+  /** Wakes the memoised stack, as an RTK subscription does in the app. */
+  listeners: new Set<() => void>(),
+  version: 0,
 }))
+function publish() {
+  mocks.version += 1
+  for (const listener of mocks.listeners) listener()
+}
 
-vi.mock('@/store/programmer', () => ({
-  useProgrammerLayersQuery: () => ({ data: mocks.layers }),
+vi.mock('@/store/programmer', async () => {
+  const { useSyncExternalStore } = await import('react')
+  const useVersion = () =>
+    useSyncExternalStore(
+      (listener) => {
+        mocks.listeners.add(listener)
+        return () => mocks.listeners.delete(listener)
+      },
+      () => mocks.version,
+    )
+  return {
+  useProgrammerLayersQuery: () => {
+    useVersion()
+    return { data: mocks.layers }
+  },
   programmerRemoveLayer: mocks.removeLayer,
   programmerMoveLayer: mocks.moveLayer,
   programmerPatchLayer: mocks.patchLayer,
+  programmerDetachLayer: mocks.detachLayer,
+  useProgrammerAppliedQuery: () => {
+    useVersion()
+    return { data: mocks.applied }
+  },
+  }
+})
+vi.mock('@/hooks/useFixtureLookup', () => ({
+  useFixtureLookup: () => ({
+    fixtures: [
+      { key: 'hex-1', name: 'Hex 1' },
+      { key: 'hex-2', name: 'Hex 2' },
+      { key: 'hex-3', name: 'Hex 3' },
+    ],
+  }),
 }))
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({ data: LOOKS }),
@@ -86,6 +123,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   mocks.layers = []
+  mocks.applied = undefined
 })
 
 describe('ProgrammerLookStack', () => {
@@ -231,5 +269,43 @@ describe('ProgrammerLookStack', () => {
   it('offers an empty state rather than a blank pane', () => {
     render(<ProgrammerLookStack />)
     expect(screen.getByText(/No layers\./)).toBeInTheDocument()
+  })
+
+  it('detaches a layer by its id from the popover', () => {
+    mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
+    render(<ProgrammerLookStack />)
+    openSettings(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+    expect(mocks.detachLayer).toHaveBeenCalledWith(40)
+  })
+
+  it('names a replacement on the row that lost heads, read from two applied frames', () => {
+    const RED = { kind: 'TEMPLATE', id: 3, uuid: 'u3', name: 'Red' } as const
+    const AMBER = { kind: 'TEMPLATE', id: 4, uuid: 'u4', name: 'Amber' } as const
+    const heads = (...keys: string[]) => keys.map((key) => ({ type: 'fixture', key, state: 'all' }))
+    mocks.layers = [layer({ layerId: 40, source: RED })]
+    mocks.applied = [{ source: RED, targets: heads('hex-1', 'hex-2', 'hex-3') }]
+    render(<ProgrammerLookStack />)
+    // The first frame this window sees has nothing before it to compare with.
+    expect(document.querySelector('[data-layer-note]')).toBeNull()
+
+    mocks.layers = [layer({ layerId: 40, source: RED }), layer({ layerId: 41, source: AMBER })]
+    mocks.applied = [
+      { source: RED, targets: heads('hex-1') },
+      { source: AMBER, targets: heads('hex-2', 'hex-3') },
+    ]
+    act(publish)
+    expect(document.querySelector('[data-layer-note]')).toHaveTextContent('lost Hex 2–3 to Amber')
+
+    // A frame that changes nothing leaves it up; the next change takes it down.
+    mocks.applied = [...mocks.applied]
+    act(publish)
+    expect(document.querySelector('[data-layer-note]')).toHaveTextContent('lost Hex 2–3 to Amber')
+    mocks.applied = [
+      { source: RED, targets: heads() },
+      { source: AMBER, targets: heads('hex-1', 'hex-2', 'hex-3') },
+    ]
+    act(publish)
+    expect(document.querySelector('[data-layer-note]')).toHaveTextContent('lost Hex 1 to Amber')
   })
 })

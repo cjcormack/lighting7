@@ -5,7 +5,8 @@ import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
  * The strip's three load-bearing behaviours: **the selection is the filter**, **the selection is
- * the target**, and **the two gestures are two routes**.
+ * the target**, and **the gestures are the press's** — a tap the toggle route, ⌥click the apply
+ * route, a hold or right-click the menu and never a press (apply-model plan D1, D8).
  *
  * Since session 2 of the space plan there is a fourth: **it renders nothing with no targets**
  * (D3), which reverses the rule it shipped with. That one is pinned because it is a reversal a
@@ -14,8 +15,8 @@ import type { TemplateSummary } from '@/api/templatesApi'
  * The filter is what makes the strip usable without a picker — select colour cells and only colour
  * templates are offered, select RGB pars and no position template is — so a regression there turns
  * it back into a list of everything. The target rule is what makes a marquee mean something: three
- * colour cells land the press on those three heads. And the click/⌥click split is the difference
- * between a literal and a dependency, which is invisible on screen: only the route called says
+ * colour cells land the press on those three heads. And the tap/⌥click split is the difference
+ * between a dependency and a literal, which is invisible on screen: only the route called says
  * which happened.
  *
  * Targets and their families arrive as props from the container, which is the only thing that
@@ -53,13 +54,33 @@ vi.mock('@/store/templates', () => ({
   ],
   useCreateTemplateFromProgrammerMutation: () => [vi.fn(), { isLoading: false, reset: vi.fn() }],
 }))
-// The picker's pads read the desk's resolved applied state for their presence ring. Nothing here
-// is about the ring, so an empty list is the whole mock.
-vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
+// The chips and the picker's pads read the desk's resolved applied state for their presence ring;
+// empty unless a test sets it.
+const applied = vi.hoisted(() => ({ current: [] as unknown[] }))
+vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied.current }) }))
+// The press's other routes; a palette never reaches them, but `usePress` holds them.
+// A refused absorb into a focused Look takes the effects it started off again.
+vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/looks', () => ({
+  useApplyLookMutation: () => [vi.fn()],
+  useToggleLookMutation: () => [vi.fn()],
+  useAbsorbLookEffectsMutation: () => [vi.fn()],
+}))
+// No programmer page above the strip here: Local, no focused Look, no published marquee.
+vi.mock('@/components/programmer/LookRowStore', () => ({ useLookRowStore: () => null }))
+vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => null }))
+// The hold menu's *Edit palette…* navigates; nothing here follows it.
+vi.mock('react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router')>()),
+  useNavigate: () => vi.fn(),
+}))
 // The mask a press carries (multi-screen plan D4): the desk's while following, the marquee's own
 // when unlinked. Null — no mask — unless a test says otherwise, so the presses below stay exact.
 const pressFamilies = vi.hoisted(() => ({ current: null as AttributeFamily[] | null }))
-vi.mock('@/store/selection', () => ({ usePressFamilies: () => pressFamilies.current }))
+vi.mock('@/store/selection', () => ({
+  usePressFamilies: () => pressFamilies.current,
+  useSelectionPair: () => ({ targets: [], families: null }),
+}))
 
 const newSheetProps = vi.fn()
 const venue = { isVenue: false }
@@ -159,6 +180,7 @@ beforeEach(() => {
   applyTemplate.mockClear()
   toggleTemplate.mockClear()
   pressFamilies.current = null
+  applied.current = []
   toastSuccess.mockClear()
   toastWarning.mockClear()
   applyResult = { written: 1, skipped: [] }
@@ -284,26 +306,20 @@ describe('TemplateStrip', () => {
     ]
     render(strip(COLOUR_CELL, three))
     fireEvent.click(screen.getByText('Amber Key'))
-    expect(applyTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 1, targets: three })
-  })
-
-  it('click sets literal values — the apply route, never the toggle', () => {
-    render(strip(COLOUR_CELL))
-    fireEvent.click(screen.getByText('Amber Key'))
-    expect(applyTemplate).toHaveBeenCalledWith({
+    expect(toggleTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 1,
-      targets: [{ type: 'fixture', key: 'hex-1' }],
+      targets: three,
+      propertyMask: 'COLOUR',
     })
-    expect(toggleTemplate).not.toHaveBeenCalled()
   })
 
-  it('⌥click adds a tracking layer, masked to the palette’s family', () => {
+  it('a tap puts on a layer that tracks the palette — the toggle route, never the apply', () => {
     // The server derives the applied mask from the template's rows; this send is the belief this
     // client is acting on, which is what lets a disagreement surface in the response rather than
     // silently on the rig. Pinned because sending nothing would make that check unavailable.
     render(strip(COLOUR_CELL))
-    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
+    fireEvent.click(screen.getByText('Amber Key'))
     expect(toggleTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 1,
@@ -313,26 +329,56 @@ describe('TemplateStrip', () => {
     expect(applyTemplate).not.toHaveBeenCalled()
   })
 
-  it('sends the selection’s mask on both presses, and never pre-refuses from it', () => {
-    // The mask is tested on the on arm only, and only the desk knows which arm a press is on — so
-    // a press outside the mask still goes out, and the desk's refusal is what the operator reads.
-    pressFamilies.current = ['POSITION']
+  it('⌥click applies its values — the apply route, never the toggle', () => {
     render(strip(COLOUR_CELL))
-    fireEvent.click(screen.getByText('Amber Key'))
+    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
     expect(applyTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
-      families: ['POSITION'],
     })
-    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
+    expect(toggleTemplate).not.toHaveBeenCalled()
+  })
+
+  it('sends the selection’s mask on both presses', () => {
+    pressFamilies.current = ['COLOUR']
+    render(strip(COLOUR_CELL))
+    fireEvent.click(screen.getByText('Amber Key'))
     expect(toggleTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
       propertyMask: 'COLOUR',
-      families: ['POSITION'],
+      families: ['COLOUR'],
     })
+    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
+    expect(applyTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 1,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+      families: ['COLOUR'],
+    })
+  })
+
+  it('withholds a palette outside the selection’s mask (apply-model plan §4.2)', () => {
+    // Another window's Position mask stands over this tab's colour cells: the desk would refuse a
+    // Colour palette, so the strip does not offer one. An offer, not a refusal — nothing here stops
+    // a press from going out.
+    pressFamilies.current = ['POSITION']
+    render(strip(COLOUR_CELL))
+    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+  })
+
+  it('wears the pad’s ring from the desk’s applied state', () => {
+    applied.current = [
+      {
+        source: { kind: 'TEMPLATE', id: 1, uuid: 'u1', name: 'Amber Key' },
+        targets: [{ type: 'fixture', key: 'hex-1', state: 'all' }],
+      },
+    ]
+    render(strip(COLOUR_CELL))
+    expect(screen.getByText('Amber Key').closest('button')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Amber Key').closest('button')).toHaveAttribute('data-presence', 'all')
   })
 
   it('keeps the half-typed palette when the selection is pulled out from under it', () => {
@@ -443,20 +489,21 @@ describe('TemplateStrip', () => {
   })
 
   it('presses through the same hook from a picker pad as from a chip', async () => {
-    // One `useTemplatePress` for both surfaces: two copies would be two answers to what a press
-    // does, a chip apart.
+    // One `usePress` for both surfaces: two copies would be two answers to what a press does, a
+    // chip apart.
     render(strip(COLOUR_CELL))
     fireEvent.click(allButton())
     // Scoped to the panel: the chip in the scroller carries the same title, which is the point —
     // they are one gesture described once.
-    const pad = within(await screen.findByRole('dialog')).getByTitle(/Click to set these values/)
+    const pad = within(await screen.findByRole('dialog')).getByTitle(/Click to put/)
     await act(async () => {
       fireEvent.click(pad)
     })
-    expect(applyTemplate).toHaveBeenCalledWith({
+    expect(toggleTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
+      propertyMask: 'COLOUR',
     })
   })
 
@@ -466,23 +513,23 @@ describe('TemplateStrip', () => {
     expect(allButton()).toHaveAttribute('aria-expanded', 'true')
     const panel = await screen.findByRole('dialog')
     await act(async () => {
-      fireEvent.click(within(panel).getByTitle(/Click to set these values/))
+      fireEvent.click(within(panel).getByTitle(/Click to put/))
     })
     // Auditioning three colours in a row is the normal case.
-    expect(within(screen.getByRole('dialog')).getByTitle(/Click to set these values/)).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog')).getByTitle(/Click to put/)).toBeInTheDocument()
 
     fireEvent.click(allButton())
     expect(allButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('click on an effect palette mints copies, and says how many started', async () => {
+  it('⌥click on an effect palette mints copies, and says how many started', async () => {
     // The effect arm writes no literals at all: `written` stays 0 and `effectIds` is the whole
     // result, so without this the one gesture that reaches the rig hardest would say nothing.
     templates = [BREATHE]
     applyResult = { written: 0, skipped: [], effectIds: [11, 12] }
     render(strip(COLOUR_CELL))
 
-    fireEvent.click(screen.getByText('Amber Breathe'))
+    fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
     expect(applyTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 3,
@@ -492,26 +539,26 @@ describe('TemplateStrip', () => {
     await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('2 effects started'))
   })
 
-  it('does not read a value press’s empty effectIds as a failed effect press', async () => {
+  it('does not read a value apply’s empty effectIds as a failed effect press', async () => {
     // The desk answers a value apply with `effectIds: []` too. That is not "nothing started" — no
     // effect was asked for — and warning about it put a red toast on every successful press.
     applyResult = { written: 3, skipped: [], effectIds: [] }
     render(strip(COLOUR_CELL))
-    fireEvent.click(screen.getByText('Amber Key'))
+    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
     await vi.waitFor(() => expect(applyTemplate).toHaveBeenCalled())
     await new Promise((r) => setTimeout(r, 0))
     expect(toastWarning).not.toHaveBeenCalled()
     expect(toastSuccess).not.toHaveBeenCalled()
   })
 
-  it('warns when an effect press started nothing', async () => {
+  it('warns when an effect apply started nothing', async () => {
     // An empty list looks exactly like a press that started everything, and this arm has no
     // `skipped` to say otherwise — only the count.
     templates = [BREATHE]
     applyResult = { written: 0, skipped: [], effectIds: [] }
     render(strip(COLOUR_CELL))
 
-    fireEvent.click(screen.getByText('Amber Breathe'))
+    fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
     await vi.waitFor(() =>
       expect(toastWarning).toHaveBeenCalledWith(
         'Nothing started — no selected head could take this effect',
@@ -519,10 +566,10 @@ describe('TemplateStrip', () => {
     )
   })
 
-  it('⌥click on an effect palette adds a tracking layer like any other', () => {
+  it('a tap on an effect palette puts on a tracking layer like any other', () => {
     templates = [BREATHE]
     render(strip(COLOUR_CELL))
-    fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
+    fireEvent.click(screen.getByText('Amber Breathe'))
     expect(toggleTemplate).toHaveBeenCalledWith({
       projectId: 1,
       templateId: 3,
@@ -532,12 +579,12 @@ describe('TemplateStrip', () => {
     expect(applyTemplate).not.toHaveBeenCalled()
   })
 
-  it('names a copy in the effect chip’s tooltip, because only the route says which happened', () => {
+  it('states every gesture in the chip’s tooltip, because only the route says which happened', () => {
     templates = [BREATHE]
     render(strip(COLOUR_CELL))
     expect(screen.getByText('Amber Breathe').closest('button')).toHaveAttribute(
       'title',
-      'Click to run a copy of “Amber Breathe” on the selection · hold or ⌥click to add a layer that tracks it',
+      'Click to run “Amber Breathe” as a layer that tracks it · ⌥click to run a copy · hold or right-click for more',
     )
   })
 
@@ -568,9 +615,8 @@ describe('TemplateStrip', () => {
 })
 
 /**
- * `PD-TRACKING-GESTURE-TOUCH`: a hold on a chip is ⌥click's touch twin. Two halves — the hold
- * reaches the toggle route, and the click the release then generates reaches nothing, or a hold
- * would add the layer *and* set the literals.
+ * A hold or a right-click opens the chip's menu — never a press, on any pointer (apply-model plan
+ * D8) — and the click the hold's release generates reaches nothing.
  */
 describe('TemplateStrip hold', () => {
   const TOUCH = { pointerType: 'touch' }
@@ -583,39 +629,72 @@ describe('TemplateStrip hold', () => {
     vi.useRealTimers()
   })
 
-  it('a hold adds the tracking layer, and the release’s click sets nothing', () => {
+  it('a hold opens the menu, never a layer, and the release’s click presses nothing', () => {
     render(strip(COLOUR_CELL))
     const chip = screen.getByText('Amber Key').closest('button')!
     fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
     act(() => {
-      vi.advanceTimersByTime(499)
+      vi.advanceTimersByTime(501)
     })
-    expect(toggleTemplate).not.toHaveBeenCalled()
-    act(() => {
-      vi.advanceTimersByTime(2)
-    })
-    expect(toggleTemplate).toHaveBeenCalledWith({
-      projectId: 1,
-      templateId: 1,
-      targets: HEX_1,
-      propertyMask: 'COLOUR',
-    })
+    expect(screen.getByRole('menu', { name: 'Amber Key' })).toBeInTheDocument()
     fireEvent.pointerUp(chip, TOUCH)
     fireEvent.click(chip)
+    expect(toggleTemplate).not.toHaveBeenCalled()
     expect(applyTemplate).not.toHaveBeenCalled()
   })
 
-  it('a tap is still the click — the hold takes nothing from it', () => {
+  it('a mouse hold opens the menu too', () => {
     render(strip(COLOUR_CELL))
     const chip = screen.getByText('Amber Key').closest('button')!
-    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
-    fireEvent.pointerUp(chip, TOUCH)
+    fireEvent.pointerDown(chip, { pointerType: 'mouse', clientX: 10, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(800)
+    })
+    fireEvent.pointerUp(chip, { pointerType: 'mouse' })
     fireEvent.click(chip)
+    expect(screen.getByRole('menu', { name: 'Amber Key' })).toBeInTheDocument()
+    expect(toggleTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a right-click opens the menu, and its items name the gestures', () => {
+    render(strip(COLOUR_CELL))
+    fireEvent.contextMenu(screen.getByText('Amber Key').closest('button')!)
+    const menu = screen.getByRole('menu', { name: 'Amber Key' })
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Put on',
+      'Apply as values',
+      'Pick up',
+      'Edit palette…',
+    ])
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Apply as values' }))
     expect(applyTemplate).toHaveBeenCalledTimes(1)
     expect(toggleTemplate).not.toHaveBeenCalled()
   })
 
-  it('a finger scrolling the chips past one holds nothing', () => {
+  it('names *Take off these heads* when the palette covers them all', () => {
+    applied.current = [
+      {
+        source: { kind: 'TEMPLATE', id: 1, uuid: 'u1', name: 'Amber Key' },
+        targets: [{ type: 'fixture', key: 'hex-1', state: 'all' }],
+      },
+    ]
+    render(strip(COLOUR_CELL))
+    fireEvent.contextMenu(screen.getByText('Amber Key').closest('button')!)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Take off these heads' }))
+    expect(toggleTemplate).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap is still the press — the hold takes nothing from it', () => {
+    render(strip(COLOUR_CELL))
+    const chip = screen.getByText('Amber Key').closest('button')!
+    fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(chip, TOUCH)
+    fireEvent.click(chip)
+    expect(toggleTemplate).toHaveBeenCalledTimes(1)
+    expect(applyTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a finger scrolling the chips past one opens nothing', () => {
     render(strip(COLOUR_CELL))
     const chip = screen.getByText('Amber Key').closest('button')!
     fireEvent.pointerDown(chip, { ...TOUCH, clientX: 10, clientY: 10 })
@@ -623,20 +702,7 @@ describe('TemplateStrip hold', () => {
     act(() => {
       vi.advanceTimersByTime(600)
     })
-    expect(toggleTemplate).not.toHaveBeenCalled()
-  })
-
-  it('a slow MOUSE press is still a click — a mouse has ⌥, and a hold there would be a silent second door', () => {
-    render(strip(COLOUR_CELL))
-    const chip = screen.getByText('Amber Key').closest('button')!
-    fireEvent.pointerDown(chip, { pointerType: 'mouse', clientX: 10, clientY: 10 })
-    act(() => {
-      vi.advanceTimersByTime(800)
-    })
-    expect(toggleTemplate).not.toHaveBeenCalled()
-    fireEvent.pointerUp(chip, { pointerType: 'mouse' })
-    fireEvent.click(chip)
-    expect(applyTemplate).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
   it('a hold released off the chip does not eat the next keyboard press of it', () => {
@@ -646,7 +712,6 @@ describe('TemplateStrip hold', () => {
     act(() => {
       vi.advanceTimersByTime(501)
     })
-    expect(toggleTemplate).toHaveBeenCalledTimes(1)
     // Implicit capture delivers the release here even off the element, and no click follows.
     fireEvent.pointerUp(chip, TOUCH)
     act(() => {
@@ -654,7 +719,7 @@ describe('TemplateStrip hold', () => {
     })
     // Enter on the focused chip is a click with no pointer sequence before it.
     fireEvent.click(chip)
-    expect(applyTemplate).toHaveBeenCalledTimes(1)
+    expect(toggleTemplate).toHaveBeenCalledTimes(1)
   })
 
   it('draws its chips and New at the 28px nested tier', () => {

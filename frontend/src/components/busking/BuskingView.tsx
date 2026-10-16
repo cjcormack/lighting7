@@ -22,6 +22,7 @@ import {
   useBuskRigQuery,
 } from '@/store/busk'
 import { handPickUp, heldName, useHandPlace } from '@/store/hand'
+import { usePress } from '@/hooks/usePress'
 import {
   isBuskPageDecided,
   keepFollowingBuskPage,
@@ -134,7 +135,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **Every press goes through one route.** A pad is pressed by `POST /busk/pads/{id}/press`,
  * whatever it holds, because the pad is what knows its bank and the bank is what decides which
  * siblings a press releases (D4). The three kind-specific mutations this view used to call are the
- * programmer's ⌥click / touch-hold strip's now, and the AI's.
+ * programmer's palette strip's now, and the AI's.
  *
  * **There is no empty-selection dim.** The pools used to grey themselves out with nothing selected,
  * which is now wrong in three ways: a per-fixture template names its own heads, a Look with no
@@ -191,6 +192,12 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const [pressPad] = usePressBuskPadMutation()
   const [addPad] = useAddBuskPadMutation()
   const placeFromHand = useHandPlace()
+  // *Apply as values* from a pad (apply-model plan D8) is the one press, over the busk pair.
+  const pressPair = useMemo(
+    () => ({ targets: selectedLayerTargets, families }),
+    [selectedLayerTargets, families],
+  )
+  const { press: pressValues } = usePress(projectId, pressPair, { scope: 'programmer' })
   const cachePage = useCacheBuskPage(projectId)
 
   // Which page is showing has two answers — the desk's and this window's — and a per-tab flag says
@@ -381,6 +388,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     () => ({
       presenceOf,
       cueRing: (pad) => (pad.kind === 'CUE' && pad.cue != null ? (cueRings.get(pad.cue.id) ?? null) : null),
+      hasSelection: selectedLayerTargets.length > 0,
       onPress: (pad) => {
         // A pad the layout write has not answered for yet has no id to press. It cannot be reached
         // in practice — presses are off while editing — but the guard keeps the type honest.
@@ -407,6 +415,13 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
             if (message != null) toast.warning(message)
           })
           .catch(ignoreReportedError)
+      },
+      onApplyValues: (pad) => {
+        if (pad.kind === 'TEMPLATE' && pad.template != null) {
+          void pressValues({ kind: 'template', template: pad.template }, 'asValues')
+        } else if (pad.kind === 'LOOK' && pad.look != null) {
+          void pressValues({ kind: 'look', look: pad.look }, 'asValues')
+        }
       },
       onInspect: (pad) => {
         if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
@@ -458,6 +473,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       presenceOf,
       cueRings,
       pressPad,
+      pressValues,
       projectId,
       selectedLayerTargets,
       families,

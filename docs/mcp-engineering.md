@@ -364,7 +364,7 @@ the code the desk's own gesture goes through, on the current project:
   `create_look`'s grammar, resolved per head by `resolveProgrammerValues` (the same parse and
   `TemplateResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
   rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeProperties` batch with each
-  head's `sourceGroup` from `groupHintsForTargets` — the palette click's value arm — so Record
+  head's `sourceGroup` from `groupHintsForTargets` — *Apply as values*' value arm — so Record
   collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
   write resolves to no channel, is in `skipped`; a value no selected head can take, an unknown target,
   or a trigger or command name refuses the call before anything is written. A colour write carries the
@@ -379,7 +379,7 @@ the code the desk's own gesture goes through, on the current project:
 - `apply_palette` `{paletteId | paletteName, targets?, asValues?, mask?, fadeSeconds?}` — by default
   the desk's press (apply-model plan D9): the toggle route's `programmerLayerStack.toggle`, with its
   family replacement and widening, answering `released` when it took heads off another palette.
-  `asValues: true` is `applyTemplateToProgrammer`, the values a click writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
+  `asValues: true` is `applyTemplateToProgrammer`, the values *Apply as values* writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
   a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a palette
   outside it (`PALETTE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
   as the desk's doors do.

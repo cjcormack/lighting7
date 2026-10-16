@@ -100,6 +100,13 @@ export function useLongPress({
       onPointerDown: (e: React.PointerEvent) => {
         didLongPress.current = false
         didMove.current = false
+        // Only the primary button presses or holds. A right-click's `pointerup` would otherwise
+        // press before the context menu opens — on Windows `contextmenu` follows the release — and
+        // a middle-click would press at all.
+        if (e.button !== 0) {
+          didMove.current = true
+          return
+        }
         // A second pointer while one is down is a pinch or a fumble, not a hold: the first
         // press's timer is dropped rather than left to fire early against the newcomer, and no
         // new one is armed. `didMove` marks the gesture spent so the release fires no press.

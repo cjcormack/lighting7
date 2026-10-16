@@ -16,18 +16,39 @@ vi.mock('sonner', () => ({
   }),
 }))
 
-const addedLayers: unknown[] = []
 /**
- * What `sendGesture` decided. `programmerAddLayer` returns it, and returning it *explicitly* is the
- * point of this mock: the first version returned `Array.push`'s new length, which is truthy by
- * accident — so the happy path was exercised and the dropped-frame path could not be.
+ * The programmer's place is the press (apply-model plan §5): `usePress`, whose routes are recorded
+ * here. `verdict.ok` false answers a refusal, which `errorToastMiddleware` would already have
+ * toasted — so the hand must keep the record and say nothing of its own.
  */
-const sendVerdict = { ok: true }
-vi.mock('@/store/programmer', () => ({
-  programmerAddLayer: (input: unknown) => {
-    addedLayers.push(input)
-    return sendVerdict.ok
-  },
+const pressed: { route: string; args: unknown }[] = []
+const verdict = { ok: true }
+const toggleAction = { current: 'applied' }
+function route(name: string) {
+  return () => [
+    (args: unknown) => {
+      pressed.push({ route: name, args })
+      return {
+        unwrap: () =>
+          verdict.ok
+            ? Promise.resolve({ action: toggleAction.current, effectCount: 0, skippedFamilies: [] })
+            : Promise.reject(new Error('refused')),
+      }
+    },
+  ]
+}
+vi.mock('@/store/templates', () => ({
+  useToggleTemplateMutation: route('toggleTemplate'),
+  useApplyTemplateMutation: route('applyTemplate'),
+}))
+vi.mock('@/store/looks', () => ({
+  useToggleLookMutation: route('toggleLook'),
+  useApplyLookMutation: route('applyLook'),
+  useAbsorbLookEffectsMutation: route('absorb'),
+}))
+vi.mock('react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router')>()),
+  useParams: () => ({ projectId: '1' }),
 }))
 
 const patches: unknown[] = []
@@ -40,8 +61,16 @@ vi.mock('@/store/cues', () => ({
   ],
 }))
 
-const selection: { targets: { type: string; key: string }[] } = { targets: [] }
-vi.mock('@/store/selection', () => ({ useDeskSelection: () => selection.targets }))
+/** The desk's pair, and this window's own copy for when it is unlinked. */
+const selection = {
+  following: true,
+  targets: [] as { type: string; key: string }[],
+  local: [] as { type: string; key: string }[],
+}
+vi.mock('@/store/selection', () => ({
+  usePressFamilies: () => null,
+  useSelectionPair: () => ({ targets: selection.following ? selection.targets : selection.local, families: null }),
+}))
 
 import { store } from '@/store/index'
 import { restApi } from '@/store/restApi'
@@ -53,8 +82,9 @@ import { HandPlaceStrip } from './HandTarget'
  * The hand's two **layer** places (multi-screen plan §3.5, D12).
  *
  * What each one has to get right: the strip is drawn only for a record the target can take, the
- * place is this window's own mutation with the desk selection as targets, the drop names the record
- * placed, and the cue's inverse is the layers array read *before* the place — not a re-derivation.
+ * place is this window's own mutation with the window's selection as targets — the desk's while it
+ * follows, its own when unlinked — the drop names the record placed, and the cue's inverse is the
+ * layers array read *before* the place — not a re-derivation.
  */
 const wrap = (ui: ReactNode) => render(<Provider store={store}>{ui}</Provider>)
 
@@ -112,10 +142,13 @@ const cue = (): Cue =>
 beforeEach(() => {
   handWs.reset()
   toasts.length = 0
-  addedLayers.length = 0
+  pressed.length = 0
   patches.length = 0
+  selection.following = true
   selection.targets = []
-  sendVerdict.ok = true
+  selection.local = []
+  verdict.ok = true
+  toggleAction.current = 'applied'
   store.dispatch(restApi.util.resetApiState())
 })
 
@@ -147,37 +180,61 @@ describe('the programmer’s layer stack', () => {
     await withHold(<HandProgrammerLayerStrip />, hold('CUE'), false)
   })
 
-  it('adds the layer with the desk selection as targets, then drops naming the record', async () => {
+  it('presses the record onto the desk selection, then drops naming it', async () => {
     selection.targets = [{ type: 'fixture', key: 'par-1' }]
     await withHold(<HandProgrammerLayerStrip />, hold('TEMPLATE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
     await waitFor(() => expect(handWs.dropped).toEqual(['template-uuid-8']))
-    expect(addedLayers).toEqual([
-      { templateId: 8, targets: [{ type: 'fixture', key: 'par-1' }] },
+    expect(pressed).toEqual([
+      {
+        route: 'toggleTemplate',
+        args: { projectId: 1, templateId: 8, targets: [{ type: 'fixture', key: 'par-1' }], propertyMask: undefined, families: undefined },
+      },
     ])
   })
 
-  it('keeps the record held when the frame never left — a closed socket is not a place', async () => {
-    // The blocker this file exists to guard. `sendGesture` refuses a closed socket, toasts "that
-    // did not reach the rig", and returns false; `programmerAddLayer` passes that back. If `run`
-    // answers `true` regardless — as it first did — the hand is dropped and a success toast lands
-    // *beside* that error, on the one place with no Undo to recover through.
-    sendVerdict.ok = false
+  it('honours an unlinked window: its own selection, not the desk’s', async () => {
+    selection.following = false
+    selection.targets = [{ type: 'fixture', key: 'par-1' }]
+    selection.local = [{ type: 'group', key: 'wash' }]
     await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
-    // It was attempted...
-    expect(addedLayers).toHaveLength(1)
-    // ...and nothing followed: no drop, so the operator still has the record, and no toast of our
-    // own, because `sendGesture` has already said the only true thing there is to say.
+    await waitFor(() => expect(pressed).toHaveLength(1))
+    expect(pressed[0]).toEqual({
+      route: 'toggleLook',
+      args: { projectId: 1, lookId: 8, targets: [{ type: 'group', key: 'wash' }], families: undefined },
+    })
+  })
+
+  it('says so when the place took the record off heads it already covered', async () => {
+    toggleAction.current = 'removed'
+    selection.targets = [{ type: 'fixture', key: 'par-1' }]
+    await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(toasts).toHaveLength(1))
+    expect(toasts[0]![0]).toBe('“Warm Wash” was already on the selection — taken off it')
+  })
+
+  it('keeps the record held when the press was refused', async () => {
+    // A refusal is already on screen (`errorToastMiddleware`), so the hand keeps the record and
+    // says nothing of its own — dropping it would lose the record and toast success beside the error.
+    verdict.ok = false
+    await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(pressed).toHaveLength(1))
     expect(handWs.dropped).toEqual([])
     expect(toasts).toHaveLength(0)
   })
 
-  it('offers no Undo — programmer.addLayer answers no id to address', async () => {
+  it('offers no Undo — a press answers no layer id to address', async () => {
     await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
@@ -216,6 +273,18 @@ describe('a cue’s stack', () => {
     const undone = patches[1] as { layers: { lookId?: number | null }[] }
     expect(undone.layers).toHaveLength(1)
     expect(undone.layers[0]!.lookId).toBe(3)
+  })
+
+  it('appends onto an unlinked window’s own selection', async () => {
+    selection.following = false
+    selection.local = [{ type: 'fixture', key: 'par-4' }]
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(patches).toHaveLength(1))
+    const sent = patches[0] as { layers: { targets: unknown[] }[] }
+    expect(sent.layers[1]!.targets).toEqual([{ type: 'fixture', key: 'par-4' }])
   })
 
   it('draws nothing for a cue in the hand', async () => {

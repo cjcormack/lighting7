@@ -16,12 +16,15 @@ import { toast } from 'sonner'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { templateSwatch } from '@/components/busking/padFace'
+import { padPresenceClass, templateSwatch } from '@/components/busking/padFace'
 import { ExtendedChannelSlider } from '@/components/fixtures/ExtendedChannelSlider'
 import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance'
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import { hexToRgb, rgbToHex } from '@/components/fx/colourUtils'
-import { useTemplatePress } from '@/components/programmer/useTemplatePress'
+import { templateLayerPresence } from '@/components/busking/lookPresence'
+import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
+import { usePress, type PressGesture } from '@/hooks/usePress'
+import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss, parseCssRgb } from '@/lib/colourMath'
@@ -312,9 +315,10 @@ export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<Colou
  * `.colour-picker-compact`, because a Tailwind utility cannot size this picker (`index.css` says
  * why).
  *
- * **This kit module reaches two feature trees and three stores** — `busking/padFace` for a chip's
- * swatch, `programmer/useTemplatePress` for a chip's press, and the templates, selection and patch
- * stores — because Recent and the leaves are the editor's own (D10, D12) rather than a host's.
+ * **This kit module reaches three feature trees and four stores** — `busking/padFace` and
+ * `busking/lookPresence` for a chip's swatch and ring, `press/PressGestures` and `hooks/usePress`
+ * for a chip's press, and the templates, programmer, selection and patch stores — because Recent and
+ * the leaves are the editor's own (D10, D12) rather than a host's.
  * Through `ColourPickerPopover` that graph now sits under the fixture and group detail sheets too;
  * `import/no-cycle` holds, and those two hosts pass neither `recent` nor `projectId`, so neither
  * store-bound child mounts there. Said here so the widening is a decision and not a surprise.
@@ -878,11 +882,11 @@ const AppearanceLeaves = memo(function AppearanceLeaves({ projectId, keys, onCha
 
 /**
  * **Recent** — the template recents row (`lib/templateRecents.ts`) over the colour-family, generic,
- * value templates the selection can take: a tap is a template **apply** through
- * `useTemplatePress`, so it stamps `lastPressedAt` and lands as literals like the strip's chip,
- * under the mask like any press. No new list, no new order. Its own component so its store hooks
- * run only where the chips are drawn — the editor mounts it only in a form the host allows, and
- * never per cell.
+ * value templates the selection can take. A chip is a press through `usePress` over the host's
+ * targets and mask — tap a layer, ⌥click its values, a hold or right-click the menu — so it stamps
+ * `lastPressedAt`, wears the pad's ring and lands in a focused Look as any press does. No new list,
+ * no new order. Its own component so its store hooks run only where the chips are drawn — the
+ * editor mounts it only in a form the host allows, and never per cell.
  */
 function RecentTemplates({
   projectId,
@@ -893,7 +897,13 @@ function RecentTemplates({
 }: Omit<ColourRecentSource, 'forms'> & { available: readonly ColourEmitter[]; className?: string }) {
   const { data: templates } = useTemplateListQuery({ projectId })
   const families = usePressFamilies(localFamilies)
-  const press = useTemplatePress(projectId, targets, families)
+  const pair = useMemo(() => ({ targets, families }), [targets, families])
+  const { press, into } = usePress(projectId, pair)
+  const { data: applied } = useProgrammerAppliedQuery()
+  const onGesture = useCallback(
+    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+    [press],
+  )
   const shown = useMemo(() => {
     const offerable = (templates ?? []).filter(
       (t) =>
@@ -912,27 +922,45 @@ function RecentTemplates({
         <p className="mt-1 text-[10px] text-muted-foreground">Colour palettes you press show up here</p>
       ) : (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {shown.map((template) => (
-            <RecentChip key={template.id} template={template} onPress={() => press(template, false)} />
-          ))}
+          {shown.map((template) => {
+            const presence = into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id)
+            return (
+              <PalettePressButton
+                key={template.id}
+                projectId={projectId}
+                template={template}
+                into={into}
+                presence={presence}
+                hasTargets={targets.length > 0}
+                onGesture={onGesture}
+              >
+                {(handlers) => (
+                  <button
+                    type="button"
+                    data-recent-template={template.id}
+                    {...handlers}
+                    title={templatePressTitle(template, into)}
+                    aria-pressed={presence !== 'none'}
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs hover:bg-accent',
+                      padPresenceClass(presence),
+                    )}
+                  >
+                    {templateSwatch(template) != null && (
+                      <span
+                        aria-hidden
+                        className="size-3 rounded-full border border-border"
+                        style={{ background: templateSwatch(template) ?? undefined }}
+                      />
+                    )}
+                    <span className="max-w-[9rem] truncate">{template.name}</span>
+                  </button>
+                )}
+              </PalettePressButton>
+            )
+          })}
         </div>
       )}
     </div>
-  )
-}
-
-function RecentChip({ template, onPress }: { template: TemplateSummary; onPress: () => void }) {
-  const swatch = templateSwatch(template)
-  return (
-    <button
-      type="button"
-      data-recent-template={template.id}
-      onClick={onPress}
-      title={`Set “${template.name}” on the selection`}
-      className="inline-flex h-7 items-center gap-1.5 rounded-md border bg-card px-2 text-xs hover:bg-accent"
-    >
-      {swatch != null && <span aria-hidden className="size-3 rounded-full border border-border" style={{ background: swatch }} />}
-      <span className="max-w-[9rem] truncate">{template.name}</span>
-    </button>
   )
 }
