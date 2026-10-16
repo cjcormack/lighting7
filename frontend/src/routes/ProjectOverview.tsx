@@ -125,7 +125,7 @@ export default function ProjectOverview() {
             onClick={() => navigate(`/projects/${project.id}/scripts`)}
           />
           <QuickNavCard
-            title="FX Library"
+            title="Effects"
             icon={<Sparkles className="size-5" />}
             description="Built-in and custom effects"
             onClick={() => navigate(`/projects/${project.id}/fx-library`)}

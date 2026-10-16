@@ -20,7 +20,7 @@ export const SCRIPT_TYPE_LABELS: Record<ScriptType, string> = {
 
 export const SCRIPT_TYPE_DESCRIPTIONS: Record<ScriptType, string> = {
   GENERAL: 'General-purpose scripts for lighting automation. Has access to fixtures, the show, FX engine, and coroutines.',
-  FX_DEFINITION: 'Defines a reusable effect type that appears in the FX Library. Specifies parameters, properties, and the calculation logic.',
+  FX_DEFINITION: 'Defines a reusable effect type that appears under Effects. Specifies parameters, properties, and the calculation logic.',
   FX_APPLICATION: 'Applies effects to fixtures. Used by cue triggers to set up and run effect instances on the FX engine.',
   FX_CALC: 'Stateless effect calculation. Receives a phase value (0-1) and parameters, returns output values. Runs every tick.',
   FX_CALC_STATEFUL: 'Stateful effect calculation with a persistent state map. Receives clock ticks and delta time for time-based effects.',
@@ -57,7 +57,7 @@ for (fixture in fixtures) {
     }
 }
 `,
-  FX_DEFINITION: `// Define an effect type for the FX Library
+  FX_DEFINITION: `// Define an effect type for Effects
 // Available: show, settings, scriptId
 
 // Register parameters that users can configure

@@ -279,7 +279,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
 }
 
 /** Why nothing is live off the running project — the library and its writes are the running show's. */
-export const FX_READ_ONLY_REASON = 'the FX Library shows and edits the running show’s effects'
+export const FX_READ_ONLY_REASON = 'Effects shows and edits the running show’s effects'
 
 /**
  * The name column's track. With the other tracks' floors (100 + 96 + 86 + 70 + 150 + 110 = 612)
