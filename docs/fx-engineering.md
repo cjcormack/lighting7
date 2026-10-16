@@ -917,7 +917,12 @@ memberPhase = (remappedClock + phaseOffset - distOffset) % 1.0
 ```
 
 The scaling to `(slots - 1) / slots` ensures the sweep reaches the last element without
-wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0).
+wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0). `slots` is the
+Order's own count (`DistributionStrategy.distinctSlots`), **not** the count after the spread's
+shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every other Order, and
+leave the sweep alone — so Spread 0 or Blocks folding every head to one slot never scales the sweep to
+nothing, and an effect that names no shape bounces bit for bit as before (P6;
+`SpreadShapeTest` "ping-pong sweeps the same way whatever the shape").
 
 Then, on that phase, the effect's **direction** and **N-shot** (§"Size, direction and N-shot"): a
 member outside its runs answers `NaN` and paints nothing, and Backward and Bounce read the phase
@@ -1201,8 +1206,15 @@ synced from `formatVersion` 32 (`docs/sync-engineering.md` §"Version 32").
 1. **Order** gives the member a rank `r` over `R` ranks: `DistributionStrategy.ranks`, the offset
    times `distinctSlots` rounded to the whole number it is — except `POSITIONAL`, whose rank is its
    position along the group times `N` (continuous, so its offset is unchanged at Spread alone).
+   Blocks, Wings and Groups count whole ranks, so whenever one of them acts
+   (`SpreadShaping.countsRanks`) the plan takes `DistributionStrategy.wholeRanks` instead, which
+   snaps Position's to the nearest of its `N` slots, `round(position × (N − 1))` — evenly spaced
+   heads rank 0 … N − 1 as under Rig, so two wings mirror and groups repeat whole slots. Under Spread
+   alone Position stays continuous.
 2. **Blocks** `B`: `r ← floor(r / B)` over `ceil(R / B)` ranks (`ceil(N / B)` under an asymmetric
-   Order, whose rank count is the member count): `B` neighbours share one phase.
+   Order, whose rank count is the member count): `B` neighbours **in the Order** share one phase —
+   on the rig under Rig, Reverse and Position, and under Random heads beside each other in the
+   shuffle, so a Random in blocks of 2 is random pairs.
 3. **Wings** `W`, only under an asymmetric Order — Centre out, Edges in and Split are two mirrored
    wings already (`DistributionStrategy.isMirrored`): the ranks split into `W` runs of
    `m = ceil(R / W)`; an odd run is mirrored **within its own length** (`r ← len − 1 − r`, `len` being
@@ -1217,7 +1229,8 @@ synced from `formatVersion` 32 (`docs/sync-engineering.md` §"Version 32").
 `numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
 per-pass reads), so a step chase's window and step timing stay gap-free: groups of 2 over eight heads
 are two slots, the odd heads and the even heads taking turns a step each. `PING_PONG`'s turnaround is
-scaled to the shaped range, `s × (slots − 1) / slots`. At the default shape (100 %, 1, 1, 0) the
+**not** shaped: its sweep is the Order's own `(N − 1) / N` (§"Phase Calculation"), the shape setting only
+the offsets. At the default shape (100 %, 1, 1, 0) the
 plan does not run the shaping at all, so an effect that names no shape keeps its offsets bit for
 bit (P6). The plan cache (`FxDistributionPlans`) is keyed on the shape as on the Order.
 
@@ -1235,7 +1248,10 @@ to the same offsets, Random's shuffle included.
   where the Order is known): Spread outside 0–2, Wings or Blocks below 1, Groups below 0, any count
   above 512, and **Wings above 1 under a mirrored Order**. `PUT /fx/{id}` checks the shape against
   the Order the effect will run under — the request's, or the one it has — so moving a winged effect
-  onto Centre out is refused as surely as sending wings to one. A stored value out of range is
+  onto Centre out is refused as surely as sending wings to one. The instance's **own** wings take
+  part only when the request moves the Order: a stored row may hold wings under a mirrored Order
+  (lenient on spawn, not run), and an edit of its Spread, Blocks or Groups — or a frame re-sending
+  the Order it already has — is not refused for them. A stored value out of range is
   clamped with a warn on spawn (`Lenient.spreadShape`), and stored wings under a mirrored Order are
   left as stored and not run.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `spread`, `wings`, `blocks` and

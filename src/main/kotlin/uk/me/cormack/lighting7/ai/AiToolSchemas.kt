@@ -7,6 +7,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import uk.me.cormack.lighting7.fx.SpreadShape
 
 // ─── Tool Schema Definitions ───────────────────────────────────────
 
@@ -106,6 +107,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
     put("wings", buildJsonObject {
         put("type", "integer")
         put("minimum", 1)
+        put("maximum", SpreadShape.MAX_COUNT)
         put(
             "description",
             "Split the heads into this many wings, alternate wings mirrored (2 = a ripple from both ends meeting in the " +
@@ -116,11 +118,13 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
     put("blocks", buildJsonObject {
         put("type", "integer")
         put("minimum", 1)
+        put("maximum", SpreadShape.MAX_COUNT)
         put("description", "This many neighbouring heads move as one (3 = the heads in threes). Omit for 1.")
     })
     put("groups", buildJsonObject {
         put("type", "integer")
         put("minimum", 0)
+        put("maximum", SpreadShape.MAX_COUNT)
         put(
             "description",
             "Repeat the spread every this many heads (2 = alternate heads, odd against even). Omit or 0 for off.",

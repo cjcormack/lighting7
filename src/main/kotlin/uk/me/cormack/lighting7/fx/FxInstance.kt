@@ -395,7 +395,8 @@ data class FxDynamics(
 
     /**
      * The rank count left after the spread's shape over [groupSize] members — [DistributionPlan.slots]
-     * in constant time and with no allocation, for the per-member step timing and ping-pong turnaround.
+     * in constant time and with no allocation, for the per-member step timing. (Ping-pong's turnaround
+     * reads the Order's own count: the shape sets offsets, never the sweep.)
      */
     fun distinctSlots(groupSize: Int): Int =
         SpreadShaping.slots(
@@ -938,17 +939,16 @@ class FxInstance internal constructor(
     ): Double {
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.
-        // Scale to [0, s × (N-1)/N] to match the shaped offset range (N the slots after the
-        // spread's shape, s its Spread — effects plan §3.3) and avoid wrapping artifacts at the
-        // turnaround points. At the default shape that is today's (N-1)/N. A shape that leaves every
-        // member on one phase (Spread 0, or Blocks / Groups folding to one slot) has no range to
-        // sweep, so the whole cycle bounces instead — scaling by 0 would freeze the effect.
+        // Scale to [0, (N-1)/N] to match the LINEAR offset range and avoid
+        // wrapping artifacts at the turnaround points. N is the Order's own slot count, never the
+        // spread's shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every
+        // other Order, and leave the sweep alone (effects plan §3.3) — so the sweep is never scaled
+        // to nothing, and an effect that names no shape bounces bit for bit as before (P6).
         var shaped = basePhase
         if (dynamics.distributionStrategy.usesTrianglePhase && groupSize > 1) {
-            val slots = dynamics.distinctSlots(groupSize)
+            val slots = dynamics.distributionStrategy.distinctSlots(groupSize)
             val tri = if (shaped < 0.5) shaped * 2.0 else 2.0 * (1.0 - shaped)
-            val range = dynamics.spread * (slots - 1.0) / slots
-            shaped = if (range > 0.0) tri * range else tri
+            shaped = tri * (slots - 1.0) / slots
         }
 
         // Subtract distribution offset so that higher-offset members are *behind*

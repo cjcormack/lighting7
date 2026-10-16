@@ -145,7 +145,7 @@ class ProjectRoundTripTest {
         // The off-default fields, which are the ones a copier can silently drop: canonical JSON
         // omits defaults, so a field left at its default is invisible to the round trip.
         assertEquals(0.125, effect.phaseOffset)
-        assertEquals("CENTER_OUT", effect.distribution)
+        assertEquals("REVERSE", effect.distribution)
         assertEquals("MAX", effect.blendMode)
         assertEquals("EVEN", effect.elementFilter)
         assertEquals(false, effect.stepTiming)
@@ -254,7 +254,7 @@ class ProjectRoundTripTest {
             Shape(templateEffect.spread, templateEffect.wings, templateEffect.blocks, templateEffect.groups),
         )
         val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
-        assertEquals(Shape(0.25, 1, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
+        assertEquals(Shape(0.25, 2, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
 
         val format = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),

@@ -210,9 +210,15 @@ export function FxEditor({
   const spreadScope = useMemo(
     (): FxScope => ({
       ...scope,
-      headCount: spreadHeadCount(targetFixtures, effect.isGroupTarget, draft.elementMode, draft.elementFilter),
+      headCount: spreadHeadCount(
+        targetFixtures,
+        effect.isGroupTarget,
+        effect.propertyName,
+        draft.elementMode,
+        draft.elementFilter,
+      ),
     }),
-    [scope, targetFixtures, effect.isGroupTarget, draft.elementMode, draft.elementFilter],
+    [scope, targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter],
   )
 
   const readOnly = !connected

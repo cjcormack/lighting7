@@ -51,8 +51,9 @@ object SpreadShaping {
     class Result(val offsets: DoubleArray, val slots: Int)
 
     /**
-     * Shape [ranks] (step 1's, one per member; whole numbers except under `POSITIONAL`, whose rank is
-     * its position along the group) over [rankCount] ranks.
+     * Shape [ranks] (step 1's, one per member) over [rankCount] ranks. They are whole numbers whenever
+     * Blocks, Wings or Groups act ([countsRanks]) — `POSITIONAL`'s position is snapped to a slot
+     * first — and continuous only under Spread alone, which scales them as they are.
      *
      * 2. **Blocks** `B`: `r ← floor(r / B)`, over `ceil(R / B)` ranks — `ceil(n / B)` under an
      *    asymmetric Order, whose rank count is the member count.
@@ -113,6 +114,17 @@ object SpreadShaping {
         if (wingsApply && wings > 1) count = ceilDiv(count, wings)
         if (groups in 1 until count) count = groups
         return count
+    }
+
+    /**
+     * Whether Blocks, Wings or Groups act on [rankCount] ranks — the steps that count in whole ranks,
+     * so a continuous Order's ranks (Position's) are snapped to whole slots before them
+     * ([uk.me.cormack.lighting7.fx.group.DistributionStrategy.wholeRanks]). Spread alone does not.
+     */
+    fun countsRanks(rankCount: Int, shape: SpreadShape, wingsApply: Boolean): Boolean {
+        if (shape.blocks > 1) return true
+        if (wingsApply && shape.wings > 1) return true
+        return shape.groups in 1 until max(rankCount, 1)
     }
 
     private fun ceilDiv(a: Int, b: Int): Int = ceil(a.toDouble() / b).toInt()

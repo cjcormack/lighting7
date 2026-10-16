@@ -664,7 +664,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoTemplateEffect.new {
         template = effectTemplate
         effectType = "ColourPulse"; category = "colour"; propertyName = "rgbColour"
-        beatDivision = 2.0; blendMode = "MAX"; distribution = "CENTER_OUT"
+        beatDivision = 2.0; blendMode = "MAX"; distribution = "REVERSE"
         phaseOffset = 0.125
         elementMode = "FLAT"
         elementFilter = "EVEN"
@@ -803,7 +803,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         direction = "BACKWARD"
         nShot = 1
         spread = 0.25
-        wings = 1
+        wings = 2
         blocks = 4
         groups = 3
     }

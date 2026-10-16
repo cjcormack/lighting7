@@ -268,6 +268,23 @@ const COMPACT_WRAP_CLASS = '@max-[299px]:flex-wrap'
 const SKIPPED_FAMILIES_TOAST = 'spread-panel-skipped-families'
 
 /** Where a fresh panel lands: the first family the mask names that the heads can take, else the first they can take. */
+/**
+ * An Order's words on the order row: the first word always, the rest folded under the compact rung
+ * (`SPREAD_COMPACT_WORD_CLASS`, `sr-only`), so *Centre out* reads *Centre* on a panel below 300px.
+ * Its item carries the whole word as `aria-label`, so its name is the effect editor's word at every
+ * width (`lib/orderLabels.ts`, one vocabulary) — the name computation drops the folded span's space.
+ */
+function OrderWord({ label }: { label: string }) {
+  const space = label.indexOf(' ')
+  if (space < 0) return <>{label}</>
+  return (
+    <>
+      {label.slice(0, space)}
+      <span className={SPREAD_COMPACT_WORD_CLASS}>{label.slice(space)}</span>
+    </>
+  )
+}
+
 function initialFamily(available: readonly AttributeFamily[], mask: readonly AttributeFamily[] | null): AttributeFamily {
   return mask?.find((family) => available.includes(family)) ?? available[0] ?? 'INTENSITY'
 }
@@ -806,8 +823,14 @@ export function SpreadPanel({
           className="mt-1 w-full justify-start"
         >
           {SPREAD_ORDERS.filter((order) => order.id != null).map((order) => (
-            <ToggleGroupItem key={order.label} value={order.id!} title={order.hint} className="flex-1 text-xs">
-              {order.label}
+            <ToggleGroupItem
+              key={order.label}
+              value={order.id!}
+              title={order.hint}
+              aria-label={order.label}
+              className="flex-1 text-xs"
+            >
+              <OrderWord label={order.label} />
             </ToggleGroupItem>
           ))}
         </ToggleGroup>

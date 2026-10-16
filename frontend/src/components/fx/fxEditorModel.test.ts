@@ -11,6 +11,7 @@ import {
   filteredElementCount,
   orderPatch,
   spreadHeadCount,
+  carriesEffectProperty,
   withTemplateDraft,
   draftOf,
   levelModeOf,
@@ -197,11 +198,37 @@ describe('fxEditorModel', () => {
   it('counts a live effect\'s heads for the dials as the desk distributes them', () => {
     const bar = { elements: Array.from({ length: 12 }) }
     const par = { elements: null }
-    expect(spreadHeadCount([par, par, par], true, 'PER_FIXTURE', 'ALL')).toBe(3)
-    expect(spreadHeadCount([bar], false, 'PER_FIXTURE', 'ALL')).toBe(12)
-    expect(spreadHeadCount([bar], false, 'PER_FIXTURE', 'ODD')).toBe(6)
-    expect(spreadHeadCount([bar, bar], true, 'FLAT', 'FIRST_HALF')).toBe(12)
-    expect(spreadHeadCount([bar, bar], true, 'PER_FIXTURE', 'ALL')).toBe(12)
+    expect(spreadHeadCount([par, par, par], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(6)
+    expect(spreadHeadCount([bar, bar], true, 'dimmer', 'FLAT', 'FIRST_HALF')).toBe(12)
+    expect(spreadHeadCount([bar, bar], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+  })
+
+  it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {
+    // A Slender 14ch: a master dimmer on the fixture, four cells beneath. A Pulse on the master runs
+    // once on the desk — one dial, not four — and a group of three such bars runs three members.
+    const slender = { properties: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
+    expect(spreadHeadCount([slender], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
+    expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'FLAT', 'ALL')).toBe(3)
+    expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(3)
+    // A property only its cells carry spreads over the cells.
+    expect(spreadHeadCount([slender], false, 'rgbColour', 'PER_FIXTURE', 'ALL')).toBe(4)
+    // Colour and position by trait, as the desk's WithColour / WithPosition.
+    expect(carriesEffectProperty([{ name: 'colour', type: 'colour' }], 'rgbColour')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'warmth', type: 'whiteMix' }], 'rgbColour')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'pt', type: 'position' }], 'position')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'dimmer', type: 'slider' }], 'rgbColour')).toBe(false)
+  })
+
+  it('filters a FLAT group across the whole strip on its global index, as the desk does', () => {
+    const three = { elements: Array.from({ length: 3 }) }
+    // Nine heads under Odd keep 1st, 3rd, … 9th: five — not three bars' ceil(3/2) summed, six.
+    expect(spreadHeadCount([three, three, three], true, 'rgbColour', 'FLAT', 'ODD')).toBe(5)
+    // Six heads' first half is three — not two bars' first halves summed, four.
+    expect(spreadHeadCount([three, three], true, 'rgbColour', 'FLAT', 'FIRST_HALF')).toBe(3)
+    // Per fixture, each bar is filtered within itself.
+    expect(spreadHeadCount([three, three], true, 'rgbColour', 'PER_FIXTURE', 'FIRST_HALF')).toBe(2)
     expect(filteredElementCount(5, 'EVEN')).toBe(2)
     expect(filteredElementCount(5, 'SECOND_HALF')).toBe(2)
   })

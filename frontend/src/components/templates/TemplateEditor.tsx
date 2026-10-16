@@ -615,7 +615,10 @@ function EffectControls({
   )
 }
 
-/** Distribution under Advanced, and nothing that needs a head. */
+/**
+ * The Spread section (Order, Spread %, Wings, Blocks, Groups) over eight notional heads — no
+ * `headCount`, since a palette has no target — and nothing else that needs a head.
+ */
 const TEMPLATE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, stepTiming: false }
 
 /**

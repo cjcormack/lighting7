@@ -100,7 +100,7 @@ describe('spreadIntent', () => {
 
   it('imports no resolver — it serialises and nothing more (D9)', () => {
     const imports = [...spreadIntentSrc.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort()
-    expect(imports).toEqual(['./attributeFamily', './templateIntent', '@/components/fx/colourUtils', '@/store/programmerOps'])
+    expect(imports).toEqual(['./attributeFamily', './orderLabels', './templateIntent', '@/components/fx/colourUtils', '@/store/programmerOps'])
     // The docblock may *name* the resolver; the import list may not reach one, nor the client walk.
     expect(imports.some((name) => /spreadPlans|fanMath|colourMath|[Rr]esolver/.test(name))).toBe(false)
     expect(spreadIntentSrc).not.toMatch(/lerp\(|mixLab|interpolateIntent/)

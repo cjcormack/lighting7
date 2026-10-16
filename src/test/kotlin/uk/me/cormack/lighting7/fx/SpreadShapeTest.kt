@@ -313,6 +313,32 @@ class SpreadShapeTest {
         assertContentEquals(doubleArrayOf(0.0, 0.25, 0.0, 0.25), plans.members.offsets)
     }
 
+    @Test
+    fun `ping-pong sweeps the same way whatever the shape, which sets only the offsets`() {
+        // The sweep is the Order's own (N − 1)/N: Spread 0 does not freeze it, a little Spread does
+        // not nearly freeze it, and Blocks folding every head to one slot does not either.
+        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
+        val base = FxDynamics(stepTiming = false, distributionStrategy = DistributionStrategy.PING_PONG)
+        val shapes = listOf(
+            base.copy(spread = 0.0),
+            base.copy(spread = 0.01),
+            base.copy(spread = 0.5),
+            base.copy(blocks = 8),
+            base.copy(groups = 2, wings = 2),
+        )
+        for (n in 0L until 24L) {
+            val expected = effect.calculatePhaseForMember(tick(n), 8, base, 0.0)
+            for (dyn in shapes) {
+                assertEquals(expected, effect.calculatePhaseForMember(tick(n), 8, dyn, 0.0), "tick $n under $dyn")
+            }
+        }
+        // And the sweep itself moves: halfway through the cycle (tick 3 of a quarter beat's 6) it is
+        // at its turnaround, far from where it started.
+        assertTrue(
+            abs(effect.calculatePhaseForMember(tick(0), 8, base, 0.0) - effect.calculatePhaseForMember(tick(3), 8, base, 0.0)) > 0.1,
+        )
+    }
+
     /** A member at an index and position, as a group or element list gives one. */
     private class Member(override val index: Int, override val normalizedPosition: Double) : DistributionMemberInfo
 }

@@ -94,6 +94,14 @@ sealed interface DistributionStrategy {
     }
 
     /**
+     * [ranks] as whole numbers in `0 until distinctSlots` — what Blocks, Wings and Groups shape
+     * ([uk.me.cormack.lighting7.fx.SpreadShaping], effects plan §3.3), since each counts in whole
+     * ranks. The same as [ranks] for every Order here but [POSITIONAL], whose continuous position is
+     * snapped to the nearest slot.
+     */
+    fun wholeRanks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray = ranks(members, groupSize)
+
+    /**
      * Linear distribution: evenly spaced phases across the group.
      *
      * Creates a classic chase effect where each fixture fires in sequence.
@@ -287,6 +295,18 @@ sealed interface DistributionStrategy {
         /** The position itself, over `groupSize` ranks: continuous, so its offset is unchanged at the default shape. */
         override fun ranks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray =
             DoubleArray(members.size) { members[it].normalizedPosition * groupSize }
+
+        /**
+         * The position snapped to the nearest of `groupSize` slots, `round(position × (n − 1))`, so
+         * evenly spaced heads rank 0, 1, … n − 1 as under Rig and Wings mirror and Groups repeat
+         * whole slots. Spread alone keeps the continuous [ranks].
+         */
+        override fun wholeRanks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray {
+            val last = (groupSize - 1).coerceAtLeast(0)
+            return DoubleArray(members.size) {
+                Math.round(members[it].normalizedPosition.coerceIn(0.0, 1.0) * last).toDouble()
+            }
+        }
     }
 
     companion object {

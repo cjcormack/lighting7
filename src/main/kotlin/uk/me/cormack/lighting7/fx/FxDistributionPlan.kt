@@ -57,9 +57,16 @@ internal class DistributionPlan private constructor(
                 offsets = strategy.offsets(members, size)
                 distinctSlots = strategy.distinctSlots(size)
             } else {
-                val shaped = SpreadShaping.shape(
-                    strategy.ranks(members, size), strategy.distinctSlots(size), shape, !strategy.isMirrored,
-                )
+                val rankCount = strategy.distinctSlots(size)
+                val wingsApply = !strategy.isMirrored
+                // Blocks, Wings and Groups count in whole ranks, so a continuous Order (Position) is
+                // snapped first; Spread alone scales its continuous ranks.
+                val ranks = if (SpreadShaping.countsRanks(rankCount, shape, wingsApply)) {
+                    strategy.wholeRanks(members, size)
+                } else {
+                    strategy.ranks(members, size)
+                }
+                val shaped = SpreadShaping.shape(ranks, rankCount, shape, wingsApply)
                 offsets = shaped.offsets
                 distinctSlots = shaped.slots
             }

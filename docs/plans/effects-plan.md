@@ -162,9 +162,11 @@ The plan adds its own:
 - **Size** — the effect's weight over what is underneath, 0–100 % (D2).
 - **Direction** — Forward, Backward or Bounce: how each head runs its own cycle (D5).
 - **Order** — the distribution strategy, renamed in the UI only: which head comes first (Rig, Reverse,
-  Centre out, Edges in, Random, Position, Ping-pong).
+  Centre out, Edges in, Split, Random, Ping-pong, Position, Unified — one vocabulary on every surface
+  that names one, `frontend/src/lib/orderLabels.ts`).
 - **Spread** — how much of the cycle the heads cover, 0–200 % (D4). 100 % is today's.
-- **Blocks** — N neighbouring heads share one phase.
+- **Blocks** — N heads neighbouring in the Order share one phase: on the rig under Rig, Reverse and
+  Position; beside each other in the shuffle under Random, so a Random in blocks is random pairs.
 - **Groups** — the spread repeats every N heads.
 - **Wings** — the heads split into N wings, alternate wings mirrored.
 - **Envelope** — the runtime part of the weight a fade moves, 0–1 (D1, D13).
@@ -196,6 +198,11 @@ For each member `i` of an effect's expansion (`FxDistributionPlan`):
    two wings are 0 1 2 3 2 1 0 and the outer pair shares a rank.
 4. **Groups** `G`: `r ← r mod G`, over `G` ranks — when `G` is below the rank count (Groups off is 0).
 5. **Spread** `s`: `offset = s × r / ranks`.
+
+Blocks, Wings and Groups count whole ranks, so Position's continuous rank (its position × `n`) is
+snapped to the nearest of its `n` slots, `round(position × (n − 1))`, whenever one of them acts; under
+Spread alone it stays continuous. Ping-pong's sweep is the Order's own `(n − 1) / n`: the shape sets the
+offsets, never the sweep.
 
 `distinctSlots` is the number of ranks left after step 4, so a step chase's window and step timing
 stay gap-free. Then, on the member's own phase `p = clock + phaseOffset − offset`:
@@ -275,9 +282,10 @@ between them — and the **target** resolves it per head, which is what no outpu
   three glyphs (→ ← ↔) with its word on the hover.
 - **Spread** (a disclosure, on a group, a selection or a fixture with heads; and always on an effect
   palette, which has no target): *Order* (today's Distribution select), *Spread* %, *Wings*, *Blocks*,
-  *Groups* as small number fields, and a row of eight phase dials previewing them — the
-  effect palette's over eight notional heads, a live effect's over its own (up to sixteen, then
-  *+n*). The summary line says the non-defaults: *Rig · 50 % · 2 wings*.
+  *Groups* (Spread a slider beside a percent field, as Size is; the three counts small number fields),
+  and a row of eight phase dials previewing them — the effect palette's over eight notional heads, a
+  live effect's over its own as the desk expands it (one per fixture where the fixture carries the
+  property itself, else its heads; up to sixteen, then *+n*). The summary line says the non-defaults: *Rig · 50 % · 2 wings*.
 - **Advanced** keeps phase, blend, step timing, element mode and the head filter, and gains *Runs*:
   *Forever* or a count.
 - A busk pad's face (`EffectPadDetail`) adds a ← or ↔ for a non-forward palette and the size where it

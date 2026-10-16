@@ -1,6 +1,7 @@
 import type { SpreadCurve, SpreadOrder } from '@/store/programmerOps'
 import { rgbToHex, serializeTemplateRef } from '@/components/fx/colourUtils'
 import type { AttributeFamily } from './attributeFamily'
+import { orderLabel } from './orderLabels'
 import {
   serializeTemplateIntent,
   templatePropertiesForFamily,
@@ -132,7 +133,8 @@ export const SPREAD_CURVES: readonly { id: SpreadCurve; label: string; hint: str
 ]
 
 /**
- * The orders the tab offers, each a `DistributionStrategy` name the desk resolves — and the one
+ * The orders the tab offers, each a `DistributionStrategy` name the desk resolves, worded as the
+ * effect editor's Order (`lib/orderLabels.ts`) — and the one
  * the design draws that the desk has no order for. `Stage L→R` would be `POSITIONAL`, but
  * `SpreadPlan` feeds that strategy a head's *index* as its position, so it is rig order under
  * another name; the tab says so in a footnote under the row rather than offering it as something
@@ -143,10 +145,10 @@ export const SPREAD_ORDERS: readonly {
   label: string
   hint: string
 }[] = [
-  { id: 'LINEAR', label: 'Rig', hint: 'Rig order: the rig’s rows and tiles, a group in member order, cells in element order' },
-  { id: 'REVERSE', label: 'Reverse', hint: 'Rig order, the other way' },
-  { id: 'CENTER_OUT', label: 'Centre', hint: 'From the centre outward: the two ends share a step' },
-  { id: 'RANDOM', label: 'Random', hint: 'A shuffle of the rig order; press again for another' },
+  { id: 'LINEAR', label: orderLabel('LINEAR'), hint: 'Rig order: the rig’s rows and tiles, a group in member order, cells in element order' },
+  { id: 'REVERSE', label: orderLabel('REVERSE'), hint: 'Rig order, the other way' },
+  { id: 'CENTER_OUT', label: orderLabel('CENTER_OUT'), hint: 'From the centre outward: the two ends share a step' },
+  { id: 'RANDOM', label: orderLabel('RANDOM'), hint: 'A shuffle of the rig order; press again for another' },
   { id: null, label: 'Stage L→R', hint: 'The desk has no stage order yet — its POSITIONAL strategy reads rig index, which is Rig again' },
 ]
 

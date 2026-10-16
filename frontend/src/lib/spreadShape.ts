@@ -1,4 +1,5 @@
 import { javaRandom } from '@/components/editor/spreadPlans'
+import { orderLabel } from './orderLabels'
 
 /**
  * The spread's shape (effects plan D4, §3.3) — the editor's copy, for the Spread section's **dial
@@ -58,35 +59,8 @@ export function isMirroredOrder(order: string): boolean {
   return order === 'CENTER_OUT' || order === 'EDGES_IN' || order === 'SPLIT'
 }
 
-/** The Order's words in the editor (§3.1: the strategy, renamed in the UI only). */
-export const ORDER_LABELS: Record<string, string> = {
-  LINEAR: 'Rig',
-  REVERSE: 'Reverse',
-  CENTER_OUT: 'Centre out',
-  EDGES_IN: 'Edges in',
-  SPLIT: 'Split',
-  RANDOM: 'Random',
-  PING_PONG: 'Ping-pong',
-  POSITIONAL: 'Position',
-  UNIFIED: 'Unified',
-}
-
-/** The Orders in the select's order — the strategies today's Distribution select offered. */
-export const ORDER_OPTIONS: readonly string[] = [
-  'LINEAR',
-  'REVERSE',
-  'CENTER_OUT',
-  'EDGES_IN',
-  'SPLIT',
-  'RANDOM',
-  'PING_PONG',
-  'POSITIONAL',
-  'UNIFIED',
-]
-
-export function orderLabel(order: string): string {
-  return ORDER_LABELS[order] ?? order
-}
+/** The Order's words (§3.1: the strategy, renamed in the UI only) — `lib/orderLabels.ts`'s, one vocabulary. */
+export { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from './orderLabels'
 
 /**
  * Step 1 over [n] notional heads, element `i` at position `i / (n − 1)` (0.5 for one): each head's
@@ -154,13 +128,21 @@ export function spreadOffsets(order: string, n: number, shape: SpreadShape): { o
     return { offsets: ranks.map((r) => r / orderCount), slots: orderCount }
   }
   let count = Math.max(orderCount, 1)
-  let r = ranks.slice()
+  const wingsApply = !isMirroredOrder(order)
+  // Blocks, Wings and Groups count whole ranks, so Position's continuous rank snaps to its nearest
+  // slot first (`DistributionStrategy.wholeRanks`); Spread alone scales it as it is.
+  const countsRanks =
+    shape.blocks > 1 || (wingsApply && shape.wings > 1) || (shape.groups >= 1 && shape.groups < count)
+  let r =
+    order === 'POSITIONAL' && countsRanks
+      ? Array.from({ length: n }, (_, i) => Math.round((n > 1 ? i / (n - 1) : 0.5) * Math.max(n - 1, 0)))
+      : ranks.slice()
   if (shape.blocks > 1) {
     const b = shape.blocks
     count = Math.ceil(count / b)
     r = r.map((x) => Math.min(Math.floor(x / b), count - 1))
   }
-  if (shape.wings > 1 && !isMirroredOrder(order)) {
+  if (shape.wings > 1 && wingsApply) {
     const w = shape.wings
     const m = Math.ceil(count / w)
     r = r.map((x) => {

@@ -746,12 +746,18 @@ Release folds to its glyph and the scope line drops the fade.
   heads — step timing, Element mode and the head filter. **The distribution is the *Spread*
   section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
   fixture with heads, and always on an effect palette: *Order* (the strategy, worded *Rig · Reverse ·
-  Centre out…* by `lib/spreadShape.ts`'s `ORDER_LABELS`, the stored name unchanged), *Spread* %,
+  Centre out…* by `lib/orderLabels.ts` — the one vocabulary, which `fxConstants.ts`'
+  `DISTRIBUTION_STRATEGY_OPTIONS` / `getDistributionLabel` (a Look's or cue's summary, a group's
+  *Runs as*) and the value Spread's `SPREAD_ORDERS` read too; the stored name unchanged), *Spread* %,
   *Wings* (hidden under a mirrored Order — Centre out, Edges in, Split — and set back to 1 in the same
   write when one is chosen, `orderPatch`, since the desk refuses wings there), *Blocks* and *Groups*
   (0 off), and a row of **phase dials** — eight notional heads on a palette, the effect's own live
-  (`FxScope.headCount`, `spreadHeadCount`: members, or elements as the element mode and head filter
-  narrow them; sixteen dials, then *+n*). Its summary says the non-defaults: *Rig · 50 % · 2 wings*.
+  (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
+  where the first fixture carries the effect's property itself (`carriesEffectProperty`: a slider or
+  setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
+  head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
+  sixteen dials, then *+n*). Under Blocks, Wings or Groups Position's continuous rank snaps to its
+  nearest slot first, as the desk's `wholeRanks` does. Its summary says the non-defaults: *Rig · 50 % · 2 wings*.
   The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `groups: 0` turning them off. **The
   dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
@@ -2085,8 +2091,10 @@ flight (`requestSeq`). The family segment is **Intensity · Colour · Position �
 board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's
 four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each drawn as a picture — Wings as **two strokes
 meeting at a marked centre**, since its eight fractions are Mirror's and one polyline through them
-*was* Mirror's V); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
-`LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
+*was* Mirror's V); order is a `DistributionStrategy` name, worded by `lib/orderLabels.ts` — Rig ·
+Reverse · Centre out · Random are
+`LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM` (*Centre out* reading *Centre* below 300px of panel, on
+`SPREAD_COMPACT_WORD_CLASS`, its `aria-label` the whole word), and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
 is Rig again), offering it as something it is not would be worse than withholding it, and a

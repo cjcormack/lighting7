@@ -453,6 +453,64 @@
       "slots": 3
     },
     {
+      "name": "Position, 2 wings over 4, snapped to whole slots",
+      "order": "POSITIONAL",
+      "heads": 4,
+      "wings": 2,
+      "offsets": [
+        0.0,
+        0.5,
+        0.5,
+        0.0
+      ],
+      "slots": 2
+    },
+    {
+      "name": "Position, groups of 2 over 5, snapped to whole slots",
+      "order": "POSITIONAL",
+      "heads": 5,
+      "groups": 2,
+      "offsets": [
+        0.0,
+        0.5,
+        0.0,
+        0.5,
+        0.0
+      ],
+      "slots": 2
+    },
+    {
+      "name": "Position over 5 at 50 %, continuous under Spread alone",
+      "order": "POSITIONAL",
+      "heads": 5,
+      "spread": 0.5,
+      "offsets": [
+        0.0,
+        0.125,
+        0.25,
+        0.375,
+        0.5
+      ],
+      "slots": 5
+    },
+    {
+      "name": "Random, blocks of 2 over 8: heads beside each other in the shuffle share a phase",
+      "order": "RANDOM",
+      "heads": 8,
+      "blocks": 2,
+      "offsets": [
+        0.25,
+        0.75,
+        0.75,
+        0.0,
+        0.0,
+        0.5,
+        0.25,
+        0.5
+      ],
+      "slots": 4
+    },
+    {
       "name": "One head, 2 wings",
       "order": "LINEAR",
       "heads": 1,
