@@ -82,6 +82,23 @@ export interface SyncRunResult {
   sessionId?: number | null
   /** Number of conflicts persisted; 0 unless `outcome === "CONFLICTS_PENDING"`. */
   conflictCount?: number
+  /**
+   * Explicit cue numbers the pulled or merged tree held twice in one stack (sync v32): the entry
+   * with the lower uuid kept the number, the other was made auto. Also said in `message`.
+   */
+  numberClashes?: CueNumberClash[]
+}
+
+/** One explicit cue number held twice in a stack after a merge, and how the pull resolved it. */
+export interface CueNumberClash {
+  stack: string
+  number: string
+  keptEntryUuid: string
+  /** The cue that kept the number. */
+  kept: string
+  entryUuid: string
+  /** The cue now numbered automatically. */
+  cue: string
 }
 
 /** Stable error codes returned by the run / apply / abort endpoints. */
@@ -223,6 +240,8 @@ export interface ImportFromRemoteResult {
   projectId: number
   projectUuid: string
   name: string
+  /** Explicit cue numbers the repo held twice in one stack, and how each was resolved (sync v32). */
+  numberClashes?: CueNumberClash[]
 }
 
 // ─── Endpoints ─────────────────────────────────────────────────────────

@@ -624,7 +624,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         size = 0.4
         direction = "BACKWARD"
         nShot = 2
-        // The spread's shape (effects plan session 2, formatVersion 32), likewise.
+        // The spread's shape (effects plan session 2, formatVersion 33), likewise.
         spread = 0.5
         wings = 2
         blocks = 3
@@ -850,10 +850,36 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; name = "build"
     }
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
+    // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with
+    // every entry shape off its default. A marker in a gap (a midpoint ordinal, P6), an auto number
+    // (never exported, P5) beside cue 1's explicit one, and two entries sharing one ordinal — two
+    // desks that inserted into the same gap — which play in uuid order.
+    DaoCueStackEntry.new {
+        stack = stack1; kind = CueStackEntryKind.MARKER.name; label = "house to half"; ordinal = 1.5
+    }
+    val left = DaoCue.new { this.project = project; name = "left" }
+    val right = DaoCue.new { this.project = project; name = "right" }
+    DaoCueStackEntry.new { stack = stack1; cue = left; ordinal = 2.5 }
+    DaoCueStackEntry.new { stack = stack1; cue = right; ordinal = 2.5 }
+    val snap = DaoCue.new { this.project = project; name = "snap" }
+    DaoCueStackEntry.new {
+        stack = stack1; cue = snap; ordinal = 3.0
+        // The auto number a renumber gives it after cue 1's 1.5 — one a reader derives too, so it
+        // is never exported (a held one is: `CueStackEntrySyncTest`).
+        cueNumber = "1.9"; cueNumberAuto = true
+        autoAdvance = true
+    }
     // A marker entry: a labelled divider, no cue (cue model plan D12).
     DaoCueStackEntry.new {
         stack = stack2; kind = CueStackEntryKind.MARKER.name; label = "finale"; ordinal = 1.0
     }
+    // Sharing, which v32 is the first format able to say (cue model plan §3.2, D1, D7): cue 1 is
+    // show-2's too — one cue in two stacks, anchored at both places below — and "build" sits in
+    // show-2 twice. A cue in no stack is loose; this one is on a busk pad.
+    val cue1Act2Entry = DaoCueStackEntry.new { stack = stack2; cue = cue1; ordinal = 2.0 }
+    DaoCueStackEntry.new { stack = stack2; cue = build; ordinal = 3.0 }
+    DaoCueStackEntry.new { stack = stack2; cue = build; ordinal = 4.0 }
+    val looseCue = DaoCue.new { this.project = project; name = "blackout" }
 
     // separator between the two stacks (replaces the old show MARKER entry); the stacks'
     // sortOrder values above define show order.
@@ -894,6 +920,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         column = sideColumn; sortOrder = 0; name = "moves"; solo = false; flow = BuskFlow.COLUMN.name
     }
     DaoBuskPad.new { bank = movesBank; sortOrder = 0; template = positionTemplate }
+    // A loose cue (no stack) on a pad: held loose when pressed (cue model plan §3.2, D6).
+    DaoBuskPad.new { bank = movesBank; sortOrder = 1; cue = looseCue }
     DaoBuskBank.new {
         column = sideColumn; sortOrder = 1; name = "cues"; solo = false; flow = BuskFlow.WRAP.name
     }
@@ -933,6 +961,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.promptBook = promptBook; entry = cue1Entry
         region = listOf(PromptBookRectDto(page = 0, x = 0.1, y = 0.2, w = 0.8, h = 0.05))
         label = "LX 1"
+    }
+    // The shared cue's second place gets its own anchor (D4).
+    DaoPromptBookAnchor.new {
+        this.promptBook = promptBook; entry = cue1Act2Entry
+        region = listOf(PromptBookRectDto(page = 7, x = 0.1, y = 0.4, w = 0.8, h = 0.05))
+        label = "LX 1 (act two)"
     }
     DaoPromptBookAnnotation.new {
         this.promptBook = promptBook; kind = "STRIKETHROUGH"

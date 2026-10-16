@@ -1199,7 +1199,7 @@ in place as the Order is (an edit keeps the phase), stored on the four effect ho
 (`look_effects`, `cue_ad_hoc_effects`, `template_effects` as `spread` and `spread_wings` /
 `spread_blocks` / `spread_groups` — `GROUPS` is an SQLite keyword — and a live instance), carried by
 `LookEffectSpec`, `EffectEntry` and `LookEffectSettings` so Record, Include and Update keep them, and
-synced from `formatVersion` 32 (`docs/sync-engineering.md` §"Version 32").
+synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 
 `DistributionPlan.of` runs §3.3 over each member, after the Order (step 1):
 

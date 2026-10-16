@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
 import uk.me.cormack.lighting7.plugins.CloudSyncProjectImportedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.CloudSyncImporter
+import uk.me.cormack.lighting7.sync.CueNumberClash
 import uk.me.cormack.lighting7.sync.GitAuthException
 import uk.me.cormack.lighting7.sync.ImportError
 import uk.me.cormack.lighting7.sync.SyncErrorCode
@@ -116,6 +117,7 @@ internal fun Route.routeApiRestCloudSync(state: State) {
                     projectId = result.projectId,
                     projectUuid = result.projectUuid,
                     name = result.name,
+                    numberClashes = result.numberClashes,
                 ),
             )
         } catch (e: SyncException) {
@@ -166,4 +168,6 @@ data class ImportFromRemoteResponse(
     val projectId: Int,
     val projectUuid: String,
     val name: String,
+    /** Explicit cue numbers the repo held twice in one stack, and how each was resolved (sync v32). */
+    val numberClashes: List<CueNumberClash> = emptyList(),
 )

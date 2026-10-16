@@ -2,6 +2,7 @@ import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import { ScriptType } from "../store/scripts";
 import type { VenueBehind } from "./venueApi";
+import type { CueNumberClash } from "../store/cloudSync";
 
 /**
  * What a project is (venue plan §3.1): a show, or a venue whose own rows are its draft. A
@@ -149,6 +150,8 @@ export interface ImportProjectResponse {
   projectId: number;
   projectUuid: string;
   name: string;
+  /** Explicit cue numbers the archive held twice in one stack, and how each was resolved (sync v32). */
+  numberClashes?: CueNumberClash[];
 }
 
 // Response from clone project endpoint

@@ -121,7 +121,16 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
             assertEquals("show-1", copiedStack.name)
             val entries = entriesOf(copiedStack).filter { !it.isMarker }
             val cues = entries.map { it.cue!! }
-            assertEquals(listOf("open", "build"), cues.map { it.name })
+            // In the source's order — two entries sharing an ordinal (the fixture's "left" and
+            // "right") play by uuid, and the copies' uuids are new, so the copy writes the order out.
+            val sourceOrder = entriesOf(DaoCueStack[stack]).filter { !it.isMarker }.map { it.cue!!.name }
+            assertEquals(listOf("open", "build"), sourceOrder.take(2))
+            assertEquals(sourceOrder, cues.map { it.name })
+            assertEquals(
+                entriesOf(DaoCueStack[stack]).map { it.isMarker },
+                entriesOf(copiedStack).map { it.isMarker },
+                "markers keep their places",
+            )
             val open = cues.first()
             assertEquals("1.5", entries.first().cueNumber)
             // Scenery found by name: the venue's tabs (the pinned version's row) and the copied deck.
@@ -159,6 +168,38 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
         }
 
         assertEquals(live, currentId(), "nothing switched project")
+    }
+
+    /**
+     * Cue model plan §3.9: `copy_to_project` copies whole stacks, so a cue two copied stacks share —
+     * or one stack holds twice — is copied once and shared in the target, each entry keeping its place.
+     */
+    @Test
+    fun `a cue two copied stacks share is copied once and shared in the target`() {
+        val showId = seedVenueReadyShow(state)
+        val showOne = stackId(showId, "show-1")
+        val showTwo = stackId(showId, "show-2")
+        // The rich fixture already places "open" in both stacks; a second place in show-2 makes it
+        // one that stack holds twice.
+        transaction(state.database) {
+            val open = DaoCue.find { (DaoCues.project eq showId) and (DaoCues.name eq "open") }.single()
+            DaoCueStackEntry.new { stack = DaoCueStack[showTwo]; cue = open; ordinal = 5.0; cueNumber = "20" }
+        }
+        val target = ok("create_project", """{"name":"Copy target"}""")["projectId"]!!.jsonPrimitive.content.toInt()
+
+        ok("copy_to_project", """{"fromProjectId":$showId,"toProjectId":$target,"cueStacks":[$showOne,$showTwo]}""")
+
+        transaction(state.database) {
+            val opens = DaoCue.find { (DaoCues.project eq target) and (DaoCues.name eq "open") }.toList()
+            assertEquals(1, opens.size, "one copy of the shared cue")
+            val placed = entriesOfCue(opens.single()).map { it.stack.name to it.cueNumber }
+            assertEquals(3, placed.size, "every entry naming it, in both stacks: $placed")
+            assertEquals(setOf("show-1", "show-2"), placed.map { it.first }.toSet())
+            assertTrue("show-2" to "20" in placed, "an entry keeps its own number: $placed")
+            // Every other cue is copied once too.
+            val names = DaoCue.find { DaoCues.project eq target }.map { it.name }
+            assertEquals(names.distinct(), names)
+        }
     }
 
     @Test

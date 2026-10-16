@@ -344,7 +344,7 @@ class ProjectCloneTest {
             assertNotEquals(source.buskPages.single().uuid, page.uuid, "clone must mint a fresh page identity")
 
             val pads = page.columns.flatMap { it.banks }.flatMap { it.pads }
-            assertEquals(7, pads.size)
+            assertEquals(8, pads.size)
             assertTrue(
                 pads.all { pad ->
                     (pad.template?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id

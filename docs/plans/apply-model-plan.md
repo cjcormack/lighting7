@@ -98,7 +98,11 @@ Agreed with Chris on 2026-10-15 (§11):
 
 The plan adds its own:
 
-- **P1 — One PR per session**, in §8's order, per CLAUDE.md §"Git workflow". Each session ends with
+- **P1 — One PR per session**, in §8's order, per CLAUDE.md §"Git workflow". One exception (agreed at
+  venue-visit course check K1, 2026-10-16): while session 2 waits on the effects plan's session 3,
+  sessions 3–5 may run ahead of it. They leave the effect door — ⌘K *Apply FX* and the picker's Effects
+  section, which press through session 2's `POST /programmer/effects` — to session 6, which owns it and
+  still waits for session 2. Each session ends with
   `./gradlew test` and `npm run check` green, its engineering-doc paragraphs written, and a
   done-marker in its heading citing its change commit(s), never the merge commit.
   The venue-visit plan's P1 checklist ([`venue-visit-plan.md`](venue-visit-plan.md)) applies
@@ -176,17 +180,23 @@ and a layer records both as its `targets` and `propertyMask`.
 
 - **A bare effect press** is `POST /programmer/effects` (§3.7): one Local instance per selected
   target, as a layer spawns them (a group stays one group effect, its distribution intact). The mask
-  must allow the effect's family. Its timing is S15's default (one bar on the family's `usage` master).
+  must allow the effect's family. With no timing it takes S15's default (venue-visit D16): one bar on
+  the master tagged for the family's `usage`, else master 1. The desk stamps it, as MCP's
+  `parseEffectTiming` does; today only the client and MCP stamp a master, and `POST /fx/add` defaults
+  the division alone.
 - **Replacement for Local effects.** The press first takes the selected heads off every other Local
   effect of the same family. A fixture instance wholly inside the selection stops. A group instance
   partly inside is narrowed: it is rewritten as one instance per uncovered member (the split below,
-  with no edit), at the phase each member had.
+  with no edit), at the phase and count each member had.
 - **The split.** `PUT /fx/{id}` gains an optional `targets`.
-  - Naming every head the instance covers, or no `targets` at all, is today's in-place edit (id and
-    phase kept).
+  - Naming every head the instance covers, or no `targets` at all, is today's in-place edit. The id is
+    kept, and the phase too, except on a move to or from *Seconds*, which restarts it (S15).
   - Naming a strict subset narrows the instance to the rest and spawns the edited copy on the subset.
-  - Each split-off head starts at the phase it had: a group member's distribution offset becomes its
-    own instance's `phaseOffset`, so nothing jumps.
+  - Each split-off head starts where it was: a group member's distribution offset becomes its own
+    instance's `phaseOffset`, so nothing jumps. A wall-clock or *Seconds* copy also takes the instance's
+    clock (`accumulatedScaledMs`), and an N-shot copy its count (`nShotStartTick`,
+    `nShotStartScaledMs`, moved on by the member's offset), as `FxEngine.updateEffect`'s swap carries
+    them (S15, effects plan session 1).
   - Refused for a layer's instance (P5) with `FX_SPLIT_LAYER_EFFECT`; a cue's instance stays read-only.
 - **The Effects band and the busk Effects tab** list the effects running on the selected heads:
   Local ones editable by these rules, a palette layer's by P5, a cue's read-only.
@@ -198,7 +208,8 @@ and a layer records both as its `targets` and `propertyMask`.
 - **Detach** (`programmer.detachLayer {layerId}`, WS like the other layer ops):
   - The layer's cooked values on its keys are written as `WEB` Local values, `touched`, in one batch.
   - Its spawned effects lose their layer key and `LayerSource` and keep running, phase kept, as Local
-    effects.
+    effects. A spent N-shot (effects plan session 1) is removed instead: only a layer keeps one
+    (`FxEngine.finishNShots`).
   - The layer is then removed with no republish of its keys, so the stage does not move.
   - The rail's layer menu and S14's tables carry it.
 - **Apply as values** is ⌥click and the hold menu's second item:
@@ -236,7 +247,7 @@ and a layer records both as its `targets` and `propertyMask`.
 | `POST /looks/{id}/apply` | 1 | `{targets, families?, fadeMs?}`; Apply as values for a Look. |
 | `POST /palettes/{id}/apply` `write` | 1 | `false` answers `written[].value` without writing (D7). |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
-| `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?, timing?}`; a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
+| `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`; S15, effects plan session 1); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
 | `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |
 | `POST /cues/{id}/layers/press` | 8 | §3.6, the stored cue's layers. |
 
@@ -395,8 +406,8 @@ Each session is one PR (P1).
   - `write: false` writes nothing and answers literals, a Shehds' cells included.
   - The mask tests stay green.
 - **Docs:** `lighting-composition-model.md` §"A press is per target" (replacement and widening),
-  §"Looks, templates and layers" (Detach, Apply as values); `mcp-engineering.md`; CLAUDE.md's
-  template endpoints.
+  §"Looks, palettes and layers" (Detach, Apply as values); `mcp-engineering.md`; CLAUDE.md's
+  §"Palette Endpoints".
 
 ### Session 2 — Local effects follow the selection (backend)
 
@@ -414,7 +425,7 @@ Each session is one PR (P1).
 
 ### Session 3 — One press in the client (frontend)
 
-- §4.1's `usePress` and every door in it.
+- §4.1's `usePress` and every door in it but the effect door (⌘K *Apply FX*), which is session 6's.
 - The strip's tap, ⌥click and hold, with rings and the mask filter (§4.2).
 - The hold menu on chips.
 - Scope routing for a focused Look (§3.6), via `write: false` and `absorb-effects`.
@@ -442,7 +453,7 @@ Each session is one PR (P1).
 
 - §4.3's `PaletteBands` on the colour, slider and position editors; *Save as palette* for every family.
 - §4.2's `ApplyPicker`, replacing `TemplatePicker` and the add-layer sheet's source and target steps
-  (§4.6).
+  (§4.6). Its Effects section is session 6's.
 - **Tests:**
   - A dimmer cell offers Intensity palettes and a zoom cell the Beam palettes with a zoom row.
   - A gobo cell has no band.
@@ -453,7 +464,8 @@ Each session is one PR (P1).
 
 ### Session 6 — Effects in the popup (frontend)
 
-- The Effects band (§4.3); *+ Effect* and ⌘K *Apply FX* on `POST /programmer/effects`.
+- The Effects band (§4.3); *+ Effect*, ⌘K *Apply FX* and `ApplyPicker`'s Effects section on
+  `POST /programmer/effects`.
 - The split editor (§4.5's *Apply to Hex 1–2 · Select all 4*) in the FX editor popover, wherever it
   opens.
 - `FxAddSheet` retired into the band and the picker.

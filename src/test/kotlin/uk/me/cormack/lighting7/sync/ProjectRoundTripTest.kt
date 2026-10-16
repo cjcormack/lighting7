@@ -229,7 +229,7 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * The spread's shape (effects plan session 2, formatVersion 32) travels on all three stored effect
+     * The spread's shape (effects plan session 2, formatVersion 33) travels on all three stored effect
      * shapes, each at the non-default `RichProjectFixture` gives it (the byte-for-byte round trip
      * above is what proves the importer keeps it), and a default shape writes no key.
      */
@@ -260,8 +260,8 @@ class ProjectRoundTripTest {
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertTrue(format.formatVersion >= 32, "the spread's shape syncs from v32")
-        assertTrue(SUPPORTED_FORMAT_VERSION >= 32, "and this desk reads it")
+        assertTrue(format.formatVersion >= 33, "the spread's shape syncs from v33")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 33, "and this desk reads it")
 
         // A default shape writes no key, so a show that shapes nothing exports as before.
         val lookText = Files.walk(exportDirA.resolve("looks")).use { stream ->
@@ -515,7 +515,7 @@ class ProjectRoundTripTest {
         val banks = page.columns.flatMap { it.banks }
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(listOf("WRAP", "COLUMN", "WRAP", "WRAP"), banks.map { it.flow })
-        assertEquals(7, banks.sumOf { it.pads.size })
+        assertEquals(8, banks.sumOf { it.pads.size })
         val keys = banks.first()
         assertTrue(keys.solo)
         assertEquals(listOf("templateUuid", "lookUuid", "cueUuid"), keys.pads.map { pad ->
@@ -890,7 +890,7 @@ class ProjectRoundTripTest {
             canonicalDecode(BuskPageJson.serializer(), Files.readString(stream.findFirst().get()))
         }
         val banks = page.columns.flatMap { it.banks }
-        assertEquals(6, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
+        assertEquals(7, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(0, banks.first { it.name == "keys" }.pads.count { it.lookUuid != null }, "the dropped pad was the keys bank's Look")
         assertEquals(2, banks.first { it.name == "keys" }.pads.size)
@@ -1025,20 +1025,23 @@ class ProjectRoundTripTest {
     }
 
     @Test
-    fun `import with bad cue stack reference rolls back atomically`() {
+    fun `import with a bad cue reference rolls back atomically`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
         wipeDatabase()
 
-        // Corrupt one cue's cueStackUuid so FK resolution fails mid-import.
-        val cueDir = exportDirA.resolve("cues")
-        val firstCue = Files.list(cueDir).use { it.findFirst().get() }
-        val original = Files.readString(firstCue)
+        // Corrupt one property assignment's cueUuid so FK resolution fails mid-import, after the
+        // cues, stacks and entries have landed. (A cue file names no stack since v32, and an entry
+        // naming a missing stack is dropped rather than refused — `CueStackEntrySyncTest`.)
+        val dir = exportDirA.resolve("cuePropertyAssignments")
+        val first = Files.list(dir).use { it.findFirst().get() }
+        val original = Files.readString(first)
         val corrupt = original.replace(
-            Regex("\"cueStackUuid\": \"[0-9a-f-]+\""),
-            "\"cueStackUuid\": \"00000000-0000-0000-0000-000000000000\""
+            Regex("\"cueUuid\": \"[0-9a-f-]+\""),
+            "\"cueUuid\": \"00000000-0000-0000-0000-000000000000\""
         )
-        Files.writeString(firstCue, corrupt)
+        assertTrue(corrupt != original, "test sanity: the assignment was rewritten")
+        Files.writeString(first, corrupt)
 
         val ex = assertFailsWith<ImportError> {
             ProjectImporter(state).import(exportDirA, nameOverride = null)

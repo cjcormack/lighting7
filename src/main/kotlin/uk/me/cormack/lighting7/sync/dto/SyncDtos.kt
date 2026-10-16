@@ -47,13 +47,23 @@ data class FormatVersionJson(
     // them away for every peer. `minReader` stays at **5** — a missing locate is the centre. A venue
     // patch's locate is part of its Focus facet, so a show's override of it travels in `showOverrides/`
     // under the same number. See `docs/sync-engineering.md` §"Version 31 — stored locate".
-    // v32: the spread's shape (effects plan session 2, venue-visit R4.2). `LookEffectJson`,
+    // v32: cue stack entries (cue model plan session 3, §3.9). A stack's list leaves the cue files:
+    // `cues/{uuid}.json` drops `cueStackUuid`, `sortOrder`, `cueNumber`, `cueNumberAuto`,
+    // `autoAdvance`, `autoAdvanceDelayMs` and `cueType`, and each place in a list is its own record,
+    // `cueStackEntries/{uuid}.json` ([CueStackEntryJson]) — a double `ordinal` (P6), the number only
+    // when explicit or not derivable (P5), and a marker as an entry with a label. `promptBookAnchors/` names its entry
+    // (`entryUuid`) instead of a cue. A v31 reader would import every cue with no stack and its next
+    // wipe-then-export push would write every stack empty for every peer, so the writer moves;
+    // `minReader` stays at **5** — the reader still takes a v5–v31 archive's lists from its cue
+    // files ([LegacyCuePlacementJson]). See `docs/sync-engineering.md` §"Version 32 — cue stack
+    // entries".
+    // v33: the spread's shape (effects plan session 2, venue-visit R4.2). `LookEffectJson`,
     // `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings` and `blocks`
     // (default 1) and `groups` (default 0, off), each omitted at its default. The writer's number moves
-    // by the sharp-edge rule: a v31 reader would run a 50 % ripple over the whole cycle and two wings
+    // by the sharp-edge rule: a v32 reader would run a 50 % ripple over the whole cycle and two wings
     // as one, and its next wipe-then-export push would write all four away. `minReader` stays at
     // **5** — every field defaults to what an older row meant. See `docs/sync-engineering.md`
-    // §"Version 32 — the spread's shape".
+    // §"Version 33 — the spread's shape".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -270,7 +280,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 32,
+    val formatVersion: Int = 33,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -425,7 +435,7 @@ data class LookEffectJson(
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 32): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
     val spread: Double = 1.0,
@@ -515,7 +525,7 @@ data class TemplateEffectJson(
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 32): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
     val spread: Double = 1.0,
@@ -901,7 +911,7 @@ data class CueAdHocEffectJson(
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 32): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
     val spread: Double = 1.0,
@@ -922,25 +932,73 @@ data class CueTriggerJson(
     val sortOrder: Int = 0,
 )
 
+/**
+ * A cue: what a state is (cue model plan D2) — never where it sits. From v32 its places in stacks
+ * are [CueStackEntryJson] records; a cue no entry names is loose. A v5–v31 archive's cue file also
+ * carries its one place, read through [LegacyCuePlacementJson].
+ */
 @Serializable
 data class CueJson(
     val uuid: String,
-    val cueStackUuid: String? = null,
     val name: String,
-    val sortOrder: Int = 0,
-    val autoAdvance: Boolean = false,
-    val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
-    val cueNumber: String? = null,
-    val cueNumberAuto: Boolean = false,
     val notes: String? = null,
-    val cueType: String = "STANDARD",
     val stomp: Boolean = false,
     /** v20: what the cue moves on GO, each change on its own clock. */
     val scenery: List<SceneryChangeJson> = emptyList(),
     /** v21: the tubes the cue fires on GO into it, each at its offset, while the desk is armed. */
     val events: List<CueEventJson> = emptyList(),
+)
+
+/**
+ * The place a v5–v31 archive's cue file gave its cue: its stack, its position, its number and
+ * follow, and whether it was a marker. **Read only, never written** — decoded from the same file as
+ * [CueJson] when the archive is older than v32, where each becomes one [CueStackEntryJson]-shaped
+ * entry (`ProjectImporter`): `ordinal = sortOrder`, the number explicit only when
+ * [cueNumberAuto] is false, a MARKER cue a marker entry labelled with its name, and a cue with no
+ * stack loose. Its fields default, so a v32 cue file decodes as no place at all.
+ */
+@Serializable
+data class LegacyCuePlacementJson(
+    val cueStackUuid: String? = null,
+    val sortOrder: Int = 0,
+    val autoAdvance: Boolean = false,
+    val autoAdvanceDelayMs: Long? = null,
+    val cueNumber: String? = null,
+    val cueNumberAuto: Boolean = false,
+    val cueType: String = "STANDARD",
+)
+
+/**
+ * v32: one place in a stack's list (cue model plan §3.9) — `cueStackEntries/{uuid}.json`, one file
+ * per entry, which is the merge story: two desks adding to one stack add two records, a drag
+ * rewrites one (its [ordinal]), and a renumber rewrites only the entries whose explicit number
+ * changed.
+ *
+ *  * [cueUuid] names the cue a cue entry places; a marker has none. Several entries may name one
+ *    cue, in one stack or several (D1, D7).
+ *  * [kind] is omitted for a cue entry; a marker says `MARKER` and carries its [label].
+ *  * [ordinal] is the entry's position (P6): ascending, ties broken by [uuid], so two desks that
+ *    inserted into the same gap — the same midpoint — play the two entries in the same order. No
+ *    default, so it is always written.
+ *  * [cueNumber] is written when explicit, and an auto number only where a reader could not derive
+ *    it from position (P5, as amended: `heldAutoNumbers`); a reader takes every number it finds as
+ *    explicit. The rest are derived by every reader, so a drag changes one file rather than every
+ *    auto-numbered entry after it.
+ *  * [autoAdvance] and [autoAdvanceDelayMs] are the entry's follow (D2).
+ */
+@Serializable
+data class CueStackEntryJson(
+    val uuid: String,
+    val cueStackUuid: String,
+    val cueUuid: String? = null,
+    val kind: String? = null,
+    val label: String? = null,
+    val ordinal: Double,
+    val cueNumber: String? = null,
+    val autoAdvance: Boolean = false,
+    val autoAdvanceDelayMs: Long? = null,
 )
 
 /**
@@ -1128,10 +1186,16 @@ data class PromptBookJson(
     val coverPages: Int = 0,
 )
 
+/**
+ * An anchor marks an **entry** (cue model plan D4): from v32 [entryUuid], a `cueStackEntries/`
+ * record. A v5–v31 archive names a cue instead ([cueUuid], read only, never written), which the
+ * importer moves to that cue's one entry — or to the marker entry a MARKER cue's uuid became.
+ */
 @Serializable
 data class PromptBookAnchorJson(
     val uuid: String,
-    val cueUuid: String,
+    val entryUuid: String? = null,
+    val cueUuid: String? = null,
     val region: List<PromptBookRectDto>,
     val label: String? = null,
 )

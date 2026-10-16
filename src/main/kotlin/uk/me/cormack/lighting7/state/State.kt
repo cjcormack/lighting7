@@ -1348,6 +1348,10 @@ class State(val config: ApplicationConfig) {
                     WHERE cue_number IS NOT NULL AND kind = 'CUE'
             """.trimIndent())
 
+            // Once per database: a cue's one entry takes its cue's uuid, so every desk names the place
+            // alike once entries are archive records (sync formatVersion 32). `CueEntryUuidMigration.kt`.
+            keyCueEntriesByCue()
+
             ensureInstallRow()
         }
 
