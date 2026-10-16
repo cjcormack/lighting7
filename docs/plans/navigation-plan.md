@@ -189,6 +189,9 @@ and is hidden in a venue like the rest of Library.
 - **The switcher button** names the current project.
   - A green dot means it is sending.
   - An amber dot means it is held behind its venue (`venue.hold`).
+  - Since venue-visit S6 a current show can also be dark by *Make rig safe*'s blackout, which is per
+    project and runtime (`GlobalScalerStateHolder.safeBlackout`, `rigSafety.state`). The dot must not
+    read green then; the session picks its look.
   - A venue's tag goes beside the name when the current project is a venue.
 - **The pin chip.** A show on a venue gets one after the button: *TCH venue v7*, plus *held* or
   *v8 published* in the banner's colours. Clicking it opens the show's home.
@@ -232,6 +235,9 @@ and is hidden in a venue like the rest of Library.
   > **Put TCH Test on the rig?** Sleeping Beauty's cues, programmer and effects stop, and every
   > channel goes dark except those TCH Test parks.
 - When the incoming show is behind its venue on output, a second line says it will open **held**.
+- Since venue-visit S6 a switch also drops a bulk lamp run in flight, a staggered strike included
+  (`RigSafetyService.attach`), and a show made safe and switched back to opens still blacked out, its
+  *Undo* on the banner. The confirmation says each when it applies.
 
 ## 5. The project's home (D2)
 
