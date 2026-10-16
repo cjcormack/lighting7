@@ -367,7 +367,7 @@ Each session is one PR (P1). All are frontend only (P5), but for session 3's two
   - The current project's rows have no dot.
 - **Docs:** the frontend CLAUDE.md beside §Navigation Registry.
 
-### Session 3 — The switcher
+### Session 3 — The switcher — done, `e714d86`
 
 - §4: the app bar's desk name, the switcher button and pin chip, the menu with search, and the
   reworded confirmation.
