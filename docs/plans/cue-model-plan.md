@@ -69,7 +69,8 @@ The findings that shape the plan, from three surveys of the code on `main` at `2
   with the cue's number.
 - **Sync stores membership inside the cue.** `CueJson` carries `cueStackUuid`, `sortOrder`,
   `cueNumber`, `cueNumberAuto` and `autoAdvance` (`sync/dto/SyncDtos.kt:835`). The writer is at
-  `formatVersion` 29 and the importer reads 5–29 (`sync/ProjectImporter.kt:234-235`). Merging is per
+  `formatVersion` 29 and the importer reads 5–29 (`sync/ProjectImporter.kt:234-235`; 31 and 5–31 at
+  `:265-266` by venue-visit course check K1). Merging is per
   record (`sync/ThreeWayDiff.kt`), so a renumber touches every cue file in the stack and conflicts
   with any concurrent edit to those cues. `FU-SYNC-ORDINAL-DOUBLE` asks for its fix "in the same
   bump" as the next one.
@@ -206,25 +207,27 @@ priority(cue) = the highest of its holds:
 - **`CueStackManager`** keeps `activeStacks` by stack, with `activeEntryId` (and the cue it names).
   A GO from entry *a* to entry *b* in stack *s* is `acquire(cue(b), Stack(s, b))` then
   `release(cue(a), Stack(s, a))`, sharing one crossfade. When *a* and *b* name the same cue (D7),
-  nothing on stage moves, and the follow timer is *b*'s.
+  nothing on stage moves, and the follow timer is *b*'s. A GO onto the entry the stack is already on
+  re-fires it: its hold is let go and taken again, snapping, so it re-fires unless another hold keeps
+  it (as session 2 shipped).
 - **`CueCrossfadeDriver`** is unchanged in shape: one fade per stack, and weights by cue. The
   registry tells it which side of the fade is real. An incoming cue already held elsewhere starts at
   weight 1, and an outgoing cue still held elsewhere stays at 1.
 - **`CueAssignmentLayer` and `FxInstance.cueStackId`.** `cueStackIds: cueId → stackId` becomes
-  the registry's question. `assignmentsExcludingStack(s)`, which Preview uses, keeps a cue that
-  another hold still holds. Effects are removed by cue when the last hold goes, never by stack.
+  the registry's question. Preview's `assignmentsExcludingCues(holds.cuesHeldOnlyBy(s) + cueId)`
+  keeps a cue that another hold still holds. Effects are removed by cue when the last hold goes, never by stack.
   `removeEffectsForCueStack` then serves only a stack's own non-cue effects, if any remain.
 - **Standby and next** (`CueRunStateTracker`) key on entries: `standbyEntryIds: stackId → entryId`,
   and `orderedCueEntries(stack)` replaces `orderedStandardCueIds`. Positions are entry positions, so
   a cue twice in one stack is never ambiguous.
 - **Loose holds.** `/cues/{id}/apply`, MCP `apply_cue`, a busk cue pad, a cue slot, `FireCue` and
-  the hand take a loose hold on the cue's fade; `/stop`, `stop_cue`, a second press and a solo
-  sibling release it. `replaceAll` releases every loose hold first; it never touches a stack's.
-  `applyCue`'s separate path (`routes/projectCuesHelpers.kt:670`) folds into the registry, so a loose
-  cue at last starts its timed effects and triggers as a GO does.
+  the hand take a loose hold, snapping in and out (`Arrival.SNAP`, `Departure.SNAP`); `/stop`,
+  `stop_cue`, a second press and a solo sibling release it. `replaceAll` lets go of every other loose
+  hold first (`dropAllLoose`); it never touches a stack's. `applyCue`'s separate path is gone (session
+  2): a loose cue starts its timed effects, triggers and events as a GO does.
 - **Scenery** tracks per stack, down the entry list to the live entry. A loose cue folds in as a
   one-cue stack in GO order: its own rows, no set, no tracking. `SceneryService`'s `goes` key on
-  entries, and `onCueApplied` becomes the loose hold's hook.
+  entries, and `onLooseHeld` / `onLooseReleased` are the loose hold's hooks.
 - **Events** fire when the cue comes on (D15): `acquire`'s first-hold arm calls
   `EffectsService.onCueGo`, whatever path took the hold. A GO into a cue another hold keeps live
   fires nothing. GO BACK still fires nothing, because the registry is told the GO's direction. The
@@ -242,14 +245,14 @@ priority(cue) = the highest of its holds:
 
 | Reference | Today | After |
 |---|---|---|
-| Stack list | `cues.cue_stack_id` + `sort_order` | `cue_stack_entries` (D1) |
-| Busk pad, cue slot, `FireCue`, the hand | the cue; press GOes in its stack | the cue; press holds it loose (D6, D11) |
-| Prompt-book anchor | the cue (unique per book) | the entry (D4) |
+| Stack list | `cues.cue_stack_id` + `sort_order` | `cue_stack_entries` (D1). Done, session 1. |
+| Busk pad, cue slot, `FireCue`, the hand | the cue; press GOes in its stack | the cue; press holds it loose (D6, D11). Done, session 2. |
+| Prompt-book anchor | the cue (unique per book) | the entry (D4). Stored by entry since session 1; the routes, the book and the MCP tools still name the cue. |
 | Cue events, cue scenery, layers, values, effects, triggers | the cue | the cue (content) |
 | Stack scenery (the set) | the stack | the stack |
 | Include target | `(cueId, cueStackId)` | `(cueId, entryId?)`: the entry it was included from, for the indicator; Update writes the cue |
 | Record CREATE | needs a stack | a stack is optional; without one the new cue is loose |
-| Standby, GO TO, preview, `activate` at a cue | a cue id in the stack | an entry id (P2) |
+| Standby, GO TO, preview, `activate` at a cue | a cue id in the stack | an entry id (P2). REST since sessions 1–2; the MCP tools in session 7. |
 | `projects.active_stack_id` | the playhead stack | unchanged |
 | MIDI `CueStackGo/Back/Pause` | the stack | unchanged |
 
@@ -318,8 +321,8 @@ are on the same venue; otherwise every record falls back to key and name.
 
 ### 3.9 Sync (P4, P5, P6)
 
-**A `formatVersion` bump**, from session 3. It takes the next number free when it lands
-(venue-visit P5; 28 when this plan was written). Below, *vN* is that version:
+**A `formatVersion` bump**, from session 3. It takes its number by venue-visit P5 (28 when this plan
+was written). Below, *vN* is that version:
 
 - `cues/{uuid}.json` drops `cueStackUuid`, `sortOrder`, `cueNumber`, `cueNumberAuto`,
   `autoAdvance`, `autoAdvanceDelayMs` and `cueType`.
@@ -357,7 +360,7 @@ That is the number an operator reads off the Show view, and it is unique in its 
 | `copy_cues` (new) | `{fromProjectId, cueIds, stackId?, dryRun?}`, the §3.8 copy. |
 | `build_cue_stack` | A row may name an existing `cueId` to share it instead of defining a cue. |
 | `activate_cue_stack`, `set_standby` | Take `entryId` or `number` in place of `cueId`. |
-| `apply_cue`, `stop_cue` | A loose hold and its release (D6); no project-less `findById` (§1). |
+| `apply_cue`, `stop_cue` | Done in session 2: a loose hold and its release (D6), current project only. |
 | `record_cue` | CREATE takes an optional `stackId`; without one the cue is loose. |
 | `get_current_state` | `cues` lists each cue's entries; `cue_run` gains entry ids; a new `cue_holds`. |
 | `describe_rig` | Each cue lists `in: Act 1 Q14, Act 2 Q3`, or `loose`. The briefing says a cue may be shared, and that delete is explicit. |
@@ -431,7 +434,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   `FireCue`, the hand. `BuskPressService`'s `PressRecord.Cue` loses its stack.
 - **Entries at runtime** (P2): standby, next, GO TO, preview and the run state by entry id.
 - **Wire:** `cueRunStateChanged`'s entry ids, `cueHolds.state`. **Frontend:** the pad ring (D11),
-  `useActiveCueIds` from `cueHolds.state`.
+  `useCueRings` from `cueHolds.state`, replacing `useActiveCueIds`.
 - **Tests:** two entries naming one cue, inserted directly, in two stacks and twice in one stack.
   Stack A moving on leaves the cue on stage while B holds it; it fades out only on the last
   release; priority is the highest hold's; a loose press beats both stacks; a crossfade between two
@@ -461,18 +464,39 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **Remove from stack** (live entries included, D16), **stack delete leaves cues** with its
   `deleteLooseCues` offer (§3.6, D17), **explicit delete** with its guard (D8), and bulk delete.
 - **Record without a stack** makes a loose cue, and `create_cue` stops using "Unsorted".
-  `getOrCreateUnsortedStack` goes.
+  `getOrCreateUnsortedStack` goes once session 6 has removed the REST `/cues/{id}/copy` that still
+  calls it; until then that copy keeps its stack. `POST /cues` stops requiring `cueStackId`.
+- **`soleEntryOf`'s callers move off it** (session 1's P4 bridge, which answers null for a cue in
+  several stacks). Each takes an entry from its caller, or lists every entry: the cue routes' number
+  and follow, `add-cue` and `add_cue_to_stack` (the "Add shares" bullet above), Record and Update's
+  scenery, Update's preview, `BuskCueDto`, the venue Update's label and `CueDetails`. The include
+  target gains R1 §3.5's `entryId?`, and its indicator reads it. `GET /cues` keeps `cueNumber` and
+  `cueStackName`, null for a shared or loose cue, until session 5 moves the list and `RecordCuePicker`
+  to entries together. The briefing and `mark_up_prompt_book` move in session 7 and the REST copy goes
+  in session 6, so the function itself goes in session 7; the importer's call is session 3's.
+- **An entry's number and follow are written on the entry**, not through the cue's `PUT` / `PATCH`
+  (today they go through `soleEntryOf`, so on a shared cue the card's number edit would be dropped).
+  The session names the route.
+- **Anchors by entry on REST and in the book** (D4): the anchor routes
+  (`/prompt-book/anchors/{cueId}` today) and `useBookAnchors` name an entry.
 - **Frontend:** the `in N stacks` chip, *Remove from stack*, *Add to stack…*, *Move to stack…*
-  (§4), and the stack delete's confirm with its unticked *Also delete* (D17).
+  (§4), and the stack delete's confirm with its unticked *Also delete* (D17). The Record sheet's
+  stack select (venue-visit S10) has no loose choice today; ask Chris whether it gains *No stack*.
 - **Tests:** a cue in two stacks edited once reads the same in both; removing an entry renumbers
   the stack it left; removing the live entry moves nothing until the next GO, which fires its
   follower (D16); `deleteLooseCues` deletes only the cues no other stack holds (D17); stack delete leaves its cues loose and their other entries untouched; delete
   without force names every reference, and with force leaves nothing pointing at the cue.
-- **Docs:** `cues-engineering.md` §"Delete", CLAUDE.md's cue endpoints.
+- **Docs:** `cues-engineering.md` §"Delete" and §"Cue Stack Membership" (the P4 paragraphs go);
+  `cue-stacks-engineering.md`'s overview and its stack-delete line; the `soleEntryOf` KDoc (the callers
+  left); CLAUDE.md's
+  cue endpoints. MCP `delete_cue_stacks` ("with all their cues") and `add_cue_to_stack` ("moved")
+  describe the old behaviour until session 7.
 
 ### Session 5 — the Cues table (frontend + backend)
 
-- §3.7, with the list endpoint gaining each cue's entries and *Used by*.
+- §3.7, with the list endpoint gaining each cue's entries and *Used by*. `RecordCuePicker`
+  (venue-visit S10) reads the same list and labels rows from `cueNumber` and `cueStackName`, so it moves
+  to the entries too.
 - **Tests:** frontend tests for the filters and the multi-select actions; a route test for the
   list's shape.
 - **Docs:** `frontend/CLAUDE.md`'s views, `desk-screens.md` if the Screens sheet's list changes.
@@ -490,7 +514,9 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 ### Session 7 — the MCP tools (backend)
 
-- §3.10, with the briefing (`RigBriefing.keyConcepts`) rewritten for shared and loose cues.
+- §3.10, with the briefing (`RigBriefing.keyConcepts`) rewritten for shared cues and explicit delete
+  (session 2 wrote the loose hold's part). The briefing and `mark_up_prompt_book` move off
+  `soleEntryOf`, which then goes.
 - **Tests:** each new tool, and each changed one naming an entry by number.
 - **Docs:** `mcp-engineering.md`, `cue-stacks-engineering.md` §"MCP tools".
 

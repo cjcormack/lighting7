@@ -177,7 +177,9 @@ its highest hold's priority, a press above every stack.
 directly, against the mock controller. Nothing in review watched a real rig hold its state while one
 of two stacks stepped off the cue, or read the two rings on a desk screen.
 
-**Test**, on the desk, on a show with two stacks:
+**Test**, on the desk, on a scratch copy of a show with two stacks and no repo attached — until the
+cue model plan's session 3 the archive writes a cue from one entry only, so a push would drop the
+second and a pull would delete it:
 
 1. **One cue in two stacks.** No route puts a cue in a second stack until session 4 lets a cue be
    shared, so add its second entry directly: note the cue's id and the second stack's id
@@ -339,7 +341,8 @@ rig's to say.
 
 **Test**, on the hall's rig with a MAC 250 and a Shehds (or the Robe) patched:
 
-1. **The centre.** Locate a mover: the programmer's Position cell, the fixture sheet's Position row
+1. **The centre.** Locate a mover with no stored locate (since S8 Locate goes to a unit's stored point
+   when it has one): the programmer's Position cell, the fixture sheet's Position row
    and the cue value grid all read `0,0`; the Channels sheet reads 128 on pan and tilt.
 2. **Typing.** In the cell, type pan `-20`, Enter: the head swings left of centre and Channels reads
    108. Type `-128` and `127`: the head reaches each end stop.
