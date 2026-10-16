@@ -615,8 +615,8 @@ internal object CueComposer {
          * How long this row's value should take to arrive, or null to snap.
          *
          * Carried through the cook because a *tracked* source has to fade like an *applied* one:
-         * clicking a template writes literals into the programmer with the template's fade
-         * (`applyTemplateToProgrammer`), and ⌥clicking the same chip adds a layer that tracks it —
+         * *Apply as values* writes literals into the programmer with the template's fade
+         * (`applyTemplateToProgrammer`), and a tap on the same chip adds a layer that tracks it —
          * which used to snap, because the field stopped here (sweep item B1).
          */
         val fadeDurationMs: Long?,

@@ -48,8 +48,8 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * knows a group's member order, each head's range, which cells a fixture has and what a colour
  * means on a head with amber. Interpolation happens **in the intent's own space** — Lab for a
  * colour ([TemplateResolver.mixLab]), centre-relative steps for a position, percent for a level, a DMX byte for
- * an emitter — and each head's literal then goes through the same [TemplateResolver] a template
- * click uses, so the far end of a spread is exactly what a template of that hex would have given
+ * an emitter — and each head's literal then goes through the same [TemplateResolver] a template's
+ * *Apply as values* uses, so the far end of a spread is exactly what a template of that hex would have given
  * that head. The write is one batched [ProgrammerWriter.writeProperties] with owner `WEB`: one
  * `ProgrammerStore.put` per key, so `programmer.entryChanged` carries it, Record captures it and
  * Blind previews it, and Clear releases it like any busked value (D10: a spread is a result, not a

@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, SwatchBook } from 'lucide-react'
 import { useCurrentProjectQuery } from '@/store/projects'
-import { useLookListQuery, useToggleLookMutation } from '@/store/looks'
+import { useLookListQuery } from '@/store/looks'
+import { usePress } from '@/hooks/usePress'
 import type { LookSummary } from '@/api/looksApi'
 
 interface LookTogglePickerProps {
@@ -39,7 +40,14 @@ export function LookTogglePicker({
     { projectId: currentProject?.id ?? 0 },
     { skip: !currentProject },
   )
-  const [toggleLook, { isLoading: isApplying }] = useToggleLookMutation()
+  // The press, onto this one target and with no mask — the sheet's pick is its own selection —
+  // and always into Local: the fixture sheet writes the programmer whatever the grid is pointed at.
+  const pair = useMemo(
+    () => ({ targets: [{ type: targetType, key: targetKey }], families: null }),
+    [targetType, targetKey],
+  )
+  const { press } = usePress(currentProject?.id ?? 0, pair, { scope: 'programmer' })
+  const [isApplying, setApplying] = useState(false)
 
   const compatible = useMemo(() => {
     if (!looks || compatibleLookIds.length === 0) return []
@@ -49,11 +57,12 @@ export function LookTogglePicker({
 
   const handleApply = async (look: LookSummary) => {
     if (!currentProject) return
-    await toggleLook({
-      projectId: currentProject.id,
-      lookId: look.id,
-      targets: [{ type: targetType, key: targetKey }],
-    })
+    setApplying(true)
+    try {
+      await press({ kind: 'look', look }, 'press')
+    } finally {
+      setApplying(false)
+    }
   }
 
   if (!currentProject || isLoading || compatible.length === 0) return null

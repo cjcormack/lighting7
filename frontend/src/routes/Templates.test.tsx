@@ -25,8 +25,10 @@ vi.mock('@/store/templates', () => ({
 vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtureFx', () => ({ useEffectLibraryQuery: () => ({ data: [] }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: () => true }))
+const current = vi.hoisted(() => ({ loading: false }))
 vi.mock('@/store/projects', () => ({
-  useCurrentProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
+  useCurrentProjectQuery: () =>
+    current.loading ? { data: undefined, isLoading: true } : { data: { id: 1, name: 'Hamlet' }, isLoading: false },
   useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet', isCurrent: true }, isLoading: false }),
   useProjectListQuery: () => ({ data: [{ id: 1, name: 'Hamlet', isCurrent: true }] }),
 }))
@@ -68,14 +70,18 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
   }
 }
 
-function renderAt(url: string) {
-  return render(
+function ui(url: string) {
+  return (
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route path="/projects/:projectId/palettes" element={<ProjectTemplates />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+}
+
+function renderAt(url: string) {
+  return render(ui(url))
 }
 
 beforeEach(() => {
@@ -193,6 +199,24 @@ describe('ProjectTemplates', () => {
   it('opens the editor from ?action=new, for the command palette', () => {
     renderAt('/projects/1/palettes?action=new')
     expect(screen.getByTestId('editor')).toBeInTheDocument()
+  })
+
+  it('opens a palette’s editor from ?edit=, the hold menu’s Edit palette…', () => {
+    renderAt('/projects/1/palettes?edit=1')
+    expect(screen.getByTestId('editor')).toBeInTheDocument()
+  })
+
+  it('waits for the current project before it reads ?edit=, rather than dropping it', () => {
+    current.loading = true
+    try {
+      const { rerender } = renderAt('/projects/1/palettes?edit=1')
+      expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+      current.loading = false
+      rerender(ui('/projects/1/palettes?edit=1'))
+      expect(screen.getByTestId('editor')).toBeInTheDocument()
+    } finally {
+      current.loading = false
+    }
   })
 
   it('shows the empty state rather than a blank page', () => {

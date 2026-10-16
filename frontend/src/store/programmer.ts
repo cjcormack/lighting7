@@ -337,6 +337,11 @@ export function programmerRemoveLayer(layerId: number, fadeMs?: number) {
   lightingApi.programmer.removeLayer(layerId, fadeMs)
 }
 
+/** *Detach*: the layer becomes Local. The send's verdict, as [programmerAddLayer]'s is. */
+export function programmerDetachLayer(layerId: number): boolean {
+  return lightingApi.programmer.detachLayer(layerId)
+}
+
 /** [toIndex] counts non-preview layers — the preview always sorts last, server-side. */
 export function programmerMoveLayer(layerId: number, toIndex: number) {
   lightingApi.programmer.moveLayer(layerId, toIndex)

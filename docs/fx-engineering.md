@@ -79,7 +79,7 @@ is the *starting* tempo; live changes write through with a 750 ms trailing debou
 Two nullable per-master settings, added for the busk view (see
 `docs/plans/completed/busking-view-plan.md` §2, decisions D1–D7):
 
-- **`usage`** (`dimmer` / `colour` / `position` — the effect library's own `category`
+- **`usage`** (`dimmer` / `colour` / `position` / `beam` — the effect library's own `category`
   vocabulary, pinned by `SpeedMasterUsageVocabularyTest`) names the master an *apply-time
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
@@ -265,6 +265,32 @@ Effects that produce pan/tilt values for moving heads.
 | `TiltSweep` | Vertical sweep | `startTilt`, `endTilt`, `pan` |
 | `RandomPosition` | Random movement | `panCenter`, `tiltCenter`, `panRange`, `tiltRange` |
 
+### Beam Effects (`FxOutput.Slider`)
+
+Category `beam` (effects plan D6, session 6): each drives **one** beam property and declares only it
+in `compatibleProperties`, so the picker offers it only on a head that has that property, under its
+**Beam** family. Level effects are not offered on beam sliders (`FU-FX-BEAM-ANY-SLIDER`).
+
+| Effect | Property | Description | Parameters |
+|--------|----------|-------------|------------|
+| `ZoomBreathe` | `zoom` | Sine between two zooms | `min`, `max` |
+| `IrisPulse` | `iris` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
+| `FrostPulse` | `frost` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
+| `FocusPull` | `focus` | Sweep between two focus levels | `start`, `end`, `curve`, `pingPong` |
+
+The values are raw DMX, as every level effect's are. A stepped zoom (the Robe's) is a setting, so
+Zoom Breathe on it writes the byte and lands on whichever step that is.
+
+A stored beam effect that names no property — an effect palette's, a Look's deferred effect — lands
+on the one property its registration declares (`EffectSpawner`'s `beam` arm), on a group only where
+every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's effect must
+declare exactly one property by name (`validateTemplateEffect`). A group or selection is resolved
+through its first head that has the property (`referenceFixtureFor(target, property)`), so a
+selection that starts on a head without zoom still drives the zooms after it. Record files an
+effect on `zoom`, `iris`, `frost` or `focus` as category `beam` (`categoryFromPropertyName`), so a
+recorded Look's families include Beam. A speed master may take `usage: beam`, and a Beam effect
+palette holds one of them (`TEMPLATE_EFFECT_FAMILIES`).
+
 ### Stateful Effects (`StatefulEffect`)
 
 Stateful effects maintain internal state that evolves over time, rather than being pure
@@ -391,7 +417,7 @@ Each registered effect provides:
 - `id` — canonical name (e.g., "SineWave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
-- `category` — UI category ("dimmer", "colour", "position", "composite", "controls")
+- `category` — UI category ("dimmer", "colour", "position", "beam", "composite", "controls")
 - `outputType` — primary output type
 - `effectMode` — `STANDARD`, `STATEFUL`, or `COMPOSITE`
 - `parameters` — schema for the API/UI
@@ -421,7 +447,7 @@ table always requires a `project_id` since every user effect belongs to a projec
 fx_definitions table (user effects only):
 ├── effect_id         — canonical ID (e.g., "MyCustomPulse")
 ├── name              — display name (e.g., "My Custom Pulse")
-├── category          — "dimmer", "colour", "position", "composite", "controls"
+├── category          — "dimmer", "colour", "position", "beam", "composite", "controls"
 ├── output_type       — SLIDER, COLOUR, or POSITION
 ├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
@@ -471,6 +497,9 @@ src/main/resources/fx/
 │   └── ...
 ├── position/
 │   ├── Circle.fx.kts
+│   └── ...
+├── beam/
+│   ├── ZoomBreathe.fx.kts
 │   └── ...
 └── composite/
     └── LightningStrike.fx.kts  (COMPOSITE)
@@ -1599,7 +1628,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (24 files) |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
 | `fx/TemplateColourSource.kt` | Colour-palette resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
 | `fx/TemplateRegistry.kt` | Palette snapshots cached by uuid — rows, or the one effect an effect palette holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |

@@ -1,16 +1,22 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { LookStack, type LayerHandlers } from '@/components/looks/LookStack'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import {
+  programmerDetachLayer,
   programmerMoveLayer,
   programmerPatchLayer,
   programmerRemoveLayer,
+  useProgrammerAppliedQuery,
   useProgrammerLayersQuery,
 } from '@/store/programmer'
 import type { ProgrammerLayer } from '@/store/programmer'
+import type { ProgrammerAppliedSource } from '@/api/programmerWsApi'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { appliedSignature, replacementNotes, sourceKey } from '@/lib/replacementNotes'
+import { cellKeysOf, headName } from '@/lib/headName'
 
 /**
  * The programmer's Look stack — the same `LookStack` the cue editor draws, over the live
@@ -102,6 +108,10 @@ export const ProgrammerLookStack = memo(function ProgrammerLookStack() {
         const layer = layers[index]
         if (layer) programmerPatchLayer(layer.layerId, { stomp })
       },
+      onDetach: (index) => {
+        const layer = layers[index]
+        if (layer) programmerDetachLayer(layer.layerId)
+      },
       // The only handler that touches nothing on the server. Focus is a property of *this*
       // client's grid: a second desk looking at the same programmer is entitled to be reading a
       // different layer, and broadcasting a focus would drag its grid around under its hands.
@@ -113,9 +123,16 @@ export const ProgrammerLookStack = memo(function ProgrammerLookStack() {
     [layers, scopeActions],
   )
 
+  const notes = useReplacementNotes()
+  const noteFor = useCallback(
+    (layer: ProgrammerLayer) => (layer.source != null ? (notes.get(sourceKey(layer.source)) ?? null) : null),
+    [notes],
+  )
+
   return (
     <LookStack
       dense
+      noteFor={noteFor}
       layers={layers}
       looksById={looksById}
       templatesById={templatesById}
@@ -129,3 +146,34 @@ export const ProgrammerLookStack = memo(function ProgrammerLookStack() {
     />
   )
 })
+
+const NO_APPLIED: readonly ProgrammerAppliedSource[] = []
+const NO_NOTES: ReadonlyMap<string, string> = new Map()
+
+/**
+ * The rows' *lost Hex 3–4 to Amber* (apply-model plan §4.6): the last applied-state transition
+ * read as replacements, held until the next frame that changes anything — so a frame that moves
+ * nothing leaves the note up, and the next press or release takes it down. Never stored, and the
+ * first frame this window sees says nothing: there is no "before" to compare it with.
+ */
+function useReplacementNotes(): ReadonlyMap<string, string> {
+  const { data } = useProgrammerAppliedQuery()
+  const { fixtures } = useFixtureLookup()
+  const applied = data ?? NO_APPLIED
+  const signature = useMemo(() => appliedSignature(applied), [applied])
+  const [held, setHeld] = useState<{
+    signature: string | null
+    applied: readonly ProgrammerAppliedSource[]
+    notes: ReadonlyMap<string, string>
+  }>({ signature: data != null ? signature : null, applied, notes: NO_NOTES })
+
+  const nameOf = useCallback((key: string) => headName(fixtures ?? [], key), [fixtures])
+  const cellsOf = useCallback((key: string) => cellKeysOf(fixtures ?? [], key), [fixtures])
+
+  if (data != null && held.signature !== signature) {
+    const notes = held.signature == null ? NO_NOTES : replacementNotes(held.applied, applied, nameOf, cellsOf)
+    setHeld({ signature, applied, notes })
+    return notes
+  }
+  return held.notes
+}

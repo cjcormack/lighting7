@@ -21,7 +21,22 @@ vi.mock('@/store/templates', () => ({
   useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
   useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
-vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
+// A Recent chip is a press (`usePress`): its other routes and the ring's applied state.
+// A refused absorb into a focused Look takes the effects it started off again.
+vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/looks', () => ({
+  useApplyLookMutation: () => [vi.fn()],
+  useToggleLookMutation: () => [vi.fn()],
+  useAbsorbLookEffectsMutation: () => [vi.fn()],
+}))
+vi.mock('@/store/programmer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/programmer')>()),
+  useProgrammerAppliedQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/selection', () => ({
+  usePressFamilies: (local: unknown) => local,
+  useSelectionPair: () => ({ targets: [], families: null }),
+}))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures: [], fixtureTypes: [], fixtureByKey: new Map(), typeByKey: new Map() }),

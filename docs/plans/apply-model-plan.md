@@ -440,7 +440,7 @@ Each session is one PR (P1).
   - Clear and Release take the split instances.
 - **Docs:** `fx-engineering.md` (Local effects and the split), `websocket-engineering.md` (`updateFx`).
 
-### Session 3 — One press in the client (frontend)
+### Session 3 — One press in the client (frontend) — done, `a14d8220`
 
 - §4.1's `usePress` and every door in it but the effect door (⌘K *Apply FX*), which is session 6's.
 - The strip's tap, ⌥click and hold, with rings and the mask filter (§4.2).
@@ -455,6 +455,10 @@ Each session is one PR (P1).
   - The hand's place honours an unlinked window.
 - **Docs:** the frontend CLAUDE.md (a section, "Applying to a selection"), retiring
   `useTemplatePress`'s paragraph.
+- The client still refuses one press before sending (decided during session 3): a palette with
+  no targets that would land nowhere — a generic one on either gesture, a per-fixture one applied
+  as values — since the toggle and apply routes take it without refusing (§4.1's "no client
+  pre-refusal" assumed they refuse).
 
 ### Session 4 — One mask (frontend)
 

@@ -32,7 +32,8 @@ vi.mock('@/store/groups', () => ({
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
 // Venue-visit plan D16: a master is tagged for position, none for dimmer.
 vi.mock('@/store/speedMasters', () => ({
-  useSpeedMasterForCategory: () => (category: string | null | undefined) => (category === 'position' ? 'm-position' : null),
+  useSpeedMasterForCategory: () => (category: string | null | undefined) =>
+    category === 'position' ? 'm-position' : category === 'beam' ? 'm-beam' : null,
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [], fixtureByKey: new Map() }) }))
 
@@ -180,5 +181,80 @@ describe('FxPicker', () => {
     render(<Harness />)
     expect((screen.getByRole('radio', { name: 'Colour' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('radio', { name: 'Position' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('radio', { name: 'Beam' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('the Beam family (effects plan §4.4)', () => {
+  const beam = (name: string, property: string): EffectLibraryEntry => ({
+    name,
+    category: 'beam',
+    outputType: 'SLIDER',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleProperties: [property],
+    parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
+  })
+  const PROFILE = makeFixture('profile-1', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    sliderProp('zoom', 'zoom', chan(2)),
+    sliderProp('iris', 'iris', chan(3)),
+  ])
+
+  function BeamHarness() {
+    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    return (
+      <FxPicker
+        target={{ type: 'fixture', fixture: PROFILE }}
+        initialFamily="BEAM"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+      />
+    )
+  }
+
+  beforeEach(() => {
+    wire.library = [
+      PULSE,
+      beam('Zoom Breathe', 'zoom'),
+      beam('Iris Pulse', 'iris'),
+      beam('Frost Pulse', 'frost'),
+      beam('Focus Pull', 'focus'),
+    ]
+  })
+
+  it('offers each beam effect only on a head with its property', () => {
+    render(<BeamHarness />)
+    const list = screen.getByRole('list', { name: 'Beam effects' })
+    expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
+      'Zoom Breathe',
+      'Iris Pulse',
+    ])
+  })
+
+  it('opens a Beam row on Beam only where a beam effect drives its property', () => {
+    const withPrism = makeFixture('profile-2', [...PROFILE.properties!, sliderProp('prism', 'prism', chan(4))])
+    const props = { current: null, onCurrent: () => {}, onEdit: () => {}, initialFamily: 'BEAM' as const }
+    const target = { type: 'fixture' as const, fixture: withPrism }
+    const { unmount } = render(<FxPicker target={target} preferredProperty="iris" {...props} />)
+    expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
+    unmount()
+    wire.library = [...wire.library, { ...PULSE, name: 'Prism Sweep', category: 'controls', compatibleProperties: ['slider'] }]
+    render(<FxPicker target={target} preferredProperty="prism" {...props} />)
+    expect(screen.getByRole('radio', { name: 'Controls' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('starts a beam effect on its own property, on the Beam master', async () => {
+    render(<BeamHarness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Pulse' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      effectType: 'Iris Pulse',
+      fixtureKey: 'profile-1',
+      propertyName: 'iris',
+      beatDivision: 4,
+      speedMasterUuid: 'm-beam',
+    })
   })
 })

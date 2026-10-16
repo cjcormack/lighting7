@@ -12,9 +12,8 @@ import type { TemplateInput, TemplateSummary } from '@/api/templatesApi'
  *
  *  - it is **locked after creation**, like the family, because the cook's template arm reads one
  *    half or the other and flipping it is a different template;
- *  - **Effect is refused under Beam**, and shown disabled with the reason rather than omitted,
- *    because the backend refuses `beam` *by name* and an operator has to learn where a beam chase
- *    lives instead;
+ *  - under **Beam** the effect is one of the beam built-ins (effects plan D6), as under any family
+ *    the effect is one of that family's own;
  *  - a save sends **exactly one** of `rows` / `effect`, because a body naming the other half is a
  *    400 rather than a no-op.
  */
@@ -53,6 +52,15 @@ const library: EffectLibraryEntry[] = [
     compatibleProperties: ['position'],
   },
   {
+    name: 'Zoom Breathe',
+    category: 'beam',
+    outputType: 'SLIDER',
+    effectMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
+    compatibleProperties: ['zoom'],
+  },
+  {
     name: 'Sine Dim',
     category: 'dimmer',
     outputType: 'LEVEL',
@@ -71,7 +79,7 @@ vi.mock('@/store/fixtures', () => ({
 vi.mock('@/store/speedMasters', () => ({
   // The D8 stamp: an effect authored under Colour picks up the master whose usage is `colour`.
   useSpeedMasterForCategory: () => (category: string | null) =>
-    category === 'colour' ? 'master-2-uuid' : null,
+    category === 'colour' ? 'master-2-uuid' : category === 'beam' ? 'master-3-uuid' : null,
   useSpeedMasterDisplay: () => null,
   useSpeedMasterBpm: () => 120,
   useMaster1Uuid: () => 'master-1-uuid',
@@ -286,13 +294,13 @@ describe('the Holds choice', () => {
     expect(screen.getByText(/cannot change afterwards/i)).toBeTruthy()
   })
 
-  it('refuses Effect under Beam, disabled with the reason rather than omitted', () => {
+  it('offers Effect under Beam, with the beam built-ins', () => {
     renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
-    expect(screen.getByRole('button', { name: 'Effect' })).toBeDisabled()
-    expect(screen.getByText(/no beam category/i)).toBeTruthy()
-    // Where a beam chase *does* live, because "disabled" on its own teaches nobody.
-    expect(screen.getByText(/recorded look/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('option', { name: 'Zoom Breathe' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Colour Pulse' })).toBeNull()
   })
 
   it('drops an effect draft when the family moves under it', () => {
@@ -363,6 +371,24 @@ describe('validity and the save body', () => {
     expect(body.effect?.parameters).toEqual({ colourA: '#FF9D4A' })
     // An effect has no fade, and hiding the field has to clear the value rather than leave it.
     expect(body.fadeDurationMs).toBeNull()
+  })
+
+  it('saves a beam effect palette on the Beam master', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zoom Breathe' } })
+    chooseEffect('Zoom Breathe')
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({
+      effectType: 'Zoom Breathe',
+      category: 'beam',
+      propertyName: null,
+      speedMasterUuid: 'master-3-uuid',
+    })
   })
 
   it('sends `rows` and no `effect` for a value palette', async () => {

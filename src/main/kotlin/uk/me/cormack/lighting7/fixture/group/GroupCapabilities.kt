@@ -70,7 +70,7 @@ internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
  * One implementation for a group and for a single head, deliberately: a head is a group of one, and
  * a second copy of this trait dispatch would be a new way for the two answers to disagree.
  * `lightGroups.kt` asks it of a group before applying a group effect; the effect arm of a template
- * apply asks it of every target the click names, because [uk.me.cormack.lighting7.fx.FxTargetFactory]
+ * apply asks it of every target the apply names, because [uk.me.cormack.lighting7.fx.FxTargetFactory]
  * never fails by design — `"rgbColour"` resolves to a `ColourTarget` whether or not the head has
  * colour, so without this check a head the effect cannot reach would get no light and no report.
  */

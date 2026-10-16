@@ -1475,24 +1475,73 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * Beam is refused by *name* rather than by the library happening to ship no beam effect — so a
-     * script-registered beam effect cannot mint a Beam effect template behind the rule.
+     * A beam effect is a Beam palette (effects plan D6). Its stored effect names no property, so a
+     * press lands on the one property the beam effect declares, and a head without it is skipped.
      */
     @Test
-    fun `a beam-category effect is refused with the reason`() = testApplication {
+    fun `a beam effect palette saves and presses onto the heads with its property`() = testApplication {
         mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "etc-source4-revolution-base-frame", "rev-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 100)
         val client = jsonClient()
-        val resp = client.post(base()) {
+
+        val created = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
                 TemplateInput(
-                    name = "beamy",
-                    effect = colourEffect(effectType = "Zoomy", category = "beam"),
+                    name = "zoom-breathe",
+                    effect = colourEffect(effectType = "ZoomBreathe", category = "beam").copy(propertyName = null),
                 )
             )
         }
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        assertTrue(resp.bodyAsText().contains("BEAM palette cannot hold an effect"), resp.bodyAsText())
+        assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+        val palette = created.body<TemplateDto>()
+        assertEquals("BEAM", palette.family)
+
+        val body = client.post("${base()}/${palette.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ApplyTemplateRequest(
+                    targets = listOf(TemplateTargetDto("fixture", "rev-1"), TemplateTargetDto("fixture", "hex-1")),
+                )
+            )
+        }.body<ApplyTemplateResponse>()
+
+        assertEquals(1, body.effectIds.size, body.toString())
+        assertEquals(listOf("hex-1"), body.skipped.map { it.fixtureKey })
+        val running = state.show.fxEngine.getActiveEffects().single()
+        assertEquals("rev-1", running.target.targetKey)
+        assertEquals("zoom", running.target.propertyName)
+    }
+
+    /**
+     * A beam effect's palette names no property, so the press needs the one its registration
+     * declares. A script-registered beam effect declaring two, or a sentinel, is refused.
+     */
+    @Test
+    fun `a beam effect palette needs an effect that drives one named property`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val registry = state.show.fxRegistry
+        val sine = registry.getRegistration("SineWave")!!
+        for ((id, properties) in listOf("TwoBeams" to listOf("zoom", "iris"), "AnyBeam" to listOf("slider"))) {
+            registry.register(sine.copy(id = id, aliases = emptySet(), name = id, category = "beam", compatibleProperties = properties))
+        }
+        try {
+            for (id in listOf("TwoBeams", "AnyBeam")) {
+                val resp = client.post(base()) {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        TemplateInput(name = "p-$id", effect = colourEffect(effectType = id, category = "beam").copy(propertyName = null))
+                    )
+                }
+                assertEquals(HttpStatusCode.BadRequest, resp.status, "$id should be refused")
+                assertTrue(resp.bodyAsText().contains("one named property"), resp.bodyAsText())
+            }
+        } finally {
+            registry.unregister("TwoBeams")
+            registry.unregister("AnyBeam")
+        }
     }
 
     @Test

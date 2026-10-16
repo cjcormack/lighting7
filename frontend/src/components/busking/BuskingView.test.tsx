@@ -202,8 +202,11 @@ function draw(pages: BuskPage[], path = '/projects/1/busk') {
     const created = request.method === 'POST' && request.url.endsWith('/busk/pages')
     const written = request.method === 'PUT' && request.url.includes('/layout')
     const pressed = request.method === 'POST' && request.url.includes('/busk/pads/')
+    const applied = request.method === 'POST' && request.url.endsWith('/apply')
     return new Response(
-      JSON.stringify(created ? emptyPage : written ? generated : pressed ? pressAnswer : body),
+      JSON.stringify(
+        created ? emptyPage : written ? generated : pressed ? pressAnswer : applied ? { written: 1, skipped: [] } : body,
+      ),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   })
@@ -818,6 +821,34 @@ describe('the busk view', () => {
       unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'] })
       const { calls } = draw([padPage])
       expect(await press(calls)).toEqual({
+        targets: [{ type: 'group', key: 'Movers' }],
+        families: ['POSITION'],
+      })
+    })
+
+    it('⌥click applies the palette’s values over the same pair, and presses nothing', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      const { calls } = draw([padPage])
+      const pad = await screen.findByTitle('Warm Amber')
+      fireEvent.pointerDown(pad, { clientX: 0, clientY: 0, altKey: true })
+      fireEvent.pointerUp(pad)
+      await waitFor(() => expect(calls.some((c) => c.url.endsWith("/palettes/7/apply"))).toBe(true))
+      expect(JSON.parse(calls.find((c) => c.url.endsWith('/apply'))!.body!)).toEqual({
+        targets: [{ type: 'fixture', key: 'par-1' }],
+        families: ['COLOUR'],
+      })
+      expect(calls.some((c) => c.url.includes('/busk/pads/31/press'))).toBe(false)
+    })
+
+    it('applies values onto this tab’s own pair once unlinked', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'] })
+      const { calls } = draw([padPage])
+      const pad = await screen.findByTitle('Warm Amber')
+      fireEvent.pointerDown(pad, { clientX: 0, clientY: 0, altKey: true })
+      fireEvent.pointerUp(pad)
+      await waitFor(() => expect(calls.some((c) => c.url.endsWith('/apply'))).toBe(true))
+      expect(JSON.parse(calls.find((c) => c.url.endsWith('/apply'))!.body!)).toEqual({
         targets: [{ type: 'group', key: 'Movers' }],
         families: ['POSITION'],
       })

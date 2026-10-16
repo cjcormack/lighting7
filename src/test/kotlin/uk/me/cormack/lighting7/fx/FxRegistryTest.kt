@@ -129,7 +129,7 @@ class FxRegistryTest {
             .getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(indexed.size >= 24, "fx/index.txt should list at least 24 effects, got ${indexed.size}")
+        assertTrue(indexed.size >= 28, "fx/index.txt should list at least 28 effects, got ${indexed.size}")
         assertEquals(indexed.size, loaded, "Every effect in fx/index.txt should load")
         assertEquals(indexed.size, registry.size, "Every loaded effect should be registered")
 
@@ -139,6 +139,7 @@ class FxRegistryTest {
         assertNotNull(registry.getRegistration("Circle"), "Circle should be registered")
         assertNotNull(registry.getRegistration("CandleFlicker"), "CandleFlicker should be registered")
         assertNotNull(registry.getRegistration("LightningStrike"), "LightningStrike should be registered")
+        assertNotNull(registry.getRegistration("ZoomBreathe"), "ZoomBreathe should be registered")
         // A fixed value is the fixture's own property, never an effect.
         for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition")) {
             assertEquals(null, registry.getRegistration(gone), "$gone should not be registered")

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
+import uk.me.cormack.lighting7.fixture.group.fixturesSupportProperty
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.LookEffectSpec
@@ -41,11 +42,13 @@ internal object EffectSpawner {
         // A recorded row's own `propertyName` wins, and rows recorded while sweep item A11 was live
         // carry `"pan"` for a position effect. The registration's output type is what lets
         // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
-        val outputType = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.outputType
+        val registration = state.show.fxRegistry.getRegistration(effectSpec.effectType)
+        val outputType = registration?.outputType
+        val beamProperty = registration?.compatibleProperties?.singleOrNull()
         val single = when (target) {
             is EffectTargetRef.Selection -> {
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForFixtureInCue(effectSpec)
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, beamProperty)
                     ?: return null
                 return createSelectionTarget(state, target, propertyName, outputType)
             }
@@ -55,13 +58,13 @@ internal object EffectSpawner {
             is TargetRef.Group -> {
                 val group = state.show.fixtures.untypedGroup(single.key)
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForCue(effectSpec, group.detectCapabilities())
+                    ?: resolveEffectPropertyForCue(effectSpec, group, beamProperty)
                     ?: return null
-                createGroupTargetForCue(group.name, propertyName, group, outputType)
+                createGroupTargetForCue(state, single, propertyName, outputType)
             }
             is TargetRef.Fixture -> {
                 val propertyName = effectSpec.propertyName
-                    ?: resolveEffectPropertyForFixtureInCue(effectSpec)
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec, beamProperty)
                     ?: return null
                 createFixtureTargetForCue(single.key, propertyName, state, outputType)
             }
@@ -79,16 +82,24 @@ internal object EffectSpawner {
         propertyName: String,
         outputType: FxOutputType?,
     ): FxTarget =
-        FxTargetFactory.forSelection(selection, propertyName, outputType, state.show.fixtures.referenceFixtureFor(selection))
+        FxTargetFactory.forSelection(selection, propertyName, outputType, state.show.fixtures.referenceFixtureFor(selection, propertyName))
 
+    /**
+     * A beam effect (effects plan D6) drives the one property its registration declares, so a
+     * spec stored without a `propertyName` — an effect palette's, a Look's deferred effect — lands
+     * on [beamProperty].
+     */
     private fun resolveEffectPropertyForCue(
         effectSpec: LookEffectSpec,
-        capabilities: List<String>,
+        group: FixtureGroup<*>,
+        beamProperty: String?,
     ): String? {
+        val capabilities = group.detectCapabilities()
         return when (effectSpec.category) {
             "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
             "colour" -> if ("colour" in capabilities) "colour" else null
             "position" -> if ("position" in capabilities) "position" else null
+            "beam" -> beamProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
             "controls", "setting" -> effectSpec.propertyName
             else -> null
         }
@@ -96,23 +107,26 @@ internal object EffectSpawner {
 
     private fun resolveEffectPropertyForFixtureInCue(
         effectSpec: LookEffectSpec,
+        beamProperty: String?,
     ): String? {
         return when (effectSpec.category) {
             "dimmer" -> "dimmer"
             "colour" -> "colour"
             "position" -> "position"
+            "beam" -> beamProperty
             "controls", "setting" -> effectSpec.propertyName
             else -> null
         }
     }
 
     private fun createGroupTargetForCue(
-        groupName: String,
+        state: State,
+        group: TargetRef.Group,
         propertyName: String,
-        group: FixtureGroup<*>,
         outputType: FxOutputType?,
     ): FxTarget = FxTargetFactory.forGroup(
-        groupName, propertyName, outputType, group.fixtures.firstOrNull() as? Fixture,
+        group.key, propertyName, outputType,
+        state.show.fixtures.referenceFixtureFor(EffectTargetRef.Single(group), propertyName) as? Fixture,
     )
 
     private fun createFixtureTargetForCue(

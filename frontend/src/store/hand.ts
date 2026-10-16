@@ -152,6 +152,11 @@ export interface HandPlacement<R> {
    * is a wrapping arrow at every call site whose only job is to discard a value nothing reads.
    */
   undo?: (result: R) => unknown
+  /**
+   * The toast, where a place can land more than one way — the programmer's is a press, which takes
+   * the record off heads it already covers. Absent, *“X” placed in <where>*.
+   */
+  describe?: (result: R, name: string) => string
 }
 
 /** How long Undo stays offered (plan D12). */
@@ -186,8 +191,8 @@ export function useHandPlace(): <R>(held: HeldRecord, placement: HandPlacement<R
     lightingApi.hand.drop(held.uuid)
 
     const name = heldName(held)
-    const landed = result
-    toast.success(`“${name}” placed in ${placement.where}`, {
+    const landed: R = result
+    toast.success(placement.describe?.(landed, name) ?? `“${name}” placed in ${placement.where}`, {
       duration: HAND_UNDO_MS,
       // Plain field, not a conditional spread: sonner renders `action` only when it is set, so an
       // explicit `undefined` and an absent key are the same thing to it.

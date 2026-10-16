@@ -18,6 +18,7 @@ import {
   Hand,
   Layers,
   SlidersHorizontal,
+  Unlink,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,12 @@ export interface LayerHandlers {
    * would put a dead affordance on every read-only surface that renders a `LayerRow`.
    */
   onFocus?: (index: number) => void
+  /**
+   * *Detach* (apply-model plan §3.5): the layer's values and effects become the host's own, and
+   * nothing on stage moves. Optional for [onFocus]'s reason — only the programmer has a Local to
+   * detach into — and drawn only where it is passed.
+   */
+  onDetach?: (index: number) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -161,6 +168,11 @@ interface LookStackProps<T extends LookStackLayer> {
   keyFor?: (layer: T, index: number) => string
   /** Which row the value grid is pointed at, if any. Ringed rather than selected-looking. */
   focusedIndex?: number | null
+  /**
+   * A row's passing note, drawn as its second line at the dense density — the programmer's
+   * *lost Hex 3–4 to Amber* (apply-model plan §4.6), which the host reads from two frames.
+   */
+  noteFor?: (layer: T) => string | null
 }
 
 /**
@@ -197,6 +209,7 @@ export function LookStack<T extends LookStackLayer>({
   footer,
   keyFor,
   focusedIndex,
+  noteFor,
   dense = false,
 }: LookStackProps<T>) {
   const sensors = useSensors(
@@ -254,6 +267,7 @@ export function LookStack<T extends LookStackLayer>({
               info={info}
               handlers={handlers}
               focused={focusedIndex === i}
+              note={noteFor?.(layer) ?? null}
             />
           ) : (
             <LayerRow
@@ -593,6 +607,7 @@ function DenseLayerRow({
   handlers,
   sortableId,
   focused,
+  note,
 }: {
   layer: LookStackLayer
   index: number
@@ -600,6 +615,8 @@ function DenseLayerRow({
   handlers: LayerHandlers
   sortableId: string
   focused: boolean
+  /** Drawn in place of the detail line while present; the detail stays on the hover. */
+  note: string | null
 }) {
   const enabled = layer.enabled !== false
   const { name, missing, isTemplate, templateKind, families, effectCount } = info
@@ -698,9 +715,19 @@ function DenseLayerRow({
                 </Badge>
               )}
             </span>
-            <span className="truncate text-[10px] text-muted-foreground" title={detailTitle}>
-              {detail}
-            </span>
+            {note != null ? (
+              <span
+                className="truncate text-[10px] text-amber-600 dark:text-amber-400"
+                title={`${note} · ${detailTitle}`}
+                data-layer-note
+              >
+                {note}
+              </span>
+            ) : (
+              <span className="truncate text-[10px] text-muted-foreground" title={detailTitle}>
+                {detail}
+              </span>
+            )}
           </span>
           {layer.stomp && (
             <Badge
@@ -744,7 +771,7 @@ function DenseLayerPopover({
           size="icon"
           className="size-6 shrink-0 text-muted-foreground"
           aria-label="Layer settings"
-          title="Amount, blend, mask, stomp and remove"
+          title="Amount, blend, mask, stomp, detach and remove"
         >
           <SlidersHorizontal className="size-3.5" />
         </Button>
@@ -780,6 +807,19 @@ function DenseLayerPopover({
             Remove
           </Button>
         </div>
+        {handlers.onDetach && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 w-full"
+            title="Turn this layer into your own values and effects, with nothing on stage moving"
+            onClick={() => handlers.onDetach?.(index)}
+          >
+            <Unlink className="size-3.5" />
+            Detach
+          </Button>
+        )}
         {/* *Pick up* the layer's **referent** into the desk's hand (multi-screen plan §3.5) — the
             Look or template itself, not the layer, which is why removing the layer is a separate
             button above and picking up leaves the stack untouched. Withheld for a row whose source

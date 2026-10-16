@@ -14,7 +14,7 @@ import {
  *
  * A spread is two intents of one property's shape, a curve, an order, parts and an over-switch,
  * sent to `POST /programmer/spread`; the desk interpolates in the intent's own space and resolves
- * one literal per head through the same `TemplateResolver` a template click uses. This module is
+ * one literal per head through the same `TemplateResolver` *Apply as values* uses. This module is
  * the client's half of that grammar and nothing more: which properties a family offers, what an
  * endpoint of each shape looks like in the editor, and the string it goes out as. It **never
  * interpolates** — no lerp, no colour space, no per-head range — for `templateIntent.ts`'s reason:

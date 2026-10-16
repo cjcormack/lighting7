@@ -57,7 +57,7 @@ private const val BEAT_DIVISION_DESCRIPTION =
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
     "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose usage " +
-        "matches the effect's family (dimmer, colour or position), else master 1, the global tempo. Leave it out with seconds."
+        "matches the effect's family (dimmer, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
 
 /** D7's Seconds, in the tools' words. */
 private const val SECONDS_DESCRIPTION =
@@ -138,11 +138,11 @@ private val lookEffectSchema = buildJsonObject {
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("controls") })
+            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject {
             put("type", "string")
-            put("description", "Target property. Usually inferred from category: dimmer→dimmer, colour→colour, position→position. Required for controls category.")
+            put("description", "Target property. Usually inferred from category: dimmer→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for controls category.")
         })
         put("beatDivision", buildJsonObject {
             put("type", "number")
@@ -566,7 +566,7 @@ private val adHocEffectSchema = buildJsonObject {
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("controls") })
+            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject { put("type", "string") })
         put("beatDivision", buildJsonObject {
@@ -987,12 +987,12 @@ private val templateEffectSchema = buildJsonObject {
         adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
             if (key !in setOf("targetType", "targetKey", "targets", "category")) put(key, value)
         }
-        // Narrowed from the ad-hoc enum: `controls` and `composite` belong to no attribute family
-        // and the library has no beam effects, so the write boundary refuses all three (D4).
-        // Offering them here only buys a rejected call and a retry.
+        // Narrowed from the ad-hoc enum: `controls` and `composite` belong to no attribute family,
+        // so the write boundary refuses both (D4). Offering them here only buys a rejected call
+        // and a retry.
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position") })
+            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam") })
         })
     })
     put("required", buildJsonArray { add("effectType"); add("category"); add("blendMode") })
@@ -1007,8 +1007,7 @@ internal val createTemplateTool = ToolDef(
             "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
             "generic one that can be aimed at any fixture) or 'effect' for an effect palette, which always " +
             "runs on whatever the applying layer or selection names. An effect palette's category must be " +
-            "dimmer, colour or position: 'controls' and 'composite' belong to no attribute family, and the " +
-            "library has no beam effects.",
+            "dimmer, colour, position or beam: 'controls' and 'composite' belong to no attribute family.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

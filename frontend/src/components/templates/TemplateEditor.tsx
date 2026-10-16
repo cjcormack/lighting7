@@ -25,8 +25,6 @@ import { AudioWaveform, Loader2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import {
   ATTRIBUTE_FAMILIES,
   FAMILY_LABELS,
-  effectCategoryForFamily,
-  familyCanHoldEffect,
   familyForEffectCategory,
   type AttributeFamily,
 } from '@/lib/attributeFamily'
@@ -72,9 +70,7 @@ import {
  * template holds a *value* or an *effect*, never both, and like the family it is fixed at creation
  * (fx-templates D1). Choosing Effect swaps the family-native control for `FxEffectFields` —
  * the live effect editor's fields, reused rather than redrawn, minus every row that needs a fixture —
- * and swaps the resolves-to panel for `TemplateRunsOn`. *Effect* is disabled under **Beam**: the
- * effect library has no beam category, and the backend refuses one by name so a script-registered
- * beam effect cannot mint a Beam effect template behind the rule.
+ * and swaps the resolves-to panel for `TemplateRunsOn`.
  *
  * Three things this editor deliberately does not do:
  *
@@ -347,9 +343,6 @@ export function TemplateEditor({
                     // family's category, and carrying it across would leave the draft claiming a
                     // family its effect derives a different one from — which the server refuses.
                     setEffectDraft(null)
-                    // Beam holds no effect, so landing there with Effect chosen would leave the
-                    // segment on a disabled option and the sheet with no control at all.
-                    if (!familyCanHoldEffect(f)) setHolds('value')
                   }}
                 >
                   {FAMILY_LABELS[f].singular}
@@ -383,7 +376,7 @@ export function TemplateEditor({
                 type="button"
                 size="sm"
                 variant={holdsEffect ? 'default' : 'outline'}
-                disabled={template != null || !familyCanHoldEffect(family)}
+                disabled={template != null}
                 onClick={() => setHolds('effect')}
               >
                 <AudioWaveform className="size-3.5" />
@@ -391,12 +384,8 @@ export function TemplateEditor({
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {/* Shown disabled with the reason rather than omitted — the same stance the beam
-                  exclusions block takes, and for the same reason: an operator looking for a beam
-                  chase needs to learn where it lives rather than conclude the desk cannot do it. */}
-              {!familyCanHoldEffect(family)
-                ? 'The effect library has no beam category — dimmer, colour and position are the three that have one — so a Beam palette holds values only. A beam chase lives in a recorded look.'
-                : 'A value is resolved per head; an effect runs on every head the layer names. For a value and an effect together, record a Look.'}
+              A value is resolved per head; an effect runs on every head the layer names. For a value
+              and an effect together, record a Look.
             </p>
             {template != null && (
               <p className="text-[11px] text-muted-foreground">
@@ -542,17 +531,13 @@ function EffectControls({
   onChoose: (entry: EffectLibraryEntry) => void
   onPatch: (patch: Partial<FxDraft>) => void
 }) {
-  const category = effectCategoryForFamily(family)
   // Filtered through the same map the write boundary derives the family with, rather than by string
   // equality against one spelling: `familyForEffectCategory` is case-insensitive and takes `color`
   // as well as `colour`, so an exact match would hide from this picker a script-registered effect
   // that *Save as template…* would happily bank under this very family.
   const offered = useMemo(
-    () =>
-      category == null
-        ? []
-        : (library ?? []).filter((e) => familyForEffectCategory(e.category) === family),
-    [library, category, family],
+    () => (library ?? []).filter((e) => familyForEffectCategory(e.category) === family),
+    [library, family],
   )
   const fxDraft = useMemo(() => (draft == null ? null : templateDraftOf(draft)), [draft])
 
