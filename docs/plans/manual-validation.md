@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
@@ -109,6 +110,34 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
+
+## `FU-MANUAL-VENUE-VISIT-R2-4`
+
+**What it proves**: *the cue editor and its two hosts on a real show* — venue-visit R2.4,
+show-cue-editing plan session 4 (§4.1–4.3, §10): the card and the table's bottom pane are one editor,
+the pane's height is the window's, the runner walks a twice-placed cue by entry, and the cue the FX
+tray names opens in place.
+
+**Why it is here**: the tests prove the writes, the store and the optimistic walk; only a browser on
+the desk shows the pane's grip under a real pointer, a reload keeping it, and a GO through a real
+stack landing where the cards say before the desk answers.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show stopped and unlocked:
+
+1. **Cards.** On Act 1, open Q4's card: the action strip, then the editor — *Act 1 · Q4*, follow,
+   the name, fade and curve, the save state — and the six tabs. Rename Q4 in the header; *Saved*
+   shows, and the collapsed row reads the new name.
+2. **Table.** Switch to the table and select Q4's row: the pane opens under the sheet with the same
+   editor. Rename it again there; the sheet's Name cell follows. Select two rows: the pane folds and
+   the sheet takes the height back.
+3. **Grip.** Drag the pane's grip up and down: it sticks at half the column and at its smallest, and
+   nowhere else. Reload the window: the pane opens at the height left. Press the grip twice: back to
+   half.
+4. **A cue twice.** *Add to stack…* Q2 into Act 1 so Act 1 holds it twice. Start the show and GO
+   through both places: each GO lights the right row the instant it is pressed, and the second Q2's
+   GO goes on to the cue after *it*.
+5. **On Q12.** With a cue's effect running on a fixture, open the fixture's sheet, the tray, and press
+   *on Q…*: that cue's editor opens over the sheet; Escape returns to the sheet.
 
 ## `FU-MANUAL-VENUE-VISIT-NAV-3`
 
@@ -3211,8 +3240,8 @@ session 5. Checks 1 and 7 need a re-run on the fixed build; 2–6 and 8 have not
    pages* and the delete confirm names them, then delete it: the pads go, the pages still render,
    no 500.
 7. **A narrow window.** Columns stack, nothing overlaps, nothing is unreachable.
-8. **Placing a pad from elsewhere** (session 4). From the Show view's cue properties, *Add to busk
-   page* → a bank; the pad is at the **end** of that bank when you next open the page, without
+8. **Placing a pad from elsewhere** (session 4). From a cue editor's Cue tab in the Show view, *Add to
+   busk page* → a bank; the pad is at the **end** of that bank when you next open the page, without
    having entered edit mode. Repeat from the template editor and the Look sheet. Then *Save as
    template* on a running effect with *Also add to* left as offered: the template is created **and**
    the pad appears. Delete the offered bank first and repeat → the template is still created and

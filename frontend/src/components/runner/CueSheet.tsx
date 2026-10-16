@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Blinds, Layers, Lock, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { UnlockShowDialog } from './UnlockShowDialog'
+import { CueEditorPane } from './CueEditorPane'
+import type { CueEditorTab } from '@/components/cues/editor/cueEditorTab'
 import { CueActions, type CueActionRow } from './CueActions'
 import { cn } from '@/lib/utils'
 import { usePatchProjectCueMutation } from '@/store/cues'
@@ -10,7 +12,7 @@ import type { CueEntryPatch } from '@/api/cueStacksApi'
 import type { CuePlace } from '@/lib/cuePlaces'
 import { SharedCueChip } from './SharedCueChip'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { formatFadeDuration, parseFadeDuration } from '@/lib/cueUtils'
+import { CUE_CURVE_OPTIONS, formatFadeDuration, parseFadeDuration, parseFollowDelay } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
 import { cueSceneryLines } from '@/lib/scenery'
 import { useStageElementListQuery } from '@/store/stageElements'
@@ -64,15 +66,7 @@ function cueOf(row: CueSheetRow): CueStackCueRow {
   return row.entry
 }
 
-/** The curve vocabulary `CuePropsPane`'s select offers, in its order. */
-const CURVE_OPTIONS: SheetOption[] = [
-  { value: 'LINEAR', label: 'Linear' },
-  { value: 'SINE_IN_OUT', label: 'Sine In/Out' },
-  { value: 'CUBIC_IN_OUT', label: 'Cubic In/Out' },
-  { value: 'EASE_IN', label: 'Ease In' },
-  { value: 'EASE_OUT', label: 'Ease Out' },
-  { value: 'EASE_IN_OUT', label: 'Ease In/Out' },
-]
+const CURVE_OPTIONS: SheetOption[] = [...CUE_CURVE_OPTIONS]
 
 /** Deselect's word beside the cue action set — measured with it, on the bar's container. */
 const DESELECT_WORD_CLASS = 'hidden @[760px]:inline'
@@ -98,8 +92,6 @@ export interface CueSheetProps {
    * sheet. Consumed on arrival and whenever it changes.
    */
   openedEntryId?: number | null
-  /** Open a cue's card on the cards view — Layers and FX are read-outs that do this. */
-  onOpenCue: (cueId: number, entryId: number) => void
   /** Open the Prompt Book at this cue's anchor — the Book column's read-out. */
   onOpenBook?: (cueId: number) => void
   /**
@@ -120,8 +112,11 @@ export interface CueSheetProps {
 /**
  * The cue sheet — one row per cue, a marker as a divider row, on the sheet kit
  * (CLAUDE.md §Sheet kit). Name · Fade · Curve · Follow · Notes are cells; the cue number keeps its
- * inline edit on the Cue column; Book · Layers · FX are read-outs that open the card. Live row
- * green, next row blue, as the cards.
+ * inline edit on the Cue column; Book is a read-out that opens the Prompt Book, and Layers · FX
+ * select their row and open the bottom pane on that tab. Live row green, next row blue, as the cards.
+ *
+ * **The bottom pane** (`CueEditorPane`) holds the cue editor for the one selected cue row, and
+ * folds for none, several or a marker.
  *
  * **The lock is this sheet's read-only scope**, the way Output scope is the programmer's. Locked,
  * every value cell is inert — `pointer-events-none` on the wrapper, `disabled` on the trigger,
@@ -145,7 +140,7 @@ export interface CueSheetProps {
  * **Scenery is a read-out that opens an editor** (scenery-programmer plan D13): the cue's own
  * changes as `Tabs → closed · 4 s`, off the stack list's `CueStackCueEntry.scenery`, or the tracked
  * hatch where it changes nothing but something is tracked into it; a press opens `CueSceneryEditor`
- * (Cue properties' own `SceneryEditor`, with times) at the cell, so a cue's scenery is edited without
+ * (the cue editor's Scenery tab body, `SceneryEditor` with times) at the cell, so a cue's scenery is edited without
  * opening its card. It is no `cell` — one cue's list is not a value a marquee spreads — and it
  * follows the lock as the value cells do: locked, a press asks to unlock (or is disabled with the
  * reason where the lock is not the operator's), and an editor open when the show locks closes.
@@ -165,7 +160,6 @@ export function CueSheet({
   onSetStandby,
   locked = false,
   openedEntryId,
-  onOpenCue,
   onOpenBook,
   onRequestUnlock,
   onReorder,
@@ -216,6 +210,16 @@ export function CueSheet({
   )
 
   const [unlockAsked, setUnlockAsked] = useState(false)
+
+  /**
+   * A read-out's ask for the pane: select its row and show that tab. Keyed by the entry, so a later
+   * plain click on another row opens the pane on the window's own tab rather than this one. Reached
+   * through a ref because the columns are built before the sheet that selects.
+   */
+  const [tabRequest, setTabRequest] = useState<{ entryId: number; tab: CueEditorTab; seq: number } | null>(null)
+  const openPaneRef = useRef<(row: CueSheetRow, tab: CueEditorTab) => void>(() => {})
+  const columnRef = useRef<HTMLDivElement>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
 
   const rows = useMemo<CueSheetRow[]>(
     () =>
@@ -360,13 +364,13 @@ export function CueSheet({
               )
             }
             validate={(draft) =>
-              parseFadeDuration(draft) === undefined ? 'A follow is a delay in seconds, or blank for none' : null
+              parseFollowDelay(draft) === undefined ? 'A follow is a delay in seconds (0 fires at once), or blank for none' : null
             }
           />
         ),
         write: (batch, value) => {
           if (typeof value !== 'string') return false
-          const parsed = parseFadeDuration(value)
+          const parsed = parseFollowDelay(value)
           if (parsed === undefined) return false
           for (const row of batch) {
             if (parsed === null) {
@@ -414,7 +418,7 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           cueOf(row).layerCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id, row.entry.entryId)} title="Open the cue's card">
+            <ReadOutButton onClick={() => openPaneRef.current(row, 'looks')} title="Open this cue's Looks in the editor below">
               <CountBadge n={cueOf(row).layerCount} />
               <Layers className="size-3" />
             </ReadOutButton>
@@ -427,7 +431,7 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           cueOf(row).adHocEffectCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id, row.entry.entryId)} title="Open the cue's card" className="text-violet-400">
+            <ReadOutButton onClick={() => openPaneRef.current(row, 'fx')} title="Open this cue's effects in the editor below" className="text-violet-400">
               <CountBadge n={cueOf(row).adHocEffectCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
             </ReadOutButton>
@@ -503,7 +507,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onOpenCue, onRequestUnlock, patch, patchEntry, placesByCue, standbyEntryId, tracksScenery],
+    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, standbyEntryId, tracksScenery],
   )
 
   const copy = useCallback(
@@ -562,6 +566,28 @@ export function CueSheet({
     rowName: cueRowName,
   })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
+  openPaneRef.current = (row, tab) => {
+    setRows([row.id])
+    setTabRequest((prev) => ({ entryId: row.entry.entryId, tab, seq: (prev?.seq ?? 0) + 1 }))
+  }
+  /** The one selected cue row the pane edits — none, several or a marker fold it (D5). */
+  const paneRow = selectedRows.length === 1 && isCueRow(selectedRows[0].entry) ? selectedRows[0] : null
+  const paneEntryId = paneRow?.entry.entryId ?? null
+  const paneRowId = paneRow?.id ?? null
+  // A read-out's tab is asked for once: when the pane moves off its row, or folds, it is spent.
+  useEffect(() => {
+    setTabRequest((request) => (request == null || request.entryId === paneEntryId ? request : null))
+  }, [paneEntryId])
+  /**
+   * The pane opened or took a height: the row it edits stays in sight above it, by the least move
+   * (`scrollTo` centres, which would jump the sheet on every click).
+   */
+  const keepPaneRowInView = useCallback(() => {
+    if (paneRowId == null) return
+    const el = sheetRef.current?.querySelector(`[data-row-id="${paneRowId}"]`)
+    el?.scrollIntoView?.({ block: 'nearest' })
+  }, [paneRowId])
+  useEffect(keepPaneRowInView, [keepPaneRowInView])
 
   // The deep link: select the addressed cue's row and bring it into view — **once per id**. Not
   // an expansion — a sheet has no card to open — but the row is what the Prompt Book's "Edit cue"
@@ -677,7 +703,7 @@ export function CueSheet({
   const markerCount = rows.length - standardCount
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={columnRef} className="flex min-h-0 flex-1 flex-col" data-cue-sheet-column>
       <div className="@container">
         <SelectionBar
           rowLabel={selectedRows.length > 0 ? `${selectedRows.length} ${rowNoun}` : null}
@@ -701,6 +727,7 @@ export function CueSheet({
           foldForStrip={actionRows.length > 0}
         />
       </div>
+      <div ref={sheetRef} className="flex min-h-0 flex-1 flex-col" data-cue-sheet-body>
       <SheetTable<CueSheetRow, CueColumnKey>
         {...sheet.tableProps}
         onRowClick={onRowClick}
@@ -801,6 +828,20 @@ export function CueSheet({
           },
         }}
       />
+      </div>
+      {/* The bottom pane: the cue editor for the one selected row (show-cue-editing plan D5, §4.3). */}
+      {paneRow != null && (
+        <CueEditorPane
+          projectId={projectId}
+          cueId={cueOf(paneRow).id}
+          entryId={paneRow.entry.entryId}
+          locked={locked}
+          tabRequest={tabRequest?.entryId === paneRow.entry.entryId ? tabRequest : null}
+          columnRef={columnRef}
+          sheetRef={sheetRef}
+          onResized={keepPaneRowInView}
+        />
+      )}
       <CueSceneryEditor
         projectId={projectId}
         // Closed by the lock as well as by its own dismissal: every edit on this sheet is an

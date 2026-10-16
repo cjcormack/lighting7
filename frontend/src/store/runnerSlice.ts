@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { CueRunStateEvent, CueStackCueEntry } from '../api/cueStacksApi'
+import { isCueRow, type CueRunStateEvent, type CueStackCueEntry, type CueStackCueRow } from '../api/cueStacksApi'
 
 /**
  * A running animation, described once rather than streamed. `startMs` is a `performance.now()`
@@ -20,10 +20,16 @@ interface FadeAnim extends RunnerAnimSpan {
 
 interface StackRunnerState {
   activeCueId: number | null
+  /**
+   * The entry of `activeCueId` the local cursor is on. A cue may sit twice in one stack, so the
+   * walk is by entry (lighting7 cue model plan P2); the cue id beside it is what the fade and the
+   * done ticks key on. Null whenever `activeCueId` is.
+   */
+  activeEntryId: number | null
   standbyCueId: number | null
   /**
-   * Which entry of `standbyCueId` is armed, where the slice knows it — an armed press or a server
-   * frame. Null after a local GO or BACK walk, which moves by cue; readers then fall back to the
+   * Which entry of `standbyCueId` is on deck: the one GO and BACK walked to, an armed press, or a
+   * server frame. Null only where the slice was seeded without one; readers then fall back to the
    * server's next entry (`entryIdOfCue`).
    */
   standbyEntryId: number | null
@@ -75,6 +81,7 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
   if (!state.stacks[stackId]) {
     state.stacks[stackId] = {
       activeCueId: null,
+      activeEntryId: null,
       standbyCueId: null,
       standbyEntryId: null,
       completedCueIds: [],
@@ -90,36 +97,58 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
   return state.stacks[stackId]
 }
 
-function nextStandardCue(
-  cues: CueStackCueEntry[],
-  currentId: number,
-  loop: boolean,
-): number | null {
-  const idx = cues.findIndex((c) => c.id === currentId)
+/** A place in the list: the entry and the cue it names. */
+interface Place {
+  cueId: number
+  entryId: number
+}
+
+const isStandard = isCueRow
+
+const placeOf = (c: CueStackCueRow): Place => ({ cueId: c.id, entryId: c.entryId })
+
+/**
+ * The index of the place a cursor names: [entryId] when it is a row of [cueId], else the cue's
+ * first row — a cursor seeded from a cue id alone, or one an edit to the list has orphaned.
+ */
+function indexOf(cues: CueStackCueEntry[], cueId: number, entryId: number | null): number {
+  if (entryId != null) {
+    const at = cues.findIndex((c) => c.entryId === entryId && c.id === cueId)
+    if (at >= 0) return at
+  }
+  return cues.findIndex((c) => c.id === cueId)
+}
+
+/** The place after the one at [idx], wrapping on a looping stack; null at the end. */
+function nextPlace(cues: CueStackCueEntry[], idx: number, loop: boolean): Place | null {
   for (let j = idx + 1; j < cues.length; j++) {
-    if (cues[j].cueType === 'STANDARD') return cues[j].id
+    const c = cues[j]
+    if (isStandard(c)) return placeOf(c)
   }
   if (loop) {
     for (let j = 0; j < idx; j++) {
-      if (cues[j].cueType === 'STANDARD') return cues[j].id
+      const c = cues[j]
+      if (isStandard(c)) return placeOf(c)
     }
     // Only one STANDARD cue in a looping stack: wrap to itself so GO re-fires it,
     // rather than reporting "no next" (which callers treat as end-of-stack).
-    if (cues[idx]?.cueType === 'STANDARD') return currentId
+    const self = cues[idx]
+    if (self != null && isStandard(self)) return placeOf(self)
   }
   return null
 }
 
-function prevStandardCue(cues: CueStackCueEntry[], currentId: number): number | null {
-  const idx = cues.findIndex((c) => c.id === currentId)
+function prevPlace(cues: CueStackCueEntry[], idx: number): Place | null {
   for (let j = idx - 1; j >= 0; j--) {
-    if (cues[j].cueType === 'STANDARD') return cues[j].id
+    const c = cues[j]
+    if (isStandard(c)) return placeOf(c)
   }
   return null
 }
 
-function firstStandardCue(cues: CueStackCueEntry[]): number | null {
-  return cues.find((c) => c.cueType === 'STANDARD')?.id ?? null
+function firstPlace(cues: CueStackCueEntry[]): Place | null {
+  const c = cues.find(isStandard)
+  return c ? placeOf(c) : null
 }
 
 export const runnerSlice = createSlice({
@@ -141,11 +170,15 @@ export const runnerSlice = createSlice({
         }
       }
 
+      // By entry: a cue twice in one stack goes on from the place it was fired at.
+      const idx = indexOf(cues, s.standbyCueId, s.standbyEntryId)
       s.activeCueId = s.standbyCueId
+      s.activeEntryId = idx >= 0 ? cues[idx].entryId : null
       s.fade = null
       s.auto = null
-      s.standbyCueId = nextStandardCue(cues, s.activeCueId, loop)
-      s.standbyEntryId = null
+      const next = nextPlace(cues, idx, loop)
+      s.standbyCueId = next?.cueId ?? null
+      s.standbyEntryId = next?.entryId ?? null
     },
 
     back(state, action: PayloadAction<{ stackId: number; cues: CueStackCueEntry[] }>) {
@@ -153,20 +186,23 @@ export const runnerSlice = createSlice({
       const s = getOrCreate(state, stackId)
       s.fade = null
       s.auto = null
-      s.standbyEntryId = null
 
       if (s.activeCueId != null) {
-        // Mid-fade: return standby to the cue that was fading
+        // Mid-fade: return standby to the place that was fading
         const prev = s.activeCueId
+        s.standbyEntryId = s.activeEntryId
         s.activeCueId = null
+        s.activeEntryId = null
         s.standbyCueId = prev
         s.completedCueIds = s.completedCueIds.filter((id) => id !== prev)
       } else if (s.standbyCueId != null) {
-        // No active: move standby cursor back
-        const prev = prevStandardCue(cues, s.standbyCueId)
+        // No active: move standby cursor back, from the place it is on
+        const idx = indexOf(cues, s.standbyCueId, s.standbyEntryId)
+        const prev = idx >= 0 ? prevPlace(cues, idx) : null
         if (prev != null) {
-          s.standbyCueId = prev
-          s.completedCueIds = s.completedCueIds.filter((id) => id !== prev)
+          s.standbyCueId = prev.cueId
+          s.standbyEntryId = prev.entryId
+          s.completedCueIds = s.completedCueIds.filter((id) => id !== prev.cueId)
         }
       }
     },
@@ -212,6 +248,7 @@ export const runnerSlice = createSlice({
         s.completedCueIds.push(action.payload.cueId)
       }
       s.activeCueId = null
+      s.activeEntryId = null
       // Clearing `activeCueId` is what ends the fade for every consumer (they all gate on it
       // before reading the descriptors), so the descriptors are cleared too rather than left
       // behind as unreachable state.
@@ -225,48 +262,55 @@ export const runnerSlice = createSlice({
         stackId: number
         cues: CueStackCueEntry[]
         serverActiveCueId?: number | null
+        /** The entry the server has live, where it said — which place of a cue that sits twice. */
+        serverActiveEntryId?: number | null
         /** The backend's `nextCueId` for this stack — an armed standby, or the positional next. */
         serverNextCueId?: number | null
+        serverNextEntryId?: number | null
         loop?: boolean
       }>,
     ) {
-      const { stackId, cues, serverActiveCueId, serverNextCueId, loop } = action.payload
-      if (serverActiveCueId != null && cues.some((c) => c.id === serverActiveCueId)) {
+      const { stackId, cues, serverActiveCueId, serverActiveEntryId, serverNextCueId, serverNextEntryId, loop } =
+        action.payload
+      const activeIdx = serverActiveCueId != null ? indexOf(cues, serverActiveCueId, serverActiveEntryId ?? null) : -1
+      const fresh = {
+        activeCueId: null,
+        activeEntryId: null,
+        fade: null,
+        auto: null,
+        fadeStartElapsedMs: 0,
+        serverTransition: 0,
+        serverAutoAdvance: null,
+        serverAutoAdvanceDelayMs: null,
+      }
+      // `serverNextCueId` when the caller has it (the backend owns "next"); the local walk is the
+      // fallback for a caller that doesn't, e.g. a stack loaded without run state.
+      const nextIdx = serverNextCueId != null ? indexOf(cues, serverNextCueId, serverNextEntryId ?? null) : -1
+      const serverNext =
+        serverNextCueId != null ? { cueId: serverNextCueId, entryId: nextIdx >= 0 ? cues[nextIdx].entryId : null } : null
+      if (activeIdx >= 0 && serverActiveCueId != null) {
         // Restore from server state — the cue already ran on the backend,
         // so treat it as completed and queue the next cue as standby.
-        const activeIdx = cues.findIndex((c) => c.id === serverActiveCueId)
         const completed = cues
           .slice(0, activeIdx + 1)
-          .filter((c) => c.cueType === 'STANDARD')
+          .filter(isStandard)
           .map((c) => c.id)
+        const next = serverNext ?? nextPlace(cues, activeIdx, loop ?? false)
         state.stacks[stackId] = {
-          activeCueId: null,
-          // `serverNextCueId` when the caller has it (the backend owns "next"); the local walk
-          // is the fallback for a caller that doesn't, e.g. a stack loaded without run state.
-          standbyCueId: serverNextCueId ?? nextStandardCue(cues, serverActiveCueId, loop ?? false),
-          standbyEntryId: null,
-          completedCueIds: completed,
-          fade: null,
-          auto: null,
-          fadeStartElapsedMs: 0,
-          serverTransition: 0,
+          ...fresh,
+          standbyCueId: next?.cueId ?? null,
+          standbyEntryId: next?.entryId ?? null,
+          completedCueIds: [...new Set(completed)],
           serverActiveCueId,
-          serverAutoAdvance: null,
-          serverAutoAdvanceDelayMs: null,
         }
       } else {
+        const next = serverNext ?? firstPlace(cues)
         state.stacks[stackId] = {
-          activeCueId: null,
-          standbyCueId: serverNextCueId ?? firstStandardCue(cues),
-          standbyEntryId: null,
+          ...fresh,
+          standbyCueId: next?.cueId ?? null,
+          standbyEntryId: next?.entryId ?? null,
           completedCueIds: [],
-          fade: null,
-          auto: null,
-          fadeStartElapsedMs: 0,
-          serverTransition: 0,
           serverActiveCueId: null,
-          serverAutoAdvance: null,
-          serverAutoAdvanceDelayMs: null,
         }
       }
     },
@@ -315,6 +359,7 @@ export const runnerSlice = createSlice({
       if (activeCueId == null) {
         // Stack stopped.
         s.activeCueId = null
+        s.activeEntryId = null
         s.fade = null
         s.auto = null
         return
@@ -326,6 +371,7 @@ export const runnerSlice = createSlice({
         // or an arming frame would kill a fade this session is legitimately drawing.
         if (previous !== activeCueId) {
           s.activeCueId = null
+          s.activeEntryId = null
           s.fade = null
           s.auto = null
         }
@@ -333,6 +379,7 @@ export const runnerSlice = createSlice({
       }
 
       s.activeCueId = activeCueId
+      s.activeEntryId = action.payload.activeEntryId ?? null
       s.fadeStartElapsedMs = fadeElapsedMs ?? 0
       s.fade = null
       s.auto = null
@@ -360,6 +407,7 @@ export const {
 // WebSocket channel/status stream) while the stack is idle. Never mutated by consumers.
 const EMPTY_STACK_RUNNER: StackRunnerState = {
   activeCueId: null,
+  activeEntryId: null,
   standbyCueId: null,
   standbyEntryId: null,
   completedCueIds: [],

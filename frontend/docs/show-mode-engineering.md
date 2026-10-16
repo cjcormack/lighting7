@@ -224,9 +224,12 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/MobileCueRow.tsx` | Lean cue row used inside `MobileCueListSheet` (no fixed notes/auto-pill columns) |
 | `src/components/runner/ShowView.tsx` | Show body: routes between ShowOverview and StackDetail on `drillStackId`. **Memoized**, which is why no fade *value* passes through it — only `fadeStackId`; see `useCueFade`. |
 | `src/components/runner/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
-| `src/components/runner/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
+| `src/components/runner/StackDetail.tsx` | Cue list within a stack — the cards or the cue sheet, which carries the bottom pane — dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
+| `src/components/runner/CueEditorPane.tsx` | The cue sheet's **bottom pane** (show-cue-editing plan D5, §4.3): `CueEditor` for the one selected row, its height the window's (`sessionStorage cueSheet.paneHeight`, half the column until dragged), set by a magnetic grip snapping at its 160px floor and at half the column — `RigHandle`'s grip, sharing `hooks/useHeightGrip.ts` and `snapRigHeight`. A key region: the sheet's keyboard stands aside for keys pressed in it. |
+| `src/components/cues/editor/CueEditor.tsx` | **The cue editor** (show-cue-editing plan D1, §4.1): a 40px header — the entry's number and follow written to the entry, the cue's name, fade and curve to the cue (P5), the shared chip, the save state — and the tabs *Values · Looks · FX · Scenery · Events · Cue*, remembered per window (`sessionStorage cueEditor.tab`). Mounted by the card, the sheet's pane and `stage/OwnerEditor`'s sheet. Values, Looks and FX are read-outs until sessions 5 and 6; locked, it reads. |
+| `src/components/runner/cueActionDialogs.tsx` | The cue action set's Record sheet, delete confirm and unlock question, held in `Layout` above every host, so a live card a GO collapses cannot close one. |
 | `src/components/runner/ShowMarkerRow.tsx` | Interactive marker with inline rename/delete. Locked, it renders `MarkerRow` — one separator, every surface. |
-| `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail`. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Under the collapsed row it draws the cue action set's strip (`CueActions`, frontend CLAUDE.md §"The cue action set"): the Edit / Blind edit split button, Load, Record…, Duplicate, Remove from stack, Delete… and the ⋯ menu. **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`, now in `components/cues/`) stays in the expanded body. |
+| `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail` — the cards view's **host of the cue editor** (show-cue-editing plan §4.2). Opened, the collapsed row, then the cue action set's strip (`CueActions`, frontend CLAUDE.md §"The cue action set": the Edit / Blind edit split button, Load, Record…, Duplicate, Remove from stack, Delete… and the ⋯ menu), then `CueEditor` — the same editor the cue sheet's pane mounts. Two cards can be open, each with its own. Cue properties is gone (D15): `CuePropertiesSheet` and `CuePropsPane` are deleted. `CueDetailContent` is no longer the card's; it stays the phone card's and the Prompt Book's read-out. |
 | `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook, true while a container is below a threshold. `ShowPage` uses it at 600px to switch to the phone runner. |
@@ -422,7 +425,8 @@ reading a stack that is not the playhead, the `OffPlayheadBanner`:
   GO fires, which is the show.
 - **The cue action set** sits under the collapsed row of an expanded card, locked or not: locked,
   *Blind edit in programmer* works and every other action asks to unlock (show-cue-editing plan D8).
-- Expanding shows `CueDetailContent` — read-only, always. A cue is edited by Include (D2).
+- Expanding shows the action set's strip and then `CueEditor` (show-cue-editing plan §4.2): the header and the tabs, read-only while locked.
+- **In the table view** the cue sheet's bottom pane holds the same editor for the one selected row, and a row's Layers and FX read-outs select it and open the pane on that tab (§4.3).
 - **"Add Cue" does not exist.** A cue is a captured state, so recording is the only way one is made:
   *Record into &lt;stack&gt;*. Separators and stacks keep their create buttons — neither is a captured
   state, and that is the line rather than "no new buttons".
@@ -474,7 +478,8 @@ refetch that follows creating a stack would bounce the operator straight back ou
 ## Scenery in the cue table and the Prompt Book
 
 Scenery-programmer plan session 5 (D13, D14). Until it, a cue's scenery changes could be read on its
-card and edited only behind it — Cards → unlocked → *Cue properties…* — so neither the cue table nor
+card and edited only behind it — Cards → unlocked → *Cue properties…*, which the cue editor's
+Scenery tab replaced in show-cue-editing plan session 4 — so neither the cue table nor
 the Prompt Book said what a cue moves, and a DSM reading the book could not see *LX 14 + fly*.
 
 **One read for both: the stack list carries every cue's own changes.** `CueStackCueEntry.scenery` (the
@@ -497,7 +502,7 @@ not a second fold of the desk's resolver) and the sheet's em-dash otherwise, sin
 set it. A MARKER is a divider row with no cells, so it is blank. A press opens `CueSceneryEditor`
 (`components/scenery/`) at the cell: `EditorSurface` anchored at the button (one surface for the
 sheet, as the Stage popover has one for the stage, not a popover per row), **wide** in the side-sheet
-form, holding *Q15 · Storm · what changes here*, *Tracked into it: …*, and Cue properties' own
+form, holding *Q15 · Storm · what changes here*, *Tracked into it: …*, and the cue editor's Scenery tab's own
 `SceneryEditor` with times — each row's `SceneryControl` on release, the cue's whole list saved per
 gesture. It follows the lock as every cell does: locked, a press asks to unlock through the sheet's
 own dialog (or is disabled with the reason where the lock is not the operator's), and an editor open
@@ -608,7 +613,9 @@ Keyboard: `Space` | Button: `GO`
 
 1. **Normal GO** (standbyCueId exists):
    - Redux: `go()` -- moves standby to active, guesses the next standby (optimistic only; the
-     server's frame is what both settle on)
+     server's frame is what both settle on). **By entry**: the walk goes on from the place the
+     standby names, so in a stack holding one cue twice the optimistic next is the entry after the
+     second place, not after the first (show-cue-editing plan session 4)
    - Backend: `POST /cue-stacks/{id}/activate` (first GO) or `POST /cue-stacks/{id}/advance`
      (subsequent). No `go-to`: the backend holds the armed standby and `advance` FORWARD fires
      it, so a cue re-queued via click-to-requeue fires correctly *and* the MIDI surface's GO
@@ -749,10 +756,13 @@ All optimistic updates are rolled back on server error.
 
 ### Runner Redux Slice
 The `runnerSlice` manages per-stack playback state entirely on the frontend:
-- `go`: moves standby -> active, computes next standby (respects loop flag, skips MARKERs)
-- `back`: reverses cursor (mid-fade: active -> standby; idle: standby -> previous)
+- **The cursors are places.** `activeCueId` / `standbyCueId` each carry their entry
+  (`activeEntryId` / `standbyEntryId`); the walk is over entries, a cue id alone resolving to its
+  first row only where nothing named the entry. The fade and the done ticks stay keyed by cue.
+- `go`: moves standby -> active, computes next standby from the standby's entry (respects loop flag, skips MARKERs)
+- `back`: reverses cursor (mid-fade: active -> standby, its entry with it; idle: standby -> the entry above it)
 - `setStandby`: re-queues a specific cue as the next GO target (click-to-requeue). Optimistic — the caller also POSTs `/standby`, and the server's frame is what every session ends up believing. Clears the cue from `completedCueIds` so the "done" tick doesn't linger.
-- `resetStack`: initializes runner for a stack, restoring from the server's `activeCueId` / `nextCueId`
+- `resetStack`: initializes runner for a stack, restoring from the server's `activeCueId` / `nextCueId` and their entries; `useShowTransport` re-runs it when the server's live **entry** moves, since a GO between two places of one cue moves no cue id
 - `markDone`: marks fade complete, clears active
 - `applyServerRunState`: adopts a `cueRunStateChanged` frame. Always takes the armed next and the
   done-marking; starts the *animation* only when the frame is a `transition` (a GO just happened)

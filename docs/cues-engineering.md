@@ -482,16 +482,16 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 
 ### UI Components
 
-Cues are authored in the **Program** view (`/projects/:projectId/program`), not in a route of their
+Cues are authored in the **Show** view (`/projects/:projectId/show`), not in a route of their
 own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 
-- `src/routes/ProgramPage.tsx` — the show: an ordered list of stacks, drilling into
-  `/program/stacks/:stackId?cue=:cueId`
-- `src/components/runner/program/CueCardEditor/` — the cue editor's panes (`CuePropsPane`,
-  `TargetsPane`, `LayersPane`)
-- `src/components/cues/CueDetailContent.tsx` — the read-only body, and **the whole cue read
-  surface**: the Run card reaches it through `RunOutputPane`, and the mobile runner and the Prompt
-  Book rail through `CueCardBody`
+- `src/routes/ShowPage.tsx` — the show: an ordered list of stacks, drilling into
+  `/show/stacks/:stackId?cue=:cueId`
+- `src/components/cues/editor/CueEditor.tsx` — the cue editor: the header (the entry's number
+  and follow, the cue's name, fade and curve) and its tabs, mounted by the card
+  (`components/runner/CueCardEditor.tsx`), the cue sheet's bottom pane and `stage/OwnerEditor`
+- `src/components/cues/CueDetailContent.tsx` — the read-only body the mobile runner and the Prompt
+  Book rail draw through `CueCardBody`
 - `src/components/cues/CopyCueDialog.tsx` — Copy to another project
 
 ### Navigation

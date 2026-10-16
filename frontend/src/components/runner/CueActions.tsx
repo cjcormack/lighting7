@@ -43,9 +43,8 @@ import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { setShowInclude } from '@/lib/showInclude'
 import { useInclude } from '@/components/programmer/useInclude'
-import { RecordSheet } from '@/components/programmer/RecordSheet'
-import { CueDeleteDialog, type CueToDelete } from '@/components/cues/CueDeleteDialog'
-import { UnlockShowDialog } from './UnlockShowDialog'
+import type { CueToDelete } from '@/components/cues/CueDeleteDialog'
+import { useCueActionDialogs } from './cueActionDialogs'
 
 /** One row the actions act on: a cue, and the entry it was opened from (null for a loose cue). */
 export interface CueActionRow {
@@ -156,10 +155,9 @@ export function CueActions({
   const [addToStack] = useAddCueToStackMutation()
   const [moveEntry] = useMoveCueStackEntryMutation()
 
-  /** The cue the Record sheet is open on, named when it opened — a card's row can move on meanwhile. */
-  const [recording, setRecording] = useState<{ cueId: number; name: string } | null>(null)
-  const [deleting, setDeleting] = useState<CueToDelete[] | null>(null)
-  const [unlockAsked, setUnlockAsked] = useState(false)
+  // The Record sheet, the delete confirm and the unlock question live above the views, so a host
+  // that goes — a live card collapsing on a GO from elsewhere — cannot take one with it.
+  const dialogs = useCueActionDialogs()
   const [blindPending, setBlindPending] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
 
@@ -171,7 +169,7 @@ export function CueActions({
   /** Run [action] — or, locked, ask to unlock instead. */
   const guarded = (action: () => void) => () => {
     if (locked) {
-      if (onRequestUnlock != null) setUnlockAsked(true)
+      if (onRequestUnlock != null) dialogs.openUnlock(onRequestUnlock)
       return
     }
     action()
@@ -249,7 +247,7 @@ export function CueActions({
       seen.add(row.cueId)
       cues.push({ id: row.cueId, name: row.cueNumber ? `Q${row.cueNumber} ${row.name}` : row.name })
     }
-    setDeleting(cues)
+    dialogs.openDelete(projectId, cues)
   }
 
   const addTo = (stackId: number) => {
@@ -339,7 +337,8 @@ export function CueActions({
       label: 'Record…',
       icon: <Zap className="size-3.5" />,
       title: 'Record the programmer into this cue',
-      onSelect: guarded(() => one && setRecording({ cueId: one.cueId, name: one.name })),
+      // Named when it opens — a card's row can move on meanwhile.
+      onSelect: guarded(() => one && dialogs.openRecord(projectId, one.cueId, one.name)),
       reason: reasons.record,
     },
   ]
@@ -412,24 +411,6 @@ export function CueActions({
     </>
   )
 
-  const dialogs = (
-    <>
-      {recording != null && (
-        <RecordSheet
-          open
-          onOpenChange={(open) => !open && setRecording(null)}
-          projectId={projectId}
-          targetCueId={recording.cueId}
-          targetCueName={recording.name}
-        />
-      )}
-      <CueDeleteDialog projectId={projectId} cues={deleting} onClose={() => setDeleting(null)} />
-      {onRequestUnlock && (
-        <UnlockShowDialog open={unlockAsked} onOpenChange={setUnlockAsked} onUnlock={onRequestUnlock} />
-      )}
-    </>
-  )
-
   if (host === 'menu') {
     return (
       <>
@@ -466,11 +447,11 @@ export function CueActions({
             {stackMenus}
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* The dialogs are portaled, but React events still bubble through the tree, and here it
-            runs through the phone card's header — whose click scrolls the Prompt Book and toggles
-            anchor placing. */}
+        {/* Drawn here only where no provider is mounted. The dialogs are portaled, but React events
+            still bubble through the tree, and here it runs through the phone card's header — whose
+            click scrolls the Prompt Book and toggles anchor placing. */}
         <span className="contents" onClick={(e) => e.stopPropagation()}>
-          {dialogs}
+          {dialogs.local}
         </span>
       </>
     )
@@ -532,7 +513,7 @@ export function CueActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">{stackMenus}</DropdownMenuContent>
       </DropdownMenu>
-      {dialogs}
+      {dialogs.local}
     </div>
   )
 }

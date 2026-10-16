@@ -18,6 +18,16 @@ export function formatFadeText(fadeDurationMs: number | null, fadeCurve: string)
   return 'SNAP'
 }
 
+/** The fade curves a cue offers, in the order every curve control lists them. */
+export const CUE_CURVE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: 'LINEAR', label: 'Linear' },
+  { value: 'SINE_IN_OUT', label: 'Sine In/Out' },
+  { value: 'CUBIC_IN_OUT', label: 'Cubic In/Out' },
+  { value: 'EASE_IN', label: 'Ease In' },
+  { value: 'EASE_OUT', label: 'Ease Out' },
+  { value: 'EASE_IN_OUT', label: 'Ease In/Out' },
+]
+
 /** The curve half of `formatFadeText` on its own — for layouts that make the duration editable. */
 export function formatFadeCurve(fadeCurve: string): string {
   return CURVE_LABELS[fadeCurve] ?? ''
@@ -55,6 +65,18 @@ export function parseFadeDuration(raw: string): number | null | undefined {
         : value * 1000
   const rounded = Math.round(ms)
   return rounded > 0 ? rounded : null
+}
+
+/**
+ * A follow typed into a field: blank, `off` or `—` is none (`null`); otherwise a delay in the fade
+ * grammar, **0 kept** — a follow of 0 fires the next cue the moment this one lands, which
+ * [parseFadeDuration] would read as a snap. `undefined` for anything else.
+ */
+export function parseFollowDelay(raw: string): number | null | undefined {
+  const text = raw.trim()
+  if (text === '' || /^(off|—|-)$/i.test(text)) return null
+  if (/^0*\.?0*\s*(ms|msec|s|sec|secs|m|min)?$/i.test(text) && /\d/.test(text)) return 0
+  return parseFadeDuration(text) ?? undefined
 }
 
 /** Find the next available name of the form "{base}", "{base} 2", "{base} 3"… */

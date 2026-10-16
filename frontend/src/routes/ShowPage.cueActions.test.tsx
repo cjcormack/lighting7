@@ -115,10 +115,7 @@ vi.mock('../components/runner/StackTabStrip', () => ({ StackTabStrip: () => null
 vi.mock('../components/runner/ShowOverview', () => ({ ShowOverview: () => <div data-testid="stack-list" /> }))
 vi.mock('../components/runner/ShowLockControl', () => ({ ShowLockControl: () => null }))
 // The card's read surface, the hand's strip and the fade — store-touching, and not what is pressed.
-vi.mock('@/components/cues/CueDetailContent', () => ({ CueDetailContent: () => <div data-testid="detail" /> }))
-vi.mock('@/components/cues/CuePropertiesSheet', () => ({ CuePropertiesSheet: () => null }))
-vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
-vi.mock('@/components/SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
+vi.mock('@/components/cues/editor/CueEditor', () => ({ CueEditor: () => <div data-testid="detail" /> }))
 vi.mock('@/components/stage/OwnerEditor', () => ({ OwnerEditor: () => null }))
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
 

@@ -37,6 +37,20 @@ vi.mock('@/components/scenery/CueSceneryEditor', () => ({
   CueSceneryEditor: ({ cue }: { cue: { id: number } | null }) =>
     cue == null ? null : <div data-testid="scenery-editor">editing {cue.id}</div>,
 }))
+// The pane's editor — `CueEditor.test.tsx`'s; here it says which cue and entry it was opened on.
+vi.mock('@/components/cues/editor/CueEditor', () => ({
+  CueEditor: (props: { cueId: number; entryId: number; host: string; locked: boolean; tabRequest?: { tab: string } | null }) => (
+    <div
+      data-cue-editor={props.cueId}
+      data-cue-editor-host={props.host}
+      data-entry={props.entryId}
+      data-locked={String(props.locked)}
+      data-tab={props.tabRequest?.tab ?? ''}
+    >
+      <button type="button" data-testid="pane-control">a control in the editor</button>
+    </div>
+  ),
+}))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -52,6 +66,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 import { CueSheet } from './CueSheet'
+import { cuePaneHeightStore } from './CueEditorPane'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 /** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
@@ -86,7 +101,7 @@ const STACK: CueStack = {
 }
 
 function draw(over: Partial<React.ComponentProps<typeof CueSheet>> = {}) {
-  return render(<CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} {...over} />)
+  return render(<CueSheet stack={STACK} projectId={1} activeEntryId={null} {...over} />)
 }
 
 /** The first column spans 0..100; Name 100..300, Fade 300..388 — rows are 36px from a 0-high header. */
@@ -232,13 +247,12 @@ describe('CueSheet', () => {
     expect(row(1).querySelector('[data-cell="notes"]')?.textContent).toContain('—')
   })
 
-  it('the Book read-out opens the Prompt Book, not the cue card', () => {
+  it('the Book read-out opens the Prompt Book, not the cue', () => {
     const onOpenBook = vi.fn()
-    const onOpenCue = vi.fn()
-    draw({ locationByCue: new Map([[1, 'top of p. 8']]), onOpenBook, onOpenCue })
+    const { container } = draw({ locationByCue: new Map([[1, 'top of p. 8']]), onOpenBook })
     fireEvent.click(within(row(1)).getByText('top of p. 8').closest('button')!)
     expect(onOpenBook).toHaveBeenCalledWith(1)
-    expect(onOpenCue).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-cue-pane]')).toBeNull()
   })
 
   it('locked: a refused edit offers to unlock instead of doing nothing', async () => {
@@ -285,12 +299,12 @@ describe('CueSheet', () => {
   it('unlocked: every row carries a reorder grip; locked, none does', () => {
     const onReorder = vi.fn()
     const { rerender } = render(
-      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={onReorder} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onReorder={onReorder} />,
     )
     // Cues and separators alike — a marker is a row of the stack and moves with them.
     expect(screen.getAllByRole('button', { name: 'Reorder row' })).toHaveLength(STACK.cues.length)
     rerender(
-      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={onReorder} locked />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onReorder={onReorder} locked />,
     )
     expect(screen.queryAllByRole('button', { name: 'Reorder row' })).toHaveLength(0)
   })
@@ -303,7 +317,7 @@ describe('CueSheet', () => {
     // started from. It is not a dead drag either way, which is what made it easy to miss: dragging
     // *up* still worked, because for an upward drag DOM order and distance order agree.
     render(
-      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} onReorder={vi.fn()} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} onReorder={vi.fn()} />,
     )
     const wrappers = [...document.querySelectorAll('[data-row-id]')].map((r) => r.parentElement!)
     expect(wrappers.map((w) => w.style.top)).toEqual(['0px', '36px', '72px', '108px', '144px'])
@@ -363,7 +377,7 @@ describe('CueSheet', () => {
     // editor's read-out names it — before this, the column's `write` received it and patched a
     // curve onto a cue with no fade.
     const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 2 ? { ...c, fadeDurationMs: null } : c)) }
-    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} onOpenCue={() => {}} />)
+    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} />)
     const cell = within(row(1)).getAllByRole('button').find((b) => b.closest('[data-cell="curve"]'))!
     fireEvent.pointerDown(cell, { button: 0, clientX: 440, clientY: 10 })
     fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 450, clientY: 62 })
@@ -387,7 +401,7 @@ describe('CueSheet', () => {
   it('consumes the deep link once — a refetched stack does not wipe a marquee made since', () => {
     // Every cell commit refetches the stack and every GO re-mints its cues; neither is an arrival.
     const view = render(
-      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={104} onOpenCue={() => {}} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={104} />,
     )
     expect(row(4)).toHaveAttribute('data-state', 'selected')
     dragFade(0, 1)
@@ -398,14 +412,13 @@ describe('CueSheet', () => {
         projectId={1}
         activeEntryId={102}
         openedEntryId={104}
-        onOpenCue={() => {}}
       />,
     )
     expect(screen.getByText('2 cells')).toBeInTheDocument()
     expect(row(4)).not.toHaveAttribute('data-state', 'selected')
     // A new id is a new arrival.
     view.rerender(
-      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={105} onOpenCue={() => {}} />,
+      <CueSheet stack={STACK} projectId={1} activeEntryId={null} openedEntryId={105} />,
     )
     expect(row(5)).toHaveAttribute('data-state', 'selected')
     expect(screen.queryByText('2 cells')).toBeNull()
@@ -565,10 +578,10 @@ describe('CueSheet · Scenery (scenery-programmer plan D13)', () => {
     const { rerender } = draw({ stack: SCENERY_STACK })
     fireEvent.click(scenery(2)!)
     expect(screen.getByTestId('scenery-editor')).toBeInTheDocument()
-    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} locked onRequestUnlock={() => {}} />)
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} locked onRequestUnlock={() => {}} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
     // …and does not come back with the unlock.
-    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} onOpenCue={() => {}} />)
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeEntryId={null} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
   })
 
@@ -594,5 +607,146 @@ describe('CueSheet · Scenery (scenery-programmer plan D13)', () => {
     expect(setAt).toBeGreaterThanOrEqual(0)
     expect(setAt).toBeLessThan(at)
     expect(at).toBeLessThan(deselectAt)
+  })
+})
+
+describe('CueSheet — the bottom pane', () => {
+  /** A column 800 tall; every other child of it is flat, so the sheet and the pane share 784. */
+  function stubColumn() {
+    // Over the flat layout the outer `beforeEach` stubbed: the same spy, its implementation kept.
+    const spy = vi.mocked(Element.prototype.getBoundingClientRect)
+    const base = spy.getMockImplementation()!
+    spy.mockImplementation(function (this: Element) {
+      const box = (height: number) => ({ left: 0, top: 0, right: 1100, bottom: height, width: 1100, height, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+      if (this.hasAttribute('data-cue-sheet-column')) return box(800)
+      if (this.hasAttribute('data-cue-pane')) return box(parseFloat((this as HTMLElement).style.height) || 0)
+      return base.call(this)
+    })
+  }
+  const pane = () => document.querySelector<HTMLElement>('[data-cue-pane]')
+
+  beforeEach(() => {
+    sessionStorage.clear()
+    cuePaneHeightStore.reset()
+    stubColumn()
+  })
+
+  it('opens for exactly one selected row and folds for two, the sheet taking the height back', () => {
+    draw()
+    expect(pane()).toBeNull()
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    expect(pane()).toHaveAttribute('data-cue-pane', '102')
+    const editor = pane()!.querySelector('[data-cue-editor]')!
+    expect(editor).toHaveAttribute('data-cue-editor', '2')
+    expect(editor).toHaveAttribute('data-cue-editor-host', 'pane')
+    expect(editor).toHaveAttribute('data-entry', '102')
+    // Two rows: no pane, and no grip.
+    dragFade(0, 1)
+    expect(pane()).toBeNull()
+    expect(document.querySelector('[data-cue-pane-handle]')).toBeNull()
+  })
+
+  it('opens at half the column, and the grip sets the window’s height, magnetic at half', () => {
+    draw()
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    // Half of the 800 column.
+    expect(pane()!.style.height).toBe('400px')
+    const grip = document.querySelector<HTMLElement>('[data-cue-pane-handle]')!
+    fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientY: 500 })
+    // Up 100: taller by 100.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 400 })
+    expect(pane()!.style.height).toBe('500px')
+    // Back to within 10px of half: it lands on half.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 494 })
+    expect(pane()!.style.height).toBe('400px')
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 430 })
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 430 })
+    expect(cuePaneHeightStore.getSnapshot()).toBe(470)
+    expect(sessionStorage.getItem('cueSheet.paneHeight')).toBe('470')
+  })
+
+  it('never lets the sheet keep less than its header and three rows, nor the pane fall under 160', () => {
+    draw()
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    const grip = document.querySelector<HTMLElement>('[data-cue-pane-handle]')!
+    fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientY: 500 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: -1000 })
+    // 800 less the grip's 16 and the sheet's header and three rows, 30 + 3 × 36.
+    expect(pane()!.style.height).toBe('646px')
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 2000 })
+    expect(pane()!.style.height).toBe('160px')
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 2000 })
+  })
+
+  it('keeps its height across a reload in the window', () => {
+    cuePaneHeightStore.set(260)
+    // A reload: the cached value goes, sessionStorage stays.
+    cuePaneHeightStore.reset()
+    draw()
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    expect(pane()!.style.height).toBe('260px')
+  })
+
+  it('steps with the arrow keys, and a double press restores the default', () => {
+    draw()
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    const grip = document.querySelector<HTMLElement>('[data-cue-pane-handle]')!
+    fireEvent.keyDown(grip, { key: 'ArrowDown' })
+    expect(pane()!.style.height).toBe('160px')
+    fireEvent.keyDown(grip, { key: 'ArrowUp' })
+    expect(pane()!.style.height).toBe('400px')
+    fireEvent.keyDown(grip, { key: 'ArrowUp' })
+    expect(pane()!.style.height).toBe('646px')
+    for (let i = 0; i < 2; i++) {
+      fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientY: 300 })
+      fireEvent.pointerUp(window, { pointerId: 1, clientY: 300 })
+    }
+    expect(cuePaneHeightStore.getSnapshot()).toBeNull()
+    expect(pane()!.style.height).toBe('400px')
+  })
+
+  it("a row's Layers and FX read-outs select it and open the pane on that tab", () => {
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { layerCount: 3, adHocEffectCount: 1 }), cue(4)] } })
+    fireEvent.click(within(row(2)).getByTitle(/Looks in the editor below/))
+    expect(row(2)).toHaveAttribute('data-state', 'selected')
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'looks')
+    fireEvent.click(within(row(2)).getByTitle(/effects in the editor below/))
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'fx')
+    // A plain click on another row is that window's own tab, not the read-out's.
+    fireEvent.click(row(4).firstElementChild as HTMLElement)
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', '')
+  })
+
+  it('a read-out’s tab is spent once the pane leaves its row', () => {
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { adHocEffectCount: 1 }), cue(4)] } })
+    fireEvent.click(within(row(2)).getByTitle(/effects in the editor below/))
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'fx')
+    fireEvent.click(row(4).firstElementChild as HTMLElement)
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', '')
+  })
+
+  it('a key pressed inside the pane is not the sheet’s: Escape keeps the row, Backspace clears no cell', () => {
+    draw()
+    // One cell in row 2: one row, so the pane opens over a selection Backspace would clear.
+    dragFade(1, 1)
+    expect(pane()).not.toBeNull()
+    const control = screen.getByTestId('pane-control')
+    control.focus()
+    fireEvent.keyDown(control, { key: 'Backspace' })
+    expect(patchCue).not.toHaveBeenCalled()
+    fireEvent.keyDown(control, { key: 'Escape' })
+    expect(pane()).not.toBeNull()
+    const grip = document.querySelector<HTMLElement>('[data-cue-pane-handle]')!
+    fireEvent.keyDown(grip, { key: 'Delete' })
+    expect(patchCue).not.toHaveBeenCalled()
+    expect(screen.getByText('1 cell')).toBeInTheDocument()
+  })
+
+  it('locked, the pane edits nothing', () => {
+    draw({ locked: true, onRequestUnlock: () => {} })
+    // Locked, the marquee still selects; one cell is one row.
+    dragFade(1, 1)
+    expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-locked', 'true')
   })
 })
