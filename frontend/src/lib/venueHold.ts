@@ -35,6 +35,13 @@ export function behindBanner(
   return null
 }
 
+/** The banner's colour: red while held, amber behind on output, neutral for drawing only. */
+export type BehindTone = 'red' | 'amber' | 'neutral'
+
+export function behindTone(banner: BehindBanner): BehindTone {
+  return banner.kind === 'held' ? 'red' : banner.kind === 'running' || banner.kind === 'output' ? 'amber' : 'neutral'
+}
+
 /** `2 drawing changes`, `1 drawing change`; `drawing changes` while the count is unknown. */
 export function drawingChangesPhrase(n: number | undefined): string {
   if (n == null) return 'drawing changes'

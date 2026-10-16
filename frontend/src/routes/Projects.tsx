@@ -5,39 +5,23 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Cloud, CloudDownload, Landmark, MoreVertical, PackageOpen, PlusCircle, Upload, XCircle } from "lucide-react"
+import { Cloud, CloudDownload, Landmark, PackageOpen, PlusCircle, Upload, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  useProjectListQuery,
-  useDeleteProjectMutation,
-} from "../store/projects"
+import { useProjectListQuery } from "../store/projects"
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
 import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
 import { useIsNavAdmin } from "../navigation"
 import { formatRepoUrl } from "@/lib/formatRepoUrl"
 import { ProjectSummary } from "../api/projectApi"
-import { formatError } from "@/lib/formatError"
 import CreateProjectDialog from "../CreateProjectDialog"
-import DeleteProjectConfirmDialog from "../DeleteProjectConfirmDialog"
-import ProjectSwitchConfirmDialog from "../ProjectSwitchConfirmDialog"
-import CloneProjectDialog from "../CloneProjectDialog"
-import ExportProjectDialog from "../ExportProjectDialog"
 import ImportProjectDialog from "../ImportProjectDialog"
 import { AddRemoteProjectDialog } from "../components/cloudSync/ImportFromRemoteDialog"
 import { VenueTag } from "../components/venue/VenueTag"
-import { VenueUpdateSheet } from "../components/venue/VenueUpdateSheet"
-import { DetachVenueDialog } from "../components/venue/DetachVenueDialog"
+import { ProjectActionsMenu, useProjectActions } from "../components/projectActions/ProjectActions"
 import { ExtractVenueSheet } from "../components/venue/ExtractVenueSheet"
 import { useVenueHistoryQuery } from "../store/venues"
 import { draftChipLabel, publishedDate, venueBadge, venueSummaryLines } from "@/lib/venue"
@@ -142,7 +126,7 @@ function ProjectsContainer() {
   // projects that have never been synced are simply absent.
   const { data: syncConfigs } = useCloudSyncConfigsQuery()
   const isAdmin = useIsNavAdmin()
-  const [extractFrom, setExtractFrom] = useState<number | null | undefined>(undefined)
+  const [extractOpen, setExtractOpen] = useState(false)
 
   if (isLoading) {
     return <div>Loading...</div>
@@ -166,7 +150,6 @@ function ProjectsContainer() {
       key={project.id}
       project={project}
       syncConfig={syncConfigs?.[String(project.id)]}
-      onExtract={isAdmin && project.kind !== "VENUE" && project.venue == null ? () => setExtractFrom(project.id) : undefined}
     />
   )
 
@@ -174,10 +157,9 @@ function ProjectsContainer() {
     <>
       {isAdmin && (
         <ExtractVenueSheet
-          open={extractFrom !== undefined}
-          onOpenChange={(open) => !open && setExtractFrom(undefined)}
+          open={extractOpen}
+          onOpenChange={setExtractOpen}
           shows={standalone}
-          initialProjectId={extractFrom ?? undefined}
         />
       )}
       {(venues.length > 0 || isAdmin) && (
@@ -190,7 +172,7 @@ function ProjectsContainer() {
             {isAdmin && (
               <button
                 type="button"
-                onClick={() => setExtractFrom(null)}
+                onClick={() => setExtractOpen(true)}
                 disabled={standalone.length === 0}
                 title={standalone.length === 0 ? "Every show is already on a venue" : undefined}
                 className="flex min-h-24 flex-col items-start gap-1 rounded-xl border border-dashed p-3 text-left transition-colors hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -223,93 +205,17 @@ function ProjectsContainer() {
 function ProjectCard({
   project,
   syncConfig,
-  onExtract,
 }: {
   project: ProjectSummary
   syncConfig?: SyncConfig
-  /** *Extract a venue…* from this show: an admin's, on a show not already on a venue. */
-  onExtract?: () => void
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [updateOpen, setUpdateOpen] = useState(false)
-  const [detachOpen, setDetachOpen] = useState(false)
-  const [switchOpen, setSwitchOpen] = useState(false)
-  const [cloneOpen, setCloneOpen] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
   const navigate = useNavigate()
-  const isAdmin = useIsNavAdmin()
   const isVenue = project.kind === "VENUE"
-  // A venue is an admin's to change (venue plan D3): an operator may open one, nothing more.
-  const canChange = !isVenue || isAdmin
-
-  const [deleteProject, { isLoading: isDeleting, error: deleteError }] =
-    useDeleteProjectMutation()
-
-  const handleActivate = () => {
-    if (!project.isCurrent) {
-      setSwitchOpen(true)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      await deleteProject(project.id).unwrap()
-      setDeleteOpen(false)
-    } catch {
-      // Error handled by dialog
-    }
-  }
-
-  const is409Error =
-    deleteError && "status" in deleteError && deleteError.status === 409
-  // A show on a venue this desk holds (venue plan session 7): *Update venue* while a newer version is
-  // published, and *Detach* — both roles, each changing only the show.
-  const venue = project.venue ?? null
-  const venueHere = venue != null && venue.id != null
-  const newer = venueHere && venue.installed != null && venue.installed > venue.version ? venue.installed : null
+  const { actions, dialogs } = useProjectActions(project, "card")
 
   return (
     <>
-      <DeleteProjectConfirmDialog
-        open={deleteOpen}
-        projectName={project.name}
-        isCurrent={project.isCurrent}
-        isDeleting={isDeleting}
-        error={
-          is409Error
-            ? isVenue
-              ? formatError(deleteError)
-              : "Cannot delete the currently active project"
-            : undefined
-        }
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteOpen(false)}
-      />
-      <ProjectSwitchConfirmDialog project={switchOpen ? project : null} onClose={() => setSwitchOpen(false)} />
-      <CloneProjectDialog
-        open={cloneOpen}
-        setOpen={setCloneOpen}
-        sourceProjectId={project.id}
-        sourceProjectName={project.name}
-      />
-      <ExportProjectDialog
-        open={exportOpen}
-        setOpen={setExportOpen}
-        sourceProjectId={project.id}
-        sourceProjectName={project.name}
-      />
-      {venueHere && (
-        <>
-          <VenueUpdateSheet open={updateOpen} onOpenChange={setUpdateOpen} projectId={project.id} showName={project.name} />
-          <DetachVenueDialog
-            open={detachOpen}
-            onOpenChange={setDetachOpen}
-            projectId={project.id}
-            showName={project.name}
-            venueName={venue.name ?? "its venue"}
-          />
-        </>
-      )}
+      {dialogs}
       <Card
         className={cn(
           "flex flex-col gap-0 py-3 cursor-pointer hover:bg-accent/50 transition-colors",
@@ -329,70 +235,7 @@ function ProjectCard({
               </p>
               {isVenue && <VenueCardLines project={project} />}
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="-mr-2 -mt-1">
-                  <MoreVertical className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
-                {!project.isCurrent && (
-                  <DropdownMenuItem onClick={handleActivate}>
-                    Activate
-                  </DropdownMenuItem>
-                )}
-                {/* A venue has no scripts: its rail hides them (venue plan §4). */}
-                {!isVenue && (
-                  <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/scripts`)}>
-                    Scripts
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => navigate(`/projects/${project.id}/settings`)}>
-                  Configure
-                </DropdownMenuItem>
-                {canChange && (
-                  <DropdownMenuItem onClick={() => setCloneOpen(true)}>
-                    Clone
-                  </DropdownMenuItem>
-                )}
-                {isAdmin && (
-                  <DropdownMenuItem onClick={() => setExportOpen(true)}>
-                    Export
-                  </DropdownMenuItem>
-                )}
-                {venueHere && (
-                  <>
-                    <DropdownMenuSeparator />
-                    {newer != null && (
-                      <DropdownMenuItem onClick={() => setUpdateOpen(true)}>
-                        Update venue to v{newer}…
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => setDetachOpen(true)}>
-                      Detach from venue…
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {onExtract && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onExtract}>Extract a venue…</DropdownMenuItem>
-                  </>
-                )}
-                {canChange && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setDeleteOpen(true)}
-                      disabled={project.isCurrent}
-                    >
-                      Delete
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ProjectActionsMenu actions={actions} label={`${project.name} actions`} className="-mr-2 -mt-1" />
           </div>
         </CardHeader>
         <CardFooter className="p-0 px-3 mt-auto flex flex-wrap items-center gap-x-2 gap-y-1">

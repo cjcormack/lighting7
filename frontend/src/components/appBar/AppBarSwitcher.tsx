@@ -9,9 +9,9 @@ import type { VenueHoldState } from '@/api/venueHoldApi'
 import CreateProjectDialog from '@/CreateProjectDialog'
 import ProjectSwitchConfirmDialog from '@/ProjectSwitchConfirmDialog'
 import { useIsNavAdmin } from '@/navigation'
+import { projectActions, type ProjectAction } from '@/lib/projectActions'
 import {
   RIG_DOT_LABEL,
-  makeCurrentRefusal,
   pinChipOf,
   rigDotOf,
   switcherDetailOf,
@@ -51,9 +51,9 @@ export function AppBarSwitcher() {
   const dot = rigDotOf(current.id, hold, safety, connected)
   const chip = pinChipOf(current, hold)
 
-  const openHome = (project: ProjectSummary) => {
+  const go = (path: string) => {
     setOpen(false)
-    navigate(`/projects/${project.id}`)
+    navigate(path)
   }
   const makeCurrent = (project: ProjectSummary) => {
     setOpen(false)
@@ -90,12 +90,9 @@ export function AppBarSwitcher() {
             projects={projects ?? []}
             hold={hold}
             dot={dot}
-            onOpen={openHome}
+            onNavigate={go}
             onMakeCurrent={makeCurrent}
-            onAllProjects={() => {
-              setOpen(false)
-              navigate('/projects')
-            }}
+            onAllProjects={() => go('/projects')}
             onCreate={create}
           />
         </PopoverContent>
@@ -166,14 +163,16 @@ function PinChip({ chip, onOpen }: { chip: PinChipModel; onOpen: () => void }) {
 const valueOf = (p: ProjectSummary) => `project-${p.id}`
 
 /**
- * The switcher's menu (§4.2): search, *On the rig*, Shows and Venues, each sorted by name. Enter
- * opens the highlighted row's home — the first match while typing — and ⌥Enter makes it current.
+ * The switcher's menu (§4.2): search, *On the rig*, Shows and Venues, each sorted by name. A row
+ * offers its project's *rig* actions (`lib/projectActions.ts`, P3) — Open, Make current, Settings.
+ * Enter opens the highlighted row's home — the first match while typing — and ⌥Enter makes it
+ * current.
  */
 export function SwitcherMenu({
   projects,
   hold,
   dot,
-  onOpen,
+  onNavigate,
   onMakeCurrent,
   onAllProjects,
   onCreate,
@@ -182,12 +181,20 @@ export function SwitcherMenu({
   hold: VenueHoldState
   /** The switcher button's dot, which the *On the rig* row repeats. */
   dot: RigDotState
-  onOpen: (project: ProjectSummary) => void
+  onNavigate: (path: string) => void
   onMakeCurrent: (project: ProjectSummary) => void
   onAllProjects: () => void
   onCreate: (kind: 'SHOW' | 'VENUE') => void
 }) {
   const isAdmin = useIsNavAdmin()
+  const rigActions = (project: ProjectSummary): ProjectAction[] =>
+    projectActions(project, {
+      place: 'switcher',
+      isAdmin,
+      host: { navigate: onNavigate, open: () => onMakeCurrent(project) },
+    // A row has room for Open and Make current; Settings is a press away on the home, the sidebar and ⌘K.
+    }).filter((a) => a.group === 'rig' && a.visible && a.id !== 'settings')
+  const actionOf = (project: ProjectSummary, id: ProjectAction['id']) => rigActions(project).find((a) => a.id === id)
   const [query, setQuery] = useState('')
   const groups = switcherGroupsOf(projects, query)
   const order = switcherOrderOf(groups)
@@ -204,16 +211,17 @@ export function SwitcherMenu({
     if (e.key !== 'Enter' || !e.altKey) return
     // ⌥Enter: make it current. cmdk reads Enter after this handler and skips a prevented one.
     e.preventDefault()
-    if (highlighted && !highlighted.isCurrent && makeCurrentRefusal(highlighted) == null) onMakeCurrent(highlighted)
+    const makeCurrent = highlighted && actionOf(highlighted, 'make-current')
+    if (makeCurrent?.enabled) makeCurrent.run()
   }
 
   const row = (project: ProjectSummary) => {
-    const refusal = makeCurrentRefusal(project)
+    const actions = rigActions(project)
     return (
       <Command.Item
         key={project.id}
         value={valueOf(project)}
-        onSelect={() => onOpen(project)}
+        onSelect={() => actions.find((a) => a.id === 'open')?.run()}
         data-switcher-row={project.id}
         className="group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
       >
@@ -221,15 +229,20 @@ export function SwitcherMenu({
         <span className="min-w-0 truncate font-medium">{project.name}</span>
         {project.kind === 'VENUE' && <VenueTag className="shrink-0" />}
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">· {switcherDetailOf(project, hold)}</span>
-        <RowButton label="Open" onClick={() => onOpen(project)} />
-        {!project.isCurrent &&
-          (refusal == null ? (
-            <RowButton label="Make current" onClick={() => onMakeCurrent(project)} />
+        {actions.map((action) =>
+          action.enabled ? (
+            <RowButton key={action.id} label={action.label} onClick={action.run} />
           ) : (
-            <span className="shrink-0 text-[11px] text-muted-foreground" title={`${refusal}, so it can’t be made current`}>
-              Venue not here
+            <span
+              key={action.id}
+              data-switcher-refusal={action.id}
+              className="shrink-0 text-[11px] text-muted-foreground"
+              title={action.reason ?? undefined}
+            >
+              {action.refusalLabel ?? action.label}
             </span>
-          ))}
+          ),
+        )}
       </Command.Item>
     )
   }

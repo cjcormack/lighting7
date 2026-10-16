@@ -1292,8 +1292,8 @@ case, not multi-master sync. Import:
    name (unique index). The operator supplies a `nameOverride` to
    disambiguate.
 4. Forces `isCurrent = false` and `activeEntryId = null` on insert. The
-   operator switches to the imported project explicitly via the existing
-   "Activate" UI.
+   operator puts the imported project on the rig explicitly, with *Make
+   current*.
 5. Resolves UUID-keyed FKs in topological order: `projects → scripts →
    fxDefinitions → looks → … → cues → cue-children → showEntries →
    cueSlots → controlSurfaceBindings`.
