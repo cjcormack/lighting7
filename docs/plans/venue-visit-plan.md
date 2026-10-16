@@ -163,10 +163,9 @@ Grouped by area. §4 gives the order.
 - ~~S5 — Grand master (D5)~~ — done, `6729e6f9`.
 - ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
 - ~~S9 — Blinder colour (D8)~~ — done, `aeada21c`.
-
-**S7 — Group member order in the Groups views.**
-- Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.
-- Show the order the effects and spread will use.
+- ~~S7 — Group member order in the Groups views~~ — done, `d48ff355` (drag in the group sheet's
+  Members view, the list numbered and undragged by Chris's call; each strategy's step from the desk;
+  a spread over one group runs in its member order).
 
 **S8 — Per-patch locate (D6).**
 - **Stored values (D17).** A patch's Focus facet gains a locate pan and tilt, with the fine
