@@ -356,7 +356,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - **Docs:** `fx-engineering.md` (Size, Direction, N-shot; the end of `intensityMultiplier`'s raw
   scaling), `sync-engineering.md`.
 
-### Session 2 — Shaping the spread (backend + editor)
+### Session 2 — Shaping the spread (backend + editor) — done, `6df3b8ff`, `835d5684`, `de9986c3`, `f8bf4454`
 
 - §3.3 steps 2–5 in `DistributionPlan.of`, with `distinctSlots` after step 4; `FxDynamics` gains the
   four fields; stored as session 1's are (`formatVersion` bump).
