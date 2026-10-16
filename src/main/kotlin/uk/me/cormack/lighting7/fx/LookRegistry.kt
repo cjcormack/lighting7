@@ -69,6 +69,11 @@ data class EffectEntry(
     val direction: String = "FORWARD",
     /** Runs (D9); see [uk.me.cormack.lighting7.models.LookEffectSpec.nShot]. */
     val nShot: Int? = null,
+    /** The spread's shape (effects plan D4) — see [uk.me.cormack.lighting7.models.LookEffectSpec.spread]. */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 ) {
     val isDeferred: Boolean get() = target == null
 }
@@ -331,6 +336,10 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
         size = size,
         direction = direction,
         nShot = nShot,
+        spread = spread,
+        wings = wings,
+        blocks = blocks,
+        groups = groups,
     )
 }
 
@@ -365,4 +374,8 @@ internal fun EffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEff
     size = size,
     direction = direction,
     nShot = nShot,
+    spread = spread,
+    wings = wings,
+    blocks = blocks,
+    groups = groups,
 )

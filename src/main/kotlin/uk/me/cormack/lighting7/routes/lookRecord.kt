@@ -562,6 +562,10 @@ private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
     size = settings.size
     direction = settings.direction
     nShot = settings.nShot
+    this.spread = settings.spread
+    this.wings = settings.wings
+    this.blocks = settings.blocks
+    this.groups = settings.groups
 }
 
 /**
@@ -590,6 +594,10 @@ private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: Look
     if (edited.size != baseline.size) size = edited.size
     if (edited.direction != baseline.direction) direction = edited.direction
     if (edited.nShot != baseline.nShot) nShot = edited.nShot
+    if (edited.spread != baseline.spread) spread = edited.spread
+    if (edited.wings != baseline.wings) wings = edited.wings
+    if (edited.blocks != baseline.blocks) blocks = edited.blocks
+    if (edited.groups != baseline.groups) groups = edited.groups
     // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
     // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
     // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.

@@ -176,6 +176,15 @@ data class CueAdHocEffectDto(
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
     val nShot: Int? = null,
     /**
+     * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
+     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * wings under a mirrored Order, at the write boundary.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
+    /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
      * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored on
      * write, like [CueLayerDto.id] — an effect is matched by its target, property and type, and a
@@ -276,6 +285,15 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
 
     /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
     val nShot = integer("n_shot").nullable()
+
+    /**
+     * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
+     * counts are `spread_`-prefixed columns: `GROUPS` is an SQLite keyword (window frames).
+     */
+    val spread = double("spread").default(1.0)
+    val wings = integer("spread_wings").default(1)
+    val blocks = integer("spread_blocks").default(1)
+    val groups = integer("spread_groups").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -314,6 +332,10 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var size by DaoCueAdHocEffects.size
     var direction by DaoCueAdHocEffects.direction
     var nShot by DaoCueAdHocEffects.nShot
+    var spread by DaoCueAdHocEffects.spread
+    var wings by DaoCueAdHocEffects.wings
+    var blocks by DaoCueAdHocEffects.blocks
+    var groups by DaoCueAdHocEffects.groups
     var uuid by DaoCueAdHocEffects.uuid
 }
 
@@ -610,5 +632,9 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     size = size,
     direction = direction,
     nShot = nShot,
+    spread = spread,
+    wings = wings,
+    blocks = blocks,
+    groups = groups,
     uuid = uuid.toString(),
 )

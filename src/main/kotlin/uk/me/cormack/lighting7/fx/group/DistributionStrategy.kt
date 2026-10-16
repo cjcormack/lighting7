@@ -74,6 +74,34 @@ sealed interface DistributionStrategy {
         DoubleArray(members.size) { calculateOffset(members[it], groupSize) }
 
     /**
+     * Whether this Order is two mirrored wings already (Centre out, Edges in, Split — effects plan
+     * §3.3 step 3), so Wings has nothing to add under it: refused at the write boundary, ignored by
+     * [uk.me.cormack.lighting7.fx.SpreadShaping] if a stored row holds one anyway.
+     */
+    val isMirrored: Boolean get() = false
+
+    /**
+     * Each member's **rank** under this Order (§3.3 step 1), over [distinctSlots] ranks — what Blocks,
+     * Wings, Groups and Spread then shape ([uk.me.cormack.lighting7.fx.SpreadShaping]). An offset is
+     * `rank / distinctSlots` for every Order here but [POSITIONAL], so the default recovers the rank
+     * from the offset, rounded to the whole number it is (`(i / n) × n` need not be exactly `i` in
+     * floating point, and Blocks floors it).
+     */
+    fun ranks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray {
+        val slots = distinctSlots(groupSize)
+        val offsets = offsets(members, groupSize)
+        return DoubleArray(offsets.size) { Math.round(offsets[it] * slots).toDouble() }
+    }
+
+    /**
+     * [ranks] as whole numbers in `0 until distinctSlots` — what Blocks, Wings and Groups shape
+     * ([uk.me.cormack.lighting7.fx.SpreadShaping], effects plan §3.3), since each counts in whole
+     * ranks. The same as [ranks] for every Order here but [POSITIONAL], whose continuous position is
+     * snapped to the nearest slot.
+     */
+    fun wholeRanks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray = ranks(members, groupSize)
+
+    /**
      * Linear distribution: evenly spaced phases across the group.
      *
      * Creates a classic chase effect where each fixture fires in sequence.
@@ -105,6 +133,8 @@ sealed interface DistributionStrategy {
      * Useful for "explosion" or "bloom" effects.
      */
     data object CENTER_OUT : DistributionStrategy {
+        override val isMirrored: Boolean = true
+
         override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
 
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
@@ -130,6 +160,8 @@ sealed interface DistributionStrategy {
      * The inverse of CENTER_OUT.
      */
     data object EDGES_IN : DistributionStrategy {
+        override val isMirrored: Boolean = true
+
         override fun distinctSlots(groupSize: Int): Int = CENTER_OUT.distinctSlots(groupSize)
 
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
@@ -236,6 +268,8 @@ sealed interface DistributionStrategy {
      * positions share the same offset and fire together.
      */
     data object SPLIT : DistributionStrategy {
+        override val isMirrored: Boolean = true
+
         override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
 
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
@@ -256,6 +290,22 @@ sealed interface DistributionStrategy {
     data object POSITIONAL : DistributionStrategy {
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return member.normalizedPosition
+        }
+
+        /** The position itself, over `groupSize` ranks: continuous, so its offset is unchanged at the default shape. */
+        override fun ranks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray =
+            DoubleArray(members.size) { members[it].normalizedPosition * groupSize }
+
+        /**
+         * The position snapped to the nearest of `groupSize` slots, `round(position × (n − 1))`, so
+         * evenly spaced heads rank 0, 1, … n − 1 as under Rig and Wings mirror and Groups repeat
+         * whole slots. Spread alone keeps the continuous [ranks].
+         */
+        override fun wholeRanks(members: List<DistributionMemberInfo>, groupSize: Int): DoubleArray {
+            val last = (groupSize - 1).coerceAtLeast(0)
+            return DoubleArray(members.size) {
+                Math.round(members[it].normalizedPosition.coerceIn(0.0, 1.0) * last).toDouble()
+            }
         }
     }
 

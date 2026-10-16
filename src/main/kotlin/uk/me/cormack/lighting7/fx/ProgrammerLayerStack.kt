@@ -808,6 +808,11 @@ class ProgrammerLayerStack(
             newDirection = fresh.dynamics.direction,
             newNShot = fresh.dynamics.nShot,
             clearNShot = fresh.dynamics.nShot == null,
+            // And the spread's shape (D4).
+            newSpread = fresh.dynamics.spread,
+            newWings = fresh.dynamics.wings,
+            newBlocks = fresh.dynamics.blocks,
+            newGroups = fresh.dynamics.groups,
         ) ?: return ResetToTemplateOutcome.NotFound
         updated.programmerLayerEffectKey = key.copy(effect = entry)
         ResetToTemplateOutcome.Reset(updated)

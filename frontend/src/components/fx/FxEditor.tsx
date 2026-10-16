@@ -33,6 +33,7 @@ import {
   withTemplateDraft,
   OPTIONAL_FIELDS,
   sameRequest,
+  spreadHeadCount,
   updateRequestOf,
   type FxDraft,
   type FxScope,
@@ -204,6 +205,22 @@ export function FxEditor({
   const setParam = (name: string, value: string, release: boolean) =>
     write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)
 
+  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
+  // mode the draft now says narrow them.
+  const spreadScope = useMemo(
+    (): FxScope => ({
+      ...scope,
+      headCount: spreadHeadCount(
+        targetFixtures,
+        effect.isGroupTarget,
+        effect.propertyName,
+        draft.elementMode,
+        draft.elementFilter,
+      ),
+    }),
+    [scope, targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter],
+  )
+
   const readOnly = !connected
   const name = entry?.name ?? effect.effectType
   const dirty = JSON.stringify(draft) !== JSON.stringify(snapshot)
@@ -275,7 +292,7 @@ export function FxEditor({
           entry={entry}
           timingSource={effect.timingSource}
           draft={draft}
-          scope={scope}
+          scope={spreadScope}
           extendedChannels={extendedChannels}
           settingProperty={settingProperty}
           readOnly={readOnly}

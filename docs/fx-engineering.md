@@ -917,7 +917,12 @@ memberPhase = (remappedClock + phaseOffset - distOffset) % 1.0
 ```
 
 The scaling to `(slots - 1) / slots` ensures the sweep reaches the last element without
-wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0).
+wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0). `slots` is the
+Order's own count (`DistributionStrategy.distinctSlots`), **not** the count after the spread's
+shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every other Order, and
+leave the sweep alone — so Spread 0 or Blocks folding every head to one slot never scales the sweep to
+nothing, and an effect that names no shape bounces bit for bit as before (P6;
+`SpreadShapeTest` "ping-pong sweeps the same way whatever the shape").
 
 Then, on that phase, the effect's **direction** and **N-shot** (§"Size, direction and N-shot"): a
 member outside its runs answers `NaN` and paints nothing, and Backward and Bounce read the phase
@@ -980,11 +985,12 @@ When `stepTiming` is enabled and the effect is distributed across a group, the e
 beat division is scaled:
 
 ```
-effectiveDivision = beatDivision × distributionStrategy.distinctSlots(groupSize)
+effectiveDivision = beatDivision × dynamics.distinctSlots(groupSize)
 ```
 
 This uses `distinctSlots` rather than `groupSize` so that symmetric distributions
-(CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot.
+(CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot — and it is the count **after the
+spread's shape** (§"The spread's shape"), so Blocks and Groups leave no empty steps either.
 
 **Default values**: Each effect type declares `defaultStepTiming` which is used when
 creating new `FxInstance`s. A step chase (a user effect windowed as above) declares `true`;
@@ -1179,6 +1185,86 @@ at the element level. It has no effect when members directly have the target pro
 than group members because symmetric pairs share the same offset. A windowed step chase uses
 `numDistinctSlots` for window width to ensure gap-free chases.
 
+**`SPLIT` and `EDGES_IN` give the same offsets.** Split's rank is `min(i, N−1−i)` and Edges in's is
+Centre out's inverted, which is the same distance from the nearer end — so the two strategies are one
+Order under two names, at every group size. Both are kept, since a stored effect names either
+(effects plan P6); `FU-FX-SPLIT-DUPLICATE` records folding them.
+
+### The spread's shape (effects plan session 2)
+
+The strategy is the **Order** (§3.1 of the effects plan — renamed in the UI only): which head comes
+first. Four more fields shape what the Order gives — **Spread**, **Wings**, **Blocks** and
+**Groups** (D4) — and with the Order they are the spread. All four are `FxDynamics` fields, edited
+in place as the Order is (an edit keeps the phase), stored on the four effect homes beside it
+(`look_effects`, `cue_ad_hoc_effects`, `template_effects` as `spread` and `spread_wings` /
+`spread_blocks` / `spread_groups` — `GROUPS` is an SQLite keyword — and a live instance), carried by
+`LookEffectSpec`, `EffectEntry` and `LookEffectSettings` so Record, Include and Update keep them, and
+synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
+
+`DistributionPlan.of` runs §3.3 over each member, after the Order (step 1):
+
+1. **Order** gives the member a rank `r` over `R` ranks: `DistributionStrategy.ranks`, the offset
+   times `distinctSlots` rounded to the whole number it is — except `POSITIONAL`, whose rank is its
+   position along the group times `N` (continuous, so its offset is unchanged at Spread alone).
+   Blocks, Wings and Groups count whole ranks, so whenever one of them acts
+   (`SpreadShaping.countsRanks`) the plan takes `DistributionStrategy.wholeRanks` instead, which
+   snaps Position's to the nearest of its `N` slots, `round(position × (N − 1))` — evenly spaced
+   heads rank 0 … N − 1 as under Rig, so two wings mirror and groups repeat whole slots. Under Spread
+   alone Position stays continuous.
+2. **Blocks** `B`: `r ← floor(r / B)` over `ceil(R / B)` ranks (`ceil(N / B)` under an asymmetric
+   Order, whose rank count is the member count): `B` neighbours **in the Order** share one phase —
+   on the rig under Rig, Reverse and Position, and under Random heads beside each other in the
+   shuffle, so a Random in blocks of 2 is random pairs.
+3. **Wings** `W`, only under an asymmetric Order — Centre out, Edges in and Split are two mirrored
+   wings already (`DistributionStrategy.isMirrored`): the ranks split into `W` runs of
+   `m = ceil(R / W)`; an odd run is mirrored **within its own length** (`r ← len − 1 − r`, `len` being
+   `m` for every run but a short last one, so the outermost member of each wing pair shares a rank —
+   seven heads in two wings are 0 1 2 3 2 1 0); over `m` ranks.
+4. **Groups** `G`: `r ← r mod G` over `G` ranks — when `G` is below the rank count; otherwise the
+   ranks stand, so the slot count never exceeds what the members fill. `G = 0` is off.
+5. **Spread** `s`, 0–2: `offset = s × r / R`. 100 % is the Order's own; 50 % packs the heads into
+   half a cycle (a tighter ripple); 200 % runs them over two.
+
+`distinctSlots` is the rank count after step 4 (`DistributionPlan.slots`, each context's
+`numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
+per-pass reads), so a step chase's window and step timing stay gap-free: groups of 2 over eight heads
+are two slots, the odd heads and the even heads taking turns a step each. `PING_PONG`'s turnaround is
+**not** shaped: its sweep is the Order's own `(N − 1) / N` (§"Phase Calculation"), the shape setting only
+the offsets. At the default shape (100 %, 1, 1, 0) the
+plan does not run the shaping at all, so an effect that names no shape keeps its offsets bit for
+bit (P6). The plan cache (`FxDistributionPlans`) is keyed on the shape as on the Order.
+
+**N-shot ends N cycles past the largest member offset — the shaped one.** A member's own clock is
+the effect's less its offset, so under Spread 50 % a 2-shot over four heads (offsets 0, ⅛, ¼, ⅜)
+hands each head back after its own two and is spent two cycles past ⅜; under Groups of 2 (offsets 0,
+½, 0, ½) two cycles past ½. Size is untouched by the shape: it weighs the apply, after the blend.
+
+**The rule is the desk's** (P2). `frontend/src/lib/spreadShape.ts` is the editor's one copy, for its
+phase-dial preview only, and `src/test/resources/fx/spreadShape.fixture.json` — generated from an
+independent reference of §3.3 and read by `SpreadShapeTest` and `spreadShape.test.ts` — pins the two
+to the same offsets, Random's shuffle included.
+
+- **Refused at the write boundary** (`EffectSpecCoercion.Strict.spreadProblem`, inside `problem()`
+  where the Order is known): Spread outside 0–2, Wings or Blocks below 1, Groups below 0, any count
+  above 512, and **Wings above 1 under a mirrored Order**. `PUT /fx/{id}` checks the shape against
+  the Order the effect will run under — the request's, or the one it has — so moving a winged effect
+  onto Centre out is refused as surely as sending wings to one. The instance's **own** wings take
+  part only when the request moves the Order: a stored row may hold wings under a mirrored Order
+  (lenient on spawn, not run), and an edit of its Spread, Blocks or Groups — or a frame re-sending
+  the Order it already has — is not refused for them. A stored value out of range is
+  clamped with a warn on spawn (`Lenient.spreadShape`), and stored wings under a mirrored Order are
+  left as stored and not run.
+- **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `spread`, `wings`, `blocks` and
+  `groups`; `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`groups: 0` turns them
+  off). `EffectDto` and the group and indirect DTOs report them. The MCP effect schemas take the four
+  (`AiToolSchemas.putEffectDynamics`), and `describe_rig` and `get_current_state` say them where they
+  are not the default.
+- **The editor** (D11, §4.1): a *Spread* disclosure in `FxEffectFields` — Order (the Distribution
+  select, moved out of Advanced), Spread %, Wings (hidden under a mirrored Order, and set back to 1
+  when one is chosen), Blocks, Groups, and a row of phase dials over eight notional heads on an effect
+  palette and the effect's own heads live (up to sixteen, then *+n*). Its summary says the
+  non-defaults: *Rig · 50 % · 2 wings*.
+
 **Strategy interface properties:**
 
 | Property | Description |
@@ -1186,6 +1272,8 @@ than group members because symmetric pairs share the same offset. A windowed ste
 | `hasSpread` | Whether offsets differ between members (false only for UNIFIED) |
 | `usesTrianglePhase` | Whether the base clock should be triangle-remapped (true for PING_PONG) |
 | `distinctSlots(groupSize)` | Number of unique offset positions for a given group size |
+| `ranks(members, groupSize)` | Each member's rank over `distinctSlots` ranks — what the spread's shape works on |
+| `isMirrored` | Two mirrored wings already (CENTER_OUT, EDGES_IN, SPLIT) — Wings is refused under it |
 
 ## Multi-Element Fixture Expansion
 

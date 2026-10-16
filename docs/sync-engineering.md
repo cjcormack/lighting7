@@ -301,6 +301,21 @@ imports such a row back would hold nothing worse than it held before; on this de
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
+### Version 33 — the spread's shape
+
+Effects plan session 2 (venue-visit R4.2; `docs/fx-engineering.md` §"The spread's shape"):
+`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings`
+and `blocks` (default 1) and `groups` (default 0, off), each omitted at its default, and the three
+tables gain the columns `spread`, `spread_wings`, `spread_blocks` and `spread_groups` with the same
+defaults (prefixed because `GROUPS` is an SQLite keyword). `SUPPORTED_FORMAT_VERSION = 33`;
+`MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — each field defaults to what a row without it meant, so
+every older archive decodes and plays as before. The writer's number moves by the sharp-edge rule: a
+v32 reader would run a 50 % ripple over the whole cycle and two wings as one, and its next
+wipe-then-export push would write all four away for every peer. Imported as stored: a value out of
+range is clamped where the effect spawns, not refused here. `RichProjectFixture` sets all four to
+non-defaults on every stored shape. A project that shapes no spread exports byte-for-byte as at v32
+(only `formatVersion.json` says 33).
+
 ### Version 32 — cue stack entries
 
 Cue model plan session 3 (venue-visit R1.3, §3.9): a stack's list leaves the cue files. A cue is what

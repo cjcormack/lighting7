@@ -183,6 +183,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // locate and write them away on its next push; MIN stays at 5 because the field defaults to empty.
 // Imported as stored (canonicalised, no type check): the write boundary refuses a unit the type does
 // not pan and tilt, and Locate ignores an entry it cannot place.
+// v33 added `spread`, `wings`, `blocks` and `groups` to the three stored effect shapes —
+// `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` (effects plan session 2, D4).
+// SUPPORTED moved for v14's reason — a v32 reader would run a 50 % ripple over the whole cycle and two
+// wings as one, and write all four away on its next push; MIN stays at 5 because each field defaults to
+// what a row without it meant. Imported as stored: a value out of range is clamped when the effect
+// spawns (`EffectSpecCoercion.Lenient.spreadShape`), not refused here.
 //
 // v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
@@ -270,7 +276,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 32
+internal const val SUPPORTED_FORMAT_VERSION = 33
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -897,6 +903,10 @@ class ProjectImporter(private val state: State) {
                     size = e.size
                     direction = e.direction
                     nShot = e.nShot
+                    this.spread = e.spread
+                    this.wings = e.wings
+                    this.blocks = e.blocks
+                    this.groups = e.groups
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
@@ -1530,6 +1540,10 @@ class ProjectImporter(private val state: State) {
                     size = e.size
                     direction = e.direction
                     nShot = e.nShot
+                    this.spread = e.spread
+                    this.wings = e.wings
+                    this.blocks = e.blocks
+                    this.groups = e.groups
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
@@ -1632,6 +1646,10 @@ class ProjectImporter(private val state: State) {
                 size = e.size
                 direction = e.direction
                 nShot = e.nShot
+                this.spread = e.spread
+                this.wings = e.wings
+                this.blocks = e.blocks
+                this.groups = e.groups
                 this.uuid = uuid
             }
             uuid to Unit

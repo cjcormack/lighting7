@@ -300,6 +300,10 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         size = effect.size
                         direction = effect.direction
                         nShot = effect.nShot
+                        this.spread = effect.spread
+                        this.wings = effect.wings
+                        this.blocks = effect.blocks
+                        this.groups = effect.groups
                         sortOrder = effect.sortOrder
                     }
                 }
@@ -944,6 +948,10 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
             direction = effect.direction,
             size = effect.size,
             nShot = effect.nShot,
+            spread = effect.spread,
+            wings = effect.wings,
+            blocks = effect.blocks,
+            groups = effect.groups,
         )?.let { return it }
     }
     return null
@@ -1087,6 +1095,10 @@ private fun DaoLookEffect.take(effect: LookEffectDto) {
     size = effect.size
     direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
     nShot = effect.nShot
+    this.spread = effect.spread
+    this.wings = effect.wings
+    this.blocks = effect.blocks
+    this.groups = effect.groups
     sortOrder = effect.sortOrder
 }
 
@@ -1256,6 +1268,10 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     size = it.size,
                     direction = it.direction,
                     nShot = it.nShot,
+                    spread = it.spread,
+                    wings = it.wings,
+                    blocks = it.blocks,
+                    groups = it.groups,
                     sortOrder = it.sortOrder,
                 )
             },

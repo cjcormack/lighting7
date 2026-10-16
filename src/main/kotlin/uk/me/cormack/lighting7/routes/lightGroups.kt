@@ -133,6 +133,10 @@ internal fun Route.routeApiRestGroups(state: State) {
                         size = instance.dynamics.size,
                         direction = instance.dynamics.direction.name,
                         nShot = instance.dynamics.nShot,
+                        spread = instance.dynamics.spread,
+                        wings = instance.dynamics.wings,
+                        blocks = instance.dynamics.blocks,
+                        groups = instance.dynamics.groups,
                         spent = instance.spent,
                     )
                 }
@@ -240,6 +244,11 @@ data class AddGroupFxRequest(
     val direction: String = "FORWARD",
     /** Runs (D9) — see [AddEffectRequest.nShot]. */
     val nShot: Int? = null,
+    /** The spread's shape (D4) — see [AddEffectRequest.spread]. */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
@@ -283,6 +292,11 @@ data class GroupEffectDto(
     val direction: String = "FORWARD",
     val nShot: Int? = null,
     val spent: Boolean = false,
+    /** See [uk.me.cormack.lighting7.fx.EffectDto.spread] and its three siblings. */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 )
 
 @Serializable
@@ -395,7 +409,10 @@ private fun applyGroupEffect(
         distributionStrategy = distribution
         this.elementMode = elementMode
         this.elementFilter = elFilter
-        applyRequestedDynamics(request.size, request.direction, request.nShot)
+        applyRequestedDynamics(
+            request.size, request.direction, request.nShot,
+            SpreadShape(request.spread, request.wings, request.blocks, request.groups),
+        )
         request.stepTiming?.let { this.stepTiming = it }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
         rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)

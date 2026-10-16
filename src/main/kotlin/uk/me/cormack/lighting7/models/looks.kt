@@ -115,6 +115,15 @@ data class LookEffectDto(
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
     val nShot: Int? = null,
+    /**
+     * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
+     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * wings under a mirrored Order, at the write boundary.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
     val sortOrder: Int = 0,
 ) {
     /** True when this effect takes its targets from the referencing layer rather than naming one. */
@@ -254,6 +263,15 @@ object DaoLookEffects : IntIdTable("look_effects") {
 
     /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
     val nShot = integer("n_shot").nullable()
+
+    /**
+     * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
+     * counts are `spread_`-prefixed columns: `GROUPS` is an SQLite keyword (window frames).
+     */
+    val spread = double("spread").default(1.0)
+    val wings = integer("spread_wings").default(1)
+    val blocks = integer("spread_blocks").default(1)
+    val groups = integer("spread_groups").default(0)
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -316,6 +334,15 @@ data class LookEffectSpec(
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
     val nShot: Int? = null,
+    /**
+     * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
+     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * wings under a mirrored Order, at the write boundary.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 )
 
 /**
@@ -349,6 +376,10 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var size by DaoLookEffects.size
     var direction by DaoLookEffects.direction
     var nShot by DaoLookEffects.nShot
+    var spread by DaoLookEffects.spread
+    var wings by DaoLookEffects.wings
+    var blocks by DaoLookEffects.blocks
+    var groups by DaoLookEffects.groups
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 

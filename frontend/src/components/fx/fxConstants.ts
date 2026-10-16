@@ -1,4 +1,5 @@
 import { Sun, Palette, Move, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 
 /**
  * An effect's speed, in **beats a cycle** — the one spelling every surface uses
@@ -51,17 +52,25 @@ export const EFFECT_CATEGORY_INFO: Record<
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
 
-export const DISTRIBUTION_STRATEGY_OPTIONS = [
-  { value: 'LINEAR', label: 'Linear', description: 'Chase across heads in order' },
-  { value: 'UNIFIED', label: 'Unified', description: 'All heads move together' },
-  { value: 'CENTER_OUT', label: 'Center Out', description: 'Expand from center to edges' },
-  { value: 'EDGES_IN', label: 'Edges In', description: 'Converge from edges to center' },
-  { value: 'REVERSE', label: 'Reverse', description: 'Chase in reverse order' },
-  { value: 'SPLIT', label: 'Split', description: 'Split into two halves' },
-  { value: 'PING_PONG', label: 'Ping Pong', description: 'Bounce back and forth' },
-  { value: 'RANDOM', label: 'Random', description: 'Random offset per head' },
-  { value: 'POSITIONAL', label: 'Positional', description: 'Based on fixture position' },
-] as const
+const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
+  LINEAR: 'Chase across heads in order',
+  REVERSE: 'Chase in reverse order',
+  CENTER_OUT: 'Expand from center to edges',
+  EDGES_IN: 'Converge from edges to center',
+  SPLIT: 'Split into two halves',
+  RANDOM: 'Random offset per head',
+  PING_PONG: 'Bounce back and forth',
+  POSITIONAL: 'Based on fixture position',
+  UNIFIED: 'All heads move together',
+}
+
+/**
+ * Every distribution strategy, worded and ordered as the effect editor's Order (`lib/orderLabels.ts`,
+ * effects plan §3.1) — one vocabulary, so a Look's summary and a group's *Runs as* picker say *Rig*
+ * where the editor does. The stored value is the strategy's name.
+ */
+export const DISTRIBUTION_STRATEGY_OPTIONS: readonly { value: string; label: string; description: string }[] =
+  ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value), description: DISTRIBUTION_DESCRIPTIONS[value] ?? '' }))
 
 export const ELEMENT_MODE_OPTIONS = [
   { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'Effect runs independently on each fixture' },
@@ -117,8 +126,7 @@ export function getEffectDescription(effectName: string, libraryDescription?: st
 }
 
 export function getDistributionLabel(strategy: string): string {
-  const option = DISTRIBUTION_STRATEGY_OPTIONS.find((o) => o.value === strategy)
-  return option?.label ?? strategy.toLowerCase()
+  return ORDER_LABELS[strategy] ?? strategy.toLowerCase()
 }
 
 /**

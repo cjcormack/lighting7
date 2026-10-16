@@ -258,7 +258,7 @@ describe('the request', () => {
   it('names the curve, order, parts and over — and Stage L→R is not on offer', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4, initial: { family: 'INTENSITY' } })]} />)
     fireEvent.click(radio('Curve', 'Wings'))
-    fireEvent.click(radio('Order', 'Centre'))
+    fireEvent.click(radio('Order', 'Centre out'))
     fireEvent.click(radio('Parts', '3'))
     fireEvent.click(radio('Over', /^Cells/))
     expect(within(screen.getByRole('radiogroup', { name: 'Order' })).queryByRole('radio', { name: 'Stage L→R' })).toBeNull()

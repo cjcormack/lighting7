@@ -561,6 +561,10 @@ internal fun CueAdHocEffectDto.toLookEffectSpec() = LookEffectSpec(
     size = size,
     direction = direction,
     nShot = nShot,
+    spread = spread,
+    wings = wings,
+    blocks = blocks,
+    groups = groups,
 )
 
 /** What a loose press did: the cue's name, and whether it brought the cue on. */

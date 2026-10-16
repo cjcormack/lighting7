@@ -57,6 +57,13 @@ data class FormatVersionJson(
     // `minReader` stays at **5** — the reader still takes a v5–v31 archive's lists from its cue
     // files ([LegacyCuePlacementJson]). See `docs/sync-engineering.md` §"Version 32 — cue stack
     // entries".
+    // v33: the spread's shape (effects plan session 2, venue-visit R4.2). `LookEffectJson`,
+    // `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings` and `blocks`
+    // (default 1) and `groups` (default 0, off), each omitted at its default. The writer's number moves
+    // by the sharp-edge rule: a v32 reader would run a 50 % ripple over the whole cycle and two wings
+    // as one, and its next wipe-then-export push would write all four away. `minReader` stays at
+    // **5** — every field defaults to what an older row meant. See `docs/sync-engineering.md`
+    // §"Version 33 — the spread's shape".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -273,7 +280,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 32,
+    val formatVersion: Int = 33,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -427,6 +434,14 @@ data class LookEffectJson(
     val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
+    /**
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * off). Each omitted at its default, so a show that shapes no spread exports as before.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
     val sortOrder: Int = 0,
 )
 
@@ -509,6 +524,14 @@ data class TemplateEffectJson(
     val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
+    /**
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * off). Each omitted at its default, so a show that shapes no spread exports as before.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 )
 
 /**
@@ -887,6 +910,14 @@ data class CueAdHocEffectJson(
     val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
     val nShot: Int? = null,
+    /**
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * off). Each omitted at its default, so a show that shapes no spread exports as before.
+     */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 )
 
 @Serializable

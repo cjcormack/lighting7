@@ -128,6 +128,11 @@ export interface CueAdHocEffect {
   direction?: EffectDirection
   /** Runs (D9); absent or null runs forever. */
   nShot?: number | null
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
    * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.

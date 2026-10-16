@@ -436,6 +436,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     size = effect.size
                     direction = effect.direction
                     nShot = effect.nShot
+                    this.spread = effect.spread
+                    this.wings = effect.wings
+                    this.blocks = effect.blocks
+                    this.groups = effect.groups
                 }
             }
 

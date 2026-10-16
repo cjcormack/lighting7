@@ -318,6 +318,10 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
                     size = fx.size,
                     direction = fx.direction,
                     nShot = fx.nShot,
+                    spread = fx.spread,
+                    wings = fx.wings,
+                    blocks = fx.blocks,
+                    groups = fx.groups,
                 )
             },
         )

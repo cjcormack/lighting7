@@ -23,6 +23,11 @@ internal class DistributionPlan private constructor(
     val offsets: DoubleArray,
     /** The context handed to the effect per member, same order as [offsets]. */
     val contexts: Array<EffectContext>,
+    /**
+     * The rank count after the spread's shape (effects plan §3.3, step 4) — every context's
+     * [EffectContext.numDistinctSlots], and what [FxDynamics.distinctSlots] answers per pass.
+     */
+    val slots: Int,
 ) {
     /** Synthetic member for an element list, whose positions are always evenly spaced. */
     private class ElementSlot(
@@ -32,15 +37,40 @@ internal class DistributionPlan private constructor(
 
     companion object {
         /** No members — the empty-list early return in the tick loops. */
-        val EMPTY = DistributionPlan(DoubleArray(0), emptyArray())
+        val EMPTY = DistributionPlan(DoubleArray(0), emptyArray(), 0)
 
-        /** Plan for a real member list ([FxTargetExpansion.members]). */
-        fun of(strategy: DistributionStrategy, members: List<DistributionMemberInfo>): DistributionPlan {
+        /**
+         * Plan for a real member list ([FxTargetExpansion.members]): the Order's offsets (§3.3 step
+         * 1), shaped by [shape] (steps 2–5, [SpreadShaping]). At [SpreadShape.DEFAULT] the shaping is
+         * not run at all, so an effect that names no shape keeps its offsets bit for bit (P6).
+         */
+        fun of(
+            strategy: DistributionStrategy,
+            members: List<DistributionMemberInfo>,
+            shape: SpreadShape = SpreadShape.DEFAULT,
+        ): DistributionPlan {
             val size = members.size
             if (size == 0) return EMPTY
-            val offsets = strategy.offsets(members, size)
+            val offsets: DoubleArray
+            val distinctSlots: Int
+            if (shape.isDefault) {
+                offsets = strategy.offsets(members, size)
+                distinctSlots = strategy.distinctSlots(size)
+            } else {
+                val rankCount = strategy.distinctSlots(size)
+                val wingsApply = !strategy.isMirrored
+                // Blocks, Wings and Groups count in whole ranks, so a continuous Order (Position) is
+                // snapped first; Spread alone scales its continuous ranks.
+                val ranks = if (SpreadShaping.countsRanks(rankCount, shape, wingsApply)) {
+                    strategy.wholeRanks(members, size)
+                } else {
+                    strategy.ranks(members, size)
+                }
+                val shaped = SpreadShaping.shape(ranks, rankCount, shape, wingsApply)
+                offsets = shaped.offsets
+                distinctSlots = shaped.slots
+            }
             val hasSpread = strategy.hasSpread
-            val distinctSlots = strategy.distinctSlots(size)
             val trianglePhase = strategy.usesTrianglePhase
             return DistributionPlan(
                 offsets,
@@ -54,6 +84,7 @@ internal class DistributionPlan private constructor(
                         trianglePhase = trianglePhase,
                     )
                 },
+                distinctSlots,
             )
         }
 
@@ -62,22 +93,27 @@ internal class DistributionPlan private constructor(
          * the shape the tick loops used to synthesise inline, preserved exactly (including
          * the `0.5` a single element gets).
          */
-        fun forElements(strategy: DistributionStrategy, count: Int): DistributionPlan {
+        fun forElements(
+            strategy: DistributionStrategy,
+            count: Int,
+            shape: SpreadShape = SpreadShape.DEFAULT,
+        ): DistributionPlan {
             if (count == 0) return EMPTY
             return of(
                 strategy,
                 List(count) { i ->
                     ElementSlot(i, if (count > 1) i.toDouble() / (count - 1) else 0.5)
                 },
+                shape,
             )
         }
     }
 }
 
 /**
- * Every [DistributionPlan] one [FxInstance] can need for a given expansion and strategy, cached
- * on the instance the same way [FxTargetExpansion] is and validated the same way: by identity
- * against the expansion it was built from, plus the strategy it was built for.
+ * Every [DistributionPlan] one [FxInstance] can need for a given expansion, strategy and spread
+ * shape, cached on the instance the same way [FxTargetExpansion] is and validated the same way: by
+ * identity against the expansion it was built from, plus the strategy and shape it was built for.
  *
  * Both the element shapes are built up front for the same reason [FxTargetExpansion] builds both
  * key lists — [ElementMode] is not part of the expansion's identity, so a mode toggle must not
@@ -88,6 +124,8 @@ internal class FxDistributionPlans private constructor(
     val expansion: FxTargetExpansion,
     /** The [FxDynamics.distributionStrategy] these were built for. */
     val strategy: DistributionStrategy,
+    /** The [FxDynamics.spreadShape] these were built for. */
+    val shape: SpreadShape,
     /** [FxTargetExpansion.Kind.GROUP_MEMBERS]. */
     val members: DistributionPlan,
     /** [FxTargetExpansion.flat]. */
@@ -96,28 +134,32 @@ internal class FxDistributionPlans private constructor(
     val perFixture: List<DistributionPlan>,
 ) {
     companion object {
-        fun build(expansion: FxTargetExpansion, strategy: DistributionStrategy): FxDistributionPlans =
+        fun build(
+            expansion: FxTargetExpansion,
+            strategy: DistributionStrategy,
+            shape: SpreadShape = SpreadShape.DEFAULT,
+        ): FxDistributionPlans =
             when (expansion.kind) {
                 FxTargetExpansion.Kind.GROUP_MEMBERS -> FxDistributionPlans(
-                    expansion, strategy,
-                    members = DistributionPlan.of(strategy, expansion.members),
+                    expansion, strategy, shape,
+                    members = DistributionPlan.of(strategy, expansion.members, shape),
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),
                 )
 
                 FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> FxDistributionPlans(
-                    expansion, strategy,
+                    expansion, strategy, shape,
                     members = DistributionPlan.EMPTY,
-                    flat = DistributionPlan.forElements(strategy, expansion.flat.size),
+                    flat = DistributionPlan.forElements(strategy, expansion.flat.size, shape),
                     perFixture = emptyList(),
                 )
 
                 FxTargetExpansion.Kind.GROUP_ELEMENTS -> FxDistributionPlans(
-                    expansion, strategy,
+                    expansion, strategy, shape,
                     members = DistributionPlan.EMPTY,
-                    flat = DistributionPlan.forElements(strategy, expansion.flat.size),
+                    flat = DistributionPlan.forElements(strategy, expansion.flat.size, shape),
                     perFixture = expansion.perFixture.map {
-                        DistributionPlan.forElements(strategy, it.size)
+                        DistributionPlan.forElements(strategy, it.size, shape)
                     },
                 )
 
@@ -125,7 +167,7 @@ internal class FxDistributionPlans private constructor(
                 FxTargetExpansion.Kind.DIRECT_FIXTURE,
                 FxTargetExpansion.Kind.NONE,
                 -> FxDistributionPlans(
-                    expansion, strategy,
+                    expansion, strategy, shape,
                     members = DistributionPlan.EMPTY,
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),

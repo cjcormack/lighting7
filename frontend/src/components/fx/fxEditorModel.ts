@@ -1,6 +1,7 @@
 import type { EffectDirection, UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveEffect, EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/effectTiming'
+import { isMirroredOrder } from '@/lib/spreadShape'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 
 export {
@@ -134,6 +135,15 @@ export interface FxDraft {
   direction: EffectDirection
   /** Runs (D9): stop after this many cycles; null runs forever. */
   nShot: number | null
+  /**
+   * The spread's shape (effects plan D4): Spread 0–2, Wings and Blocks at least 1, Groups 0 (off) or
+   * more. The desk shapes the heads from them (P2); the editor's dials only preview it
+   * (`lib/spreadShape.ts`).
+   */
+  spread: number
+  wings: number
+  blocks: number
+  groups: number
 }
 
 /**
@@ -161,6 +171,11 @@ export function draftOf(effect: ActiveEffect): FxDraft {
     size: effect.size ?? 1,
     direction: effect.direction ?? 'FORWARD',
     nShot: effect.nShot ?? null,
+    // The same for the spread's shape (effects plan session 2).
+    spread: effect.spread ?? 1,
+    wings: effect.wings ?? 1,
+    blocks: effect.blocks ?? 1,
+    groups: effect.groups ?? 0,
   }
 }
 
@@ -177,6 +192,12 @@ export interface FxScope {
    * layer supplies the heads) but not step timing, which is a question about one head's elements.
    */
   stepTiming?: boolean
+  /**
+   * How many heads the effect runs over, for the Spread section's dials — a live effect's own (they
+   * draw up to sixteen, then *+n*). Absent on an effect palette, which has no target: the dials draw
+   * eight notional heads (effects plan §4.1).
+   */
+  headCount?: number
 }
 
 /** The fields the DTO may leave out, and so the editor sends only once the operator has set them. */
@@ -191,6 +212,10 @@ export type OptionalField =
   | 'size'
   | 'direction'
   | 'nShot'
+  | 'spread'
+  | 'wings'
+  | 'blocks'
+  | 'groups'
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'stepTiming',
@@ -203,6 +228,10 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'size',
   'direction',
   'nShot',
+  'spread',
+  'wings',
+  'blocks',
+  'groups',
 ]
 
 /**
@@ -227,6 +256,9 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
  * Size, direction and runs (effects plan D2, D5, D9) ride once touched too, which keeps a frame to
  * a desk that predates them the shape it always was; a null count is said as `runForever`, since
  * the frame's absent `nShot` means "keep".
+ *
+ * The spread's shape (effects plan D4) rides once touched too, each field on its own; groups 0 is how
+ * the frame turns them off, so a cleared Groups needs no flag of its own.
  */
 export function updateRequestOf(
   draft: FxDraft,
@@ -248,6 +280,10 @@ export function updateRequestOf(
     ...(touched.has('size') ? { size: draft.size } : {}),
     ...(touched.has('direction') ? { direction: draft.direction } : {}),
     ...(touched.has('nShot') ? (draft.nShot == null ? { runForever: true } : { nShot: draft.nShot }) : {}),
+    ...(touched.has('spread') ? { spread: draft.spread } : {}),
+    ...(touched.has('wings') ? { wings: draft.wings } : {}),
+    ...(touched.has('blocks') ? { blocks: draft.blocks } : {}),
+    ...(touched.has('groups') ? { groups: draft.groups } : {}),
     ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
     ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
@@ -283,6 +319,79 @@ export function timingChoicePatch(
     seconds: false,
     speedMasterUuid: choice,
     ...(draft.seconds ? { beatDivision: secondsToBeats(draft.beatDivision, bpmOf(choice)) } : {}),
+  }
+}
+
+/**
+ * The draft patch for choosing an Order (effects plan D4): the Order, and — onto a mirrored one
+ * (Centre out, Edges in, Split, two wings already) — Wings back to 1 in the same write, since the
+ * desk refuses wings under a mirrored Order and the editor hides the field there.
+ */
+export function orderPatch(draft: Pick<FxDraft, 'wings'>, order: string): Partial<FxDraft> {
+  return isMirroredOrder(order) && draft.wings > 1 ? { distributionStrategy: order, wings: 1 } : { distributionStrategy: order }
+}
+
+/** The descriptors [spreadHeadCount] reads: a fixture's own properties, by name and type. */
+type CarrierProperty = { name: string; type: string }
+
+/**
+ * Whether a fixture carries the effect's property **itself** rather than only on its heads — the
+ * desk's `FxTarget.fixtureHasProperty`: a slider or a setting by name, a colour by the colour trait
+ * (`WithColour`, a `colour` or `whiteMix` descriptor), a position by `WithPosition`.
+ */
+export function carriesEffectProperty(properties: readonly CarrierProperty[] | null | undefined, propertyName: string): boolean {
+  return (properties ?? []).some(
+    (p) =>
+      p.name === propertyName ||
+      (propertyName === 'rgbColour' && (p.type === 'colour' || p.type === 'whiteMix')) ||
+      (propertyName === 'position' && p.type === 'position'),
+  )
+}
+
+/**
+ * How many heads a live effect's distribution runs over, for the Spread section's dials — the desk's
+ * `FxEngine.buildExpansion`, counted. The first fixture stands for a group, as on the desk: where it
+ * carries the effect's property itself ([carriesEffectProperty]) the effect runs once per fixture —
+ * a group's members, unfiltered, or the one fixture — whatever heads it has (a pixel bar's master
+ * dimmer). Otherwise it runs over the heads: one fixture's, narrowed by the head filter; a group's
+ * under `FLAT` as one strip, the filter across the whole strip on its global index; under
+ * `PER_FIXTURE` each member's own, filtered within it — the most any member keeps. A preview's
+ * count, never sent.
+ */
+export function spreadHeadCount(
+  fixtures: readonly { properties?: readonly CarrierProperty[] | null; elements?: readonly unknown[] | null }[],
+  isGroup: boolean,
+  propertyName: string,
+  elementMode: string,
+  elementFilter: string,
+): number {
+  const perFixture = isGroup ? fixtures.length : 1
+  const first = fixtures[0]
+  if (!first || carriesEffectProperty(first.properties, propertyName)) return perFixture
+  const elementCounts = fixtures.map((f) => f.elements?.length ?? 0)
+  if (!elementCounts.some((n) => n > 0)) return perFixture
+  if (isGroup && elementMode === 'FLAT') {
+    return filteredElementCount(
+      elementCounts.reduce((sum, n) => sum + n, 0),
+      elementFilter,
+    )
+  }
+  return Math.max(...elementCounts.map((n) => filteredElementCount(n, elementFilter)))
+}
+
+/** How many of [n] elements the head filter keeps — the desk's `ElementFilter.includes`, counted. */
+export function filteredElementCount(n: number, filter: string): number {
+  switch (filter) {
+    case 'ODD':
+      return Math.ceil(n / 2)
+    case 'EVEN':
+      return Math.floor(n / 2)
+    case 'FIRST_HALF':
+      return Math.floor((n + 1) / 2)
+    case 'SECOND_HALF':
+      return n - Math.floor((n + 1) / 2)
+    default:
+      return n
   }
 }
 
@@ -361,6 +470,11 @@ export interface TemplateEffectFields {
   size?: number
   direction?: EffectDirection
   nShot?: number | null
+  /** The spread's shape as stored (effects plan D4); absent at its defaults. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /** The palette's resolved timing source, where the desk has said it. */
   timingSource?: string | null
 }
@@ -387,6 +501,10 @@ export function templateDraftOf(effect: TemplateEffectFields, timingSource?: str
     size: effect.size ?? 1,
     direction: effect.direction ?? 'FORWARD',
     nShot: effect.nShot ?? null,
+    spread: effect.spread ?? 1,
+    wings: effect.wings ?? 1,
+    blocks: effect.blocks ?? 1,
+    groups: effect.groups ?? 0,
   }
 }
 
@@ -418,6 +536,11 @@ export function withTemplateDraft<E extends TemplateEffectFields>(
     ...(draft.size !== 1 || effect.size != null ? { size: draft.size } : {}),
     ...(draft.direction !== 'FORWARD' || effect.direction != null ? { direction: draft.direction } : {}),
     ...(draft.nShot != null || effect.nShot != null ? { nShot: draft.nShot } : {}),
+    // And the spread's shape (effects plan D4), each field on the same rule.
+    ...(draft.spread !== 1 || effect.spread != null ? { spread: draft.spread } : {}),
+    ...(draft.wings !== 1 || effect.wings != null ? { wings: draft.wings } : {}),
+    ...(draft.blocks !== 1 || effect.blocks != null ? { blocks: draft.blocks } : {}),
+    ...(draft.groups !== 0 || effect.groups != null ? { groups: draft.groups } : {}),
   }
 }
 
@@ -466,6 +589,10 @@ export function differsFromTemplate(
   if (Math.abs(draft.size - (effect.size ?? 1)) > 1e-6) return true
   if (draft.direction !== (effect.direction ?? 'FORWARD')) return true
   if ((draft.nShot ?? null) !== (effect.nShot ?? null)) return true
+  if (Math.abs(draft.spread - (effect.spread ?? 1)) > 1e-6) return true
+  if (draft.wings !== (effect.wings ?? 1)) return true
+  if (draft.blocks !== (effect.blocks ?? 1)) return true
+  if (draft.groups !== (effect.groups ?? 0)) return true
   const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
   for (const name of names) {
     if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true

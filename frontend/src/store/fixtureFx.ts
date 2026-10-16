@@ -146,6 +146,11 @@ export interface AddFixtureFxRequest {
   direction?: EffectDirection
   /** Runs (D9), at least 1; omitted → forever. */
   nShot?: number
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -225,6 +230,11 @@ export interface ActiveEffect {
   direction?: EffectDirection
   /** Runs (D9): the cycles an N-shot runs; absent or null runs forever. */
   nShot?: number | null
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * An N-shot that has run its count and is kept, painting nothing, until its programmer layer goes
    * (the desk's `FxInstance.spent`). Any other spent N-shot has already left the list.

@@ -261,6 +261,11 @@ export function TemplateEditor({
           ...(prev?.size != null ? { size: prev.size } : {}),
           ...(prev?.direction != null ? { direction: prev.direction } : {}),
           ...(prev?.nShot != null ? { nShot: prev.nShot } : {}),
+          // So does the spread's shape (D4): it shapes the heads, whichever effect runs over them.
+          ...(prev?.spread != null ? { spread: prev.spread } : {}),
+          ...(prev?.wings != null ? { wings: prev.wings } : {}),
+          ...(prev?.blocks != null ? { blocks: prev.blocks } : {}),
+          ...(prev?.groups != null ? { groups: prev.groups } : {}),
           // The draft's own reading of its kind, until the desk answers with the registry's: what
           // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
           timingSource: entry.timingSource ?? 'BEAT',
@@ -610,7 +615,10 @@ function EffectControls({
   )
 }
 
-/** Distribution under Advanced, and nothing that needs a head. */
+/**
+ * The Spread section (Order, Spread %, Wings, Blocks, Groups) over eight notional heads — no
+ * `headCount`, since a palette has no target — and nothing else that needs a head.
+ */
 const TEMPLATE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, stepTiming: false }
 
 /**
@@ -674,6 +682,11 @@ function effectKey(effect: TemplateEffect | null): string {
     effect.size ?? 1,
     effect.direction ?? 'FORWARD',
     effect.nShot ?? null,
+    // The spread's shape (D4), likewise.
+    effect.spread ?? 1,
+    effect.wings ?? 1,
+    effect.blocks ?? 1,
+    effect.groups ?? 0,
     Object.entries(effect.parameters).sort(([a], [b]) => a.localeCompare(b)),
   ])
 }

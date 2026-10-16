@@ -507,6 +507,10 @@ internal class VenueSetupTools(private val state: State) {
                     size = e.size
                     direction = e.direction
                     nShot = e.nShot
+                    this.spread = e.spread
+                    this.wings = e.wings
+                    this.blocks = e.blocks
+                    this.groups = e.groups
                     sortOrder = e.sortOrder
                 }
             }
@@ -563,6 +567,10 @@ internal class VenueSetupTools(private val state: State) {
                     size = e.size
                     direction = e.direction
                     nShot = e.nShot
+                    this.spread = e.spread
+                    this.wings = e.wings
+                    this.blocks = e.blocks
+                    this.groups = e.groups
                 }
             }
             templateMap[t.id.value] = copy
@@ -674,6 +682,10 @@ internal class VenueSetupTools(private val state: State) {
                         size = e.size
                         direction = e.direction
                         nShot = e.nShot
+                        this.spread = e.spread
+                        this.wings = e.wings
+                        this.blocks = e.blocks
+                        this.groups = e.groups
                     }
                 }
                 c.propertyAssignments.forEach { a ->

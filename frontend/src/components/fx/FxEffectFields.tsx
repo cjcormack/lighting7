@@ -23,8 +23,17 @@ import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
 import type { detectExtendedChannels } from './colourUtils'
 import {
+  ORDER_OPTIONS,
+  isMirroredOrder,
+  orderLabel,
+  spreadOffsets,
+  spreadSummary,
+  MAX_SPREAD,
+  MAX_SPREAD_COUNT,
+  type SpreadShape,
+} from '@/lib/spreadShape'
+import {
   BLEND_MODE_OPTIONS,
-  DISTRIBUTION_STRATEGY_OPTIONS,
   ELEMENT_FILTER_OPTIONS,
   ELEMENT_MODE_OPTIONS,
   SPEED_STEPS,
@@ -39,6 +48,7 @@ import {
   isLevelEffect,
   isRatioParam,
   levelModeOf,
+  orderPatch,
   paramRole,
   runsWord,
   timingChoicePatch,
@@ -201,6 +211,8 @@ export function FxEffectFields({
 
       {main.length > 0 && <div className="flex flex-col gap-2.5">{main.map(paramControl)}</div>}
 
+      {scope.heads && <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} />}
+
       {shape.length > 0 && (
         <Disclosure
           label="Shape"
@@ -252,15 +264,6 @@ export function FxEffectFields({
             <span>Step timing</span>
             <span className="text-muted-foreground">the speed steps from head to head</span>
           </label>
-        )}
-        {scope.heads && (
-          <SelectRow
-            label="Distribution"
-            value={draft.distributionStrategy}
-            readOnly={readOnly}
-            options={DISTRIBUTION_STRATEGY_OPTIONS}
-            onChange={(distributionStrategy) => set({ distributionStrategy })}
-          />
         )}
         {scope.elementMode && (
           <SelectRow
@@ -345,6 +348,170 @@ function SizeSection({
         </ToggleGroup>
       </div>
     </div>
+  )
+}
+
+// ─── Spread ───────────────────────────────────────────────────────────────────────────────────
+
+/** The dials a live effect draws before the rest of its heads fold into *+n* (effects plan §4.1). */
+const MAX_DIALS = 16
+
+/** The notional heads an effect palette's dials draw — it has no target to count. */
+const NOTIONAL_HEADS = 8
+
+/**
+ * The Spread section (effects plan D11, §4.1), on a group, a selection or a fixture with heads, and
+ * always on an effect palette: *Order* (the distribution, renamed in the UI only — it moved here from
+ * Advanced), *Spread* %, *Wings*, *Blocks* and *Groups*, and a row of phase dials previewing them.
+ * Its summary line says the non-defaults: *Rig · 50 % · 2 wings*.
+ *
+ * The desk shapes the heads (P2): this writes the five fields and draws the dials from
+ * `lib/spreadShape.ts`, the one client copy of the rule, pinned to the desk's by a shared vector.
+ * Wings are hidden under a mirrored Order (Centre out, Edges in, Split — two wings already), and
+ * choosing one puts any wings back to 1 in the same write, which the desk would otherwise refuse.
+ */
+function SpreadSection({
+  draft,
+  headCount,
+  readOnly,
+  set,
+}: {
+  draft: FxDraft
+  headCount: number | undefined
+  readOnly: boolean
+  set: (patch: Partial<FxDraft>, release?: boolean) => void
+}) {
+  const order = draft.distributionStrategy
+  const shape: SpreadShape = { spread: draft.spread, wings: draft.wings, blocks: draft.blocks, groups: draft.groups }
+  const mirrored = isMirroredOrder(order)
+  const unison = order === 'UNIFIED'
+  const options = ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value) }))
+  // An Order this editor does not offer (a script's, a newer desk's) is still drawn, as itself.
+  if (!ORDER_OPTIONS.includes(order)) options.push({ value: order, label: orderLabel(order) })
+  return (
+    <Disclosure label="Spread" summary={spreadSummary(order, shape)}>
+      <SelectRow
+        label="Order"
+        value={order}
+        readOnly={readOnly}
+        options={options}
+        onChange={(next) => set(orderPatch(draft, next))}
+      />
+      {unison ? (
+        <EditorReadout>Every head runs in step, so there is no spread to shape.</EditorReadout>
+      ) : (
+        <>
+          <SliderRow
+            label="Spread"
+            unit="%"
+            value={draft.spread}
+            min={0}
+            max={MAX_SPREAD}
+            step={0.01}
+            display={(v) => Math.round(v * 100)}
+            fromDisplay={(d) => d / 100}
+            displayMin={0}
+            displayMax={MAX_SPREAD * 100}
+            readOnly={readOnly}
+            onChange={(spread, release) => set({ spread }, release)}
+          />
+          <div className="grid grid-cols-3 gap-2">
+            {mirrored ? (
+              <div className="flex flex-col gap-1">
+                <EditorLabel>Wings</EditorLabel>
+                <span className="text-[11px] text-muted-foreground" title={`${orderLabel(order)} is two wings already`}>
+                  two already
+                </span>
+              </div>
+            ) : (
+              <CountRow label="Wings" value={draft.wings} min={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
+            )}
+            <CountRow label="Blocks" value={draft.blocks} min={1} readOnly={readOnly} onChange={(blocks) => set({ blocks })} />
+            <CountRow label="Groups" value={draft.groups} min={0} readOnly={readOnly} onChange={(groups) => set({ groups })} />
+          </div>
+          <EditorReadout>
+            {mirrored ? '' : 'Wings mirror alternate runs · '}Blocks move neighbours as one · Groups repeat the spread (0 is off)
+          </EditorReadout>
+        </>
+      )}
+      <SpreadDials order={order} shape={shape} headCount={headCount} />
+    </Disclosure>
+  )
+}
+
+/** A whole-number field under its label, committing on Enter — Wings, Blocks, Groups. */
+function CountRow({
+  label,
+  value,
+  min,
+  readOnly,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  readOnly: boolean
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <EditorLabel>{label}</EditorLabel>
+      <SheetField
+        label={label}
+        value={value}
+        min={min}
+        max={MAX_SPREAD_COUNT}
+        step={1}
+        disabled={readOnly}
+        className="w-full"
+        onEnter={(n) => {
+          const next = Math.round(n)
+          if (next >= min && next <= MAX_SPREAD_COUNT) onChange(next)
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * The row of phase dials (effects plan §4.1): one per head — eight notional heads on an effect
+ * palette, the effect's own heads live, up to sixteen and then *+n* — each hand at the head's offset
+ * through the cycle, as the desk will run it. A preview: nothing here is sent.
+ */
+function SpreadDials({ order, shape, headCount }: { order: string; shape: SpreadShape; headCount: number | undefined }) {
+  const heads = headCount ?? NOTIONAL_HEADS
+  const { offsets } = spreadOffsets(order, heads, shape)
+  const shown = offsets.slice(0, MAX_DIALS)
+  const more = offsets.length - shown.length
+  const degrees = shown.map((o) => Math.round((((o % 1) + 1) % 1) * 360))
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        role="img"
+        aria-label={`Phase of ${heads} head${heads === 1 ? '' : 's'}: ${degrees.map((d) => `${d}°`).join(', ')}${more > 0 ? ` and ${more} more` : ''}`}
+        data-spread-dials
+        className="flex flex-wrap items-center gap-1"
+      >
+        {degrees.map((deg, i) => (
+          <PhaseDial key={i} degrees={deg} />
+        ))}
+        {more > 0 && <span className="text-[11px] tabular-nums text-muted-foreground">+{more}</span>}
+      </div>
+      <EditorReadout>{headCount == null ? 'Previewed over eight heads' : `Over its ${heads} head${heads === 1 ? '' : 's'}`}</EditorReadout>
+    </div>
+  )
+}
+
+/** One head's phase: a ring and a hand from the top, clockwise through the cycle. */
+function PhaseDial({ degrees }: { degrees: number }) {
+  const radians = (degrees * Math.PI) / 180
+  const x = 9 + 6 * Math.sin(radians)
+  const y = 9 - 6 * Math.cos(radians)
+  return (
+    <svg viewBox="0 0 18 18" className="size-[18px] shrink-0 text-muted-foreground" aria-hidden data-phase={degrees}>
+      <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+      <line x1="9" y1="9" x2={x} y2={y} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary" />
+    </svg>
   )
 }
 

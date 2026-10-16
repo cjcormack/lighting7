@@ -53,6 +53,11 @@ export interface FxCreateRequest {
   direction?: EffectDirection
   /** Runs (D9), at least 1; omitted → forever. */
   nShot?: number
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -89,6 +94,11 @@ export function fxCreateAddition(
     ...(request.size != null && request.size !== 1 ? { size: request.size } : {}),
     ...(request.direction != null && request.direction !== 'FORWARD' ? { direction: request.direction } : {}),
     ...(request.nShot != null ? { nShot: request.nShot } : {}),
+    // The spread's shape (effects plan D4), said only where it is not the default.
+    ...(request.spread != null && request.spread !== 1 ? { spread: request.spread } : {}),
+    ...(request.wings != null && request.wings !== 1 ? { wings: request.wings } : {}),
+    ...(request.blocks != null && request.blocks !== 1 ? { blocks: request.blocks } : {}),
+    ...(request.groups != null && request.groups !== 0 ? { groups: request.groups } : {}),
   }
 
   if (target.type === 'group') {

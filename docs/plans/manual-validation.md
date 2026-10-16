@@ -18,6 +18,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R4-2`](#fu-manual-venue-visit-r4-2) | the spread's shape on the rig — Spread 50 % tightens a chase into half a cycle, two wings ripple from both ends, blocks of three move as threes, groups of two alternate odd and even, and the editor's dials match what the heads do | Venue visit R4.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
@@ -166,6 +167,37 @@ If a stored locate lands visibly off the spot it was set on, promote it to a `FU
 `followups.md`.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-2`
+
+**What it proves**: *the spread's shape* — venue-visit R4.2, effects plan session 2 (D4, D11, P2):
+Spread, Wings, Blocks and Groups shape what the Order gives, a step chase stays gap-free under them,
+and the editor's phase dials preview what the heads do.
+
+**Why it is here**: the tests read offsets and bytes off synthetic ticks against a mock controller,
+and pin the dials to the desk through a shared vector. Nothing in review watched a ripple tighten,
+two wings meet in the middle or a pixel bar chase in threes on real heads, or judged whether the dial
+row reads as the stage does.
+
+**Test**, on Sleeping Beauty, from the programmer and the busk view:
+
+1. **Spread.** Busk a Pulse chase over a group of eight (*+ Effect*), open *Spread*: the summary
+   reads *Rig*, the dials sit an eighth apart. Drag Spread to 50 %: the chase packs into half a cycle —
+   a tighter ripple with a gap behind it — and the dials close up to match; at 200 % it runs over two
+   cycles; at 0 % every head pulses together.
+2. **Wings.** Set Wings to 2: the chase runs from both ends to the middle and the dials mirror. Choose
+   *Centre out*: the Wings field is replaced by *two already*, and the effect runs centre out with no
+   refusal.
+3. **Blocks and Groups.** On a pixel bar (twelve cells), Blocks 3: the cells chase in threes, four
+   steps. Groups 2 instead: odd and even cells alternate. With *Step timing* on, neither leaves a dark
+   step.
+4. **Runs.** Under Advanced, *Runs* 1 on the Spread 50 % chase: it ripples once and hands every head
+   back, ending as the last head finishes rather than a cycle later.
+5. **A palette and a cue.** *Save as palette…*: the palette's editor shows the same shape over eight
+   notional dials. Record the busk into a cue and GO it: it runs with the same shape. Include it and
+   change Groups in the editor, then Update: the cue keeps the change.
 
 ---
 

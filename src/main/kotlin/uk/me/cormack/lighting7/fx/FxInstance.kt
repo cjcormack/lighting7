@@ -236,6 +236,11 @@ data class LookEffectSettings(
     val direction: String = EffectDirection.FORWARD.name,
     /** [FxDynamics.nShot] — effects plan D9; null runs forever. */
     val nShot: Int? = null,
+    /** [FxDynamics.spread], [FxDynamics.wings], [FxDynamics.blocks], [FxDynamics.groups] — effects plan D4. */
+    val spread: Double = 1.0,
+    val wings: Int = 1,
+    val blocks: Int = 1,
+    val groups: Int = 0,
 )
 
 /**
@@ -262,6 +267,10 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
         size = dyn.size,
         direction = dyn.direction.name,
         nShot = dyn.nShot,
+        spread = dyn.spread,
+        wings = dyn.wings,
+        blocks = dyn.blocks,
+        groups = dyn.groups,
     )
 }
 
@@ -364,7 +373,36 @@ data class FxDynamics(
      * clock has run N cycles past the largest one. See [FxInstance.nShotPending].
      */
     val nShot: Int? = null,
-)
+
+    /**
+     * Spread (effects plan D4, §3.3 step 5): how much of the cycle the members cover, 0.0–2.0; 1.0 is
+     * the Order's own offsets. With [wings], [blocks] and [groups] it is the spread's shape — see
+     * [SpreadShape], [SpreadShaping] — edited in place like the Order, phase kept.
+     */
+    val spread: Double = 1.0,
+
+    /** Wings (D4, step 3): the members split into this many mirrored wings; 1 is none. */
+    val wings: Int = 1,
+
+    /** Blocks (D4, step 2): this many neighbouring members share one phase; 1 is none. */
+    val blocks: Int = 1,
+
+    /** Groups (D4, step 4): the spread repeats every this many members; 0 is off. */
+    val groups: Int = 0,
+) {
+    /** The four shape fields as one value, for the plan cache and [DistributionPlan.of]. Cold path. */
+    val spreadShape: SpreadShape get() = SpreadShape(spread, wings, blocks, groups)
+
+    /**
+     * The rank count left after the spread's shape over [groupSize] members — [DistributionPlan.slots]
+     * in constant time and with no allocation, for the per-member step timing. (Ping-pong's turnaround
+     * reads the Order's own count: the shape sets offsets, never the sweep.)
+     */
+    fun distinctSlots(groupSize: Int): Int =
+        SpreadShaping.slots(
+            distributionStrategy.distinctSlots(groupSize), wings, blocks, groups, !distributionStrategy.isMirrored,
+        )
+}
 
 class FxInstance internal constructor(
     val effect: Effect,
@@ -871,12 +909,13 @@ class FxInstance internal constructor(
 
     /**
      * The effective beat division for a member pass: for step-timed effects, the beat
-     * division is scaled by the number of distinct distribution slots so it controls
-     * time-per-step rather than total cycle time.
+     * division is scaled by the number of distinct distribution slots — after the spread's shape
+     * (effects plan §3.3: the rank count after step 4) — so it controls time-per-step rather than
+     * total cycle time, and a chase over Blocks or Groups has no empty steps.
      */
     private fun memberCycleDivision(dynamics: FxDynamics, groupSize: Int): Double =
         if (dynamics.stepTiming && groupSize > 1) {
-            timing.beatDivision * dynamics.distributionStrategy.distinctSlots(groupSize)
+            timing.beatDivision * dynamics.distinctSlots(groupSize)
         } else {
             timing.beatDivision
         }
@@ -885,7 +924,8 @@ class FxInstance internal constructor(
      * The member-phase shaping shared by the beat and wall-clock forms, which differ only in where
      * the clock comes from: [cycles] whole cycles and [basePhase] of the current one.
      *
-     * In order (effects plan §3.3): the distribution's own shaping and offset, as before; then N-shot
+     * In order (effects plan §3.3): the distribution's own shaping and offset — the offset already
+     * shaped by Spread, Wings, Blocks and Groups (steps 2–5, in [DistributionPlan]); then N-shot
      * (D9), whose member runs while its own clock — the effect's less its offset — is in `[0, N)`,
      * holding underneath before and after (NaN); then direction (D5, step 6), Bounce counting
      * cycles on that same own clock.
@@ -900,7 +940,10 @@ class FxInstance internal constructor(
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.
         // Scale to [0, (N-1)/N] to match the LINEAR offset range and avoid
-        // wrapping artifacts at the turnaround points.
+        // wrapping artifacts at the turnaround points. N is the Order's own slot count, never the
+        // spread's shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every
+        // other Order, and leave the sweep alone (effects plan §3.3) — so the sweep is never scaled
+        // to nothing, and an effect that names no shape bounces bit for bit as before (P6).
         var shaped = basePhase
         if (dynamics.distributionStrategy.usesTrianglePhase && groupSize > 1) {
             val slots = dynamics.distributionStrategy.distinctSlots(groupSize)

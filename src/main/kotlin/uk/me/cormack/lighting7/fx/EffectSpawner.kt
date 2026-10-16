@@ -134,6 +134,9 @@ internal object EffectSpawner {
         val direction = EffectSpecCoercion.Lenient.direction(effectSpec.direction, context)
         val size = EffectSpecCoercion.Lenient.size(effectSpec.size, context)
         val nShot = EffectSpecCoercion.Lenient.nShot(effectSpec.nShot, context)
+        val shape = EffectSpecCoercion.Lenient.spreadShape(
+            effectSpec.spread, effectSpec.wings, effectSpec.blocks, effectSpec.groups, context,
+        )
 
         // Propagate timing source from the effect's registration
         val registration = state.show.fxRegistry.getRegistration(effectSpec.effectType)
@@ -152,7 +155,13 @@ internal object EffectSpawner {
             effectSpec.stepTiming?.let { this.stepTiming = it }
             // Size, direction and runs (effects plan D2, D5, D9) — the row's own; a fade's envelope
             // is runtime and starts at 1.
-            updateDynamics { it.copy(size = size, direction = direction, nShot = nShot) }
+            // The spread's shape (D4) is the row's too.
+            updateDynamics {
+                it.copy(
+                    size = size, direction = direction, nShot = nShot,
+                    spread = shape.spread, wings = shape.wings, blocks = shape.blocks, groups = shape.groups,
+                )
+            }
             speedMasterUuid = overrideSpeedMasterUuid
                 ?: speedMasterUuidOrNull(effectSpec.speedMasterUuid)
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid

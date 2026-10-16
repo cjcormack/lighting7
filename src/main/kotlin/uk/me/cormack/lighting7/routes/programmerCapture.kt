@@ -597,6 +597,10 @@ internal fun fxInstancesToCueChildren(
                     size = dyn.size,
                     direction = dyn.direction.name,
                     nShot = dyn.nShot,
+                    spread = dyn.spread,
+                    wings = dyn.wings,
+                    blocks = dyn.blocks,
+                    groups = dyn.groups,
                 )
         )
     }

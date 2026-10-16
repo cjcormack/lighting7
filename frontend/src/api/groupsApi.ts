@@ -105,6 +105,11 @@ export interface ApplyFxRequest {
   direction?: EffectDirection
   /** Runs (D9), at least 1; omitted → forever. */
   nShot?: number
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -144,6 +149,11 @@ export interface GroupActiveEffect {
   direction?: EffectDirection
   /** Runs (D9); absent or null runs forever. */
   nShot?: number | null
+  /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
+  spread?: number
+  wings?: number
+  blocks?: number
+  groups?: number
   /** A programmer layer's N-shot that has run its count, kept painting nothing until its layer goes. */
   spent?: boolean
 }

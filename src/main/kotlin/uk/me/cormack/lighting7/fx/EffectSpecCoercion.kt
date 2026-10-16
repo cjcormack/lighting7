@@ -97,6 +97,10 @@ object EffectSpecCoercion {
             direction: String? = null,
             size: Double? = null,
             nShot: Int? = null,
+            spread: Double? = null,
+            wings: Int? = null,
+            blocks: Int? = null,
+            groups: Int? = null,
         ): String? {
             blendMode?.let { raw ->
                 Names.blendMode(raw) ?: return message("blendMode", raw, BlendMode.entries.map { it.name })
@@ -117,7 +121,56 @@ object EffectSpecCoercion {
             }
             size?.let { sizeProblem(it)?.let { problem -> return problem } }
             nShot?.let { nShotProblem(it)?.let { problem -> return problem } }
+            if (spread != null || wings != null || blocks != null || groups != null) {
+                // An absent Order is the default one, LINEAR, which every stored spec falls back to.
+                val order = distribution?.let { Names.distribution(it) } ?: DistributionStrategy.LINEAR
+                spreadProblem(spread, wings, blocks, groups, order)?.let { return it }
+            }
             return null
+        }
+
+        /**
+         * Why the spread's shape (effects plan D4) is not one — Spread outside 0–2 (0–200 %), Wings or
+         * Blocks below 1, Groups below 0 (off), any count above [SpreadShape.MAX_COUNT], or Wings above
+         * 1 under a mirrored Order ([DistributionStrategy.isMirrored]: Centre out, Edges in and Split
+         * are two wings already) — or null. A null field is absent and takes no part, except that
+         * [order] is checked against [wings] only when wings are given.
+         */
+        fun spreadProblem(
+            spread: Double?,
+            wings: Int?,
+            blocks: Int?,
+            groups: Int?,
+            order: DistributionStrategy,
+        ): String? {
+            spread?.let {
+                if (it.isNaN() || it < 0.0 || it > SpreadShape.MAX_SPREAD) {
+                    return "spread must be between 0 and 2 (0–200 %), got $it"
+                }
+            }
+            wings?.let { if (it !in 1..SpreadShape.MAX_COUNT) return "wings must be between 1 and ${SpreadShape.MAX_COUNT}, got $it" }
+            blocks?.let { if (it !in 1..SpreadShape.MAX_COUNT) return "blocks must be between 1 and ${SpreadShape.MAX_COUNT}, got $it" }
+            groups?.let {
+                if (it !in 0..SpreadShape.MAX_COUNT) {
+                    return "groups must be between 0 (off) and ${SpreadShape.MAX_COUNT}, got $it"
+                }
+            }
+            if (wings != null && wings > 1 && order.isMirrored) {
+                return "wings need an asymmetric order: ${orderName(order)} is two wings already (wings must be 1)"
+            }
+            return null
+        }
+
+        /** [spreadProblem] as the [IllegalArgumentException] the apply routes answer 400 with. */
+        fun spreadShape(shape: SpreadShape, order: DistributionStrategy): SpreadShape = shape.also {
+            spreadProblem(it.spread, it.wings, it.blocks, it.groups, order)?.let { p -> throw IllegalArgumentException(p) }
+        }
+
+        private fun orderName(order: DistributionStrategy): String = when (order) {
+            DistributionStrategy.CENTER_OUT -> "Centre out"
+            DistributionStrategy.EDGES_IN -> "Edges in"
+            DistributionStrategy.SPLIT -> "Split"
+            else -> order.javaClass.simpleName
         }
 
         /** Why [size] is not a Size (effects plan D2: 0.0–1.0 — `FU-FX-SIZE-OVER-100`), or null. */
@@ -178,6 +231,27 @@ object EffectSpecCoercion {
             if (raw == null || raw >= 1) return raw
             logger.warn("{}: nShot {} below 1 — running forever", context(), raw)
             return null
+        }
+
+        /**
+         * A stored spread shape (effects plan D4) with each field clamped into its range, with a warn.
+         * Wings under a mirrored Order are left as stored: [SpreadShaping] ignores them, and the
+         * editor shows them so the operator can see what the row says.
+         */
+        fun spreadShape(spread: Double, wings: Int, blocks: Int, groups: Int, context: () -> String): SpreadShape {
+            val shape = SpreadShape(
+                spread = if (spread.isNaN()) 1.0 else spread.coerceIn(0.0, SpreadShape.MAX_SPREAD),
+                wings = wings.coerceIn(1, SpreadShape.MAX_COUNT),
+                blocks = blocks.coerceIn(1, SpreadShape.MAX_COUNT),
+                groups = groups.coerceIn(0, SpreadShape.MAX_COUNT),
+            )
+            if (shape.spread != spread || shape.wings != wings || shape.blocks != blocks || shape.groups != groups) {
+                logger.warn(
+                    "{}: spread shape (spread {}, wings {}, blocks {}, groups {}) out of range — clamping",
+                    context(), spread, wings, blocks, groups,
+                )
+            }
+            return shape
         }
 
         /**

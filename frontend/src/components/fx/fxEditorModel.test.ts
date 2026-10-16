@@ -8,6 +8,10 @@ import { makeActiveEffect } from '@/test/fixtureFactories'
 import {
   centreModeOf,
   differsFromTemplate,
+  filteredElementCount,
+  orderPatch,
+  spreadHeadCount,
+  carriesEffectProperty,
   withTemplateDraft,
   draftOf,
   levelModeOf,
@@ -150,6 +154,83 @@ describe('fxEditorModel', () => {
     expect(differsFromTemplate({ ...draft, direction: 'BOUNCE' }, palette, 'm1', {}, { distribution: false })).toBe(true)
     expect(differsFromTemplate({ ...draft, nShot: 2 }, palette, 'm1', {}, { distribution: false })).toBe(true)
     expect(differsFromTemplate(draft, palette, 'm1', {}, { distribution: false })).toBe(false)
+  })
+
+  it('reads the spread\'s shape off the wire at its defaults, and sends each field once touched (D4)', () => {
+    const plain = draftOf(makeActiveEffect({}))
+    expect([plain.spread, plain.wings, plain.blocks, plain.groups]).toEqual([1, 1, 1, 0])
+    expect(updateRequestOf(plain)).not.toHaveProperty('spread')
+    const shaped = draftOf(makeActiveEffect({ spread: 0.5, wings: 2, blocks: 3, groups: 4 }))
+    expect([shaped.spread, shaped.wings, shaped.blocks, shaped.groups]).toEqual([0.5, 2, 3, 4])
+    expect(updateRequestOf(shaped, new Set(['spread', 'groups'] as const))).toMatchObject({ spread: 0.5, groups: 4 })
+    expect(updateRequestOf(shaped, new Set(['spread'] as const))).not.toHaveProperty('wings')
+    // Groups 0 is how the frame turns them off — no flag of its own.
+    expect(updateRequestOf({ ...shaped, groups: 0 }, new Set(['groups'] as const))).toMatchObject({ groups: 0 })
+  })
+
+  it('takes wings back to 1 when the order moves onto a mirrored one', () => {
+    expect(orderPatch({ wings: 2 }, 'CENTER_OUT')).toEqual({ distributionStrategy: 'CENTER_OUT', wings: 1 })
+    expect(orderPatch({ wings: 2 }, 'SPLIT')).toEqual({ distributionStrategy: 'SPLIT', wings: 1 })
+    expect(orderPatch({ wings: 1 }, 'EDGES_IN')).toEqual({ distributionStrategy: 'EDGES_IN' })
+    expect(orderPatch({ wings: 3 }, 'REVERSE')).toEqual({ distributionStrategy: 'REVERSE' })
+  })
+
+  it('writes a palette effect\'s shape where it says something, and reads it as an edit', () => {
+    const palette = {
+      effectType: 'Pulse',
+      category: 'dimmer',
+      beatDivision: 1,
+      blendMode: 'OVERRIDE',
+      distribution: 'LINEAR',
+      parameters: {},
+    }
+    const draft = templateDraftOf(palette)
+    expect(withTemplateDraft(palette, draft)).not.toHaveProperty('spread')
+    const shaped = withTemplateDraft(palette, { ...draft, spread: 0.25, wings: 2, groups: 3 })
+    expect(shaped).toMatchObject({ spread: 0.25, wings: 2, groups: 3 })
+    expect(shaped).not.toHaveProperty('blocks')
+    expect(templateDraftOf(shaped)).toMatchObject({ spread: 0.25, wings: 2, blocks: 1, groups: 3 })
+    expect(differsFromTemplate({ ...draft, blocks: 2 }, palette, 'm1', {}, { distribution: false })).toBe(true)
+    expect(differsFromTemplate({ ...draft, spread: 0.5 }, palette, 'm1', {}, { distribution: false })).toBe(true)
+    expect(differsFromTemplate(draft, palette, 'm1', {}, { distribution: false })).toBe(false)
+  })
+
+  it('counts a live effect\'s heads for the dials as the desk distributes them', () => {
+    const bar = { elements: Array.from({ length: 12 }) }
+    const par = { elements: null }
+    expect(spreadHeadCount([par, par, par], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(6)
+    expect(spreadHeadCount([bar, bar], true, 'dimmer', 'FLAT', 'FIRST_HALF')).toBe(12)
+    expect(spreadHeadCount([bar, bar], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+  })
+
+  it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {
+    // A Slender 14ch: a master dimmer on the fixture, four cells beneath. A Pulse on the master runs
+    // once on the desk — one dial, not four — and a group of three such bars runs three members.
+    const slender = { properties: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
+    expect(spreadHeadCount([slender], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
+    expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'FLAT', 'ALL')).toBe(3)
+    expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(3)
+    // A property only its cells carry spreads over the cells.
+    expect(spreadHeadCount([slender], false, 'rgbColour', 'PER_FIXTURE', 'ALL')).toBe(4)
+    // Colour and position by trait, as the desk's WithColour / WithPosition.
+    expect(carriesEffectProperty([{ name: 'colour', type: 'colour' }], 'rgbColour')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'warmth', type: 'whiteMix' }], 'rgbColour')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'pt', type: 'position' }], 'position')).toBe(true)
+    expect(carriesEffectProperty([{ name: 'dimmer', type: 'slider' }], 'rgbColour')).toBe(false)
+  })
+
+  it('filters a FLAT group across the whole strip on its global index, as the desk does', () => {
+    const three = { elements: Array.from({ length: 3 }) }
+    // Nine heads under Odd keep 1st, 3rd, … 9th: five — not three bars' ceil(3/2) summed, six.
+    expect(spreadHeadCount([three, three, three], true, 'rgbColour', 'FLAT', 'ODD')).toBe(5)
+    // Six heads' first half is three — not two bars' first halves summed, four.
+    expect(spreadHeadCount([three, three], true, 'rgbColour', 'FLAT', 'FIRST_HALF')).toBe(3)
+    // Per fixture, each bar is filtered within itself.
+    expect(spreadHeadCount([three, three], true, 'rgbColour', 'PER_FIXTURE', 'FIRST_HALF')).toBe(2)
+    expect(filteredElementCount(5, 'EVEN')).toBe(2)
+    expect(filteredElementCount(5, 'SECOND_HALF')).toBe(2)
   })
 
   it('reads the desk\'s Seconds off a running effect, whatever loop it reports', () => {

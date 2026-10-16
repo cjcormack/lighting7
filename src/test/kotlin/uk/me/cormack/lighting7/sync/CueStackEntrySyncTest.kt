@@ -156,11 +156,14 @@ class CueStackEntrySyncTest {
             assertEquals(mapOf(onBuild to build, onInterval to interval), anchors, "each anchor moved to its cue's one entry")
         }
 
-        // Written back as v32.
+        // Written back at this desk's version — the entries format, v32 or later (v33 added the
+        // spread's shape), never the legacy cue-file one.
         val out = Files.createTempDirectory(scratchRoot, "legacy-out-")
         ProjectExporter(state).export(imported.projectId, out)
         val files = readExportFiles(out)
-        assertEquals(32, canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")).formatVersion)
+        val writtenVersion = canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")).formatVersion
+        assertEquals(SUPPORTED_FORMAT_VERSION, writtenVersion)
+        assertTrue(writtenVersion >= CUE_ENTRIES_FORMAT_VERSION, "the entries format")
         files.filterKeys { it.startsWith("cues/") }.values.forEach { text ->
             listOf("cueStackUuid", "sortOrder", "cueNumber", "autoAdvance", "cueType").forEach { gone ->
                 assertFalse("\"$gone\"" in text, "a v32 cue file carries no $gone: $text")
