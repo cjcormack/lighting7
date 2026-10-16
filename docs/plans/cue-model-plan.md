@@ -422,7 +422,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **Then:** Chris runs the migration on a copy of the desk's database before the desk itself
   (§9).
 
-### Session 2 — holds (backend + frontend)
+### Session 2 — holds (backend + frontend) — done, `595aced3`
 
 - **`fx/CueHolds.kt`** (P3) and every path in §3.4 through it: the manager, the crossfade, the
   assignment layer, the trigger manager, timed effects, stomp, stop, delete, events, scenery and the
