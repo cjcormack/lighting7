@@ -427,7 +427,7 @@ Each session is one PR (P1).
   §"Looks, palettes and layers" (Detach, Apply as values); `mcp-engineering.md`; CLAUDE.md's
   §"Palette Endpoints".
 
-### Session 2 — Local effects follow the selection (backend)
+### Session 2 — Local effects follow the selection (backend) — done, `4212865a`
 
 - §3.4: `POST /programmer/effects`, the Local replacement, the `targets` split on `PUT /fx/{id}` and
   `updateFx`, the per-member phase carry, `FX_SPLIT_LAYER_EFFECT`.
