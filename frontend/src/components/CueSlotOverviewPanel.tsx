@@ -22,7 +22,7 @@ import type { HeldRecord } from '@/api/handApi'
 import { HAND_TARGET_RING, useHandOffer } from './hand/HandTarget'
 import { useApplyCueMutation, useStopCueMutation } from '../store/cues'
 import { useCueRings } from '../store/cueHolds'
-import { useToggleLookMutation } from '../store/looks'
+import { usePress, type PressPair } from '../hooks/usePress'
 import { useProgrammerAppliedQuery } from '../store/programmer'
 import { lookIsApplied } from './busking/lookPresence'
 import { useBuskEditMode } from '@/store/buskEditSlice'
@@ -46,6 +46,7 @@ const SLOTS_PER_PAGE = 8
 // `"3"` the hand-rolled `String(page)` wrote, so a desk's stored page survives the switch.
 const PAGE_STORAGE_KEY = 'cue-slot-overview-page'
 
+const SLOT_PAIR: PressPair = { targets: [], families: null }
 /**
  * The drag context lives on `DeskDndProvider` — the app's one `DndContext`, which wraps this panel
  * *and* the routed page so a busk page can drop onto a slot. Re-exported under the old name so this
@@ -99,7 +100,9 @@ function CueSlotOverviewPanelBody() {
 
   const [applyCue] = useApplyCueMutation()
   const [stopCue] = useStopCueMutation()
-  const [toggleLook] = useToggleLookMutation()
+  // A slot has no selection: no targets — the desk lands the Look on its own patched fixtures — and
+  // no mask, whatever the window holds, and never a focused Look's draft.
+  const { press } = usePress(projectId ?? 0, SLOT_PAIR, { scope: 'programmer' })
   const [clearSlot] = useClearCueSlotMutation()
   const [assignSlot] = useAssignCueSlotMutation()
   const placeFromHand = useHandPlace()
@@ -312,9 +315,9 @@ function CueSlotOverviewPanelBody() {
       // Look's own patched fixtures, which is exactly why only a Look with no deferred effect may
       // sit in a slot (D7). No optimistic ring: the applied feed lands on the same frame, and
       // faking one would fight it.
-      void toggleLook({ projectId, lookId: slot.itemId, targets: [] })
+      void press({ kind: 'look', look: { id: slot.itemId, name: slot.itemName } }, 'press')
     },
-    [projectId, cueRings, applyCue, stopCue, toggleLook],
+    [projectId, cueRings, applyCue, stopCue, press],
   )
 
   const handleViewSlot = useCallback(

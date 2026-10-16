@@ -1316,15 +1316,16 @@ to retime in place rather than retract and respawn, or the cure is the disease.
 
 ### `FU-TMPL-CLICK-GROUP-PARTIAL`
 
-**A clicked effect template is all-or-nothing on a mixed group; a ⌥clicked one is not** · Trigger:
-an operator clicks an effect pad with a mixed group selected, gets nothing, and ⌥clicks to find the
-capable heads light · fx-templates session 2 review, 2026-09-02
+**An effect template applied as values is all-or-nothing on a mixed group; a tapped one is not** ·
+Trigger: an operator ⌥clicks (*Apply as values*) an effect chip with a mixed group selected, gets
+nothing, and taps it to find the capable heads light · fx-templates session 2 review, 2026-09-02
 
 `applyEffectTemplateToProgrammer` gates each target on `fixturesSupportProperty`, which requires
 **every** member to have the property — the same all-members rule `POST /groups/{name}/fx` has
 always applied. The layer path (`ProgrammerLayerStack.build`) has no capability check at all: it
 resolves a `ColourTarget` for the group and lets `FxInstance` warn per head. So on a group of hexes
-plus a hazer, click reports the whole group skipped and ⌥click runs the effect on the hexes. The
+plus a hazer, ⌥click (*Apply as values*) reports the whole group skipped and a tap runs the effect
+on the hexes. The
 docs' parity claim is qualified for exactly this case.
 
 Three smaller things sit behind the same gate and are worth doing together if it fires:
@@ -1349,14 +1350,14 @@ about one fixture is what sharing it prevented.
 **Read again by venue-visit plan S1 (2026-10-14), and left open on purpose.** S1 made *value*
 templates reach a multi-head fixture's cells on every arm (`fx/TemplateFanOut.kt`); it tried the
 obvious fix here too — ask `fixturesSupportProperty` of one member at a time and run the group
-effect when any member can take it — and backed it out in review, because it is not the click
+effect when any member can take it — and backed it out in review, because it is not the apply
 arm's gap alone. Two things sit underneath, and both are the FX engine's:
 
 - **A group effect with no `propertyName` is decided by `detectCapabilities()`'s all-members
   rule** (`EffectSpawner.resolveTargetForCue`). Every effect template the UI authors names no
   property (`TemplateEditor`, `NewTemplateFromEffectSheet`), so on a group of hexes plus a hazer
-  — or hexes plus a 24-channel Shehds, whose colour is on its cells — the click *and* the ⌥click
-  resolve no target and spawn nothing. The "⌥click lights the capable heads" in the paragraph above
+  — or hexes plus a 24-channel Shehds, whose colour is on its cells — the tap *and* the ⌥click
+  resolve no target and spawn nothing. The "a tap lights the capable heads" in the paragraph above
   holds only for a spec that names its property.
 - **`FxEngine.buildExpansion` lets the first member stand for the whole group's shape**: a first
   member with the property directly makes every member a direct target, one whose property is on
@@ -1366,7 +1367,7 @@ arm's gap alone. Two things sit underneath, and both are the FX engine's:
 
 The fix is therefore an engine one — expand a group per member by that member's own shape, and
 resolve a property-less group spec by "any member" — and it moves the group FX route's contract
-with it, which is why it waits for its trigger rather than riding S1. The click arm's skip still
+with it, which is why it waits for its trigger rather than riding S1. The apply arm's skip still
 names the group's key (the first bullet below).
 
 ---

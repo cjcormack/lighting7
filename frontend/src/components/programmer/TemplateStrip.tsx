@@ -1,24 +1,26 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AudioWaveform, Hand, LayoutGrid, Plus } from 'lucide-react'
-import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { type AttributeFamily } from '@/lib/attributeFamily'
-import { EFFECT_GLYPH_CLASS } from '@/components/busking/padFace'
+import { EFFECT_GLYPH_CLASS, padPresenceClass } from '@/components/busking/padFace'
+import { templateLayerPresence } from '@/components/busking/lookPresence'
+import type { EffectPresence } from '@/components/busking/buskingTypes'
+import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
+import { usePress, type PressGesture, type PressInto } from '@/hooks/usePress'
+import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { templateRowsSwatch, describeTemplateIntent } from '@/lib/templateIntent'
 import { stripTemplates } from '@/lib/templateRecents'
 import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import { useVenueMode } from '@/store/venues'
 import { TemplatePicker } from './TemplatePicker'
-import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
 import { usePressFamilies } from '@/store/selection'
-import { handPickUp } from '@/store/hand'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
 /**
@@ -43,15 +45,19 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * on `renderToolbar`) because only it knows which rows the cells sit on; the strip reads nothing
  * from Redux.
  *
- * **Two gestures, because there are two things you might mean**, and they are the reason a template
- * is not just a value you paste:
+ * **The gestures are the press's** (`usePress`, apply-model plan D1, D8), the same on every chip
+ * and pad on the desk:
  *
- *  - **click** sets literal values in Local. Retuning the template later does not move them. This is
- *    the busking gesture, and it is why the retired `ref:` grammar is not missed here.
- *  - **⌥click — or a hold, which is the same press on a touchscreen** — adds a layer that
- *    *tracks* it, targeted at the selection and masked to the template's family. Retune the
- *    template and every layer moves. The hold is stated on the chip's `title` beside ⌥click, and
- *    the reason it is a hold rather than a Set/Track switch is in `TemplateChip`.
+ *  - **tap** puts the palette on as a layer that *tracks* it, targeted at the selection and masked
+ *    to its family — or takes the selected heads off it when it already covers them all. The desk
+ *    replaces the palette's family on those heads (D2). Retune the palette and every layer moves.
+ *  - **⌥click** is *Apply as values*: literals in Local, which retuning the palette never moves.
+ *  - **hold or right-click** opens the menu — the tap's verb named, *Apply as values*, *Pick up*,
+ *    *Edit palette…* — and never presses.
+ *
+ * With a Look layer focused a tap writes the palette into that Look instead (D7), and the chips
+ * draw no ring. Otherwise each chip wears the pad's ring from the desk's applied state, and the
+ * row is filtered by the selection's mask as well as by what the heads can take (§4.2).
  *
  * The last chip records the selection as a new template, which is how the library fills up without
  * anyone visiting it. It is drawn **outside** the scroller, pinned to its right: it is the one
@@ -63,9 +69,9 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * fixtures this should land on first". That was the single most expensive line on the page: a row
  * of chips — wrapping to four rows on a real library — spending 43px of a grid's height on a
  * gesture that could only fail. The library is browsed on `/palettes`; this strip is where a
- * template is *pressed*, and a press needs a target (space plan D3). The `targets.length === 0`
- * guard in `press` stays as defence in depth, and so does `New`'s disabled arm — neither is
- * reachable through the UI now, and both are one careless host away from being reachable again.
+ * template is *pressed*, and a press needs a target (space plan D3). `usePress` still refuses a
+ * generic palette with no targets, as defence in depth: the toggle route would take one as a layer
+ * that lands nowhere.
  *
  * **The chips are the eight most recently *pressed*, not the whole library** (see `stripTemplates`).
  * A show has sixty templates and this row was sized for six; the fix is not a longer scroller but a
@@ -115,7 +121,22 @@ export function TemplateStrip({
   const allRef = useRef<HTMLButtonElement>(null)
   // The mask the press carries: the desk's while following, the marquee's own when unlinked (D4).
   const pressFamilies = usePressFamilies(askedFamilies)
-  const press = useTemplatePress(projectId, targets, pressFamilies)
+  const pair = useMemo(() => ({ targets, families: pressFamilies }), [targets, pressFamilies])
+  const { press, into } = usePress(projectId, pair)
+  const onGesture = useCallback(
+    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+    [press],
+  )
+
+  // The pad's ring, from the desk's resolved applied state (apply-model plan §4.2). None while a
+  // Look layer is focused: a press writes the Look's values there, and a ring would describe the
+  // programmer's layers instead.
+  const { data: applied } = useProgrammerAppliedQuery()
+  const presenceOf = useCallback(
+    (template: TemplateSummary): EffectPresence =>
+      into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id),
+    [applied, targets, into],
+  )
 
   /**
    * The families the selection is asking about.
@@ -148,6 +169,10 @@ export function TemplateStrip({
       (t) =>
         t.family != null &&
         families.includes(t.family) &&
+        // The selection's mask, too (apply-model plan §4.2): a palette outside it is not offered,
+        // since the desk would refuse it. An offer, never a refusal — the press itself is not
+        // pre-refused, and with every attribute the mask is null and filters nothing.
+        (pressFamilies == null || pressFamilies.length === 0 || pressFamilies.includes(t.family)) &&
         // Every emitter the template names has to be somewhere in the selection. A **union** over
         // the heads, matching how `targetFamilies` is built: with a hex and a par selected together
         // the amber template is still offered, and the par reports a skip on the press. Requiring
@@ -161,7 +186,7 @@ export function TemplateStrip({
         // field actually is.
         (t.requiredEmitters ?? []).every((emitter) => targetEmitters.includes(emitter)),
     )
-  }, [templates, families, targetEmitters])
+  }, [templates, families, pressFamilies, targetEmitters])
 
   /**
    * The chips the row actually draws: the templates this desk pressed most recently, most recent
@@ -252,9 +277,11 @@ export function TemplateStrip({
           {valueChips.map((template) => (
             <TemplateChip
               key={template.id}
+              projectId={projectId}
               template={template}
-              onPress={press}
-              onPickUp={(t) => handPickUp('TEMPLATE', t.id)}
+              into={into}
+              presence={presenceOf(template)}
+              onGesture={onGesture}
             />
           ))}
 
@@ -265,9 +292,11 @@ export function TemplateStrip({
           {effectChips.map((template) => (
             <TemplateChip
               key={template.id}
+              projectId={projectId}
               template={template}
-              onPress={press}
-              onPickUp={(t) => handPickUp('TEMPLATE', t.id)}
+              into={into}
+              presence={presenceOf(template)}
+              onGesture={onGesture}
             />
           ))}
         </div>
@@ -300,7 +329,7 @@ export function TemplateStrip({
             as Update and Revert inside the source box. No `disabled` arm: the
             guard above has already returned, so it could only ever have rendered enabled, and a
             dead conditional whose `title` no longer explains the state it guards is worse than no
-            conditional. `press`'s guard is the one that stays — it is the only one a future host
+            conditional. `usePress`'s guard is the one that stays — it is the only one a future host
             rendering this component differently could still reach. */}
         {/* Not in a venue: a template is recorded from the programmer, and Record is off there (venue
             plan D11; the desk refuses one with `VENUE_RECORD_OFF`). */}
@@ -338,6 +367,9 @@ export function TemplateStrip({
         askedFamilies={askedFamilies}
         targets={targets}
         offerable={visible}
+        into={into}
+        presenceOf={presenceOf}
+        onGesture={onGesture}
       />
       <NewTemplateFromSelectionSheet
         open={newOpen}
@@ -360,91 +392,68 @@ export function TemplateStrip({
 const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
 
 /**
- * One template on the recents row.
- *
- * **Its *Pick up* is a right-click, not a hold**, and that is forced rather than chosen: the chip's
- * hold is already ⌥click's touch twin (§"The two apply gestures"), and a control cannot answer one
- * gesture two ways. On touch the routes to picking a template up are the library row on
- * `/palettes` and a busk pad's own hold menu, both of which have a free hold.
- *
- * **Which is why this is a `Popover` opened from `onContextMenu`, and not a `ContextMenu`.**
- * Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`
- * and clears it only on its own pointer handlers or on a `contextmenu` event reaching the trigger.
- * `BuskPad` and `CueSlotCell` are safe because their holds *dispatch* a synthetic `contextmenu`,
- * which clears it — this chip's hold dispatches nothing, it fires a tracking-layer mutation. So a
- * stationary touch hold here would have added the layer at 500ms and then popped this menu at
- * 700ms: two uncoordinated effects from one finger, on a live rig, and exactly the "pick-up is
- * right-click only" rule above broken by the primitive rather than by the code. `PopoverAnchor`
- * registers no handlers at all, so the chip keeps one hold and one meaning.
+ * One palette on the recents row: tap puts it on as a layer, ⌥click sets its values, a hold or a
+ * right-click opens the menu (`PalettePressButton`), and it wears the pad's ring.
  */
 function TemplateChip({
+  projectId,
   template,
-  onPress,
-  onPickUp,
+  into,
+  presence,
+  onGesture,
 }: {
+  projectId: number
   template: TemplateSummary
-  onPress: (template: TemplateSummary, additive: boolean) => void
-  onPickUp: (template: TemplateSummary) => void
+  into: PressInto
+  presence: EffectPresence
+  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
 }) {
   const swatch = templateRowsSwatch(template.rows)
-  // Click, ⌥click and the touch hold, shared with the picker's pad — see `useTemplatePressHandlers`.
-  // It was written out here and copied into the pad, which is the drift `useTemplatePress` was
-  // extracted to stop for the mutation half and had not yet stopped for the gesture half.
-  const handlers = useTemplatePressHandlers(template, onPress)
-  const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-      <PopoverAnchor asChild>
-    <button
-      onContextMenu={(event) => {
-        event.preventDefault()
-        setMenuOpen(true)
-      }}
-      type="button"
-      {...handlers}
-      title={templatePressTitle(template)}
-      className={cn(
-        // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex
-        // would compress every chip to fit and the mask would never fade anything. `h-7` is the
-        // nested tier: a chip is a control inside the selection bar's 40px row, so it is 28 where
-        // the row's own verbs are 32.
-        'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors',
-        'hover:bg-accent/60 active:scale-95',
-      )}
+    <PalettePressButton
+      projectId={projectId}
+      template={template}
+      into={into}
+      presence={presence}
+      onGesture={onGesture}
     >
-      {/* An effect template holds no rows, so there is no value to preview — the glyph the whole
-          desk uses for FX says what the press will do instead of a blank gap. */}
-      {template.kind === 'effect' ? (
-        <AudioWaveform className={EFFECT_GLYPH_CLASS} />
-      ) : swatch != null ? (
-        <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
-      ) : (
-        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-          {/* A per-fixture palette holds one value per head, so no one row describes it — the
-              library sheet's *n heads* rule; a generic one is its row. */}
-          {!template.isGeneric
-            ? `${template.rows?.length ?? 0} heads`
-            : template.rows?.[0] != null
-              ? describeTemplateIntent(template.rows[0].value)
-              : ''}
-        </span>
-      )}
-      <span className="truncate max-w-32">{template.name}</span>
-    </button>
-      </PopoverAnchor>
-      <PopoverContent align="start" className="w-auto p-1">
+      {(handlers) => (
         <button
           type="button"
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
-          onClick={() => {
-            setMenuOpen(false)
-            onPickUp(template)
-          }}
+          {...handlers}
+          title={templatePressTitle(template, into)}
+          aria-pressed={presence !== 'none'}
+          data-presence={presence}
+          className={cn(
+            // `shrink-0` is what makes the row a scroller rather than a squeezer: without it flex
+            // would compress every chip to fit and the mask would never fade anything. `h-7` is the
+            // nested tier: a chip is a control inside the selection bar's 40px row, so it is 28 where
+            // the row's own verbs are 32.
+            'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors',
+            'hover:bg-accent/60 active:scale-95',
+            padPresenceClass(presence),
+          )}
         >
-          <Hand className="size-3.5" />
-          Pick up
+          {/* An effect template holds no rows, so there is no value to preview — the glyph the whole
+              desk uses for FX says what the press will do instead of a blank gap. */}
+          {template.kind === 'effect' ? (
+            <AudioWaveform className={EFFECT_GLYPH_CLASS} />
+          ) : swatch != null ? (
+            <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
+          ) : (
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {/* A per-fixture palette holds one value per head, so no one row describes it — the
+                  library sheet's *n heads* rule; a generic one is its row. */}
+              {!template.isGeneric
+                ? `${template.rows?.length ?? 0} heads`
+                : template.rows?.[0] != null
+                  ? describeTemplateIntent(template.rows[0].value)
+                  : ''}
+            </span>
+          )}
+          <span className={cn('truncate max-w-32', presence !== 'none' && 'text-primary')}>{template.name}</span>
         </button>
-      </PopoverContent>
-    </Popover>
+      )}
+    </PalettePressButton>
   )
 }

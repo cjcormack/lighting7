@@ -18,8 +18,18 @@ export interface PadBehaviour {
    * press lets go of — and outline while only a stack holds it.
    */
   cueRing: (pad: BuskPad) => CueRing
+  /**
+   * Whether the busk pair names any target. Without one a ring cannot say which way a press goes —
+   * a per-fixture palette or a Look lands on its own heads — so the hold menu names both.
+   */
+  hasSelection?: boolean
   onPress: (pad: BuskPad) => void
-  /** Long press: the pad's hold menu — *Pick up*, and *View* (where the record is edited). */
+  /**
+   * *Apply as values* (apply-model plan D8): a palette's or Look's literals and Local effects over
+   * the busk selection, with no layer — ⌥click and the hold menu's second item. A cue has none.
+   */
+  onApplyValues?: (pad: BuskPad) => void
+  /** Long press: the pad's hold menu — the tap's verb, *Apply as values*, *Pick up* and *View*. */
   onInspect: (pad: BuskPad) => void
   /** The pad's *Pick up*: this record into the desk's hand (multi-screen plan §3.5). */
   onPickUp: (pad: BuskPad) => void

@@ -189,7 +189,8 @@ export const templatesApi = restApi.injectEndpoints({
     }),
 
     /**
-     * **Click**: set literal values in the programmer for the current selection.
+     * ***Apply as values*** — ⌥click, or the hold menu's second item: set literal values in the
+     * programmer for the current selection (`write: false` answers them without writing).
      *
      * No dependency — retuning the template later does not move these. That is the whole difference
      * from `toggleTemplate` below, and why the two gestures are two routes rather than a flag.
@@ -210,14 +211,16 @@ export const templatesApi = restApi.injectEndpoints({
       // broadcasts `palettePressed`, so this is belt as well as braces — but the frame is a
       // round trip away and the chips the operator just pressed are under their hand.
       //
-      // **After the response, not before it, and gated on the same rule the server applies**: a
-      // click that reaches no head returns 200 having written nothing, and the desk does not stamp
+      // **After the response, not before it, and gated on the same rule the server applies**: an
+      // apply that reaches no head returns 200 having written nothing, and the desk does not stamp
       // that. A provisional clock reading is fine because the frame overwrites it with the
       // server's within the same breath — and it is the server's value every client keeps.
-      async onQueryStarted({ templateId }, { dispatch, getState, queryFulfilled }) {
+      async onQueryStarted({ templateId, write }, { dispatch, getState, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled
-          if (data.written > 0 || (data.effectIds?.length ?? 0) > 0) {
+          // `write: false` wrote nothing, and the desk logs no press for it: `written` there counts
+          // what it *would* have written.
+          if (write !== false && (data.written > 0 || (data.effectIds?.length ?? 0) > 0)) {
             applyTemplatePressed(dispatch, getState as typeof store.getState, templateId, new Date().toISOString())
           }
         } catch {
@@ -258,8 +261,8 @@ export const templatesApi = restApi.injectEndpoints({
     }),
 
     /**
-     * **⌥click — or a hold on a touchscreen**: add (or remove) a layer that *tracks* the
-     * template, targeted at the selection.
+     * **The press** — a tap on a chip or pad: add (or remove) a layer that *tracks* the template,
+     * targeted at the selection.
      *
      * The layer is the dependency mechanism — it already is, for Looks — so "a colour I can change
      * everywhere later" and "a colour I want right now" are two gestures on one chip rather than two

@@ -29,7 +29,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * Pick and its hidden leaves, Recent, the footer — is the editor's, docked.
  *
  * **It writes literals to Local, and only that.** Every drag is `programmer.setColour` per selected
- * target, which is what a template pad's click does and what the programmer's colour cell does.
+ * target, which is what a palette's *Apply as values* does and what the programmer's colour cell does.
  * There is **no layer arm and no ⌥ arm**: a picked colour has no library referent for a layer to
  * follow, so *Save as template…* is the route to something trackable, through the same
  * `POST /palettes/from-programmer` the strip uses. The writes go through {@link useLivePush}, the
@@ -37,7 +37,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  *
  * **The family mask is not consulted.** The desk's mask gates *presses*, and a colour drag is a
  * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Recent
- * chip is a *press*, and goes through `useTemplatePress` under the mask like any other.
+ * chip is a *press*, and goes through `usePress` under the mask like any other.
  *
  * **The buffer is seeded from the rig** — the editor's Pick on mount and on every change of heads,
  * retried until they have reported (`pickOnTargets`) — so a single-channel edit means what it

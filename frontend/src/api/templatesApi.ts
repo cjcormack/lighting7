@@ -162,8 +162,8 @@ export interface TemplateSummary {
    * been.
    *
    * What the programmer's row of recent chips is ordered by. It is a **desk** fact rather than a
-   * tab's — the server stamps it, on the chip's click, on ⌥click / hold, on a busk pad press and on
-   * a MIDI `pressTemplate` — so every client and every surface agrees on what was reached for, and
+   * tab's — the server stamps it, on a chip's tap and its *Apply as values*, on a busk pad press and
+   * on a MIDI `pressTemplate` — so every client and every surface agrees on what was reached for, and
    * a press made from the desk's own hardware counts. Toggling a layer **off** is not a press and
    * leaves it where it was.
    *
@@ -283,7 +283,7 @@ export interface TemplateInUseError {
 }
 
 /**
- * What `click` reports.
+ * What *Apply as values* reports.
  *
  * The two arms report in different fields, because they do different things. A **value** template
  * writes literals: `written` counts them and `skipped` names the heads it could not reach. An
@@ -295,10 +295,17 @@ export interface ApplyTemplateResponse {
   written: number
   skipped: { fixtureKey: string; propertyName: string; reason: string }[]
   effectIds?: number[]
+  /**
+   * Each head's literal for a **value** palette, in the Look row grammar, on the property it landed
+   * on — a cell by its element key, Spread's `write: false` shape. With `write: false` this is all
+   * the desk did, and `written` counts what it would have written. Absent from a desk that predates
+   * the field.
+   */
+  values?: { target: TemplateTarget; propertyName: string; value: string }[]
 }
 
 /**
- * The click: literal values into Local. `families` is the selection's attribute mask (multi-screen
+ * *Apply as values* (⌥click): literal values into Local. `families` is the selection's attribute mask (multi-screen
  * plan D4) — a template is one family, so under a mask it lands whole or is refused by name, 400
  * `PALETTE_OUTSIDE_MASK`, on both the value and the effect arm. Absent is every attribute.
  */
@@ -306,10 +313,16 @@ export interface ApplyTemplateRequest {
   targets: TemplateTarget[]
   fadeMs?: number
   families?: AttributeFamily[]
+  /**
+   * `false` resolves and answers `values` without writing anything or logging a press — the
+   * focused-Look-layer arm (apply-model plan D7). Sent only when false: the desk's Json refuses an
+   * unknown key, so a desk that predates it would 400 every *Apply as values* that carried `true`.
+   */
+  write?: false
 }
 
 /**
- * ⌥click / hold: a layer that tracks the template. `propertyMask` is what this client believes
+ * The press (a tap): a layer that tracks the template. `propertyMask` is what this client believes
  * the layer's mask is; the desk derives the real one and reports it back. `families` is the
  * selection's mask, refused as on [ApplyTemplateRequest] — on the **on** arm only, since a press
  * that takes the layer off comes off under any mask.
@@ -338,9 +351,9 @@ export interface ToggleTemplateResponse {
    */
   propertyMask: string | null
   /**
-   * How many **sibling** layers this press took off first — a template group's exclusivity, applied
-   * to layers on the same target set. 0 on a `removed`, and for an ungrouped template. Optional on
-   * the wire: a server that predates groups sends nothing here.
+   * How many other palettes this press took heads off: the palettes of its family and kind it
+   * replaced on the pressed heads (apply-model plan D2, D6). 0 on a `removed`. Optional on the wire:
+   * a desk that predates the field sends nothing here.
    */
   released?: number
 }

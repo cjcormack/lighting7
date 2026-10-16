@@ -417,6 +417,15 @@ interface ProgrammerRemoveLayerOutgoing {
   fadeMs?: number
 }
 
+/**
+ * *Detach* (apply-model plan §3.5): the layer's values become touched `web` values and its effects
+ * Local, and the layer comes off with nothing on stage moving. Answered by `programmer.layerState`.
+ */
+interface ProgrammerDetachLayerOutgoing {
+  type: 'programmer.detachLayer'
+  layerId: number
+}
+
 /** Move a layer to [toIndex] among the non-preview layers. The server renumbers the whole list. */
 interface ProgrammerMoveLayerOutgoing {
   type: 'programmer.moveLayer'
@@ -483,6 +492,7 @@ export type ProgrammerOutgoingMessage =
   | ProgrammerStateOutgoing
   | ProgrammerAddLayerOutgoing
   | ProgrammerRemoveLayerOutgoing
+  | ProgrammerDetachLayerOutgoing
   | ProgrammerMoveLayerOutgoing
   | ProgrammerPatchLayerOutgoing
   | ProgrammerSetSceneryOutgoing
@@ -695,6 +705,8 @@ export interface ProgrammerApi {
     fadeMs?: number
   }): boolean
   removeLayer(layerId: number, fadeMs?: number): void
+  /** Detach: the layer's values and effects become Local, and nothing on stage moves. */
+  detachLayer(layerId: number): boolean
   /** [toIndex] counts non-preview layers, which is what the server's own move does. */
   moveLayer(layerId: number, toIndex: number): void
   patchLayer(
@@ -1258,6 +1270,9 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     },
     removeLayer(layerId, fadeMs) {
       send({ type: 'programmer.removeLayer', layerId, fadeMs })
+    },
+    detachLayer(layerId) {
+      return send({ type: 'programmer.detachLayer', layerId })
     },
     moveLayer(layerId, toIndex) {
       send({ type: 'programmer.moveLayer', layerId, toIndex })

@@ -432,7 +432,7 @@ internal fun buildCueAssignmentsForCue(
             moveInDark = assignment.moveInDark,
             // The stored row's own fade. Dropped here until sweep item B1: the column, the DTO, the
             // exporter and the cue routes all carried it, and the one hop into the composition
-            // layer did not — so a cue's local row snapped while a clicked template faded.
+            // layer did not — so a cue's local row snapped while a template applied as values faded.
             fadeDurationMs = assignment.fadeDurationMs,
             // Per member, not off the reference fixture: whether a slider shares its channel with the
             // colour is a fact about each member's class, and a mixed group may disagree.

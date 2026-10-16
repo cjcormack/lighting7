@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
+import { useParams } from 'react-router'
 import type { Cue, CueLayer } from '@/api/cuesApi'
 import type { HeldRecord } from '@/api/handApi'
 import { buildCueInput } from '@/lib/cueUtils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { programmerAddLayer } from '@/store/programmer'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import { useDeskSelection } from '@/store/selection'
+import { useWindowPress, useWindowPressPair, type PressSource } from '@/hooks/usePress'
 import { useHandPlace } from '@/store/hand'
 import { HandPlaceStrip, useHandOffer } from './HandTarget'
 
@@ -16,24 +16,27 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * layer, and the only difference is which stack it joins. Each is still the placing window's *own*
  * existing mutation followed by `hand.drop` (D12); there is no `hand.place`.
  *
- * ### The targets are the desk selection, and an empty one is not a failure
+ * ### The targets are the window's selection, and an empty one is not a failure
  *
- * Both send the desk selection as the layer's `targets`, which is what the plan's §3.5 says and
- * what the template chip's ⌥click already does. It means two things depending on what is held, and
+ * Both send the window's selection pair (`useWindowPressPair`: the desk's while this window follows
+ * it, its own when unlinked — apply-model plan §4.1). The programmer's place **is a press**
+ * (`usePress`), so it toggles, replaces the palette's family and lands in a focused Look exactly as
+ * the strip's tap does; the cue's place appends a layer to the stored cue. The targets mean two
+ * things depending on what is held, and
  * both are the layer model's own: for a **template**, whose rows are generic, the targets are
  * *supplied* — with nothing selected a template layer contributes nothing, which is why the strip
  * says so rather than placing silently. For a **Look**, whose rows are bound, the targets *filter* —
  * so an empty selection is the Look's own rows, the ordinary case, and a standing selection narrows
  * it on purpose.
  *
- * The family mask is **the server's** for a template layer, derived from the template's own rows:
+ * The layer's mask is **the server's** for a template layer, derived from the template's own rows:
  * which family a template layer belongs to is a fact about the template, not about the press.
  *
  * ### Each strip is two components, and the split is not cosmetic
  *
  * The outer one asks `useHandOffer` — a narrowed subscription that only wakes when *this* target's
  * answer changes — and renders nothing at all when the hand holds nothing it can take, which is
- * almost always. The `useDeskSelection()` subscription lives in the inner one, so it exists only
+ * almost always. The selection subscription lives in the inner one, so it exists only
  * while a placeable record is actually held.
  *
  * Written flat, both hooks ran unconditionally in an always-mounted component: the programmer's
@@ -56,14 +59,15 @@ function layerSource(held: HeldRecord): { templateId: number } | { lookId: numbe
 }
 
 /**
- * *Place “X” here* on the **programmer's** layer stack, drawn in the rail's footer.
+ * *Place “X” here* on the **programmer's** layer stack, drawn in the rail's footer: the press, with
+ * the window's pair (apply-model plan §5).
  *
- * **No Undo**, and that is a decision rather than an omission. `programmer.addLayer` is a
- * fire-and-forget WS op answered by the whole `programmer.layerState` broadcast — it returns no id —
- * so this window cannot address the layer it just made. The only way to find it would be to diff
- * the stack before and after, and the stack is *shared*: another window or a busking pad adding a
- * layer in the same moment would have Undo remove someone else's, on a live rig. A wrong inverse is
- * worse than none, and the row this just added is one click from its own remove in the rail above.
+ * **No Undo**, and that is a decision rather than an omission. A press answers no layer id — the
+ * stack comes back whole on `programmer.layerState` — so this window cannot address the layer it
+ * just made. The only way to find it would be to diff the stack before and after, and the stack is
+ * *shared*: another window or a busking pad pressing in the same moment would have Undo remove
+ * someone else's, on a live rig. A wrong inverse is worse than none, and the row this just added is
+ * one click from its own remove in the rail above.
  */
 export function HandProgrammerLayerStrip() {
   // The cheap question first: nothing placeable held means no selection subscription at all.
@@ -72,26 +76,43 @@ export function HandProgrammerLayerStrip() {
 }
 
 function ProgrammerLayerStripBody() {
-  const targets = useDeskSelection()
+  const { projectId } = useParams()
+  const { press, into } = useWindowPress(Number(projectId))
   const placeFromHand = useHandPlace()
+  const where = into.kind === 'look' ? into.lookName : 'the programmer'
 
   const onPlace = useCallback(
     (held: HeldRecord) => {
+      const source = pressSourceOf(held)
+      if (source == null) return
       void placeFromHand(held, {
-        where: 'the programmer',
-        // A WS op has no receipt, so "it landed" is "it was sent" — but *was it sent* is a real
-        // question with a real answer, and dropping it was a bug: `sendGesture` refuses a closed
-        // socket, toasts "that did not reach the rig", and returns false. Returning `true`
-        // regardless let `useHandPlace` drop the hand and toast success **beside that error**, on
-        // a place that never left the browser. `null` takes the hook's "nothing landed" path, which
-        // keeps the record held and stays quiet — the failure is already on screen.
-        run: async () => (programmerAddLayer({ ...layerSource(held), targets: [...targets] }) ? true : null),
+        where,
+        // A refused press is already on screen (`errorToastMiddleware`) and answers `null`, the
+        // hook's "nothing landed" path, which keeps the record held and stays quiet.
+        run: () => press(source, 'press'),
+        // The press toggles: a record already on every selected head comes off them.
+        describe: (result, name) =>
+          result === 'off'
+            ? `“${name}” was already on the selection — taken off it`
+            : result === 'into'
+              ? `“${name}” written into ${where}`
+              : `“${name}” placed in ${where}`,
       })
     },
-    [placeFromHand, targets],
+    [placeFromHand, press, where],
   )
 
-  return <HandPlaceStrip target="layer-stack" where="the programmer" onPlace={onPlace} />
+  return <HandPlaceStrip target="layer-stack" where={where} onPlace={onPlace} />
+}
+
+/**
+ * The press source a held record is — its own summary DTO, which the hand frame carries. A cue
+ * never reaches here (`canHandLand` refuses both layer targets for one).
+ */
+function pressSourceOf(held: HeldRecord): PressSource | null {
+  if (held.kind === 'TEMPLATE' && held.template != null) return { kind: 'template', template: held.template }
+  if (held.kind === 'LOOK' && held.look != null) return { kind: 'look', look: held.look }
+  return null
 }
 
 /**
@@ -110,7 +131,7 @@ export function HandCueLayerStrip({ projectId, cue }: { projectId: number; cue: 
 }
 
 function CueLayerStripBody({ projectId, cue }: { projectId: number; cue: Cue }) {
-  const targets = useDeskSelection()
+  const { targets } = useWindowPressPair()
   const placeFromHand = useHandPlace()
   const [patchCue] = usePatchProjectCueMutation()
 

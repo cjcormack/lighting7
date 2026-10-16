@@ -240,8 +240,9 @@ export interface BuskPressResponse {
   action: 'applied' | 'removed'
   effectCount: number
   /**
-   * What an *on* press in a **solo** bank turned off: layer siblings narrowed or dropped, plus cue
-   * siblings stopped. Always 0 for an off press and in a stacking bank.
+   * What an *on* press turned off: the palettes of the pressed palette's family and kind it
+   * replaced on the pressed heads (apply-model plan D2, D6), and in a **solo** bank its siblings
+   * besides — layer siblings narrowed or dropped, cue siblings stopped. Always 0 for an off press.
    */
   released: number
   /**

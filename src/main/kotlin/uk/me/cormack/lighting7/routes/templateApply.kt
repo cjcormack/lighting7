@@ -25,7 +25,7 @@ import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("templateApply")
 
-/** What a click did, or why it did nothing — the route maps the refusal to a 400 by code. */
+/** What an apply did, or why it did nothing — the route maps the refusal to a 400 by code. */
 internal sealed interface ApplyTemplateOutcome {
     data class Applied(val response: ApplyTemplateResponse) : ApplyTemplateOutcome
 
@@ -34,15 +34,15 @@ internal sealed interface ApplyTemplateOutcome {
 }
 
 /**
- * The plain-click gesture: resolve a template against a selection and put the result into the
+ * *Apply as values* (a chip's ⌥click): resolve a template against a selection and put the result into the
  * programmer, **detached** — literals for a value template, a band copy of the effect for an
  * effect template (D1's two arms, dispatched on which one the template holds).
  *
  * Three things about it are the design rather than the implementation:
  *
  *  - **Literals, not a dependency.** Retuning the template afterwards must not move what was
- *    applied. That is the whole difference between clicking a template chip and ⌥clicking it: click
- *    is "this colour, now", ⌥click adds a layer that tracks it. `Templates.dc.html` draws both.
+ *    applied. That is the whole difference between a chip's *Apply as values* (⌥click) and its tap:
+ *    the first is "this colour, now", the tap adds a layer that tracks it. `Templates.dc.html` draws both.
  *  - **Resolution happens here, server-side**, through the same [TemplateResolver] the cook uses.
  *    The client could have resolved a colour itself and written channels — it already has a batch
  *    write path — but then the white/amber policy and the wheel snap would exist in TypeScript as
@@ -57,7 +57,7 @@ internal sealed interface ApplyTemplateOutcome {
  *    and Clear read the same way.
  *  - **The selection's mask is tested before either arm** (multi-screen plan D5). A template is
  *    one family, so under a mask it either lands whole or not at all: [families] naming a set the
- *    template's family is outside is [ApplyTemplateOutcome.Refused] by name, on the click exactly
+ *    template's family is outside is [ApplyTemplateOutcome.Refused] by name, on the apply exactly
  *    as on the pad and the button. Null is every attribute — today's press.
  *
  * [write] false is the focused-Look-layer arm (apply-model plan D7): the same resolve and fan-out,
@@ -91,9 +91,9 @@ internal fun applyTemplateToProgrammer(
         else -> ApplyTemplateResponse(written = 0)
     }
 
-    // The click door of the press log. Gated on the press having *done* something, which is the
-    // "never on a refusal" rule applied to the one door that cannot refuse with a status code: a
-    // click onto heads that can take none of the rows returns 200 with `written = 0` and a skip per
+    // The apply door of the press log. Gated on the press having *done* something, which is the
+    // "never on a refusal" rule applied to the one door that cannot refuse with a status code: an
+    // apply onto heads that can take none of the rows returns 200 with `written = 0` and a skip per
     // head, and putting that in an eight-slot recents row would fill it with templates this rig
     // cannot use. Both arms are covered by one test, which is the point of dispatching above. A
     // `write: false` resolve wrote nothing, so it is not a press either.
@@ -172,7 +172,7 @@ private fun applyValueTemplateToProgrammer(
         when (val requirement = TemplateResolver.unmetColourRequirement(
             forHead.first().head, applicable, TemplateFanOut.mediaOf(forHead.first().head, fittedMediaFor),
         )) {
-            // Reported for both arms: a click that lands on nothing must say why, and unlike the
+            // Reported for both arms: an apply that lands on nothing must say why, and unlike the
             // editor's panel there is no "was never a candidate" to stay quiet about — the operator
             // selected this head deliberately.
             is TemplateResolver.ColourRequirement.NotACandidate -> {
@@ -245,8 +245,8 @@ private class Landing(
 )
 
 /**
- * The click gesture on an **effect** template: one detached programmer-band copy of the effect per
- * target the click names (D9).
+ * *Apply as values* on an **effect** template: one detached programmer-band copy of the effect per
+ * target the apply names (D9).
  *
  * Four things about it are the design rather than the implementation:
  *
@@ -262,8 +262,8 @@ private class Landing(
  *    later edit of the template leaves it exactly as it was spawned.
  *  - **Per target as named, groups not expanded**, mirroring `CueComposer.effectsForLayer`, which
  *    fans a deferred effect over the layer's targets as authored. Identical to one-per-head for a
- *    head selection; on a group selection it keeps the distribution spread, so clicking and
- *    ⌥clicking the same selection put the same thing on stage — one detached, one tracking.
+ *    head selection; on a group selection it keeps the distribution spread, so ⌥clicking and
+ *    tapping the same selection put the same thing on stage — one detached, one tracking.
  *  - **The capability check is ours to do.** `FxTargetFactory` never fails by design, and
  *    `"rgbColour"` resolves to a `ColourTarget` whether or not the head has colour, so an effect
  *    aimed at a head that cannot take it would otherwise produce no light and no report. Two
@@ -273,8 +273,8 @@ private class Landing(
  *    [TemplateResolver].
  *
  * `fadeMs` is not a parameter: an effect has no arrival to fade in, which is why the authoring
- * sheet hides Fade for one. Clicking twice mints two copies — the click is not a toggle, the busk
- * pad is.
+ * sheet hides Fade for one. Applying twice mints two copies — the apply is not a toggle, the press
+ * is.
  */
 private fun applyEffectTemplateToProgrammer(
     state: State,
@@ -299,7 +299,7 @@ private fun applyEffectTemplateToProgrammer(
             continue
         }
         // `untypedGroup` throws for a group that has gone; the fixture arm degrades quietly. Either
-        // way a click must report rather than 500.
+        // way an apply must report rather than 500.
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(state, target, spec)
         } catch (e: Exception) {
@@ -318,7 +318,7 @@ private fun applyEffectTemplateToProgrammer(
         }
         val instance = try {
             // No speed-master overrides: an effect template stamps its master at authoring time
-            // (D8), and a click carries no per-application retune the way a layer does.
+            // (D8), and an apply carries no per-application retune the way a layer does.
             EffectSpawner.createEffectInstance(spec, fxTarget, state)
         } catch (e: Exception) {
             logger.warn(
@@ -332,7 +332,7 @@ private fun applyEffectTemplateToProgrammer(
             // The other half of "the capability check is ours to do": `FxTargetFactory` never
             // fails, so a spec whose `propertyName` disagrees with its effect's output type
             // resolves to a target that discards every frame. `FxInstance`'s init warns, but the
-            // click would still report success — the FX add routes reject this up front with
+            // apply would still report success — the FX add routes reject this up front with
             // `requireOutputTypeMatch`, and this arm reports it per target because that is the
             // shape of its answer.
             logger.warn(

@@ -24,7 +24,9 @@ import {
 } from './cellEntry'
 import { isForeignControl, keyTargetIsGuarded } from '../sheet/cellEntry'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { resolutionPropertyNames } from './columns'
+import { cellFamilies, resolutionPropertyNames } from './columns'
+import { familiesKey } from '../../lib/selectionMask'
+import { headName } from '../../lib/headName'
 import { cellEffectKey } from './cellEffects'
 import { useClearCellEffects } from './useClearCellEffects'
 import { arrowOfKey, type CellArrow, type CellRef } from '../sheet/cellSelectionModel'
@@ -1031,6 +1033,13 @@ export function FixturesListContainer({
   // `cellKeyboardPermission` answers a fresh object per call.
   // Held by content for `columnTargets`' reason: `selectedTargets` follows `rows`' identity.
   const railRows = useContentStable(cellCount > 0 ? EMPTY_TARGETS : selectedTargets, sameTargets)
+  const pressAsked = useContentStable(
+    cellCount > 0 ? cellFamilies(cellSelection.cells) : null,
+    (a, b) => familiesKey(a) === familiesKey(b),
+  )
+  // Held by content for `columnTargets`' reason: `templateTargets` follows `rows`' identity.
+  const pressTargets = useContentStable(templateTargets, sameKeys)
+  const press = useMemo(() => ({ targets: pressTargets, askedFamilies: pressAsked }), [pressTargets, pressAsked])
   const permissionEntry = keys.entry
   const permissionClear = keys.clear
   const marqueeSnapshot = useMemo<MarqueeSnapshot>(
@@ -1041,8 +1050,9 @@ export function FixturesListContainer({
       permission: { entry: permissionEntry, clear: permissionClear },
       scopeLabel,
       commit: publishedCommit,
+      press,
     }),
-    [marqueeBatches, columnTargets, railRows, permissionEntry, permissionClear, scopeLabel, publishedCommit],
+    [marqueeBatches, columnTargets, railRows, permissionEntry, permissionClear, scopeLabel, publishedCommit, press],
   )
   usePublishMarquee(marqueeSnapshot)
 
@@ -1612,6 +1622,11 @@ function sameTargets(a: readonly WriteTarget[], b: readonly WriteTarget[]): bool
   )
 }
 
+/** Two press target lists name the same targets in the same order. */
+function sameKeys(a: readonly LocateTarget[], b: readonly LocateTarget[]): boolean {
+  return a.length === b.length && a.every((t, i) => t.type === b[i].type && t.key === b[i].key)
+}
+
 function sameColumns(a: readonly SpreadColumn[], b: readonly SpreadColumn[]): boolean {
   return (
     a.length === b.length &&
@@ -1625,12 +1640,3 @@ function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {
   return true
 }
 
-/** A fixture's name, or a head's as *Bar 1 Head 3* — Release's toast names what it took. */
-function headName(fixtures: readonly Fixture[], key: string): string {
-  for (const fixture of fixtures) {
-    if (fixture.key === key) return fixture.name
-    const element = fixture.elements?.find((e) => e.key === key)
-    if (element) return `${fixture.name} ${element.displayName}`
-  }
-  return key
-}

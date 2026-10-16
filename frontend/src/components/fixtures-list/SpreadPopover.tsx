@@ -7,6 +7,7 @@ import { headsLine } from '../editor/editorCopy'
 import { SpreadPanel, type IntentSpreadPlan, type RawSpreadPlan, type SpreadPlan, type SpreadSeed } from '../editor/SpreadPanel'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useLookRowStore } from '../programmer/LookRowStore'
+import { landValuesInLook } from '../programmer/landValuesInLook'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import { parseProgrammerValue } from '../../lib/programmerValue'
@@ -156,21 +157,22 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
   const marqueeFamilies = useMemo(() => cellFamilies(intentColumns), [intentColumns])
   const pressFamilies = usePressFamilies(marqueeFamilies)
   const mask = desk ? pressFamilies : marqueeFamilies
-  const setLookValue = scope?.kind === 'layer' ? lookStore?.setValue : undefined
-  const lookName = scope?.kind === 'layer' ? lookStore?.lookName : undefined
+  const layerStore = scope?.kind === 'layer' ? lookStore : null
+  const setLookValue = layerStore?.setValue
+  const lookName = layerStore?.lookName
 
   const landInLayer = useCallback(
     (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
-      if (!setLookValue) return
+      if (layerStore == null) return
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
       if (intent != null) {
         toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a Look layer`, { id: INTENT_TOAST })
         return
       }
-      for (const write of written) setLookValue(write.target.key, write.propertyName, write.value)
+      landValuesInLook(layerStore, written)
     },
-    [setLookValue],
+    [layerStore],
   )
 
   const plans = useMemo<SpreadPlan[]>(() => {

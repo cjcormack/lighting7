@@ -210,11 +210,63 @@ describe('the hold menu', () => {
     vi.useRealTimers()
   }
 
-  it('offers Pick up first, then View', () => {
-    draw(templatePad())
+  it('names the tap’s verb first, then Apply as values, Pick up and View', () => {
+    draw(templatePad(), { onApplyValues: () => {} })
     hold(screen.getByRole('button'))
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
-    expect(items).toEqual(['Pick up', 'View'])
+    expect(items).toEqual(['Put on', 'Apply as values', 'Pick up', 'View'])
+  })
+
+  it('says *Take off these heads* when the pad covers them all', () => {
+    draw(templatePad(), { presence: 'all', onApplyValues: () => {} })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Take off these heads')
+  })
+
+  it('applies values from the menu and from ⌥click, and presses nothing', () => {
+    const onApplyValues = vi.fn()
+    const onPress = vi.fn()
+    draw(templatePad(), { onApplyValues, onPress })
+    const pad = screen.getByRole('button')
+    fireEvent.pointerDown(pad, { altKey: true, clientX: 0, clientY: 0 })
+    fireEvent.pointerUp(pad)
+    expect(onApplyValues).toHaveBeenCalledTimes(1)
+    hold(pad)
+    fireEvent.click(screen.getByText('Apply as values'))
+    expect(onApplyValues).toHaveBeenCalledTimes(2)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('never presses on a right- or middle-button release, whatever follows', () => {
+    // Windows sends `contextmenu` after the release, so a right-click pressed the pad first.
+    const onPress = vi.fn()
+    const onApplyValues = vi.fn()
+    draw(templatePad(), { onPress, onApplyValues })
+    const pad = screen.getByRole('button')
+    for (const button of [2, 1]) {
+      fireEvent.pointerDown(pad, { button, clientX: 0, clientY: 0 })
+      fireEvent.pointerUp(pad, { button })
+    }
+    expect(onPress).not.toHaveBeenCalled()
+    expect(onApplyValues).not.toHaveBeenCalled()
+  })
+
+  it('names both ways when nothing is selected on a per-fixture pad — it lands on its own heads', () => {
+    draw(templatePad({ isGeneric: false }), { onApplyValues: () => {}, hasSelection: false })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Put on or take off its own heads')
+  })
+
+  it('asks for a selection on a generic pad with nothing selected — it has no heads of its own', () => {
+    draw(templatePad(), { onApplyValues: () => {}, hasSelection: false })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Put on — select fixtures first')
+  })
+
+  it('offers a cue pad only Pick up and View — a cue is playback', () => {
+    draw(cuePad, { onApplyValues: () => {} })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Pick up', 'View'])
   })
 
   it('picks the record up, and leaves the pad where it is', () => {

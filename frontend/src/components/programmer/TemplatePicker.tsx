@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { AudioWaveform, Plus, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,18 +17,16 @@ import {
   padPresenceClass,
   templateSwatch,
 } from '@/components/busking/padFace'
-import { templateLayerPresence } from '@/components/busking/lookPresence'
 import { useEditorForm } from '@/components/editor/EditorSurface'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { FAMILY_LABELS, TEMPLATE_FAMILY_ORDER, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { recentTemplates } from '@/lib/templateRecents'
-import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
-import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
-import { usePressFamilies } from '@/store/selection'
+import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
+import type { PressGesture, PressInto } from '@/hooks/usePress'
 import type { EffectPresence } from '@/components/busking/buskingTypes'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
@@ -50,10 +48,9 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  *    picker that shut on the first would make the second and third a trip back to the button. It
  *    closes on Escape, an outside press, or its X — and every press moves that template to the
  *    front of Recent, so the row behind it is rearranging as you work.
- *  - **The two gestures are the chip's**, through the same `useTemplatePress`: click sets literals,
- *    hold or ⌥click adds a layer that tracks the template. The hold is touch and pen only, exactly
- *    as on the chip — a mouse has ⌥, and a mouse hold would be a second silent door to the
- *    tracking mutation.
+ *  - **The gestures are the chip's**, through the strip's one `usePress`: tap puts the palette on
+ *    as a layer that tracks it, ⌥click applies its values, a hold or a right-click opens the menu
+ *    (`PalettePressButton`).
  *  - **Three forms, from the cell editor.** A popover under the `All` button on a desk or an iPad, a
  *    bottom sheet on an upright phone, a right-hand sheet where the viewport is short — the same
  *    two media queries `EditorSurface` makes, so the two panels never disagree about which
@@ -91,6 +88,9 @@ export function TemplatePicker({
   askedFamilies,
   targets,
   offerable,
+  into,
+  presenceOf,
+  onGesture,
 }: {
   projectId: number
   open: boolean
@@ -110,6 +110,12 @@ export function TemplatePicker({
   targets: readonly TemplateTarget[]
   /** The templates that fit the selection, in the library's own name order. */
   offerable: readonly TemplateSummary[]
+  /** Where a press lands — the strip's, so the two answer it once. */
+  into: PressInto
+  /** The ring, folded by the strip once for both — the desk's resolved applied state. */
+  presenceOf: (template: TemplateSummary) => EffectPresence
+  /** The strip's press. */
+  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
 }) {
   const form = useEditorForm()
   const [search, setSearch] = useState('')
@@ -209,23 +215,6 @@ export function TemplatePicker({
   if (sections !== NO_SECTIONS) lastSections.current = sections
   const drawnSections = sections === NO_SECTIONS ? lastSections.current : sections
 
-  const pressFamilies = usePressFamilies(askedFamilies)
-  const press = useTemplatePress(projectId, targets, pressFamilies)
-
-  /**
-   * The presence ring, folded **once** for the whole grid.
-   *
-   * `BuskingView` subscribes at the container and hands its pads a `presenceOf` callback; this grid
-   * is unvirtualized, so a `useProgrammerAppliedQuery()` inside the pad meant one subscription and
-   * one independent `templateLayerPresence` fold per visible pad — up to the whole library. One
-   * subscription, one callback, same answer.
-   */
-  const { data: applied } = useProgrammerAppliedQuery()
-  const presenceOf = useCallback(
-    (template: TemplateSummary) => templateLayerPresence(applied ?? [], targets, template.id),
-    [applied, targets],
-  )
-
   const scopeLabel =
     askedFamilies != null && askedFamilies.length > 0 ? formatFamilyList(askedFamilies, ' · ') : null
   const noun =
@@ -300,9 +289,11 @@ export function TemplatePicker({
                   {section.templates.map((template) => (
                     <TemplatePad
                       key={template.id}
+                      projectId={projectId}
                       template={template}
+                      into={into}
                       presence={presenceOf(template)}
-                      onPress={press}
+                      onGesture={onGesture}
                     />
                   ))}
                 </div>
@@ -312,11 +303,13 @@ export function TemplatePicker({
         </div>
 
         <div className="flex flex-none items-center gap-2 border-t px-3 py-2 text-[10px] text-muted-foreground">
-          {/* The gesture hint is the popover's alone: on either sheet the press it describes is a
-              hold, which the operator has just been making, and ⌥ is a key a phone has not got. */}
+          {/* The gesture hint is the popover's alone: on either sheet the operator is
+              holding and tapping, and ⌥ is a key a phone has not got. */}
           {form === 'popover' && (
             <span className="min-w-0 truncate">
-              Click sets values · hold or ⌥click adds a layer that tracks it
+              {into.kind === 'look'
+                ? `Click writes into ${into.lookName} · hold or right-click for more`
+                : 'Click puts a layer on · ⌥click sets values · hold or right-click for more'}
             </span>
           )}
           <span className="ml-auto shrink-0 tabular-nums">
@@ -411,68 +404,79 @@ export function TemplatePicker({
 }
 
 /**
- * One pad. The busk page's face, pressed the programmer's way.
+ * One pad. The busk page's face, pressed the strip's way.
  *
- * A component rather than markup in the loop because the presence ring and the effect detail line
- * both read live state, and a hook cannot be conditional.
+ * A component rather than markup in the loop because the effect detail line reads live state, and a
+ * hook cannot be conditional.
  */
 function TemplatePad({
+  projectId,
   template,
+  into,
   presence,
-  onPress,
+  onGesture,
 }: {
+  projectId: number
   template: TemplateSummary
-  /** Folded once by the grid — see `presenceOf`. */
+  into: PressInto
+  /** Folded once by the strip — see `presenceOf`. */
   presence: EffectPresence
-  onPress: (template: TemplateSummary, additive: boolean) => void
+  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
 }) {
   const swatch = templateSwatch(template)
   const isEffect = template.kind === 'effect'
-  // Click, ⌥click and the touch-only hold, shared with `TemplateChip` — see
-  // `useTemplatePressHandlers`. It was duplicated verbatim between the two until review.
-  const handlers = useTemplatePressHandlers(template, onPress)
 
   return (
-    <button
-      type="button"
-      {...handlers}
-      title={templatePressTitle(template)}
-      className={cn(
-        PAD_SHELL,
-        PAD_FACE_SHELL,
-        'w-full active:scale-95 hover:brightness-110',
-        padPresenceClass(presence),
-      )}
+    <PalettePressButton
+      projectId={projectId}
+      template={template}
+      into={into}
+      presence={presence}
+      onGesture={onGesture}
     >
-      <span className="flex items-center gap-1.5">
-        {isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
-        {swatch && (
-          <span
-            aria-hidden
-            className="size-3 shrink-0 rounded shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)]"
-            style={{ background: swatch }}
-          />
-        )}
-        <span
+      {(handlers) => (
+        <button
+          type="button"
+          {...handlers}
+          title={templatePressTitle(template, into)}
           className={cn(
-            'text-sm leading-tight font-medium',
-            presence !== 'none' ? 'text-primary' : 'text-foreground',
+            PAD_SHELL,
+            PAD_FACE_SHELL,
+            'w-full active:scale-95 hover:brightness-110',
+            padPresenceClass(presence),
           )}
         >
-          {template.name}
-        </span>
-      </span>
-      <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
-        {isEffect ? <EffectPadDetail template={template} /> : describeTemplate(template)}
-      </span>
-      {presence !== 'none' && (
-        <div
-          className={cn(
-            'absolute top-1.5 right-1.5 size-2 rounded-full',
-            presence === 'all' ? 'bg-primary' : 'bg-primary/50',
+          <span className="flex items-center gap-1.5">
+            {isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
+            {swatch && (
+              <span
+                aria-hidden
+                className="size-3 shrink-0 rounded shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)]"
+                style={{ background: swatch }}
+              />
+            )}
+            <span
+              className={cn(
+                'text-sm leading-tight font-medium',
+                presence !== 'none' ? 'text-primary' : 'text-foreground',
+              )}
+            >
+              {template.name}
+            </span>
+          </span>
+          <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
+            {isEffect ? <EffectPadDetail template={template} /> : describeTemplate(template)}
+          </span>
+          {presence !== 'none' && (
+            <div
+              className={cn(
+                'absolute top-1.5 right-1.5 size-2 rounded-full',
+                presence === 'all' ? 'bg-primary' : 'bg-primary/50',
+              )}
+            />
           )}
-        />
+        </button>
       )}
-    </button>
+    </PalettePressButton>
   )
 }

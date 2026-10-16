@@ -25,8 +25,8 @@ import kotlin.time.Duration.Companion.minutes
  * its own. The hand replaces the drag with two half-gestures the desk can hold between.
  *
  * **There is no `hand.place`.** Every target a place can land on already has a mutation with its
- * own validation — `POST /busk/banks/{bankId}/pads`, `assignCueSlot`, `programmer.addLayer`,
- * `patchProjectCue` through `buildCueInput` — so one frame that placed would reimplement four of
+ * own validation — `POST /busk/banks/{bankId}/pads`, `assignCueSlot`, the palette or Look
+ * press, `patchProjectCue` through `buildCueInput` — so one frame that placed would reimplement four of
  * them. A place is the placing window's own existing mutation followed by a drop, and Undo is that
  * window's inverse mutation. The desk's whole share of a place is letting go.
  *

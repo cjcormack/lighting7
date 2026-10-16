@@ -60,6 +60,7 @@ function snapshot(over: Partial<MarqueeSnapshot> = {}): MarqueeSnapshot {
     permission: { entry: true, clear: true },
     scopeLabel: 'Local',
     commit: vi.fn(),
+    press: { targets: [], askedFamilies: null },
     ...over,
   }
 }
