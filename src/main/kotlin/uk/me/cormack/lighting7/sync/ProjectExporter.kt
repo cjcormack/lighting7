@@ -40,6 +40,7 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
+import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
@@ -82,9 +83,7 @@ import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
-import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueStackEntry
-import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.entriesOf
 
 /**
@@ -101,7 +100,8 @@ import uk.me.cormack.lighting7.models.entriesOf
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
  * /showParkReleases/{uuid}.json    -- v27: a show's releases of its venue's parks
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
- * /cues/{uuid}.json
+ * /cues/{uuid}.json               -- v32: what a cue is; no stack, position, number or follow
+ * /cueStackEntries/{uuid}.json    -- v32: one place in a stack's list (a cue's, or a marker)
  * /cuePropertyAssignments/{uuid}.json
  * /cueLayers/{uuid}.json
  * /cueAdHocEffects/{uuid}.json
@@ -253,38 +253,39 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "cues", cueRecordsOf(project), CueJson.serializer(), { it.uuid }, liveKeys) { r ->
-                val c = r.cue
-                val e = r.entry
-                if (c == null) {
-                    // A marker entry is written as the MARKER cue it was before the cue model
-                    // plan's session 1, under the entry's uuid (the migration kept the cue's).
-                    CueJson(
-                        uuid = r.uuid.toString(),
-                        cueStackUuid = e!!.stack.uuid.toString(),
-                        name = e.label.orEmpty(),
-                        sortOrder = r.position,
-                        cueType = CueType.MARKER.name,
-                    )
-                } else {
-                    CueJson(
-                        uuid = c.uuid.toString(),
-                        cueStackUuid = e?.stack?.uuid?.toString(),
-                        name = c.name,
-                        sortOrder = r.position,
-                        autoAdvance = e?.autoAdvance ?: false,
-                        autoAdvanceDelayMs = e?.autoAdvanceDelay?.toMillis(),
-                        fadeDurationMs = c.fadeDuration?.toMillis(),
-                        fadeCurve = c.fadeCurve,
-                        cueNumber = e?.cueNumber,
-                        cueNumberAuto = e?.cueNumberAuto ?: false,
-                        notes = c.notes,
-                        cueType = CueType.STANDARD.name,
-                        stomp = c.stomp,
-                        scenery = cueSceneryOf(c.id).map { it.toJson() },
-                        events = cueEventsOf(c.id).map { it.toJson() },
-                    )
-                }
+            // v32: a cue is what a state is, never where it sits (cue model plan D2, §3.9).
+            count += writeAll(targetDir, "cues", project.cues.toList(), CueJson.serializer(), { it.uuid }, liveKeys) { c ->
+                CueJson(
+                    uuid = c.uuid.toString(),
+                    name = c.name,
+                    fadeDurationMs = c.fadeDuration?.toMillis(),
+                    fadeCurve = c.fadeCurve,
+                    notes = c.notes,
+                    stomp = c.stomp,
+                    scenery = cueSceneryOf(c.id).map { it.toJson() },
+                    events = cueEventsOf(c.id).map { it.toJson() },
+                )
+            }
+
+            // v32: each place in a stack's list is its own record, written from the entry itself — never
+            // through the P4 bridge (`soleEntryOf`), so a shared or loose cue travels as it is. The
+            // number only when explicit (P5): every reader derives the auto ones from position.
+            count += writeAll(
+                targetDir, "cueStackEntries",
+                project.cueStacks.flatMap { entriesOf(it) },
+                CueStackEntryJson.serializer(), { it.uuid }, liveKeys,
+            ) { e ->
+                CueStackEntryJson(
+                    uuid = e.uuid.toString(),
+                    cueStackUuid = e.stack.uuid.toString(),
+                    cueUuid = e.cue?.uuid?.toString(),
+                    kind = CueStackEntryKind.MARKER.name.takeIf { e.isMarker },
+                    label = e.label.takeIf { e.isMarker },
+                    ordinal = e.ordinal,
+                    cueNumber = e.cueNumber.takeIf { !e.cueNumberAuto && !e.isMarker && !it.isNullOrEmpty() },
+                    autoAdvance = e.autoAdvance && !e.isMarker,
+                    autoAdvanceDelayMs = e.autoAdvanceDelay?.toMillis()?.takeIf { !e.isMarker },
+                )
             }
 
             count += writeCueChildren(targetDir, project, liveKeys)
@@ -304,8 +305,8 @@ class ProjectExporter(private val state: State) {
             count += writeAll(targetDir, "promptBookAnchors", promptBooks.flatMap { it.anchors.toList() }, PromptBookAnchorJson.serializer(), { it.uuid }, liveKeys) { a ->
                 PromptBookAnchorJson(
                     uuid = a.uuid.toString(),
-                    // The entry's cue — or, for a marker entry, the entry, as its cue file is named.
-                    cueUuid = (a.entry.cue?.uuid ?: a.entry.uuid).toString(),
+                    // v32: the entry it marks (cue model plan D4).
+                    entryUuid = a.entry.uuid.toString(),
                     region = a.region,
                     label = a.label,
                 )
@@ -759,36 +760,6 @@ class ProjectExporter(private val state: State) {
      * Each written record's [RecordKey] is added to [liveKeys] so the snapshot pipeline can
      * derive deletions without re-walking the export folder.
      */
-    /**
-     * One `cues/` record: a cue with its one entry (or none), or a marker entry with no cue.
-     * [position] is the entry's index in its stack's list, markers counted — the archive's integer
-     * `sortOrder`.
-     */
-    private data class CueRecord(val uuid: UUID, val cue: DaoCue?, val entry: DaoCueStackEntry?, val position: Int)
-
-    /**
-     * The archive still describes a stack's list inside its cue files (cue model plan P4, §3.9 is
-     * session 3's): each cue is written from its one entry, and each marker entry as a MARKER cue
-     * whose uuid is the entry's. A cue no entry places is written with no stack — which nothing
-     * makes before the plan's session 4, and which an older reader lands in "Unsorted".
-     */
-    private fun cueRecordsOf(project: DaoProject): List<CueRecord> {
-        val records = mutableListOf<CueRecord>()
-        val placed = HashSet<Int>()
-        for (stack in project.cueStacks.toList()) {
-            entriesOf(stack).forEachIndexed { position, entry ->
-                val cue = entry.cue
-                if (cue == null) {
-                    records += CueRecord(entry.uuid, null, entry, position)
-                } else if (placed.add(cue.id.value)) {
-                    records += CueRecord(cue.uuid, cue, entry, position)
-                }
-            }
-        }
-        project.cues.filter { it.id.value !in placed }.forEach { records += CueRecord(it.uuid, it, null, 0) }
-        return records
-    }
-
     private fun <E, J> writeAll(
         targetDir: Path,
         subdir: String,

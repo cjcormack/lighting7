@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
@@ -99,6 +100,38 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-3`
+
+**What it proves**: *a stack's list syncs entry by entry, across the bump and between desks* —
+venue-visit R1.3, cue model plan session 3 (§3.9, §9): sync `formatVersion` 32 writes each place in a
+stack as its own `cueStackEntries/{uuid}.json`, the number only when explicit, a double ordinal, and
+reads a v31 repo's places from its cue files. `state/CueEntryUuidMigration.kt` names each cue's entry
+after its cue at the first start, so two desks write the same file for the same place.
+
+**Why it is here**: the tests run the bump, the two-desk insert and the number clash against a bare
+repo on one machine. Nothing ran it over a real show's repo, with two desks that each already held the
+show at v31 — the case the entry-uuid step exists for — nor checked the result on the rig.
+
+**Test**, on a show with a repo that both desks already sync (a scratch copy of one is fine), both
+desks on this build:
+
+1. **Before.** On desk A, note two stacks' rows — number, name, follow, the markers — and screenshot
+   a prompt-book page with anchors on it.
+2. **Across the bump.** Sync on desk A. The commit rewrites every cue file and adds
+   `cueStackEntries/`; on GitHub, a cue file has no `cueStackUuid`, an entry with an auto number has no
+   `cueNumber`, and an entry file is named with its cue's uuid.
+3. **Pull it on B.** Sync on desk B (which held the show at v31). It merges or fast-forwards with
+   **no** conflicts, and every stack lists each cue once — not twice — with the same numbers, follows
+   and markers as step 1; the anchors sit where they did. Sync both again: nothing to do on either.
+4. **One gap, both desks.** Between the same two cues of one stack, insert a new cue on A and another
+   on B, without syncing in between. Sync A, then B, then A. Both desks list both new cues, between the
+   two, in the **same** order, and a third sync on each changes nothing.
+5. **A drag is one file.** Drag a cue to another place in a stack on A and sync: the commit changes
+   one `cueStackEntries/` file.
+6. **Clean up.** Remove the two test cues (or drop the scratch copy).
 
 ---
 
@@ -230,6 +263,9 @@ pointing at the copy, the desk itself stopped or on another port):
 5. **Once.** Stop and start again: no migration line, no second backup.
 6. **Sync.** On a show with a repo, the Sync tab may list cue records whose `sortOrder` closed a gap
    (the archive now writes each cue's position); nothing else should change. Note what it lists.
+   *(Superseded once R1.3 is on the desk: from `formatVersion` 32 the cue files carry no position and
+   the first sync rewrites them all and adds `cueStackEntries/` — `FU-MANUAL-VENUE-VISIT-R1-3` checks
+   that.)*
 7. **The desk itself.** Then the same start on the real desk, keeping the backup file until the
    next show has run.
 

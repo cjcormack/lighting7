@@ -12,10 +12,11 @@ A **Cue Stack** is a named, project-scoped entity that groups cues into an order
 - **Multiple active stacks** — several stacks can be active simultaneously
 
 Key behaviours:
-- Every cue has exactly one entry, so it is in exactly one stack (cue model plan P4, until its
-  session 4; there are no standalone cues, and an archive from before stacks were mandatory imports
-  its stack-less cues into an "Unsorted" stack). The runtime already speaks entries and holds
-  (§"Runtime"), so a cue named by several entries needs nothing more of it
+- Every cue the desk makes has exactly one entry, so it is in exactly one stack (cue model plan P4,
+  until its session 4). The one loose cue before then is an old archive's: a pre-v32 archive's cue
+  with no stack imports loose rather than into an "Unsorted" stack (§"In the sync archive"). The
+  runtime already speaks entries and holds (§"Runtime"), and the archive one record per entry, so a
+  cue named by several entries, or by none, needs nothing more of either
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through the list's cue entries in order, markers skipped
 - Deactivating removes all effects tagged with the stack's ID
@@ -38,7 +39,7 @@ cue_stack_entries (cue model plan session 1 — `models/cueStackEntries.kt`)
 ├── cue_id (FK → cues, nullable — null exactly when kind is MARKER)
 ├── kind (varchar 20 — CUE or MARKER)
 ├── label (varchar 255, nullable — a marker's text)
-├── ordinal (double, default 0.0 — the list's order; ties by id)
+├── ordinal (double, default 0.0 — the list's order; ties by uuid, `ENTRY_ORDER`)
 ├── cue_number (varchar 20, nullable — free-form display label)
 ├── cue_number_auto (boolean, default false — cue_number was derived from position)
 ├── auto_advance (boolean, default false — the follow)
@@ -51,10 +52,16 @@ Partial unique index: uq_entry_number_per_stack (stack_id, cue_number)
 ```
 
 The cue itself (`cues`, `cues-engineering.md` §"Data Model") keeps only what it is — name, fade,
-notes, stomp, children; everything that is a matter of the list is its entry's. Every handler writes
-the order through `writeEntryOrder`, which renormalises the ordinals to `1.0, 2.0, …` (session 3
-adopts midpoint inserts). The wire still speaks of a **position** — `sortOrder` on `NewCue`,
-`add-cue` and the DTOs is the entry's index in the list, markers counted.
+notes, stomp, children; everything that is a matter of the list is its entry's. A list plays in
+`(ordinal, uuid)` order (`ENTRY_ORDER`, cue model plan P6) — never by id, which each desk mints for
+itself. Every handler writes the order through `writeEntryOrder`, which changes as few entries as it
+can (`planEntryOrdinals`): the entries already in order keep their ordinals, and an insert or a drag
+takes the midpoint of its neighbours, an append the next whole number. A handler names the entry it
+just made or moved in from another stack as **fresh**, so that entry's placeholder ordinal is never
+taken for one already in place. It never writes a tie, and
+renormalises the stack to `1.0, 2.0, …` only when doubles leave no room. The wire still speaks of a
+**position** — `sortOrder` on `NewCue`, `add-cue` and the DTOs is the entry's index in the list,
+markers counted.
 
 #### The startup migration
 
@@ -70,13 +77,29 @@ no `cue_stack_id`, so a second start does nothing. Its KDoc explains why it is t
 `InstallBootstrap.kt`'s "after the schema is created"; `CueModelMigrationTest` runs it over
 `src/test/resources/db/pre-cue-model.sql`, the old shape frozen.
 
+#### In the sync archive
+
+From `formatVersion` 32 (cue model plan session 3, `docs/sync-engineering.md` §"Version 32") each
+entry is its own record, `cueStackEntries/{uuid}.json`: its stack, its cue (or `kind: MARKER` and a
+label), its ordinal, its follow, and its number **only when explicit** — every reader derives the auto
+numbers from position, so a drag is one changed file and a renumber touches only the entries whose
+explicit number moved. An anchor names its entry. A cue file says nothing about where the cue sits.
+
+A v5–v31 archive still imports: each cue becomes one entry in its stack, named with **its cue's
+uuid** at its 0-based place, and a MARKER cue a marker entry; a cue with no stack is loose. The
+entries a desk held before the bump were renamed the same way once, at startup
+(`state/CueEntryUuidMigration.kt`), and each given its 0-based position as its ordinal, so two desks
+write the same file for the same place. Two explicit numbers alike in one stack after a merge keep
+the number on the lower uuid and make the other auto, and the sync result names it.
+
 ### Entry kinds
 
 - **CUE** — places one cue. Participates in advance, go-to and standby.
 - **MARKER** — an inert, labelled section divider with no cue behind it (cue model plan D12): made,
   renamed and removed through `/{stackId}/markers`, never through `/cues`. Invisible to `advance`;
   `go-to` and `standby` naming one are HTTP 400. Not moved by `sort-by-cue-number`. A row's kind
-  reaches the wire as `cueType` (`STANDARD` | `MARKER`), the archive's vocabulary.
+  reaches the wire as `cueType` (`STANDARD` | `MARKER`), the REST vocabulary — the v32 archive says
+  `kind` on the entry record, and only a pre-v32 archive's cue file says `cueType`.
 
 ### Cue Number Model
 
@@ -144,11 +167,15 @@ for the whole run below the boundary (two cues before `S1-1`, say) does it fall 
 `S1-0.2`. With nothing either side the run is starting the series, so a fresh stack numbers `1`,
 `2`, `3`.
 
-**Nothing renumbers a stored stack on upgrade or import.** Every number the derive-from-scratch rule
-wrote is one the keep rule leaves alone — a stack's kept labels are its own — and the sync importer,
-`copy_to_project` and a clone store `cue_number` and `cue_number_auto` as they arrive, calling no
-renumber at all. A stack's auto numbers move only when an operator next changes that stack's list,
-and then only for the cues that change moves.
+**Nothing renumbers a stored stack on upgrade.** Every number the derive-from-scratch rule wrote is
+one the keep rule leaves alone — a stack's kept labels are its own — and `copy_to_project` stores
+`cue_number` and `cue_number_auto` as they are. **An import derives them from scratch**: the archive
+carries only explicit numbers (sync v32, P5), so the importer — a pull, a clone, an import — numbers
+every stack's auto entries from position alone once its entries are in, and every desk reading one
+archive numbers it alike. That can relabel an auto number the desk had kept by the keep rule (an
+explicit renumber's neighbours), which is the price of a drag being one changed file. On the desk
+itself, a stack's auto numbers move only when an operator next changes that stack's list, and then
+only for the cues that change moves.
 
 Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
 so the edit can't be rejected by `uq_entry_number_per_stack`; clearing the field hands the cue back to
@@ -171,8 +198,9 @@ is next mutated.
 - **Every cue has one entry** (P4, for now) — moving a cue is `add-cue` to another stack, which moves
   its entry; deleting a stack deletes its entries and their cues (with their children, scenery and
   events). The caller always names the stack (P7) — nothing picks a cue's "home" stack
-- **Ordinal** as a double, ties broken by id, so session 3's inserts can land between two entries
-  without rewriting the list
+- **Ordinal** as a double, ties broken by uuid, so an insert or a drag lands between two entries
+  without rewriting the list (`writeEntryOrder`), and two desks inserting into one gap play their
+  entries in the same order (sync v32, one archive file per entry)
 - **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration = null` means snap-cut
 - **`cue_number` is a display label only** — the entries' order remains the authoritative playback order
 - **Markers are entries, not cues** — `advance`, `go-to` and standby only target cue entries

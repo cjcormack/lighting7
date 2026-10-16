@@ -319,7 +319,8 @@ internal class VenueSetupTools(private val state: State) {
                 }
                 put(
                     "note",
-                    "Copies are new records with new ids, named as the source names them. A Look or palette a copied cue layers is " +
+                    "Copies are new records with new ids, named as the source names them. A cue two copied stacks share is copied " +
+                        "once and shared in the target. A Look or palette a copied cue layers is " +
                         "copied with it, or — when the target already has one of that name — linked to the target's (looksLinked). " +
                         "Rows naming a fixture or group the target lacks are kept and read as missing; a scenery change, cue event " +
                         "or script trigger that cannot resolve is left out. Prompt-book anchors are never copied: anchor the cues " +
@@ -569,6 +570,9 @@ internal class VenueSetupTools(private val state: State) {
         }
 
         // ── Stacks and their cues ──
+        // A cue is copied once however many copied entries place it (cue model plan §3.9): two copied
+        // stacks that share a cue — or one that holds it twice — share its copy in the target.
+        val copiedCues = HashMap<Int, DaoCue>()
         var stackOrder = (DaoCueStack.find { DaoCueStacks.project eq target.id }.maxOfOrNull { it.sortOrder } ?: -1) + 1
         for (s in stacks) {
             val copy = DaoCueStack.new {
@@ -589,6 +593,7 @@ internal class VenueSetupTools(private val state: State) {
                 }
             }
             val stackEntries = entriesByStack.getValue(s)
+            val placedEntries = ArrayList<DaoCueStackEntry>(stackEntries.size)
             for (sourceEntry in stackEntries) {
                 // The entry is copied as it stands — its place, number and follow — and a marker
                 // entry is nothing more.
@@ -602,7 +607,15 @@ internal class VenueSetupTools(private val state: State) {
                     autoAdvance = sourceEntry.autoAdvance
                     autoAdvanceDelay = sourceEntry.autoAdvanceDelay
                 }
+                placedEntries += placed
                 val c = sourceEntry.cue ?: continue
+                val anchors = DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq sourceEntry.id }.count()
+                if (anchors > 0) report.unresolved("prompt-book anchors are not copied", "stack '${s.name}'")
+                val shared = copiedCues[c.id.value]
+                if (shared != null) {
+                    placed.cue = shared
+                    continue
+                }
                 val by = "cue ${sourceEntry.cueNumber ?: c.name} of '${s.name}'"
                 val cue = DaoCue.new {
                     name = c.name
@@ -613,6 +626,7 @@ internal class VenueSetupTools(private val state: State) {
                     stomp = c.stomp
                 }
                 placed.cue = cue
+                copiedCues[c.id.value] = cue
                 for (l in layers.getValue(c)) {
                     l.targets.forEach { t -> checkTarget(t.type, t.key, by) }
                     DaoCueLayer.new {
@@ -715,9 +729,10 @@ internal class VenueSetupTools(private val state: State) {
                         sortOrder = ev.sortOrder
                     }
                 }
-                val anchors = DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq sourceEntry.id }.count()
-                if (anchors > 0) report.unresolved("prompt-book anchors are not copied", "stack '${s.name}'")
             }
+            // The copies keep the source's ordinals but not its uuids, and a uuid breaks an ordinal tie
+            // (P6): write the source's order out, which moves only an entry a tie would now misplace.
+            writeEntryOrder(placedEntries)
             report.stacks += s.name to stackEntries.count { !it.isMarker }
         }
     }

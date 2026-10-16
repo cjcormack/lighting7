@@ -85,7 +85,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-JGIT-STRESS-BENCH`](#fu-sync-jgit-stress-bench) | Trigger | Sync | ~1000 synced records, `runSync` >5 s, or an OOM |
 | [`FU-SYNC-STREAMING-PROGRESS`](#fu-sync-streaming-progress) | Trigger | Sync | sync feels unresponsive, or a cycle exceeds 5 s |
 | [`FU-SYNC-MERGE-ATOMICITY`](#fu-sync-merge-atomicity) | Trigger | Sync | a merged change reverts after a crash |
-| [`FU-SYNC-ORDINAL-DOUBLE`](#fu-sync-ordinal-double) | Trigger | Sync | surprising cue order after a merge, or a bump |
+| [`FU-SYNC-ORDINAL-DOUBLE`](#fu-sync-ordinal-double) | Trigger | Sync | surprising stack or cue-child order after a merge, or a bump (cue stack entries done, v32) |
 | [`FU-SYNC-FETCHING-STATE`](#fu-sync-fetching-state) | Trigger | Sync | a sync "just stopped" with no log trail |
 | [`FU-SYNC-FIELD-LEVEL-MERGE`](#fu-sync-field-level-merge) | Trigger | Sync | frequent conflicts on disjoint fields |
 | [`FU-SYNC-MANUAL-MULTIFILE`](#fu-sync-manual-multifile) | Trigger | Sync | an operator wants to hand-merge a script conflict |
@@ -2023,38 +2023,46 @@ fold the fix in while the seam is fresh.
 
 ### `FU-SYNC-ORDINAL-DOUBLE`
 
-**Double-precision ordinals for concurrent inserts** · Trigger · Cloud-sync §Ordering; unshipped
-through Phase 8, re-logged 2026-07-23
+**Double-precision ordinals for concurrent inserts, beyond cue stack entries** · Trigger · Cloud-sync
+§Ordering; re-logged 2026-07-23, narrowed 2026-10-16
 
-The design (and `sync-engineering.md` §"Ordinal contract") specifies that Phase 5 replaces
-`sortOrder: Int` with `ordinal: Double` on the ten ordered tables, so two installs inserting into
-the same position pick a midpoint instead of colliding, tiebroken by UUID. **Not implemented** —
-`sync/dto/SyncDtos.kt` still carries `sortOrder: Int`. (Exports already sort by `(sortOrder, uuid)`
-for deterministic output, which is the pre-work; the type change never landed.)
+The design (and `sync-engineering.md` §"Ordinal contract") specifies `ordinal: Double` in place of
+`sortOrder: Int` on the ordered tables, so two installs inserting into the same position pick a
+midpoint instead of colliding, tiebroken by UUID. **Cue stack entries have it** since `formatVersion`
+32 (cue model plan session 3, P6): one `cueStackEntries/` file per entry, a midpoint on insert, a drag
+rewriting one file, ties ordered by uuid (`ENTRY_ORDER`, `writeEntryOrder`). **Every other ordered
+table still carries `sortOrder: Int`**: the stacks themselves (`cueStacks/`), a cue's children
+(layers, property assignments, ad-hoc effects, triggers, scenery, events), Look and palette rows, the
+busk layout and rig, riggings, regions, scene elements, viewpoints and patches. Exports sort those by
+`(sortOrder, uuid)` for deterministic output.
 
-Consequence: two installs each inserting a cue "between 5 and 6" isn't a conflict (distinct UUIDs)
-but both land on the same integer `sortOrder`, so merged ordering is decided only by the UUID
-tiebreak — non-deterministic from the operator's point of view, and integer renumbers can cascade.
-Fine for solo-multi-machine use; bites once two people routinely reorder the same stack.
+Consequence: two installs each inserting a stack "between Act 1 and Act 2", or a layer into one cue,
+isn't a conflict (distinct UUIDs) but both land on the same integer `sortOrder`, so merged ordering is
+decided only by the UUID tiebreak, and an integer renumber rewrites every later record. Fine for
+solo-multi-machine use; bites once two people routinely reorder the same list.
 
-**Shape**: `ordinal: Double` column + one-shot migration (renumber to `1.0, 2.0, …`), DTO field
-swap, `formatVersion` bump (→ 4) with a v3→v4 reader (see `FU-SYNC-FORMAT-MIGRATIONS`), and
-midpoint-pick insert logic in the routes creating ordered rows.
+**Shape**: per table, an `ordinal: Double` column, the DTO field swap, a `formatVersion` bump (the next
+number free) whose reader converts an older archive's `sortOrder` in place — as v32 reads a v5–v31
+archive's cue places — and midpoint-pick insert logic in the routes creating ordered rows
+(`planEntryOrdinals` is the pattern).
 
-**Trigger**: two installs report cues/stacks landing in a surprising order after a merge, **or** a
-`formatVersion` bump is already planned — do it in the same bump.
+**Trigger**: two installs report stacks or cue children landing in a surprising order after a merge,
+**or** a `formatVersion` bump is already planned for one of those tables — do it in the same bump.
 
 ### `FU-SYNC-FORMAT-MIGRATIONS`
 
 **Repo-format migration framework** · Blocked (needs a real breaking bump) · Cloud-sync §Format
-versioning; re-logged 2026-07-23
+versioning; re-logged 2026-07-23, version numbers corrected 2026-10-16
 
 Both the design and `sync-engineering.md` reference migrations at
 `sync/migrations/V{n}_to_V{n+1}.kt`, run on pull before the three-way diff. **The directory does
-not exist.** Today an imported or pulled repo whose `formatVersion` differs from `3` is
-hard-rejected (HTTP 422 in `ProjectImporter.loadAndValidateArchive`, both too-old and too-new).
-The v2→v3 jump was handled by rejecting old repos outright, on the rationale that the project
-hadn't shipped beyond the dev box.
+not exist.** Today the importer takes any archive from `MIN_SUPPORTED_FORMAT_VERSION` (5) to
+`SUPPORTED_FORMAT_VERSION` (32) and refuses the rest with 422 (`ProjectImporter.loadAndValidateArchive`;
+a pull checks the remote's number first, `FORMAT_TOO_NEW`). Every bump since v5 has been additive or
+read in place: an older field defaults, and where a shape moved the reader takes both — v32 builds a
+v5–v31 archive's cue stack entries from its cue files (`CUE_ENTRIES_FORMAT_VERSION`). Only v5, which
+collapsed presets into Looks, refused older archives outright (`minReader` 5), on the rationale that
+the project hadn't shipped beyond the dev box.
 
 That shortcut stops being acceptable once >1 install exists in the field and a breaking bump
 ships: without a reader for the previous version, every peer must upgrade in lockstep or lose
@@ -2065,8 +2073,8 @@ fromVersion)` step invoked from both import entry points before validation/diff,
 transformers. The `formatVersion.json` `minReader` field already exists to gate truly-breaking
 changes.
 
-**Unblock when**: the next `formatVersion` bump is planned (e.g. `FU-SYNC-ORDINAL-DOUBLE`, or
-re-nesting cue children under their stack folder), **or** a second install needs to read a repo
+**Unblock when**: a bump is planned that cannot be read in place — one that moves `minReader` (e.g.
+re-nesting cue children under their stack folder) — **or** a second install needs to read a repo
 written by a newer one.
 
 ### `FU-SYNC-FETCHING-STATE`

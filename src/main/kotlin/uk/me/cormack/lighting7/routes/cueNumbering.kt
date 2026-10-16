@@ -361,9 +361,9 @@ internal fun releaseAutoNumber(stack: DaoCueStack, number: String?, exceptEntryI
 }
 
 /**
- * [stack]'s **cue** entries in playback order, markers left out. `id` breaks an `ordinal` tie, so
- * two reads of an unchanged stack always agree — which [renumberAutoEntries]'s comparison against
- * a [cueEntryIds] snapshot depends on.
+ * [stack]'s **cue** entries in playback order ([ENTRY_ORDER]), markers left out. The uuid breaks an
+ * `ordinal` tie, so two reads of an unchanged stack always agree — which [renumberAutoEntries]'s
+ * comparison against a [cueEntryIds] snapshot depends on — and so do two desks.
  */
 internal fun cueEntriesInOrder(stack: DaoCueStack): List<DaoCueStackEntry> = entriesOf(stack).filter { !it.isMarker }
 

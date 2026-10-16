@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import io.ktor.http.HttpStatusCode
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -96,6 +97,8 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
+import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
+import uk.me.cormack.lighting7.sync.dto.LegacyCuePlacementJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
@@ -137,7 +140,6 @@ import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.CueType
-import uk.me.cormack.lighting7.models.soleEntryOf
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 
 // v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
@@ -222,6 +224,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // plan session 5, still at v24: a show's facet overrides of venue patches. MIN stays at 5: every key
 // defaults, and a v23 archive imports unchanged.
 //
+// v32 moved a stack's list out of the cue files (cue model plan session 3, §3.9): each entry is its
+// own `cueStackEntries/{uuid}.json` — a double `ordinal`, the number only when explicit, a marker as
+// a labelled entry — and an anchor names its entry. SUPPORTED moved because a v31 reader would import
+// every cue with no stack and its next push would write every stack empty. MIN stays at 5: a v5–v31
+// archive's lists still import from its cue files (`CUE_ENTRIES_FORMAT_VERSION`).
+//
 // v23 added the scene's painted cloths (scrim plan P2): `DrapeParams.fabric` and the drape's and the
 // flat's `paint`, inside the element's params, and a top-level `sceneImages/{sha256}.{png|jpg}`
 // folder of the images they name — raw bytes, content-addressed, moved by `SceneImageRepoSync`. The
@@ -262,8 +270,34 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 31
+internal const val SUPPORTED_FORMAT_VERSION = 32
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
+
+/**
+ * The first `formatVersion` whose stacks' lists are `cueStackEntries/` records (cue model plan
+ * §3.9). An older archive's lists are in its cue files ([LegacyCuePlacementJson]), and its anchors
+ * name cues; the importer reads both shapes, so `MIN_SUPPORTED_FORMAT_VERSION` stays 5.
+ */
+internal const val CUE_ENTRIES_FORMAT_VERSION = 32
+
+/**
+ * An explicit cue number an archive held twice in one stack, and how the import resolved it (cue
+ * model plan §3.9): [kept] — the cue of entry [keptEntryUuid], the lower uuid — keeps [number], and
+ * [cue] (entry [entryUuid]) was made auto. Named in the sync result ([SyncRunResult.numberClashes]).
+ */
+@Serializable
+data class CueNumberClash(
+    val stack: String,
+    val number: String,
+    val keptEntryUuid: String,
+    val kept: String,
+    val entryUuid: String,
+    val cue: String,
+) {
+    /** One line for a log, a toast or the activity log. */
+    fun describe(): String =
+        "cue number $number was taken twice in '$stack': '$kept' keeps it, '$cue' is numbered automatically"
+}
 
 /**
  * Import-time error with the HTTP status the route layer should report. Carrying the status
@@ -300,7 +334,17 @@ class ProjectImporter(private val state: State) {
 
     private val logger = LoggerFactory.getLogger(ProjectImporter::class.java)
 
-    data class Result(val projectId: Int, val projectUuid: String, val name: String)
+    data class Result(
+        val projectId: Int,
+        val projectUuid: String,
+        val name: String,
+        /**
+         * Explicit cue numbers the archive held twice in one stack — after a merge, two desks that
+         * each typed `14A` — each resolved by keeping the number on the entry with the lower uuid and
+         * making the other auto (cue model plan §3.9). Empty for an archive any one desk wrote.
+         */
+        val numberClashes: List<CueNumberClash> = emptyList(),
+    )
 
     /**
      * Imports a project from [sourceDir]. Single transaction — any failure rolls back. Refuses
@@ -328,7 +372,7 @@ class ProjectImporter(private val state: State) {
          */
         inTransaction: (DaoProject) -> Unit = {},
     ): Result {
-        val (_, projectJson) = loadAndValidateArchive(sourceDir)
+        val (format, projectJson) = loadAndValidateArchive(sourceDir)
         val targetName = nameOverride ?: projectJson.name
         val targetUuid = UUID.fromString(projectJson.uuid)
         val targetKind = kind ?: projectJson.kind
@@ -378,13 +422,14 @@ class ProjectImporter(private val state: State) {
                 venueRepo = pin?.hint
             }
 
-            populateProject(sourceDir, project)
+            val clashes = populateProject(sourceDir, project, format.formatVersion)
             inTransaction(project)
 
             Result(
                 projectId = project.id.value,
                 projectUuid = targetUuid.toString(),
                 name = targetName,
+                numberClashes = clashes,
             )
         }
 
@@ -420,7 +465,7 @@ class ProjectImporter(private val state: State) {
      * Runs in a single transaction — partial pulls can't leave the DB inconsistent.
      */
     fun replaceFromWorkingTree(projectId: Int, sourceDir: Path): Result {
-        val (_, projectJson) = loadAndValidateArchive(sourceDir)
+        val (format, projectJson) = loadAndValidateArchive(sourceDir)
         val incomingUuid = UUID.fromString(projectJson.uuid)
 
         return transaction(state.database) {
@@ -522,12 +567,13 @@ class ProjectImporter(private val state: State) {
             project.venueVersion = pin?.version
             project.venueRepo = pin?.hint
 
-            populateProject(sourceDir, project)
+            val clashes = populateProject(sourceDir, project, format.formatVersion)
 
             Result(
                 projectId = project.id.value,
                 projectUuid = project.uuid.toString(),
                 name = project.name,
+                numberClashes = clashes,
             )
         }
     }
@@ -600,7 +646,7 @@ class ProjectImporter(private val state: State) {
      * path; the topological order matters because parent rows must exist before children
      * dereference them through the maps returned by each step.
      */
-    private fun populateProject(sourceDir: Path, project: DaoProject) {
+    private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int): List<CueNumberClash> {
         // v24: a show on a venue links into the pinned snapshot's rows, which its archive does not
         // carry. Every map starts from them, and the archive's own rows are laid over the top — so a
         // link resolves to the show's own row where it has one (a Preset seating it copied keeps the
@@ -627,15 +673,16 @@ class ProjectImporter(private val state: State) {
         // The rig after the groups and patches its tiles name (v12).
         importBuskRig(sourceDir, project, groupMap, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project, elementMap)
-        val markerEntries = HashMap<UUID, DaoCueStackEntry>()
-        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, markerEntries)
+        val legacyPlaces = ArrayList<PendingEntry>()
+        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, formatVersion, legacyPlaces)
+        val (entryMap, numberClashes) = importCueStackEntries(sourceDir, cueStackMap, cueMap, legacyPlaces)
         importCuePropertyAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, templateMap)
         importCueAdHocEffects(sourceDir, cueMap)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
-        importPromptBookAnchors(sourceDir, promptBook, cueMap, markerEntries)
+        importPromptBookAnchors(sourceDir, promptBook, entryMap)
         importPromptBookAnnotations(sourceDir, promptBook)
         importCueSlots(sourceDir, project, cueMap, lookMap)
         // Pages after every record a pad can name.
@@ -651,6 +698,7 @@ class ProjectImporter(private val state: State) {
         // before the commands existed.
         val strippedCommands = stripCommandRows(project)
         if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
+        return numberClashes
     }
 
     /**
@@ -1210,52 +1258,51 @@ class ProjectImporter(private val state: State) {
             uuid to dao
         }
 
+    /**
+     * Cues: what each one is (cue model plan D2). From v32 a cue file says nothing about where the cue
+     * sits — `cueStackEntries/` does ([importCueStackEntries]). An older archive's cue file also gave
+     * its one place, which is collected into [legacyPlaces] as the entry it becomes (§3.9's pre-vN
+     * reader): in its `cueStackUuid` stack at `ordinal = sortOrder` (ranked per stack, see
+     * [importCueStackEntries]), its number explicit only when
+     * `cueNumberAuto` is false, its follow, and a MARKER cue as a marker entry labelled with its name,
+     * not a cue. A cue with no stack is loose — the "Unsorted" fallback is gone.
+     *
+     * The entry a legacy cue becomes takes **the cue's uuid**, and a marker keeps its file's: the same
+     * archive gives every desk the same entries, so two desks that pull one v31 repo and then each
+     * write v32 agree on every entry rather than each adding its own (`state/CueEntryUuidMigration.kt`
+     * keys the entries already on a desk the same way).
+     */
     private fun importCues(
         dir: Path,
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
         elementMap: Map<UUID, DaoStageElement>,
         patchMap: Map<UUID, DaoFixturePatch>,
-        markerEntries: MutableMap<UUID, DaoCueStackEntry>,
-    ): Map<UUID, DaoCue> {
-        // Every cue belongs to a stack now. Legacy archives may carry standalone cues (null
-        // cueStackUuid); those land in a project "Unsorted" stack, created once on demand.
-        var unsortedStack: DaoCueStack? = null
-        fun unsorted(): DaoCueStack = unsortedStack ?: run {
-            val stack = project.cueStacks.firstOrNull {
-                it.name == "Unsorted" && it.type == CueStackType.STACK.name
-            } ?: DaoCueStack.new {
-                name = "Unsorted"
-                this.project = project
-                loop = false
-                type = CueStackType.STACK.name
-                sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
-            }
-            unsortedStack = stack
-            stack
-        }
-
-        // The archive still carries a stack's list inside its cue files (cue model plan P4, §3.9 is
-        // session 3's): each cue becomes one entry in its stack, and a MARKER cue a marker entry —
-        // not a cue — under the cue's uuid, which is how the exporter writes one. Ordinals are the
-        // archive's sort orders, ties broken by id; numbers and follow are the entry's.
-        val cues = readDir(dir.resolve("cues")) { json ->
+        formatVersion: Int,
+        legacyPlaces: MutableList<PendingEntry>,
+    ): Map<UUID, DaoCue> = readDir(dir.resolve("cues")) { json ->
         val c = canonicalDecode(CueJson.serializer(), json)
         val uuid = UUID.fromString(c.uuid)
-        val stack = c.cueStackUuid?.let {
+        val place = if (formatVersion < CUE_ENTRIES_FORMAT_VERSION) {
+            canonicalDecode(LegacyCuePlacementJson.serializer(), json)
+        } else {
+            null
+        }
+        val stack = place?.cueStackUuid?.let {
             val stackUuid = UUID.fromString(it)
             cueStackMap[stackUuid]
                 ?: throw ImportError.invalidArchive("Cue ${c.uuid} references unknown cue stack $stackUuid")
-        } ?: unsorted()
-        if (c.cueType == CueType.MARKER.name) {
-            val marker = DaoCueStackEntry.new {
-                this.stack = stack
-                kind = CueStackEntryKind.MARKER.name
-                label = c.name.take(255)
-                ordinal = c.sortOrder.toDouble()
-                this.uuid = uuid
+        }
+        if (place != null && place.cueType == CueType.MARKER.name) {
+            // A marker was never a cue; with no stack it marks nothing.
+            if (stack != null) {
+                legacyPlaces += PendingEntry(
+                    uuid = uuid, stack = stack, cue = null, marker = true, label = c.name.take(255),
+                    ordinal = place.sortOrder.toDouble(), cueNumber = null, autoAdvance = false, autoAdvanceDelayMs = null,
+                )
+            } else {
+                logger.warn("Import: marker {} names no stack; left out", c.uuid)
             }
-            markerEntries[uuid] = marker
             return@readDir null
         }
         val dao = DaoCue.new {
@@ -1267,15 +1314,13 @@ class ProjectImporter(private val state: State) {
             stomp = c.stomp
             this.uuid = uuid
         }
-        DaoCueStackEntry.new {
-            this.stack = stack
-            this.cue = dao
-            kind = CueStackEntryKind.CUE.name
-            ordinal = c.sortOrder.toDouble()
-            cueNumber = c.cueNumber
-            cueNumberAuto = c.cueNumberAuto
-            autoAdvance = c.autoAdvance
-            autoAdvanceDelay = c.autoAdvanceDelayMs.asDuration()
+        if (place != null && stack != null) {
+            legacyPlaces += PendingEntry(
+                uuid = uuid, stack = stack, cue = dao, marker = false, label = null,
+                ordinal = place.sortOrder.toDouble(),
+                cueNumber = place.cueNumber?.takeIf { !place.cueNumberAuto && it.isNotEmpty() },
+                autoAdvance = place.autoAdvance, autoAdvanceDelayMs = place.autoAdvanceDelayMs,
+            )
         }
         importScenery(c.scenery, elementMap, "Cue ${c.uuid}") { element, s ->
             DaoCueSceneryRow.new {
@@ -1289,11 +1334,127 @@ class ProjectImporter(private val state: State) {
         }
         importCueEvents(c.events, patchMap, dao, "Cue ${c.uuid}")
         uuid to dao
+    }
+
+    /** One stack entry read from the archive, held until its stack's numbers are checked. */
+    private class PendingEntry(
+        val uuid: UUID,
+        val stack: DaoCueStack,
+        val cue: DaoCue?,
+        val marker: Boolean,
+        val label: String?,
+        var ordinal: Double,
+        var cueNumber: String?,
+        val autoAdvance: Boolean,
+        val autoAdvanceDelayMs: Long?,
+    )
+
+    /**
+     * v32: every stack's list, one `cueStackEntries/` record per entry (cue model plan §3.9), beside
+     * the entries an older archive's cue files gave ([legacyPlaces]). Answers the entries by uuid —
+     * what an anchor names — and the number clashes it resolved.
+     *
+     *  * **An entry naming a stack or a cue the archive lacks is dropped with a warning**, never the
+     *    pull: one file per entry means a merge can pair a peer's new entry with a stack or cue this
+     *    side deleted, and a place in a list is nothing without either. The next snapshot writes the
+     *    drop as a deletion, so the deleting side wins everywhere.
+     *  * **Two explicit numbers alike in one stack** — two desks that each typed `14A`, merged — keep
+     *    the number on the entry with the lower uuid and make the other auto; the clash is answered so
+     *    the sync result can name it. Resolved before a row is written, so `uq_entry_number_per_stack`
+     *    never sees the pair and a pull never aborts on it.
+     *  * **Auto numbers are derived, never read** (P5): each stack is numbered from scratch once its
+     *    entries are in, from position alone, so every desk reading the archive numbers it alike.
+     */
+    private fun importCueStackEntries(
+        dir: Path,
+        cueStackMap: Map<UUID, DaoCueStack>,
+        cueMap: Map<UUID, DaoCue>,
+        legacyPlaces: List<PendingEntry>,
+    ): Pair<Map<UUID, DaoCueStackEntry>, List<CueNumberClash>> {
+        val pending = LinkedHashMap<UUID, PendingEntry>()
+        readDir<Unit>(dir.resolve("cueStackEntries")) { json ->
+            val e = canonicalDecode(CueStackEntryJson.serializer(), json)
+            val uuid = UUID.fromString(e.uuid)
+            val stack = cueStackMap[UUID.fromString(e.cueStackUuid)]
+            if (stack == null) {
+                logger.warn("Import: entry {} names cue stack {}, which the archive lacks; left out", e.uuid, e.cueStackUuid)
+                return@readDir null
+            }
+            val marker = e.kind == CueStackEntryKind.MARKER.name
+            val cue = if (marker) null else e.cueUuid?.let { cueMap[UUID.fromString(it)] }
+            if (!marker && cue == null) {
+                logger.warn("Import: entry {} names cue {}, which the archive lacks; left out", e.uuid, e.cueUuid)
+                return@readDir null
+            }
+            if (!e.ordinal.isFinite()) throw ImportError.invalidArchive("Entry ${e.uuid} has no usable ordinal: ${e.ordinal}")
+            pending[uuid] = PendingEntry(
+                uuid = uuid, stack = stack, cue = cue, marker = marker,
+                label = if (marker) e.label.orEmpty().take(255) else null,
+                ordinal = e.ordinal,
+                cueNumber = if (marker) null else e.cueNumber?.takeIf { it.isNotEmpty() },
+                autoAdvance = !marker && e.autoAdvance,
+                autoAdvanceDelayMs = if (marker) null else e.autoAdvanceDelayMs,
+            )
+            null
         }
-        // A cue that lands in "Unsorted" (a pre-stack archive's) arrives with no number, and takes
-        // one from where it landed, as `add-cue` would number it.
-        unsortedStack?.let { renumberAutoEntries(it, emptyList()) }
-        return cues
+        // An older archive's places, each ordinal its 0-based rank in its stack by (sortOrder, uuid) —
+        // the sortOrder itself for every archive a desk with entries wrote (each cue's index in its
+        // list), and the same answer on every desk for an older one with gaps or ties, which is what
+        // `state/CueEntryUuidMigration.kt` gave the desk's own rows. Unless a record already says it
+        // (an archive never holds both).
+        legacyPlaces.groupBy { it.stack.id.value }.values.forEach { places ->
+            places.sortedWith(compareBy({ it.ordinal }, { it.uuid.toString() }))
+                .forEachIndexed { rank, place -> place.ordinal = rank.toDouble() }
+        }
+        legacyPlaces.forEach { pending.putIfAbsent(it.uuid, it) }
+
+        val clashes = resolveNumberClashes(pending.values)
+        val entries = pending.values.associate { p ->
+            p.uuid to DaoCueStackEntry.new {
+                stack = p.stack
+                cue = p.cue
+                kind = if (p.marker) CueStackEntryKind.MARKER.name else CueStackEntryKind.CUE.name
+                label = p.label
+                ordinal = p.ordinal
+                cueNumber = p.cueNumber
+                cueNumberAuto = false
+                autoAdvance = p.autoAdvance
+                autoAdvanceDelay = p.autoAdvanceDelayMs.asDuration()
+                uuid = p.uuid
+            }
+        }
+        cueStackMap.values.forEach { renumberAutoEntries(it, emptyList()) }
+        clashes.forEach { logger.warn("Import: {}", it.describe()) }
+        return entries to clashes
+    }
+
+    /**
+     * Keep each stack's explicit numbers unique (cue model plan §3.9): of the cue entries holding one
+     * number, the entry with the lowest uuid keeps it and every other is made auto. Compared exactly,
+     * as `uq_entry_number_per_stack` compares them.
+     */
+    private fun resolveNumberClashes(entries: Collection<PendingEntry>): List<CueNumberClash> {
+        val clashes = ArrayList<CueNumberClash>()
+        entries.filter { !it.marker && it.cueNumber != null }
+            .groupBy { it.stack.id.value to it.cueNumber!! }
+            .values
+            .filter { it.size > 1 }
+            .forEach { same ->
+                val ordered = same.sortedBy { it.uuid.toString() }
+                val kept = ordered.first()
+                ordered.drop(1).forEach { loser ->
+                    clashes += CueNumberClash(
+                        stack = kept.stack.name,
+                        number = kept.cueNumber!!,
+                        keptEntryUuid = kept.uuid.toString(),
+                        kept = kept.cue?.name.orEmpty(),
+                        entryUuid = loser.uuid.toString(),
+                        cue = loser.cue?.name.orEmpty(),
+                    )
+                    loser.cueNumber = null
+                }
+            }
+        return clashes.sortedWith(compareBy({ it.stack }, { it.number }, { it.entryUuid }))
     }
 
     private fun importCuePropertyAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
@@ -1813,33 +1974,52 @@ class ProjectImporter(private val state: State) {
         }
     }
 
+    /**
+     * Anchors mark entries (cue model plan D4). A v32 anchor names its entry; an older one names a
+     * cue, which lands on that cue's one entry — the entry took the cue's uuid ([importCues]), and a
+     * MARKER cue's uuid is its marker entry's — so both resolve through [entryMap].
+     *
+     * An anchor whose entry the archive lacks (an entry dropped by [importCueStackEntries], a loose
+     * cue's) is dropped with a warning, and of two anchors on one entry — a merge of two desks that
+     * each marked it — the lower uuid is kept: the one-per-entry index must never abort a pull.
+     */
     private fun importPromptBookAnchors(
         dir: Path,
         promptBook: DaoPromptBook?,
-        cueMap: Map<UUID, DaoCue>,
-        markerEntries: Map<UUID, DaoCueStackEntry>,
+        entryMap: Map<UUID, DaoCueStackEntry>,
     ) {
-        readDir(dir.resolve("promptBookAnchors")) { json ->
+        val parsed = readDir(dir.resolve("promptBookAnchors")) { json ->
             val a = canonicalDecode(PromptBookAnchorJson.serializer(), json)
-            val book = promptBook
-                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} has no prompt book to attach to")
-            val cueUuid = UUID.fromString(a.cueUuid)
-            // An anchor marks an entry (cue model plan D4): its cue's one entry, or the marker entry
-            // the archive names by the uuid its MARKER cue file carried.
-            val entry = cueMap[cueUuid]?.let { soleEntryOf(it) } ?: markerEntries[cueUuid]
-                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} references unknown cue $cueUuid")
+            UUID.fromString(a.uuid) to a
+        }
+        val book = promptBook
+        if (book == null) {
+            parsed.keys.firstOrNull()?.let { throw ImportError.invalidArchive("Prompt book anchor $it has no prompt book to attach to") }
+            return
+        }
+        val taken = HashSet<Int>()
+        parsed.entries.sortedBy { it.key.toString() }.forEach { (uuid, a) ->
+            val ref = a.entryUuid ?: a.cueUuid
+                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} names no entry")
+            val entry = entryMap[UUID.fromString(ref)]
+            if (entry == null) {
+                logger.warn("Import: prompt book anchor {} names {}, which has no entry here; left out", a.uuid, ref)
+                return@forEach
+            }
             checkPromptBookRegion(a.region, book.pageCount)?.let {
                 throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} has an invalid region: $it")
             }
-            val uuid = UUID.fromString(a.uuid)
-            val dao = DaoPromptBookAnchor.new {
+            if (!taken.add(entry.id.value)) {
+                logger.warn("Import: prompt book anchor {} marks an entry another anchor already marks; left out", a.uuid)
+                return@forEach
+            }
+            DaoPromptBookAnchor.new {
                 this.promptBook = book
                 this.entry = entry
                 region = a.region
                 label = a.label
                 this.uuid = uuid
             }
-            uuid to dao
         }
     }
 

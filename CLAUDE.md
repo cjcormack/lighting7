@@ -566,7 +566,7 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 - `POST /api/sentry` - The browser SDK's envelope tunnel, open to every caller on both listeners and outside the warm-up and auth gates: spooled to `<appDataDir>/sentry-browser/` only while telemetry is on, at most 1 MB, and only if its header names `sentry.browserDsn`; forwarded byte for byte by a worker only `module()` starts, and deleted when telemetry is turned off. See `docs/observability-engineering.md` §"The tunnel"
 
 ### Cue Stack Run Endpoints
-- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{entryId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby". `reorder` (`{entryIds}`), `go-to` (`{entryId}`), `activate` (`{entryId?}`) and preview name **entries** too, and the run state is keyed by them (cue model plan session 2): a stack's list is `cue_stack_entries` (cue model plan session 1), each row a cue's place or a **marker**, and markers are `POST .../markers` + `PUT/DELETE .../markers/{entryId}`, never a cue (`POST /cues` refuses `cueType: "MARKER"`). See `docs/cue-stacks-engineering.md` §"Database Tables"
+- `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{entryId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby". `reorder` (`{entryIds}`), `go-to` (`{entryId}`), `activate` (`{entryId?}`) and preview name **entries** too, and the run state is keyed by them (cue model plan session 2): a stack's list is `cue_stack_entries` (cue model plan session 1), each row a cue's place or a **marker**, and markers are `POST .../markers` + `PUT/DELETE .../markers/{entryId}`, never a cue (`POST /cues` refuses `cueType: "MARKER"`). A list plays in `(ordinal, uuid)` order (`ENTRY_ORDER`, a double ordinal, an insert or a drag taking the midpoint) and syncs as one record per entry, `cueStackEntries/{uuid}.json`, its number only when explicit (sync `formatVersion` 32, cue model plan session 3). See `docs/cue-stacks-engineering.md` §"Database Tables"
 - `GET /api/rest/projects/{id}/cue-stacks/{stackId}/preview?entryId=` - Compose an entry's cue without firing it (absent → the effective next), keeping every cue another stack or a press also holds. Layer 4 only — except `scenery`, the whole stage's scenery as the GO would land it, each element with `from` and the GO's duration; see §"Preview compose"
 
 ### Scenery Endpoints
@@ -697,6 +697,14 @@ first (`VACUUM INTO '<db>.pre-cue-model-<utc>.db'`), then converts in one transa
 in raw SQL, rebuilding `cues` and `prompt_book_anchors` from the model.
 `CueModelMigrationTest` runs it over `src/test/resources/db/pre-cue-model.sql`, the
 old shape frozen; never regenerate that file from a later commit.
+
+**One one-shot data step follows it:** `state/CueEntryUuidMigration.kt` (cue model plan
+session 3), inside `initDatabase`'s transaction after the schema exists, gives every cue's
+one stack entry its cue's uuid and every entry its 0-based position as its ordinal, so two
+desks write the same record for the same place once entries are sync records
+(`formatVersion` 32). It runs once per database, recorded in **`PRAGMA
+user_version`** (1) — the database header's counter, first used here; a later one-shot
+step takes the next number. It must never run twice: its KDoc says why.
 
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.

@@ -63,6 +63,12 @@ class RemoteSyncEngine(
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
 
     /**
+     * The cue number clashes the current run's latest import resolved, by project ([importTree]).
+     * Runs on one project are serialised by [projectLocks], so a key is only ever one run's.
+     */
+    private val runNumberClashes = ConcurrentHashMap<Int, List<CueNumberClash>>()
+
+    /**
      * Pull credentials for [repoUrl] via [authResolver], translating its typed errors
      * into the [SyncException] codes the route layer maps to HTTP statuses.
      */
@@ -214,6 +220,7 @@ class RemoteSyncEngine(
         if (trigger.logsIdleRuns) {
             syncLogger.info(projectId, SyncLogEvent.RUN_STARTED, "Starting sync run")
         }
+        runNumberClashes.remove(projectId)
         val (repoUrl, branch) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                 ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Sync config has not been initialised for this project.")
@@ -242,7 +249,7 @@ class RemoteSyncEngine(
         }
 
         val workingTreePath = workingTree.pathFor(projectUuid)
-        val outcome = withContext(Dispatchers.IO) {
+        val outcome = withNumberClashes(projectId, withContext(Dispatchers.IO) {
             val repo = JGitClient.open(workingTreePath)
                 ?: throw SyncException(
                     SyncErrorCode.NO_REPO,
@@ -251,7 +258,7 @@ class RemoteSyncEngine(
             repo.use {
                 configureAndExchange(it, projectId, installUuid, installFriendlyName, repoUrl, branch, credentials)
             }
-        }
+        })
 
         if (outcome.outcome != SyncOutcome.CONFLICTS_PENDING) {
             transaction(state.database) {
@@ -644,7 +651,7 @@ class RemoteSyncEngine(
         // on a show that already synced) and taking its rig with it. Merge the pin three-way.
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
 
-        importer.replaceFromWorkingTree(projectId, workingTreePath)
+        importTree(projectId, workingTreePath)
 
         // Ensure the merged tree carries the PDF matching the merged scriptHash (the
         // overlay above only writes record JSON, not the binary), and hydrate the local
@@ -1015,11 +1022,12 @@ class RemoteSyncEngine(
         val credentials = resolveCredentials(view.repoUrl)
 
         val workingTreePath = workingTree.pathFor(projectUuid)
-        val result = withContext(Dispatchers.IO) {
+        runNumberClashes.remove(projectId)
+        val result = withNumberClashes(projectId, withContext(Dispatchers.IO) {
             val repo = JGitClient.open(workingTreePath)
                 ?: throw SyncException(SyncErrorCode.NO_REPO, "Working tree at $workingTreePath has no git repo.")
             repo.use { applyMergeFromSession(it, projectId, installUuid, installFriendlyName, view, credentials) }
-        }
+        })
 
         transaction(state.database) {
             val session = DaoSyncSession.findById(view.sessionId) ?: return@transaction
@@ -1149,7 +1157,7 @@ class RemoteSyncEngine(
             for ((relPath, content) in JGitClient.walkTree(repo, remoteSha)) {
                 writeWorkingTreeFile(scratch, relPath, content)
             }
-            importer.replaceFromWorkingTree(projectId, scratch)
+            importTree(projectId, scratch)
         } finally {
             scratch.toFile().deleteRecursively()
         }
@@ -1159,6 +1167,28 @@ class RemoteSyncEngine(
         // without a manual re-import. No reconcile: a fast-forward adopts the remote tree
         // wholesale, so it already matches the pulled scriptHash exactly.
         reconcileAndHydratePromptScripts(projectId, repo.workTree.toPath(), reconcile = false)
+    }
+
+    /**
+     * Apply a pulled or merged tree to the DB ([ProjectImporter.replaceFromWorkingTree]) and keep the
+     * cue number clashes it resolved for this run's result. The latest import of a run wins: a
+     * push-rejected retry imports again, and the DB is what that last import left.
+     */
+    private fun importTree(projectId: Int, dir: Path) {
+        val result = importer.replaceFromWorkingTree(projectId, dir)
+        runNumberClashes[projectId] = result.numberClashes
+    }
+
+    /**
+     * [result] naming the cue number clashes this run's imports resolved (cue model plan §3.9), in
+     * [SyncRunResult.numberClashes] and in its message — which the activity log and the sync-done
+     * notification carry. Consumes them, so the next run starts clean.
+     */
+    private fun withNumberClashes(projectId: Int, result: SyncRunResult): SyncRunResult {
+        val clashes = runNumberClashes.remove(projectId).orEmpty()
+        if (clashes.isEmpty()) return result
+        val said = clashes.joinToString(" ") { clash -> clash.describe().replaceFirstChar { it.uppercase() } + "." }
+        return result.copy(numberClashes = clashes, message = "${result.message} $said")
     }
 
     /** Write [content] to `relPath` under [workingTreePath], creating parent dirs. */
@@ -1295,6 +1325,12 @@ data class SyncRunResult(
     val sessionId: Int? = null,
     /** Number of conflicts persisted; 0 unless `outcome == CONFLICTS_PENDING`. */
     val conflictCount: Int = 0,
+    /**
+     * Explicit cue numbers the pulled or merged tree held twice in one stack, each resolved by
+     * keeping the lower-uuid entry's and making the other auto (cue model plan §3.9). Also said in
+     * [message]. Empty for nearly every run.
+     */
+    val numberClashes: List<CueNumberClash> = emptyList(),
 )
 
 @Serializable

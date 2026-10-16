@@ -168,11 +168,10 @@ class SyncCoverageTest {
         DaoFixtureGroupMembers to Disposition.Portable("fixtureGroups", "members"),
         DaoCueStacks to Disposition.Portable("cueStacks"),
         DaoCues to Disposition.Portable("cues"),
-        // Cue model plan session 1: a stack's list moved off the cue onto entries, but the
-        // archive's format did not move (P4) — each cue's one entry is still written into its cue
-        // file as `cueStackUuid`, `sortOrder`, `cueNumber` and follow, and a marker entry as a
-        // MARKER cue. Session 3 gives entries their own folder, `cueStackEntries/`.
-        DaoCueStackEntries to Disposition.Portable("cues", "cueStackUuid"),
+        // Cue model plan session 3 (formatVersion 32): a stack's list is its own records, one file per
+        // entry — markers included — so a drag rewrites one file and two desks adding to one stack add
+        // two. Until then each cue's one entry rode inside its cue file.
+        DaoCueStackEntries to Disposition.Portable("cueStackEntries"),
         DaoCuePropertyAssignments to Disposition.Portable("cuePropertyAssignments"),
         DaoCueLayers to Disposition.Portable("cueLayers"),
         DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),

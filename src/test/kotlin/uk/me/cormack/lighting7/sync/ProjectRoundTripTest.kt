@@ -982,20 +982,23 @@ class ProjectRoundTripTest {
     }
 
     @Test
-    fun `import with bad cue stack reference rolls back atomically`() {
+    fun `import with a bad cue reference rolls back atomically`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
         wipeDatabase()
 
-        // Corrupt one cue's cueStackUuid so FK resolution fails mid-import.
-        val cueDir = exportDirA.resolve("cues")
-        val firstCue = Files.list(cueDir).use { it.findFirst().get() }
-        val original = Files.readString(firstCue)
+        // Corrupt one property assignment's cueUuid so FK resolution fails mid-import, after the
+        // cues, stacks and entries have landed. (A cue file names no stack since v32, and an entry
+        // naming a missing stack is dropped rather than refused — `CueStackEntrySyncTest`.)
+        val dir = exportDirA.resolve("cuePropertyAssignments")
+        val first = Files.list(dir).use { it.findFirst().get() }
+        val original = Files.readString(first)
         val corrupt = original.replace(
-            Regex("\"cueStackUuid\": \"[0-9a-f-]+\""),
-            "\"cueStackUuid\": \"00000000-0000-0000-0000-000000000000\""
+            Regex("\"cueUuid\": \"[0-9a-f-]+\""),
+            "\"cueUuid\": \"00000000-0000-0000-0000-000000000000\""
         )
-        Files.writeString(firstCue, corrupt)
+        assertTrue(corrupt != original, "test sanity: the assignment was rewritten")
+        Files.writeString(first, corrupt)
 
         val ex = assertFailsWith<ImportError> {
             ProjectImporter(state).import(exportDirA, nameOverride = null)

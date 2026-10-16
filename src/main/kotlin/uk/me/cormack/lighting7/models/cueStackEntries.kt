@@ -11,6 +11,8 @@ import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.dao.with
 import org.jetbrains.exposed.v1.javatime.duration
+import kotlin.math.ceil
+import kotlin.math.floor
 
 // ─── Entry kinds ────────────────────────────────────────────────────────
 
@@ -29,9 +31,11 @@ enum class CueStackEntryKind { CUE, MARKER }
  * holds the cue's **place** in that stack — its position, its number (and whether that number is
  * auto) and its follow — and the cue holds what it is.
  *
- * Until the cue model plan's session 4 every cue has exactly one entry (P4), so today's archive
- * format can still describe the desk; nothing here assumes it, and the few callers that still
- * have only a cue and need its stack go through [soleEntryOf], which says so.
+ * Until the cue model plan's session 4 every cue has exactly one entry (P4). Nothing here assumes
+ * it, and the few callers that still have only a cue and need its stack go through [soleEntryOf],
+ * which says so. The archive no longer does: from sync `formatVersion` 32 each entry is its own
+ * record, `cueStackEntries/{uuid}.json` (`sync/ProjectExporter.kt`), written from these rows
+ * directly — so a shared or loose cue (session 4) already travels.
  *
  * Numbers are unique per stack among cue entries through the raw-SQL partial index
  * `uq_entry_number_per_stack` (`State.initDatabase`), which Exposed cannot declare.
@@ -45,8 +49,10 @@ object DaoCueStackEntries : IntIdTable("cue_stack_entries") {
     /** A marker's text; null for a cue entry, which is shown by its cue's name. */
     val label = varchar("label", 255).nullable()
     /**
-     * Position in the stack, ascending, ties broken by id (P6). A double so an insert can take the
-     * midpoint of its neighbours; the startup migration renormalised every stack to `1.0, 2.0, …`.
+     * Position in the stack, ascending, ties broken by uuid ([ENTRY_ORDER], P6). A double so an
+     * insert takes the midpoint of its neighbours ([writeEntryOrder]) and a drag rewrites one entry;
+     * the startup migration renormalised every stack to `1.0, 2.0, …`. Two desks inserting into the
+     * same gap give their entries the same ordinal, and the uuid orders them the same way on both.
      */
     val ordinal = double("ordinal").default(0.0)
     val cueNumber = varchar("cue_number", 20).nullable()
@@ -95,14 +101,20 @@ class DaoCueStackEntry(id: EntityID<Int>) : IntEntity(id) {
     val displayName: String get() = if (isMarker) label.orEmpty() else cue?.name.orEmpty()
 }
 
-/** [stack]'s entries in playback order — `(ordinal, id)`, markers included. */
+/**
+ * Playback order (cue model plan P6): ascending `ordinal`, then ascending uuid — the uuid's
+ * canonical text, which is its 16 bytes compared unsigned. Never the int id: ids are minted per
+ * desk in whatever order an import reads its files, so two desks holding the same entries (two
+ * inserts into one gap, merged) would otherwise play them in different orders.
+ */
+val ENTRY_ORDER: Comparator<DaoCueStackEntry> = compareBy<DaoCueStackEntry>({ it.ordinal }, { it.uuid.toString() })
+
+/** [stack]'s entries in playback order ([ENTRY_ORDER]), markers included. */
 fun entriesOf(stack: DaoCueStack): List<DaoCueStackEntry> = entriesOfStack(stack.id)
 
-/** [stackId]'s entries in playback order — `(ordinal, id)`, markers included. */
+/** [stackId]'s entries in playback order ([ENTRY_ORDER]), markers included. */
 fun entriesOfStack(stackId: EntityID<Int>): List<DaoCueStackEntry> =
-    DaoCueStackEntry.find { DaoCueStackEntries.stack eq stackId }
-        .orderBy(DaoCueStackEntries.ordinal to SortOrder.ASC, DaoCueStackEntries.id to SortOrder.ASC)
-        .toList()
+    DaoCueStackEntry.find { DaoCueStackEntries.stack eq stackId }.toList().sortedWith(ENTRY_ORDER)
 
 /**
  * The first entry in stack [stackId] that places cue [cueId], in the stack's order — the caller names
@@ -112,9 +124,8 @@ fun entriesOfStack(stackId: EntityID<Int>): List<DaoCueStackEntry> =
  */
 fun entryInStack(stackId: Int, cueId: Int): DaoCueStackEntry? =
     DaoCueStackEntry.find { (DaoCueStackEntries.stack eq stackId) and (DaoCueStackEntries.cue eq cueId) }
-        .orderBy(DaoCueStackEntries.ordinal to SortOrder.ASC, DaoCueStackEntries.id to SortOrder.ASC)
-        .limit(1)
-        .firstOrNull()
+        .toList()
+        .minWithOrNull(ENTRY_ORDER)
 
 /** Every entry naming [cue], in no particular stack order. */
 fun entriesOfCue(cue: DaoCue): List<DaoCueStackEntry> =
@@ -153,11 +164,10 @@ fun soleEntrySlotsOf(cueIds: Collection<Int>): Map<Int, EntrySlot> {
         .mapNotNull { (cueId, entries) -> entries.singleOrNull()?.let { cueId to it } }
     if (sole.isEmpty()) return emptyMap()
     val positions = DaoCueStackEntry.find { DaoCueStackEntries.stack inList sole.map { it.second.stackId }.distinct() }
-        .orderBy(DaoCueStackEntries.ordinal to SortOrder.ASC, DaoCueStackEntries.id to SortOrder.ASC)
         .toList()
         .groupBy { it.stackId }
         .values
-        .flatMap { list -> list.mapIndexed { index, entry -> entry.id.value to index } }
+        .flatMap { list -> list.sortedWith(ENTRY_ORDER).mapIndexed { index, entry -> entry.id.value to index } }
         .toMap()
     return sole.associate { (cueId, entry) -> cueId to EntrySlot(entry, positions.getValue(entry.id.value)) }
 }
@@ -170,19 +180,113 @@ fun soleEntryOfCueId(cueId: Int): DaoCueStackEntry? =
 fun nextOrdinal(stack: DaoCueStack): Double = (entriesOf(stack).maxOfOrNull { it.ordinal } ?: 0.0) + 1.0
 
 /**
- * Write [ordered] — a stack's entries in the order they should play — back as ordinals `1.0, 2.0,
- * …`, touching only the entries whose ordinal changes. Every handler that changes a list builds the
- * new order in memory and hands it here, so a tie never survives a write and the order is exactly
- * the list given.
+ * Write [ordered] — a stack's entries in the order they should play — back as ordinals, so that
+ * [ENTRY_ORDER] reads exactly that list, **changing as few entries as it can** (cue model plan P6).
  *
- * Renormalising rather than taking a midpoint (P6) is session 1's choice: the archive still carries
- * each cue's position as an integer `sortOrder`, so nothing yet benefits from a sparse ordinal. The
- * cue model plan's session 3, which gives entries their own files, is where an insert should start
- * taking the midpoint of its neighbours.
+ * Every handler that changes a list builds the new order in memory and hands it here. The entries
+ * whose ordinals already ascend in it — the longest run of them, each strictly above the last —
+ * keep their ordinals; each gap of the others between two kept neighbours takes evenly spaced
+ * ordinals strictly between them (one moved entry takes the midpoint), one after the last kept entry
+ * counts on in whole numbers, and one before the first counts down. So a drag rewrites one entry and
+ * an insert writes one, and since the archive writes one file per entry (`cueStackEntries/`, sync
+ * `formatVersion` 32) a drag is one changed file, where renumbering the stack `1.0, 2.0, …` rewrote
+ * every entry after it.
+ *
+ * The caller names the entries in [ordered] that are **fresh** — just made, or moved in from another
+ * stack — so their placeholder or old-stack ordinal never counts as in order; each takes the room its
+ * neighbours leave.
+ *
+ * It never writes two entries one ordinal: a tie is ordered by uuid, which a copy or a clone re-mints.
+ * A tie arrives only from a merge — two desks that inserted into one gap — and the next write to the
+ * stack that keeps one of the pair moves the other off it.
+ *
+ * When a gap has no room left — doubles too close to split — the whole stack is renormalised to
+ * `1.0, 2.0, …` instead: still exactly the order given, just more files.
  */
-fun writeEntryOrder(ordered: List<DaoCueStackEntry>) {
+fun writeEntryOrder(ordered: List<DaoCueStackEntry>, fresh: Collection<DaoCueStackEntry> = emptyList()) {
+    if (ordered.isEmpty()) return
+    // A fresh entry — one just made, or one just moved in from another stack — holds a placeholder or
+    // another list's ordinal, which must never count as "already in order": it would be kept and an
+    // existing neighbour moved instead (an insert writing two entries, a new stack never starting at 1).
+    // By identity, not id: reading a new entity's id would flush its placeholder row early.
+    val ordinals = planEntryOrdinals(ordered.map { entry -> if (fresh.any { it === entry }) Double.NaN else entry.ordinal })
     ordered.forEachIndexed { index, entry ->
-        val ordinal = (index + 1).toDouble()
+        val ordinal = ordinals[index]
         if (entry.ordinal != ordinal) entry.ordinal = ordinal
     }
+}
+
+/**
+ * The ordinals [writeEntryOrder] gives a list whose current ordinals are [current], in the order
+ * given: the longest strictly ascending run keeps its own, every other entry takes room between its
+ * kept neighbours, and when a gap has no room, the list is renormalised to `1.0, 2.0, …`. A non-finite
+ * value — how a fresh entry is passed — is never kept. The answer is always strictly ascending. Pure,
+ * so it is tested on its own.
+ */
+internal fun planEntryOrdinals(current: List<Double>): List<Double> {
+    val n = current.size
+    if (n == 0) return emptyList()
+    val kept = longestAscendingRun(current)
+    val out = current.toDoubleArray()
+    var i = 0
+    while (i < n) {
+        if (kept[i]) { i++; continue }
+        var j = i
+        while (j < n && !kept[j]) j++
+        val spread = spreadBetween(if (i > 0) out[i - 1] else null, if (j < n) out[j] else null, j - i)
+            ?: return List(n) { (it + 1).toDouble() }
+        spread.forEachIndexed { k, ordinal -> out[i + k] = ordinal }
+        i = j
+    }
+    return out.toList()
+}
+
+/**
+ * Which of [values] form one longest strictly ascending subsequence (patience sorting, O(n log n)).
+ * A non-finite value is never kept, so it is always given a place.
+ */
+private fun longestAscendingRun(values: List<Double>): BooleanArray {
+    val tails = ArrayList<Int>()          // tails[len] = index of the smallest tail of a run of length len + 1
+    val previous = IntArray(values.size) { -1 }
+    for (index in values.indices) {
+        if (!values[index].isFinite()) continue
+        var lo = 0
+        var hi = tails.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (values[tails[mid]] < values[index]) lo = mid + 1 else hi = mid
+        }
+        if (lo > 0) previous[index] = tails[lo - 1]
+        if (lo == tails.size) tails.add(index) else tails[lo] = index
+    }
+    val kept = BooleanArray(values.size)
+    var at = tails.lastOrNull() ?: -1
+    while (at >= 0) {
+        kept[at] = true
+        at = previous[at]
+    }
+    return kept
+}
+
+/**
+ * [count] ordinals strictly between [lo] and [hi] and strictly ascending, or null when doubles
+ * cannot hold them. A missing bound counts in whole numbers from the other; neither counts from 1.
+ */
+private fun spreadBetween(lo: Double?, hi: Double?, count: Int): List<Double>? {
+    val values = when {
+        lo != null && hi != null -> {
+            val step = (hi - lo) / (count + 1)
+            List(count) { lo + step * (it + 1) }
+        }
+        lo != null -> List(count) { floor(lo) + it + 1 }
+        hi != null -> List(count) { ceil(hi) - (count - it) }
+        else -> List(count) { (it + 1).toDouble() }
+    }
+    var previous = lo
+    for (value in values) {
+        if (!value.isFinite() || (previous != null && value <= previous)) return null
+        previous = value
+    }
+    if (hi != null && previous != null && previous >= hi) return null
+    return values
 }

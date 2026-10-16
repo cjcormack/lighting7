@@ -837,6 +837,23 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; name = "build"
     }
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
+    // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with
+    // every entry shape off its default. A marker in a gap (a midpoint ordinal, P6), an auto number
+    // (never exported, P5) beside cue 1's explicit one, and two entries sharing one ordinal — two
+    // desks that inserted into the same gap — which play in uuid order.
+    DaoCueStackEntry.new {
+        stack = stack1; kind = CueStackEntryKind.MARKER.name; label = "house to half"; ordinal = 1.5
+    }
+    val left = DaoCue.new { this.project = project; name = "left" }
+    val right = DaoCue.new { this.project = project; name = "right" }
+    DaoCueStackEntry.new { stack = stack1; cue = left; ordinal = 2.5 }
+    DaoCueStackEntry.new { stack = stack1; cue = right; ordinal = 2.5 }
+    val snap = DaoCue.new { this.project = project; name = "snap" }
+    DaoCueStackEntry.new {
+        stack = stack1; cue = snap; ordinal = 3.0
+        cueNumber = "7"; cueNumberAuto = true
+        autoAdvance = true
+    }
     // A marker entry: a labelled divider, no cue (cue model plan D12).
     DaoCueStackEntry.new {
         stack = stack2; kind = CueStackEntryKind.MARKER.name; label = "finale"; ordinal = 1.0
