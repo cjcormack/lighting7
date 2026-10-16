@@ -209,8 +209,9 @@ describe('FxEffectFields', () => {
     expect(screen.queryByRole('button', { name: /^Spread/ })).toBeNull()
     cleanup()
     fields(PULSE, draft({ distributionStrategy: 'LINEAR', spread: 0.5, wings: 2 }), HEADS)
-    // Folded, the summary says the non-defaults.
-    expect(screen.getByRole('button', { name: 'Spread · Rig · 50 % · 2 wings' })).toBeTruthy()
+    // Folded, the summary says the non-defaults. The label and the summary are two spans with only
+    // a CSS gap between them, so the accessible name has no space after "Spread".
+    expect(screen.getByRole('button', { name: /^Spread\s*· Rig · 50 % · 2 wings$/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
     expect(screen.queryByRole('combobox', { name: 'Distribution' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
@@ -218,7 +219,8 @@ describe('FxEffectFields', () => {
   })
 
   it('writes Spread in percent and the three counts on Enter, refusing a count out of range', () => {
-    const { set } = fields(PULSE, draft(), HEADS)
+    // Groups starts at 2 so that typing 0 is a change: a field already showing 0 fires no onChange.
+    const { set } = fields(PULSE, draft({ groups: 2 }), HEADS)
     fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
     const spread = screen.getByRole('spinbutton', { name: /Spread percent/ }) as HTMLInputElement
     expect(spread.value).toBe('100')
