@@ -354,6 +354,7 @@ class AiTools(private val state: State) {
         val lookId = input["lookId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'lookId'")
         val targets = input["targets"]?.jsonArray?.let(::parseTargets).orEmpty()
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
+        if (input["asValues"]?.jsonPrimitive?.booleanOrNull == true) return applyLookValues(lookId, targets, beatDivision)
 
         return when (val outcome = pressLook(lookId, targets, beatDivision)) {
             is LookPress.Refused -> errorResult(outcome.message)
@@ -364,6 +365,26 @@ class AiTools(private val state: State) {
                     put("action", outcome.action)
                     put("effectCount", outcome.effectCount)
                 }.toString()
+            )
+        }
+    }
+
+    /** `asValues`: the Look's values and effects into the programmer's own, as `POST /looks/{id}/apply`. */
+    private fun applyLookValues(lookId: Int, requested: List<CueTargetDto>, beatDivision: Double?): ToolExecutionResult {
+        val project = state.projectManager.currentProject
+        val look = transaction(state.database) {
+            DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.toggleSource(state.show.fixtures)
+        } ?: return errorResult("Look not found: $lookId")
+        return when (val outcome = applyLookAsValues(state, look, requested, families = null, fadeMs = null, beatDivision)) {
+            is LookApplyOutcome.Refused -> errorResult(outcome.message)
+            is LookApplyOutcome.Applied -> ToolExecutionResult(
+                success = true,
+                description = "Applied look $lookId as values: ${outcome.response.written} value(s), " +
+                    "${outcome.response.effectIds.size} effect(s)",
+                result = buildJsonObject {
+                    put("written", outcome.response.written)
+                    put("effectIds", buildJsonArray { outcome.response.effectIds.forEach { add(JsonPrimitive(it)) } })
+                }.toString(),
             )
         }
     }
@@ -716,8 +737,8 @@ class AiTools(private val state: State) {
             }
 
             if ("programmer" in include) {
-                // The AI mutates the programmer itself — and `apply_look`, `apply_palette`'s LAYER
-                // mode and `create_look`'s `applyToTargets` go through `programmerLayerStack.toggle`,
+                // The AI mutates the programmer itself — and `apply_look` and `apply_palette` (unless
+                // `asValues`) and `create_look`'s `applyToTargets` go through `programmerLayerStack.toggle`,
                 // which *toggles*: without being able to read the stack back, a model asked to "add
                 // the wash" a second time takes it off stage instead.
                 val store = state.show.programmerStore

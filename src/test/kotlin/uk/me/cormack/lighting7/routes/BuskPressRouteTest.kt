@@ -50,10 +50,10 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
     private fun pages() = "/api/rest/projects/$projectId/busk/pages"
 
-    private suspend fun HttpClient.createTemplate(name: String, value: String = "#ff8800"): Int {
+    private suspend fun HttpClient.createTemplate(name: String, value: String = "#ff8800", propertyName: String = "rgbColour"): Int {
         val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", value))))
+            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", propertyName, value))))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
         return resp.body<TemplateDto>().id
@@ -276,7 +276,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.layers.isEmpty(), "no dead layer lighting the pad")
 
         assertEquals("applied", client.press(focusPad).action)
-        assertEquals(setOf("focus@"), live(), "a per-fixture template's layer names no targets and lands on its own rows")
+        assertEquals(setOf("focus@hex-1"), live(), "a per-fixture template pressed with none names its own rows' heads")
     }
 
     @Test
@@ -434,15 +434,16 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val amber = client.createTemplate("amber")
-        val blue = client.createTemplate("blue", "#0000ff")
+        // A level, so the colour palette is not replaced by the press of its own family (apply-model D2).
+        val half = client.createTemplate("half", "pct:50", propertyName = "dimmer")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
-        val (amberPad, bluePad, cuePad) = client.bank("keys", solo = false, tpl(amber), tpl(blue), cue(opening))
+        val (amberPad, halfPad, cuePad) = client.bank("keys", solo = false, tpl(amber), tpl(half), cue(opening))
 
         client.press(amberPad, "hex-1")
-        assertEquals(0, client.press(bluePad, "hex-1").released)
+        assertEquals(0, client.press(halfPad, "hex-1").released)
         assertEquals(0, client.press(cuePad).released)
-        assertEquals(setOf("amber@hex-1", "blue@hex-1"), live())
+        assertEquals(setOf("amber@hex-1", "half@hex-1"), live())
         assertTrue(looseHeld(opening))
     }
 
@@ -494,7 +495,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val on = client.press(second, "hex-2")
         assertEquals("applied", on.action, "hex-2 was not covered, so the press extends")
         assertEquals(0, on.released)
-        assertEquals(setOf("amber@hex-1", "amber@hex-2"), live())
+        assertEquals(setOf("amber@hex-1+hex-2"), live(), "its own top layer widens (apply-model P3)")
     }
 
     // ─── The selection's attribute mask (multi-screen plan D5) ──────────
@@ -599,7 +600,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a per-fixture template pressed with no targets releases under an excluding mask — the twin arm`() = testApplication {
+    fun `a per-fixture template pressed with no targets releases under an excluding mask`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -610,9 +611,9 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val (pad) = client.bank("keys", solo = false, tpl(focus))
 
         assertEquals("applied", client.press(pad).action)
-        assertEquals(setOf("focus@"), live(), "a per-fixture template's layer names no targets")
-        // No heads to compare coverage on: `toggle` finds its twin by identical (empty) targets,
-        // and so must the arm decided before the mask test.
+        assertEquals(setOf("focus@hex-1"), live(), "it names its own rows' heads")
+        // `toggle` reads the empty press as its rows' heads, and so must the arm decided before the
+        // mask test (`pressTargets`), or the off press would be refused.
         assertEquals("removed", client.press(pad, families = listOf("COLOUR")).action)
         assertTrue(state.show.programmerStore.layers.isEmpty())
         assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, client.pressRaw(pad, families = listOf("COLOUR")).body<ErrorResponse>().code)

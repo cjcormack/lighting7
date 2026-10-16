@@ -785,34 +785,6 @@ internal fun deleteCueReferences(cue: DaoCue): Set<Int> {
 }
 
 /**
- * `memberFixtureKey → groupKey` for every group in [targets], so a writer that fans a
- * group-scoped gesture out to members can still stamp `sourceGroup` on each programmer slot.
- *
- * Without the hint, Record sees N unrelated fixture entries and emits N cue rows where the
- * operator wrote one group row. Groups are visited in sorted key order and the first group
- * claiming a member wins, so overlapping groups produce a stable (if arbitrary) hint rather
- * than one that flips between calls.
- */
-internal fun groupHintsForTargets(
-    fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    targets: List<TargetRef>,
-): Map<String, String> {
-    val groupKeys = targets.filterIsInstance<TargetRef.Group>().map { it.key }.distinct().sorted()
-    if (groupKeys.isEmpty()) return emptyMap()
-    val out = HashMap<String, String>()
-    for (groupKey in groupKeys) {
-        val group = try {
-            fixtures.untypedGroup(groupKey)
-        } catch (_: IllegalStateException) {
-            continue
-        }
-        for (member in group.fixtures) out.putIfAbsent(member.targetKey, groupKey)
-    }
-    return out
-}
-
-
-/**
  * Resolve `elementKey` — either a full element key (`"bar-1.head-0"`) or a suffix
  * (`"head-0"`) — against [fixture]. Returns null if [fixture] isn't multi-element or
  * doesn't contain a matching element.

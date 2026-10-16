@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
 import kotlin.math.roundToInt
+import uk.me.cormack.lighting7.fx.groupHintsForTargets
 
 /** 400 code: the request is malformed — an unknown property, curve, order or over, an endpoint that is not an intent of the property's shape, `parts` below 1. */
 internal const val CODE_SPREAD_INVALID = "SPREAD_INVALID"

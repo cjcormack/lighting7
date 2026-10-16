@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.fx.TemplateFanOut
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
+import uk.me.cormack.lighting7.fx.familyOf
+import uk.me.cormack.lighting7.fx.groupHintsForTargets
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.toEffectSpec
@@ -57,6 +59,11 @@ internal sealed interface ApplyTemplateOutcome {
  *    one family, so under a mask it either lands whole or not at all: [families] naming a set the
  *    template's family is outside is [ApplyTemplateOutcome.Refused] by name, on the click exactly
  *    as on the pad and the button. Null is every attribute — today's press.
+ *
+ * [write] false is the focused-Look-layer arm (apply-model plan D7): the same resolve and fan-out,
+ * answered as [ApplyTemplateResponse.values] in the Look row grammar, with nothing written and no
+ * press logged. An effect palette answers nothing that way — its effect joins a Look through
+ * `absorb-effects`.
  */
 internal fun applyTemplateToProgrammer(
     state: State,
@@ -65,6 +72,7 @@ internal fun applyTemplateToProgrammer(
     targets: List<CueTargetDto>,
     fadeMs: Long,
     families: Set<PropertyMaskGroup>? = null,
+    write: Boolean = true,
 ): ApplyTemplateOutcome {
     val family = template.familyOf()
     if (families != null && !maskAllows(families, family)) {
@@ -77,16 +85,19 @@ internal fun applyTemplateToProgrammer(
     // only place that has to know which. The dispatch is here rather than inside the value arm
     // because the effect arm shares none of it — not the fixture expansion (it keeps group shape,
     // see [applyEffectTemplateToProgrammer]), not the group hints, not the fade.
-    val outcome = template.effect
-        ?.let { applyEffectTemplateToProgrammer(state, template.name, it, targets) }
-        ?: applyValueTemplateToProgrammer(state, template, targets, fadeMs)
+    val outcome = when {
+        template.effect == null -> applyValueTemplateToProgrammer(state, template, targets, fadeMs, write)
+        write -> applyEffectTemplateToProgrammer(state, template.name, template.effect, targets)
+        else -> ApplyTemplateResponse(written = 0)
+    }
 
     // The click door of the press log. Gated on the press having *done* something, which is the
     // "never on a refusal" rule applied to the one door that cannot refuse with a status code: a
     // click onto heads that can take none of the rows returns 200 with `written = 0` and a skip per
     // head, and putting that in an eight-slot recents row would fill it with templates this rig
-    // cannot use. Both arms are covered by one test, which is the point of dispatching above.
-    if (outcome.written > 0 || outcome.effectIds.isNotEmpty()) {
+    // cannot use. Both arms are covered by one test, which is the point of dispatching above. A
+    // `write: false` resolve wrote nothing, so it is not a press either.
+    if (write && (outcome.written > 0 || outcome.effectIds.isNotEmpty())) {
         TemplatePressLog.record(state, projectId, template.templateId)
     }
     return ApplyTemplateOutcome.Applied(outcome)
@@ -98,6 +109,7 @@ private fun applyValueTemplateToProgrammer(
     template: TemplateSnapshot,
     targets: List<CueTargetDto>,
     fadeMs: Long,
+    write: Boolean,
 ): ApplyTemplateResponse {
     val fixtureKeys = expandTargetsToFixtureKeys(state, targets)
     if (fixtureKeys.isEmpty()) return ApplyTemplateResponse(0, emptyList())
@@ -209,12 +221,15 @@ private fun applyValueTemplateToProgrammer(
         )
     }
 
-    if (writes.isNotEmpty()) {
+    if (write && writes.isNotEmpty()) {
         // One batched write, as Include does: a template across a whole rig is hundreds of
         // properties and per-property publishing would visibly stutter it.
         state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
     }
-    return ApplyTemplateResponse(writes.size, skips)
+    val values = writes.map {
+        SpreadWriteDto(CueTargetDto(TargetRef.Fixture.TYPE, it.fixture.targetKey), it.propertyName, it.value.serialize())
+    }
+    return ApplyTemplateResponse(writes.size, skips, values = values)
 }
 
 /**
