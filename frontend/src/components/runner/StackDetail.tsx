@@ -22,8 +22,7 @@ import {
 import { cn } from '@/lib/utils'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import type { CueStack } from '@/api/cueStacksApi'
-import type { Cue } from '@/api/cuesApi'
-import { CueCardEditor, type StackChoice } from './CueCardEditor'
+import { CueCardEditor } from './CueCardEditor'
 import { cuePlacesByCue } from '@/lib/cuePlaces'
 import { ShowMarkerRow } from './ShowMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
@@ -35,7 +34,7 @@ import { OwnerEditor } from '@/components/stage/OwnerEditor'
 
 interface StackDetailProps {
   stack: CueStack
-  /** The project's stacks, for the shared chip and *Add to stack…* / *Move to stack…*. */
+  /** The project's stacks, for the shared chip. */
   stacks?: CueStack[]
   projectId: number
   /** The live stack's live and armed entries — a row is an entry, and a cue may be twice in one stack. */
@@ -82,12 +81,6 @@ interface StackDetailProps {
   /** A marker is an entry, so both name the marker's entry id. */
   onMarkerRename: (entryId: number, name: string) => void
   onMarkerDelete: (entryId: number) => void
-  onDuplicate?: (cue: Cue) => void
-  /** Record the programmer into this cue — opens the Record sheet targeting it. */
-  onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
-  onIncludeCue?: (cueId: number, entryId: number) => void
-  includePending?: boolean
   /**
    * Cards (the inline-expanding cue cards, draggable while unlocked) or the cue sheet
    * (`CueSheet`, CLAUDE.md §Sheet kit). A sibling route plus a sticky preference, exactly the
@@ -122,10 +115,6 @@ export function StackDetail({
   onAddMarker,
   onMarkerRename,
   onMarkerDelete,
-  onDuplicate,
-  onRecordInto,
-  onIncludeCue,
-  includePending,
   view = 'cards',
   onOpenCue,
   onOpenBook,
@@ -169,10 +158,6 @@ export function StackDetail({
   }, [openedEntryId])
 
   const placesByCue = useMemo(() => cuePlacesByCue(stacks ?? [stack]), [stacks, stack])
-  const stackChoices = useMemo<StackChoice[]>(
-    () => (stacks ?? []).filter((s) => s.type === 'STACK').map((s) => ({ id: s.id, name: s.name })),
-    [stacks],
-  )
 
   const standardCount = useMemo(
     () => stack.cues.filter((c) => c.cueType === 'STANDARD').length,
@@ -359,7 +344,6 @@ export function StackDetail({
                   stackId={stack.id}
                   projectId={projectId}
                   places={placesByCue.get(cue.id)}
-                  stackChoices={stackChoices}
                   expanded={isExpanded(cue.entryId)}
                   onToggleExpanded={() => onToggleExpanded(cue.entryId)}
                   isActive={cue.entryId === activeEntryId}
@@ -369,10 +353,7 @@ export function StackDetail({
                   location={locationByCue?.get(cue.id) ?? null}
                   onSetStandby={onSetStandby ? () => onSetStandby(cue.id, cue.entryId) : undefined}
                   locked={locked}
-                  onDuplicate={onDuplicate}
-                  onRecordInto={onRecordInto}
-                  onIncludeCue={onIncludeCue}
-                  includePending={includePending}
+                  onRequestUnlock={onRequestUnlock}
                 />
               )
             })}

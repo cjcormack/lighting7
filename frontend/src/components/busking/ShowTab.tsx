@@ -6,6 +6,7 @@ import { useCueLocationLabels, useRunnerDisplay } from '@/hooks/useRunnerDisplay
 import { useMakeStackLive } from '@/hooks/useMakeStackLive'
 import type { ShowBarState } from '@/hooks/useShowBarProps'
 import { useProjectCueStackListQuery, useProjectProgramStateQuery } from '@/store/cueStacks'
+import { useEditLock } from '@/hooks/useEditLock'
 import type { CueStack } from '@/api/cueStacksApi'
 
 /**
@@ -57,6 +58,12 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: programState } = useProjectProgramStateQuery(projectId)
   const activeStackId = programState?.activeStackId ?? null
+  // The cards' ⋯ menus follow the shared show-editing lock but cannot lift it: the busk view has no
+  // lock control, so a locked action names the Show view, where the lock is. Blind edit still works.
+  const { locked: cueActionsLocked } = useEditLock({
+    canEdit: programState?.canEdit ?? false,
+    isShowActive: activeStackId != null,
+  })
 
   const [browsedStackId, setBrowsedStackId] = useState<number | null>(null)
   const browsed =
@@ -106,6 +113,7 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
         activeLocation={display.activeCue ? locationByCue.get(display.activeCue.id) ?? null : null}
         standbyLocation={display.standbyCue ? locationByCue.get(display.standbyCue.id) ?? null : null}
         strip={<ProgrammerIndicator />}
+        cueActions={{ locked: cueActionsLocked, lockedReason: 'Locked — unlock the show on the Show view to edit' }}
       />
     </div>
   )

@@ -325,6 +325,10 @@ after the source's entry in that stack, or loose.
 > **Revised by R2** ([`show-cue-editing-plan.md`](show-cue-editing-plan.md) D12): Duplicate appends the
 > copy to the **end** of the stack, `POST /cues/{id}/duplicate {stackId?}` with no `after`, and R2's
 > session 3 builds the route, so session 6 here builds only the cross-project copy.
+>
+> **Landed with R2 session 3.** `POST /cues/{id}/duplicate {stackId?}` copies through
+> `copyCueRecord` (`routes/projectCuesHelpers.kt`), which the REST copy now shares, so session 6's
+> cross-project copy starts from it.
 
 **Any project can be the source** (D18). The venue's uuid matching applies only when both projects
 are on the same venue; otherwise every record falls back to key and name.
@@ -390,6 +394,10 @@ the model forces:
   cue is still in the Cues table.
 - ***Add to stack…*** on a card or a table row shares the cue. ***Move to stack…*** is add, then
   remove. A drag between stacks in the stack list moves.
+
+  > **Revised by R2 session 3** (Chris, 2026-10-16): *Move to stack…* moves the entry whole, through
+  > `POST /cue-stacks/{id}/entries/{entryId}/move {toStackId}`, so its uuid, explicit number, follow
+  > and prompt-book anchor go with it. Add then remove dropped all four.
 - **A cue pad's ring** follows D11: solid, outline, or off. A pad's face shows the cue's name, and
   its numbers when it has any.
 - **The busk view's "open cue"** (`BuskingView.tsx:415`) opens the cue's first entry, or the Cues
@@ -512,9 +520,10 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   made a loose cue since session 4, and this session's table is where one is found.
 - **A loose cue's pad opens the table.** The busk view's "open cue" opens a cue's first entry, and
   does nothing for a loose cue since session 4 (§4); it opens the Cues table filtered to that cue.
-- **D8's cue confirm.** None exists yet; the stack delete's dialog lists a dry run's uses through
-  `cueDeletePreview` (`DeleteStackDialog.tsx`). This session or R2 session 3, whichever lands first,
-  builds the cue confirm on it for the other to reuse.
+- **D8's cue confirm** exists: R2 session 3 built `CueDeleteDialog`
+  (`frontend/src/components/cues/CueDeleteDialog.tsx`) on `cueDeletePreview`, one confirm for one cue
+  or several that lists every entry, pad, slot, anchor and binding, then deletes with `force`. The
+  table's multi-select *Delete…* mounts it.
 - **Tests:** frontend tests for the filters and the multi-select actions; a route test for the
   list's shape.
 - **Docs:** `frontend/CLAUDE.md`'s views (§Navigation Registry, its ⌘K count of the seven views, the
@@ -522,9 +531,9 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 ### Session 6 — copy from another show (backend + frontend)
 
-- §3.8: the route, *Copy from another show…* in the Cues table, *Duplicate*. The REST
-  `/cues/{id}/copy` goes. *Duplicate* and its route are R2 session 3's if that has landed first
-  (R2 D12: appended to the end of the stack); otherwise this session builds them to R2's rule.
+- §3.8: the route and *Copy from another show…* in the Cues table. The REST `/cues/{id}/copy` goes.
+  *Duplicate* and its route landed with R2 session 3, so this session builds only the cross-project
+  copy, from the `copyCueRecord` helper the duplicate and the old copy share.
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;

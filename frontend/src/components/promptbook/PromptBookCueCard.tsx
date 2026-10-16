@@ -9,6 +9,7 @@ import { cueNumberCellWidth } from '@/lib/cueNumber'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/mobile/CueCardBody'
 import { useCueFade } from '@/hooks/useCueFade'
 import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
+import { CueActions } from '@/components/runner/CueActions'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '@/lib/promptBook/desync'
@@ -51,6 +52,8 @@ interface PromptBookCueCardProps {
   onSetStandby: (entryId: number) => void
   onRemoveAnchor: (entryId: number) => void
   onEditCue: (entryId: number) => void
+  /** Lift the show-editing lock, where it is the operator's — the ⋯ menu's locked actions ask first. */
+  onRequestUnlock?: () => void
   /** Rename the cue. Only wired up while the book is unlocked. */
   onRenameCue: (cueId: number, name: string) => void
   /** Set (or clear, with null) the entry's number. Only wired up while unlocked. */
@@ -110,6 +113,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   onSetStandby,
   onRemoveAnchor,
   onEditCue,
+  onRequestUnlock,
   onRenameCue,
   onRenumberCue,
   onRenoteCue,
@@ -264,6 +268,23 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               {warningTriangle}
               {chevron}
             </>
+          }
+          actions={
+            <CueActions
+              projectId={projectId}
+              host="menu"
+              rows={[
+                {
+                  cueId: cue.cueId,
+                  name: cue.name,
+                  cueNumber: cueEntry?.cueNumber ?? null,
+                  entryId: cue.entryId,
+                  stackId: cue.stackId,
+                },
+              ]}
+              locked={locked}
+              onRequestUnlock={onRequestUnlock}
+            />
           }
           afterIdentity={
             lines.length > 0 ? (

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
@@ -107,6 +108,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-R2-3`
+
+**What it proves**: *the cue action set on a real show* — venue-visit R2.3, show-cue-editing plan
+session 3 (§5, §10): the split button's Blind edit sends nothing to the stage while the show runs,
+*← Show* returns to the entry the edit came from, the duplicate route appends, and the D8 confirm
+names everything a delete takes.
+
+**Why it is here**: the tests prove Blind goes on before the Include and that the desk holds an
+included effect under Blind; only the rig shows that nothing on stage moved, and only a real show's
+pads and stacks show the confirm reads right.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show running and locked:
+
+1. **Blind edit.** On Act 1, open Q4's card. The split button reads *Blind edit in programmer*, amber.
+   Press it: the programmer opens, Blind is on, and nothing on stage moves — values or effects.
+2. **← Show.** In the programmer's source box press *← Show*: Act 1 opens with Q4's card open.
+3. **Duplicate.** Unlock, and *Duplicate* Q3: the copy, *Q3 (copy)*, is the last cue of Act 1, its
+   card open, and every other cue keeps its number.
+4. **Delete.** Put a cue on a busk pad, then *Delete…* it from its card: the confirm lists its entry
+   and the pad's page (and any slot, anchor or binding). Delete; the pad's page redraws without it.
+
 ## `FU-MANUAL-VENUE-VISIT-R1-4`
 
 **What it proves**: *one cue, several stacks, and delete as its own act* — venue-visit R1.4, cue model
@@ -124,9 +146,9 @@ Show view's cards and confirms against a real show, or watched the stage while t
    Nothing on stage moves and A reads the next cue on deck; GO, and the following cue comes in.
 3. **Delete a stack.** Delete B with *Also delete* left unticked: its cues are still in A (or loose).
    Delete a stack again with it ticked: the confirm lists the pads and slots of the cues it would take.
-4. **Delete a cue in use.** Put a cue on a busk pad, then delete it from somewhere that offers it (the
-   Cues table from R1.5, or `DELETE /cues/{id}` until then): it is refused, naming the stack entry and
-   the pad; forced, both are gone and the pad's page redraws.
+4. **Delete a cue in use.** Put a cue on a busk pad, then *Delete…* it from its card (R2.3's confirm,
+   on the dry run): it names the stack entry and the pad; confirmed, both are gone and the pad's page
+   redraws.
 
 ## `FU-MANUAL-VENUE-VISIT-R1-3`
 

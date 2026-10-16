@@ -315,6 +315,10 @@ class CueHolds internal constructor(
      * Restamp the stack holds on the entries in [entryPriorities] (`entryId → stackBand + position`),
      * after a write shifted positions — a reorder, an add, a sort, a delete or insert mid-list, a
      * marker. A live cue's priority is still its highest hold's, so a loose hold above keeps it there.
+     *
+     * A hold is restamped only by a priority in its own stack's band: an entry moved to another stack
+     * keeps its id, and the stack it left goes on holding it at that stack's priority until its next
+     * GO, whatever the stack it joined does meanwhile.
      */
     fun restampEntries(entryPriorities: Map<Int, Int>) {
         if (entryPriorities.isEmpty()) return
@@ -325,6 +329,7 @@ class CueHolds internal constructor(
                 for (hold in cue.holds.keys.toList()) {
                     if (hold !is CueHold.Stack) continue
                     val priority = entryPriorities[hold.entryId] ?: continue
+                    if (stackOfDerivedPriority(priority) != hold.stackId) continue
                     if (cue.holds.put(hold, priority) != priority) touched = true
                 }
                 if (touched) out[cueId] = cue.holds.values.max()

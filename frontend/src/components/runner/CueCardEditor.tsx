@@ -1,17 +1,5 @@
 import { useState } from 'react'
-import {
-  ArrowRightLeft,
-  ChevronRight,
-  Check,
-  Copy,
-  Download,
-  GripVertical,
-  ListPlus,
-  Loader2,
-  Sliders,
-  Trash2,
-  Zap,
-} from 'lucide-react'
+import { ChevronRight, Check, GripVertical, Loader2, Sliders } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
@@ -19,23 +7,11 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { targetKey } from '@/lib/targetKey'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import {
-  useAddCueToStackMutation,
-  usePatchCueStackEntryMutation,
-  useRemoveCueStackEntryMutation,
-} from '@/store/cueStacks'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
 import type { CuePlace } from '@/lib/cuePlaces'
 import { SharedCueChip } from './SharedCueChip'
+import { CueActions } from './CueActions'
 import { InlineEditField } from '@/components/InlineEditField'
-import type { Cue } from '@/api/cuesApi'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 import {
   formatFadeCurve,
@@ -54,22 +30,15 @@ import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { HandCueLayerStrip } from '@/components/hand/HandLayerTargets'
 import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
 import { useCueFade } from '@/hooks/useCueFade'
-/** A stack a cue can be added or moved to. */
-export interface StackChoice {
-  id: number
-  name: string
-}
 
 interface CueCardEditorProps {
   /** A cue entry — a marker is drawn by `ShowMarkerRow`, never as a card. */
   cue: CueStackCueRow
-  /** The stack the entry is in — what Remove, Move and the entry's number and follow address. */
+  /** The stack the entry is in — what the actions and the entry's number and follow address. */
   stackId: number
   projectId: number
   /** Every place the cue sits, this entry's included — the shared chip reads it. */
   places?: readonly CuePlace[]
-  /** The project's runnable stacks, for *Add to stack…* and *Move to stack…*. */
-  stackChoices?: readonly StackChoice[]
   expanded: boolean
   onToggleExpanded: () => void
   isActive?: boolean
@@ -97,20 +66,16 @@ interface CueCardEditorProps {
    * genuinely impossible rather than merely discouraged.
    */
   locked?: boolean
-  onDuplicate?: (cue: Cue) => void
-  /** Record the programmer into this cue — opens the Record sheet targeting it. */
-  onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
-  onIncludeCue?: (cueId: number, entryId: number) => void
-  includePending?: boolean
+  /** Lift the lock, where it is the operator's to lift — a locked cue action asks first. */
+  onRequestUnlock?: () => void
 }
 
 /**
  * Inline-expanding cue card. The collapsed row is the cue summary (Q# · name · target
- * chips · fade); expanding it shows the cue **read-only** — the same value grid the programmer
- * draws, its layer stack, its effects and its hooks — with two ways out: *Edit in Programmer*,
- * which Includes it, and *Cue properties…*, which opens the drawer for everything a value grid
- * cannot express.
+ * chips · fade); opening it draws the cue's action set directly under that row (`CueActions`,
+ * show-cue-editing plan §5) and then the cue **read-only** — the same value grid the programmer
+ * draws, its layer stack, its effects and its hooks — with *Cue properties…* for everything a value
+ * grid cannot express.
  *
  * **It used to be a three-pane editor** (Targets · Properties · Layers), collapsing to tabs below
  * 1000px, and each expanded card opened its own `cueEdit` WS session. All of that went in session
@@ -124,7 +89,6 @@ export function CueCardEditor({
   stackId,
   projectId,
   places,
-  stackChoices,
   expanded,
   onToggleExpanded,
   isActive = false,
@@ -134,10 +98,7 @@ export function CueCardEditor({
   location = null,
   onSetStandby,
   locked = false,
-  onDuplicate,
-  onRecordInto,
-  onIncludeCue,
-  includePending = false,
+  onRequestUnlock,
 }: CueCardEditorProps) {
   // Sorted by entry id, as the list's `SortableContext` is: rows are entries.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -157,24 +118,6 @@ export function CueCardEditor({
   const { cueData, targets, isFetching } = useExpandedCue(projectId, cue.id, expanded, cue.entryId)
   const [patchCue] = usePatchProjectCueMutation()
   const [patchEntry] = usePatchCueStackEntryMutation()
-  const [removeEntry] = useRemoveCueStackEntryMutation()
-  const [addToStack] = useAddCueToStackMutation()
-
-  const removeFromStack = () => {
-    removeEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id }).unwrap().catch(ignoreReportedError)
-  }
-  const addTo = (target: number) => {
-    addToStack({ projectId, stackId: target, cueId: cue.id }).unwrap().catch(ignoreReportedError)
-  }
-  // Move is add then remove, and the remove waits on the add: a refused add must not leave the cue
-  // in no stack at all.
-  const moveTo = (target: number) => {
-    addToStack({ projectId, stackId: target, cueId: cue.id })
-      .unwrap()
-      .then(() => removeEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id }).unwrap())
-      .catch(ignoreReportedError)
-  }
-  const moveChoices = stackChoices?.filter((s) => s.id !== stackId) ?? []
 
 
   const targetCount = targets.length
@@ -227,7 +170,10 @@ export function CueCardEditor({
   }
 
   return (
-    <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id} data-entry-row={cue.entryId}>
+    // The sortable's `attributes` (`role="button"`, and `aria-disabled` while locked) go on the grip,
+    // the drag's activator, not on the card: on the card they made the whole of it one disabled
+    // button, the action strip included, which works locked.
+    <div ref={setNodeRef} style={sortableStyle} data-cue-row={cue.id} data-entry-row={cue.entryId}>
       <div
         className={cn(
           // `@container`: the header's columns below query THIS box. They used to be viewport
@@ -266,6 +212,7 @@ export function CueCardEditor({
             {!locked && (
               <div
                 className="absolute inset-0 grid place-items-center text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cue:opacity-100 cursor-grab"
+                {...attributes}
                 {...listeners}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -400,6 +347,22 @@ export function CueCardEditor({
           </button>
         </div>
 
+        {/* The action set, directly under the row it acts on (show-cue-editing plan §5, §4.2),
+            drawn whole whether or not the show is locked: locked, Blind edit works and the rest
+            ask to unlock (D8). */}
+        {expanded && (
+          <div className="flex items-center border-t bg-muted/20 px-3 py-1.5" data-cue-strip={cue.entryId}>
+            <CueActions
+              projectId={projectId}
+              host="strip"
+              rows={[{ cueId: cue.id, name: cue.name, cueNumber: cue.cueNumber ?? null, entryId: cue.entryId, stackId }]}
+              locked={locked}
+              onRequestUnlock={onRequestUnlock}
+              fromShowView
+              className="min-w-0"
+            />
+          </div>
+        )}
         {expanded && (
           <div className="border-t bg-background">
               {!cueData ? (
@@ -452,106 +415,6 @@ export function CueCardEditor({
                         layer stack it would join is drawn. */}
                     {!locked && <HandCueLayerStrip projectId={projectId} cue={cueData} />}
                   </div>
-
-                  {/* The action row, absent in its entirety while locked — hidden rather than
-                      disabled, because a row of greyed-out buttons reads as breakage where absence
-                      reads as "not now".
-
-                      Every one of these changes the show or reaches the stage, which is why none of
-                      them survives the lock. Remove and Duplicate edit the stack. **Edit in
-                      Programmer Includes the cue, and Include goes live** (D2 of the plan: the desk
-                      does not auto-blind, so opening a cue puts it on stage). Record writes the cue
-                      from whatever the programmer is holding. Reading a cue is the only thing this
-                      card does while the show is locked. */}
-                  {!locked && (
-                  <div className="flex items-center gap-2 px-3 py-2 border-t bg-muted/20">
-                    {/* Remove from stack takes this entry away and never the cue, which stays in its
-                        other places or loose — nothing is lost, so it asks nothing. */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-destructive hover:text-destructive gap-1"
-                      onClick={removeFromStack}
-                      title="Take this cue out of this stack — the cue itself is kept"
-                    >
-                      <Trash2 className="size-3.5" />
-                      Remove from stack
-                    </Button>
-                    {stackChoices && stackChoices.length > 0 && (
-                      <StackMenu
-                        label="Add to stack…"
-                        icon={<ListPlus className="size-3.5" />}
-                        heading="Share this cue with"
-                        stacks={stackChoices}
-                        onPick={addTo}
-                      />
-                    )}
-                    {moveChoices.length > 0 && (
-                      <StackMenu
-                        label="Move to stack…"
-                        icon={<ArrowRightLeft className="size-3.5" />}
-                        heading="Move this entry to"
-                        stacks={moveChoices}
-                        onPick={moveTo}
-                      />
-                    )}
-                    {onDuplicate && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => onDuplicate(cueData)}
-                      >
-                        <Copy className="size-3.5" />
-                        Duplicate
-                      </Button>
-                    )}
-                    {/* The programmer loop, from the cue you're already looking at. Include
-                        loads this cue into the programmer to edit on stage; Record writes the
-                        programmer back. Together they replace the old "Grab live" button —
-                        capturing the whole stage is now one Record source among several,
-                        rather than the only (and lossiest) way in. */}
-                    {onIncludeCue && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="h-7 gap-1 text-xs"
-                        onClick={() => onIncludeCue(cue.id, cue.entryId)}
-                        disabled={includePending}
-                        // Named for where it takes you rather than for the verb it sends. "Include"
-                        // is the right word for the operation and the wrong word for the only route
-                        // from a cue to changing it: an operator looking for "edit" would not guess
-                        // it. Blind stays theirs to set first — the desk does not infer it, which is
-                        // why the ShowBar carries the switch.
-                        title="Load this cue into the programmer to change it"
-                      >
-                        {includePending ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Download className="size-3.5" />
-                        )}
-                        Edit in Programmer
-                      </Button>
-                    )}
-                    {onRecordInto && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => onRecordInto(cue.id)}
-                      >
-                        <Zap className="size-3.5" />
-                        Record
-                      </Button>
-                    )}
-                    {/* No "Make hard" here, and nothing replaces it. The gesture existed to
-                        resolve value-level references; those retired with the `ref:` grammar, so
-                        there is nothing left to make hard. Every route it could have called is
-                        gone too — the per-cue one, `POST /programmer/make-hard`, and
-                        `POST /cues/{id}/flatten`. Don't add a button back for a concept the
-                        composition model no longer has. */}
-                  </div>
-                  )}
                 </>
               )}
           </div>
@@ -567,35 +430,3 @@ export function CueCardEditor({
   )
 }
 
-function StackMenu({
-  label,
-  icon,
-  heading,
-  stacks,
-  onPick,
-}: {
-  label: string
-  icon: React.ReactNode
-  heading: string
-  stacks: readonly StackChoice[]
-  onPick: (stackId: number) => void
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-          {icon}
-          {label}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel className="text-xs">{heading}</DropdownMenuLabel>
-        {stacks.map((s) => (
-          <DropdownMenuItem key={s.id} onSelect={() => onPick(s.id)}>
-            {s.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}

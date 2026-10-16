@@ -165,6 +165,7 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | PUT | `/{projectId}/cues/{cueId}` | Update a cue's content (current project only); its number and follow are the entry's |
 | DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only): 409 `CUE_IN_USE` while anything names it, `?force=true` to take those with it (§"Delete") |
 | POST | `/{projectId}/cues/delete` | `{cueIds, force?, dryRun?}` — several at once, all or none (§"Delete") |
+| POST | `/{projectId}/cues/{cueId}/duplicate` | `{stackId?}` — a copy of the cue in this project (current project only): its rows, layers, effects, hooks, notes, scenery and events, named `<name> (copy)`, appended unnumbered to the **end** of `stackId`'s list, or loose without one (show-cue-editing plan D12). Answers 201 `{cueId, name, stackId?, entryId?}`; 400 for a stack of another project or a separator |
 | POST | `/{projectId}/cues/{cueId}/copy` | Copy cue to another project |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
@@ -229,6 +230,9 @@ effect of removing an entry or deleting a stack.
 - **Several at once:** `POST /cues/delete {cueIds, force?, dryRun?}` answers `{deleted, uses}`; any
   cue in use without `force` is 409 `CUE_IN_USE` and nothing is deleted. `dryRun` deletes nothing and
   lists the uses — what a confirm shows.
+- **The Show view's confirm** is `CueDeleteDialog` (frontend `components/cues/CueDeleteDialog.tsx`,
+  show-cue-editing plan session 3): a dry run lists each cue's uses, one confirm for several, then
+  `POST /cues/delete` with `force`; it says that a binding stays and reports its cue missing.
 - **A stack delete leaves its cues** (`DELETE /cue-stacks/{id}`): its entries, anchors and set go,
   and it answers `{looseCueIds, deletedCueIds}`. `?deleteLooseCues=true` (D17) deletes, as a forced
   delete would, the cues it left in no stack — and only those; a cue another stack still holds stays.
@@ -282,7 +286,15 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
   in one, or none (**loose**). Editing a cue changes it everywhere it plays; its number and follow
   are each entry's own (D2), so a shared cue can be Q14 in one stack and Q3 in another.
   `POST /cue-stacks/{id}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?}` **adds** an entry,
-  sharing the cue rather than moving it; *Move to stack* is add, then remove.
+  sharing the cue rather than moving it.
+- ***Move to stack…*** is `POST /cue-stacks/{id}/entries/{entryId}/move` `{toStackId}`
+  (show-cue-editing plan session 3): the **same entry row** re-pointed to the end of the other
+  stack, so its uuid, explicit number, follow and prompt-book anchor go with it; an auto number is
+  labelled again where it lands, and both stacks renumber. Answers `{stackId, entryId}`; 409 when
+  the target already holds the entry's explicit number, 400 for its own stack, a separator or
+  another project's, 404 for a marker. Moving the **live** entry leaves the stage alone as a removal
+  does (below): its old stack keeps the hold, at its old priority, until its next GO
+  (`moveEntry` in `routes/projectCueStacks.kt`).
 - **The caller names the entry** (P7). Every route that runs or edits a cue's place in a list takes
   the stack and the **entry** id, and nothing picks a "home" stack for a cue. A press that holds a
   cue loose — a busk pad, a cue slot, MIDI `FireCue`, the hand, `POST /cues/{id}/apply`, the AI's

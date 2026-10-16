@@ -47,7 +47,7 @@ locked = !canEdit || (isShowActive && lockRequested)      // useEditLock
 |---|---|---|
 | `/show` | the stack list, read-only | plus reorder / create / rename / delete |
 | `/show/stacks/:id` | one stack's cues, plus the sibling tab strip | the same, plus drag and inline edits |
-| A cue row | state pip, fade chrome, click-to-arm | plus grip, inline fields, Remove, Duplicate |
+| A cue row | state pip, fade chrome, click-to-arm; the cue action set, Blind edit live and the rest asking to unlock | plus grip and inline fields; every action live |
 | Transport | Space / Backspace live | off — the operator is typing; `L` still toggles |
 | Phone | the phone runner (`RunMobile`) | — always locked |
 
@@ -226,7 +226,7 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
 | `src/components/runner/StackDetail.tsx` | Cue list within a stack, dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
 | `src/components/runner/ShowMarkerRow.tsx` | Interactive marker with inline rename/delete. Locked, it renders `MarkerRow` — one separator, every surface. |
-| `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail`. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Two ways out: **Edit in Programmer** (Includes the cue, then opens the programmer — venue-visit plan S3; a refused Include stays on Show) and **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`, now in `components/cues/`). |
+| `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail`. **No longer an editor**: session 2a deleted its three panes (Targets · Cue properties · Layers) and their tab chrome, and the expanded body is now the read-only cue surface — `CueDetailContent`, which includes `CueValueGrid`, the same cells the programmer's grid draws. Under the collapsed row it draws the cue action set's strip (`CueActions`, frontend CLAUDE.md §"The cue action set"): the Edit / Blind edit split button, Load, Record…, Duplicate, Remove from stack, Delete… and the ⋯ menu. **Cue properties…** (`CuePropertiesSheet`, which reuses the surviving `CuePropsPane`, now in `components/cues/`) stays in the expanded body. |
 | `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/hooks/useRunnerAnimation.ts` | requestAnimationFrame hook for fade/auto-advance progress |
 | `src/hooks/useNarrowContainer.ts` | ResizeObserver hook, true while a container is below a threshold. `ShowPage` uses it at 600px to switch to the phone runner. |
@@ -418,8 +418,10 @@ reading a stack that is not the playhead, the `OffPlayheadBanner`:
 - **Running** it shows a fade countdown, a played tick, a blue armed accent, and the prompt-book
   reading position; the row body arms the cue as next GO and the chevron expands it.
 - **Unlocked** the body expands instead, the pip's cell reveals a drag grip on hover, the Q number /
-  name / fade become inline editable, and the expanded card gains Remove and Duplicate. Arming is
-  deliberately not offered unlocked: it changes what GO fires, which is the show.
+  name / fade become inline editable. Arming is deliberately not offered unlocked: it changes what
+  GO fires, which is the show.
+- **The cue action set** sits under the collapsed row of an expanded card, locked or not: locked,
+  *Blind edit in programmer* works and every other action asks to unlock (show-cue-editing plan D8).
 - Expanding shows `CueDetailContent` — read-only, always. A cue is edited by Include (D2).
 - **"Add Cue" does not exist.** A cue is a captured state, so recording is the only way one is made:
   *Record into &lt;stack&gt;*. Separators and stacks keep their create buttons — neither is a captured
@@ -692,6 +694,7 @@ POST   /project/{id}/cue-stacks/{sid}/standby               Arm the next GO { en
 POST   /project/{id}/cue-stacks/{sid}/add-cue               Add an entry naming a cue { cueId, ... } — shares it, never moves it
 PATCH  /project/{id}/cue-stacks/{sid}/entries/{entryId}     An entry's number and follow { cueNumber?, autoAdvance?, autoAdvanceDelayMs? }
 DELETE /project/{id}/cue-stacks/{sid}/entries/{entryId}     Remove from stack: the entry goes, the cue stays (loose if it was its last)
+POST   /project/{id}/cue-stacks/{sid}/entries/{entryId}/move Move the entry whole to { toStackId }: number, follow and anchor kept
 POST   /project/{id}/cue-stacks/{sid}/sort-by-cue-number    Sort cues by Q number
 
 POST   /project/{id}/cue-stacks/{sid}/activate              Start stack playback
@@ -708,7 +711,8 @@ POST   /project/{id}/cues                                   Create cue (no cueSt
 PUT    /project/{id}/cues/{cueId}                           Update cue (number and follow are the entry's, ignored here)
 DELETE /project/{id}/cues/{cueId}                           Delete cue; 409 CUE_IN_USE naming its uses, ?force=true deletes them too
 POST   /project/{id}/cues/delete                            Delete several { cueIds, force?, dryRun? }; dryRun answers the uses
-POST   /project/{id}/cues/{cueId}/copy                     Duplicate cue
+POST   /project/{id}/cues/{cueId}/copy                     Copy a cue into another project
+POST   /project/{id}/cues/{cueId}/duplicate                Duplicate { stackId? }: appended unnumbered, or loose; scenery and events kept
 ```
 
 ## WebSocket Events

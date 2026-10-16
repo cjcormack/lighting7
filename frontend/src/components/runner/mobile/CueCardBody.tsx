@@ -31,6 +31,11 @@ interface CueCardBodyProps {
   headerLabel?: string
   /** Right-aligned header content (counter/Change on Run; chevron/controls in the book). Hidden while fading. */
   headerTrailing?: ReactNode
+  /**
+   * The cue's action set as a ⋯ menu (`CueActions` with `host="menu"`, show-cue-editing plan D9),
+   * at the header's right end — drawn while fading too. The body stays a read-out.
+   */
+  actions?: ReactNode
   /** Extra content pinned to the foot of the card (book: Edit cue / Set next / anchor controls). */
   footer?: ReactNode
   /** Under the cue's identity and position line, above the Details toggle — the Prompt Book's scenery lines. */
@@ -73,6 +78,7 @@ export function CueCardBody({
   location,
   headerLabel,
   headerTrailing,
+  actions,
   footer,
   afterIdentity,
   onBodyClick,
@@ -177,7 +183,7 @@ export function CueCardBody({
           }
         />
         {label && <span>{label}</span>}
-        {(isFading || headerTrailing) && (
+        {(isFading || headerTrailing || actions) && (
           <div className="ml-auto flex items-center gap-2">
             {isFading && (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-900 bg-amber-950/60 px-2 py-px text-[10px] tracking-[0.08em]">
@@ -185,6 +191,7 @@ export function CueCardBody({
               </span>
             )}
             {headerTrailing}
+            {actions}
           </div>
         )}
       </header>

@@ -28,6 +28,11 @@ function Harness({
       <div role="dialog">
         <button>in a dialog</button>
       </div>
+      <div role="menu">
+        <div role="menuitem" tabIndex={-1}>
+          a menu item
+        </div>
+      </div>
       <span data-testid="inert">inert</span>
     </div>
   )
@@ -95,6 +100,17 @@ describe('useTransportKeys', () => {
     const { getByText } = render(<Harness onGo={onGo} />)
     fireEvent.keyDown(getByText('in a dialog'), { code: 'Space' })
     expect(onGo).not.toHaveBeenCalled()
+  })
+
+  it('does nothing from inside an open menu — no GO, no BACK, no lock', () => {
+    const onGo = vi.fn()
+    const onBack = vi.fn()
+    const onToggleLock = vi.fn()
+    const { getByText } = render(<Harness onGo={onGo} onBack={onBack} onToggleLock={onToggleLock} />)
+    for (const code of ['Space', 'Backspace', 'KeyL']) fireEvent.keyDown(getByText('a menu item'), { code })
+    expect(onGo).not.toHaveBeenCalled()
+    expect(onBack).not.toHaveBeenCalled()
+    expect(onToggleLock).not.toHaveBeenCalled()
   })
 
   it('does not fire while a button holds focus', () => {

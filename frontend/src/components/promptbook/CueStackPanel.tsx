@@ -54,6 +54,8 @@ interface CueStackPanelProps {
   onSetStandby: (entryId: number) => void
   /** Jump to the entry's cue in Show. */
   onEditCue: (entryId: number) => void
+  /** Lift the show-editing lock, where it is the operator's — a card's locked ⋯ action asks first. */
+  onRequestUnlock?: () => void
   /** Rename a cue in place (unlocked only — the cards gate on `locked` themselves). */
   onRenameCue: (cueId: number, name: string) => void
   /** Set or clear an entry's number in place (unlocked only). */
@@ -109,6 +111,7 @@ export function CueStackPanel({
   onWarningClick,
   onSetStandby,
   onEditCue,
+  onRequestUnlock,
   onRenameCue,
   onRenumberCue,
   onRenoteCue,
@@ -242,6 +245,7 @@ export function CueStackPanel({
               onSetStandby={onSetStandby}
               onRemoveAnchor={onRemoveAnchor}
               onEditCue={onEditCue}
+              onRequestUnlock={onRequestUnlock}
               onRenameCue={onRenameCue}
               onRenumberCue={onRenumberCue}
               onRenoteCue={onRenoteCue}

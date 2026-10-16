@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { AlertTriangle, CirclePlus, Download, Layers, RefreshCw, Upload } from 'lucide-react'
+import { useNavigate } from 'react-router'
+import { AlertTriangle, ArrowLeft, CirclePlus, Download, Layers, RefreshCw, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -15,6 +16,7 @@ import { useProjectCueListQuery } from '@/store/cues'
 import { useVenueMode } from '@/store/venues'
 import { useLookListQuery } from '@/store/looks'
 import { useIncludeBaseline } from './useIncludeBaseline'
+import { isShowInclude, useShowInclude } from '@/lib/showInclude'
 
 const ZONE_LABEL = 'text-[9px] font-bold uppercase tracking-[0.1em]'
 
@@ -179,6 +181,17 @@ export function ProgrammerSourceStrip({
   const { data: looks } = useLookListQuery({ projectId }, { skip: lookId == null })
 
   const placed = useMemo(() => includedCueEntry(target, stacks), [target, stacks])
+  const navigate = useNavigate()
+  /**
+   * *← Show* (show-cue-editing plan D16): back to the card of the entry this window Included from
+   * the Show view, by `?entry=`, so a cue twice in one stack opens the right row. Only while that
+   * include is the programmer's current one — any other Include takes the way back away.
+   */
+  const showInclude = useShowInclude()
+  const backToShow =
+    isShowInclude(showInclude, projectId, target) && placed != null
+      ? `/projects/${projectId}/show/stacks/${placed.stack.id}?cue=${showInclude.cueId}&entry=${showInclude.entryId}`
+      : null
   // A cue in no stack the list holds is loose or deleted; only the project's cue list, which holds
   // loose cues too, can say which. Read only for that case.
   const includedId = target?.kind === 'CUE' ? target.cueId : null
@@ -306,6 +319,22 @@ export function ProgrammerSourceStrip({
           `aria-hidden`: the number and the location are in this sentence too, and without it they
           are announced twice. */}
       <span className="sr-only">{boxTitle}</span>
+      {backToShow != null && (
+        <Button
+          size="sm"
+          variant="outline"
+          // Its word only from `@[800px]`, the arrow alone below. **Not drawn below `@[600px]`**: the
+          // phone's arm is `Q4 · Update · Revert` to the pixel, and the arrow pushed Revert out of
+          // the box (measured at 393px); the switcher's Show pill is the way back there.
+          className="hidden h-7 shrink-0 gap-1 @[600px]:inline-flex @max-[800px]:w-7 @max-[800px]:px-0"
+          aria-label="Back to Show"
+          title="Back to this cue on the Show view"
+          onClick={() => navigate(backToShow)}
+        >
+          <ArrowLeft className="size-3.5" />
+          <span className="hidden @[800px]:inline">Show</span>
+        </Button>
+      )}
       <span
         aria-hidden="true"
         className={cn(ZONE_LABEL, 'hidden shrink-0 text-blue-300 @[600px]:inline')}

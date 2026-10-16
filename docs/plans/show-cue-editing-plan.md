@@ -257,6 +257,7 @@ effect across writes. No `formatVersion` change: the archive already carries eac
 | Route or frame | Session | Notes |
 |---|---|---|
 | `POST /cues/{id}/duplicate {stackId?}` | 3 | Appends to the end of `stackId`'s list, or loose without one (D12). Replaces the client's `buildCueInput` copy. |
+| `POST /cue-stacks/{id}/entries/{entryId}/move {toStackId}` | 3 | *Move to stack…*: the entry row moved whole to the end of the other stack — uuid, explicit number, follow and anchor kept (§11, 17). |
 | `GET /cues/{id}/cooked` | 5 | Each row gains `sourceTargetType` / `sourceTargetKey`, the own row's or layer row's own target before group expansion. |
 | `CueAdHocEffectDto.uuid` | 2 | Read-only. |
 | `POST /cues/{id}/update-stage {dryRun?}` | 7 | §3.5. |
@@ -406,7 +407,7 @@ says palette). All of them have merged.
 - **Docs:** `cues-engineering.md` §"Data Model", `sync-engineering.md` (what a cue write does to
   uuids).
 
-### Session 3 — the action set (frontend + duplicate route)
+### Session 3 — the action set (frontend + duplicate route) — done, `ebd029f`
 
 - §5: `CueActions` in the card strip, the cue sheet's bar and the phone ⋯; the split button and its
   run-state face; Load; Record; Duplicate on its new route (this takes the duplicate route from R1
@@ -557,3 +558,9 @@ Answered by Chris, 2026-10-14, in three rounds:
 14. **Cue properties?** Folded into the editor (D15).
 15. **The way back from the programmer?** *← Show* in the source box (D16).
 16. **Adding an effect?** The picker, in draft (D17).
+
+Answered by Chris, 2026-10-16, during session 3:
+
+17. ***Move to stack…* drops the entry's place?** No: it moves the entry whole, on a route of its own,
+    so its number, follow and prompt-book anchor go with it. Keeping R1.4's add then remove was
+    declined, and so was copying the number and follow onto a new entry (which still lost the anchor).

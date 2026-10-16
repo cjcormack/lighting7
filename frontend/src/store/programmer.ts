@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
+import { Status } from '../api/statusApi'
 import type { CueTarget } from '../api/cuesApi'
 import type {
   IncludedTarget,
@@ -261,6 +262,36 @@ export function programmerClearAll(fadeMs?: number) {
 
 export function programmerSetBlind(blind: boolean, fadeMs?: number) {
   lightingApi.programmer.setBlind(blind, fadeMs)
+}
+
+/**
+ * Switch Blind on at [fadeMs] and resolve once the desk says it is on — true, or false when it has
+ * not said so within [timeoutMs]. Already blind resolves true at once.
+ *
+ * *Blind edit in programmer* Includes only after this resolves true: Blind is a WS gesture and
+ * Include a REST call, and the desk does not order the two, so an Include sent beside the Blind
+ * frame could land first and put the cue on stage. False at once while the socket is down.
+ */
+export function programmerBlindOn(fadeMs?: number, timeoutMs = 3000): Promise<boolean> {
+  // With the socket down the cached flag may be a desk that has since restarted without Blind, and
+  // no Blind frame could be sent or confirmed anyway; a reconnect pushes the state afresh.
+  if (lightingApi.status.get() !== Status.OPEN) return Promise.resolve(false)
+  if (lightingApi.programmer.isBlind()) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (on: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subscription.unsubscribe()
+      resolve(on)
+    }
+    const subscription = lightingApi.programmer.subscribe((state) => {
+      if (state.blind) finish(true)
+    })
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    lightingApi.programmer.setBlind(true, fadeMs)
+  })
 }
 
 /**

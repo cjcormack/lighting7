@@ -493,6 +493,7 @@ export function PromptBookViewerPage() {
     onWarningClick: handleWarningClick,
     onSetStandby: handleSetStandby,
     onEditCue: handleEditCue,
+    onRequestUnlock: relock.lockRelevant ? toggleLock : undefined,
     onRenameCue: handleRenameCue,
     onRenumberCue: handleRenumberCue,
     onRenoteCue: handleRenoteCue,

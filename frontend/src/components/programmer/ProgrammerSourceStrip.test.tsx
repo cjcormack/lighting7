@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
 let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null }
@@ -26,6 +27,12 @@ const venue = { isVenue: false }
 vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue, canEdit: venue.isVenue }) }))
 
 import { ProgrammerSourceStrip } from './ProgrammerSourceStrip'
+import { resetShowIncludeForTests, setShowInclude } from '@/lib/showInclude'
+
+function Where() {
+  const l = useLocation()
+  return <div data-testid="where">{l.pathname + l.search}</div>
+}
 
 const CUE: IncludedTarget = {
   kind: 'CUE',
@@ -38,16 +45,22 @@ const STACK = { id: 2, name: 'Act 1', cues: [{ id: 5 }, { id: 6 }] }
 
 function draw() {
   render(
-    <ProgrammerSourceStrip
-      projectId={1}
-      onUpdate={() => {}}
-      onRevert={() => {}}
-    />,
+    <MemoryRouter initialEntries={['/projects/1/programmer']}>
+      <Where />
+      <Routes>
+        <Route
+          path="*"
+          element={<ProgrammerSourceStrip projectId={1} onUpdate={() => {}} onRevert={() => {}} />}
+        />
+      </Routes>
+    </MemoryRouter>,
   )
 }
 
 afterEach(() => {
   cleanup()
+  sessionStorage.clear()
+  resetShowIncludeForTests()
   summary = { blind: false, entryCount: 0, lastIncluded: null }
   dirty = null
   stacks = []
@@ -362,5 +375,43 @@ describe('ProgrammerSourceStrip', () => {
     draw()
     const update = screen.getByRole('button', { name: 'Update Q4' })
     expect(update.parentElement!.querySelector('span[aria-hidden]')).toBeNull()
+  })
+
+  describe('← Show (show-cue-editing plan D16)', () => {
+    /** One cue twice in Act 1 (entries 11 and 12), as R1.4 allows. */
+    const TWICE = {
+      id: 2,
+      name: 'Act 1',
+      cues: [
+        { id: 5, entryId: 11, cueType: 'STANDARD', cueNumber: '1' },
+        { id: 6, entryId: 13, cueType: 'STANDARD', cueNumber: '2' },
+        { id: 5, entryId: 12, cueType: 'STANDARD', cueNumber: '3' },
+      ],
+    }
+
+    it('lands on the entry the Show view included, not the cue’s first place', () => {
+      stacks = [TWICE]
+      summary = { ...summary, lastIncluded: { ...CUE, entryId: 12 } }
+      setShowInclude({ projectId: 1, cueId: 5, entryId: 12 })
+      draw()
+      fireEvent.click(screen.getByRole('button', { name: 'Back to Show' }))
+      expect(screen.getByTestId('where').textContent).toBe('/projects/1/show/stacks/2?cue=5&entry=12')
+    })
+
+    it('is drawn only while that include is the current one', () => {
+      stacks = [TWICE]
+      // The programmer has since Included the cue's other place, from somewhere else.
+      summary = { ...summary, lastIncluded: { ...CUE, entryId: 11 } }
+      setShowInclude({ projectId: 1, cueId: 5, entryId: 12 })
+      draw()
+      expect(screen.queryByRole('button', { name: 'Back to Show' })).toBeNull()
+    })
+
+    it('is not drawn for an include the Show view did not make', () => {
+      stacks = [TWICE]
+      summary = { ...summary, lastIncluded: { ...CUE, entryId: 12 } }
+      draw()
+      expect(screen.queryByRole('button', { name: 'Back to Show' })).toBeNull()
+    })
   })
 })

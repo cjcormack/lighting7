@@ -223,7 +223,13 @@ internal fun cueDerivedPriority(cueData: CueApplyData): Int =
  * [CueHolds.restampEntries] recomputes after a stack's order changes.
  */
 internal fun cueDerivedPriority(cueStackId: Int?, sortOrder: Int): Int =
-    (cueStackId ?: 0) * 1_000_000 + sortOrder * 1_000 + 1
+    (cueStackId ?: 0) * STACK_PRIORITY_BAND + sortOrder * 1_000 + 1
+
+/** The width of one stack's priority band: [cueDerivedPriority] puts stack `n` at `n × this`. */
+internal const val STACK_PRIORITY_BAND = 1_000_000
+
+/** The stack whose band [priority], a [cueDerivedPriority], lies in. */
+internal fun stackOfDerivedPriority(priority: Int): Int = priority / STACK_PRIORITY_BAND
 
 /**
  * `entryId → cueDerivedPriority` for every cue entry in [stack] at its current position. Hand the

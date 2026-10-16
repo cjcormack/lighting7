@@ -337,7 +337,7 @@ private fun DaoCueStackEntry.hasExplicitNumber(): Boolean = !cueNumberAuto && !c
  * `ORDER BY ordinal` sees ordinals written moments earlier, and so the two-pass renumber's clears
  * land before its assignments (otherwise `uq_entry_number_per_stack` sees both at once).
  */
-private fun flushPendingEntryWrites() {
+internal fun flushPendingEntryWrites() {
     TransactionManager.current().entityCache.flush(listOf(DaoCueStackEntries))
 }
 

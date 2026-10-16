@@ -5,6 +5,7 @@ import { SpeedMastersChip } from '../../SpeedMasters'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
+import { CueActions } from '../CueActions'
 import type { CueStack, CueStackCueEntry, CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
@@ -50,6 +51,18 @@ interface RunMobileProps {
    * used to carry (busk-chrome plan D1, D10). The phone passes nothing.
    */
   strip?: ReactNode
+  /**
+   * The two cards' ⋯ action menus (show-cue-editing plan D9) and the lock they follow: locked, only
+   * *Blind edit* works, and the rest ask to unlock through `onRequestUnlock`, or are disabled with
+   * `lockedReason` without it. Absent draws no menu.
+   */
+  cueActions?: { locked: boolean; onRequestUnlock?: () => void; lockedReason?: string; fromShowView?: boolean }
+}
+
+/** The stack holding [entryId], for a card's actions — the cards follow the playhead, not the stack shown. */
+function stackOfEntry(stacks: readonly CueStack[], entryId: number | null): number | null {
+  if (entryId == null) return null
+  return stacks.find((s) => s.cues.some((c) => c.entryId === entryId))?.id ?? null
 }
 
 /**
@@ -80,6 +93,7 @@ export function RunMobile({
   activeLocation,
   standbyLocation,
   strip,
+  cueActions,
 }: RunMobileProps) {
   const cues = useMemo<CueStackCueEntry[]>(() => stack?.cues ?? [], [stack?.cues])
   const [stackPickerOpen, setStackPickerOpen] = useState(false)
@@ -90,6 +104,28 @@ export function RunMobile({
   const [expansion, setExpansion] = useState<MobileExpansion | null>(null)
 
   const { activeCue, standbyCue, nextStack } = display
+
+  /** A card's ⋯ menu, for the cue and the entry it shows. */
+  const actionsFor = (cue: CueStackCueRow | null, entryId: number | null) =>
+    cueActions == null || cue == null ? undefined : (
+      <CueActions
+        projectId={projectId}
+        host="menu"
+        rows={[
+          {
+            cueId: cue.id,
+            name: cue.name,
+            cueNumber: cue.cueNumber ?? null,
+            entryId: entryId ?? cue.entryId,
+            stackId: stackOfEntry(stacks, entryId ?? cue.entryId),
+          },
+        ]}
+        locked={cueActions.locked}
+        onRequestUnlock={cueActions.onRequestUnlock}
+        lockedReason={cueActions.lockedReason}
+        fromShowView={cueActions.fromShowView}
+      />
+    )
 
   const playable = useMemo(
     () => cues.filter((c) => c.cueType === 'STANDARD'),
@@ -176,6 +212,7 @@ export function RunMobile({
           counter={counter}
           fadeStackId={fadeStackId}
           location={activeLocation}
+          actions={actionsFor(activeCue, display.activeEntryId)}
         />
         <RunMobileCueCard
           kind="nxt"
@@ -185,6 +222,7 @@ export function RunMobile({
           onSetExpansion={setExpansion}
           onChange={() => setCueListOpen(true)}
           location={standbyLocation}
+          actions={actionsFor(standbyCue, display.standbyEntryId)}
         />
 
         {!standbyCue && nextStack && (

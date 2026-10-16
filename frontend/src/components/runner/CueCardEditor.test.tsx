@@ -26,8 +26,14 @@ const sortableArgs: { disabled?: boolean } = {}
 vi.mock('@dnd-kit/utilities', () => ({ CSS: { Transform: { toString: () => undefined } } }))
 const patchCue = vi.fn()
 const patchEntry = vi.fn()
-const removeEntry = vi.fn()
-const addToStack = vi.fn()
+/** What the card hands its action set — the actions themselves are `CueActions.test.tsx`'s. */
+const actionProps: { last?: Record<string, unknown> } = {}
+vi.mock('./CueActions', () => ({
+  CueActions: (props: Record<string, unknown>) => {
+    actionProps.last = props
+    return <div data-testid="cue-actions" />
+  },
+}))
 /** A mutation trigger's result: `unwrap` resolves, as a landed request does. */
 const landed = (value: unknown = undefined) => ({ unwrap: () => Promise.resolve(value) })
 vi.mock('@/store/cues', () => ({
@@ -35,8 +41,6 @@ vi.mock('@/store/cues', () => ({
 }))
 vi.mock('@/store/cueStacks', () => ({
   usePatchCueStackEntryMutation: () => [patchEntry],
-  useRemoveCueStackEntryMutation: () => [removeEntry],
-  useAddCueToStackMutation: () => [addToStack],
 }))
 vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,
@@ -161,46 +165,32 @@ describe('CueCardEditor', () => {
     expect(sortableArgs.disabled).toBe(false)
   })
 
-  it('offers nothing but reading while locked', () => {
-    // Every action on this card either edits the stack or reaches the stage — Edit in Programmer
-    // *Includes* the cue, and Include goes live. So an expanded card in a running show is a read
-    // surface and nothing else.
-    draw({
-      locked: true,
-      expanded: true,
-      onDuplicate: vi.fn(),
-      onIncludeCue: vi.fn(),
-      onRecordInto: vi.fn(),
-    })
+  it('draws the whole action set under the row while locked, and only reading below it', () => {
+    // D8: locked, the strip is drawn whole — Blind edit works, the rest ask to unlock — and the
+    // card's editing form (*Cue properties…*) stays away.
+    const unlock = vi.fn()
+    draw({ locked: true, expanded: true, onRequestUnlock: unlock })
     expect(screen.getByTestId('detail')).toBeTruthy()
-    expect(screen.queryByText('Remove from stack')).toBeNull()
-    expect(screen.queryByText('Duplicate')).toBeNull()
-    expect(screen.queryByText('Edit in Programmer')).toBeNull()
-    expect(screen.queryByText('Record')).toBeNull()
+    expect(screen.getByTestId('cue-actions')).toBeTruthy()
+    expect(actionProps.last).toMatchObject({
+      host: 'strip',
+      locked: true,
+      onRequestUnlock: unlock,
+      rows: [{ cueId: 1, name: 'Q1', cueNumber: '1', entryId: 101, stackId: 7 }],
+    })
     expect(screen.queryByText('Cue properties…')).toBeNull()
   })
 
-  it('offers all of them while unlocked', () => {
-    draw({
-      locked: false,
-      expanded: true,
-      onDuplicate: vi.fn(),
-      onIncludeCue: vi.fn(),
-      onRecordInto: vi.fn(),
-    })
-    expect(screen.getByText('Remove from stack')).toBeTruthy()
-    expect(screen.getByText('Duplicate')).toBeTruthy()
-    expect(screen.getByText('Edit in Programmer')).toBeTruthy()
-    expect(screen.getByText('Record')).toBeTruthy()
+  it('draws the action set and the properties door while unlocked', () => {
+    draw({ locked: false, expanded: true })
+    expect(screen.getByTestId('cue-actions')).toBeTruthy()
+    expect(actionProps.last).toMatchObject({ locked: false })
     expect(screen.getByText('Cue properties…')).toBeTruthy()
   })
 
-  it('removes the entry from the stack, never the cue, and asks nothing', () => {
-    removeEntry.mockReturnValue(landed())
-    draw({ expanded: true })
-    fireEvent.click(screen.getByText('Remove from stack'))
-    expect(removeEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1 })
-    expect(screen.queryByRole('dialog')).toBeNull()
+  it('draws no actions on a closed card', () => {
+    draw({ expanded: false })
+    expect(screen.queryByTestId('cue-actions')).toBeNull()
   })
 
   it('writes a number edit to the entry, not the cue', () => {
@@ -228,25 +218,5 @@ describe('CueCardEditor', () => {
   it('draws no mark for a cue in one place', () => {
     draw({ places: [{ stackId: 7, stackName: 'Act 1', entryId: 101, cueNumber: '1' }] })
     expect(document.querySelector('[data-shared-cue]')).toBeNull()
-  })
-
-  it('moves an entry by adding it to the other stack, then removing it here', async () => {
-    addToStack.mockReturnValue(landed())
-    removeEntry.mockReturnValue(landed())
-    draw({
-      expanded: true,
-      stackChoices: [
-        { id: 7, name: 'Act 1' },
-        { id: 8, name: 'Act 2' },
-      ],
-    })
-    fireEvent.keyDown(screen.getByRole('button', { name: /Move to stack/ }), { key: 'Enter' })
-    // The current stack is not a destination.
-    expect(screen.queryByRole('menuitem', { name: 'Act 1' })).toBeNull()
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Act 2' }))
-    expect(addToStack).toHaveBeenCalledWith({ projectId: 1, stackId: 8, cueId: 1 })
-    await vi.waitFor(() =>
-      expect(removeEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1 }),
-    )
   })
 })

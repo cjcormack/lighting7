@@ -6,7 +6,6 @@ import {
   useRenameMarkerEntryMutation,
 } from '@/store/cueStacks'
 import type { CueStack } from '@/api/cueStacksApi'
-import type { Cue } from '@/api/cuesApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
 import { nextAvailableName } from '@/lib/cueUtils'
@@ -43,14 +42,8 @@ interface ShowViewProps {
   onToggleExpanded: (entryId: number) => void
   /** The cue named in the URL, if any. */
   openedEntryId?: number | null
-  onDuplicate?: (cue: Cue) => void
-  /** Record the programmer into this cue — opens the Record sheet targeting it. */
-  onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
-  onIncludeCue?: (cueId: number, entryId: number) => void
   /** Record the programmer into a new cue in this stack — what replaced "Add Cue". */
   onRecordIntoStack?: (stackId: number) => void
-  includePending?: boolean
   /** Cards or the cue sheet, for the drilled stack. See `StackDetail`. */
   view?: 'cards' | 'list'
   /** Open a cue's card on the cards view. */
@@ -85,11 +78,7 @@ export const ShowView = memo(function ShowView({
   isExpanded,
   onToggleExpanded,
   openedEntryId,
-  onDuplicate,
-  onRecordInto,
-  onIncludeCue,
   onRecordIntoStack,
-  includePending,
   view,
   onOpenCue,
   onOpenBook,
@@ -168,10 +157,6 @@ export const ShowView = memo(function ShowView({
         onAddMarker={handleAddMarker}
         onMarkerRename={handleMarkerRename}
         onMarkerDelete={handleMarkerDelete}
-        onDuplicate={onDuplicate}
-        onRecordInto={onRecordInto}
-                  onIncludeCue={onIncludeCue}
-        includePending={includePending}
         view={view}
         onOpenCue={onOpenCue}
         onOpenBook={onOpenBook}
