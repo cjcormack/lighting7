@@ -17,14 +17,15 @@ interface ShowViewProps {
   drillStackId: number | null
   onDrillStack: (id: number | null) => void
   activeStackId: number | null
-  activeCueId: number | null
+  /** The live entry, as the server has it — the stable "on stage" marker. */
+  activeEntryId: number | null
   /**
    * Cue armed for the next GO. Only meaningful in the live stack, and only reached the row once
    * session 2b unified the transport — `StackDetail` has accepted this and `CueCardEditor` has
    * drawn a blue "next" accent from it since 2a, but nothing supplied it, so the whole affordance
    * was unreachable in Show while Run had it.
    */
-  standbyCueId?: number | null
+  standbyEntryId?: number | null
   /** The playhead's stack id — rows read their own fade from it. See `useCueFade`. */
   fadeStackId?: number | null
   /** Cues this session has already run, for the "played" tick. */
@@ -32,34 +33,34 @@ interface ShowViewProps {
   /** Prompt-book reading position per cue. */
   locationByCue?: Map<number, string>
   /** Arm a cue as the next GO. */
-  onSetStandby?: (cueId: number) => void
+  onSetStandby?: (cueId: number, entryId: number) => void
   /** Show-safe mode: no dragging, no inline edits, no destructive actions. */
   locked?: boolean
   /** A running show is unlocked — tints the header row with the chrome above it. */
   unlockedWarning?: boolean
   /** Whether a cue's card is open — a predicate, because two can be. See `useCueExpansion`. */
-  isExpanded: (cueId: number) => boolean
-  onToggleExpanded: (cueId: number) => void
+  isExpanded: (entryId: number) => boolean
+  onToggleExpanded: (entryId: number) => void
   /** The cue named in the URL, if any. */
-  openedCueId?: number | null
+  openedEntryId?: number | null
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage. */
-  onIncludeCue?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
+  onIncludeCue?: (cueId: number, entryId: number) => void
   /** Record the programmer into a new cue in this stack — what replaced "Add Cue". */
   onRecordIntoStack?: (stackId: number) => void
   includePending?: boolean
   /** Cards or the cue sheet, for the drilled stack. See `StackDetail`. */
   view?: 'cards' | 'list'
   /** Open a cue's card on the cards view. */
-  onOpenCue?: (cueId: number) => void
+  onOpenCue?: (cueId: number, entryId: number) => void
   onOpenBook?: (cueId: number) => void
   onRequestUnlock?: () => void
 }
 
 // Memoized: `ShowPage` subscribes to the runner slice (via `useShowTransport` for the Row 3 show
-// bar), so it re-renders on every fade frame. Its props are stable during a fade — `activeCueId` is
+// bar), so it re-renders on every fade frame. Its props are stable during a fade — `activeEntryId` is
 // the server cursor, not the optimistic fade cursor — so memo keeps the whole editor subtree from
 // reconciling ~60x/sec while a cue fades.
 //
@@ -73,8 +74,8 @@ export const ShowView = memo(function ShowView({
   drillStackId,
   onDrillStack,
   activeStackId,
-  activeCueId,
-  standbyCueId,
+  activeEntryId,
+  standbyEntryId,
   fadeStackId,
   completedCueIds,
   locationByCue,
@@ -83,7 +84,7 @@ export const ShowView = memo(function ShowView({
   unlockedWarning,
   isExpanded,
   onToggleExpanded,
-  openedCueId,
+  openedEntryId,
   onDuplicate,
   onRecordInto,
   onIncludeCue,
@@ -143,9 +144,10 @@ export const ShowView = memo(function ShowView({
     return (
       <StackDetail
         stack={drillStack}
+        stacks={stacks}
         projectId={projectId}
-        activeCueId={drillStackId === activeStackId ? activeCueId : null}
-        standbyCueId={drillStackId === activeStackId ? standbyCueId : null}
+        activeEntryId={drillStackId === activeStackId ? activeEntryId : null}
+        standbyEntryId={drillStackId === activeStackId ? standbyEntryId : null}
         // Null unless this *is* the live stack: a stack being read has no fade of its own, and the
         // running stack's runner says nothing about these rows.
         fadeStackId={drillStackId === activeStackId ? fadeStackId : null}
@@ -160,7 +162,7 @@ export const ShowView = memo(function ShowView({
         unlockedWarning={unlockedWarning}
         isExpanded={isExpanded}
         onToggleExpanded={onToggleExpanded}
-        openedCueId={openedCueId}
+        openedEntryId={openedEntryId}
         onBack={() => onDrillStack(null)}
         onRecordIntoStack={onRecordIntoStack}
         onAddMarker={handleAddMarker}

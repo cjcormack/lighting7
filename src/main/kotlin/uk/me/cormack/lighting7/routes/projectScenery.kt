@@ -233,15 +233,19 @@ internal fun sceneryOwnersChanged(state: State) {
  * stacks whose set holds it, and the Looks that show it while live — `GET
  * stage-elements/{id}/scenery`, the Stage popover's and the element form's *Moves with*. Each entry
  * is the owner's own stored row, never what it tracks: a cue that only inherits the piece from an
- * earlier one is not listed. Cues in show order (their stack's place, then theirs), sets in stack
- * order, Looks by name. Must run inside a transaction.
+ * earlier one is not listed. Cues in show order (their stack's place, then theirs), a loose cue's
+ * after them by name, sets in stack order, Looks by name. Must run inside a transaction.
  */
 internal fun elementSceneryOf(element: DaoStageElement): ElementSceneryDto {
     // A cue row is listed at each of its cue's entries, in show order — the stack's place, then the
     // entry's (cue model plan P7: the entry names the stack, never the cue).
-    val cueRows = DaoCueSceneryRow.find { DaoCueScenery.element eq element.id }.toList()
-        .flatMap { row -> entriesOfCue(row.cue).map { entry -> row to entry } }
+    val rows = DaoCueSceneryRow.find { DaoCueScenery.element eq element.id }.toList().map { row -> row to entriesOfCue(row.cue) }
+    val cueRows = rows
+        .flatMap { (row, entries) -> entries.map { entry -> row to entry } }
         .sortedWith(compareBy({ it.second.stack.sortOrder }, { it.second.stackId }, { it.second.ordinal }, { it.second.uuid.toString() }))
+    // A loose cue moves it too, when pressed: listed under no stack, by name.
+    val looseRows = rows.filter { it.second.isEmpty() }.map { it.first }
+        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.cue.name })
     val setRows = DaoCueStackSceneryRow.find { DaoCueStackScenery.element eq element.id }.toList()
         .sortedWith(compareBy({ it.stack.sortOrder }, { it.stack.id.value }))
     val lookRows = DaoLookSceneryRow.find { DaoLookScenery.element eq element.id }.toList()
@@ -253,6 +257,14 @@ internal fun elementSceneryOf(element: DaoStageElement): ElementSceneryDto {
                 cueId = row.cue.id.value,
                 // The entry's number where it has one, else the cue's name — `trackedSceneryAt`'s label.
                 label = entry.cueNumber?.takeIf { it.isNotBlank() } ?: row.cue.name,
+                state = storedParamsObject(row.stateJson),
+                transitionMs = row.transition?.toMillis(),
+            )
+        } + looseRows.map { row ->
+            ElementCueSceneryDto(
+                stackId = null,
+                cueId = row.cue.id.value,
+                label = row.cue.name,
                 state = storedParamsObject(row.stateJson),
                 transitionMs = row.transition?.toMillis(),
             )
@@ -274,10 +286,13 @@ data class ElementSceneryDto(
     val looks: List<ElementLookSceneryDto>,
 )
 
-/** A cue that moves the element on GO, on its own clock ([transitionMs]; null moves with the cue's fade). */
+/**
+ * A cue that moves the element on GO, on its own clock ([transitionMs]; null moves with the cue's
+ * fade) — once per entry, at that [stackId]; a loose cue once, with no stack.
+ */
 @Serializable
 data class ElementCueSceneryDto(
-    val stackId: Int,
+    val stackId: Int?,
     val cueId: Int,
     val label: String,
     val state: JsonObject,

@@ -13,6 +13,10 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { usePatchProjectCueMutation } from '@/store/cues'
+import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
+import type { CueEntryPatch } from '@/api/cueStacksApi'
+import type { CuePlace } from '@/lib/cuePlaces'
+import { SharedCueChip } from './SharedCueChip'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { formatFadeDuration, parseFadeDuration } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
@@ -42,7 +46,7 @@ import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCel
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
-import { cueRowById, isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
+import { isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
 
 export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
 
@@ -84,12 +88,13 @@ const LOCKED_REASON = 'Locked — cells are read-only · L to edit'
 export interface CueSheetProps {
   stack: CueStack
   projectId: number
-  activeCueId: number | null
-  standbyCueId?: number | null
+  /** The live and armed entries — a row is an entry, and a cue may sit twice in one stack. */
+  activeEntryId: number | null
+  standbyEntryId?: number | null
   completedCueIds?: number[]
   locationByCue?: Map<number, string>
   /** Arm a cue as the next GO. Absent where there is no transport, or off the playhead's stack. */
-  onSetStandby?: (cueId: number) => void
+  onSetStandby?: (cueId: number, entryId: number) => void
   /** The show-editing lock — this sheet's read-only scope. */
   locked?: boolean
   /**
@@ -97,9 +102,9 @@ export interface CueSheetProps {
    * expand it; the sheet selects its row and scrolls to it, which is what "opened" means on a
    * sheet. Consumed on arrival and whenever it changes.
    */
-  openedCueId?: number | null
+  openedEntryId?: number | null
   /** Open a cue's card on the cards view — Layers and FX are read-outs that do this. */
-  onOpenCue: (cueId: number) => void
+  onOpenCue: (cueId: number, entryId: number) => void
   /** Open the Prompt Book at this cue's anchor — the Book column's read-out. */
   onOpenBook?: (cueId: number) => void
   /**
@@ -113,6 +118,8 @@ export interface CueSheetProps {
    */
   /** Every row's entry id in its new order, markers included. */
   onReorder?: (entryIds: number[]) => void
+  /** Every cue's places across the show — the shared chip on a cue in more than one. */
+  placesByCue?: ReadonlyMap<number, readonly CuePlace[]>
 }
 
 /**
@@ -156,19 +163,21 @@ export interface CueSheetProps {
 export function CueSheet({
   stack,
   projectId,
-  activeCueId,
-  standbyCueId,
+  activeEntryId,
+  standbyEntryId,
   completedCueIds,
   locationByCue,
   onSetStandby,
   locked = false,
-  openedCueId,
+  openedEntryId,
   onOpenCue,
   onOpenBook,
   onRequestUnlock,
   onReorder,
+  placesByCue,
 }: CueSheetProps) {
   const [patchCue] = usePatchProjectCueMutation()
+  const [patchEntryMutation] = usePatchCueStackEntryMutation()
   const { data: elements } = useStageElementListQuery(projectId)
   const elementsByUuid = useMemo(() => (elements == null ? null : new Map(elements.map((e) => [e.uuid, e]))), [elements])
   /**
@@ -187,18 +196,28 @@ export function CueSheet({
     }
     return out
   }, [stack.cues, stack.scenery])
-  /** The cue whose scenery editor is open, and the cell it opened from. */
-  const [sceneryCueId, setSceneryCueId] = useState<number | null>(null)
+  /** The entry whose scenery editor is open — an entry, so a shared cue tracks from its place here. */
+  const [sceneryEntryId, setSceneryEntryId] = useState<number | null>(null)
   const sceneryAnchorRef = useRef<HTMLElement | null>(null)
   // The GO that re-locks the show forgets the open editor rather than holding it for the unlock.
   useEffect(() => {
-    if (locked) setSceneryCueId(null)
+    if (locked) setSceneryEntryId(null)
   }, [locked])
   const patch = useCallback(
     (cueId: number, body: Record<string, unknown>) => {
       patchCue({ projectId, cueId, ...body }).unwrap().catch(ignoreReportedError)
     },
     [patchCue, projectId],
+  )
+
+  /** The number and the follow are the entry's, written on the entry. */
+  const patchEntry = useCallback(
+    (row: CueStackCueRow, body: CueEntryPatch) => {
+      patchEntryMutation({ projectId, stackId: stack.id, entryId: row.entryId, cueId: row.id, ...body })
+        .unwrap()
+        .catch(ignoreReportedError)
+    },
+    [patchEntryMutation, projectId, stack.id],
   )
 
   const [unlockAsked, setUnlockAsked] = useState(false)
@@ -223,19 +242,22 @@ export function CueSheet({
         width: 'minmax(200px, 1fr)',
         value: (row) => cueOf(row).name,
         cell: (row, props) => {
-          const active = cueOf(row).id === activeCueId
-          const standby = cueOf(row).id === standbyCueId && !active
+          const active = row.entry.entryId === activeEntryId
+          const standby = row.entry.entryId === standbyEntryId && !active
           return (
             <TextCell
               {...(props as React.ComponentProps<typeof TextCell>)}
               face={
-                <span
-                  className={cn(
-                    'mx-1.5 truncate text-sm',
-                    active ? 'font-semibold text-green-300' : standby ? 'font-semibold text-blue-300' : 'font-medium',
-                  )}
-                >
-                  {cueOf(row).name}
+                <span className="mx-1.5 flex min-w-0 items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'truncate text-sm',
+                      active ? 'font-semibold text-green-300' : standby ? 'font-semibold text-blue-300' : 'font-medium',
+                    )}
+                  >
+                    {cueOf(row).name}
+                  </span>
+                  <SharedCueChip places={placesByCue?.get(cueOf(row).id)} entryId={cueOf(row).entryId} interactive={false} />
                 </span>
               }
             />
@@ -353,15 +375,15 @@ export function CueSheet({
           if (parsed === undefined) return false
           for (const row of batch) {
             if (parsed === null) {
-              if (cueOf(row).autoAdvance) patch(cueOf(row).id, { autoAdvance: false })
+              if (cueOf(row).autoAdvance) patchEntry(cueOf(row), { autoAdvance: false })
             } else if (!cueOf(row).autoAdvance || parsed !== cueOf(row).autoAdvanceDelayMs) {
-              patch(cueOf(row).id, { autoAdvance: true, autoAdvanceDelayMs: parsed })
+              patchEntry(cueOf(row), { autoAdvance: true, autoAdvanceDelayMs: parsed })
             }
           }
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (cueOf(row).autoAdvance) patch(cueOf(row).id, { autoAdvance: false })
+          for (const row of batch) if (cueOf(row).autoAdvance) patchEntry(cueOf(row), { autoAdvance: false })
         },
       },
       {
@@ -397,7 +419,7 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           cueOf(row).layerCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id)} title="Open the cue's card">
+            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id, row.entry.entryId)} title="Open the cue's card">
               <CountBadge n={cueOf(row).layerCount} />
               <Layers className="size-3" />
             </ReadOutButton>
@@ -410,7 +432,7 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           cueOf(row).adHocEffectCount > 0 ? (
-            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id)} title="Open the cue's card" className="text-violet-400">
+            <ReadOutButton onClick={() => onOpenCue(cueOf(row).id, row.entry.entryId)} title="Open the cue's card" className="text-violet-400">
               <CountBadge n={cueOf(row).adHocEffectCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
             </ReadOutButton>
@@ -447,7 +469,7 @@ export function CueSheet({
                   return
                 }
                 sceneryAnchorRef.current = e.currentTarget
-                setSceneryCueId(cueOf(row).id)
+                setSceneryEntryId(row.entry.entryId)
               }}
             >
               {lines.length > 0 && <Blinds className="size-3 shrink-0" />}
@@ -486,7 +508,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeCueId, elementsByUuid, locationByCue, locked, onOpenBook, onOpenCue, onRequestUnlock, patch, standbyCueId, tracksScenery],
+    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onOpenCue, onRequestUnlock, patch, patchEntry, placesByCue, standbyEntryId, tracksScenery],
   )
 
   const copy = useCallback(
@@ -552,39 +574,39 @@ export function CueSheet({
   // would have dropped the contract on the floor.
   //
   // Once, because `rows` is re-minted on every refetch of the stack — each cell commit invalidates
-  // the stack list, and every GO moves `activeCueId` — and `?cue=` is never cleared on this view.
+  // the stack list, and every GO moves `activeEntryId` — and `?cue=` is never cleared on this view.
   // Keyed on `rows` alone the effect re-fired after every commit, wiping a live marquee and
   // re-scrolling to the linked cue (found by the fresh verifier). The ref remembers which id has
   // been acted on; a cue not yet in `rows` (the stack still loading) is consumed when it arrives.
   const consumedCueRef = useRef<number | null>(null)
   useEffect(() => {
-    if (openedCueId == null) {
+    if (openedEntryId == null) {
       consumedCueRef.current = null
       return
     }
-    if (consumedCueRef.current === openedCueId) return
-    const row = rows.find((r) => r.divider == null && r.entry.id === openedCueId)
+    if (consumedCueRef.current === openedEntryId) return
+    const row = rows.find((r) => r.divider == null && r.entry.entryId === openedEntryId)
     if (row == null) return
     const id = row.id
-    consumedCueRef.current = openedCueId
+    consumedCueRef.current = openedEntryId
     setRows([id])
     scrollTo(id)
-  }, [openedCueId, rows, scrollTo, setRows])
+  }, [openedEntryId, rows, scrollTo, setRows])
 
   /** Arming is what a click on the Cue column means while locked — the cards' body-click rule. */
   const onRowClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       if (locked && onSetStandby) {
         const row = rows.find((r) => r.id === id && r.divider == null)
-        if (row && cueOf(row).id !== activeCueId) onSetStandby(cueOf(row).id)
+        if (row && row.entry.entryId !== activeEntryId) onSetStandby(cueOf(row).id, row.entry.entryId)
         return
       }
       sheet.tableProps.onRowClick(id, e)
     },
-    [activeCueId, locked, onSetStandby, rows, sheet.tableProps],
+    [activeEntryId, locked, onSetStandby, rows, sheet.tableProps],
   )
 
-  const armable = locked && onSetStandby && selectedRows.length === 1 && cueOf(selectedRows[0]).id !== activeCueId
+  const armable = locked && onSetStandby && selectedRows.length === 1 && selectedRows[0].entry.entryId !== activeEntryId
   const verbs =
     selectedRows.length > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -613,7 +635,7 @@ export function CueSheet({
             variant="outline"
             size="sm"
             disabled={!armable}
-            onClick={() => armable && onSetStandby(cueOf(selectedRows[0]).id)}
+            onClick={() => armable && onSetStandby(cueOf(selectedRows[0]).id, selectedRows[0].entry.entryId)}
             title={armable ? 'Arm this cue as the next GO' : 'Select one cue that is not on stage to arm it'}
           >
             <Play className="size-3.5" />
@@ -676,9 +698,9 @@ export function CueSheet({
         rowClass={(row) =>
           !isCueRow(row.entry)
             ? undefined
-            : row.entry.id === activeCueId
+            : row.entry.entryId === activeEntryId
               ? LIVE_ROW_CLASS
-              : row.entry.id === standbyCueId
+              : row.entry.entryId === standbyEntryId
                 ? STANDBY_ROW_CLASS
                 : undefined
         }
@@ -686,10 +708,14 @@ export function CueSheet({
           label: 'Cue',
           width: '100px',
           render: (row) => {
-            const active = cueOf(row).id === activeCueId
-            const standby = cueOf(row).id === standbyCueId && !active
+            const active = row.entry.entryId === activeEntryId
+            const standby = row.entry.entryId === standbyEntryId && !active
             return (
-              <span className="relative flex min-w-0 items-center gap-2" data-cue-row={cueOf(row).id}>
+              <span
+                className="relative flex min-w-0 items-center gap-2"
+                data-cue-row={cueOf(row).id}
+                data-entry-row={row.entry.entryId}
+              >
                 <CueStatePip isActive={active} isStandby={standby} />
                 {completedSet.has(cueOf(row).id) && !active && (
                   <span className="sr-only">Played</span>
@@ -725,7 +751,7 @@ export function CueSheet({
                         label: 'Cue number',
                         onCommit: (next) => {
                           const trimmed = next || null
-                          if (trimmed !== (cueOf(row).cueNumber ?? null)) patch(cueOf(row).id, { cueNumber: trimmed })
+                          if (trimmed !== (cueOf(row).cueNumber ?? null)) patchEntry(cueOf(row), { cueNumber: trimmed })
                         },
                       })}
                       mono
@@ -755,9 +781,9 @@ export function CueSheet({
         projectId={projectId}
         // Closed by the lock as well as by its own dismissal: every edit on this sheet is an
         // unlocked gesture, and the GO that re-locks the show must not leave one open.
-        cue={locked || sceneryCueId == null ? null : cueRowById(stack.cues, sceneryCueId)}
+        cue={locked || sceneryEntryId == null ? null : (stack.cues.filter(isCueRow).find((c) => c.entryId === sceneryEntryId) ?? null)}
         anchorRef={sceneryAnchorRef}
-        onClose={() => setSceneryCueId(null)}
+        onClose={() => setSceneryEntryId(null)}
       />
       <AlertDialog open={unlockAsked} onOpenChange={setUnlockAsked}>
         <AlertDialogContent>

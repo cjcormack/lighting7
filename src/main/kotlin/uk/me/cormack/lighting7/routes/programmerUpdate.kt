@@ -12,7 +12,8 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.state.State
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.entryInStack
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
 
 /** One cue Update would overwrite, with a sample of the properties driving that. */
 @Serializable
@@ -182,32 +183,31 @@ internal fun buildUpdateChecklist(
         )
     }
 
-    // One read for every cue's name/number and, where the engine map didn't have it, its
-    // stack. A cue whose assignments are empty but whose effects are running has no engine
-    // stack entry, so the DB is the fallback rather than the primary.
+    // One read for every cue's name, and its number in the stack the engine says holds it. A cue
+    // held only loose has no stack, and nothing here picks one of a shared cue's (cue model plan P7).
     data class CueMeta(
         val name: String,
         val number: String?,
         val numberAuto: Boolean,
-        val stackId: Int?,
         val stackName: String?,
     )
     val meta = transaction(state.database) {
         byCue.keys.associateWith { cueId ->
             DaoCue.findById(cueId)?.let { cue ->
-                // Where the cue plays is its one entry's (cue model plan P4).
-                val entry = soleEntryOf(cue)
-                CueMeta(
-                    cue.name, entry?.cueNumber, entry?.cueNumberAuto ?: false,
-                    entry?.stackId, entry?.stack?.name,
-                )
+                // The stack's live entry when it is this cue's (a cue twice in one stack, D7), else its first there.
+                val entry = stackOf[cueId]?.let { stackId ->
+                    state.show.cueStackManager.getActiveEntryId(stackId)
+                        ?.let { DaoCueStackEntry.findById(it) }?.takeIf { it.cueId == cueId }
+                        ?: entryInStack(stackId, cueId)
+                }
+                CueMeta(cue.name, entry?.cueNumber, entry?.cueNumberAuto ?: false, entry?.stack?.name)
             }
         }
     }
 
     val cueDtos = byCue.map { (cueId, keys) ->
         val cueMeta = meta[cueId]
-        val stackId = stackOf[cueId] ?: cueMeta?.stackId
+        val stackId = stackOf[cueId]
         val sorted = keys.sortedWith(keyOrder)
         Triple(
             stackId,

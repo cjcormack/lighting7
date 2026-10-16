@@ -1,4 +1,4 @@
-import type { BuskPad, BuskPadKind } from '@/api/buskApi'
+import type { BuskCueEntry, BuskPad, BuskPadKind } from '@/api/buskApi'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
@@ -98,6 +98,24 @@ const EMPTY_FACE: PadFace = {
 }
 
 /**
+ * A cue pad's numbers, one per entry: `14`, `14 · 3` for two, `14 +2` past that so the pad's one
+ * mono line stays legible. Null for a cue whose entries carry no number, or that is in no stack.
+ */
+export function cueNumbersLabel(entries: readonly BuskCueEntry[]): string | null {
+  const numbers = entries.map((e) => e.cueNumber).filter((n): n is string => n != null && n !== '')
+  if (numbers.length === 0) return null
+  if (numbers.length <= 2) return numbers.join(' · ')
+  return `${numbers[0]} +${numbers.length - 1}`
+}
+
+/** The stacks a cue pad names: the one, the first `+n` for several, *No stack* for a loose cue. */
+export function cueStacksLabel(entries: readonly BuskCueEntry[]): string {
+  const names = [...new Set(entries.map((e) => e.stackName))]
+  if (names.length === 0) return 'No stack'
+  return names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`
+}
+
+/**
  * The face for a pad.
  *
  * The record is embedded in the pad by the server, so this needs no lookup and no second fetch —
@@ -130,15 +148,16 @@ export function padFaceOf(pad: BuskPad): PadFace {
     }
   }
   if (pad.kind === 'CUE' && pad.cue != null) {
+    const stacks = cueStacksLabel(pad.cue.entries ?? [])
     return {
       kind: 'CUE',
       name: pad.cue.name,
-      detail: pad.cue.cueStackName,
+      detail: stacks,
       swatch: null,
       isEffect: false,
       notes: null,
-      cueNumber: pad.cue.cueNumber,
-      stackName: pad.cue.cueStackName,
+      cueNumber: cueNumbersLabel(pad.cue.entries ?? []),
+      stackName: stacks,
     }
   }
   return { ...EMPTY_FACE, kind: pad.kind }

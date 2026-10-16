@@ -6,8 +6,9 @@ function rect(page: number, y: number, overrides: Partial<Rect> = {}): Rect {
   return { page, x: 0.06, y, w: 0.88, h: 0.04, ...overrides }
 }
 
+/** An anchor on cue `cueId`'s entry — entry ids are the cue ids + 100, as in `test/cueEntries`. */
 function anchor(cueId: number, ...region: Rect[]): CueAnchorDto {
-  return { cueId, region, label: `A${cueId}` }
+  return { cueId, entryId: cueId + 100, region, label: `A${cueId}` }
 }
 
 function strike(id: number, ...region: Rect[]): AnnotationDto {
@@ -16,6 +17,7 @@ function strike(id: number, ...region: Rect[]): AnnotationDto {
 
 function order(...cues: Array<[cueId: number, stackId?: number]>): FlatCue[] {
   return cues.map(([cueId, stackId = 1]) => ({
+    entryId: cueId + 100,
     cueId,
     label: `Q${cueId}`,
     name: `cue-${cueId}`,
@@ -79,7 +81,7 @@ describe('computeWarnings', () => {
       order([1], [2]),
     )
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatchObject({ kind: 'out-of-order', cueId: 2 })
+    expect(warnings[0]).toMatchObject({ kind: 'out-of-order', entryId: 102 })
     expect(warnings[0].message).toContain('Q1')
   })
 
@@ -90,7 +92,7 @@ describe('computeWarnings', () => {
       order([1], [2]),
     )
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatchObject({ kind: 'out-of-order', cueId: 2 })
+    expect(warnings[0]).toMatchObject({ kind: 'out-of-order', entryId: 102 })
   })
 
   it('uses the earliest rect of a multi-rect region for ordering', () => {
@@ -122,7 +124,7 @@ describe('computeWarnings', () => {
       order([1], [2], [3]),
     )
     expect(warnings.map((w) => w.kind)).toEqual(['out-of-order'])
-    expect(warnings[0]).toMatchObject({ cueId: 3 })
+    expect(warnings[0]).toMatchObject({ entryId: 103 })
     expect(warnings[0].message).toContain('Q1')
   })
 
@@ -133,7 +135,7 @@ describe('computeWarnings', () => {
       order([1]),
     )
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatchObject({ kind: 'anchor-in-cut', cueId: 1 })
+    expect(warnings[0]).toMatchObject({ kind: 'anchor-in-cut', entryId: 101 })
   })
 
   it('ignores non-strikethrough annotations for the cut check', () => {
@@ -153,5 +155,25 @@ describe('computeWarnings', () => {
       order([1], [2]),
     )
     expect(warnings.map((w) => w.kind).sort()).toEqual(['anchor-in-cut', 'out-of-order'])
+  })
+})
+
+describe('computeWarnings — a shared cue', () => {
+  it('reads each entry by its own anchor, so one cue in two stacks has two places in the script', () => {
+    // Cue 5 is in stack 1 (entry 105) and stack 2 (entry 205); each entry is anchored on its own.
+    const order: FlatCue[] = [
+      { entryId: 105, cueId: 5, label: 'Q1', name: 'Shared', fadeMs: null, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
+      { entryId: 106, cueId: 6, label: 'Q2', name: 'Other', fadeMs: null, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
+      { entryId: 205, cueId: 5, label: 'Q1', name: 'Shared', fadeMs: null, fadeCurve: 'LINEAR', stackId: 2, stackName: 'Act 2' },
+    ]
+    const anchors: CueAnchorDto[] = [
+      { cueId: 5, entryId: 105, region: [rect(0, 0.1)], label: 'Q1' },
+      { cueId: 6, entryId: 106, region: [rect(0, 0.5)], label: 'Q2' },
+      { cueId: 5, entryId: 205, region: [rect(2, 0.3)], label: 'Q1' },
+    ]
+    expect(computeWarnings(anchors, [], order)).toEqual([])
+    // Moving only the second entry's anchor above Q2 is a fault for that entry alone.
+    const moved = anchors.map((a) => (a.entryId === 205 ? { ...a, region: [rect(0, 0.3)] } : a))
+    expect(computeWarnings(moved, [], order)).toEqual([expect.objectContaining({ kind: 'out-of-order', entryId: 205 })])
   })
 })

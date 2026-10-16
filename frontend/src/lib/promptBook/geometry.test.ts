@@ -192,6 +192,17 @@ describe('flattenCueOrder', () => {
     expect(result[2]).toMatchObject({ stackId: 11, label: 'cue-3' })
   })
 
+  it('lists a shared cue once per entry, each with its own entry id', () => {
+    const result = flattenCueOrder([
+      stack(10, 'Act One', [cue(1)], 0),
+      stack(11, 'Act Two', [cue(1, { entryId: 401, cueNumber: '9' })], 1),
+    ])
+    expect(result.map((c) => [c.cueId, c.entryId, c.label])).toEqual([
+      [1, 101, 'cue-1'],
+      [1, 401, 'Q9'],
+    ])
+  })
+
   it('excludes marker-type cues within a stack', () => {
     const result = flattenCueOrder([stack(10, 'S', [cue(1), cue(2, { cueType: 'MARKER' }), cue(3)])])
     expect(result.map((c) => c.cueId)).toEqual([1, 3])
@@ -337,13 +348,15 @@ function regionAt(page: number, y: number): Region {
   return [{ page, x: 0.1, y, w: 0.5, h: 0.03 }]
 }
 
-/** Build an anchor map from `[cueId, page, y]` tuples. */
+/** Build an anchor map by entry from `[cueId, page, y]` tuples — each cue's entry is its id + 100. */
 function anchors(entries: Array<[number, number, number]>): Map<number, CueAnchorDto> {
-  return new Map(entries.map(([cueId, page, y]) => [cueId, { cueId, region: regionAt(page, y), label: null }]))
+  return new Map(
+    entries.map(([cueId, page, y]) => [cueId + 100, { cueId, entryId: cueId + 100, region: regionAt(page, y), label: null }]),
+  )
 }
 
 describe('orderedEntryIdsForInsert', () => {
-  // Entry ids are the cue ids + 100: the order is of entries, and anchors are read by cue.
+  // Entry ids are the cue ids + 100: the order is of entries, and so are the anchors.
   const cue = (id: number) => cueRow(id, { name: `cue-${id}`, sortOrder: 0, fadeDurationMs: null, cueNumber: null })
   function stack(cues: CueStackCueEntry[]): CueStack {
     return { id: 1, name: 'S', loop: false, sortOrder: 0, type: 'STACK', label: null, cues, activeCueId: null, nextCueId: null, activeEntryId: null, nextEntryId: null, standbyEntryId: null, canEdit: true, canDelete: true }
@@ -393,6 +406,7 @@ describe('orderedEntryIdsForInsert', () => {
 describe('nearestAnchoredCue', () => {
   function order(...cues: Array<[cueId: number, stackId?: number]>): FlatCue[] {
     return cues.map(([cueId, stackId = 1]) => ({
+      entryId: cueId + 100,
       cueId,
       label: `Q${cueId}`,
       name: `cue-${cueId}`,
@@ -404,35 +418,35 @@ describe('nearestAnchoredCue', () => {
   }
 
   it('borrows the previous anchored cue, even when a later one is nearer in the list', () => {
-    const found = nearestAnchoredCue(2, order([1], [2], [3]), anchors([[1, 0, 0.2], [3, 0, 0.8]]))
+    const found = nearestAnchoredCue(102, order([1], [2], [3]), anchors([[1, 0, 0.2], [3, 0, 0.8]]))
     expect(found).toMatchObject({ direction: 'before', region: regionAt(0, 0.2) })
     expect(found?.cue.cueId).toBe(1)
   })
 
   it('skips other unanchored cues to reach the nearest anchor behind it', () => {
-    const found = nearestAnchoredCue(4, order([1], [2], [3], [4]), anchors([[1, 0, 0.2]]))
+    const found = nearestAnchoredCue(104, order([1], [2], [3], [4]), anchors([[1, 0, 0.2]]))
     expect(found?.cue.cueId).toBe(1)
     expect(found?.direction).toBe('before')
   })
 
   it('borrows forwards for a cue ahead of every anchor', () => {
-    const found = nearestAnchoredCue(1, order([1], [2], [3]), anchors([[3, 2, 0.4]]))
+    const found = nearestAnchoredCue(101, order([1], [2], [3]), anchors([[3, 2, 0.4]]))
     expect(found).toMatchObject({ direction: 'after', region: regionAt(2, 0.4) })
     expect(found?.cue.cueId).toBe(3)
   })
 
   it('borrows across a stack boundary (show order, not stack order)', () => {
     // Stack 2 is wholly unanchored; it borrows from the end of stack 1.
-    const found = nearestAnchoredCue(10, order([1, 1], [2, 1], [10, 2], [11, 2]), anchors([[1, 0, 0.2], [2, 1, 0.5]]))
+    const found = nearestAnchoredCue(110, order([1, 1], [2, 1], [10, 2], [11, 2]), anchors([[1, 0, 0.2], [2, 1, 0.5]]))
     expect(found?.cue.cueId).toBe(2)
     expect(found?.cue.stackId).toBe(1)
   })
 
   it('returns null for a book with no anchors at all', () => {
-    expect(nearestAnchoredCue(2, order([1], [2]), new Map())).toBeNull()
+    expect(nearestAnchoredCue(102, order([1], [2]), new Map())).toBeNull()
   })
 
   it('returns null for a cue that is not in the show order', () => {
-    expect(nearestAnchoredCue(99, order([1], [2]), anchors([[1, 0, 0.2]]))).toBeNull()
+    expect(nearestAnchoredCue(199, order([1], [2]), anchors([[1, 0, 0.2]]))).toBeNull()
   })
 })

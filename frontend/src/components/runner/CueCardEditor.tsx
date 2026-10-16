@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import {
+  ArrowRightLeft,
   ChevronRight,
   Check,
   Copy,
   Download,
   GripVertical,
+  ListPlus,
   Loader2,
   Sliders,
   Trash2,
@@ -16,10 +18,22 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { targetKey } from '@/lib/targetKey'
+import { usePatchProjectCueMutation } from '@/store/cues'
 import {
-  useDeleteProjectCueMutation,
-  usePatchProjectCueMutation,
-} from '@/store/cues'
+  useAddCueToStackMutation,
+  usePatchCueStackEntryMutation,
+  useRemoveCueStackEntryMutation,
+} from '@/store/cueStacks'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import type { CuePlace } from '@/lib/cuePlaces'
+import { SharedCueChip } from './SharedCueChip'
 import { InlineEditField } from '@/components/InlineEditField'
 import type { Cue } from '@/api/cuesApi'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
@@ -40,10 +54,22 @@ import { CueDetailContent } from '@/components/cues/CueDetailContent'
 import { HandCueLayerStrip } from '@/components/hand/HandLayerTargets'
 import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
 import { useCueFade } from '@/hooks/useCueFade'
+/** A stack a cue can be added or moved to. */
+export interface StackChoice {
+  id: number
+  name: string
+}
+
 interface CueCardEditorProps {
   /** A cue entry — a marker is drawn by `ShowMarkerRow`, never as a card. */
   cue: CueStackCueRow
+  /** The stack the entry is in — what Remove, Move and the entry's number and follow address. */
+  stackId: number
   projectId: number
+  /** Every place the cue sits, this entry's included — the shared chip reads it. */
+  places?: readonly CuePlace[]
+  /** The project's runnable stacks, for *Add to stack…* and *Move to stack…*. */
+  stackChoices?: readonly StackChoice[]
   expanded: boolean
   onToggleExpanded: () => void
   isActive?: boolean
@@ -74,8 +100,8 @@ interface CueCardEditorProps {
   onDuplicate?: (cue: Cue) => void
   /** Record the programmer into this cue — opens the Record sheet targeting it. */
   onRecordInto?: (cueId: number) => void
-  /** Load this cue into the programmer to edit it on stage. */
-  onIncludeCue?: (cueId: number) => void
+  /** Load this cue into the programmer to edit it on stage, naming the entry it came from. */
+  onIncludeCue?: (cueId: number, entryId: number) => void
   includePending?: boolean
 }
 
@@ -95,7 +121,10 @@ interface CueCardEditorProps {
  */
 export function CueCardEditor({
   cue,
+  stackId,
   projectId,
+  places,
+  stackChoices,
   expanded,
   onToggleExpanded,
   isActive = false,
@@ -125,9 +154,27 @@ export function CueCardEditor({
 
   const [propsOpen, setPropsOpen] = useState(false)
 
-  const { cueData, targets, isFetching } = useExpandedCue(projectId, cue.id, expanded)
-  const [deleteCue] = useDeleteProjectCueMutation()
+  const { cueData, targets, isFetching } = useExpandedCue(projectId, cue.id, expanded, cue.entryId)
   const [patchCue] = usePatchProjectCueMutation()
+  const [patchEntry] = usePatchCueStackEntryMutation()
+  const [removeEntry] = useRemoveCueStackEntryMutation()
+  const [addToStack] = useAddCueToStackMutation()
+
+  const removeFromStack = () => {
+    removeEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id }).unwrap().catch(ignoreReportedError)
+  }
+  const addTo = (target: number) => {
+    addToStack({ projectId, stackId: target, cueId: cue.id }).unwrap().catch(ignoreReportedError)
+  }
+  // Move is add then remove, and the remove waits on the add: a refused add must not leave the cue
+  // in no stack at all.
+  const moveTo = (target: number) => {
+    addToStack({ projectId, stackId: target, cueId: cue.id })
+      .unwrap()
+      .then(() => removeEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id }).unwrap())
+      .catch(ignoreReportedError)
+  }
+  const moveChoices = stackChoices?.filter((s) => s.id !== stackId) ?? []
 
 
   const targetCount = targets.length
@@ -143,7 +190,7 @@ export function CueCardEditor({
   const commitCueNumber = (next: string) => {
     const trimmed = next.trim() || null
     if (trimmed !== (cue.cueNumber ?? null)) {
-      patchCue({ projectId, cueId: cue.id, cueNumber: trimmed })
+      patchEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id, cueNumber: trimmed })
     }
   }
 
@@ -180,7 +227,7 @@ export function CueCardEditor({
   }
 
   return (
-    <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id}>
+    <div ref={setNodeRef} style={sortableStyle} {...attributes} data-cue-row={cue.id} data-entry-row={cue.entryId}>
       <div
         className={cn(
           // `@container`: the header's columns below query THIS box. They used to be viewport
@@ -258,20 +305,22 @@ export function CueCardEditor({
             />
           </div>
 
-          <InlineEditField
-            value={cue.name}
-            onCommit={commitName}
-            ariaLabel="cue name"
-            disabled={locked}
-            title="Click to rename"
-            // `justify-self-start` keeps the field the width of the name it holds. Left to
-            // stretch (the grid default) it would cover the whole 1fr column, so clicking the
-            // empty space beside a short cue name opened the editor instead of expanding the cue.
-            className={cn(
-              'justify-self-start min-w-0 max-w-full truncate text-sm',
-              isActive ? 'text-green-300 font-semibold' : isStandby ? 'text-blue-300 font-semibold' : 'font-medium',
-            )}
-          />
+          <div className="flex min-w-0 items-center gap-1.5">
+            <InlineEditField
+              value={cue.name}
+              onCommit={commitName}
+              ariaLabel="cue name"
+              disabled={locked}
+              title="Click to rename"
+              // The width of the name it holds: stretched over the column, a click on the empty
+              // space beside a short cue name opened the editor instead of expanding the cue.
+              className={cn(
+                'min-w-0 max-w-full truncate text-sm',
+                isActive ? 'text-green-300 font-semibold' : isStandby ? 'text-blue-300 font-semibold' : 'font-medium',
+              )}
+            />
+            <SharedCueChip places={places} entryId={cue.entryId} />
+          </div>
 
           <div className="flex items-center gap-1 flex-nowrap @max-[1000px]:hidden">
             {/* Prompt-book reading position — where in the script this cue is called. Sits with the
@@ -416,17 +465,36 @@ export function CueCardEditor({
                       card does while the show is locked. */}
                   {!locked && (
                   <div className="flex items-center gap-2 px-3 py-2 border-t bg-muted/20">
+                    {/* Remove from stack takes this entry away and never the cue, which stays in its
+                        other places or loose — nothing is lost, so it asks nothing. */}
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs text-destructive hover:text-destructive gap-1"
-                      onClick={() => {
-                        deleteCue({ projectId, cueId: cue.id })
-                      }}
+                      onClick={removeFromStack}
+                      title="Take this cue out of this stack — the cue itself is kept"
                     >
                       <Trash2 className="size-3.5" />
-                      Remove
+                      Remove from stack
                     </Button>
+                    {stackChoices && stackChoices.length > 0 && (
+                      <StackMenu
+                        label="Add to stack…"
+                        icon={<ListPlus className="size-3.5" />}
+                        heading="Share this cue with"
+                        stacks={stackChoices}
+                        onPick={addTo}
+                      />
+                    )}
+                    {moveChoices.length > 0 && (
+                      <StackMenu
+                        label="Move to stack…"
+                        icon={<ArrowRightLeft className="size-3.5" />}
+                        heading="Move this entry to"
+                        stacks={moveChoices}
+                        onPick={moveTo}
+                      />
+                    )}
                     {onDuplicate && (
                       <Button
                         variant="outline"
@@ -448,7 +516,7 @@ export function CueCardEditor({
                         variant="default"
                         size="sm"
                         className="h-7 gap-1 text-xs"
-                        onClick={() => onIncludeCue(cue.id)}
+                        onClick={() => onIncludeCue(cue.id, cue.entryId)}
                         disabled={includePending}
                         // Named for where it takes you rather than for the verb it sends. "Include"
                         // is the right word for the operation and the wrong word for the only route
@@ -499,3 +567,35 @@ export function CueCardEditor({
   )
 }
 
+function StackMenu({
+  label,
+  icon,
+  heading,
+  stacks,
+  onPick,
+}: {
+  label: string
+  icon: React.ReactNode
+  heading: string
+  stacks: readonly StackChoice[]
+  onPick: (stackId: number) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+          {icon}
+          {label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel className="text-xs">{heading}</DropdownMenuLabel>
+        {stacks.map((s) => (
+          <DropdownMenuItem key={s.id} onSelect={() => onPick(s.id)}>
+            {s.name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}

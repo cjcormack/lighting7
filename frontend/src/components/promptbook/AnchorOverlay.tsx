@@ -97,6 +97,7 @@ export function CueMarginMarker({
   return (
     <div
       data-anchor-cue={anchor.cueId}
+      data-anchor-entry={anchor.entryId}
       onPointerDown={onPointerDown}
       title={locked ? undefined : 'Drag to nudge — re-anchor by selecting the new text'}
       // Right edge sits in the shared margin lane just left of the text; the box

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
-import { describeLookContents, describeTemplate } from './padFace'
+import { cueNumbersLabel, cueStacksLabel, describeLookContents, describeTemplate, padFaceOf } from './padFace'
 
 function look(over: Partial<LookSummary>): LookSummary {
   return {
@@ -59,5 +59,30 @@ describe('describeTemplate — around (fixture-fx-sheets plan D16)', () => {
     expect(describeTemplate(shaped({ direction: 'BACKWARD', size: 0.6 }))).toMatch(/· ← · 60 %$/)
     expect(describeTemplate(shaped({ direction: 'BOUNCE' }))).toMatch(/· ↔$/)
     expect(describeTemplate(shaped({ direction: 'FORWARD', size: 1 }))).not.toMatch(/[←↔%]/)
+  })
+})
+
+describe('a cue pad names its entries', () => {
+  const at = (stackId: number, stackName: string, cueNumber: string | null) => ({
+    stackId,
+    stackName,
+    entryId: stackId * 100,
+    cueNumber,
+  })
+
+  it('draws one number and stack for a cue in one place', () => {
+    const face = padFaceOf({ kind: 'CUE', cue: { id: 1, name: 'Verse', entries: [at(1, 'Main', '12')] } })
+    expect(face).toMatchObject({ name: 'Verse', cueNumber: '12', stackName: 'Main' })
+  })
+
+  it('joins two numbers and counts past them, so the line stays legible', () => {
+    expect(cueNumbersLabel([at(1, 'Main', '14'), at(2, 'Encore', '3')])).toBe('14 · 3')
+    expect(cueNumbersLabel([at(1, 'Main', '14'), at(2, 'Encore', '3'), at(3, 'Reprise', '1')])).toBe('14 +2')
+    expect(cueStacksLabel([at(1, 'Main', '14'), at(2, 'Encore', '3')])).toBe('Main +1')
+  })
+
+  it('draws a loose cue by its name, with no number', () => {
+    const face = padFaceOf({ kind: 'CUE', cue: { id: 1, name: 'Loose', entries: [] } })
+    expect(face).toMatchObject({ name: 'Loose', cueNumber: null, stackName: 'No stack' })
   })
 })

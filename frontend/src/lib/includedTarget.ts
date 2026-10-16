@@ -1,4 +1,5 @@
 import type { IncludedTarget } from '@/api/programmerWsApi'
+import { isCueRow, type CueStack, type CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
  * Operator-facing label for whatever Include last loaded.
@@ -54,4 +55,30 @@ export function includedTargetKey(target: IncludedTarget | null): string {
 /** The cue id when a cue is included, else null. Narrows the union at read sites. */
 export function includedCueId(target: IncludedTarget | null): number | null {
   return target?.kind === 'CUE' ? target.cueId : null
+}
+
+/**
+ * Where an included cue sits in the stack list: the entry it was included from when the include
+ * named one, else the first row placing the cue. `undefined` while there is nothing to look in or
+ * no cue is included; `null` when the cue is in no stack the list holds.
+ */
+export function includedCueEntry(
+  target: IncludedTarget | null,
+  stacks: readonly CueStack[] | undefined,
+): { stack: CueStack; index: number; row: CueStackCueRow } | null | undefined {
+  if (target?.kind !== 'CUE' || stacks == null) return undefined
+  const entryId = target.entryId
+  if (entryId != null) {
+    for (const stack of stacks) {
+      const index = stack.cues.findIndex((c) => c.entryId === entryId)
+      const row = stack.cues[index]
+      if (row != null && isCueRow(row)) return { stack, index, row }
+    }
+  }
+  for (const stack of stacks) {
+    const index = stack.cues.findIndex((c) => isCueRow(c) && c.id === target.cueId)
+    const row = stack.cues[index]
+    if (row != null && isCueRow(row)) return { stack, index, row }
+  }
+  return null
 }

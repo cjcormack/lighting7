@@ -15,7 +15,9 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.entryInStack
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.DaoCues
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.entriesOf
 
 /**
@@ -54,7 +56,6 @@ internal sealed interface RecordCoreResult {
  * the project mismatch. The core calls it too, which is what the AI surface relies on.
  */
 internal fun recordShapeProblem(mode: RecordMode, cueStackId: Int?, cueId: Int?): String? = when {
-    mode == RecordMode.CREATE && cueStackId == null -> "CREATE requires cueStackId"
     mode != RecordMode.CREATE && cueId == null -> "${mode.name} requires cueId"
     else -> null
 }
@@ -101,43 +102,48 @@ internal fun performProgrammerRecord(
     val recording = collectProgrammerRecording(state, source, mask, includeFx, scope)
     val held = if (scenery) heldSceneryOf(state, project.id.value) else emptyMap()
 
-    data class Written(val outcome: CueWriteOutcome, val details: CueDetails, val stackId: Int?)
+    data class Written(val outcome: CueWriteOutcome, val details: CueDetails, val entry: DaoCueStackEntry?)
 
     // A CREATE at a position shifts the entries after it, and a live cue's priority is its position.
     var priorities = emptyMap<Int, Int>()
+    // A write into a cue keeps the entry it was included from, when it was (the indicator's number).
+    val includedEntryId = state.show.programmerStore.lastIncludedTarget?.takeIf { it.cueId == cueId }?.entryId
     val (written, error) = transaction(state.database) {
         if (mode == RecordMode.CREATE) {
-            val stack = DaoCueStack.findById(cueStackId!!)
-                ?: return@transaction null to "Cue stack not found"
-            if (stack.project.id != project.id) {
-                return@transaction null to "Cue stack belongs to a different project"
-            }
-            if (stack.type == CueStackType.SEPARATOR.name) {
-                return@transaction null to "Cannot record into a separator row"
+            // No stack makes a loose cue (cue model plan §3.5).
+            val stack = cueStackId?.let { id ->
+                val stack = DaoCueStack.findById(id) ?: return@transaction null to "Cue stack not found"
+                if (stack.project.id != project.id) {
+                    return@transaction null to "Cue stack belongs to a different project"
+                }
+                if (stack.type == CueStackType.SEPARATOR.name) {
+                    return@transaction null to "Cannot record into a separator row"
+                }
+                stack
             }
             val outcome = createCueFromRecording(
                 project, stack, recording,
-                name = name?.takeIf { it.isNotBlank() } ?: defaultRecordedCueName(stack),
+                name = name?.takeIf { it.isNotBlank() } ?: defaultRecordedCueName(project, stack),
                 cueNumber = cueNumber?.takeIf { it.isNotBlank() },
                 sortOrder = sortOrder,
                 cueType = cueType,
             )
-            priorities = stackEntryPriorities(stack)
+            if (stack != null) priorities = stackEntryPriorities(stack)
             val cue = DaoCue.findById(outcome.cueId)!!
             // After the cue exists, so what it would track is read at its own place in the list.
-            val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, entryInStack(stack.id.value, cue.id.value), held, mode))
-            Written(withScenery, cue.toCueDetails(true, state.show.fixtures), stack.id.value) to null
+            val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, held, mode))
+            val entry = stack?.let { entryInStack(it.id.value, cue.id.value) }
+            Written(withScenery, cue.toCueDetails(true, state.show.fixtures), entry) to null
         } else {
             val cue = DaoCue.findById(cueId!!)
                 ?: return@transaction null to "Cue not found"
             if (cue.project.id != project.id) {
                 return@transaction null to "Cue belongs to a different project"
             }
-            // The cue's one entry is where it plays (cue model plan P4), until Record names one.
-            val entry = soleEntryOf(cue)
             val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
-                .withScenery(writeHeldSceneryIntoCue(cue, entry, held, mode))
-            Written(outcome, cue.toCueDetails(true, state.show.fixtures), entry?.stackId) to null
+                .withScenery(writeHeldSceneryIntoCue(cue, held, mode))
+            val entry = includedEntryId?.let { DaoCueStackEntry.findById(it) }?.takeIf { it.cueId == cue.id.value }
+            Written(outcome, cue.toCueDetails(true, state.show.fixtures, contextEntryId = entry?.id?.value), entry) to null
         }
     }
 
@@ -149,7 +155,7 @@ internal fun performProgrammerRecord(
     // Record-then-tweak-then-Update is the obvious next gesture, so point the include target at
     // what we just wrote.
     state.show.programmerStore.lastIncludedTarget =
-        IncludedTarget.cue(written.outcome.cueId, written.stackId)
+        IncludedTarget.cue(written.outcome.cueId, written.entry?.id?.value)
     // And the scenery half of that pointer: what the cue now says is the baseline Update's dirty
     // count reads — all of the held scenery, unless this Record left it out or took it away.
     state.programmerScenery.rebaseline(
@@ -166,7 +172,7 @@ internal fun performProgrammerRecord(
     return RecordCoreResult.Ok(
         outcome = written.outcome,
         details = written.details,
-        stackId = written.stackId,
+        stackId = written.entry?.stackId,
         republishedLive = republished,
         skipped = recording.skipped,
     )
@@ -176,8 +182,8 @@ internal fun performProgrammerRecord(
 private fun CueWriteOutcome.withScenery(scenery: SceneryRecordOutcome) =
     copy(scenery = scenery, warnings = warnings + scenery.warnings)
 
-internal fun defaultRecordedCueName(stack: DaoCueStack): String =
-    "Cue ${entriesOf(stack).size + 1}"
+internal fun defaultRecordedCueName(project: DaoProject, stack: DaoCueStack?): String =
+    "Cue ${(stack?.let { entriesOf(it).size } ?: DaoCue.count(DaoCues.project eq project.id).toInt()) + 1}"
 
 // ── Include ─────────────────────────────────────────────────────────────────
 
@@ -220,6 +226,8 @@ internal fun performProgrammerInclude(
      * desk's selection, the one a busk press would land on.
      */
     targets: List<CueTargetDto>? = null,
+    /** The stack entry a cue is included from, for the indicator's number; must place [cueId]. */
+    entryId: Int? = null,
 ): IncludeCoreResult {
     includeShapeProblem(cueId, lookId)?.let { return IncludeCoreResult.Failure(it) }
 
@@ -242,13 +250,20 @@ internal fun performProgrammerInclude(
         return IncludeCoreResult.Look(lookId, lookName, outcome, sceneryIncluded)
     }
 
+    var refused: IncludeCoreResult.Failure? = null
     val (cueData, sceneryRows) = transaction(state.database) {
-        DaoCue.findById(cueId!!)
-            ?.takeIf { it.project.id == project.id }
-            // The include target names the cue's stack, for the indicator: its one entry's (cue model
-            // plan P4); §3.5's `(cueId, entryId?)` target takes it from the caller.
-            ?.let { buildCueApplyData(it, soleEntryOf(it)) to cueSceneryForInclude(it) }
-    } ?: return IncludeCoreResult.Failure("Cue not found in current project", notFound = true)
+        val cue = DaoCue.findById(cueId!!)?.takeIf { it.project.id == project.id }
+            ?: return@transaction null
+        // The caller names the entry, if any (cue model plan P7); nothing picks one for a shared cue.
+        val entry = entryId?.let { id ->
+            DaoCueStackEntry.findById(id)?.takeIf { it.cueId == cue.id.value }
+                ?: run {
+                    refused = IncludeCoreResult.Failure("Entry $id does not place cue ${cue.id.value}")
+                    return@transaction null
+                }
+        }
+        buildCueApplyData(cue, entry) to cueSceneryForInclude(cue)
+    } ?: return refused ?: IncludeCoreResult.Failure("Cue not found in current project", notFound = true)
 
     val sceneryIncluded = state.programmerScenery.include(project.id.value, sceneryRows, fadeMs)
     val outcome = includeCueIntoProgrammer(state, cueData, mask, fadeMs, sceneryIncluded)
@@ -259,7 +274,7 @@ internal fun performProgrammerInclude(
     // write the stack back to the cue the operator had just included. A cue that only moves scenery
     // is the same case again.
     if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0) {
-        state.show.programmerStore.lastIncludedTarget = includedTargetFor(cueData)
+        state.show.programmerStore.lastIncludedTarget = includedTargetFor(cueData, entryId)
         // The scenery baseline follows the target: an Include that staged nothing leaves both on
         // the source before it, or every held piece would read as changed against an empty one.
         state.programmerScenery.includedBaseline(project.id.value, sceneryRows)
@@ -335,6 +350,7 @@ internal fun performProgrammerUpdate(
     }
 
     val cueIds = targets ?: listOf(includeTarget!!.cueId!!)
+    val includedEntryId = includeTarget?.entryId
     // Mode A writes the programmer's held scenery back into the cue it came from (D8). Mode B does
     // not, for the reason it leaves the layer stack alone below: scenery held over a cue the operator
     // never included says nothing about which of the named cues it belongs to.
@@ -369,9 +385,11 @@ internal fun performProgrammerUpdate(
         val outcome = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                 ?: return@transaction null
-            val entry = soleEntryOf(cue)
+            // The stack it reports is the included entry's, in Mode A; a checklist names no entry.
+            val entry = includedEntryId?.takeIf { modeLabel == "A" }?.let { DaoCueStackEntry.findById(it) }
+                ?.takeIf { it.cueId == cue.id.value }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
-                .withScenery(writeHeldSceneryIntoCue(cue, entry, held, RecordMode.MERGE))
+                .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
             if (modeLabel == "A") {
                 writeLayerStackIntoCue(
                     cue,

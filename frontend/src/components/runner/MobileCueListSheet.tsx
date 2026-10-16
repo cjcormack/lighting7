@@ -14,14 +14,15 @@ interface MobileCueListSheetProps {
   onOpenChange: (open: boolean) => void
   stackName: string
   cues: CueStackCueEntry[]
-  activeCueId: number | null
-  standbyCueId: number | null
+  /** The live and armed entries — a row is an entry. */
+  activeEntryId: number | null
+  standbyEntryId: number | null
   completedCueIds: number[]
   /** The live stack id, or null when this sheet's stack isn't it — passed straight through to
    *  each row's own `useCueFade`/`useCueAutoProgress` subscription. */
   fadeStackId: number | null
   isTheatre: boolean
-  onSelectCue: (cueId: number) => void
+  onSelectCue: (cueId: number, entryId: number) => void
 }
 
 export function MobileCueListSheet({
@@ -29,8 +30,8 @@ export function MobileCueListSheet({
   onOpenChange,
   stackName,
   cues,
-  activeCueId,
-  standbyCueId,
+  activeEntryId,
+  standbyEntryId,
   completedCueIds,
   fadeStackId,
   isTheatre,
@@ -60,13 +61,14 @@ export function MobileCueListSheet({
               if (cue.cueType === 'MARKER') {
                 return <MarkerRow key={`entry-${cue.entryId}`} name={cue.name} />
               }
-              const isActive = cue.id === activeCueId
-              const isStandby = cue.id === standbyCueId
+              const isActive = cue.entryId === activeEntryId
+              const isStandby = cue.entryId === standbyEntryId
               const isDone = completedSet.has(cue.id)
               return (
                 <MobileCueRow
                   key={`entry-${cue.entryId}`}
                   cueId={cue.id}
+                  entryId={cue.entryId}
                   cueNumber={cue.cueNumber}
                   cueNumberAuto={cue.cueNumberAuto}
                   name={cue.name}

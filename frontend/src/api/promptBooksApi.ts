@@ -28,8 +28,10 @@ export type AnnotationKind = 'NOTE' | 'STRIKETHROUGH' | 'FREETEXT'
  */
 export type NoteTone = 'NOTE' | 'WARN' | 'SAFETY'
 
+/** An anchor pins a stack **entry** to the script: a shared cue has one per entry it is anchored by. */
 export interface CueAnchorDto {
   cueId: number
+  entryId: number
   region: Region
   /** Cached display label ("LX 12") — rendering convenience, not identity. */
   label: string | null
@@ -43,6 +45,8 @@ export interface CueAnchorDto {
  */
 export interface CueLocationDto {
   cueId: number
+  /** The anchored entry; a shared cue has one location per anchor. */
+  entryId: number
   page: number
   y: number
 }

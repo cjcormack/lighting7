@@ -17,11 +17,11 @@ class ProgrammerIncludeTargetTest {
         val store = ProgrammerStore()
         assertNull(store.lastIncludedTarget)
 
-        store.lastIncludedTarget = IncludedTarget.cue(cueId = 12, cueStackId = 3)
+        store.lastIncludedTarget = IncludedTarget.cue(cueId = 12, entryId = 3)
         val target = store.lastIncludedTarget
         assertEquals(IncludedTarget.Kind.CUE, target?.kind)
         assertEquals(12, target?.cueId)
-        assertEquals(3, target?.cueStackId)
+        assertEquals(3, target?.entryId)
     }
 
     @Test

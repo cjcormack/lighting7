@@ -517,6 +517,12 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         val dusk = look("Dusk")
         assertEquals(HttpStatusCode.OK, putScenery(client, "looks/$night", change(moon, trim(3.0))).status)
         assertEquals(HttpStatusCode.OK, putScenery(client, "looks/$dusk", change(moon, trim(5.0))).status)
+        // A loose cue moves it too, when pressed: after the stacks', under no stack.
+        val loose = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Moonrise"))
+        }.body<CueDetails>().id
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$loose", change(moon, trim(4.0))).status)
 
         val moonId = client.get("/api/rest/projects/$projectId/stage-elements").body<List<StageElementDto>>().single { it.uuid == moon }.id
         val resp = client.get("/api/rest/projects/$projectId/stage-elements/$moonId/scenery")
@@ -524,10 +530,10 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         val read = resp.body<ElementSceneryDto>()
 
         // Act 1's Q2 before Act 2's Q9: the stacks' order, not the rows'. Q1 moves only the tabs.
-        assertEquals(listOf(q2 to "2", q9 to "9"), read.cues.map { it.cueId to it.label })
-        assertEquals(listOf(act1, act2), read.cues.map { it.stackId })
+        assertEquals(listOf(q2 to "2", q9 to "9", loose to "Moonrise"), read.cues.map { it.cueId to it.label })
+        assertEquals(listOf(act1, act2, null), read.cues.map { it.stackId })
         assertEquals(4000L, read.cues.first().transitionMs)
-        assertEquals(null, read.cues.last().transitionMs, "no clock of its own: moves with the cue's fade")
+        assertEquals(null, read.cues[1].transitionMs, "no clock of its own: moves with the cue's fade")
         assertEquals("7.0", read.cues.first().state["trimM"]!!.jsonPrimitive.content)
         assertEquals(listOf(act1 to "Act 1"), read.sets.map { it.stackId to it.name })
         assertEquals("false", read.sets.single().state["visible"]!!.jsonPrimitive.content)

@@ -146,15 +146,15 @@ The UI is structured around four distinct phases a lighting operator works throu
 
 A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueEditor sheet, come back), not a programming phase that happens to involve running.
 
-The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (values, layers, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. There are no longer any standalone cues: **every cue belongs to a stack**.
+The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (values, layers, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. A cue is a project record and a stack's list is **entries** naming cues, so a cue may sit in several stacks, twice in one, or in none (*loose*).
 
 ## Concepts
 
 **Show** -- the project's *ordered list of cue stacks* (there is no separate entries table). Each row is either a runnable **STACK** or a **SEPARATOR** (a label-only divider between stacks). Ordering is `cue_stacks.sortOrder`; the show is running when the project has an `activeStackId` set (the playhead).
 
-**Cue Stack** -- an ordered sequence of cues. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label` and a `loop` flag (repeat after last cue). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
+**Cue Stack** -- an ordered list of entries, each placing a cue (with its own number and follow) or a marker. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label` and a `loop` flag (repeat after last cue). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
 
-**Cue** -- a single lighting state, always belonging to a stack (`cueStackId` is non-null). Consists of:
+**Cue** -- a single lighting state, placed by zero or more entries. `cueStackId` / `cueStackName` describe the entry the read names (`?entryId=`), else the cue's only entry, else null; `entries` lists every place. Consists of:
 - Its own property assignments (the local layer)
 - Preset applications (named FX presets applied to fixture groups)
 - Ad-hoc effects (inline effects not from the library)
@@ -680,7 +680,8 @@ GET    /project/{id}/cue-stacks                             List stacks + separa
 GET    /project/{id}/cue-stacks/{stackId}                   Get stack details
 POST   /project/{id}/cue-stacks                             Create stack OR separator (type=SEPARATOR)
 PUT    /project/{id}/cue-stacks/{stackId}                   Update stack / separator
-DELETE /project/{id}/cue-stacks/{stackId}                   Delete stack (cascades its cues) / separator
+DELETE /project/{id}/cue-stacks/{stackId}                   Delete stack / separator; its cues stay ({ looseCueIds, deletedCueIds });
+                                                            ?deleteLooseCues=true deletes the cues no other stack uses
 POST   /project/{id}/cue-stacks/reorder                     Reorder the project's stacks + separators { stackIds }
 
 POST   /project/{id}/cue-stacks/{sid}/reorder               Reorder the list { entryIds }, markers included
@@ -688,7 +689,9 @@ POST   /project/{id}/cue-stacks/{sid}/markers               Add a marker { label
 PUT    /project/{id}/cue-stacks/{sid}/markers/{entryId}     Rename a marker { label }
 DELETE /project/{id}/cue-stacks/{sid}/markers/{entryId}     Remove a marker
 POST   /project/{id}/cue-stacks/{sid}/standby               Arm the next GO { entryId } (null disarms; a marker is 400)
-POST   /project/{id}/cue-stacks/{sid}/add-cue               Add / move a cue into the stack
+POST   /project/{id}/cue-stacks/{sid}/add-cue               Add an entry naming a cue { cueId, ... } — shares it, never moves it
+PATCH  /project/{id}/cue-stacks/{sid}/entries/{entryId}     An entry's number and follow { cueNumber?, autoAdvance?, autoAdvanceDelayMs? }
+DELETE /project/{id}/cue-stacks/{sid}/entries/{entryId}     Remove from stack: the entry goes, the cue stays (loose if it was its last)
 POST   /project/{id}/cue-stacks/{sid}/sort-by-cue-number    Sort cues by Q number
 
 POST   /project/{id}/cue-stacks/{sid}/activate              Start stack playback
@@ -700,10 +703,11 @@ POST   /project/{id}/cue-stacks/{sid}/go-to                 Jump to a specific c
 ### Cues
 ```
 GET    /project/{id}/cues                                   List all cues
-GET    /project/{id}/cues/{cueId}                           Get cue details
-POST   /project/{id}/cues                                   Create cue
-PUT    /project/{id}/cues/{cueId}                           Update cue
-DELETE /project/{id}/cues/{cueId}                           Delete cue
+GET    /project/{id}/cues/{cueId}                           Get cue details (?entryId= names the context entry)
+POST   /project/{id}/cues                                   Create cue (no cueStackId makes a loose cue)
+PUT    /project/{id}/cues/{cueId}                           Update cue (number and follow are the entry's, ignored here)
+DELETE /project/{id}/cues/{cueId}                           Delete cue; 409 CUE_IN_USE naming its uses, ?force=true deletes them too
+POST   /project/{id}/cues/delete                            Delete several { cueIds, force?, dryRun? }; dryRun answers the uses
 POST   /project/{id}/cues/{cueId}/copy                     Duplicate cue
 ```
 

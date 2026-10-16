@@ -310,3 +310,65 @@ describe('cueRunStateChanged', () => {
     return undefined
   }
 })
+
+/**
+ * The entry routes (lighting7 cue model plan session 4): a cue's place — its number, its follow,
+ * whether it is in a stack at all — is the entry's, addressed by entry id under its stack.
+ */
+describe('stack entries', () => {
+  let fetchMock: ReturnType<typeof installRecordingFetch>
+
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    fetchMock = installRecordingFetch({
+      'projects/1/cue-stacks/7/entries/110': { entryId: 110 },
+      'projects/1/cue-stacks/8/add-cue': { id: 8, cues: [] },
+      'projects/1/cue-stacks/7': { looseCueIds: [], deletedCueIds: [10] },
+    })
+  })
+
+  afterEach(() => {
+    store.dispatch(restApi.util.resetApiState())
+    vi.unstubAllGlobals()
+  })
+
+  const lastRequest = () => fetchMock.mock.calls.at(-1)![0] as Request
+
+  it('PATCHes an entry’s number on the entry, with the cue id kept out of the body', async () => {
+    await store.dispatch(
+      cueStacksApi.endpoints.patchCueStackEntry.initiate({ projectId: 1, stackId: 7, entryId: 110, cueId: 10, cueNumber: '4.5' }),
+    )
+    const req = lastRequest()
+    expect(req.url).toMatch(/\/projects\/1\/cue-stacks\/7\/entries\/110$/)
+    expect(req.method).toBe('PATCH')
+    expect(JSON.parse(await req.clone().text())).toEqual({ cueNumber: '4.5' })
+  })
+
+  it('removes an entry from its stack with a DELETE on the entry', async () => {
+    await store.dispatch(
+      cueStacksApi.endpoints.removeCueStackEntry.initiate({ projectId: 1, stackId: 7, entryId: 110, cueId: 10 }),
+    )
+    const req = lastRequest()
+    expect(req.url).toMatch(/\/projects\/1\/cue-stacks\/7\/entries\/110$/)
+    expect(req.method).toBe('DELETE')
+  })
+
+  it('adds a cue to another stack by naming the cue', async () => {
+    await store.dispatch(cueStacksApi.endpoints.addCueToStack.initiate({ projectId: 1, stackId: 8, cueId: 10 }))
+    const req = lastRequest()
+    expect(req.url).toMatch(/\/projects\/1\/cue-stacks\/8\/add-cue$/)
+    expect(req.method).toBe('POST')
+    expect(JSON.parse(await req.clone().text())).toEqual({ cueId: 10 })
+  })
+
+  it('deletes a stack keeping its cues, unless asked to take the loose ones too', async () => {
+    await store.dispatch(cueStacksApi.endpoints.deleteProjectCueStack.initiate({ projectId: 1, stackId: 7 }))
+    expect(lastRequest().url).toMatch(/\/projects\/1\/cue-stacks\/7$/)
+    const result = await store.dispatch(
+      cueStacksApi.endpoints.deleteProjectCueStack.initiate({ projectId: 1, stackId: 7, deleteLooseCues: true }),
+    )
+    expect(lastRequest().url).toMatch(/\/projects\/1\/cue-stacks\/7\?deleteLooseCues=true$/)
+    expect(lastRequest().method).toBe('DELETE')
+    expect('data' in result ? result.data : null).toEqual({ looseCueIds: [], deletedCueIds: [10] })
+  })
+})

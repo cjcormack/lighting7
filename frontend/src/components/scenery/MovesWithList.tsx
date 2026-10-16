@@ -55,8 +55,9 @@ export function MovesWithList({
   }
   return (
     <ul className={cn('space-y-0.5', className)} data-moves-with aria-label={`What moves ${element.name}`}>
-      {entries.map((entry) => (
-        <li key={`${entry.kind}:${entry.id}`} data-moves-with-entry={entry.kind}>
+      {entries.map((entry, i) => (
+        // The index too: a cue shared by two stacks is listed once per stack.
+        <li key={`${entry.kind}:${entry.id}:${i}`} data-moves-with-entry={entry.kind}>
           {onOpen == null ? (
             <p className="truncate text-xs" title={`${entry.owner} · ${entry.what}`}>
               <span className="font-medium">{entry.owner}</span>

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { describeIncludedTarget, includedCueId, includedTargetKey, includedTargetParts } from './includedTarget'
+import { describeIncludedTarget, includedCueEntry, includedCueId, includedTargetKey, includedTargetParts } from './includedTarget'
+import { cueRow } from '@/test/cueEntries'
+import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
 const CUE: IncludedTarget = { kind: 'CUE', cueId: 4, cueNumber: '2.1', cueName: 'Warm wash' }
@@ -75,5 +77,33 @@ describe('includedTargetParts', () => {
     expect(includedTargetParts({ kind: 'LOOK', lookId: 2, lookName: 'Amber Key' })).toEqual({
       name: 'Amber Key',
     })
+  })
+})
+
+describe('includedCueEntry', () => {
+  const stack = (id: number, name: string, cues: CueStackCueEntry[]): CueStack => ({
+    id, name, loop: false, sortOrder: id, type: 'STACK', label: null, cues,
+    activeCueId: null, nextCueId: null, activeEntryId: null, nextEntryId: null, standbyEntryId: null,
+    canEdit: true, canDelete: true,
+  })
+  // Cue 5 is in Act 1 as Q2 and in Act 2 as Q9.
+  const stacks = [
+    stack(1, 'Act 1', [cueRow(4), cueRow(5, { cueNumber: '2' })]),
+    stack(2, 'Act 2', [cueRow(5, { entryId: 205, cueNumber: '9' })]),
+  ]
+
+  it('finds the entry the cue was included from, for its number and stack', () => {
+    const found = includedCueEntry({ kind: 'CUE', cueId: 5, entryId: 205 }, stacks)
+    expect(found?.stack.name).toBe('Act 2')
+    expect(found?.row.cueNumber).toBe('9')
+  })
+
+  it('falls back to the cue’s first place when the include named no entry', () => {
+    expect(includedCueEntry({ kind: 'CUE', cueId: 5 }, stacks)?.row.cueNumber).toBe('2')
+  })
+
+  it('answers null for a cue in no stack, and undefined before the list has arrived', () => {
+    expect(includedCueEntry({ kind: 'CUE', cueId: 99 }, stacks)).toBeNull()
+    expect(includedCueEntry({ kind: 'CUE', cueId: 5 }, undefined)).toBeUndefined()
   })
 })

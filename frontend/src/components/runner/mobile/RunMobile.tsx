@@ -20,6 +20,9 @@ export interface RunnerDisplayState {
   nextStack: CueStack | null
   activeCueId: number | null
   standbyCueId: number | null
+  /** The entries behind the two cursors: a list row is an entry, and a cue may be twice in a stack. */
+  activeEntryId: number | null
+  standbyEntryId: number | null
   completedCueIds: number[]
 }
 
@@ -33,7 +36,7 @@ interface RunMobileProps {
   onGo: () => void
   onBack: () => void
   onSelectStack: (stack: CueStack) => void
-  onRequeueCue: (cueId: number) => void
+  onRequeueCue: (cueId: number, entryId?: number) => void
   projectId: number
   /** The live stack id, or null off the playhead — gates the Current card's and the cue-list
    *  sheet's own `useCueFade` subscriptions (see `useCueFade`). */
@@ -97,8 +100,8 @@ export function RunMobile({
     activeCue && curIdx >= 0 ? `${curIdx + 1} / ${playable.length}` : null
 
   const handleSelectCueFromList = useCallback(
-    (cueId: number) => {
-      onRequeueCue(cueId)
+    (cueId: number, entryId: number) => {
+      onRequeueCue(cueId, entryId)
       setCueListOpen(false)
     },
     [onRequeueCue],
@@ -228,8 +231,8 @@ export function RunMobile({
         onOpenChange={setCueListOpen}
         stackName={stack?.name ?? ''}
         cues={cues}
-        activeCueId={display.activeCueId}
-        standbyCueId={display.standbyCueId}
+        activeEntryId={display.activeEntryId}
+        standbyEntryId={display.standbyEntryId}
         completedCueIds={display.completedCueIds}
         fadeStackId={fadeStackId}
         // Q-numbers and notes always render now that the Theatre/Band toggle

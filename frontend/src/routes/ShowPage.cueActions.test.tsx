@@ -36,11 +36,13 @@ vi.mock('../store/cueStacks', () => ({
   useCreateMarkerEntryMutation: () => mutation(),
   useRenameMarkerEntryMutation: () => mutation(),
   useDeleteMarkerEntryMutation: () => mutation(),
+  usePatchCueStackEntryMutation: () => mutation(),
+  useRemoveCueStackEntryMutation: () => mutation(),
+  useAddCueToStackMutation: () => mutation(),
 }))
 const createCue = vi.fn((_input: Record<string, unknown>) => ({ unwrap: () => Promise.resolve({ id: 77 }) }))
 vi.mock('../store/cues', () => ({
   useCreateProjectCueMutation: () => [createCue],
-  useDeleteProjectCueMutation: () => mutation(),
   usePatchProjectCueMutation: () => mutation(),
   useProjectCueQuery: ({ cueId }: { cueId: number }) => ({ data: fullCue(cueId), isFetching: false }),
   useProjectCueListQuery: () => ({ data: [] }),
@@ -73,7 +75,7 @@ vi.mock('../hooks/useShowBarProps', () => ({
     standbyCue: null,
   }),
 }))
-const include = vi.fn((_cueId: number) => Promise.resolve<object | null>({ fixtureKeys: [], groupKeys: [], warnings: [] }))
+const include = vi.fn((_cueId: number, _entryId?: number) => Promise.resolve<object | null>({ fixtureKeys: [], groupKeys: [], warnings: [] }))
 vi.mock('../components/programmer/useInclude', () => ({
   useInclude: () => ({ includeCue: include, isLoading: false }),
 }))
@@ -286,7 +288,8 @@ describe('the cue card’s actions (S3)', () => {
   it('Edit in Programmer includes the cue and then opens the programmer', async () => {
     draw(['/projects/1/show/stacks/10?cue=42'])
     fireEvent.click(screen.getByRole('button', { name: 'Edit in Programmer' }))
-    expect(include).toHaveBeenCalledWith(42)
+    // Naming the entry it was included from, so the indicator says this place's number.
+    expect(include).toHaveBeenCalledWith(42, 142)
     await waitFor(() => expect(where()).toBe('/projects/1/programmer'))
     // And the switcher brings the operator back to the cue they were editing.
     pill('Show')

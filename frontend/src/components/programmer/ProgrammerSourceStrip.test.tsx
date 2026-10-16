@@ -7,12 +7,19 @@ let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarge
 let dirty: number | null = null
 let stacks: unknown[] = []
 let looks: unknown[] = []
+/** The project's cue list, loose cues included — what tells a loose cue from a deleted one. */
+let projectCues: { id: number }[] | undefined = []
 
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: summary }),
 }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
+vi.mock('@/store/cues', () => ({
+  useProjectCueListQuery: (_projectId: number, options?: { skip?: boolean }) => ({
+    data: options?.skip ? undefined : projectCues,
+  }),
+}))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
 vi.mock('./useIncludeBaseline', () => ({ useIncludeBaseline: () => dirty }))
 const venue = { isVenue: false }
@@ -45,6 +52,7 @@ afterEach(() => {
   dirty = null
   stacks = []
   looks = []
+  projectCues = []
 })
 
 describe('ProgrammerSourceStrip', () => {
@@ -105,6 +113,23 @@ describe('ProgrammerSourceStrip', () => {
     stacks = []
     draw()
     expect(box()?.hasAttribute('data-fills')).toBe(true)
+  })
+
+  it('shows a loose included cue as itself, with Update, rather than as deleted', () => {
+    // In no stack, but still in the project: the cue is there to write back to.
+    summary = { ...summary, lastIncluded: { kind: 'CUE', cueId: 5, cueName: 'Warm Wash' } }
+    stacks = [{ id: 2, name: 'Act 1', cues: [{ id: 6 }] }]
+    projectCues = [{ id: 5 }]
+    draw()
+    expect(screen.queryByText(/has been deleted/)).toBeNull()
+    expect(screen.getAllByText('Warm Wash').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Update/ })).toBeTruthy()
+    cleanup()
+
+    // Gone from the project as well: that one is deleted.
+    projectCues = [{ id: 6 }]
+    draw()
+    expect(screen.getAllByText(/has been deleted/).length).toBeGreaterThan(0)
   })
 
   it('is as wide as its words, not as wide as the row', () => {

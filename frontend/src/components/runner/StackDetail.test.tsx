@@ -19,11 +19,12 @@ vi.mock('@/store/cueStacks', () => ({
   useSortCueStackByCueNumberMutation: () => [vi.fn()],
 }))
 
-// Rows must carry `data-cue-row` — that attribute is the selector both scroll effects query, so a
-// probe without it would make them silently no-ops and every assertion here vacuous.
+// Rows must carry `data-entry-row` — that attribute is the selector both scroll effects query, so
+// a probe without it would make them silently no-ops and every assertion here vacuous. Rows are
+// entries, so the probe is keyed by entry id.
 const rowProps = new Map<
   number,
-  { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean }
+  { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean; onSetStandby?: () => void }
 >()
 vi.mock('./CueCardEditor', () => ({
   CueCardEditor: (p: {
@@ -32,19 +33,21 @@ vi.mock('./CueCardEditor', () => ({
     isActive?: boolean
     expanded?: boolean
     locked?: boolean
+    onSetStandby?: () => void
   }) => {
-    rowProps.set(p.cue.id, {
+    rowProps.set(p.cue.entryId, {
       isStandby: p.isStandby,
       isActive: p.isActive,
       expanded: p.expanded,
       locked: p.locked,
+      onSetStandby: p.onSetStandby,
     })
-    return <div data-cue-row={p.cue.id} data-testid={`cue-${p.cue.id}`} />
+    return <div data-entry-row={p.cue.entryId} data-testid={`cue-${p.cue.id}`} />
   },
 }))
 vi.mock('./ShowMarkerRow', () => ({
   ShowMarkerRow: (p: { id: number }) => (
-    <div data-cue-row={p.id} data-testid={`marker-${p.id}`} />
+    <div data-entry-row={p.id} data-testid={`marker-${p.id}`} />
   ),
 }))
 
@@ -79,11 +82,13 @@ const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   ...over,
 })
 
+/** Cursors are entries: a cue's entry in these fixtures is its id + 100. */
 interface Props {
   stack?: CueStack
-  activeCueId?: number | null
-  standbyCueId?: number | null
-  expandedCueId?: number | null
+  activeEntryId?: number | null
+  standbyEntryId?: number | null
+  expandedEntryId?: number | null
+  onSetStandby?: (cueId: number, entryId: number) => void
   locked?: boolean
   unlockedWarning?: boolean
 }
@@ -94,11 +99,12 @@ function view(p: Props = {}) {
     <StackDetail
       stack={p.stack ?? mkStack()}
       projectId={1}
-      activeCueId={p.activeCueId ?? null}
-      standbyCueId={p.standbyCueId}
-      isExpanded={(id) => id === (p.expandedCueId ?? null)}
+      activeEntryId={p.activeEntryId ?? null}
+      standbyEntryId={p.standbyEntryId}
+      isExpanded={(id) => id === (p.expandedEntryId ?? null)}
       onToggleExpanded={vi.fn()}
-      openedCueId={p.expandedCueId ?? null}
+      openedEntryId={p.expandedEntryId ?? null}
+      onSetStandby={p.onSetStandby}
       locked={p.locked}
       unlockedWarning={p.unlockedWarning}
       onRecordIntoStack={vi.fn()}
@@ -130,14 +136,14 @@ describe('StackDetail', () => {
   })
 
   it('scrolls the active cue into view on mount', () => {
-    render(view({ activeCueId: 2 }))
+    render(view({ activeEntryId: 102 }))
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('re-scrolls when the active cue moves', () => {
-    const { rerender } = render(view({ activeCueId: 2 }))
+    const { rerender } = render(view({ activeEntryId: 102 }))
     scrollIntoView.mockClear()
-    rerender(view({ activeCueId: 3 }))
+    rerender(view({ activeEntryId: 103 }))
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
@@ -149,29 +155,29 @@ describe('StackDetail', () => {
   it('scrolls an expanded card into view, smoothly', () => {
     // Two effects with deliberately different behaviour: the marker jumps (`nearest`), an operator
     // opening a card gets a smooth scroll. 2b must not collapse them into one.
-    render(view({ expandedCueId: 3 }))
+    render(view({ expandedEntryId: 103 }))
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
   })
 
   it('re-scrolls when a different card is expanded', () => {
-    const { rerender } = render(view({ expandedCueId: 1 }))
+    const { rerender } = render(view({ expandedEntryId: 101 }))
     scrollIntoView.mockClear()
-    rerender(view({ expandedCueId: 3 }))
+    rerender(view({ expandedEntryId: 103 }))
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
   })
 
   it('does not scroll when a card is collapsed', () => {
-    const { rerender } = render(view({ expandedCueId: 1 }))
+    const { rerender } = render(view({ expandedEntryId: 101 }))
     scrollIntoView.mockClear()
-    rerender(view({ expandedCueId: null }))
+    rerender(view({ expandedEntryId: null }))
     expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('marks the active and expanded cue on the row', () => {
-    render(view({ activeCueId: 2, expandedCueId: 3 }))
-    expect(rowProps.get(2)?.isActive).toBe(true)
-    expect(rowProps.get(3)?.expanded).toBe(true)
-    expect(rowProps.get(1)?.isActive).toBe(false)
+    render(view({ activeEntryId: 102, expandedEntryId: 103 }))
+    expect(rowProps.get(102)?.isActive).toBe(true)
+    expect(rowProps.get(103)?.expanded).toBe(true)
+    expect(rowProps.get(101)?.isActive).toBe(false)
   })
 
   it('offers the edit affordances while unlocked', () => {
@@ -195,7 +201,7 @@ describe('StackDetail', () => {
     // The rows are where dragging is actually disabled — via dnd-kit's own `disabled`, so a drag is
     // impossible rather than merely discouraged.
     render(view({ locked: true }))
-    expect(rowProps.get(1)?.locked).toBe(true)
+    expect(rowProps.get(101)?.locked).toBe(true)
   })
 
   it('withholds the out-of-order fix while locked', () => {
@@ -225,8 +231,22 @@ describe('StackDetail', () => {
   it('forwards a standby cue to the row when it is given one', () => {
     // The prop works; nothing currently passes it. See the companion assertion in
     // ShowView.test.tsx — 2b is what finally wires it through.
-    render(view({ standbyCueId: 3 }))
-    expect(rowProps.get(3)?.isStandby).toBe(true)
-    expect(rowProps.get(1)?.isStandby).toBe(false)
+    render(view({ standbyEntryId: 103 }))
+    expect(rowProps.get(103)?.isStandby).toBe(true)
+    expect(rowProps.get(101)?.isStandby).toBe(false)
+  })
+
+  it('keys a cue twice in one stack by entry: live, expanded and armed per place', () => {
+    // Cue 5 sits at entries 105 and 205 of one stack (cue model plan D7).
+    const twice = mkStack({ cues: [cue(5), cue(6), cue(5, { entryId: 205, cueNumber: '9' })] })
+    const onSetStandby = vi.fn()
+    render(view({ stack: twice, activeEntryId: 205, expandedEntryId: 105, onSetStandby }))
+    expect(rowProps.get(205)?.isActive).toBe(true)
+    expect(rowProps.get(105)?.isActive).toBe(false)
+    expect(rowProps.get(105)?.expanded).toBe(true)
+    expect(rowProps.get(205)?.expanded).toBe(false)
+    // Arming the first place names its entry, though the cue is live at the other.
+    rowProps.get(105)?.onSetStandby?.()
+    expect(onSetStandby).toHaveBeenCalledWith(5, 105)
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { cueRowById, type CueStack } from '../api/cueStacksApi'
+import { entryIdOfCue, type CueStack } from '../api/cueStacksApi'
 import {
   useAdvanceCueStackMutation,
   useActivateCueStackMutation,
@@ -53,6 +53,13 @@ export interface ShowTransport {
    */
   serverActiveCueId: number | null
   standbyCueId: number | null
+  /**
+   * The entries behind the three cursors (lighting7 cue model plan P2): a cue may sit twice in one
+   * stack, and a row is an entry, so every drawn row is matched on these rather than on the cue.
+   */
+  activeEntryId: number | null
+  serverActiveEntryId: number | null
+  standbyEntryId: number | null
   /** Cues this session has run on this stack — the "done" tick. */
   completedCueIds: number[]
   /** 0..1 while an auto-advance timer runs, else null. */
@@ -71,7 +78,8 @@ export interface ShowTransport {
   goDisabled: boolean
   go: () => void
   back: () => void
-  setStandby: (cueId: number) => void
+  /** Arm a cue as the next GO; `entryId` names which of its places, where it has several. */
+  setStandby: (cueId: number, entryId?: number) => void
   cancelAnimations: () => void
 }
 
@@ -149,6 +157,16 @@ export function useShowTransport({
 
   // Live cue: the optimistic runner cursor while a fade animates, else the server's active cue.
   const activeCueId = runner.activeCueId ?? serverActiveCueId
+
+  // The same cursors as entries: the server's entry where it places the cue, else the cue's first
+  // row in the live stack (an optimistic cursor ahead of the desk).
+  const serverActiveEntryId = entryIdOfCue(activeStack, serverActiveCueId, activeStack?.activeEntryId)
+  const activeEntryId = entryIdOfCue(activeStack, activeCueId, activeStack?.activeEntryId)
+  const standbyEntryId = entryIdOfCue(
+    activeStack,
+    runner.standbyCueId,
+    runner.standbyEntryId ?? activeStack?.nextEntryId,
+  )
 
   // ── Runner ↔ server reconciliation. Re-init when the stack (or its cues) first load and on
   // stack switch, on a cue reorder/add/remove (sig changes), AND when the cache's live cue moves
@@ -309,18 +327,19 @@ export function useShowTransport({
   }, [activeStackId, activeStack, cancelAnimations, dispatch, advanceCueStack, projectId])
 
   const setStandby = useCallback(
-    (cueId: number) => {
-      if (activeStackId == null || cueId === activeCueId) return
-      // The desk arms an *entry* (lighting7 cue model plan P2): the row in this stack that places
-      // the cue — its one entry while every cue has one.
-      const entryId = cueRowById(activeStack?.cues, cueId)?.entryId
-      if (entryId == null) return
+    (cueId: number, named?: number) => {
+      if (activeStackId == null) return
+      // The desk arms an *entry* (lighting7 cue model plan P2): the one named when it is in this
+      // stack, else the first row in this stack that places the cue. The live entry is never
+      // armed; the same cue's other entry may be.
+      const entryId = entryIdOfCue(activeStack, cueId, named)
+      if (entryId == null || entryId === activeEntryId) return
       // Local dispatch for an instant highlight; the POST is what makes the desk, the tablet and
       // the MIDI surface agree on what GO will fire.
-      dispatch(setStandbyAction({ stackId: activeStackId, cueId }))
+      dispatch(setStandbyAction({ stackId: activeStackId, cueId, entryId }))
       setCueStackStandby({ projectId, stackId: activeStackId, entryId })
     },
-    [activeStackId, activeStack, activeCueId, dispatch, setCueStackStandby, projectId],
+    [activeStackId, activeStack, activeEntryId, dispatch, setCueStackStandby, projectId],
   )
 
   const goDisabled = !isShowActive || !(canOperate ?? true)
@@ -331,6 +350,9 @@ export function useShowTransport({
     activeCueId,
     serverActiveCueId,
     standbyCueId: runner.standbyCueId,
+    activeEntryId,
+    serverActiveEntryId,
+    standbyEntryId,
     completedCueIds: runner.completedCueIds,
     autoProgress,
     fadeProgress,

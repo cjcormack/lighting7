@@ -77,9 +77,12 @@ export interface ElementScenery {
   looks: ElementLookScenery[]
 }
 
-/** A cue that moves the element on GO; a null [transitionMs] moves with the cue's own fade. */
+/**
+ * A cue that moves the element on GO; a null [transitionMs] moves with the cue's own fade. A null
+ * [stackId] is a loose cue — in no stack — listed after the stacks' cues.
+ */
 export interface ElementCueScenery {
-  stackId: number
+  stackId: number | null
   cueId: number
   /** The cue's number where it has one, else its name. */
   label: string
@@ -109,9 +112,9 @@ export function parseElementScenery(raw: unknown): ElementScenery {
   const list = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x): x is Record<string, unknown> => x != null && typeof x === 'object') : [])
   return {
     cues: list(r.cues)
-      .filter((c) => typeof c.stackId === 'number' && typeof c.cueId === 'number')
+      .filter((c) => (typeof c.stackId === 'number' || c.stackId == null) && typeof c.cueId === 'number')
       .map((c) => ({
-        stackId: c.stackId as number,
+        stackId: typeof c.stackId === 'number' ? c.stackId : null,
         cueId: c.cueId as number,
         label: typeof c.label === 'string' ? c.label : '',
         state: parseSceneryState(c.state),

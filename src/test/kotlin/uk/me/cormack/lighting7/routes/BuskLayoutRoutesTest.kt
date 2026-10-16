@@ -451,9 +451,10 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         assertEquals(1, lookPad.look?.rowCount)
         val cue = assertNotNull(cuePad.cue)
         assertEquals("opening", cue.name)
-        assertEquals(stackId, cue.cueStackId)
-        assertEquals("Main", cue.cueStackName)
-        assertNotNull(cue.cueNumber, "a created cue carries its auto number")
+        val entry = cue.entries.single()
+        assertEquals(stackId, entry.stackId)
+        assertEquals("Main", entry.stackName)
+        assertNotNull(entry.cueNumber, "a created cue carries its auto number")
     }
 
     @Test
@@ -494,14 +495,16 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/looks/$warm").status)
         assertEquals(listOf("CUE", "TEMPLATE"), client.page(page.id).pads.map { it.kind })
 
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cues/$opening").status)
+        // A cue on a pad is in use (cue model plan D8): only a forced delete takes it, pads and all.
+        assertEquals(HttpStatusCode.Conflict, client.delete("/api/rest/projects/$projectId/cues/$opening").status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cues/$opening?force=true").status)
         assertEquals(listOf(blue), client.page(page.id).pads.map { it.template?.id })
         assertEquals(1, padCount())
         assertEquals(1, bankCount(), "the bank survives its pads")
     }
 
     @Test
-    fun `deleting a cue stack deletes the pads of its cues`() = testApplication {
+    fun `deleting a cue stack keeps its cues' pads, unless it deletes the cues it left loose`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
@@ -513,7 +516,11 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         val page = client.createPage("Act 1")
         client.writeLayout(page.id, layout(row(column(12, bank("cues", cue(opening), cue(kept), cue(closing))))))
 
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId").status)
+        val other = client.createStack("Other")
+        assertEquals(HttpStatusCode.OK, client.delete("/api/rest/projects/$projectId/cue-stacks/$other").status)
+        assertEquals(listOf(opening, kept, closing), client.page(page.id).pads.map { it.cue?.id }, "a stack lists cues; it does not own them")
+
+        assertEquals(HttpStatusCode.OK, client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId?deleteLooseCues=true").status)
         assertEquals(listOf(kept), client.page(page.id).pads.map { it.cue?.id })
     }
 

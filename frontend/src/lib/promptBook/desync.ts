@@ -15,8 +15,13 @@
 
 import type { Rect, Region, CueAnchorDto, AnnotationDto } from '../../api/promptBooksApi'
 
-/** One cue in the authoritative flattened show order (see geometry.flattenCueOrder). */
+/**
+ * One cue **entry** in the authoritative flattened show order (see geometry.flattenCueOrder). A cue
+ * shared by two stacks is two of these, and the book keys everything on `entryId`: an anchor, a
+ * status, a rail card. `cueId` is for what belongs to the cue itself — its name and notes.
+ */
 export interface FlatCue {
+  entryId: number
   cueId: number
   label: string
   /** Cue name (distinct from the "Q12" label) — shown in the rail's hero row. */
@@ -33,8 +38,8 @@ export type WarningKind = 'out-of-order' | 'anchor-in-cut'
 
 export interface DesyncWarning {
   kind: WarningKind
-  /** The cue the warning is about — always an anchored cue, so it can be scrolled to. */
-  cueId: number
+  /** The entry the warning is about — always an anchored one, so it can be scrolled to. */
+  entryId: number
   stackId: number
   message: string
 }
@@ -67,7 +72,7 @@ export function computeWarnings(
   cueOrder: FlatCue[],
 ): DesyncWarning[] {
   const warnings: DesyncWarning[] = []
-  const anchorByCue = new Map(anchors.map((a) => [a.cueId, a]))
+  const anchorByEntry = new Map(anchors.map((a) => [a.entryId, a]))
   const cuts = annotations.filter((n) => n.kind === 'STRIKETHROUGH')
 
   // Walk cues in stack order, requiring monotonic script position. Unanchored cues
@@ -76,14 +81,14 @@ export function computeWarnings(
   let prev: { page: number; y: number } | null = null
   let prevLabel: string | null = null
   for (const cue of cueOrder) {
-    const anchor = anchorByCue.get(cue.cueId)
+    const anchor = anchorByEntry.get(cue.entryId)
     if (!anchor) continue
 
     const pos = scriptPosition(anchor.region)
     if (prev && (pos.page < prev.page || (pos.page === prev.page && pos.y < prev.y))) {
       warnings.push({
         kind: 'out-of-order',
-        cueId: cue.cueId,
+        entryId: cue.entryId,
         stackId: cue.stackId,
         message: `${cue.label} sits earlier in the script than ${prevLabel ?? 'the cue before it'}. Check anchor placement or stack order.`,
       })
@@ -94,7 +99,7 @@ export function computeWarnings(
     if (cuts.some((cut) => regionsOverlap(anchor.region, cut.region))) {
       warnings.push({
         kind: 'anchor-in-cut',
-        cueId: cue.cueId,
+        entryId: cue.entryId,
         stackId: cue.stackId,
         message: `${cue.label} is anchored inside a cut section.`,
       })
