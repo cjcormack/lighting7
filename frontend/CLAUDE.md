@@ -16,17 +16,28 @@ the root's, in `../CLAUDE.md` §"Git workflow". Two points bear repeating from t
 
 - A change that crosses the wire is **one PR**: the backend route and this side's client land
   together, never as two PRs that are each broken without the other.
-- CI's `Frontend` job runs exactly the gate below, `npm run check`, on every PR. The `Backend` job
-  builds this app as well (Gradle's `buildFrontend`), with Gradle's pinned Node rather than
-  `.nvmrc`'s.
+- CI's `Frontend` check runs the full gate below, `npm run check`, on every PR, split into a
+  build-and-lint job and three Vitest shards. The `Backend` job builds this app as well
+  (Gradle's `buildFrontend`), with Gradle's pinned Node rather than `.nvmrc`'s.
 
 ### Pre-commit gate
 
 ```bash
-npm run check
+npm run check:quick
 ```
 
-That's `build` + `test` + `lint`. There's no separate `type-check` step in it:
+That's `build` + the Vitest files affected by changes since `origin/main` + `lint`. The full
+suite, `npm run check`, runs in CI on every PR; run it locally only for a change CI is a slow
+place to find out about (see `../CLAUDE.md` §"Pre-commit checks"). A change to `package.json`
+or the Vite/Vitest config makes `--changed` run every test file (Vitest's `forceRerunTriggers`).
+
+Lint is cached in `node_modules/.cache/eslint/`, content-hashed: a cold run is minutes (mostly
+`import/no-cycle` walking the import graph), a warm one seconds. That rule reads other files, so
+a cached file can keep a stale result; a new cycle is still caught, because the import that
+closes it is in an edited file, which is re-linted. After changing `tsconfig` path aliases,
+delete the cache. CI's run on `main` lints without it.
+
+`check` is `build` + `test` + `lint`. There's no separate `type-check` step in it:
 `build` is `tsc && vite build`, so the standalone `npm run type-check` would run
 the same full `tsc` a second time for ~9s of nothing. Use `type-check` on its
 own during development when you want types without a build.
@@ -37,7 +48,7 @@ over it. `npm run lint` passes `--max-warnings 0`, because plain `eslint` exits
 0 on warnings and would wave them through.
 
 **A git hook enforces this.** `.githooks/pre-commit` at the repo root runs
-`npm run check` in `frontend/` and refuses the commit if it fails; it skips the
+`npm run check:quick` in `frontend/` and refuses the commit if it fails; it skips the
 run when nothing buildable under `frontend/` is staged (docs, `.idea/`, assets,
 backend-only changes). Enable it in a fresh clone with
 `git config core.hooksPath .githooks` from the repo root. Bypass a single commit with
