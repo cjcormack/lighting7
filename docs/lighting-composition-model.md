@@ -126,7 +126,7 @@ Clients that fan a group-scoped gesture out *themselves* — a group virtual dim
 
 ### The include target
 
-`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record that names a cue (record-then-tweak-then-Update being the obvious next gesture), cleared by Clear and by deleting the cue, and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
+`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record that names a cue (record-then-tweak-then-Update being the obvious next gesture), carries the stack entry a cue was included from (`entryId`, for the indicator's number — a shared cue has one per stack; Update writes the cue, whichever), cleared by Clear and by deleting the cue (removing its entry drops only the `entryId`), and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
 
 It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as a `programmer.includeTarget` push. That push is a **broadcast**, unlike every other programmer reply, because the programmer is shared: a second tab's Update button must offer the same target.
 

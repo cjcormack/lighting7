@@ -64,7 +64,9 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
         assertEquals("cue-1", details.name)
         assertEquals(stackId, details.cueStackId)
 
-        val deleteResp = client.delete("/api/rest/projects/$projectId/cues/$cueId")
+        // In a stack, it is in use: a plain delete is refused (cue model plan D8), a forced one goes.
+        assertEquals(HttpStatusCode.Conflict, client.delete("/api/rest/projects/$projectId/cues/$cueId").status)
+        val deleteResp = client.delete("/api/rest/projects/$projectId/cues/$cueId?force=true")
         assertEquals(HttpStatusCode.NoContent, deleteResp.status)
         val getAfterResp = client.get("/api/rest/projects/$projectId/cues/$cueId")
         assertEquals(HttpStatusCode.NotFound, getAfterResp.status)
@@ -76,7 +78,7 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `creating a cue without a stack is rejected`() = testApplication {
+    fun `creating a cue without a stack makes a loose cue`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
@@ -84,6 +86,9 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "loose", cueStackId = null))
         }
-        assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        val cue = resp.body<CueDetails>()
+        assertNull(cue.cueStackId)
+        assertTrue(cue.entries.isEmpty())
     }
 }

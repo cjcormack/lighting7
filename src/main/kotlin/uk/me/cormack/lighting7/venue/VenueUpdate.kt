@@ -75,7 +75,7 @@ import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.entriesOfCue
 
 /**
  * *Update* a show to a newer version of its venue (venue plan §3.5, P3, P8; session 6): the review of
@@ -703,9 +703,10 @@ class VenueUpdate(private val state: State) {
 
     private fun cueUser(cue: DaoCue) = UsedByDto("CUE", cue.id.value, cueLabel(cue))
 
-    // A cue's number is its entry's — its one entry's while every cue has one (cue model plan P4).
+    // A cue's numbers are its entries': every one it has (a shared cue's places), else its name.
     private fun cueLabel(cue: DaoCue): String =
-        soleEntryOf(cue)?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name
+        entriesOfCue(cue).mapNotNull { e -> e.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } }.distinct()
+            .joinToString(" · ").ifEmpty { cue.name }
 
     // ── Carry over ──────────────────────────────────────────────────────────────
 

@@ -33,6 +33,7 @@ import {
   Unlink2,
   Rows2,
   Lightbulb,
+  Folders,
  Moon, Sun } from "lucide-react"
 import { useLocation } from "react-router"
 import type { LucideIcon } from "lucide-react"
@@ -53,49 +54,146 @@ import { unlinkFromDeskNow } from "./store/selection"
 import { openScreensSheet } from "./components/screens/screensSheetState"
 import { canChooseDisplay, listDisplays, newWindowUrl, nextScreenName, openWindowOn } from "./lib/screens"
 
-export type NavGroup = "setup" | "program" | "live" | "monitor" | "settings" | "install"
+/**
+ * The sidebar's sections, by job (navigation plan D3): what the desk is used for most first. The
+ * sidebar draws [NAV_SECTIONS]' label as a heading over each, and the 64px rail a rule between
+ * them; a section with no visible row draws neither, which is how a venue loses Library.
+ */
+export type NavSection = "run" | "rig" | "library" | "project" | "desk"
+
+export const NAV_SECTIONS: readonly { id: NavSection; label: string }[] = [
+  { id: "run", label: "Run" },
+  { id: "rig", label: "Rig" },
+  { id: "library", label: "Library" },
+  { id: "project", label: "Project" },
+  { id: "desk", label: "Desk" },
+]
 
 export interface NavItem {
   id: string
   label: string
+  /**
+   * The name ⌘K lists, where [label] leans on a section heading ⌘K does not draw: the two Sync
+   * rows, and Project's *Settings*. Absent, ⌘K says [label].
+   */
+  commandLabel?: string
+  /** Extra words ⌘K matches the row on. */
+  keywords?: string[]
   icon: LucideIcon
   path: (projectId: number) => string
   /** Controls when this item is shown based on project status */
   visibility: "always" | "active-only" | "inactive-only"
   /** Used to match active state against the current pathname */
   pathMatch: string
-  /** Workflow group this item belongs to; used by the sidebar to insert separators. */
-  group: NavGroup
+  /**
+   * Lights only on [pathMatch] itself, never on a path below it: `/projects` is the start of every
+   * project's path, so the Projects row would otherwise light on all of them.
+   */
+  pathExact?: boolean
+  /** The sidebar section this row belongs to; rows are declared in section order. */
+  section: NavSection
   /** Optional parent item id; sub-items render indented beneath their parent. */
   parent?: string
   /**
    * Hidden from OPERATOR accounts. Set it wherever the destination's API is admin only on the
    * backend — `adminOnly {}` (`auth/AuthGate.kt`), or `requireAdmin()` on every handler a page
-   * reads, as Remote access's `/install/tunnel` does — so neither the sidebar nor Cmd+K offers a
-   * page that can only answer 403. Not on a page an operator can read whose *actions* are
-   * admin-only (Updates). Not a permission check — the backend is that.
+   * reads, as Remote access's `/install/tunnel` does — so neither the sidebar, its settings tab
+   * nor Cmd+K offers a page that can only answer 403. Not on a page an operator can read whose
+   * *actions* are admin-only (Updates). Not a permission check — the backend is that.
    */
   adminOnly?: boolean
   /**
    * Hidden while the viewed project is a **venue** (venue plan §4): a venue holds a rig, so the
-   * views that author or run a show — Scripts, FX Library, Looks, Palettes, Speed Masters, Show,
-   * Prompt Book and Busk — are not its. The Programmer stays, for testing and focus, with Record off.
+   * views that author or run a show — Show, Prompt Book, Busk and the whole Library — are not its.
+   * The Programmer and the Stage stay, for testing and focus, with Record off.
    */
   hiddenInVenue?: boolean
 }
 
 /**
- * Shared navigation registry consumed by both the sidebar and command palette.
- * When adding a new page/route, add an entry here and it will automatically
- * appear in both the sidebar navigation and the Cmd+K command palette.
+ * Shared navigation registry consumed by the sidebar, the command palette and the settings tabs.
+ * When adding a new page/route, add an entry here and it will automatically appear in both the
+ * sidebar navigation and the Cmd+K command palette.
  *
- * Items are grouped by workflow phase (setup → program → live → monitor). The
- * sidebar renders a thin separator between groups; the order within each group
- * is preserved as declared below. "live" is the four show modes and nothing
- * else — it is ordered to match `components/ViewSwitcher.tsx`.
+ * Rows are declared in [NAV_SECTIONS] order, and within a section in the order the sidebar draws
+ * them. Run leads with the four live views in `components/ViewSwitcher.tsx`'s order, then Stage.
+ * Paths never move with a row: Regions and Rigging are Rig rows whose pages are Project Settings
+ * tabs.
  */
 export const navItems: NavItem[] = [
-  // ── Setup ───────────────────────────────────────────────────────────
+  // ── Run ─────────────────────────────────────────────────────────────
+  // The four live views, in the order `ViewSwitcher` shows them — Programmer · Show · Prompt Book ·
+  // Busk. `components/ViewSwitcher.tsx` owns that order and states the reasoning ("the pills run in
+  // the order the work does"); this list follows it, so change one and change the other. Stage
+  // follows them: it is not a show mode, but it is used building a show and running one.
+  {
+    id: "programmer",
+    // The programmer: values, layers and effects on ONE screen. It was a page, then three tabs of
+    // a collapsed pane inside Program with no nav entry of its own, and is a page again — three
+    // readings of one live object that could never be seen together is the problem that move
+    // solved. The `/program` vs `/programmer` near-collision that argued against a second entry
+    // last time went away when Program was renamed to Show.
+    label: "Programmer",
+    icon: SlidersVertical,
+    path: (p) => `/projects/${p}/programmer`,
+    visibility: "active-only",
+    pathMatch: "/programmer",
+    section: "run",
+  },
+  {
+    // `id` stays "program" — it is the stable handle, and `navigation.test.ts` looks entries up by
+    // it. Only the name, the path and the match moved.
+    id: "program",
+    // Show is the cue/stack authoring + running surface (it absorbed the FX Cues view). It was
+    // called Program until the programmer moved out of it; two live views one letter apart was
+    // exactly the collision that kept the programmer out of this list.
+    // Scoped to the active project — running cues from here needs the project live.
+    label: "Show",
+    icon: Theater,
+    // Back to the stack and cue this window last had open on Show (`lib/showPosition.ts`), read
+    // when the entry is pressed — the sidebar and ⌘K both call `path` at the press.
+    path: (p) => showViewPath(p),
+    visibility: "active-only",
+    pathMatch: "/show",
+    section: "run",
+    hiddenInVenue: true,
+  },
+  {
+    id: "prompt-book",
+    label: "Prompt Book",
+    icon: BookOpenText,
+    path: (p) => `/projects/${p}/prompt-book`,
+    visibility: "active-only",
+    pathMatch: "/prompt-book",
+    section: "run",
+    hiddenInVenue: true,
+  },
+  {
+    // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
+    // This is one destination under a new name, not a new one.
+    id: "fx",
+    // Busk: the pad-first performance surface, and the fourth live view. It was "FX", which named
+    // the machinery rather than the job and sat one hyphen from `/fx-library` — a genuinely
+    // different destination that the route match here got wrong twice.
+    label: "Busk",
+    icon: AudioWaveform,
+    path: (p) => `/projects/${p}/busk`,
+    visibility: "active-only",
+    pathMatch: "/busk",
+    section: "run",
+    hiddenInVenue: true,
+  },
+  {
+    id: "stage-view",
+    label: "Stage",
+    icon: Boxes,
+    path: (p) => `/projects/${p}/stage`,
+    visibility: "active-only",
+    pathMatch: "/stage",
+    section: "run",
+  },
+
+  // ── Rig ─────────────────────────────────────────────────────────────
   {
     id: "patches",
     label: "Patch List",
@@ -103,7 +201,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/patches`,
     visibility: "always",
     pathMatch: "/patches",
-    group: "setup",
+    section: "rig",
   },
   {
     id: "fixtures",
@@ -112,7 +210,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/fixtures`,
     visibility: "active-only",
     pathMatch: "/fixtures",
-    group: "setup",
+    section: "rig",
   },
   {
     id: "groups",
@@ -121,30 +219,41 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/groups`,
     visibility: "active-only",
     pathMatch: "/groups",
-    group: "setup",
+    section: "rig",
+  },
+  {
+    // `id` stays "stage" — the handle of the Project Settings tab it opens. The tab says Regions
+    // too: Run's Stage row already says Stage, and two rows cannot.
+    id: "stage",
+    label: "Regions",
+    icon: Box,
+    path: (p) => `/projects/${p}/settings/stage`,
+    visibility: "always",
+    pathMatch: "/settings/stage",
+    section: "rig",
+  },
+  {
+    id: "rigging",
+    label: "Rigging",
+    icon: Anchor,
+    path: (p) => `/projects/${p}/settings/rigging`,
+    visibility: "always",
+    pathMatch: "/settings/rigging",
+    section: "rig",
+  },
+  {
+    id: "channels",
+    label: "Channels",
+    icon: SlidersHorizontal,
+    // No universe in the path: the route resolves the project's first patched universe
+    // (rigs don't always start at 0).
+    path: (p) => `/projects/${p}/channels`,
+    visibility: "active-only",
+    pathMatch: "/channels",
+    section: "rig",
   },
 
-  // ── Program ─────────────────────────────────────────────────────────
-  {
-    id: "scripts",
-    label: "Scripts",
-    icon: Braces,
-    path: (p) => `/projects/${p}/scripts`,
-    visibility: "always",
-    pathMatch: "/scripts",
-    group: "program",
-    hiddenInVenue: true,
-  },
-  {
-    id: "fx-library",
-    label: "FX Library",
-    icon: Sparkles,
-    path: (p) => `/projects/${p}/fx-library`,
-    visibility: "always",
-    pathMatch: "/fx-library",
-    group: "program",
-    hiddenInVenue: true,
-  },
+  // ── Library ─────────────────────────────────────────────────────────
   {
     id: "looks",
     // Named states over named fixtures, applied to a cue as layers. Every one is **recorded** — from
@@ -158,7 +267,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/looks`,
     visibility: "always",
     pathMatch: "/looks",
-    group: "program",
+    section: "library",
     hiddenInVenue: true,
   },
   {
@@ -177,7 +286,19 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/palettes`,
     visibility: "always",
     pathMatch: "/palettes",
-    group: "program",
+    section: "library",
+    hiddenInVenue: true,
+  },
+  {
+    // `id` and path stay `fx-library`; the row says what the page lists.
+    id: "fx-library",
+    label: "Effects",
+    keywords: ["fx library"],
+    icon: Sparkles,
+    path: (p) => `/projects/${p}/fx-library`,
+    visibility: "always",
+    pathMatch: "/fx-library",
+    section: "library",
     hiddenInVenue: true,
   },
   {
@@ -189,112 +310,32 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/speed-masters`,
     visibility: "always",
     pathMatch: "/speed-masters",
-    group: "program",
+    section: "library",
+    hiddenInVenue: true,
+  },
+  {
+    id: "scripts",
+    label: "Scripts",
+    icon: Braces,
+    path: (p) => `/projects/${p}/scripts`,
+    visibility: "always",
+    pathMatch: "/scripts",
+    section: "library",
     hiddenInVenue: true,
   },
 
-  // ── Live ────────────────────────────────────────────────────────────
-  // The four live views, in the order `ViewSwitcher` shows them — Programmer · Show · Prompt Book ·
-  // Busk. `components/ViewSwitcher.tsx` owns that order and states the reasoning ("the pills run in
-  // the order the work does"); this list follows it, so change one and change the other.
-  // Stage and Channels are NOT show modes and live in the Monitor group below.
-  {
-    id: "programmer",
-    // The programmer: values, layers and effects on ONE screen. It was a page, then three tabs of
-    // a collapsed pane inside Program with no nav entry of its own, and is a page again — three
-    // readings of one live object that could never be seen together is the problem that move
-    // solved. The `/program` vs `/programmer` near-collision that argued against a second entry
-    // last time went away when Program was renamed to Show.
-    label: "Programmer",
-    icon: SlidersVertical,
-    path: (p) => `/projects/${p}/programmer`,
-    visibility: "active-only",
-    pathMatch: "/programmer",
-    group: "live",
-  },
-  {
-    // `id` stays "program" — it is the stable handle, and `navigation.test.ts` looks entries up by
-    // it. Only the name, the path and the match moved.
-    id: "program",
-    // Show is the cue/stack authoring + running surface (it absorbed the FX Cues view). It was
-    // called Program until the programmer moved out of it; two live views one letter apart was
-    // exactly the collision that kept the programmer out of this list.
-    // Scoped to the active project — running cues from here needs the project live.
-    label: "Show",
-    icon: Theater,
-    // Back to the stack and cue this window last had open on Show (`lib/showPosition.ts`), read
-    // when the entry is pressed — the sidebar and ⌘K both call `path` at the press.
-    path: (p) => showViewPath(p),
-    visibility: "active-only",
-    pathMatch: "/show",
-    group: "live",
-    hiddenInVenue: true,
-  },
-  {
-    id: "prompt-book",
-    label: "Prompt Book",
-    icon: BookOpenText,
-    path: (p) => `/projects/${p}/prompt-book`,
-    visibility: "active-only",
-    pathMatch: "/prompt-book",
-    group: "live",
-    hiddenInVenue: true,
-  },
-  {
-    // `id` stays "fx" — the stable handle, the same call `program` made when Show was renamed.
-    // This is one destination under a new name, not a new one.
-    id: "fx",
-    // Busk: the pad-first performance surface, and the fourth live view. It was "FX", which named
-    // the machinery rather than the job and sat one hyphen from `/fx-library` — a genuinely
-    // different destination that the route match here got wrong twice.
-    label: "Busk",
-    icon: AudioWaveform,
-    path: (p) => `/projects/${p}/busk`,
-    visibility: "active-only",
-    pathMatch: "/busk",
-    group: "live",
-    hiddenInVenue: true,
-  },
-
-  // ── Monitor ─────────────────────────────────────────────────────────
-  // What the rig is actually doing, rather than a surface you drive it from. Their own section
-  // below the live views: they sat interleaved with the four show modes, which made neither group
-  // readable. Both are active-only, so this section disappears with the live one on an inactive
-  // project and its separator collapses with it.
-  {
-    id: "stage-view",
-    label: "Stage",
-    icon: Boxes,
-    path: (p) => `/projects/${p}/stage`,
-    visibility: "active-only",
-    pathMatch: "/stage",
-    group: "monitor",
-  },
-  {
-    id: "channels",
-    label: "Channels",
-    icon: SlidersHorizontal,
-    // No universe in the path: the route resolves the project's first patched universe
-    // (rigs don't always start at 0).
-    path: (p) => `/projects/${p}/channels`,
-    visibility: "active-only",
-    pathMatch: "/channels",
-    group: "monitor",
-  },
-
-  // ── Settings (per-project) ──────────────────────────────────────────
-  // The parent lands on the General tab; the children deep-link to their
-  // sibling tabs so common destinations are one click away from the sidebar.
-  // The patch list is not one of them any more: it is a routed page under
-  // Setup (list-shell-design, called 2026-09-15).
+  // ── Project ─────────────────────────────────────────────────────────
+  // Project Settings' tabs. Regions and Rigging are tabs there too, but Rig rows.
   {
     id: "project-settings",
-    label: "Project Settings",
+    label: "Settings",
+    commandLabel: "Project Settings",
+    keywords: ["configure", "general", "metadata"],
     icon: Settings,
     path: (p) => `/projects/${p}/settings`,
     visibility: "always",
     pathMatch: "/settings",
-    group: "settings",
+    section: "project",
   },
   {
     id: "surfaces",
@@ -303,43 +344,32 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/settings/surfaces`,
     visibility: "active-only",
     pathMatch: "/settings/surfaces",
-    group: "settings",
-    parent: "project-settings",
-  },
-  {
-    id: "stage",
-    label: "Regions",
-    icon: Box,
-    path: (p) => `/projects/${p}/settings/stage`,
-    visibility: "always",
-    pathMatch: "/settings/stage",
-    group: "settings",
-    parent: "project-settings",
-  },
-  {
-    id: "rigging",
-    label: "Rigging",
-    icon: Anchor,
-    path: (p) => `/projects/${p}/settings/rigging`,
-    visibility: "always",
-    pathMatch: "/settings/rigging",
-    group: "settings",
-    parent: "project-settings",
+    section: "project",
   },
   {
     id: "project-sync",
     label: "Sync",
+    commandLabel: "Project sync",
     icon: Cloud,
     path: (p) => `/projects/${p}/settings/sync`,
     visibility: "always",
     pathMatch: "/settings/sync",
-    group: "settings",
-    parent: "project-settings",
+    section: "project",
     adminOnly: true,
   },
 
-  // ── Install (no project context) ────────────────────────────────────
+  // ── Desk (no project context) ───────────────────────────────────────
   // Path resolvers ignore the projectId arg — these routes are install-scope.
+  {
+    id: "projects",
+    label: "Projects",
+    icon: Folders,
+    path: () => "/projects",
+    visibility: "always",
+    pathMatch: "/projects",
+    pathExact: true,
+    section: "desk",
+  },
   {
     id: "install-settings",
     label: "Install Settings",
@@ -347,7 +377,7 @@ export const navItems: NavItem[] = [
     path: () => "/install",
     visibility: "always",
     pathMatch: "/install",
-    group: "install",
+    section: "desk",
   },
   {
     id: "users",
@@ -356,18 +386,19 @@ export const navItems: NavItem[] = [
     path: () => "/install/users",
     visibility: "always",
     pathMatch: "/install/users",
-    group: "install",
+    section: "desk",
     parent: "install-settings",
     adminOnly: true,
   },
   {
     id: "sync",
     label: "Sync",
+    commandLabel: "Desk sync",
     icon: Cloud,
     path: () => "/install/sync",
     visibility: "always",
     pathMatch: "/install/sync",
-    group: "install",
+    section: "desk",
     parent: "install-settings",
     adminOnly: true,
   },
@@ -382,7 +413,7 @@ export const navItems: NavItem[] = [
     path: () => "/install/remote",
     visibility: "always",
     pathMatch: "/install/remote",
-    group: "install",
+    section: "desk",
     parent: "install-settings",
     adminOnly: true,
   },
@@ -393,7 +424,7 @@ export const navItems: NavItem[] = [
     path: () => "/install/updates",
     visibility: "always",
     pathMatch: "/install/updates",
-    group: "install",
+    section: "desk",
     parent: "install-settings",
   },
   {
@@ -403,7 +434,7 @@ export const navItems: NavItem[] = [
     path: () => "/install/diagnostics",
     visibility: "always",
     pathMatch: "/install/diagnostics",
-    group: "install",
+    section: "desk",
     parent: "install-settings",
   },
 ]
@@ -417,7 +448,7 @@ export function useNavItems(): NavItem[] {
  * Returns per-universe navigation items ("Universe 0", "Universe 1", …).
  * Only consumed by the Cmd+K command palette so power users can jump
  * directly to a specific universe; the sidebar shows a single "Channels"
- * entry instead — which is why these carry that row's "monitor" group.
+ * entry instead — which is why these carry that row's "rig" section.
  */
 export function useUniverseNavItems(): NavItem[] {
   const { data: universes } = useGetUniverseQuery()
@@ -431,7 +462,7 @@ export function useUniverseNavItems(): NavItem[] {
         path: (p: number) => `/projects/${p}/channels/${universe}`,
         visibility: "active-only" as const,
         pathMatch: `/channels/${universe}`,
-        group: "monitor" as const,
+        section: "rig" as const,
       })),
     [universes],
   )
@@ -458,7 +489,7 @@ export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family)
   // The bare path, not `/palettes/${slug}` — see above. `navigation.test.ts` asserts this against
   // the real array, which is why the array is module-scope rather than built inside the hook.
   pathMatch: "/palettes",
-  group: "program" as const,
+  section: "library" as const,
   hiddenInVenue: true,
 }))
 
@@ -480,6 +511,24 @@ export function useIsNavAdmin(): boolean {
 }
 
 /**
+ * Whether one row is offered — the one predicate behind its sidebar row, its ⌘K item and the
+ * settings tab it opens (navigation plan P2), so the three cannot disagree.
+ */
+export function navItemShown(
+  item: NavItem,
+  isViewingActiveProject: boolean,
+  isAdmin: boolean = true,
+  isVenue: boolean = false,
+): boolean {
+  if (item.adminOnly && !isAdmin) return false
+  if (item.hiddenInVenue && isVenue) return false
+  if (item.visibility === "always") return true
+  if (item.visibility === "active-only") return isViewingActiveProject
+  if (item.visibility === "inactive-only") return !isViewingActiveProject
+  return true
+}
+
+/**
  * Filter nav items by project-activity visibility and, for [NavItem.adminOnly] entries,
  * by role. [isAdmin] defaults to true so callers that predate roles — and tests exercising
  * visibility alone — keep their existing behaviour.
@@ -491,14 +540,33 @@ export function filterNavItems(
   /** The viewed project is a venue: its rail drops the show's views ([NavItem.hiddenInVenue]). */
   isVenue: boolean = false,
 ): NavItem[] {
-  return items.filter((item) => {
-    if (item.adminOnly && !isAdmin) return false
-    if (item.hiddenInVenue && isVenue) return false
-    if (item.visibility === "always") return true
-    if (item.visibility === "active-only") return isViewingActiveProject
-    if (item.visibility === "inactive-only") return !isViewingActiveProject
-    return true
-  })
+  return items.filter((item) => navItemShown(item, isViewingActiveProject, isAdmin, isVenue))
+}
+
+/**
+ * Which of a settings page's tabs are offered, by the predicate of the nav row each opens:
+ * `tabs` maps a tab to its row's id. A tab whose row is not in the registry is always offered.
+ */
+export function useShownTabs<T extends string>(
+  tabs: Readonly<Record<T, string>>,
+  project?: { isCurrent: boolean; kind?: string } | null,
+): ReadonlySet<T> {
+  const isAdmin = useIsNavAdmin()
+  const isCurrent = project?.isCurrent ?? true
+  const isVenue = project?.kind === "VENUE"
+  return useMemo(() => {
+    const shown = new Set<T>()
+    for (const tab of Object.keys(tabs) as T[]) {
+      const item = navItems.find((i) => i.id === tabs[tab])
+      if (item == null || navItemShown(item, isCurrent, isAdmin, isVenue)) shown.add(tab)
+    }
+    return shown
+  }, [tabs, isCurrent, isAdmin, isVenue])
+}
+
+/** The name ⌘K lists a row by. */
+export function commandLabelOf(item: NavItem): string {
+  return item.commandLabel ?? item.label
 }
 
 /**

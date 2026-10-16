@@ -25,6 +25,7 @@ import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import {
   usePatchProjectCueMutation,
 } from '@/store/cues'
+import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetCueSceneryMutation } from '@/store/scenery'
@@ -55,6 +56,24 @@ interface CuePropsPaneProps {
  */
 export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const [patchCue] = usePatchProjectCueMutation()
+  const [patchEntry] = usePatchCueStackEntryMutation()
+  // The number and the follow are the context entry's. A cue read with none — loose, or in several
+  // stacks and opened from no one of them — has nowhere to write them.
+  const stackId = cue.cueStackId
+  const entryId = cue.entryId ?? null
+  const entryFieldsReason =
+    stackId != null && entryId != null
+      ? null
+      : (cue.entries?.length ?? 0) > 1
+        ? 'This cue is in several places — its number and follow are each place’s, set on its card'
+        : 'This cue is in no stack — it has no number or follow'
+  const writeEntry = useCallback(
+    (body: { cueNumber?: string | null; autoAdvance?: boolean; autoAdvanceDelayMs?: number | null }) => {
+      if (stackId == null || entryId == null) return
+      patchEntry({ projectId, stackId, entryId, cueId: cue.id, ...body })
+    },
+    [patchEntry, projectId, stackId, entryId, cue.id],
+  )
   const [setCueScenery] = useSetCueSceneryMutation()
   const [setCueEvents] = useSetCueEventsMutation()
 
@@ -100,8 +119,8 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const commitCueNumber = useCallback(() => {
     const next = cueNumber.trim() || null
     if (next === (cue.cueNumber ?? null)) return
-    patchCue({ projectId, cueId: cue.id, cueNumber: next })
-  }, [cueNumber, cue.cueNumber, cue.id, patchCue, projectId])
+    writeEntry({ cueNumber: next })
+  }, [cueNumber, cue.cueNumber, writeEntry])
 
   const commitNotes = useCallback(() => {
     const next = notes.trim() || null
@@ -122,8 +141,8 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
     const next = raw === '' ? null : Number(raw)
     if (raw !== '' && !Number.isFinite(next)) return
     if (next === (cue.autoAdvanceDelayMs ?? null)) return
-    patchCue({ projectId, cueId: cue.id, autoAdvanceDelayMs: next as number | null })
-  }, [autoAdvanceDelay, cue.autoAdvanceDelayMs, cue.id, patchCue, projectId])
+    writeEntry({ autoAdvanceDelayMs: next as number | null })
+  }, [autoAdvanceDelay, cue.autoAdvanceDelayMs, writeEntry])
 
   const setFadeCurve = useCallback(
     (curve: string) => {
@@ -156,9 +175,9 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const setAutoAdvance = useCallback(
     (next: boolean) => {
       if (next === cue.autoAdvance) return
-      patchCue({ projectId, cueId: cue.id, autoAdvance: next })
+      writeEntry({ autoAdvance: next })
     },
-    [cue.autoAdvance, cue.id, patchCue, projectId],
+    [cue.autoAdvance, writeEntry],
   )
 
   const [hooksExpanded, setHooksExpanded] = useState((cue.triggers ?? []).length > 0)
@@ -232,6 +251,8 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
             onBlur={commitCueNumber}
             onKeyDown={commitOnEnter(commitCueNumber)}
             placeholder="14A"
+            disabled={entryFieldsReason != null}
+            title={entryFieldsReason ?? undefined}
             className={cn('h-9', cue.cueNumberAuto && 'text-muted-foreground')}
           />
         </div>
@@ -308,8 +329,10 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
             role="switch"
             aria-checked={cue.autoAdvance}
             onClick={() => setAutoAdvance(!cue.autoAdvance)}
+            disabled={entryFieldsReason != null}
+            title={entryFieldsReason ?? undefined}
             className={cn(
-              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               cue.autoAdvance ? 'bg-primary' : 'bg-muted',
             )}
           >

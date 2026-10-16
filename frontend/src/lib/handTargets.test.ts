@@ -36,7 +36,7 @@ import type { BuskPadKind } from '@/api/buskApi'
 function paletteDrag(kind: BuskPadKind, hasDeferredEffects = false, eligible?: boolean) {
   const record =
     kind === 'CUE'
-      ? { kind: 'CUE' as const, cue: { id: 7, name: 'Cue 1', cueNumber: '1', cueStackId: 1, cueStackName: 'Act I' } }
+      ? { kind: 'CUE' as const, cue: { id: 7, name: 'Cue 1', entries: [{ stackId: 1, stackName: 'Act I', entryId: 107, cueNumber: '1' }] } }
       : kind === 'LOOK'
         ? { kind: 'LOOK' as const, look: { id: 7, name: 'Warm', hasDeferredEffects } }
         : { kind: 'TEMPLATE' as const, template: { id: 7, name: 'Amber' } }

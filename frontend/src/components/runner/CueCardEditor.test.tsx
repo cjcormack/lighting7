@@ -24,9 +24,19 @@ vi.mock('@dnd-kit/sortable', () => ({
 }))
 const sortableArgs: { disabled?: boolean } = {}
 vi.mock('@dnd-kit/utilities', () => ({ CSS: { Transform: { toString: () => undefined } } }))
+const patchCue = vi.fn()
+const patchEntry = vi.fn()
+const removeEntry = vi.fn()
+const addToStack = vi.fn()
+/** A mutation trigger's result: `unwrap` resolves, as a landed request does. */
+const landed = (value: unknown = undefined) => ({ unwrap: () => Promise.resolve(value) })
 vi.mock('@/store/cues', () => ({
-  useDeleteProjectCueMutation: () => [vi.fn()],
-  usePatchProjectCueMutation: () => [vi.fn()],
+  usePatchProjectCueMutation: () => [patchCue],
+}))
+vi.mock('@/store/cueStacks', () => ({
+  usePatchCueStackEntryMutation: () => [patchEntry],
+  useRemoveCueStackEntryMutation: () => [removeEntry],
+  useAddCueToStackMutation: () => [addToStack],
 }))
 vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,
@@ -73,6 +83,7 @@ function draw(over: Partial<React.ComponentProps<typeof CueCardEditor>> = {}) {
   const utils = render(
     <CueCardEditor
       cue={cue}
+      stackId={7}
       projectId={1}
       expanded={false}
       onToggleExpanded={onToggleExpanded}
@@ -162,7 +173,7 @@ describe('CueCardEditor', () => {
       onRecordInto: vi.fn(),
     })
     expect(screen.getByTestId('detail')).toBeTruthy()
-    expect(screen.queryByText('Remove')).toBeNull()
+    expect(screen.queryByText('Remove from stack')).toBeNull()
     expect(screen.queryByText('Duplicate')).toBeNull()
     expect(screen.queryByText('Edit in Programmer')).toBeNull()
     expect(screen.queryByText('Record')).toBeNull()
@@ -177,10 +188,65 @@ describe('CueCardEditor', () => {
       onIncludeCue: vi.fn(),
       onRecordInto: vi.fn(),
     })
-    expect(screen.getByText('Remove')).toBeTruthy()
+    expect(screen.getByText('Remove from stack')).toBeTruthy()
     expect(screen.getByText('Duplicate')).toBeTruthy()
     expect(screen.getByText('Edit in Programmer')).toBeTruthy()
     expect(screen.getByText('Record')).toBeTruthy()
     expect(screen.getByText('Cue properties…')).toBeTruthy()
+  })
+
+  it('removes the entry from the stack, never the cue, and asks nothing', () => {
+    removeEntry.mockReturnValue(landed())
+    draw({ expanded: true })
+    fireEvent.click(screen.getByText('Remove from stack'))
+    expect(removeEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1 })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('writes a number edit to the entry, not the cue', () => {
+    patchEntry.mockReturnValue(landed())
+    draw()
+    fireEvent.click(screen.getByRole('button', { name: /^cue number:/ }))
+    const input = screen.getByRole('textbox', { name: 'cue number' })
+    fireEvent.change(input, { target: { value: '14A' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1, cueNumber: '14A' })
+    expect(patchCue).not.toHaveBeenCalled()
+  })
+
+  it('marks a cue in two stacks and names the other place', () => {
+    draw({
+      places: [
+        { stackId: 7, stackName: 'Act 1', entryId: 101, cueNumber: '1' },
+        { stackId: 8, stackName: 'Act 2', entryId: 205, cueNumber: '14' },
+      ],
+    })
+    const chip = screen.getByRole('button', { name: /in 2 stacks/ })
+    expect(chip.getAttribute('title')).toBe('Also Act 2 · Q14')
+  })
+
+  it('draws no mark for a cue in one place', () => {
+    draw({ places: [{ stackId: 7, stackName: 'Act 1', entryId: 101, cueNumber: '1' }] })
+    expect(document.querySelector('[data-shared-cue]')).toBeNull()
+  })
+
+  it('moves an entry by adding it to the other stack, then removing it here', async () => {
+    addToStack.mockReturnValue(landed())
+    removeEntry.mockReturnValue(landed())
+    draw({
+      expanded: true,
+      stackChoices: [
+        { id: 7, name: 'Act 1' },
+        { id: 8, name: 'Act 2' },
+      ],
+    })
+    fireEvent.keyDown(screen.getByRole('button', { name: /Move to stack/ }), { key: 'Enter' })
+    // The current stack is not a destination.
+    expect(screen.queryByRole('menuitem', { name: 'Act 1' })).toBeNull()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Act 2' }))
+    expect(addToStack).toHaveBeenCalledWith({ projectId: 1, stackId: 8, cueId: 1 })
+    await vi.waitFor(() =>
+      expect(removeEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1 }),
+    )
   })
 })

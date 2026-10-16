@@ -4,11 +4,11 @@ import type { CueType } from '@/api/cueStacksApi'
  * What the picker reads off one row of the project's cue list (`GET /projects/{id}/cues`), and
  * nothing more.
  *
- * **The stack is optional here although every cue has one today.** The cue model plan's session 4
- * (R1.4) makes a cue a project record a stack only names, so a cue can be in no stack (*loose*) or
- * in several; this picker is the "An existing cue…" destination for all of them. It therefore
- * draws whatever stack the row carries and assumes nothing beyond it — a row with no stack is a
- * cue all the same, named by its name, and a shared cue is one row because it is one cue.
+ * **The stack and number are optional.** A cue is a project record a stack only names, so a cue
+ * can be in no stack (*loose*) or in several, and the list row then carries a null `cueStackName`
+ * and `cueNumber`; this picker is the "An existing cue…" destination for all of them. It draws
+ * whatever stack the row carries and assumes nothing beyond it — a row with no stack is a cue all
+ * the same, named by its name, and a shared cue is one row because it is one cue.
  */
 export interface CuePickerSource {
   id: number

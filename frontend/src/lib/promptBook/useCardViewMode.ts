@@ -21,7 +21,7 @@ export function useCardViewMode() {
   const [overrides, setOverrides] = useState<Map<number, ExpansionMode | null>>(new Map())
 
   const onCueModeChange = useCallback(
-    (cueId: number, status: CueRunStatus, next: ExpansionMode | null) => {
+    (entryId: number, status: CueRunStatus, next: ExpansionMode | null) => {
       if (status === 'live') {
         // Toggling the live card updates the shared view (which the next GO carries).
         // Never write a per-cue override for the live cue, so it can't get pinned stale.
@@ -29,7 +29,7 @@ export function useCardViewMode() {
       } else {
         setOverrides((prev) => {
           const m = new Map(prev)
-          m.set(cueId, next)
+          m.set(entryId, next)
           return m
         })
       }
@@ -41,9 +41,9 @@ export function useCardViewMode() {
   // never opens live with a stale pinned mode); a non-live cue uses the operator's own choice if it
   // has one, else opens with neither selected.
   const modeOf = useCallback(
-    (cueId: number, status: CueRunStatus): ExpansionMode | null => {
+    (entryId: number, status: CueRunStatus): ExpansionMode | null => {
       if (status === 'live') return viewMode
-      return overrides.has(cueId) ? overrides.get(cueId) ?? null : null
+      return overrides.has(entryId) ? overrides.get(entryId) ?? null : null
     },
     [overrides, viewMode],
   )

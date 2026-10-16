@@ -75,6 +75,20 @@ export function cueRowById(cues: readonly CueStackCueEntry[] | undefined, cueId:
   return null
 }
 
+/**
+ * The entry of [stack] that places [cueId] — [preferred] when it is one of them, else the first. The
+ * runner's cursors are cue ids; this names which place of a shared cue they mean.
+ */
+export function entryIdOfCue(
+  stack: CueStack | null | undefined,
+  cueId: number | null | undefined,
+  preferred: number | null | undefined,
+): number | null {
+  if (stack == null || cueId == null) return null
+  if (preferred != null && stack.cues.some((c) => c.entryId === preferred && c.id === cueId)) return preferred
+  return cueRowById(stack.cues, cueId)?.entryId ?? null
+}
+
 export interface CueStack {
   id: number
   name: string
@@ -126,6 +140,22 @@ export interface ReorderCuesRequest {
 export interface MarkerEntryRequest {
   label: string
   sortOrder?: number
+}
+
+/**
+ * `PATCH cue-stacks/{sid}/entries/{entryId}` — an entry's number and follow. Only the fields present
+ * are written; a null or empty `cueNumber` hands the entry back to auto-numbering.
+ */
+export interface CueEntryPatch {
+  cueNumber?: string | null
+  autoAdvance?: boolean
+  autoAdvanceDelayMs?: number | null
+}
+
+/** `DELETE cue-stacks/{sid}`: the cues it left in no stack, or — with `deleteLooseCues` — deleted. */
+export interface DeleteCueStackResponse {
+  looseCueIds: number[]
+  deletedCueIds: number[]
 }
 
 /** Result of `POST /cue-stacks/{stackId}/sort-by-cue-number`. */

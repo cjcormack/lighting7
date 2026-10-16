@@ -347,8 +347,10 @@ private fun DaoCuePropertyAssignment.toDtoWithHealth(
 internal fun DaoCue.toCueDetails(
     isCurrentProject: Boolean,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-    /** The cue's entry and position; a list passes each from one [soleEntrySlotsOf] for them all. */
-    slot: EntrySlot? = soleEntrySlotsOf(listOf(id.value))[id.value],
+    /** The cue's entries in show order; a list passes each from one [entrySlotsOf] for them all. */
+    slots: List<EntrySlot> = entrySlotsOf(listOf(id.value))[id.value].orEmpty(),
+    /** The entry the place fields describe; null describes the cue's only entry, if it has one. */
+    contextEntryId: Int? = null,
 ): CueDetails {
     val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDetailDto(
@@ -363,8 +365,7 @@ internal fun DaoCue.toCueDetails(
     }
     val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
         .map { it.toDtoWithHealth(fixtures) }
-    // A cue's place is its entry's. Every cue has one until sharing lands (cue model plan P4), and
-    // these fields describe it; the plan's session 4 lists every entry instead.
+    val slot = if (contextEntryId != null) slots.firstOrNull { it.entry.id.value == contextEntryId } else slots.singleOrNull()
     val entry = slot?.entry
     val stack = entry?.stack
     return CueDetails(
@@ -392,8 +393,20 @@ internal fun DaoCue.toCueDetails(
         scenery = cueSceneryOf(this.id).map { it.toDto() },
         trackedScenery = entry?.let(::trackedSceneryAt).orEmpty(),
         events = cueEventsOf(this.id).map { it.toDto() },
+        entries = slots.map { it.toPlaceDto() },
     )
 }
+
+internal fun EntrySlot.toPlaceDto() = CueEntryPlaceDto(
+    entryId = entry.id.value,
+    stackId = entry.stackId,
+    stackName = entry.stack.name,
+    sortOrder = position,
+    cueNumber = entry.cueNumber,
+    cueNumberAuto = entry.cueNumberAuto,
+    autoAdvance = entry.autoAdvance,
+    autoAdvanceDelayMs = entry.autoAdvanceDelay?.toMillis(),
+)
 
 /**
  * A cue layer's referent, resolved for the write path: exactly one field is non-null.
@@ -770,34 +783,6 @@ internal fun deleteCueChildren(cue: DaoCue) {
 }
 
 /**
- * Delete every prompt-book anchor on an entry of [cue] — an anchor marks an entry (cue model plan
- * D4). Kept separate from [deleteCueChildren] because an anchor is not one of the cue's children:
- * it is the prompt book's, and dies only with the cue's entry, never with an edit of its contents.
- * Explicit rather than DB-cascade because SQLite doesn't enforce cascades without a
- * per-connection pragma. Returns the number removed so callers know whether to fire
- * promptBookChanged.
- */
-internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int {
-    val entryIds = entriesOfCue(cue).map { it.id }
-    if (entryIds.isEmpty()) return 0
-    return DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry inList entryIds }
-}
-
-/**
- * Delete [cue]'s entries — its places in every stack — and renumber each stack it left. For a cue
- * delete, after [deletePromptBookAnchorsForCue] (the anchors mark the entries). Returns the stacks
- * that lost an entry, for their priorities.
- */
-internal fun deleteCueEntries(cue: DaoCue): List<DaoCueStack> {
-    val entries = entriesOfCue(cue)
-    val stacks = entries.map { it.stack }.distinctBy { it.id.value }
-    val before = stacks.associate { it.id.value to cueEntryIds(it) }
-    entries.forEach { it.delete() }
-    stacks.forEach { renumberAutoEntries(it, before.getValue(it.id.value)) }
-    return stacks
-}
-
-/**
  * Delete everything that *points at* [cue] from outside it — its busk pads and its cue slots —
  * and return the ids of the busk pages that lost a pad, for `buskLayoutChanged`.
  *
@@ -895,8 +880,8 @@ internal fun categoryFromPropertyName(propertyName: String): String {
  * explicit number when given and the entry's follow. Renumbers the stack's auto numbers, so an
  * unnumbered cue takes one from where it landed. Must run inside a transaction.
  *
- * Every path that makes a cue goes through this, so one entry per cue (P4) holds by construction.
- * A caller placing several cues in one gesture passes [renumber] false and renumbers once, from
+ * Every path that adds a cue to a stack goes through this — a new cue, or one shared into another
+ * stack (`add-cue`, cue model plan D1). A caller placing several cues in one gesture passes [renumber] false and renumbers once, from
  * the [cueEntryIds] it took before the first, so the new cues are labelled together — as one run
  * between their numbered neighbours — rather than each from the ones placed before it.
  */
@@ -910,6 +895,7 @@ internal fun placeCueInStack(
     renumber: Boolean = true,
 ): DaoCueStackEntry {
     val before = if (renumber) cueEntryIds(stack) else emptyList()
+    cueNumber?.takeIf { it.isNotEmpty() }?.let { releaseAutoNumber(stack, it, exceptEntryId = -1) }
     val existing = entriesOf(stack)
     val entry = DaoCueStackEntry.new {
         this.stack = stack
@@ -928,6 +914,18 @@ internal fun placeCueInStack(
 }
 
 /**
+ * Why explicit [number] cannot go on an entry of [stack] other than [exceptEntryId] — another cue
+ * entry there already holds it explicitly — or null. An auto number is no clash: [setEntryNumber]
+ * and [placeCueInStack] take it over. Must run inside a transaction.
+ */
+internal fun explicitNumberClash(stack: DaoCueStack, number: String, exceptEntryId: Int? = null): String? =
+    "Cue number $number is already used in ${stack.name}".takeIf {
+        entriesOf(stack).any { e ->
+            e.id.value != exceptEntryId && !e.isMarker && !e.cueNumberAuto && number.equals(e.cueNumber, ignoreCase = true)
+        }
+    }
+
+/**
  * Set [entry]'s number as an operator edit: typed, it becomes explicit, released first from any
  * auto-numbered sibling that holds it; blank hands the entry back to the auto scheme, which fills
  * it in again from position. A number edit moves nothing, so every other auto entry keeps its
@@ -941,36 +939,4 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
     entry.cueNumber = next
     entry.cueNumberAuto = false
     renumberAutoEntries(stack, cueEntryIds(stack))
-}
-
-/**
- * Move [entry] to [position] in [stack]'s list (0 first, markers counted; null or past the end
- * appends) — within its own stack, or into another, which is what `add-cue` does while every cue
- * has one entry (cue model plan P4). Renumbers the stack it joined, and the stack it left as well
- * (venue-visit R1). An explicit number that another cue entry of the target already holds refuses
- * the move, as the unique index would; an auto one is dropped and derived again where it lands.
- * Answers an error, or null when moved. Must run inside a transaction.
- */
-internal fun moveEntryTo(stack: DaoCueStack, entry: DaoCueStackEntry, position: Int?): String? {
-    val left = entry.stack.takeIf { it.id != stack.id }
-    val leftBefore = left?.let { cueEntryIds(it) }
-    val before = cueEntryIds(stack)
-    val existing = entriesOf(stack).filter { it.id != entry.id }
-    if (left != null) {
-        val number = entry.cueNumber
-        if (!entry.cueNumberAuto && number != null &&
-            existing.any { !it.isMarker && !it.cueNumberAuto && number.equals(it.cueNumber, ignoreCase = true) }
-        ) {
-            return "Cue number $number is already used in ${stack.name}"
-        }
-        if (entry.cueNumberAuto) entry.cueNumber = null
-        releaseAutoNumber(stack, entry.cueNumber, exceptEntryId = entry.id.value)
-        entry.stack = stack
-    }
-    val at = position?.coerceIn(0, existing.size) ?: existing.size
-    // Moved in from another stack, its ordinal is that list's, never this one's.
-    writeEntryOrder(existing.take(at) + entry + existing.drop(at), fresh = listOfNotNull(entry.takeIf { left != null }))
-    renumberAutoEntries(stack, before)
-    if (left != null) renumberAutoEntries(left, leftBefore!!)
-    return null
 }

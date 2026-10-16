@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.models.EntryPlace
 import uk.me.cormack.lighting7.models.entriesOfStack
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
@@ -70,6 +71,8 @@ internal data class LiveStack(
     val fadeStartedAtMs: Long?,
     val autoAdvanceRunning: Boolean,
     val autoAdvanceDelayMs: Long?,
+    /** Where [activeEntryId] stood, once it has been removed from the list (cue model plan D16). */
+    val detachedAt: EntryPlace? = null,
 )
 
 /** The manager's live-stack table, as the run-state half sees it. */
@@ -113,26 +116,40 @@ class CueRunStateTracker internal constructor(
         entriesOfStack(EntityID(stackId, DaoCueStacks)).mapNotNull { entry -> entry.cueId?.let { CueEntryRef(entry.id.value, it) } }
 
     /**
+     * How many of [stackId]'s cue entries play before [place] — where a removed live entry would sit
+     * in [orderedCueEntries] — or null for no place. Must be called inside a transaction.
+     */
+    internal fun detachedIndex(stackId: Int, place: EntryPlace?): Int? =
+        place?.cueIndexIn(entriesOfStack(EntityID(stackId, DaoCueStacks)))
+
+    /**
      * The entry [direction] from [fromEntryId] within [ordered], honouring [loop].
      *
      * Null when the walk runs off the end of a non-looping stack — callers decide what that
      * means: [CueStackManager.advanceStack] stays on the current entry, [effectiveNext]
-     * reports "nothing on deck". A [fromEntryId] that isn't in [ordered] (removed, or its cue
-     * deleted) falls back to the first entry.
+     * reports "nothing on deck". A [fromEntryId] that isn't in [ordered] walks from
+     * [detachedIndex] — where it stood before it was removed (D16) — when known, else falls back to
+     * the first entry.
      */
     internal fun positional(
         ordered: List<CueEntryRef>,
         fromEntryId: Int?,
         direction: CueStackManager.AdvanceDirection,
         loop: Boolean,
+        detachedIndex: Int? = null,
     ): CueEntryRef? {
         if (ordered.isEmpty()) return null
         if (fromEntryId == null) return ordered.first()
         val currentIndex = ordered.indexOfFirst { it.entryId == fromEntryId }
-        if (currentIndex == -1) return ordered.first()
-        val nextIndex = when (direction) {
-            CueStackManager.AdvanceDirection.FORWARD -> currentIndex + 1
-            CueStackManager.AdvanceDirection.BACKWARD -> currentIndex - 1
+        val nextIndex = when {
+            currentIndex == -1 && detachedIndex == null -> return ordered.first()
+            // Between two entries: forward is the one now at its index, back the one before.
+            currentIndex == -1 -> when (direction) {
+                CueStackManager.AdvanceDirection.FORWARD -> detachedIndex!!
+                CueStackManager.AdvanceDirection.BACKWARD -> detachedIndex!! - 1
+            }
+            direction == CueStackManager.AdvanceDirection.FORWARD -> currentIndex + 1
+            else -> currentIndex - 1
         }
         return when {
             nextIndex in ordered.indices -> ordered[nextIndex]
@@ -158,13 +175,16 @@ class CueRunStateTracker internal constructor(
      * Overload taking an already-loaded entry list, for callers that are inside a transaction and
      * hold the stack's entries (the details DTO). The rules live here, not in the caller.
      */
-    fun effectiveNext(stackId: Int, ordered: List<CueEntryRef>, loop: Boolean): CueEntryRef? =
-        nextFrom(
-            activeEntryId = liveStacks.liveStack(stackId)?.activeEntryId,
+    fun effectiveNext(stackId: Int, ordered: List<CueEntryRef>, loop: Boolean): CueEntryRef? {
+        val live = liveStacks.liveStack(stackId)
+        return nextFrom(
+            activeEntryId = live?.activeEntryId,
             stackId = stackId,
             ordered = ordered,
             loop = loop,
+            detachedAt = live?.detachedAt,
         )
+    }
 
     /** [effectiveNext] for a stack whose entries aren't already loaded. */
     fun effectiveNext(state: State, stackId: Int): CueEntryRef? = transaction(state.database) {
@@ -185,10 +205,12 @@ class CueRunStateTracker internal constructor(
         stackId: Int,
         ordered: List<CueEntryRef>,
         loop: Boolean,
+        detachedAt: EntryPlace? = null,
     ): CueEntryRef? {
         val armed = standbys[stackId]
         if (armed != null && armed.entryId != activeEntryId && armed in ordered) return armed
-        return positional(ordered, activeEntryId, CueStackManager.AdvanceDirection.FORWARD, loop)
+        val detachedIndex = if (detachedAt != null && ordered.none { it.entryId == activeEntryId }) detachedIndex(stackId, detachedAt) else null
+        return positional(ordered, activeEntryId, CueStackManager.AdvanceDirection.FORWARD, loop, detachedIndex)
     }
 
     /**
@@ -213,14 +235,10 @@ class CueRunStateTracker internal constructor(
         publishRunState(state, stackId)
     }
 
-    /**
-     * Drop any standby naming [cueId]. Called when a cue is deleted: [effectiveNext] already
-     * ignores an armed entry that is no longer in the stack, but the standby would otherwise
-     * linger and `standbyCueId` would keep reporting a cue that is gone.
-     */
-    fun clearStandbyForCue(state: State, cueId: Int) {
+    /** Drop any standby armed on one of [entryIds], which were removed from their stacks. */
+    fun clearStandbyForEntries(state: State, entryIds: Set<Int>) {
         for ((stackId, armed) in standbys) {
-            if (armed.cueId == cueId) clearStandby(state, stackId)
+            if (armed.entryId in entryIds) clearStandby(state, stackId)
         }
     }
 
@@ -261,6 +279,7 @@ class CueRunStateTracker internal constructor(
                 stackId = stackId,
                 ordered = orderedCueEntries(stackId),
                 loop = stack.loop,
+                detachedAt = active?.detachedAt,
             )
         }
         val armed = standbys[stackId]

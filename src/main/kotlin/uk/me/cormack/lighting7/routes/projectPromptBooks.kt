@@ -74,7 +74,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                         ?: return@mapNotNull null
                     // A location is a cue's: a marker's anchor has none to report.
                     val cueId = cueByEntry[anchor.entryId] ?: return@mapNotNull null
-                    CueLocationDto(cueId = cueId, page = earliest.page, y = earliest.y)
+                    CueLocationDto(cueId = cueId, entryId = anchor.entryId, page = earliest.page, y = earliest.y)
                 }
             }
             call.respond(locations)
@@ -161,7 +161,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         }
     }
 
-    // PUT /{projectId}/prompt-book/anchors/{cueId} - Upsert the cue's anchor
+    // PUT /{projectId}/prompt-book/anchors/{entryId} - Upsert the anchor on a cue's entry (cue model plan D4)
     put<PromptBookAnchorResource> { resource ->
         withCurrentProject(
             state,
@@ -176,14 +176,10 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 checkPromptBookRegion(input.region, book.pageCount)?.let {
                     return@transaction RouteResult.Error(HttpStatusCode.BadRequest, it)
                 }
-                val cue = DaoCue.findById(resource.cueId)
-                if (cue == null || cue.project.id != project.id) {
-                    return@transaction RouteResult.Error(HttpStatusCode.NotFound, "Cue not found")
-                }
-                // An anchor marks an entry (cue model plan D4). This route still names a cue, and
-                // means its one entry until anchors are addressed by entry (P4).
-                val entry = soleEntryOf(cue)
-                    ?: return@transaction RouteResult.Error(HttpStatusCode.Conflict, "Cue is not in exactly one stack")
+                // A shared cue has a place, and an anchor, in each stack that holds it.
+                val entry = cueEntryOf(project, resource.entryId)
+                    ?: return@transaction RouteResult.Error(HttpStatusCode.NotFound, "Entry not found")
+                val cue = entry.cue!!
 
                 val existing = DaoPromptBookAnchor.find {
                     (DaoPromptBookAnchors.promptBook eq book.id) and (DaoPromptBookAnchors.entry eq entry.id)
@@ -209,7 +205,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         }
     }
 
-    // DELETE /{projectId}/prompt-book/anchors/{cueId}
+    // DELETE /{projectId}/prompt-book/anchors/{entryId}
     delete<PromptBookAnchorResource> { resource ->
         withCurrentProject(
             state,
@@ -218,7 +214,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         ) { project ->
             val found = transaction(state.database) {
                 val book = project.promptBook ?: return@transaction false
-                val entry = soleEntryOfCueId(resource.cueId) ?: return@transaction false
+                val entry = cueEntryOf(project, resource.entryId) ?: return@transaction false
                 val anchor = DaoPromptBookAnchor.find {
                     (DaoPromptBookAnchors.promptBook eq book.id) and
                         (DaoPromptBookAnchors.entry eq entry.id)
@@ -421,7 +417,7 @@ private fun DaoPromptBook.toDetails(isCurrentProject: Boolean): PromptBookDetail
         scriptFileName = scriptFileName,
         pageCount = pageCount,
         coverPages = coverPages,
-        // The book's anchors are cue-keyed on this route (P4): a marker's anchor has no cue to name.
+        // A marker's anchor has no cue to name, so the book lists cue entries' anchors only.
         anchors = anchors.mapNotNull { anchor -> cueByEntry[anchor.entryId]?.let { anchor.toDto(it) } },
         annotations = annotations.map { it.toDto() },
         canEdit = isCurrentProject,
@@ -440,6 +436,10 @@ private fun anchorCueIds(anchors: List<DaoPromptBookAnchor>): Map<Int, Int> {
         .mapNotNull { row -> row[DaoCueStackEntries.cue]?.let { row[DaoCueStackEntries.id].value to it.value } }
         .toMap()
 }
+
+/** Cue entry [entryId] of a stack of [project] — never a marker's — or null. Inside a transaction. */
+private fun cueEntryOf(project: DaoProject, entryId: Int): DaoCueStackEntry? =
+    DaoCueStackEntry.findById(entryId)?.takeIf { !it.isMarker && it.cueId != null && it.stack.project.id == project.id }
 
 private fun DaoPromptBookAnchor.toDto(cueId: Int) = PromptBookAnchorDto(
     cueId = cueId,
@@ -465,8 +465,8 @@ data class ProjectPromptBookResource(val projectId: String)
 @Resource("/{projectId}/cue-locations")
 data class ProjectCueLocationsResource(val projectId: String)
 
-@Resource("/anchors/{cueId}")
-data class PromptBookAnchorResource(val parent: ProjectPromptBookResource, val cueId: Int)
+@Resource("/anchors/{entryId}")
+data class PromptBookAnchorResource(val parent: ProjectPromptBookResource, val entryId: Int)
 
 @Resource("/annotations")
 data class PromptBookAnnotationsResource(val parent: ProjectPromptBookResource)
@@ -506,7 +506,7 @@ data class PromptBookDetails(
 @Serializable
 data class PromptBookAnchorDto(
     val cueId: Int,
-    /** The stack entry the anchor marks (cue model plan D4); its cue's one entry while P4 holds. */
+    /** The stack entry the anchor marks (cue model plan D4) — what the anchor routes name. */
     val entryId: Int,
     val region: List<PromptBookRectDto>,
     val label: String? = null,
@@ -520,6 +520,8 @@ data class PromptBookAnchorDto(
 @Serializable
 data class CueLocationDto(
     val cueId: Int,
+    /** The entry the anchor marks: a shared cue has one location per anchored entry. */
+    val entryId: Int,
     val page: Int,
     val y: Double,
 )

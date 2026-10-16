@@ -837,8 +837,8 @@ internal val copyToProjectTool = ToolDef(
 
 internal val deleteCueStacksTool = ToolDef(
     name = "delete_cue_stacks",
-    description = "Delete cue stacks with all their cues, their scenery and events, and their prompt-book anchors. A running stack is refused: deactivate it first. " +
-        "Looks and palettes the cues layered stay. Everything is checked before anything is deleted; use dryRun to see what would go.",
+    description = "Delete cue stacks with their entries, their set and their prompt-book anchors. The cues stay: a cue no other stack holds is left in no stack. A running stack is refused: deactivate it first. " +
+        "Everything is checked before anything is deleted; use dryRun to see what would go.",
     inputSchema = objectSchema(required = listOf("stackIds")) {
         put("stackIds", buildJsonObject {
             put("type", "array")

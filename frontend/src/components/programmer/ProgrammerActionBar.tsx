@@ -29,7 +29,7 @@ import {
 import { useIsDeskConnected } from '@/store/status'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
-import { includedCueId, includedTargetParts } from '@/lib/includedTarget'
+import { includedCueEntry, includedCueId, includedTargetParts } from '@/lib/includedTarget'
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useHeldSceneryCount } from './ProgrammerSceneryList'
 
@@ -150,11 +150,14 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const canRecord = hasContent && !isVenue
 
   const cueId = includedCueId(target)
-  const includedCue = target?.kind === 'CUE' ? includedTargetParts(target) : null
+  const includedEntry = includedCueEntry(target, stacks)
+  const includedParts = target?.kind === 'CUE' ? includedTargetParts(target) : null
+  // The number shown is the entry's the cue was included from, where the stack list has it.
+  const includedCue =
+    includedParts == null ? null : { ...includedParts, number: includedEntry?.row.cueNumber || includedParts.number }
   const includedStack =
-    target?.kind === 'CUE' && target.cueStackId != null
-      ? stacks?.find((s) => s.id === target.cueStackId)
-      : undefined
+    includedEntry?.stack ??
+    (target?.kind === 'CUE' && target.cueStackId != null ? stacks?.find((s) => s.id === target.cueStackId) : undefined)
 
   return (
     <div className="flex shrink-0 items-center gap-2">

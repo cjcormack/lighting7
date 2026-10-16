@@ -19,6 +19,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
@@ -201,7 +202,7 @@ internal class VenueSetupTools(private val state: State) {
         val target = state.toolProject(input)
         val problems = unknownFields(input, listOf("projectId", "stackIds", "dryRun"), "delete_cue_stacks").toMutableList()
         val ids = intList(input, "stackIds", problems)
-        if (ids.isEmpty() && problems.isEmpty()) problems += "stackIds is required: the stacks to delete, with their cues"
+        if (ids.isEmpty() && problems.isEmpty()) problems += "stackIds is required: the stacks to delete"
         val dryRun = input.bool("dryRun") == true
         val manager = state.show.cueStackManager
 
@@ -220,22 +221,37 @@ internal class VenueSetupTools(private val state: State) {
             }
         }
         if (problems.isNotEmpty()) return rejected(problems)
-        if (!dryRun) {
+        val loose = if (dryRun) {
+            transaction(state.database) { cuesLeftLoose(found.map { it.id }) }
+        } else {
             val deleted = transaction(state.database) {
                 val project = DaoProject[target.project.id]
                 found.map { deleteCueStackRows(state, project, DaoCueStack[it.id]) }
             }
             for (d in deleted) announceCueStacksDeleted(state, d)
+            deleted.flatMap { it.looseCueIds }.distinct().size
         }
         return success(
-            "${if (dryRun) "Would delete" else "Deleted"} ${found.size} cue stack(s) and ${found.sumOf { it.cues }} cue(s)",
+            "${if (dryRun) "Would delete" else "Deleted"} ${found.size} cue stack(s); their cues stay, " +
+                "$loose ${if (dryRun) "would be" else "now"} in no stack",
             buildJsonObject {
                 put("dryRun", dryRun)
+                put("cuesLeftLoose", loose)
                 putJsonArray("stacks") {
                     found.forEach { addJsonObject { put("id", it.id); put("name", it.name); put("cues", it.cues) } }
                 }
             },
         )
+    }
+
+    /** How many cues placed in [stackIds] have no entry in any other stack. Inside a transaction. */
+    private fun cuesLeftLoose(stackIds: List<Int>): Int {
+        val entries = stackIds.flatMap { entriesOfStack(EntityID(it, DaoCueStacks)) }
+        val cueIds = entries.mapNotNull { it.cueId }.toSet()
+        val elsewhere = cueIds.filter { cueId ->
+            DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.any { it.stackId !in stackIds }
+        }
+        return cueIds.size - elsewhere.size
     }
 
     // ─── copy_to_project ────────────────────────────────────────────────

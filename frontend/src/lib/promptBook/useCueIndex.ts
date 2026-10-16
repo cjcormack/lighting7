@@ -14,25 +14,33 @@ import { flattenCueOrder, flattenShowRows } from './geometry'
  *
  * `cueOrder` is the authoritative reading order; `railRows` is the same order with the separators
  * and per-stack headers the rail draws. Every other member is an index into `cueOrder` or the raw
- * stack entries, so they cannot disagree with it.
+ * stack entries, so they cannot disagree with it. They are keyed by **entry**, as the book is,
+ * except the notes, which are the cue's own.
  */
 export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: number | null) {
   const cueOrder: FlatCue[] = useMemo(() => flattenCueOrder(stacks), [stacks])
   // Rail rows include separators + per-stack headers (multi-stack only).
   const railRows = useMemo(() => flattenShowRows(stacks), [stacks])
-  const cueOrderIndex = useMemo(() => new Map(cueOrder.map((c, i) => [c.cueId, i])), [cueOrder])
-  // Live cue labels — the pill reads these so an edited cue number reflects at once
+  // Keyed by entry: a cue in two stacks is two places in the book.
+  const cueOrderIndex = useMemo(() => new Map(cueOrder.map((c, i) => [c.entryId, i])), [cueOrder])
+  // Live entry labels — the pill reads these so an edited cue number reflects at once
   // (the anchor's own cached label only refreshes when the anchor is re-saved).
-  const cueLabelByCue = useMemo(() => new Map(cueOrder.map((c) => [c.cueId, c.label])), [cueOrder])
+  const labelByEntry = useMemo(() => new Map(cueOrder.map((c) => [c.entryId, c.label])), [cueOrder])
+  // A cue's first entry in show order — where a `?cue=` link lands.
+  const firstEntryByCue = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const c of cueOrder) if (!m.has(c.cueId)) m.set(c.cueId, c.entryId)
+    return m
+  }, [cueOrder])
 
   // Names in play, so the create form can suggest a non-colliding "New Cue N".
   const existingCueNames = useMemo(() => new Set(cueOrder.map((c) => c.name)), [cueOrder])
 
-  // Full stack entries by cue id — each expanded rail card renders the shared Run
+  // Full stack entries by entry id — each expanded rail card renders the shared Run
   // card, which needs the entry's cueNumber/notes/auto (FlatCue carries only a label).
-  const cueEntryByCue = useMemo(() => {
+  const entryRowByEntry = useMemo(() => {
     const m = new Map<number, CueStackCueRow>()
-    for (const s of stacks ?? []) for (const c of s.cues) if (isCueRow(c)) m.set(c.id, c)
+    for (const s of stacks ?? []) for (const c of s.cues) if (isCueRow(c)) m.set(c.entryId, c)
     return m
   }, [stacks])
 
@@ -41,9 +49,9 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
   // nowhere on the page to sit — its note shows on the rail card instead.
   const cueNotesByCue = useMemo(() => {
     const m = new Map<number, string>()
-    for (const [id, c] of cueEntryByCue) if (c.notes) m.set(id, c.notes)
+    for (const c of entryRowByEntry.values()) if (c.notes) m.set(c.id, c.notes)
     return m
-  }, [cueEntryByCue])
+  }, [entryRowByEntry])
 
   // Default target stack for a cue created from a selection: the live stack (if runnable),
   // else the sole runnable stack, else the first in show order. null → no stack to add to.
@@ -58,9 +66,10 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
     cueOrder,
     railRows,
     cueOrderIndex,
-    cueLabelByCue,
+    labelByEntry,
+    firstEntryByCue,
     existingCueNames,
-    cueEntryByCue,
+    entryRowByEntry,
     cueNotesByCue,
     defaultStackId,
   }

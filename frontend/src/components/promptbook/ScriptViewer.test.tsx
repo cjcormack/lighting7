@@ -151,7 +151,7 @@ beforeEach(() => {
 })
 
 const anchors: CueAnchorDto[] = [
-  { cueId: 1, label: 'Q1', region: [{ page: 2, x: 0.1, y: 0.4, w: 0.6, h: 0.02 }] },
+  { cueId: 1, entryId: 101, label: 'Q1', region: [{ page: 2, x: 0.1, y: 0.4, w: 0.6, h: 0.02 }] },
 ]
 
 type ViewerProps = ComponentProps<typeof import('./ScriptViewer').ScriptViewer>
@@ -162,13 +162,13 @@ const baseProps: ViewerProps = {
   anchors,
   annotations: [],
   statusOf: () => 'done',
-  cueLabels: new Map([[1, 'Q1']]),
+  cueLabels: new Map([[101, 'Q1']]),
   cueNotes: new Map<number, string>(),
   onRenoteCue: noop,
-  warningCueIds: new Set<number>(),
+  warningEntryIds: new Set<number>(),
   locked: true,
   tool: 'move',
-  placingCueId: null,
+  placingEntryId: null,
   onMoveAnchor: noop,
   onPlaceAnchor: noop,
   onAnchorRequest: noop,
@@ -322,7 +322,7 @@ describe('ScriptViewer render window', () => {
     const onPlaceAnchor = vi.fn()
     const { sheets, mounted } = await renderViewer({
       locked: false,
-      placingCueId: 1,
+      placingEntryId: 101,
       onPlaceAnchor,
     })
 
@@ -349,7 +349,7 @@ describe('ScriptViewer render window', () => {
     // passes without the fix if it is not wrapped. (It also silently disabled the `onDocumentError`
     // report that the failed-measure test above covers.)
     scannedPages = new Set([3, 71])
-    const { sheets } = await renderViewer({ locked: false, placingCueId: 1 }, { strict: true })
+    const { sheets } = await renderViewer({ locked: false, placingEntryId: 101 }, { strict: true })
 
     // Both, and the far one is what bites: a walk that gives up part-way still classifies the
     // pages it reached before it did.
@@ -384,7 +384,7 @@ describe('ScriptViewer render window', () => {
     // Locked, the marker is click-through; the glyph still takes its own press.
     expect(glyph.className).toContain('pointer-events-auto')
     fireEvent.click(glyph)
-    expect(onOpenCueCard).toHaveBeenCalledWith(1)
+    expect(onOpenCueCard).toHaveBeenCalledWith(101)
   })
 
   it('unlocked, the glyph never starts the marker\'s drag', async () => {
@@ -396,7 +396,7 @@ describe('ScriptViewer render window', () => {
     fireEvent.pointerDown(glyph, { pointerId: 1 })
     expect(capture).not.toHaveBeenCalled()
     fireEvent.click(glyph)
-    expect(onOpenCueCard).toHaveBeenCalledWith(1)
+    expect(onOpenCueCard).toHaveBeenCalledWith(101)
     // The chip beside it still is the drag handle.
     fireEvent.pointerDown(view.getByText('Q1'), { pointerId: 1 })
     expect(capture).toHaveBeenCalled()

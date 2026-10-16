@@ -224,9 +224,11 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // Record, blind flip or entry-count move — a wake `memo` cannot block, since it only
   // compares props. Read before `programmerClearAll`, which is about to clear the target.
   const handleRevert = () => {
-    const cueId = includedCueId(lightingApi.programmer.getState().lastIncluded)
+    const target = lightingApi.programmer.getState().lastIncluded
+    const cueId = includedCueId(target)
+    const entryId = target?.kind === 'CUE' ? target.entryId : undefined
     programmerClearAll(0)
-    if (cueId != null) void includeCue(cueId)
+    if (cueId != null) void includeCue(cueId, entryId)
   }
 
   // The two halves of row A, built once: drawn on their own row at an ordinary height, and handed

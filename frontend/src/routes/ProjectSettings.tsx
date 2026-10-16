@@ -19,11 +19,24 @@ import { ProjectSyncContent } from "./CloudSync"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 import { useVenueMode } from "@/store/venues"
 import { SeatingPresetCard } from "@/components/venue/SeatingPresetCard"
+import { useShownTabs } from "@/navigation"
 
 // No `patches`: the patch list is a routed page again at `/projects/:id/patches` (CLAUDE.md
 // §List shell), and `App.tsx` redirects `/settings/patches` there.
 const TABS = ["general", "surfaces", "stage", "rigging", "sync"] as const
 type Tab = (typeof TABS)[number]
+
+/**
+ * The nav row each tab opens: a tab is offered exactly where its row is (navigation plan P2) —
+ * Surfaces on the project on the rig, Sync to an admin.
+ */
+const TAB_NAV_IDS: Record<Tab, string> = {
+  general: "project-settings",
+  surfaces: "surfaces",
+  stage: "stage",
+  rigging: "rigging",
+  sync: "project-sync",
+}
 
 function isTab(value: string | undefined): value is Tab {
   return TABS.includes(value as Tab)
@@ -40,8 +53,10 @@ export function ProjectSettings() {
   const { data: project, isLoading } = useProjectQuery(projectIdNum)
   const venueMode = useVenueMode(projectIdNum)
   const venueReadOnly = venueMode.isVenue && !venueMode.canEdit
+  const shown = useShownTabs(TAB_NAV_IDS, project)
 
-  const activeTab: Tab = isTab(tab) ? tab : "general"
+  // A tab its row hides, reached by URL, opens General — as the sidebar lights Settings.
+  const activeTab: Tab = isTab(tab) && shown.has(tab) ? tab : "general"
 
   if (isLoading) {
     return (
@@ -75,10 +90,11 @@ export function ProjectSettings() {
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
-            <TabsTrigger value="stage">Stage</TabsTrigger>
-            <TabsTrigger value="rigging">Rigging</TabsTrigger>
-            <TabsTrigger value="sync">Sync</TabsTrigger>
+            {shown.has("surfaces") && <TabsTrigger value="surfaces">Surfaces</TabsTrigger>}
+            {/* Regions, as its Rig row says: Run's Stage row is the Stage view. */}
+            {shown.has("stage") && <TabsTrigger value="stage">Regions</TabsTrigger>}
+            {shown.has("rigging") && <TabsTrigger value="rigging">Rigging</TabsTrigger>}
+            {shown.has("sync") && <TabsTrigger value="sync">Sync</TabsTrigger>}
           </TabsList>
         </Tabs>
       </div>

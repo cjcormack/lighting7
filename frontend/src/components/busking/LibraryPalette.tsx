@@ -11,6 +11,8 @@ import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { buskPaletteId, type PaletteRecord } from '@/lib/buskLayout'
 import { canHandLand } from '@/lib/handTargets'
 import type { BuskCue } from '@/api/buskApi'
+import { isCueRow } from '@/api/cueStacksApi'
+import { cuePlacesByCue } from '@/lib/cuePlaces'
 import { EditorLabel } from '../editor/EditorLabel'
 import {
   describeLookContents,
@@ -276,35 +278,31 @@ function LibraryTab({
         cueNumber: null,
       })
     }
-    for (const stack of stacks ?? []) {
-      if (stack.type !== 'STACK') continue
-      for (const cue of stack.cues) {
-        // A MARKER cannot be fired, so a pad for one would be dead on arrival.
-        if (cue.cueType === 'MARKER') continue
-        const record: BuskCue = {
-          id: cue.id,
-          name: cue.name,
-          cueNumber: cue.cueNumber,
-          cueStackId: stack.id,
-          cueStackName: stack.name,
-        }
-        const pad = { kind: 'CUE' as const, cue: record }
-        out.push({
-          key: `cue:${cue.id}`,
-          dragId: buskPaletteId('CUE', cue.id),
-          record: pad,
-          face: padFaceOf(pad),
-          name: cue.name,
-          detail: stack.name,
-          badge: 'Cue',
-          kind: 'cue',
-          families: [],
-          slotEligible: canHandLand({ kind: 'CUE' }, 'slot'),
-          swatch: null,
-          isEffect: false,
-          cueNumber: cue.cueNumber,
-        })
-      }
+    // One row per cue, however many stacks name it: a pad is the cue's, and its face lists them all.
+    // A MARKER is no cue, so it has no places and no pad.
+    const places = cuePlacesByCue(stacks)
+    const names = new Map<number, string>()
+    for (const stack of stacks ?? []) for (const row of stack.cues) if (isCueRow(row)) names.set(row.id, row.name)
+    for (const [id, entries] of places) {
+      const name = names.get(id) ?? ''
+      const record: BuskCue = { id, name, entries }
+      const pad = { kind: 'CUE' as const, cue: record }
+      const face = padFaceOf(pad)
+      out.push({
+        key: `cue:${id}`,
+        dragId: buskPaletteId('CUE', id),
+        record: pad,
+        face,
+        name,
+        detail: face.detail,
+        badge: 'Cue',
+        kind: 'cue',
+        families: [],
+        slotEligible: canHandLand({ kind: 'CUE' }, 'slot'),
+        swatch: null,
+        isEffect: false,
+        cueNumber: face.cueNumber,
+      })
     }
     return out
   }, [templates, looks, stacks])

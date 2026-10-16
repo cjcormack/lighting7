@@ -364,6 +364,6 @@ internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     groups = groups,
 )
 
-/** The include target for [cueData], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */
-internal fun includedTargetFor(cueData: CueApplyData) =
-    IncludedTarget.cue(cueData.cueId, cueData.cueStackId)
+/** The include target for [cueData], included from [entryId], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */
+internal fun includedTargetFor(cueData: CueApplyData, entryId: Int?) =
+    IncludedTarget.cue(cueData.cueId, entryId)

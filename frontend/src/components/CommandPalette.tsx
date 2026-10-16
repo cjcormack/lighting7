@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router"
 import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
-  Settings, FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
+  FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
   ListOrdered, SlidersHorizontal,
 } from "lucide-react"
@@ -19,6 +19,7 @@ import {
   useWindowCommands,
   filterNavItems,
   useIsNavAdmin,
+  commandLabelOf,
 } from "@/navigation"
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
@@ -274,12 +275,15 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                 {[...visibleItems, ...visibleUniverseItems, ...visibleTemplateFamilyItems].map((item) => (
                   <Command.Item
                     key={item.id}
-                    value={item.label}
+                    // cmdk keys selection on `value`, so it must be unique: `commandLabel` names
+                    // the rows whose sidebar label leans on a section heading.
+                    value={commandLabelOf(item)}
+                    keywords={item.keywords}
                     onSelect={() => runAction(() => navigate(item.path(viewedProject.id)))}
                     className={itemClassName}
                   >
                     <item.icon className="size-4 text-muted-foreground" />
-                    {item.label}
+                    {commandLabelOf(item)}
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -287,17 +291,6 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
 
             {/* Actions */}
             <Command.Group heading="Actions" className={groupClassName}>
-              {viewedProject && (
-                <Command.Item
-                  value="Project Settings"
-                  keywords={["configure", "project", "settings", "general", "metadata"]}
-                  onSelect={() => runAction(() => navigate(`/projects/${viewedProject.id}/settings`))}
-                  className={itemClassName}
-                >
-                  <Settings className="size-4 text-muted-foreground" />
-                  Project Settings
-                </Command.Item>
-              )}
               {viewedProject && isViewingActiveProject && (
                 <>
                   <Command.Item
@@ -496,14 +489,6 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Projects */}
             {projects && projects.length > 0 && (
               <Command.Group heading="Projects" className={groupClassName}>
-                <Command.Item
-                  value="View All Projects"
-                  onSelect={() => runAction(() => navigate("/projects"))}
-                  className={itemClassName}
-                >
-                  <FolderOpen className="size-4 text-muted-foreground" />
-                  View All Projects
-                </Command.Item>
                 {projects.map((project) => (
                   <Command.Item
                     key={project.id}

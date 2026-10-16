@@ -80,9 +80,15 @@ export function CueStatePip({
  *    cleared when the cue *id* changes, because the component slot is recycled across a reorder and
  *    would otherwise show the previous cue's body for one render.
  */
-export function useExpandedCue(projectId: number, cueId: number, expanded: boolean) {
+export function useExpandedCue(
+  projectId: number,
+  cueId: number,
+  expanded: boolean,
+  /** The entry the row draws: the read's context, so its number and follow are that entry's. */
+  entryId?: number | null,
+) {
   const { data: fullCue, isFetching } = useProjectCueQuery(
-    { projectId, cueId },
+    { projectId, cueId, entryId },
     { skip: !expanded },
   )
 

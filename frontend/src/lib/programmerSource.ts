@@ -59,7 +59,7 @@ export interface ProgrammerSourceInput {
    * `null` sets `missing` — conflating it with `undefined` would flash "the cue you were editing has
    * been deleted" over every page load, while the stack list is still in flight.
    */
-  cueLocation?: { stackName?: string; position?: CuePosition } | null
+  cueLocation?: { stackName?: string; position?: CuePosition; number?: string | null } | null
   lookFamilies?: string
 }
 
@@ -98,7 +98,8 @@ export function resolveProgrammerSource({
   const { number, name } = includedTargetParts(target)
   return {
     kind: 'cue',
-    number,
+    // The number of the entry the cue was included from, where the stack list has it.
+    number: cueLocation?.number || number,
     name,
     stackName: cueLocation?.stackName,
     position: cueLocation?.position,

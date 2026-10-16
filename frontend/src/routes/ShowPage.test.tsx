@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { Provider } from 'react-redux'
 import type { CueStack } from '@/api/cueStacksApi'
+import { cueRow } from '@/test/cueEntries'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -106,6 +107,11 @@ const transportSpies = {
   setStandby: vi.fn(),
   cancelAnimations: vi.fn(),
 }
+function serverActiveCue(): number | null {
+  return programState.data?.activeStackId != null
+    ? (stacksState.data?.find((s) => s.id === programState.data!.activeStackId)?.activeCueId ?? null)
+    : null
+}
 const barPropsOpts: { canOperate?: boolean; onBeforeGo?: () => void } = {}
 vi.mock('../hooks/useShowBarProps', () => ({
   useShowBarProps: (_projectId: number, opts: { onBeforeGo?: () => void } = {}) => {
@@ -126,11 +132,10 @@ vi.mock('../hooks/useShowBarProps', () => ({
       activeCueId: null,
       // Derived exactly as the real hook derives it, from the same controllable data — the page
       // reads the server cursor through the transport now, not off the cache directly.
-      serverActiveCueId:
-        programState.data?.activeStackId != null
-          ? (stacksState.data?.find((s) => s.id === programState.data!.activeStackId)
-              ?.activeCueId ?? null)
-          : null,
+      serverActiveCueId: serverActiveCue(),
+      // Each cue's one entry is its id + 100 in these fixtures.
+      serverActiveEntryId: serverActiveCue() == null ? null : serverActiveCue()! + 100,
+      standbyEntryId: null,
       go: transportSpies.go,
       back: transportSpies.back,
       setStandby: transportSpies.setStandby,
@@ -180,8 +185,8 @@ vi.mock('../components/programmer/RecordSheet', () => ({
 // gives the test the two callbacks the real view drives.
 const probe: {
   drillStackId: number | null
-  openedCueId: number | null
-  activeCueId: number | null
+  openedEntryId: number | null
+  activeEntryId: number | null
   locked?: boolean
   unlockedWarning?: boolean
   isExpanded: (id: number) => boolean
@@ -189,8 +194,8 @@ const probe: {
   drill: (id: number | null) => void
 } = {
   drillStackId: null,
-  openedCueId: null,
-  activeCueId: null,
+  openedEntryId: null,
+  activeEntryId: null,
   isExpanded: () => false,
   toggle: () => {},
   drill: () => {},
@@ -198,8 +203,8 @@ const probe: {
 vi.mock('../components/runner/ShowView', () => ({
   ShowView: (p: {
     drillStackId: number | null
-    openedCueId?: number | null
-    activeCueId: number | null
+    openedEntryId?: number | null
+    activeEntryId: number | null
     locked?: boolean
     unlockedWarning?: boolean
     isExpanded: (id: number) => boolean
@@ -207,8 +212,8 @@ vi.mock('../components/runner/ShowView', () => ({
     onDrillStack: (id: number | null) => void
   }) => {
     probe.drillStackId = p.drillStackId
-    probe.openedCueId = p.openedCueId ?? null
-    probe.activeCueId = p.activeCueId
+    probe.openedEntryId = p.openedEntryId ?? null
+    probe.activeEntryId = p.activeEntryId
     probe.locked = p.locked
     probe.unlockedWarning = p.unlockedWarning
     probe.isExpanded = p.isExpanded
@@ -229,7 +234,8 @@ const mkStack = (over: Partial<CueStack> = {}): CueStack => ({
   sortOrder: 0,
   type: 'STACK',
   label: null,
-  cues: [],
+  // Rows place cues 1, 2, 5, 6, 8 and 42 — the ones the URL cases address — at entries id + 100.
+  cues: [1, 2, 5, 6, 8, 42].map((id) => cueRow(id)),
   activeCueId: null,
   nextCueId: null,
   activeEntryId: null,
@@ -301,9 +307,9 @@ describe('ShowPage URL contract', () => {
 
   it('derives the expanded cue from ?cue=', () => {
     draw(['/projects/1/show/stacks/10?cue=42'])
-    expect(probe.openedCueId).toBe(42)
-    expect(probe.isExpanded(42)).toBe(true)
-    expect(probe.isExpanded(41)).toBe(false)
+    expect(probe.openedEntryId).toBe(142)
+    expect(probe.isExpanded(142)).toBe(true)
+    expect(probe.isExpanded(141)).toBe(false)
   })
 
   it('expands the live cue without claiming the URL', () => {
@@ -315,7 +321,7 @@ describe('ShowPage URL contract', () => {
     draw(['/projects/1/show/stacks/10'])
 
     expect(where()).toBe('/projects/1/show/stacks/10')
-    expect(probe.isExpanded(5)).toBe(true)
+    expect(probe.isExpanded(105)).toBe(true)
   })
 
   it('keeps both the operator’s card and the live one open', () => {
@@ -324,30 +330,39 @@ describe('ShowPage URL contract', () => {
     stacksState.data = [mkStack({ activeCueId: 5 })]
     draw(['/projects/1/show/stacks/10?cue=8'])
 
-    expect(probe.isExpanded(8)).toBe(true)
-    expect(probe.isExpanded(5)).toBe(true)
+    expect(probe.isExpanded(108)).toBe(true)
+    expect(probe.isExpanded(105)).toBe(true)
   })
 
   it('expands nothing on its own in a stack that is not live', () => {
     programState.data = { activeStackId: 11, canEdit: true }
     stacksState.data = [mkStack({ activeCueId: 5 }), mkStack({ id: 11, sortOrder: 1 })]
     draw(['/projects/1/show/stacks/10'])
-    expect(probe.isExpanded(5)).toBe(false)
+    expect(probe.isExpanded(105)).toBe(false)
   })
 
   it('addresses one cue at a time', () => {
     // The single scalar in the URL is the one-at-a-time rule — for the *addressed* card. The live
     // one sits alongside it rather than competing for the slot.
     draw(['/projects/1/show/stacks/10'])
-    act(() => probe.toggle(1))
+    act(() => probe.toggle(101))
     expect(where()).toBe('/projects/1/show/stacks/10?cue=1')
-    act(() => probe.toggle(2))
+    act(() => probe.toggle(102))
     expect(where()).toBe('/projects/1/show/stacks/10?cue=2')
+  })
+
+  it('opens one place of a cue that sits twice in the stack, naming it in ?entry=', () => {
+    stacksState.data = [mkStack({ cues: [cueRow(5), cueRow(6), cueRow(5, { entryId: 205 })] })]
+    draw(['/projects/1/show/stacks/10'])
+    act(() => probe.toggle(205))
+    expect(where()).toBe('/projects/1/show/stacks/10?cue=5&entry=205')
+    expect(probe.isExpanded(205)).toBe(true)
+    expect(probe.isExpanded(105)).toBe(false)
   })
 
   it('clears ?cue= rather than leaving it empty', () => {
     draw(['/projects/1/show/stacks/10?cue=1'])
-    act(() => probe.toggle(1))
+    act(() => probe.toggle(101))
     expect(where()).toBe('/projects/1/show/stacks/10')
   })
 
@@ -357,10 +372,10 @@ describe('ShowPage URL contract', () => {
     programState.data = { activeStackId: 10, canEdit: true }
     stacksState.data = [mkStack({ activeCueId: 5 })]
     draw(['/projects/1/show/stacks/10'])
-    expect(probe.isExpanded(5)).toBe(true)
+    expect(probe.isExpanded(105)).toBe(true)
 
-    act(() => probe.toggle(5))
-    expect(probe.isExpanded(5)).toBe(false)
+    act(() => probe.toggle(105))
+    expect(probe.isExpanded(105)).toBe(false)
     expect(where()).toBe('/projects/1/show/stacks/10')
   })
 
@@ -370,20 +385,20 @@ describe('ShowPage URL contract', () => {
     programState.data = { activeStackId: 10, canEdit: true }
     stacksState.data = [mkStack({ activeCueId: 5 })]
     draw(['/projects/1/show/stacks/10'])
-    act(() => probe.toggle(5))
-    expect(probe.isExpanded(5)).toBe(false)
+    act(() => probe.toggle(105))
+    expect(probe.isExpanded(105)).toBe(false)
 
     stacksState.data = [mkStack({ activeCueId: 6 })]
     act(() => probe.drill(10))
-    expect(probe.isExpanded(6)).toBe(true)
+    expect(probe.isExpanded(106)).toBe(true)
   })
 
   it('does not grow history when the addressed cue changes', () => {
     // `{ replace: true }` on the `?cue=` write. Without it, every chevron is a history entry and
     // Back walks the operator through their own expansions instead of leaving the view.
     draw(['/elsewhere', '/projects/1/show/stacks/10'])
-    act(() => probe.toggle(1))
-    act(() => probe.toggle(2))
+    act(() => probe.toggle(101))
+    act(() => probe.toggle(102))
     expect(where()).toBe('/projects/1/show/stacks/10?cue=2')
 
     act(() => screen.getByText('back').click())
@@ -429,12 +444,12 @@ describe('ShowPage URL contract', () => {
     programState.data = { activeStackId: 10 }
     stacksState.data = [mkStack({ activeCueId: 5 })]
     draw(['/projects/1/show/stacks/10'])
-    expect(probe.activeCueId).toBe(5)
+    expect(probe.activeEntryId).toBe(105)
   })
 
   it('reports no active cue for a stopped show', () => {
     draw(['/projects/1/show/stacks/10'])
-    expect(probe.activeCueId).toBeNull()
+    expect(probe.activeEntryId).toBeNull()
   })
 
   it('shows the bar whether or not the show is running', () => {

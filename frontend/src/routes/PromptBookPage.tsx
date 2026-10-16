@@ -29,6 +29,7 @@ import {
   useProjectCueStackListQuery,
 } from '../store/cueStacks'
 import { usePatchProjectCueMutation } from '../store/cues'
+import { usePatchCueStackEntryMutation } from '../store/cueStacks'
 import { useNarrowContainer } from '../hooks/useContainerBand'
 import { useShowBarProps } from '../hooks/useShowBarProps'
 import { useProjectPromptBookQuery } from '../store/promptBooks'
@@ -88,6 +89,7 @@ export function PromptBookViewerPage() {
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
   const [patchCue] = usePatchProjectCueMutation()
+  const [patchEntry] = usePatchCueStackEntryMutation()
 
   const activeStackId = programState?.activeStackId ?? null
   const isShowActive = activeStackId != null
@@ -107,22 +109,23 @@ export function PromptBookViewerPage() {
     cueOrder,
     railRows,
     cueOrderIndex,
-    cueLabelByCue,
+    labelByEntry,
+    firstEntryByCue,
     existingCueNames,
-    cueEntryByCue,
+    entryRowByEntry,
     cueNotesByCue,
     defaultStackId,
   } = useCueIndex(stacks, activeStackId)
 
   const {
-    anchorByCue,
-    anchorHintByCue,
-    scrollToCue,
-    placingCueId,
+    anchorByEntry,
+    anchorHintByEntry,
+    scrollToEntry,
+    placingEntryId,
     clearPlacing,
     togglePlacing,
     anchorPicker,
-    overlapCueId,
+    overlapEntryId,
     requestAnchor,
     closePicker,
     undoSnapshot,
@@ -132,7 +135,7 @@ export function PromptBookViewerPage() {
     anchorCue,
     removeAnchor,
     createCueFromSelection,
-  } = useBookAnchors({ projectId: projectIdNum, book, stacks, cueOrder, cueLabelByCue, viewerRef })
+  } = useBookAnchors({ projectId: projectIdNum, book, stacks, cueOrder, labelByEntry, viewerRef })
 
   const doc = useScriptDocument(projectIdNum, book)
   const ann = useAnnotationEditor(projectIdNum)
@@ -172,25 +175,26 @@ export function PromptBookViewerPage() {
     onBeforeGo: noteGo,
     frameRateProgress: false,
   })
+  // The book is keyed by entry, as the transport's entry cursors are.
   const {
     activeStack,
-    activeCueId,
-    standbyCueId,
+    activeEntryId,
+    standbyEntryId,
     goDisabled,
     go: fireGo,
     back: fireBack,
   } = transport
 
-  const { nextCueId, statusOf } = useCueRunStatus({
+  const { nextEntryId, statusOf } = useCueRunStatus({
     isShowActive,
-    activeCueId,
-    standbyCueId,
+    activeEntryId,
+    standbyEntryId,
     activeStackId,
     cueOrder,
     cueOrderIndex,
   })
 
-  const { isExpanded, toggleExpanded } = useRailExpansion(activeCueId, nextCueId)
+  const { isExpanded, toggleExpanded } = useRailExpansion(activeEntryId, nextEntryId)
   const { modeOf, onCueModeChange } = useCardViewMode()
 
   // ── Scenery on the page (scenery-programmer plan D14) ──
@@ -200,12 +204,13 @@ export function PromptBookViewerPage() {
   const sceneryLinesByCue = useMemo(() => {
     const byUuid = elements == null ? null : new Map(elements.map((e) => [e.uuid, e]))
     const out = new Map<number, readonly string[]>()
-    for (const [cueId, entry] of cueEntryByCue) {
+    for (const entry of entryRowByEntry.values()) {
+      if (out.has(entry.id)) continue
       const lines = cueSceneryLines(entry.scenery, byUuid)
-      if (lines.length > 0) out.set(cueId, lines)
+      if (lines.length > 0) out.set(entry.id, lines)
     }
     return out
-  }, [cueEntryByCue, elements])
+  }, [entryRowByEntry, elements])
   const sceneryByCue = useMemo(
     () => new Map([...sceneryLinesByCue].map(([cueId, lines]) => [cueId, lines.join('\n')])),
     [sceneryLinesByCue],
@@ -222,16 +227,16 @@ export function PromptBookViewerPage() {
     () => (book ? computeWarnings(book.anchors, book.annotations, cueOrder) : []),
     [book, cueOrder],
   )
-  const warningsByCue = useMemo(() => {
+  const warningsByEntry = useMemo(() => {
     const map = new Map<number, DesyncWarning[]>()
-    for (const w of warnings) map.set(w.cueId, [...(map.get(w.cueId) ?? []), w])
+    for (const w of warnings) map.set(w.entryId, [...(map.get(w.entryId) ?? []), w])
     return map
   }, [warnings])
-  const warningCueIds = useMemo(() => new Set(warnings.map((w) => w.cueId)), [warnings])
+  const warningEntryIds = useMemo(() => new Set(warnings.map((w) => w.entryId)), [warnings])
 
   const jumpToLive = useCallback(() => {
-    if (activeCueId != null) scrollToCue(activeCueId)
-  }, [activeCueId, scrollToCue])
+    if (activeEntryId != null) scrollToEntry(activeEntryId)
+  }, [activeEntryId, scrollToEntry])
 
   /**
    * **`?cue=` is the arrival contract, the mirror of the one this page mints for Show.** The cue
@@ -252,6 +257,8 @@ export function PromptBookViewerPage() {
   // no entry for, so the effect below simply never fires.
   const cueParam = searchParams.get('cue')
   const linkedCueId = cueParam ? Number(cueParam) : null
+  // A cue in several places lands on its first.
+  const linkedEntryId = linkedCueId != null ? (firstEntryByCue.get(linkedCueId) ?? null) : null
   const consumedLinkRef = useRef<number | null>(null)
   useEffect(() => {
     if (linkedCueId == null) {
@@ -259,10 +266,10 @@ export function PromptBookViewerPage() {
       return
     }
     if (consumedLinkRef.current === linkedCueId) return
-    if (!cueOrderIndex.has(linkedCueId)) return
+    if (linkedEntryId == null) return
     consumedLinkRef.current = linkedCueId
-    scrollToCue(linkedCueId)
-  }, [cueOrderIndex, linkedCueId, scrollToCue])
+    scrollToEntry(linkedEntryId)
+  }, [linkedEntryId, linkedCueId, scrollToEntry])
 
   // ── Runtime emphasis: scroll the live cue into view on advance. ──
   // The same operation the toolbar's "jump to live" performs, so the two cannot drift.
@@ -288,9 +295,9 @@ export function PromptBookViewerPage() {
    * is at that moment rather than as it was at mount.
    */
   const handlePagesReady = useStableCallback(() => {
-    if (linkedCueId != null && cueOrderIndex.has(linkedCueId)) {
+    if (linkedCueId != null && linkedEntryId != null) {
       consumedLinkRef.current = linkedCueId
-      scrollToCue(linkedCueId)
+      scrollToEntry(linkedEntryId)
       return
     }
     jumpToLive()
@@ -301,13 +308,13 @@ export function PromptBookViewerPage() {
    * one — and brought into view there. Never collapses one already open; the book stays where it is,
    * since the glyph is already at the cue. Stable for the memoized viewer.
    */
-  const openCueCard = useStableCallback((cueId: number) => {
-    if (!isExpanded(cueId)) toggleExpanded(cueId)
+  const openCueCard = useStableCallback((entryId: number) => {
+    if (!isExpanded(entryId)) toggleExpanded(entryId)
     if (isNarrow) setDrawerOpen(true)
     // After the card has expanded (and the drawer begun to slide), so the box scrolled to is the
     // card's. One rail is mounted at a time (the side rail or the drawer), so the id is unique.
     requestAnimationFrame(() => {
-      const card = document.querySelector(`[data-rail-cue="${cueId}"]`)
+      const card = document.querySelector(`[data-rail-entry="${entryId}"]`)
       if (card instanceof HTMLElement) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     })
   })
@@ -315,20 +322,21 @@ export function PromptBookViewerPage() {
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
   // transport ignores the live cue; we just also close the narrow drawer here.
   const handleSetStandby = useCallback(
-    (cueId: number) => {
-      transport.setStandby(cueId)
+    (entryId: number) => {
+      const flat = cueOrder[cueOrderIndex.get(entryId) ?? -1]
+      if (flat) transport.setStandby(flat.cueId, entryId)
       setDrawerOpen(false)
     },
-    [transport],
+    [transport, cueOrder, cueOrderIndex],
   )
 
   // Jump to the cue's editor in Program, deep-linking to the exact cue (mirrors Run's
   // "Edit cue"). Show's ?stack=&cue= handler requires the stack, so resolve it first.
   const handleEditCue = useCallback(
-    (cueId: number) => {
-      const flat = cueOrder[cueOrderIndex.get(cueId) ?? -1]
+    (entryId: number) => {
+      const flat = cueOrder[cueOrderIndex.get(entryId) ?? -1]
       if (flat?.stackId != null) {
-        navigate(`/projects/${projectIdNum}/show/stacks/${flat.stackId}?cue=${cueId}`)
+        navigate(`/projects/${projectIdNum}/show/stacks/${flat.stackId}?cue=${flat.cueId}`)
       } else {
         navigate(`/projects/${projectIdNum}/show`)
       }
@@ -344,9 +352,13 @@ export function PromptBookViewerPage() {
     (cueId: number, name: string) => patchCue({ projectId: projectIdNum, cueId, name }),
     [patchCue, projectIdNum],
   )
+  // The number is the entry's, written on the entry.
   const handleRenumberCue = useCallback(
-    (cueId: number, cueNumber: string | null) => patchCue({ projectId: projectIdNum, cueId, cueNumber }),
-    [patchCue, projectIdNum],
+    (entryId: number, cueNumber: string | null) => {
+      const flat = cueOrder[cueOrderIndex.get(entryId) ?? -1]
+      if (flat) patchEntry({ projectId: projectIdNum, stackId: flat.stackId, entryId, cueId: flat.cueId, cueNumber })
+    },
+    [patchEntry, projectIdNum, cueOrder, cueOrderIndex],
   )
   const handleRenoteCue = useCallback(
     (cueId: number, notes: string | null) => patchCue({ projectId: projectIdNum, cueId, notes }),
@@ -358,15 +370,15 @@ export function PromptBookViewerPage() {
   // click-to-place, so you land near where the anchor belongs and can select the line.
   const handleCueClick = useCallback(
     (cue: FlatCue) => {
-      scrollToCue(cue.cueId)
-      if (!anchorByCue.has(cue.cueId) && !locked) togglePlacing(cue.cueId)
+      scrollToEntry(cue.entryId)
+      if (!anchorByEntry.has(cue.entryId) && !locked) togglePlacing(cue.entryId)
     },
-    [scrollToCue, anchorByCue, locked, togglePlacing],
+    [scrollToEntry, anchorByEntry, locked, togglePlacing],
   )
 
   const handleWarningClick = useCallback(
-    (warning: DesyncWarning) => scrollToCue(warning.cueId),
-    [scrollToCue],
+    (warning: DesyncWarning) => scrollToEntry(warning.entryId),
+    [scrollToEntry],
   )
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
@@ -456,21 +468,21 @@ export function PromptBookViewerPage() {
   }
 
   // O(1) lookups via the existing cueOrderIndex map.
-  const liveCue = activeCueId != null ? (cueOrder[cueOrderIndex.get(activeCueId) ?? -1] ?? null) : null
+  const liveCue = activeEntryId != null ? (cueOrder[cueOrderIndex.get(activeEntryId) ?? -1] ?? null) : null
   const activeCueLabel = liveCue?.label ?? null
   const railStackName = activeStack?.name ?? cueOrder[0]?.stackName ?? null
   // Shared rail props — the same panel serves the desktop side rail and the drawer.
   const railProps = {
     rows: railRows,
-    anchorByCue,
-    anchorHintByCue,
-    cueEntryByCue,
+    anchorByEntry,
+    anchorHintByEntry,
+    entryRowByEntry,
     statusOf,
-    warningsByCue,
+    warningsByEntry,
     warnings,
     showWarnings,
     locked,
-    placingCueId,
+    placingEntryId,
     isExpanded,
     onToggleExpanded: toggleExpanded,
     modeOf,
@@ -569,7 +581,7 @@ export function PromptBookViewerPage() {
           // Amber is the "you unlocked a running show" signal — with the show stopped the
           // bar is just the normal way to annotate, so it wears the normal chrome.
           warn={isShowActive}
-          placingLabel={placingCueId != null ? (cueLabelByCue.get(placingCueId) ?? null) : null}
+          placingLabel={placingEntryId != null ? (labelByEntry.get(placingEntryId) ?? null) : null}
           onSelectTool={(t) => {
             setTool(t)
             clearPlacing()
@@ -625,13 +637,13 @@ export function PromptBookViewerPage() {
               anchors={book.anchors}
               annotations={book.annotations}
               statusOf={statusOf}
-              cueLabels={cueLabelByCue}
+              cueLabels={labelByEntry}
               cueNotes={cueNotesByCue}
               onRenoteCue={handleRenoteCue}
-              warningCueIds={warningCueIds}
+              warningEntryIds={warningEntryIds}
               locked={locked}
               tool={tool}
-              placingCueId={placingCueId}
+              placingEntryId={placingEntryId}
               onMoveAnchor={moveAnchor}
               onPlaceAnchor={placeAnchor}
               onAnchorRequest={requestAnchor}
@@ -757,13 +769,13 @@ export function PromptBookViewerPage() {
       <CueAnchorPickerSheet
         open={anchorPicker != null}
         cueOrder={cueOrder}
-        anchorByCue={anchorByCue}
+        anchorByEntry={anchorByEntry}
         stacks={stacks ?? []}
         defaultStackId={defaultStackId}
         existingCueNames={existingCueNames}
-        preselectCueId={placingCueId ?? overlapCueId}
-        onPick={(cueId) => {
-          if (anchorPicker) anchorCue(cueId, anchorPicker.region)
+        preselectEntryId={placingEntryId ?? overlapEntryId}
+        onPick={(entryId) => {
+          if (anchorPicker) anchorCue(entryId, anchorPicker.region)
         }}
         onCreateCue={createCueFromSelection}
         onEditCue={handleEditCue}

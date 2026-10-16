@@ -108,7 +108,8 @@ private fun CuePropertyAssignmentDto.matchKey() = assignmentKey(targetType, targ
  */
 internal fun createCueFromRecording(
     project: DaoProject,
-    stack: DaoCueStack,
+    /** The stack the new cue joins; null makes a loose cue (cue model plan §3.5). */
+    stack: DaoCueStack?,
     recording: ProgrammerRecording,
     name: String,
     cueNumber: String?,
@@ -127,7 +128,7 @@ internal fun createCueFromRecording(
     )
     // Its place is a new entry: at `sortOrder` (a position in the list), else appended; an
     // unnumbered cue takes its number from where it landed.
-    placeCueInStack(stack, cue, cueNumber = cueNumber, position = sortOrder)
+    if (stack != null) placeCueInStack(stack, cue, cueNumber = cueNumber, position = sortOrder)
 
     return CueWriteOutcome(
         cueId = cue.id.value,

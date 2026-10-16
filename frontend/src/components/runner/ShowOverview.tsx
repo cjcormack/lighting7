@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { SceneryChange } from '@/api/sceneryApi'
 import {
   ArrowRight,
@@ -17,14 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { MarkerRow } from '@/components/runner/MarkerRow'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,9 +47,10 @@ import {
   useSortCueStackByCueNumberMutation,
 } from '@/store/cueStacks'
 import { CueStackForm } from '@/components/cues/CueStackForm'
+import { DeleteStackDialog } from './DeleteStackDialog'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
-import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
+import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
 
 /** An empty set, stable, so the form's set editor does not re-seed on every render. */
 const NO_SCENERY: SceneryChange[] = []
@@ -340,10 +333,8 @@ export function ShowOverview({
   unlockedWarning = false,
 }: ShowOverviewProps) {
   const stackRows = stacks.filter((s) => s.type === 'STACK')
-  const totalCues = stackRows.reduce(
-    (n, s) => n + s.cues.filter((c) => c.cueType === 'STANDARD').length,
-    0,
-  )
+  // Distinct cues: a cue shared by two stacks is one cue in two places.
+  const totalCues = new Set(stackRows.flatMap((s) => s.cues.filter(isCueRow).map((c) => c.id))).size
 
   const [createStack, { isLoading: creating }] = useCreateProjectCueStackMutation()
   const [saveStack, { isLoading: saving }] = useSaveProjectCueStackMutation()
@@ -408,10 +399,6 @@ export function ShowOverview({
     }
   }, [deleteStack, projectId])
 
-  const confirmDelete = useCallback(() => {
-    if (pendingDelete) deleteStack({ projectId, stackId: pendingDelete.id })
-    setPendingDelete(null)
-  }, [pendingDelete, deleteStack, projectId])
 
   // dnd-kit
   const sensors = useSensors(
@@ -434,10 +421,6 @@ export function ShowOverview({
     [stacks, projectId, reorderStacks],
   )
 
-  const pendingDeleteCueCount = useMemo(
-    () => pendingDelete?.cues.filter((c) => c.cueType === 'STANDARD').length ?? 0,
-    [pendingDelete],
-  )
 
   return (
     <div className="@container flex-1 flex flex-col overflow-hidden">
@@ -529,26 +512,12 @@ export function ShowOverview({
         isSaving={creating || saving}
       />
 
-      <Dialog open={pendingDelete != null} onOpenChange={(open) => !open && setPendingDelete(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete stack?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            {pendingDeleteCueCount > 0
-              ? `This permanently deletes "${pendingDelete?.name}" and its ${pendingDeleteCueCount} cue${pendingDeleteCueCount === 1 ? '' : 's'}.`
-              : `This permanently deletes the empty stack "${pendingDelete?.name}".`}
-          </DialogDescription>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingDelete(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteStackDialog
+        projectId={projectId}
+        stack={pendingDelete}
+        stacks={stacks}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   )
 }

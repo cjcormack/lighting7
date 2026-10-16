@@ -46,11 +46,11 @@ const NEW_STACK = 'new'
 export function CueAnchorPickerSheet({
   open,
   cueOrder,
-  anchorByCue,
+  anchorByEntry,
   stacks,
   defaultStackId,
   existingCueNames,
-  preselectCueId,
+  preselectEntryId,
   onPick,
   onCreateCue,
   onEditCue,
@@ -58,23 +58,24 @@ export function CueAnchorPickerSheet({
 }: {
   open: boolean
   cueOrder: FlatCue[]
-  anchorByCue: Map<number, CueAnchorDto>
+  /** Anchors by stack entry — a shared cue is listed once per entry, each anchored on its own. */
+  anchorByEntry: Map<number, CueAnchorDto>
   /** All project stacks; the create form's stack picker lists the runnable (STACK) ones. */
   stacks: CueStack[]
   /** Stack pre-selected in the create form (the live stack, the sole stack, or the first). */
   defaultStackId: number | null
   /** Existing cue names, so the create form can suggest a non-colliding "New Cue N". */
   existingCueNames: Set<string>
-  /** Cue to highlight as the likely pick (armed from the rail, or overlapping the selection). */
-  preselectCueId: number | null
-  onPick: (cueId: number) => void
+  /** Entry to highlight as the likely pick (armed from the rail, or overlapping the selection). */
+  preselectEntryId: number | null
+  onPick: (entryId: number) => void
   onCreateCue: (input: {
     name: string
     cueNumber: string | null
     notes: string | null
     stack: NewCueStackChoice
   }) => void | Promise<void>
-  onEditCue: (cueId: number) => void
+  onEditCue: (entryId: number) => void
   onClose: () => void
 }) {
   const rows = useMemo(() => groupCuesByStack(cueOrder), [cueOrder])
@@ -115,10 +116,10 @@ export function CueAnchorPickerSheet({
   // Scroll the preselected cue (armed / overlapping the selection) into view when the list opens.
   const preselectRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (open && mode === 'pick' && preselectCueId != null) {
+    if (open && mode === 'pick' && preselectEntryId != null) {
       preselectRef.current?.scrollIntoView({ block: 'nearest' })
     }
-  }, [open, mode, preselectCueId])
+  }, [open, mode, preselectEntryId])
 
   const creatingStack = stackChoice === NEW_STACK
   const canCreate = name.trim() !== '' && (creatingStack ? newStackName.trim() !== '' : true)
@@ -248,19 +249,19 @@ export function CueAnchorPickerSheet({
                     {row.stackName}
                   </div>
                 ) : (
-                  <Fragment key={row.cue.cueId}>
+                  <Fragment key={row.cue.entryId}>
                     <div
-                      ref={row.cue.cueId === preselectCueId ? preselectRef : undefined}
+                      ref={row.cue.entryId === preselectEntryId ? preselectRef : undefined}
                       className={cn(
                         'flex items-center gap-1 rounded-md border',
-                        row.cue.cueId === preselectCueId
+                        row.cue.entryId === preselectEntryId
                           ? 'border-amber-500 bg-amber-400/10'
                           : 'border-transparent hover:bg-muted/40',
                       )}
                     >
                       <button
                         type="button"
-                        onClick={() => onPick(row.cue.cueId)}
+                        onClick={() => onPick(row.cue.entryId)}
                         className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
                       >
                         <TruncateStart
@@ -269,7 +270,7 @@ export function CueAnchorPickerSheet({
                           className="w-16 shrink-0 font-mono text-sm font-bold"
                         />
                         <span className="min-w-0 flex-1 truncate text-sm">{row.cue.name}</span>
-                        {anchorByCue.has(row.cue.cueId) ? (
+                        {anchorByEntry.has(row.cue.entryId) ? (
                           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-amber-600">
                             <Anchor className="size-3" />
                             re-anchor
@@ -278,10 +279,10 @@ export function CueAnchorPickerSheet({
                           <span className="shrink-0 text-[11px] text-muted-foreground/40">not anchored</span>
                         )}
                       </button>
-                      {anchorByCue.has(row.cue.cueId) && (
+                      {anchorByEntry.has(row.cue.entryId) && (
                         <button
                           type="button"
-                          onClick={() => onEditCue(row.cue.cueId)}
+                          onClick={() => onEditCue(row.cue.entryId)}
                           aria-label={`Edit ${row.cue.label} in Program`}
                           className="mr-1.5 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                         >

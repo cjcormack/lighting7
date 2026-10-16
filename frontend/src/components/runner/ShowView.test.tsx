@@ -60,7 +60,7 @@ function draw(over: Partial<React.ComponentProps<typeof ShowView>> = {}) {
       drillStackId={null}
       onDrillStack={vi.fn()}
       activeStackId={null}
-      activeCueId={null}
+      activeEntryId={null}
       isExpanded={() => false}
       onToggleExpanded={vi.fn()}
       {...over}
@@ -95,21 +95,21 @@ describe('ShowView', () => {
   it('passes the active cue only while drilled into the live stack', () => {
     // The green marker belongs to the stack that is actually running. Showing it in a stack the
     // operator is merely reading would claim a cue is on stage when it is not.
-    draw({ drillStackId: 10, activeStackId: 10, activeCueId: 5 })
-    expect(detail.props!.activeCueId).toBe(5)
+    draw({ drillStackId: 10, activeStackId: 10, activeEntryId: 5 })
+    expect(detail.props!.activeEntryId).toBe(5)
   })
 
   it('nulls the active cue when drilled into a stack that is not live', () => {
-    draw({ drillStackId: 11, activeStackId: 10, activeCueId: 5 })
-    expect(detail.props!.activeCueId).toBeNull()
+    draw({ drillStackId: 11, activeStackId: 10, activeEntryId: 5 })
+    expect(detail.props!.activeEntryId).toBeNull()
   })
 
   it('passes the armed cue through in the live stack', () => {
     // Was "supplies no standby cue at all" — the gap phase 3 closed. `StackDetail` had accepted
     // this prop and `CueCardEditor` had drawn a blue "next" accent from it since 2a, with nothing
     // supplying it, so the affordance was unreachable in Show while Run had it.
-    draw({ drillStackId: 10, activeStackId: 10, activeCueId: 5, standbyCueId: 6 })
-    expect(detail.props!.standbyCueId).toBe(6)
+    draw({ drillStackId: 10, activeStackId: 10, activeEntryId: 5, standbyEntryId: 6 })
+    expect(detail.props!.standbyEntryId).toBe(6)
   })
 
   it('withholds the arming callback in a stack that is not live', () => {
@@ -130,7 +130,7 @@ describe('ShowView', () => {
   it('withholds the armed cue in a stack that is not live', () => {
     // Same reasoning as the active cue: "next GO" is a fact about the running stack, and drawing
     // it on a stack being read would claim a cue was queued when it was not.
-    draw({ drillStackId: 11, activeStackId: 10, activeCueId: 5, standbyCueId: 6 })
-    expect(detail.props!.standbyCueId).toBeNull()
+    draw({ drillStackId: 11, activeStackId: 10, activeEntryId: 5, standbyEntryId: 6 })
+    expect(detail.props!.standbyEntryId).toBeNull()
   })
 })

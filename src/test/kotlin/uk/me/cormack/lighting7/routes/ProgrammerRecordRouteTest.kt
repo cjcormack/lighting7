@@ -696,7 +696,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val target = state.show.programmerStore.lastIncludedTarget
         assertNotNull(target)
         assertEquals(created.cue.id, target.cueId)
-        assertEquals(stackId, target.cueStackId)
+        assertEquals(created.cue.entryId, target.entryId, "the target names the new entry")
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

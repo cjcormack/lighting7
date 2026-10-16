@@ -2,6 +2,8 @@
 export interface PathMatchable {
   id: string
   pathMatch: string
+  /** Match `pathMatch` as the whole pathname, never as a segment of a longer one. */
+  pathExact?: boolean
 }
 
 /**
@@ -22,10 +24,12 @@ export function pathHasSegment(pathname: string, segment: string): boolean {
 
 /**
  * Among all visible nav items whose `pathMatch` appears in the current pathname, return the id of
- * the most specific one — longest `pathMatch` wins. This keeps a parent like "Project Settings"
- * from staying active while the operator is on one of its child tabs (e.g. "Surfaces").
+ * the most specific one — longest `pathMatch` wins. This keeps a row like Settings from staying
+ * active while the operator is on one of its sibling tabs (e.g. Surfaces, `/settings/surfaces`).
  *
- * Matching is [pathHasSegment] — see there for why it has to be segment-aware.
+ * Matching is [pathHasSegment] — see there for why it has to be segment-aware — except for an
+ * item marked `pathExact`, which matches its own path alone (a trailing slash allowed): the
+ * Projects row's `/projects` begins every project's path.
  *
  * Extracted from `ProjectSwitcher` so that guarantee can be pinned by a test rather than described
  * in a comment. It was load-bearing twice over: it is why a `programmer` nav entry is safe to add
@@ -39,7 +43,8 @@ export function mostSpecificActiveId<T extends PathMatchable>(
   let winner: T | null = null
   for (const item of items) {
     const m = item.pathMatch
-    if (!pathHasSegment(pathname, m)) continue
+    const hit = item.pathExact ? pathname === m || pathname === m + '/' : pathHasSegment(pathname, m)
+    if (!hit) continue
     if (!winner || m.length > winner.pathMatch.length) winner = item
   }
   return winner?.id ?? null
