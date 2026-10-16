@@ -396,7 +396,7 @@ Each session is one PR (P1). All are frontend only (P5), but for session 3's two
   - A held show's home offers *Review update* and *Run against*.
 - **Docs:** the frontend CLAUDE.md, replacing the overview's paragraph.
 
-### Session 5 — A venue's home
+### Session 5 — A venue's home — done, `500b1e7`
 
 - §5.2: the venue's status block, History and Publish from the home, the shows on it, and its
   sections.
