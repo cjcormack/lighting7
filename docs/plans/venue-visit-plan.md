@@ -266,6 +266,8 @@ a one-line row here.
 
 - ~~K1 — after twelve sessions~~ — done, `64ab8eaf` (plans corrected for R1.1, R1.2, R4.1, S6, S8,
   S11 and S15; Rig and output folded; Apply opened next; P5's claiming rule; no manual check run).
+- ~~K2 — after R1.4~~ — done, `fff3addb` (plans corrected for the shared cue, R1.3, R4.2 and Nav.1;
+  R1.4's gaps to R2.3, R2.4 and `FU-BUSK-PAD-STALE-NUMBER`; the Cues lane folded; no manual check run).
 
 ### Research and design — done
 
