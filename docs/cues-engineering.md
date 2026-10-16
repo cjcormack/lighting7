@@ -368,8 +368,8 @@ A live cue composes at its **highest hold's** priority (cue model plan P3, D10; 
 A cue held twice — by two stacks, by a stack and a press — is one contribution at the higher of the
 two (D3). Manual (uncued) effects keep priority `0`; the programmer band sits above all of it.
 
-The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
-priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
+The engine iterates effects in priority-ascending order, then by compose order (creation order,
+which a split copy takes from its parent), then id. Higher priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
 earlier cues on the same property, and on Layer 4 the higher priority wins every LTP property (HTP
 dimmers still take the highest level). See
 [lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects" and §"Holds and

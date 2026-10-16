@@ -233,7 +233,10 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 - Record writes a Local effect over a selection as one ad-hoc cue effect with a `selection` target.
   Include brings it back as one.
 - R3's split (`PUT /fx/{id}` with `targets`) narrows the list and starts the edited copy over the
-  subset, each head at the phase it had — the same rule as for a group (D12).
+  subset, each head at the phase it had — the same rule as for a group (D12). *(As built in the
+  apply-model plan's session 2: the effect is rewritten as one instance per head, each carrying its
+  member's offset, and the named heads' copies take the edit — `fx-engineering.md` §"Local effects
+  follow the selection".)*
 
 ### 3.5 Fading (D1, D13)
 

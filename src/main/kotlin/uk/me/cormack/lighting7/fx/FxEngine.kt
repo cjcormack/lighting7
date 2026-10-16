@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 private val logger = LoggerFactory.getLogger("FxEngine")
 
@@ -90,7 +91,7 @@ class FxEngine(
 
     // Read lock-free by the hot tick loops; rebuilt under [effectSnapshotLock] on mutation.
     private val effectSnapshotLock = Any()
-    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.id })
+    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
     @Volatile private var sortedBeatEffects: List<FxInstance> = emptyList()
     @Volatile private var sortedWallClockEffects: List<FxInstance> = emptyList()
 
@@ -615,11 +616,18 @@ class FxEngine(
     /**
      * Stamp an instance and put it in [activeEffects], without rebuilding or broadcasting.
      * Every caller must follow with [rebuildSortedSnapshots] then [emitStateUpdate].
+     *
+     * [carried] is for a copy that goes on running an effect already live ([headCopies]): it keeps
+     * the start time and compose order it was given, and a stateful effect it shares with its
+     * parent is not reset.
      */
-    private fun insert(effect: FxInstance): Long {
+    private fun insert(effect: FxInstance, carried: Boolean = false): Long {
         val id = nextEffectId.incrementAndGet()
         effect.id = id
-        effect.startedAtMs = System.currentTimeMillis()
+        if (!carried) {
+            effect.startedAtMs = System.currentTimeMillis()
+            effect.composeOrder = id
+        }
 
         // Auto-tag with CueContext if set and effect doesn't already have a cueId.
         // Programmer-band effects are exempt: they belong to the operator's programmer, not
@@ -632,7 +640,7 @@ class FxEngine(
             }
         }
 
-        if (effect.effect is StatefulEffect) {
+        if (!carried && effect.effect is StatefulEffect) {
             effect.effect.initialize()
         }
 
@@ -675,6 +683,131 @@ class FxEngine(
             emitStateUpdate()
         }
         return removed.size
+    }
+
+    /**
+     * Replace each key of [replace] by its copies, and add [fresh], as **one** mutation: one
+     * rebuild, one reset of what the replaced left uncovered (read after the adds, so a head the new
+     * instances paint never drops to the layer below for a tick) and one broadcast. A key with no
+     * copies is stopped. Returns the ids actually replaced: a parent another request removed or
+     * swapped first is skipped with its copies, so a race cannot bring a stopped effect back.
+     *
+     * Each copy takes its parent's running state again at the moment of the swap, so a pause or a
+     * dynamics edit that reached the parent after [headCopies] built the copies is not lost.
+     */
+    fun replaceEffects(
+        replace: Map<FxInstance, List<FxInstance>>,
+        fresh: List<FxInstance> = emptyList(),
+    ): Set<Long> {
+        // By identity, so a copy is only ever added for a parent this call took out. The tick loops
+        // keep painting the parent from the sorted snapshot until the one rebuild below.
+        val removed = replace.keys.filter { activeEffects.remove(it.id, it) }
+        for (parent in removed) {
+            for (copy in replace.getValue(parent)) {
+                copy.takeRunningStateFrom(parent)
+                insert(copy, carried = true)
+            }
+        }
+        fresh.forEach { insert(it) }
+        if (removed.isEmpty() && fresh.isEmpty()) return emptySet()
+        rebuildSortedSnapshots()
+        resetUncoveredProperties(removed)
+        emitStateUpdate()
+        return removed.mapTo(HashSet()) { it.id }
+    }
+
+    /**
+     * One head a running effect paints, as its tick pass spreads it (apply-model plan §3.4): the
+     * offset, list size and context the pass hands the phase function and the effect for it.
+     */
+    data class PaintedHead(val key: String, val offset: Double, val groupSize: Int, val context: EffectContext)
+
+    /**
+     * The heads [effect] paints, in its order, each as the tick pass spreads it under its current
+     * dynamics. Heads that paint nothing are left out: an element filter's, and a heterogeneous
+     * group's members that lack the property (the group takes its first member's branch).
+     */
+    fun paintedHeads(effect: FxInstance): List<PaintedHead> {
+        val dyn = effect.dynamics
+        val expansion = expansionFor(effect, dyn)
+        fun spread(keys: List<String>, plan: DistributionPlan): List<PaintedHead> =
+            keys.mapIndexed { i, key -> PaintedHead(key, plan.offsets[i], keys.size, plan.contexts[i]) }
+        return when (expansion.kind) {
+            FxTargetExpansion.Kind.NONE -> emptyList()
+            FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
+                val carry = effect.splitMember
+                listOf(
+                    if (carry == null) PaintedHead(effect.target.targetKey, 0.0, 1, EffectContext.SINGLE)
+                    else PaintedHead(effect.target.targetKey, carry.offset, carry.groupSize, carry.context),
+                )
+            }
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> spread(expansion.flat, plansFor(effect, expansion, dyn).flat)
+            FxTargetExpansion.Kind.GROUP_MEMBERS -> {
+                val plan = plansFor(effect, expansion, dyn).members
+                expansion.members.mapIndexedNotNull { i, member ->
+                    val fixture = runCatching { fixtures.untypedGroupableFixture(member.key) }.getOrNull()
+                    if (fixture == null || !effect.target.fixtureHasProperty(fixture)) return@mapIndexedNotNull null
+                    PaintedHead(member.key, plan.offsets[i], expansion.members.size, plan.contexts[i])
+                }
+            }
+            FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
+                val plans = plansFor(effect, expansion, dyn)
+                when (dyn.elementMode) {
+                    ElementMode.PER_FIXTURE -> expansion.perFixture.flatMapIndexed { i, keys -> spread(keys, plans.perFixture[i]) }
+                    ElementMode.FLAT -> spread(expansion.flat, plans.flat)
+                }
+            }
+        }
+    }
+
+    /**
+     * [effect] rewritten as one instance per head it paints, less [drop] (apply-model plan §3.4):
+     * built, not added — [replaceEffects] swaps them in. The split and the Local replacement's
+     * narrowing both start here.
+     *
+     * Each copy is the member it was ([SplitMember]) and keeps the parent's phase offset, compose
+     * order, clocks, masters, timing, envelope and band, so nothing on stage moves. It shares the
+     * parent's effect object, as the members did, and keeps the parent's cue Include origin, which
+     * Update reads to retire the child the copies now stand for. A Look Include's is not kept: a
+     * Look's effect is written back whole.
+     */
+    fun headCopies(effect: FxInstance, drop: Set<String> = emptySet()): List<FxInstance> =
+        paintedHeads(effect).filter { it.key !in drop }.map { head ->
+            val target = FxTargetFactory.forFixture(
+                head.key, effect.target.propertyName, effect.effect.outputType,
+                runCatching { fixtures.untypedGroupableFixture(head.key) }.getOrNull(),
+            )
+            FxInstance(
+                effect = effect.effect,
+                target = target,
+                timing = effect.timing,
+                blendMode = effect.blendMode,
+                dynamicsRef = AtomicReference(effect.dynamics),
+            ).apply {
+                composeOrder = effect.composeOrder
+                registrationId = effect.registrationId
+                priority = effect.priority
+                programmerOrigin = effect.programmerOrigin
+                startedAtMs = effect.startedAtMs
+                startedAtBeat = effect.startedAtBeat
+                timingSource = effect.timingSource
+                seconds = effect.seconds
+                speedMasterUuid = effect.speedMasterUuid
+                rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                splitMember = SplitMember(head.groupSize, head.offset, head.context)
+                takeRunningStateFrom(effect)
+            }
+        }
+
+    /** What a copy takes from its parent each time it is built or swapped in ([headCopies]). */
+    private fun FxInstance.takeRunningStateFrom(parent: FxInstance) {
+        dynamicsRef.set(parent.dynamics.copy(elementFilter = ElementFilter.ALL))
+        intensityMultiplier = parent.intensityMultiplier
+        lastPhase = parent.lastPhase
+        accumulatedScaledMs = parent.accumulatedScaledMs
+        nShotStartTick = parent.nShotStartTick
+        nShotStartScaledMs = parent.nShotStartScaledMs
+        spent = parent.spent
     }
 
     /**
@@ -863,144 +996,152 @@ class FxEngine(
         newBlocks: Int? = null,
         newGroups: Int? = null,
     ): FxInstance? {
-        val existing = activeEffects[effectId] ?: return null
-        val nShotChanged = (clearNShot && existing.dynamics.nShot != null) ||
-            (newNShot != null && newNShot != existing.dynamics.nShot)
+        // Again from the top when another request swapped or split the instance under this one.
+        while (true) {
+            val existing = activeEffects[effectId] ?: return null
+            val nShotChanged = (clearNShot && existing.dynamics.nShot != null) ||
+                (newNShot != null && newNShot != existing.dynamics.nShot)
 
-        // One atomic dynamics update covering both branches: the cell is shared across the
-        // swap below, so applying it up front reaches whichever instance survives — and a
-        // tick pass sees either none of this update or all of it, never half.
-        if (newPhaseOffset != null || newDistributionStrategy != null || newElementMode != null ||
-            newElementFilter != null || newStepTiming != null || newSize != null || newDirection != null ||
-            newNShot != null || clearNShot || newSpread != null || newWings != null || newBlocks != null ||
-            newGroups != null
-        ) {
-            existing.updateDynamics { dyn ->
-                dyn.copy(
-                    phaseOffset = newPhaseOffset ?: dyn.phaseOffset,
-                    distributionStrategy = newDistributionStrategy ?: dyn.distributionStrategy,
-                    elementMode = newElementMode ?: dyn.elementMode,
-                    elementFilter = newElementFilter ?: dyn.elementFilter,
-                    stepTiming = newStepTiming ?: dyn.stepTiming,
-                    size = newSize ?: dyn.size,
-                    direction = newDirection ?: dyn.direction,
-                    nShot = if (clearNShot) null else newNShot ?: dyn.nShot,
-                    spread = newSpread ?: dyn.spread,
-                    wings = newWings ?: dyn.wings,
-                    blocks = newBlocks ?: dyn.blocks,
-                    groups = newGroups ?: dyn.groups,
-                )
-            }
-        }
-        // A new count runs from now: the anchors re-take on the next pass. Written from this request
-        // thread into tick-owned fields, which at worst re-anchors one pass late.
-        if (nShotChanged) {
-            existing.nShotStartTick = FxInstance.UNANCHORED
-            existing.nShotStartScaledMs = Double.NaN
-            existing.spent = false
-        }
-
-        // D7: a timing move or a type swap decides the loop and which masters can stand.
-        val timingMove = if (newSeconds != null || newTimingSource != null) {
-            (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
-        } else null
-
-        // Determine if we need an atomic swap (immutable fields changed)
-        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null || timingMove != null
-
-        val updated = if (needsSwap) {
-            FxInstance(
-                effect = newEffect ?: existing.effect,
-                target = existing.target,
-                timing = newTiming ?: existing.timing,
-                blendMode = newBlendMode ?: existing.blendMode,
-                // The dynamics (running state, phase offset, distribution, element
-                // mode/filter, step timing) travel by this shared cell, not by copying —
-                // which is what makes a pause/resume racing this swap unlosable.
-                dynamicsRef = existing.dynamicsRef,
-            ).apply {
-                id = existing.id
-                registrationId = newRegistrationId ?: existing.registrationId
-                source = existing.source
-                // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
-                // Record reads to tell a layer's effect from a loose one. Dropping them here
-                // un-stomps an edited layer effect and makes Record write it back a second
-                // time as an ad-hoc child.
-                cueLayerId = existing.cueLayerId
-                programmerLayerEffectKey = existing.programmerLayerEffectKey
-                programmerOrigin = existing.programmerOrigin
-                includedLookEffect = existing.includedLookEffect
-                cueId = existing.cueId
-                cueStackId = existing.cueStackId
-                priority = existing.priority
-                // A manual fade lives here; without it, editing an effect mid-fade snaps it to
-                // full output.
-                intensityMultiplier = existing.intensityMultiplier
-                startedAtMs = existing.startedAtMs
-                startedAtBeat = existing.startedAtBeat
-                lastPhase = existing.lastPhase
-                // Wall-clock phase derives from this and nothing else, so dropping it here
-                // would snap an edited wall-clock effect back to the start of its cycle —
-                // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
-                accumulatedScaledMs = existing.accumulatedScaledMs
-                // An N-shot's count runs on across an edit, as its phase does.
-                nShotStartTick = existing.nShotStartTick
-                nShotStartScaledMs = existing.nShotStartScaledMs
-                spent = existing.spent
-                timingSource = existing.timingSource
-                seconds = existing.seconds
-                // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
-                // it on first read, which costs one walk and is the safe direction. Carrying it
-                // would survive a future `updateEffect` that learns to retarget, and the effect
-                // would silently keep painting the old fixtures.
-                //
-                // Master assignment must survive the swap: this block hand-enumerates every
-                // carried field, and missing one silently yanks an edited effect back to
-                // master 1 the moment its beat division or blend mode is tweaked.
-                speedMasterUuid = newSpeedMasterUuid ?: existing.speedMasterUuid
-                rateSpeedMasterUuid = newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid
-                speedMasterSlot = if (newSpeedMasterUuid != null) {
-                    speedMasters.slotFor(newSpeedMasterUuid)
-                } else {
-                    existing.speedMasterSlot
-                }
-                rateMasterSlot = if (newRateSpeedMasterUuid != null) {
-                    rateSlotFor(newRateSpeedMasterUuid)
-                } else {
-                    existing.rateMasterSlot
-                }
-                replaceMasters?.let { assignMasters(this, it) }
-                // After the masters: Seconds clears whichever master its kind cannot have, and the
-                // slots are bound again from what is left.
-                timingMove?.let { (registrationSource, seconds) ->
-                    applyTimingChoice(registrationSource, seconds)
-                    speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
-                    rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+            // One atomic dynamics update covering both branches: the cell is shared across the
+            // swap below, so applying it up front reaches whichever instance survives — and a
+            // tick pass sees either none of this update or all of it, never half.
+            if (newPhaseOffset != null || newDistributionStrategy != null || newElementMode != null ||
+                newElementFilter != null || newStepTiming != null || newSize != null || newDirection != null ||
+                newNShot != null || clearNShot || newSpread != null || newWings != null || newBlocks != null ||
+                newGroups != null
+            ) {
+                existing.updateDynamics { dyn ->
+                    dyn.copy(
+                        phaseOffset = newPhaseOffset ?: dyn.phaseOffset,
+                        distributionStrategy = newDistributionStrategy ?: dyn.distributionStrategy,
+                        elementMode = newElementMode ?: dyn.elementMode,
+                        elementFilter = newElementFilter ?: dyn.elementFilter,
+                        stepTiming = newStepTiming ?: dyn.stepTiming,
+                        size = newSize ?: dyn.size,
+                        direction = newDirection ?: dyn.direction,
+                        nShot = if (clearNShot) null else newNShot ?: dyn.nShot,
+                        spread = newSpread ?: dyn.spread,
+                        wings = newWings ?: dyn.wings,
+                        blocks = newBlocks ?: dyn.blocks,
+                        groups = newGroups ?: dyn.groups,
+                    )
                 }
             }
-        } else {
-            newSpeedMasterUuid?.let {
-                existing.speedMasterUuid = it
-                existing.speedMasterSlot = speedMasters.slotFor(it)
+            // A new count runs from now: the anchors re-take on the next pass. Written from this request
+            // thread into tick-owned fields, which at worst re-anchors one pass late.
+            if (nShotChanged) {
+                existing.nShotStartTick = FxInstance.UNANCHORED
+                existing.nShotStartScaledMs = Double.NaN
+                existing.spent = false
             }
-            newRateSpeedMasterUuid?.let {
-                existing.rateSpeedMasterUuid = it
-                existing.rateMasterSlot = rateSlotFor(it)
-            }
-            replaceMasters?.let { assignMasters(existing, it) }
-            existing
-        }
 
-        if (needsSwap) {
-            activeEffects[effectId] = updated
-            rebuildSortedSnapshots()
-        } else {
-            // A non-swap update can still move coverage (elementFilter changes the expansion);
-            // see [rebuildSortedSnapshots].
-            effectListEpoch.incrementAndGet()
+            // D7: a timing move or a type swap decides the loop and which masters can stand.
+            val timingMove = if (newSeconds != null || newTimingSource != null) {
+                (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
+            } else null
+
+            // Determine if we need an atomic swap (immutable fields changed)
+            val needsSwap = newEffect != null || newTiming != null || newBlendMode != null || timingMove != null
+
+            val updated = if (needsSwap) {
+                FxInstance(
+                    effect = newEffect ?: existing.effect,
+                    target = existing.target,
+                    timing = newTiming ?: existing.timing,
+                    blendMode = newBlendMode ?: existing.blendMode,
+                    // The dynamics (running state, phase offset, distribution, element
+                    // mode/filter, step timing) travel by this shared cell, not by copying —
+                    // which is what makes a pause/resume racing this swap unlosable.
+                    dynamicsRef = existing.dynamicsRef,
+                ).apply {
+                    id = existing.id
+                    composeOrder = existing.composeOrder
+                    registrationId = newRegistrationId ?: existing.registrationId
+                    source = existing.source
+                    // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
+                    // Record reads to tell a layer's effect from a loose one. Dropping them here
+                    // un-stomps an edited layer effect and makes Record write it back a second
+                    // time as an ad-hoc child.
+                    cueLayerId = existing.cueLayerId
+                    programmerLayerEffectKey = existing.programmerLayerEffectKey
+                    programmerOrigin = existing.programmerOrigin
+                    includedLookEffect = existing.includedLookEffect
+                    cueId = existing.cueId
+                    cueStackId = existing.cueStackId
+                    priority = existing.priority
+                    // A manual fade lives here; without it, editing an effect mid-fade snaps it to
+                    // full output.
+                    intensityMultiplier = existing.intensityMultiplier
+                    startedAtMs = existing.startedAtMs
+                    startedAtBeat = existing.startedAtBeat
+                    lastPhase = existing.lastPhase
+                    // Wall-clock phase derives from this and nothing else, so dropping it here
+                    // would snap an edited wall-clock effect back to the start of its cycle —
+                    // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
+                    accumulatedScaledMs = existing.accumulatedScaledMs
+                    // An N-shot's count runs on across an edit, as its phase does.
+                    nShotStartTick = existing.nShotStartTick
+                    nShotStartScaledMs = existing.nShotStartScaledMs
+                    spent = existing.spent
+                    timingSource = existing.timingSource
+                    seconds = existing.seconds
+                    // A split-off copy's member (apply-model plan §3.4): without it an edited copy
+                    // loses its set's step cycle, sweep and N-shot lag.
+                    splitMember = existing.splitMember
+                    // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
+                    // it on first read, which costs one walk and is the safe direction. Carrying it
+                    // would survive a future `updateEffect` that learns to retarget, and the effect
+                    // would silently keep painting the old fixtures.
+                    //
+                    // Master assignment must survive the swap: this block hand-enumerates every
+                    // carried field, and missing one silently yanks an edited effect back to
+                    // master 1 the moment its beat division or blend mode is tweaked.
+                    speedMasterUuid = newSpeedMasterUuid ?: existing.speedMasterUuid
+                    rateSpeedMasterUuid = newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid
+                    speedMasterSlot = if (newSpeedMasterUuid != null) {
+                        speedMasters.slotFor(newSpeedMasterUuid)
+                    } else {
+                        existing.speedMasterSlot
+                    }
+                    rateMasterSlot = if (newRateSpeedMasterUuid != null) {
+                        rateSlotFor(newRateSpeedMasterUuid)
+                    } else {
+                        existing.rateMasterSlot
+                    }
+                    replaceMasters?.let { assignMasters(this, it) }
+                    // After the masters: Seconds clears whichever master its kind cannot have, and the
+                    // slots are bound again from what is left.
+                    timingMove?.let { (registrationSource, seconds) ->
+                        applyTimingChoice(registrationSource, seconds)
+                        speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
+                        rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+                    }
+                }
+            } else {
+                newSpeedMasterUuid?.let {
+                    existing.speedMasterUuid = it
+                    existing.speedMasterSlot = speedMasters.slotFor(it)
+                }
+                newRateSpeedMasterUuid?.let {
+                    existing.rateSpeedMasterUuid = it
+                    existing.rateMasterSlot = rateSlotFor(it)
+                }
+                replaceMasters?.let { assignMasters(existing, it) }
+                existing
+            }
+
+            if (needsSwap) {
+                // By identity: a plain put would bring back an instance a split has just replaced.
+                if (!activeEffects.replace(effectId, existing, updated)) continue
+                rebuildSortedSnapshots()
+            } else {
+                // A non-swap update can still move coverage (elementFilter changes the expansion);
+                // see [rebuildSortedSnapshots].
+                effectListEpoch.incrementAndGet()
+            }
+            emitStateUpdate()
+            return updated
         }
-        emitStateUpdate()
-        return updated
     }
 
     /** Both of an effect's master assignments, as [updateEffect]'s `replaceMasters` sets them. */
@@ -1482,7 +1623,7 @@ class FxEngine(
      *
      * Layer 1 (parking) short-circuits: a fully-parked property skips the reset entirely
      * because the parked value wins at transmit time regardless. The caller passes a
-     * pre-sorted effect list (priority-ascending, id-ascending tie-break); ordering only
+     * pre-sorted effect list (priority, then compose order, then id); ordering only
      * matters downstream for effect composition, not for the reset pass.
      */
     private fun resetActiveProperties(
@@ -1648,7 +1789,9 @@ class FxEngine(
                 val effectPhase = phases.single(effect, tick, dyn)
                 // An N-shot outside its runs holds what is underneath (D9).
                 if (FxInstance.isHolding(effectPhase)) return
-                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, EffectContext.SINGLE)
+                // A copy split off a spread effect is the member it was (apply-model plan §3.4).
+                val context = effect.splitMember?.context ?: EffectContext.SINGLE
+                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, context)
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, effect.weight(dyn))
                 }

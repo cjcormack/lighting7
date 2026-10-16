@@ -1088,8 +1088,8 @@ class ProgrammerLayerStack(
      * in `CookWinner.index` — so an effect's position in the band and its layer's cooked rank are
      * one value, not two that have to be kept equal.
      *
-     * `sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
-     * counter, so without the offset relative order would be *spawn* order and a reorder would need
+     * `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder` the
+     * creation counter, so without the offset relative order would be *spawn* order and a reorder would need
      * a respawn to express itself. Every consumer of the band tests
      * `isProgrammerFxPriority` (`>= BASE`) rather than exact equality, so an offset is invisible to
      * all of them. The band is a million wide; [FxEngine.PROGRAMMER_FX_RANK_CLAMP] is a backstop,

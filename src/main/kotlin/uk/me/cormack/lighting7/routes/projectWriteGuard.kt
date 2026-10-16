@@ -29,7 +29,7 @@ internal const val CODE_VENUE_ADMIN_ONLY = "VENUE_ADMIN_ONLY"
  *   every write, `set-current`, clone and delete included. A version is what was published.
  * - the project is a **venue** and the caller is an operator: 403 [CODE_VENUE_ADMIN_ONLY] for a
  *   stored write. Opening the venue (`set-current`) and the runtime gestures — the programmer's
- *   spread, aim and focus, arming and firing, fixture commands (one or a bulk run), *Make rig safe*
+ *   spread, aim and focus and its bare effect press, arming and firing, fixture commands (one or a bulk run), *Make rig safe*
  *   and its *Undo*, the grand master — are not stored
  *   and pass, so an operator can look at a venue and the programmer still works there (D11).
  *

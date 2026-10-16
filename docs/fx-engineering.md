@@ -7,7 +7,7 @@ This document describes the effects subsystem for tempo-synchronized lighting ef
 > assignments (Layer 4) and below the programmer (Layer 2) and parking (Layer 1). The per-tick reset-to-
 > neutral pass resets each property to the **layer below** (via `LayerResolver`), not to
 > hardcoded zero, so direct writes and cue state remain visible under running effects. Effect
-> iteration is a sorted pass (priority ascending, id-ascending tie-break) rather than
+> iteration is a sorted pass (priority ascending, then compose order, then id) rather than
 > undefined map iteration, making multi-effect composition on the same property deterministic.
 
 ## Overview
@@ -825,7 +825,10 @@ holds read *Programmer* while the Circle was what the rig showed — the plan's 
 instance's id, phase, layer identity and fade. A type swap takes the new type's timing source
 (`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
 running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
-`FX_NOT_FOUND`) is decided before anything moves: a 400 / 404 on REST, an `fxError` on the socket.
+`FX_NOT_FOUND`; a split of an effect that is not Local, `FX_SPLIT_LAYER_EFFECT` / `FX_SPLIT_NOT_LOCAL`)
+is decided before anything moves: a 400 / 404 / 409 on REST, an `fxError` on the socket. With
+`targets` naming some of its heads the edit splits them off instead (§"Local effects follow the
+selection").
 Its client is the live editor (`FxEditor`, session 3): every control writes the draft through
 `useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per effect
 (`store/fixtureFx.ts`), so a drag refused on every frame is one toast.
@@ -958,7 +961,8 @@ member outside its runs answers `NaN` and paints nothing, and Backward and Bounc
 backward on the member's own cycles. For an N-shot the clock is counted from the effect's start
 rather than the master's tick 0. A forever effect's phase is exactly what it was — the clock is
 still split into whole cycles and a fraction in integer arithmetic — and the whole-target form
-(`calculatePhase`) is the same function at offset 0.
+(`calculatePhase`) is the same function at offset 0 — except for a copy split off a spread
+(`FxInstance.splitMember`), which makes its member's call: that member's offset and group size.
 
 ### EffectContext
 
@@ -1105,8 +1109,96 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   `targetType` and `targetKey`, and `clear_effects` naming targets clears a selection effect only when
   every item it names is among them. A rename rewrites the keys inside a stored selection (`ai/RigKeyReferences.kt`), and a
   venue Update's dead-reference report names each item (`venue/VenueUpdate.kt`).
-- **Not here**: a layer's deferred effects still fan one instance per target, and R3's split (`PUT
-  /fx/{id}` with `targets`) is the apply plan's session 2, built on this.
+- **Not here**: a layer's deferred effects still fan one instance per target. The programmer's bare
+  effect press and the split are built on this — §"Local effects follow the selection" below.
+
+### Local effects follow the selection (apply-model plan session 2)
+
+MagicQ's rule (apply-model plan D5, §3.4): a bare library effect is a **Local** effect on the whole
+selection — the programmer's own, in its priority band and owned by no layer, Look or cue
+(`FxInstance.isLocalEffect`) — and an edit follows the selection: with every head the effect runs on
+selected it changes in place, phase kept; with some selected, those heads split off at the phase they
+had.
+
+**The bare effect press**, `POST /api/rest/projects/{id}/programmer/effects`
+(`routes/programmerEffects.kt`): `{effectType, propertyName, targets, families?, parameters?}` plus
+every effect field `POST /fx/add` takes, built by the same `buildEffectInstance`, so one effect over
+the selection as the add route makes it (a group one group effect, several targets one selection
+effect). The route fixes only where it runs and whose it is:
+
+- **The mask.** The effect's family must be in the selection's mask, else 400 `EFFECT_OUTSIDE_MASK`;
+  no targets is 400 `EFFECT_NEEDS_SELECTION`. The family is `routes/programmerEffects.kt`'s
+  `effectFamily`: the attribute group of the property it drives on the first head it paints
+  (`maskGroupForProperty`, as Record and Include read an effect), so a dimmer-category Pulse on `uv`
+  is Colour. Agreed with Chris during session 2; an effect palette's family stays its library
+  category (`familyForEffectCategory`), since a palette names no property until it lands.
+- **The timing.** No `beatDivision` is one bar; a beat effect naming no master and not on *Seconds* is
+  stamped with the master whose `usage` is its library category, else master 1 (venue-visit plan
+  D16) — `fx/EffectTiming.kt`'s `usageMasterUuidFor`, the one reading MCP's effect tools stamp with
+  too. That is the category, not the property group the mask reads: a Pulse on `uv` is Colour for
+  the mask and takes the dimmer master.
+- **Local replacement**, the effect-side twin of a palette layer's family replacement
+  (`fx/LayerPress.kt`). Before it starts, the press takes the selected heads off every other Local
+  effect of its family, read the same way (a family that resolves to nothing replaces nothing): one
+  whose every painted head is selected stops; one that paints some of them
+  and some others is **narrowed** — rewritten as one instance per head it keeps, each where it was
+  (the split below, with no edit). A layer's effect is never touched. The stops, the narrowing and
+  the new effect are one engine mutation (`FxEngine.replaceEffects`), so no head drops to the layer
+  below between the old effect and the new; an effect another request swapped meanwhile is taken
+  off its current instance. Answers `{effectId, stopped, narrowed: [{effectId, into}]}`.
+
+**The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, cells and groups, as a press
+names them), decided by `planSplit` against the heads the effect **paints** (`FxEngine.paintedHeads`:
+an element filter's left-out cells paint nothing and are not counted):
+
+- No `targets`, or targets covering every painted head (`TargetCoverage.covers`, so a group by its
+  members and a cell by itself or its fixture), is the in-place edit, id kept. Targets covering none
+  are 400 `FX_UPDATE_REFUSED`.
+- Covering some splits them off: `FxEngine.headCopies` rewrites the effect as **one instance per head
+  it paints**, `replaceEffects` swaps them in for it as one mutation, and the named heads' copies then
+  take the edit through the same `updateEffect` an in-place edit uses. The rest run on untouched. REST
+  answers `EffectSplitResponse {splitEffectId, edited, rest}`; the frame answers `fxChanged(REMOVED)`
+  for the effect and `fxChanged(ADDED)` per copy, the edited first.
+- Only a Local effect splits: a programmer layer's is 409 `FX_SPLIT_LAYER_EFFECT` (splitting it would
+  need splitting its layer, apply-model plan P5; *Reset to palette* and *Update palette* stay its
+  edits), and a cue's or a manual one outside the band is 409 `FX_SPLIT_NOT_LOCAL`.
+- A change to the spread's **shape** — Order, Spread, Wings, Blocks, Groups, element mode or filter —
+  sent with some heads is 400 `FX_UPDATE_REFUSED`, nothing moved: a split-off head runs alone, so the
+  shape would do nothing on it (agreed with Chris, session 2). Only a field that differs from what
+  the effect has counts, so an editor re-sending the shape it shows still splits.
+
+**Each copy starts where its head was** (`SplitMember`, on `FxInstance.splitMember`). A copy is the
+member it was: its phase is computed by the same member call the parent's pass made for that head —
+the member's distribution offset, the size of the list it was spread over and its `EffectContext` —
+so a step-timed copy keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
+(Chris chose to carry them rather than refuse those splits), an N-shot copy runs its window from its
+own offset and Bounce counts its cycles from it, and an effect reading its place in the spread still
+sees it. `EffectSplitTest` runs an effect on two rigs, splits one mid-run and compares every channel
+on every tick. A copy also takes the parent's clocks (`accumulatedScaledMs`, the N-shot anchors, the
+start time), masters, timing source, *Seconds*, envelope and band, shares its effect object (as the
+members did; added `carried`, so a stateful effect is not reset), and names its fixture or cell with
+element filter `ALL`.
+
+- **The offset is beside the phase offset, not in it.** Every copy keeps the parent's
+  `phaseOffset`, so an edit that follows the selection sends one value to every copy it covers; a
+  phase offset per copy would collapse them into unison on the first edit. (The plan's §3.4 put the
+  offset in the phase offset and moved the N-shot anchor by it; done together those count the offset
+  twice, which is part of why it is carried instead.) Stored data has no field for it (P7), so what
+  stores a copy folds it in — `FxInstance.storedPhaseOffset`, read by Record into a cue
+  (`captureCurrentState`, `fxInstancesToCueChildren`) and into a Look (`lookEffectSettings`): a
+  recorded copy keeps its phase, though not its set's step cycle or sweep.
+- **Update.** A copy keeps a cue Include's origin (`programmerOrigin`). A cue Update writes each
+  copy as a child of its own, one per head, so it retires the child they stand for once nothing but
+  copies carries it (`splitIncludedChildren`), and the copies drop the origin; otherwise the cue
+  would play the effect twice. A Look Include's (`includedLookEffect`) is not kept: a Look's effect
+  is written back whole, and a copy is the operator's busk of part of it.
+- **Order.** Copies take new ids but keep the parent's `composeOrder`, which the engine sorts by
+  between priority and id, so a split moves nothing in the composition order.
+- **Races.** The copies take the parent's running state again at the swap, so a pause that reached
+  the parent meanwhile is kept, and `updateEffect` swaps by identity, so an edit racing a split
+  cannot put the parent back beside its copies.
+- **Clear and Release** take copies as they take any Local effect: they are in the band, and each
+  names one head.
 
 ### Target Types
 
@@ -1441,7 +1533,7 @@ derived, so retune master 1 or unlink first).
 ```
 GET    /api/rest/fx/active           → [EffectDto...]
 POST   /api/rest/fx/add              ← AddEffectRequest → { effectId }
-PUT    /api/rest/fx/{id}             ← UpdateEffectRequest → EffectDto
+PUT    /api/rest/fx/{id}             ← UpdateEffectRequest → EffectDto | EffectSplitResponse (with targets naming some heads)
 DELETE /api/rest/fx/{id}             (remove effect)
 POST   /api/rest/fx/{id}/pause
 POST   /api/rest/fx/{id}/resume
@@ -1516,6 +1608,10 @@ heads has the property is refused. The distribution and element fields then appl
   "seconds": false
 }
 ```
+
+`targets` (`[{"type": "fixture" | "group", "key": "…"}]`) says which heads the edit is for: absent, or
+naming every head the effect paints, is the in-place edit below; naming some splits them off and
+answers `EffectSplitResponse` instead — see [Local effects follow the selection](#local-effects-follow-the-selection-apply-model-plan-session-2).
 
 All fields are optional. Truly immutable fields (`effectType`, `parameters`, `beatDivision`,
 `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and — because
@@ -1753,8 +1849,9 @@ cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit
 are created as `FxInstance`s tagged with the cue id.
 
 **Effects spawn in layer order, and that alone is enough to make layer order the composition
-order.** `sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
-counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
+order.** `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
+the monotonic creation counter (a split copy keeps its parent's, §"Local effects follow the
+selection"), and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
 same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
 uniform per-cue priority stays. A deferred Look effect fans over the layer's targets; a bound one
 uses its own, filtered by the layer's target set when that set is non-empty.
@@ -1987,9 +2084,10 @@ Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`
 **A new effect is one bar** (venue-visit plan D16): four beats, on the master whose `usage` matches
 its family where one is tagged, else master 1. The master is **stamped as a uuid when the effect is
 written**, never resolved later, so `null` still means master 1 everywhere: by the editor's picker
-(`FxPicker`), the palette editor and the MCP effect tools (`AiTools.parseEffectTiming`, which also
-makes `beatDivision` optional). REST's `AddEffectRequest` and `AddGroupFxRequest` default an omitted
-division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
+(`FxPicker`), the palette editor, the MCP effect tools (`AiTools.parseEffectTiming`, which also
+makes `beatDivision` optional) and the programmer's bare effect press (`POST /programmer/effects`);
+the desk's two read one rule, `fx/EffectTiming.kt`'s `usageMasterUuidFor`. REST's
+`AddEffectRequest` and `AddGroupFxRequest` default an omitted division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
 seconds — since "one bar" means nothing to an effect timed in seconds. Moving a beat effect between
 Seconds and a master in the editor or the palette sheet keeps its speed: the division is converted
 at the master's tempo (4 beats at 120 BPM is 2 s). The effects plan's sessions build on this timing

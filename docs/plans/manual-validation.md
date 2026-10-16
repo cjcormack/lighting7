@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
@@ -106,6 +107,42 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-2`
+
+**What it proves**: *Local effects follow the selection* — venue-visit R3.2, apply-model plan
+session 2 (§3.4, D5): a bare library effect is one Local effect over the selection, a second effect
+of its family takes the pressed heads off the first, and an edit for some of an effect's heads splits
+them off at the phase they had.
+
+**Why it is here**: `EffectSplitTest` compares every channel tick for tick against a mock controller
+on synthetic ticks, and the route tests read the instances. Nothing watched a split on real heads at
+a real tempo, where a jump of one head out of a chase is what an operator would see.
+
+**Test**, on Sleeping Beauty. Until session 6 (R3.6) gives these a door in the UI, drive them from a
+terminal with `curl` against `http://localhost:8413/api/rest` (signed in; the bodies are in
+CLAUDE.md's FX REST endpoints), and watch the stage and the programmer's FX list:
+
+1. **The press.** `POST /projects/{id}/programmer/effects` with `Pulse` on `dimmer` over four hexes
+   by fixture: one effect in the FX list, a four-step chase in the order sent, on the master tagged
+   *dimmer* if there is one. With `families: ["COLOUR"]` it is refused and nothing starts.
+2. **Replacement.** Press `ColourCycle` on `rgbColour` over the four, then again over two of them:
+   those two change to the new cycle, the other two carry on exactly where they were (no step back to
+   the start), and the Pulse is untouched. Press it over all four: the first is gone.
+3. **The split.** With the Pulse running, `PUT /fx/{id}` with `beatDivision` doubled and `targets`
+   naming two of the hexes: those two slow down from where they were, the other two do not hitch,
+   and the FX list shows four effects. The same `PUT` with every hex keeps the one effect.
+4. **Step and ping-pong.** Start a Pulse with `stepTiming: true` and `distributionStrategy:
+   "PING_PONG"` over four, then split one head off with a `size` edit: it keeps its place in the
+   bounce and its step length, beside the three still running together.
+5. **Refusals.** The split with `distributionStrategy` changed is refused, nothing moved; a split of a
+   palette layer's effect is 409 `FX_SPLIT_LAYER_EFFECT`.
+6. **Clear and Record.** Record a cue with the split chase up: GO it after Clear and each head keeps its
+   place in the chase. Clear takes every copy; a fixture's *Release* takes its own.
+
+**Time**: 15 minutes.
 
 ---
 
