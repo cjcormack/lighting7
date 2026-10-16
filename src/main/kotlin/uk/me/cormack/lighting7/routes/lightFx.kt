@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -590,10 +591,9 @@ private fun createTargetFromList(
             is TargetRef.Fixture -> FxTargetFactory.forFixture(
                 single.key, propertyName, outputType, runCatching { fixtures.untypedGroupableFixture(single.key) }.getOrNull(),
             )
-            is TargetRef.Group -> {
-                val group = fixtures.untypedGroup(single.key)
-                FxTargetFactory.forGroup(single.key, propertyName, outputType, group.fixtures.firstOrNull() as? Fixture)
-            }
+            is TargetRef.Group -> FxTargetFactory.forGroup(
+                single.key, propertyName, outputType, fixtures.referenceFixtureFor(target, propertyName) as? Fixture,
+            )
         }
     }
     return fxTarget

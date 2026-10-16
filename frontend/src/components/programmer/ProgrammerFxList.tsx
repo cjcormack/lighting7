@@ -16,7 +16,7 @@ import { useRemoveGroupFxMutation } from '@/store/groups'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
-import { familyCanHoldEffect, familyForEffectCategory } from '@/lib/attributeFamily'
+import { familyForEffectCategory } from '@/lib/attributeFamily'
 import { findEffectEntry } from '../busking/buskingTypes'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
 import { HeldBlindMark } from '../fx/HeldBlindMark'
@@ -150,8 +150,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
  *    template is not a new named thing — the named thing exists, and *Edit template* is the gesture.
  *    An effect on a cue is that cue's, and a base effect belongs to the show.
  *  - **Its category must map to a template family.** `controls` has no tempo and `composite` spans
- *    families, so neither can name one; `beam` is refused by name server-side so a script-registered
- *    beam effect cannot mint a Beam effect template behind the rule.
+ *    families, so neither can name one.
  *
  * Returns a reason rather than false, because the item is **shown disabled** in both cases. A menu
  * that silently loses an entry teaches nobody why.
@@ -182,7 +181,7 @@ function saveAsTemplateOffer(
     }
   }
   const family = familyForEffectCategory(entry.category)
-  if (family == null || !familyCanHoldEffect(family)) {
+  if (family == null) {
     return {
       enabled: false,
       reason: `A “${entry.category}” effect is not banked by family, so it cannot be a palette. It can live in a recorded look.`,

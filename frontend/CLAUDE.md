@@ -712,7 +712,8 @@ Release folds to its glyph and the scope line drops the fade.
   every member. A fixture's head row sees an effect on the fixture, which the desk paints onto the
   heads (`effectsReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
-  Position · Controls, a family the target cannot take disabled) opening on the family of the row
+  Position · Beam · Controls, a family the target cannot take disabled; Beam lists the beam
+  built-ins, each only where a head has its one property, effects plan §4.4) opening on the family of the row
   open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
@@ -938,9 +939,9 @@ two it holds is `kind`, and it is fixed at creation the way the family is; three
 effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
-A **Beam** palette holds values only — the effect library has no beam category, and the backend
-refuses `beam`, `controls` and `composite` **by name** so a script-registered beam effect cannot
-mint one behind the rule. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
+Every family may hold an effect — a **Beam** one a beam built-in (Zoom Breathe, Iris Pulse, Frost
+Pulse, Focus Pull; effects plan D6) — and the backend refuses `controls` and `composite` **by name**,
+since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -4748,7 +4749,7 @@ four relocated, never a fifth.
 view's speed-master work, and both are edited in `SpeedMasterDetailSheet` and in the Speed Masters
 sheet's Usage, Follows and Ratio columns (§Library sheets):
 
-- **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. An effect
+- **Usage** (`dimmer` / `colour` / `position` / `beam`) is the **apply-time routing default**. An effect
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1

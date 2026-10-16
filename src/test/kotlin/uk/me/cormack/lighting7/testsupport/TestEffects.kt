@@ -14,7 +14,7 @@ import kotlin.math.sin
 /**
  * Effect implementations for the engine tests and the FX benchmark.
  *
- * The desk's own effects are the 24 `.fx.kts` resources in `src/main/resources/fx/`, compiled at
+ * The desk's own effects are the 28 `.fx.kts` resources in `src/main/resources/fx/`, compiled at
  * startup into the [uk.me.cormack.lighting7.fx.FxRegistry]. Engine tests do not want those: they
  * need *an* effect that produces a known value so an assertion can be about the engine — target
  * expansion, blending, priority, provenance — and reaching them through the registry would make

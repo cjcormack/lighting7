@@ -27,7 +27,7 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
  * `EFFECT_CATEGORY_INFO`, and lighting7's `SpeedMasterUsageVocabularyTest` pins the server's
  * copy against the shipped `.fx.kts` files — the two ends of one list.
  */
-export const SPEED_MASTER_USAGES = ['dimmer', 'colour', 'position'] as const
+export const SPEED_MASTER_USAGES = ['dimmer', 'colour', 'position', 'beam'] as const
 
 export type SpeedMasterUsage = (typeof SPEED_MASTER_USAGES)[number]
 

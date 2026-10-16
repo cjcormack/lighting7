@@ -22,7 +22,7 @@ class SpeedMasterUsageVocabularyTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 24, "fx/index.txt should list at least 24 effects, got ${index.size}")
+        assertTrue(index.size >= 28, "fx/index.txt should list at least 28 effects, got ${index.size}")
 
         return index.map { path ->
             val text = loader.getResource("fx/$path")!!.readText()
@@ -33,7 +33,7 @@ class SpeedMasterUsageVocabularyTest {
     @Test
     fun `the shipped effect library's categories are exactly the known set`() {
         assertEquals(
-            setOf("dimmer", "colour", "position", "composite"),
+            setOf("dimmer", "colour", "position", "beam", "composite"),
             builtInCategories(),
             "the built-in category vocabulary moved. If you added a category, decide whether it " +
                 "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +

@@ -414,9 +414,9 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        // `beam` and `controls` are real strings elsewhere in the codebase but deliberately
-        // NOT routable usages (D7) — pinning the exclusion here, not just in the constant.
-        for (bad in listOf("beam", "controls", "smoke")) {
+        // `composite` and `controls` are real effect categories but deliberately NOT routable
+        // usages (D7) — pinning the exclusion here, not just in the constant.
+        for (bad in listOf("composite", "controls", "smoke")) {
             val resp = client.post("/api/rest/projects/$projectId/speed-masters") {
                 contentType(ContentType.Application.Json)
                 setBody(CreateSpeedMasterRequest(name = "Bad $bad", usage = bad))

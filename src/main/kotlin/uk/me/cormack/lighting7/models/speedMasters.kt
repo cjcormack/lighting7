@@ -157,7 +157,7 @@ const val DEFAULT_SPEED_MASTER_COUNT = 4
  * master 1 via a null `speedMasterUuid`. Pinned against the shipped `.fx.kts` files by
  * `SpeedMasterUsageVocabularyTest`.
  */
-val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position")
+val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position", "beam")
 
 // The write-boundary half of the speed-master error vocabulary (shared by REST and the WS
 // socket). The delete-guard half (CODE_SPEED_MASTER_PROTECTED / _IN_USE) follows the house

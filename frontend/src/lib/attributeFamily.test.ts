@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTRIBUTE_FAMILIES,
   TEMPLATE_EFFECT_FAMILIES,
-  effectCategoryForFamily,
-  familyCanHoldEffect,
   familyForCategory,
   familyForEffectCategory,
   familySlug,
@@ -126,30 +124,16 @@ describe('familyForEffectCategory', () => {
 })
 
 describe('which families can hold an effect', () => {
-  it('excludes BEAM, and by name rather than by the library being empty', () => {
-    // The backend refuses `beam` explicitly so a *script-registered* beam effect cannot mint a
-    // Beam effect template behind the rule — so this list must not be derived from whatever
-    // categories the shipped library happens to contain.
-    expect(TEMPLATE_EFFECT_FAMILIES).not.toContain('BEAM')
-    expect(familyCanHoldEffect('BEAM')).toBe(false)
-    expect(effectCategoryForFamily('BEAM')).toBeNull()
-  })
-
-  it('round-trips every effect-holding family through its category', () => {
-    for (const family of TEMPLATE_EFFECT_FAMILIES) {
-      const category = effectCategoryForFamily(family)
-      expect(category, family).not.toBeNull()
-      expect(familyForEffectCategory(category as string), family).toBe(family)
-    }
+  it('is all four, Beam included', () => {
+    expect([...TEMPLATE_EFFECT_FAMILIES].sort()).toEqual(['BEAM', 'COLOUR', 'INTENSITY', 'POSITION'])
+    expect(familyForEffectCategory('beam')).toBe('BEAM')
   })
 
   it('covers exactly the categories a speed master may be the default for', () => {
-    // The two lists coincide, and pinning them together is worth doing precisely because they
-    // coincide *for different reasons*: a usage excludes `controls` and `composite` for want of a
-    // tempo, while a template excludes `beam` for want of a column. If a beam category is ever
-    // added to the library, this is the assertion that should be argued with rather than deleted.
-    const templateCategories = TEMPLATE_EFFECT_FAMILIES.map(effectCategoryForFamily)
-    expect([...templateCategories].sort()).toEqual([...SPEED_MASTER_USAGES].sort())
+    // A usage excludes `controls` and `composite` for want of a tempo, and a template the same two
+    // for want of a family.
+    const usageFamilies = SPEED_MASTER_USAGES.map(familyForEffectCategory)
+    expect([...usageFamilies].sort()).toEqual([...TEMPLATE_EFFECT_FAMILIES].sort())
   })
 })
 
