@@ -33,12 +33,14 @@ import {
   withTemplateDraft,
   OPTIONAL_FIELDS,
   sameRequest,
+  selectionHeadCount,
   spreadHeadCount,
   updateRequestOf,
   type FxDraft,
   type FxScope,
   type OptionalField,
 } from './fxEditorModel'
+import { selectionFixtures, selectionItems, selectionUnits, spreadsOverMembers } from '@/lib/effectTargets'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -94,18 +96,20 @@ export function FxEditor({
   const connected = useIsDeskConnected()
   const master1Uuid = useMaster1Uuid()
 
+  const selection = selectionItems(effect)
   const targetFixtures = useMemo((): Fixture[] => {
+    if (selection != null) return selectionFixtures(selection, fixtures)
     if (effect.isGroupTarget) return groupMemberFixtures(fixtures, effect.targetKey)
     const fixture = fixtureByKey.get(effect.targetKey)
     return fixture ? [fixture] : []
-  }, [effect.isGroupTarget, effect.targetKey, fixtures, fixtureByKey])
+  }, [selection, effect.isGroupTarget, effect.targetKey, fixtures, fixtureByKey])
 
   const scope = useMemo((): FxScope => {
     const multiElement = targetFixtures.some((f) => (f.elements?.length ?? 0) > 1)
-    if (effect.isGroupTarget) return { heads: true, elementMode: multiElement, elementFilter: multiElement }
+    if (spreadsOverMembers(effect)) return { heads: true, elementMode: multiElement, elementFilter: multiElement }
     const heads = targetFixtures.some((f) => (f.elementGroupProperties?.length ?? 0) > 0)
     return { heads, elementMode: false, elementFilter: heads }
-  }, [effect.isGroupTarget, targetFixtures])
+  }, [effect, targetFixtures])
 
   const extendedChannels = useMemo(
     () => (entry?.category === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.properties ?? [])) : undefined),
@@ -210,15 +214,12 @@ export function FxEditor({
   const spreadScope = useMemo(
     (): FxScope => ({
       ...scope,
-      headCount: spreadHeadCount(
-        targetFixtures,
-        effect.isGroupTarget,
-        effect.propertyName,
-        draft.elementMode,
-        draft.elementFilter,
-      ),
+      headCount:
+        selection != null
+          ? selectionHeadCount(selectionUnits(selection, fixtures), effect.propertyName, draft.elementMode, draft.elementFilter)
+          : spreadHeadCount(targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter),
     }),
-    [scope, targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter],
+    [scope, selection, fixtures, targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter],
   )
 
   const readOnly = !connected

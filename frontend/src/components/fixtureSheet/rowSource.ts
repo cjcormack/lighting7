@@ -1,6 +1,7 @@
 import { isHeldBack } from '@/lib/heldBack'
 import type { ProgrammerKeyState } from '@/api/programmerWsApi'
 import type { ActiveEffect } from '@/store/fixtureFx'
+import { effectNames } from '@/lib/effectTargets'
 
 /**
  * Who is driving a sheet row (fixture-fx-sheets plan D4): the programmer grid's ownership
@@ -119,8 +120,8 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
 }
 
 /**
- * Every effect targeted at one of [targetKeys], or at a group the fixture is in — the one filter
- * the rows and the tray share.
+ * Every effect targeted at one of [targetKeys], or at a group the fixture is in — itself, or as one
+ * of a selection's items (effects plan D3) — the one filter the rows and the tray share.
  *
  * A row passes its head and, for a head of a multi-head fixture, the fixture too: the desk expands
  * an effect on the fixture onto its heads (`FxEngine`'s element coverage) while the effect keeps the
@@ -135,7 +136,7 @@ export function effectsReaching(
   if (!effects) return []
   const keys = new Set(targetKeys)
   const inGroup = new Set(groups)
-  return effects.filter((e) => (e.isGroupTarget ? inGroup.has(e.targetKey) : keys.has(e.targetKey)))
+  return effects.filter((e) => effectNames(e, keys, inGroup))
 }
 
 /**

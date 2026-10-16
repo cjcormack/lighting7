@@ -1018,16 +1018,66 @@ The low-level DMX fading system supports easing curves via `EasingCurve`:
 
 ## FX Targets
 
-Effects target fixture or element properties via `FxTarget` subclasses. Targets can reference either a single fixture or an entire group using `FxTargetRef`. The `applyValueToFixture` method accepts `GroupableFixture` (not `Fixture`), allowing it to work with both standalone fixtures and fixture elements:
+Effects target fixture or element properties via `FxTarget` subclasses. Targets can reference a single fixture, an entire group, or an ordered selection of them using `FxTargetRef`. The `applyValueToFixture` method accepts `GroupableFixture` (not `Fixture`), allowing it to work with both standalone fixtures and fixture elements:
 
 ### Target Reference Types
 
 ```kotlin
 sealed class FxTargetRef {
-    data class FixtureRef(val targetKey: String)  // Single fixture
-    data class GroupRef(val targetKey: String)    // Fixture group
+    data class FixtureRef(val targetKey: String)              // Single fixture (or cell)
+    data class GroupRef(val targetKey: String)                // Fixture group
+    data class SelectionRef(val selection: EffectTargetRef.Selection)  // Fixtures and groups, in order
 }
 ```
+
+### Over a selection (effects plan session 3)
+
+One effect may run over an **ordered list of fixtures and groups** (effects plan D3), spread across
+them in that order as a group's members are: a marquee in grid order, a busk selection in the order
+pressed. Before this a Local effect over loose fixtures ran them in unison, one instance each.
+
+- **The type is effect-only.** `models/TargetRef.kt` keeps `TargetRef` to fixture and group, and adds
+  `EffectTargetRef` beside it — `Single(TargetRef)` or `Selection(items)`. A value row, a layer's
+  targets and a binding hold a `TargetRef`, so they cannot hold a selection, and the write boundaries
+  that parse one refuse it by name (`validateCueChildren` for a cue's rows and layers,
+  `validateLookRows` for a Look's). An effect row — a cue's ad-hoc effect, a Look effect, an
+  `EffectEntry` — holds an `EffectTargetRef`.
+- **Stored as the pair it always was.** `targetType: "selection"` and a `targetKey` holding the list's
+  canonical JSON, `[{"key":"par-1","type":"fixture"},{"key":"Front wash","type":"group"}]` (keys
+  alphabetical, no whitespace, `EffectTargetRef.Selection.key`), so no column was added; sync carries it
+  from `formatVersion` 34. `EffectTargetRef.ofOrNull` refuses a key that is not a non-empty list of
+  fixtures and groups and reads a one-item list as its one target; a cue's or a Look's write stores the
+  pair in that canonical spelling (`EffectTargetRef.canonical`), so a hand-written row pairs with what
+  Record writes. `target_key` is `text` on both effect tables, since a selection outgrows 255.
+- **The expansion** (`FxEngine.buildSelectionExpansion`) flattens the list in order: a fixture or a cell
+  as itself, a group as its members in their own order. Each unit is a **member** where it has the
+  property, else its **heads** where its elements do, else skipped; a head reached twice counts once,
+  at its first place, and an item the rig has lost is skipped as a missing member is. Every unit a
+  member is `GROUP_MEMBERS`, spaced evenly in selection order (so `POSITION` is selection order too);
+  every unit its heads is `GROUP_ELEMENTS`, exactly as a group of multi-head fixtures, `elementMode`
+  choosing per fixture or flat; a mix is `GROUP_ELEMENTS` too, a member being a unit of one head, so
+  per fixture each multi-head fixture runs across its own heads beside the members. The members go through
+  `DistributionPlan.of` like a group's, so the spread's shape applies unchanged. The tick loops send a
+  selection down `processGroupEffect`.
+- **Coverage and reach.** `fixtureKeysCoveredBy` answers the heads in order;
+  `isPropertyCoveredByAny` also answers the units (the parents of heads it paints), as it does for a
+  group; `getIndirectEffectsForFixture` lists a selection effect for every fixture it names, which
+  `IndirectEffectDto.targetType` marks. `getEffectsForFixture` and `getEffectsForGroup` never see one:
+  the canonical key names neither. Another cue's stomp takes one off only where it asserts **every**
+  item on the property, as it takes a group's effect off only where it asserts the group.
+- **The doors.** `POST /fx/add` takes `targets` in place of `fixtureKey` — one item is that fixture or
+  group alone, several a selection, every item checked against the rig at once and a trigger or a
+  command refused for any item that has one. `EffectDto` reports `targetType` and, for a selection,
+  `targets`. Record writes a Local effect over a selection as one ad-hoc cue effect, or one Look effect,
+  with its `selection` target (`fxInstancesToCueChildren`, `writeLookEffects`); Include spawns it back as
+  one (`EffectSpawner.resolveTargetForCue`); a scoped Record or a masked Include reads it as in scope
+  only when every item is (`effectTargetInScope`) and by the mask group of its first item that resolves
+  (`Fixtures.referenceFixtureFor`). MCP's `create_cue` takes an ad-hoc effect's `targets` instead of
+  `targetType` and `targetKey`, and `clear_effects` naming targets clears a selection effect only when
+  every item it names is among them. A rename rewrites the keys inside a stored selection (`ai/RigKeyReferences.kt`), and a
+  venue Update's dead-reference report names each item (`venue/VenueUpdate.kt`).
+- **Not here**: a layer's deferred effects still fan one instance per target, and R3's split (`PUT
+  /fx/{id}` with `targets`) is the apply plan's session 2, built on this.
 
 ### Target Types
 
@@ -1129,7 +1179,7 @@ group.applyDimmerFx(fxEngine, effect("Pulse"), distribution = DistributionStrate
 
 ## Group Effect Processing
 
-When an `FxInstance` targets a group, the `FxEngine` expands it at processing time:
+When an `FxInstance` targets a group (or a selection, §"Over a selection"), the `FxEngine` expands it at processing time:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1415,6 +1465,11 @@ unread by the timing source that does not apply.
 The `distributionStrategy` field is optional. When provided, it sets the distribution strategy for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
 
 The `stepTiming` field is optional. When provided, it overrides the effect's default step timing mode. See [Step Timing](#step-timing).
+
+`targets` (`[{"type": "fixture" | "group", "key": "…"}]`) replaces `fixtureKey` for one effect over a
+selection, spread in that order ([Over a selection](#over-a-selection-effects-plan-session-3)): one
+item is that fixture or group alone, an unknown item is a 400 naming it, and a list none of whose
+heads has the property is refused. The distribution and element fields then apply as to a group.
 
 ### UpdateEffectRequest Format
 

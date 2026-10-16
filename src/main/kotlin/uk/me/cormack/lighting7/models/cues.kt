@@ -24,8 +24,12 @@ data class CueTargetDto(
     val key: String,
 ) {
     constructor(target: TargetRef) : this(target.discriminator, target.key)
+    constructor(target: EffectTargetRef) : this(target.discriminator, target.key)
 
     val target: TargetRef get() = TargetRef.of(type, key)
+
+    /** [target], or a selection (effects plan D3) — only an effect's target may be one. */
+    val effectTarget: EffectTargetRef get() = EffectTargetRef.of(type, key)
 }
 
 /**
@@ -193,7 +197,12 @@ data class CueAdHocEffectDto(
      */
     val uuid: String? = null,
 ) {
-    val target: TargetRef get() = TargetRef.of(targetType, targetKey)
+    /** A fixture, a group, or a selection of them (effects plan D3). */
+    val target: EffectTargetRef get() = EffectTargetRef.of(targetType, targetKey)
+
+    /** This effect with its target spelled as the desk stores it ([EffectTargetRef.canonical]). */
+    fun canonicalTarget(): CueAdHocEffectDto =
+        EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
 }
 
 // ─── Cue types ──────────────────────────────────────────────────────────
@@ -254,7 +263,9 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
 object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val cue = reference("cue_id", DaoCues)
     val targetType = varchar("target_type", 50)
-    val targetKey = varchar("target_key", 255)
+
+    /** `text`, not a `varchar(255)`: a selection's canonical key outgrows any fixed width. */
+    val targetKey = text("target_key")
     val effectType = varchar("effect_type", 255)
     val category = varchar("category", 50)
     val propertyName = varchar("property_name", 255).nullable()
@@ -304,8 +315,9 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var targetType by DaoCueAdHocEffects.targetType
     var targetKey by DaoCueAdHocEffects.targetKey
 
-    var target: TargetRef
-        get() = TargetRef.of(targetType, targetKey)
+    /** A fixture, a group, or a selection of them (effects plan D3). */
+    var target: EffectTargetRef
+        get() = EffectTargetRef.of(targetType, targetKey)
         set(value) {
             targetType = value.discriminator
             targetKey = value.key

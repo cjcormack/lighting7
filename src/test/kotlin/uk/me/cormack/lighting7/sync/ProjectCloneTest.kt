@@ -252,7 +252,7 @@ class ProjectCloneTest {
                 "…and must not still name the source project's master",
             )
 
-            val lookEffect = clone.looks.flatMap { it.effects.toList() }.single()
+            val lookEffect = clone.looks.flatMap { it.effects.toList() }.single { it.speedMasterUuid != null }
             assertEquals(
                 cloneMaster.uuid, lookEffect.speedMasterUuid,
                 "the look effect's reference must point at the clone's master",
@@ -262,7 +262,7 @@ class ProjectCloneTest {
                 "and so must the rate role — parity matters, they are set independently",
             )
 
-            val adHoc = clone.cues.flatMap { it.adHocEffects }.single()
+            val adHoc = clone.cues.flatMap { it.adHocEffects }.single { it.speedMasterUuid != null }
             assertEquals(
                 cloneMaster.uuid, adHoc.speedMasterUuid,
                 "the ad-hoc effect's column must point at the clone's master",

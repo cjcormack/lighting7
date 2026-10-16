@@ -186,7 +186,7 @@ class ProjectRoundTripTest {
         assertTrue(lookEffect.seconds, "a Look's effect keeps Seconds")
         val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
         assertTrue(templateEffect.seconds, "a palette's effect keeps Seconds")
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
         assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
 
         val format = canonicalDecode(
@@ -218,7 +218,7 @@ class ProjectRoundTripTest {
         assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.size, lookEffect.direction, lookEffect.nShot))
         val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
         assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.size, templateEffect.direction, templateEffect.nShot))
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
         assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.size, adHoc.direction, adHoc.nShot))
 
         val format = canonicalDecode(
@@ -253,7 +253,7 @@ class ProjectRoundTripTest {
             Shape(1.5, 3, 2, 2),
             Shape(templateEffect.spread, templateEffect.wings, templateEffect.blocks, templateEffect.groups),
         )
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
         assertEquals(Shape(0.25, 2, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
 
         val format = canonicalDecode(
@@ -269,6 +269,37 @@ class ProjectRoundTripTest {
         }
         assertTrue(lookText.size > 1, "the fixture has more than the one shaped Look")
         assertEquals(1, lookText.count { "\"wings\"" in it }, "only the shaped Look carries the keys")
+    }
+
+    /**
+     * An effect over a selection (effects plan session 3, formatVersion 34) exports with its
+     * `selection` target and the ordered list as its key, on both stored shapes that hold a target.
+     */
+    @Test
+    fun `an effect over a selection exports its ordered list and round-trips`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun <T> docs(folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                    .map { canonicalDecode(serializer, Files.readString(it)) }
+            }
+
+        val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+            .single { it.name == "Warm Amber" }.effects.single()
+        assertEquals("selection", lookEffect.targetType)
+        assertEquals("""[{"key":"hex-3","type":"fixture"},{"key":"front-wash","type":"group"}]""", lookEffect.targetKey)
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer())
+            .single { it.targetType == "selection" }
+        assertEquals("""[{"key":"front-wash","type":"group"},{"key":"hex-4","type":"fixture"}]""", adHoc.targetKey)
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 34, "a selection target syncs from v34")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 34, "and this desk reads it")
     }
 
     /**

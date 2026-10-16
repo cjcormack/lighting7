@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -750,17 +751,20 @@ class FxEngine(
     }
 
     /**
-     * Get all active effects that indirectly affect a fixture through group membership.
+     * Get all active effects that indirectly affect a fixture: through group membership, or as one
+     * of a selection's units (effects plan D3).
      *
      * @param fixtureKey The fixture key
-     * @return List of group effect instances whose groups contain this fixture
+     * @return Group effects whose groups contain this fixture, and selection effects that reach it
      */
     fun getIndirectEffectsForFixture(fixtureKey: String): List<FxInstance> {
         val groupNames = fixtures.groupsForFixture(fixtureKey).toSet()
-        if (groupNames.isEmpty()) return emptyList()
-
         return activeEffects.values.filter {
-            it.isGroupEffect && it.target.targetKey in groupNames
+            when (val ref = it.target.targetRef) {
+                is FxTargetRef.GroupRef -> ref.targetKey in groupNames
+                is FxTargetRef.SelectionRef -> fixtureKey in selectionUnitKeys(ref, it.id)
+                is FxTargetRef.FixtureRef -> false
+            }
         }
     }
 
@@ -1068,6 +1072,27 @@ class FxEngine(
     }
 
     /**
+     * Remove every effect over a selection all of whose items are among [targets]. A selection
+     * naming anything else keeps running, as a group's effect does when only some members are named.
+     *
+     * @return Number of effects removed
+     */
+    fun removeSelectionEffectsWithin(targets: Collection<TargetRef>): Int {
+        val named = targets.toSet()
+        val toRemove = activeEffects.values.filter { effect ->
+            val items = (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items ?: return@filter false
+            items.all { it in named }
+        }
+        toRemove.forEach { activeEffects.remove(it.id) }
+        if (toRemove.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            resetUncoveredProperties(toRemove)
+            emitStateUpdate()
+        }
+        return toRemove.size
+    }
+
+    /**
      * A programmer layer's *Detach*, effect half: every instance [layerId] spawned loses its layer
      * key and its [FxInstance.source], so it is a Local effect ([FxInstance.isLocalEffect]) that
      * keeps its id, phase and band priority and that no recook will retract. A spent N-shot is
@@ -1150,7 +1175,11 @@ class FxEngine(
         val toRemove = activeEffects.values.filter { effect ->
             val owner = effect.cueId ?: return@filter false
             if (owner == stompingCueId) return@filter false
-            PropertyKey(effect.target.targetKey, effect.target.propertyName) in overlap
+            val property = effect.target.propertyName
+            // A selection goes only where the cue asserts every item, as a group goes only where the
+            // cue asserts the group: one member asserted leaves the rest running.
+            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.all { PropertyKey(it.key, property) in overlap }
+                ?: (PropertyKey(effect.target.targetKey, property) in overlap)
         }
         if (toRemove.isEmpty()) return 0
         for (effect in toRemove) activeEffects.remove(effect.id)
@@ -1241,7 +1270,7 @@ class FxEngine(
             val tick = frame.tick(effect.speedMasterSlot)
             try {
                 beginNShotPass(effect)
-                if (effect.isGroupEffect) {
+                if (effect.spreadsOverMembers) {
                     processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
                 } else {
                     processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
@@ -1368,7 +1397,7 @@ class FxEngine(
 
             try {
                 beginNShotPass(effect)
-                if (effect.isGroupEffect) {
+                if (effect.spreadsOverMembers) {
                     processGroupEffect(
                         syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
                     )
@@ -1681,7 +1710,7 @@ class FxEngine(
     }
 
     /**
-     * Process an effect targeting a group - expands to all members with distribution.
+     * Process an effect targeting a group or a selection - expands to all members with distribution.
      *
      * If members have the target property directly, applies the effect to each member
      * using the distribution strategy (existing behaviour).
@@ -1918,6 +1947,10 @@ class FxEngine(
             if (filter == ElementFilter.ALL) keys
             else keys.filterIndexed { index, _ -> filter.includes(index, keys.size) }
 
+        (effect.target.targetRef as? FxTargetRef.SelectionRef)?.let { ref ->
+            return buildSelectionExpansion(effect, ref, version, filter, ::applyFilter)
+        }
+
         if (effect.isGroupEffect) {
             val groupName = effect.target.targetKey
             val group = try {
@@ -2036,6 +2069,97 @@ class FxEngine(
     }
 
     /**
+     * A selection's expansion (effects plan §3.4): its items flattened in order — a fixture or a
+     * cell as itself, a group as its members in their own order — and each of those units either a
+     * member (it has the property) or its heads (its elements do). A head reached twice counts once,
+     * at its first place, and an item that resolves to nothing is skipped.
+     *
+     * Every unit a member is [FxTargetExpansion.Kind.GROUP_MEMBERS], spaced evenly in selection
+     * order. Every unit's heads is [FxTargetExpansion.Kind.GROUP_ELEMENTS], exactly as a group of
+     * multi-head fixtures. A mix of the two is laid out the same way, a member being one unit of one
+     * head: per fixture, each multi-head fixture runs across its own heads beside it.
+     */
+    private fun buildSelectionExpansion(
+        effect: FxInstance,
+        ref: FxTargetRef.SelectionRef,
+        version: Long,
+        filter: ElementFilter,
+        applyFilter: (List<String>) -> List<String>,
+    ): FxTargetExpansion {
+        val target = effect.target
+        val seen = HashSet<String>()
+        val perUnit = ArrayList<List<String>>()
+        var anyElements = false
+        for (unitKey in selectionUnitKeys(ref, effect.id)) {
+            val unit = try {
+                fixtures.untypedGroupableFixture(unitKey)
+            } catch (_: Exception) { continue }
+            if (target.fixtureHasProperty(unit)) {
+                if (seen.add(unitKey)) perUnit.add(listOf(unitKey))
+                continue
+            }
+            if (unit !is MultiElementFixture<*>) continue
+            val heads = unit.elements.filter { target.fixtureHasProperty(it) }.map { it.elementKey }.filter { seen.add(it) }
+            if (heads.isNotEmpty()) {
+                perUnit.add(heads)
+                anyElements = true
+            }
+        }
+        if (perUnit.isEmpty()) return FxTargetExpansion.none(version, filter)
+
+        val coverage = perUnit.flatten()
+        if (!anyElements) {
+            val last = (coverage.size - 1).coerceAtLeast(1)
+            return FxTargetExpansion(
+                structureVersion = version,
+                elementFilter = filter,
+                kind = FxTargetExpansion.Kind.GROUP_MEMBERS,
+                coverageKeys = coverage,
+                flat = emptyList(),
+                perFixture = emptyList(),
+                members = coverage.mapIndexed { i, key ->
+                    MemberSlot(key, i, if (coverage.size > 1) i.toDouble() / last else 0.5)
+                },
+            )
+        }
+        val flat = applyFilter(coverage)
+        return FxTargetExpansion(
+            structureVersion = version,
+            elementFilter = filter,
+            kind = FxTargetExpansion.Kind.GROUP_ELEMENTS,
+            coverageKeys = coverage,
+            flat = flat,
+            perFixture = perUnit.map(applyFilter),
+            members = emptyList(),
+        )
+    }
+
+    /**
+     * A selection's units in order, before any property check: each fixture or cell it names, and
+     * each member of each group it names. Repeats are left for the caller, which dedupes by head.
+     */
+    private fun selectionUnitKeys(ref: FxTargetRef.SelectionRef, effectId: Long): List<String> {
+        val keys = ArrayList<String>()
+        for (item in ref.items) {
+            when (item) {
+                is TargetRef.Fixture -> keys.add(item.key)
+                is TargetRef.Group -> {
+                    val group = try {
+                        fixtures.untypedGroup(item.key)
+                    } catch (e: Exception) {
+                        throttle.log("missing-group-${item.key}", e) {
+                            "FX engine: group '${item.key}' not found for selection effect $effectId"
+                        }
+                        continue
+                    }
+                    group.allMembers.mapTo(keys) { it.key }
+                }
+            }
+        }
+        return keys
+    }
+
+    /**
      * Check if any effect in the list covers a (fixtureKey, propertyName) pair.
      *
      * Handles direct fixture effects, group effects whose members include the
@@ -2056,7 +2180,12 @@ class FxEngine(
         for (effect in remainingEffects) {
             if (effect.target.propertyName != propertyName) continue
 
-            if (!effect.isGroupEffect) {
+            val selection = effect.target.targetRef as? FxTargetRef.SelectionRef
+            if (selection != null) {
+                // The heads it paints, and — as for a group — the parents of heads it paints.
+                if (fixtureKey in resolveEffectFixtureKeys(effect)) return true
+                if (fixtureKey in selectionUnitKeys(selection, effect.id)) return true
+            } else if (!effect.isGroupEffect) {
                 if (effect.target.targetKey == fixtureKey) return true
 
                 // Check multi-element: parent effect covers element keys

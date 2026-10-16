@@ -66,6 +66,7 @@ import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.VenueLinks
 import uk.me.cormack.lighting7.models.decodeFacet
@@ -626,6 +627,11 @@ class VenueUpdate(private val state: State) {
         if (goneFixtures.isEmpty() && goneGroups.isEmpty()) return emptyList()
         val users = LinkedHashMap<Pair<String, String>, LinkedHashSet<UsedByDto>>()
         fun note(type: String, key: String, user: UsedByDto) {
+            // An effect over a selection (effects plan D3) names each of its items.
+            if (type == EffectTargetRef.Selection.TYPE) {
+                EffectTargetRef.Selection.parseKey(key)?.forEach { note(it.discriminator, it.key, user) }
+                return
+            }
             val target = when (type) {
                 TargetRef.Fixture.TYPE -> goneFixtures.firstOrNull { key == it || key.startsWith("$it.") }?.let { "FIXTURE" to it }
                 TargetRef.Group.TYPE -> key.takeIf { it in goneGroups }?.let { "GROUP" to it }

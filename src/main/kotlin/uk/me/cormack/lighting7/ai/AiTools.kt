@@ -502,17 +502,17 @@ class AiTools(private val state: State) {
         }
 
         var totalRemoved = 0
-        for (target in targets) {
+        val refs = targets.mapNotNull { target ->
             val obj = target.jsonObject
-            val ref = TargetRef.ofOrNull(
-                obj["type"]!!.jsonPrimitive.content,
-                obj["key"]!!.jsonPrimitive.content,
-            ) ?: continue
+            TargetRef.ofOrNull(obj["type"]!!.jsonPrimitive.content, obj["key"]!!.jsonPrimitive.content)
+        }
+        for (ref in refs) {
             totalRemoved += when (ref) {
                 is TargetRef.Group -> state.show.fxEngine.removeEffectsForGroup(ref.key)
                 is TargetRef.Fixture -> state.show.fxEngine.removeEffectsForFixture(ref.key)
             }
         }
+        totalRemoved += state.show.fxEngine.removeSelectionEffectsWithin(refs)
 
         return ToolExecutionResult(
             success = true,
@@ -576,6 +576,15 @@ class AiTools(private val state: State) {
                             put("targetKey", effect.target.targetKey)
                             put("propertyName", effect.target.propertyName)
                             put("isGroupTarget", effect.isGroupEffect)
+                            put("targetType", effect.target.targetRef.discriminator)
+                            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.let { ref ->
+                                put("targets", buildJsonArray {
+                                    for (item in ref.items) addJsonObject {
+                                        put("type", item.discriminator)
+                                        put("key", item.key)
+                                    }
+                                })
+                            }
                             put("beatDivision", effect.timing.beatDivision)
                             // D7: the division is seconds and no master is followed.
                             if (effect.onSeconds) put("seconds", true)
@@ -2110,9 +2119,10 @@ class AiTools(private val state: State) {
     private fun parseAdHocEffectFromJson(obj: JsonObject, at: String): CueAdHocEffectDto {
         val timing = parseEffectTiming(obj, at)
         val dynamics = parseEffectDynamics(obj, at)
+        val target = parseAdHocEffectTarget(obj, at)
         return CueAdHocEffectDto(
-            targetType = obj.requiredString("targetType", at),
-            targetKey = obj.requiredString("targetKey", at),
+            targetType = target.discriminator,
+            targetKey = target.key,
             effectType = obj.requiredString("effectType", at),
             category = obj.requiredString("category", at),
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
@@ -2273,6 +2283,23 @@ class AiTools(private val state: State) {
         TriggerIndex.EMPTY.check(refs)
         CommandIndex.EMPTY.check(refs)
         return effects
+    }
+
+    /** An ad-hoc effect's `targets` list (effects plan D3), else its `targetType` and `targetKey`. */
+    private fun parseAdHocEffectTarget(obj: JsonObject, at: String): EffectTargetRef {
+        val list = obj["targets"] as? JsonArray
+            ?: return EffectTargetRef.ofOrNull(obj.requiredString("targetType", at), obj.requiredString("targetKey", at))
+                ?: throw IllegalArgumentException("$at: targetType must be 'fixture' or 'group' (or send targets)")
+        if (obj["targetType"] != null || obj["targetKey"] != null) {
+            throw IllegalArgumentException("$at: send targets, or targetType and targetKey — not both")
+        }
+        if (list.isEmpty()) throw IllegalArgumentException("$at: targets names no fixture or group")
+        val refs = list.mapIndexed { i, element ->
+            val item = element as? JsonObject ?: throw IllegalArgumentException("$at.targets[$i] must be an object")
+            TargetRef.ofOrNull(item.requiredString("type", "$at.targets[$i]"), item.requiredString("key", "$at.targets[$i]"))
+                ?: throw IllegalArgumentException("$at.targets[$i]: type must be 'fixture' or 'group'")
+        }
+        return EffectTargetRef.of(refs)
     }
 
     /** [field] of an effect at [at], refused by name when it is absent, null or blank. */

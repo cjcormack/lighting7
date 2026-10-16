@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge'
-import { Layers, LayoutGrid } from 'lucide-react'
+import { Layers, LayoutGrid, ListOrdered } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   EFFECT_CATEGORY_INFO,
@@ -14,12 +14,13 @@ import { useColourTemplates, type ColourTemplates } from './FxColourTemplates'
 import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 import { isOnSeconds } from '@/lib/effectTiming'
+import { effectTargetLabel, parseSelectionKey } from '@/lib/effectTargets'
 
 export interface EffectSummaryProps {
   /** Normalised effect data */
   effect: EffectSummaryData
-  /** Optional target indicator (fixture/group icon + key) */
-  target?: { type: 'group' | 'fixture'; key: string } | null
+  /** Optional target indicator (fixture/group icon + key; a selection's items, effects plan D3) */
+  target?: { type: 'group' | 'fixture' | 'selection'; key: string } | null
   /** Optional badge text (e.g. "via GroupName", element mode label) */
   badge?: string | null
   /** Running state: false dims the item */
@@ -142,7 +143,19 @@ export function EffectSummary({
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function TargetIndicator({ target }: { target: { type: 'group' | 'fixture'; key: string } }) {
+function TargetIndicator({ target }: { target: { type: 'group' | 'fixture' | 'selection'; key: string } }) {
+  if (target.type === 'selection') {
+    const items = parseSelectionKey(target.key)
+    return (
+      <span
+        className="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0"
+        title={`Over ${items.map((t) => t.key).join(', ')}, in that order`}
+      >
+        <ListOrdered className="size-3" />
+        {effectTargetLabel({ targetKey: target.key, isGroupTarget: false, targetType: 'selection', targets: items })}
+      </span>
+    )
+  }
   return (
     <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0">
       {target.type === 'group' ? (
