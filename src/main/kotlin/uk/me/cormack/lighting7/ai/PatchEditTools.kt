@@ -30,6 +30,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.reorderGroupMembers
 import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.routes.deleteOwnUniverse
 import uk.me.cormack.lighting7.routes.republishCueIfLive
@@ -385,7 +386,12 @@ internal class PatchEditTools(private val state: State) {
         val members = row.members
         if (members != null) {
             byKey.filterKeys { it !in members }.values.forEach { it.delete() }
-            members.forEachIndexed { i, key -> byKey[key]?.let { it.sortOrder = i } ?: join(key, i) }
+            // New members join after every place taken — a hidden venue fixture's included — and
+            // [reorderGroupMembers] then puts the named ones in order in the places they hold. A
+            // place written here first could tie a hidden fixture's and move it.
+            var next = (group.members.maxOfOrNull { it.sortOrder } ?: -1) + 1
+            members.filter { it !in byKey }.forEach { join(it, next++) }
+            reorderGroupMembers(group, members.map { patchesByKey.getValue(it).id.value })
             return members
         }
         row.remove.forEach { byKey[it]?.delete() }

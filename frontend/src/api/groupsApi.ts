@@ -22,6 +22,12 @@ export interface GroupSummary {
    * answer, given server-side, or it drifts.
    */
   compatibleLookIds: number[]
+  /**
+   * Every member's key in the group's order (`sort_order`, venue-visit plan S7): the order its
+   * effects and a spread over it run in, which the Groups list draws member rows in. Absent from
+   * an older desk.
+   */
+  memberKeys?: string[]
 }
 
 export interface GroupMember {
@@ -37,6 +43,13 @@ export interface GroupMember {
 
 export interface GroupDetail extends GroupSummary {
   members: GroupMember[]
+  /**
+   * Each strategy's step per member, indexed by the member's `index`: 1 comes round first, and
+   * members sharing an offset share a step (a pair under `CENTER_OUT`). Computed by the desk's
+   * `DistributionStrategy`, so the group sheet shows the order without mirroring a formula. A
+   * function of the group's size alone. Absent from an older desk.
+   */
+  distributionSteps?: Partial<Record<DistributionStrategy, number[]>>
 }
 
 export type BlendMode = 'OVERRIDE' | 'ADDITIVE' | 'MULTIPLY' | 'MAX' | 'MIN'

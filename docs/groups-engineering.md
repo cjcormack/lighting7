@@ -182,6 +182,39 @@ group.applyDimmerFx(
 )
 ```
 
+## Member order
+
+A patched group's order is `fixture_group_members.sort_order` (venue-visit plan S7). The loader
+builds each group's members in that order, less any venue patch the show hides, and numbers them
+`index` 0…n−1 with `normalizedPosition = i / (n − 1)`. Everything above reads only those two, so the
+stored order is the order a group's effects run in under every strategy. `POSITIONAL` included: it is
+the list position, not the stage. A **spread** whose one target is a group runs in the group's order
+too (cells in element order) — a busk group tile, and a list selection that is exactly one group row
+with every member listed and none filtered out, which the client sends as the group
+(`wholeGroupOf`). Any other selection spreads in rig order (`state/BuskRigOrder.kt`),
+which places a fixture at its first appearance on the rig, so an earlier group or tile holding it can
+put it anywhere (`routes/programmerSpread.kt`).
+
+**Writing it.** The patch-group PUT's `memberOrder` (patch ids) and the `edit_groups` tool's
+`members` both go through `reorderGroupMembers` (`models/fixtureGroups.kt`). The members named fill,
+in the order given, the places the members named held. A member not named **keeps its place**, and
+every member is renumbered `0…n−1`. That is what lets a view send only what it shows: no view of a
+show lists a venue patch the show hides, and the Groups views leave out an infrastructure head. Ties
+in an old stored order break by row id, the order members were added in. A venue's group seen from a
+show is the venue's to order (409 `VENUE_OWNED`, like every write to it).
+
+**Reading it.** `GET /groups` answers each group's `memberKeys` in order, and the Groups list draws
+member rows in that order with their place. `GET /groups/{name}` adds `distributionSteps`, each
+strategy's step per member by `index` (`DistributionStrategy.stepsBySize`; `steps` is a member's place
+in the order the strategy brings members round, 1 first, shared offsets sharing a step). It is a
+function of the group's size alone, so the group sheet shows it without mirroring a formula, and
+moves with an optimistic reorder. `RANDOM` is seed 0, the seed a group effect gets by name. The
+group sheet's *Members* view is where a group is reordered from the Groups views. It is a numbered
+list in that order, dragged, with each member's step under the strategy *Runs as* picks (the group's
+own distribution first). A venue's group in a show, and a venue's rig for an operator, are read-only
+and say why. Patches' *Edit Group* sheet does the same (lighting7 `frontend/CLAUDE.md` §"The fixture
+sheet").
+
 ## Group FX Extensions
 
 Extension functions provide type-safe effect application. Each function creates a **single group-level FxInstance** that the engine expands to group members at processing time:
@@ -449,8 +482,8 @@ This is simpler than creating a named group via `addElements()` when you just ne
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/rest/groups` | List all groups |
-| GET | `/api/rest/groups/{name}` | Get group details |
+| GET | `/api/rest/groups` | List all groups, each with its `memberKeys` in order |
+| GET | `/api/rest/groups/{name}` | Get group details, with each strategy's `distributionSteps` |
 | GET | `/api/rest/groups/{name}/properties` | Get aggregated property descriptors |
 | GET | `/api/rest/groups/{name}/fx` | Get active effects for group |
 | POST | `/api/rest/groups/{name}/fx` | Apply effect to group |

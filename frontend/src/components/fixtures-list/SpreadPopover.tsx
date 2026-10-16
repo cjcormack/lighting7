@@ -28,6 +28,7 @@ import {
 import { applyPlannedWrite, useCellWriters } from './useCellWriters'
 import type { ColumnKey } from './columns'
 import type { AttributeFamily } from '../../lib/attributeFamily'
+import type { LocateTarget } from '../../store/locate'
 
 /** Columns a spread can drive: the template vocabulary's, plus Speed as raw bytes (D15). Gobo and Prism build no plan. */
 const SPREAD_COLUMNS: ColumnKey[] = ['dimmer', 'colour', 'position', 'zoom', 'focus', 'iris', 'strobe', 'speed']
@@ -53,11 +54,15 @@ export function isIntentString(value: string): boolean {
  * what the **raw** arm walks (Speed); a desk-resolved spread is re-sorted by the desk into **rig
  * order** (`state/BuskRigOrder.kt` — the rig's rows and tiles, a group in member order, cells in
  * element order), which is the order every spread on the busk tab already runs in, and *Order:
- * Reverse* covers the other direction on both.
+ * Reverse* covers the other direction on both. A column that is one whole group (`group`) is sent
+ * as the group, which the desk runs in the group's own member order instead (venue-visit plan S7).
  */
 export interface SpreadColumn {
   col: ColumnKey
   targets: readonly WriteTarget[]
+  /** The column's heads are one whole group's (`wholeGroupOf`): a desk spread names the group, so it
+   *  runs in the group's member order (venue-visit plan S7). */
+  group?: string
 }
 
 /**
@@ -66,8 +71,8 @@ export interface SpreadColumn {
  * like the programmer's; this is the *rows-only* arm those two keep and the programmer does not,
  * where the column is still the operator's to choose in the panel.
  */
-export function spreadColumnsForTargets(targets: readonly WriteTarget[]): SpreadColumn[] {
-  return SPREAD_COLUMNS.map((col) => ({ col, targets }))
+export function spreadColumnsForTargets(targets: readonly WriteTarget[], group?: string): SpreadColumn[] {
+  return SPREAD_COLUMNS.map((col) => ({ col, targets, group }))
 }
 
 interface SpreadPopoverProps {
@@ -184,13 +189,19 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         }
       }
       const first = intentColumns[0]
-      const targets = spreadTargetsOf(heads)
+      // One whole group in every column is a spread over that group, which the desk runs in its
+      // member order; otherwise each head by its own key, in rig order.
+      const group = first.group
+      const each = spreadTargetsOf(heads)
+      const targets: LocateTarget[] =
+        group != null && intentColumns.every((c) => c.group === group) ? [{ type: 'group', key: group }] : each
       const plan: IntentSpreadPlan = {
         kind: 'intent',
         col: 'intent',
         label: intentColumns.map(({ col }) => labels.get(col) ?? col).join(' · '),
         targets,
-        count: targets.length,
+        // The heads it stands for, the group's members included — what Spread needs two of.
+        count: each.length,
         cellCount: spreadCellCount(heads),
         families: targetFamilies(heads),
         offered: marqueeFamilies,

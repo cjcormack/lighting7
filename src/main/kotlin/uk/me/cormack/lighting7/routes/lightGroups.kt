@@ -178,7 +178,12 @@ data class GroupSummaryDto(
     val capabilities: List<String>,
     val symmetricMode: String,
     val defaultDistribution: String,
-    val compatibleLookIds: List<Int> = emptyList()
+    val compatibleLookIds: List<Int> = emptyList(),
+    /**
+     * Every member's key in the group's order (`sort_order`, venue-visit plan S7) — the order its
+     * effects and a spread over it run in, which the Groups list draws its member rows in.
+     */
+    val memberKeys: List<String> = emptyList(),
 )
 
 @Serializable
@@ -201,7 +206,13 @@ data class GroupDetailDto(
     val symmetricMode: String,
     val defaultDistribution: String,
     val members: List<GroupMemberDto>,
-    val compatibleLookIds: List<Int> = emptyList()
+    val compatibleLookIds: List<Int> = emptyList(),
+    /**
+     * Each strategy's step per member, by `index` (`DistributionStrategy.stepsBySize`): the order
+     * the group sheet shows effects and a spread running in under that strategy (venue-visit plan S7)
+     * — over the members; an effect expanded to multi-head members' cells distributes over the cells.
+     */
+    val distributionSteps: Map<String, List<Int>> = emptyMap(),
 )
 
 @Serializable
@@ -293,7 +304,8 @@ internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = em
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
         defaultDistribution = metadata.defaultDistributionName,
-        compatibleLookIds = compatibleLookIds
+        compatibleLookIds = compatibleLookIds,
+        memberKeys = allMembers.map { it.key },
     )
 }
 
@@ -316,7 +328,8 @@ private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyLi
                 tags = member.metadata.tags.toList()
             )
         },
-        compatibleLookIds = compatibleLookIds
+        compatibleLookIds = compatibleLookIds,
+        distributionSteps = DistributionStrategy.stepsBySize(memberCount),
     )
 }
 

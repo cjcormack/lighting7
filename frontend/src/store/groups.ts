@@ -1,6 +1,8 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
+import { placeInOrder } from "../lib/memberOrder"
+import type { PatchGroupDetail } from "../api/patchApi"
 import {
   GroupSummary,
   GroupDetail,
@@ -45,6 +47,48 @@ export const groupsApi = restApi.injectEndpoints({
     // The distribution-strategy vocabulary is not fetched: `DistributionStrategy` is a closed
     // union in `api/groupsApi.ts` and the pickers render it directly, so the route's list would
     // only be a second spelling of the same set.
+
+    /**
+     * Reorder a group's members from the Groups views (venue-visit plan S7): the patch-group PUT's
+     * `memberOrder`, sending only the members the view shows — the desk keeps every other member in
+     * its place, and so does the optimistic update here ([placeInOrder]), which moves the runtime
+     * group's members (renumbering `index`, which `distributionSteps` is read by) and the list's
+     * `memberKeys` so a drop does not snap back. A failure rolls both back; the errorToastMiddleware
+     * reports it. The PUT reloads the rig before it answers, so the tags it invalidates refetch the
+     * desk's own order.
+     */
+    reorderGroupMembers: build.mutation<
+      PatchGroupDetail,
+      { projectId: number; groupId: number; groupName: string; memberOrder: number[]; keys: string[] }
+    >({
+      query: ({ projectId, groupId, memberOrder }) => ({
+        url: `projects/${projectId}/patch-groups/${groupId}`,
+        method: 'PUT',
+        body: { memberOrder },
+      }),
+      async onQueryStarted({ groupName, keys }, { dispatch, queryFulfilled }) {
+        const detail = dispatch(
+          groupsApi.util.updateQueryData('group', groupName, (draft) => {
+            const moved = placeInOrder(draft.members, keys, (m) => m.fixtureKey)
+            const last = moved.length - 1
+            draft.members = moved.map((m, i) => ({ ...m, index: i, normalizedPosition: last > 0 ? i / last : 0.5 }))
+          }),
+        )
+        const list = dispatch(
+          groupsApi.util.updateQueryData('groupList', undefined, (draft) => {
+            const group = draft.find((g) => g.name === groupName)
+            if (group?.memberKeys) group.memberKeys = placeInOrder(group.memberKeys, keys, (k) => k)
+          }),
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          detail.undo()
+          list.undo()
+        }
+      },
+      invalidatesTags: ['Patch', 'Fixture', 'GroupList'],
+    }),
 
     // Get active effects for a group
     groupActiveEffects: build.query<GroupActiveEffect[], string>({
@@ -121,4 +165,5 @@ export const {
   usePauseGroupFxMutation,
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,
+  useReorderGroupMembersMutation,
 } = groupsApi
