@@ -472,7 +472,7 @@ class ProjectRoundTripTest {
         val banks = page.columns.flatMap { it.banks }
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(listOf("WRAP", "COLUMN", "WRAP", "WRAP"), banks.map { it.flow })
-        assertEquals(7, banks.sumOf { it.pads.size })
+        assertEquals(8, banks.sumOf { it.pads.size })
         val keys = banks.first()
         assertTrue(keys.solo)
         assertEquals(listOf("templateUuid", "lookUuid", "cueUuid"), keys.pads.map { pad ->
@@ -847,7 +847,7 @@ class ProjectRoundTripTest {
             canonicalDecode(BuskPageJson.serializer(), Files.readString(stream.findFirst().get()))
         }
         val banks = page.columns.flatMap { it.banks }
-        assertEquals(6, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
+        assertEquals(7, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(0, banks.first { it.name == "keys" }.pads.count { it.lookUuid != null }, "the dropped pad was the keys bank's Look")
         assertEquals(2, banks.first { it.name == "keys" }.pads.size)

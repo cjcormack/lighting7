@@ -179,10 +179,11 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
         val showId = seedVenueReadyShow(state)
         val showOne = stackId(showId, "show-1")
         val showTwo = stackId(showId, "show-2")
+        // The rich fixture already places "open" in both stacks; a second place in show-2 makes it
+        // one that stack holds twice.
         transaction(state.database) {
             val open = DaoCue.find { (DaoCues.project eq showId) and (DaoCues.name eq "open") }.single()
-            DaoCueStackEntry.new { stack = DaoCueStack[showTwo]; cue = open; ordinal = 2.0; cueNumber = "20" }
-            DaoCueStackEntry.new { stack = DaoCueStack[showTwo]; cue = open; ordinal = 3.0 }
+            DaoCueStackEntry.new { stack = DaoCueStack[showTwo]; cue = open; ordinal = 5.0; cueNumber = "20" }
         }
         val target = ok("create_project", """{"name":"Copy target"}""")["projectId"]!!.jsonPrimitive.content.toInt()
 

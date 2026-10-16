@@ -176,7 +176,7 @@ class ProjectImporterReplaceTest {
             // point at the re-imported records rather than the swept ones.
             assertEquals(listOf("act-one"), project.buskPages.map { it.name }, "one page, not a duplicate and not an orphan")
             val pads = project.buskPages.single().columns.flatMap { it.banks }.flatMap { it.pads }
-            assertEquals(7, pads.size)
+            assertEquals(8, pads.size)
             assertTrue(pads.all { it.kind != null }, "every pad still names a live record")
         }
     }
