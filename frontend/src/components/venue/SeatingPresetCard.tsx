@@ -30,7 +30,7 @@ const VIEWS_STRANDED = 'STAGE_ELEMENT_IN_USE'
  * copy of any preset at the show's pinned version. The venue's Fixed blocks (the balcony) come with
  * the venue and are not listed. Seat views in the stalls move to the new copy; one whose seat the new
  * preset lacks is named, and the replace goes ahead only when asked again. Both roles: it changes only
- * the show. Drawn on Project Settings' Stage tab, for a show on a venue only.
+ * the show. Drawn on Project Settings' Regions tab, for a show on a venue only.
  */
 export function SeatingPresetCard({ projectId, venue }: { projectId: number; venue: ProjectVenue }) {
   const { data, isLoading: loading, error: readError } = useSeatingPresetsQuery(projectId)

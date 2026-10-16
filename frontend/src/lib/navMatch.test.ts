@@ -13,7 +13,7 @@ import { mostSpecificActiveId, pathHasSegment } from './navMatch'
  * that reasoning. These assertions are what make adding it safe.
  */
 describe('mostSpecificActiveId', () => {
-  const nav = navItems.map(({ id, pathMatch }) => ({ id, pathMatch }))
+  const nav = navItems.map(({ id, pathMatch, pathExact }) => ({ id, pathMatch, pathExact }))
 
   it('keeps the programmer and the show apart', () => {
     expect(mostSpecificActiveId(nav, '/projects/7/programmer')).toBe('programmer')
@@ -48,7 +48,13 @@ describe('mostSpecificActiveId', () => {
   })
 
   it('returns null when nothing matches', () => {
-    expect(mostSpecificActiveId(nav, '/projects')).toBeNull()
+    expect(mostSpecificActiveId(nav, '/projects/7')).toBeNull()
+  })
+
+  it('matches an exact item on its own path only', () => {
+    // The Projects row: `/projects` begins every project's path.
+    expect(mostSpecificActiveId(nav, '/projects')).toBe('projects')
+    expect(mostSpecificActiveId([{ id: 'a', pathMatch: '/projects', pathExact: true }], '/projects/7/looks')).toBeNull()
   })
 })
 

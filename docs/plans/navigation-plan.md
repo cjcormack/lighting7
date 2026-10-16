@@ -332,7 +332,7 @@ and is hidden in a venue like the rest of Library.
 
 Each session is one PR (P1). All are frontend only (P5).
 
-### Session 1 — Sections and the registry
+### Session 1 — Sections and the registry — done, `a5b6c8c0`
 
 - §3.1: `NavSection` and its headings, the regrouping, the Projects row, the *Regions* tab label,
   *FX Library* becomes *Effects*, and `commandLabel`.
