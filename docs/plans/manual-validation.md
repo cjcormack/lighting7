@@ -155,7 +155,9 @@ desks on this build:
    two, in the **same** order, and a third sync on each changes nothing.
 5. **A drag is one file.** Drag a cue to another place in a stack on A and sync: the commit changes
    one `cueStackEntries/` file.
-6. **Clean up.** Remove the two test cues (or drop the scratch copy).
+6. **Clean up.** Drop the scratch copy. Since R1.4 *Remove from stack* leaves a cue loose and no UI
+   deletes one yet, so on a real show delete the two test cues with `DELETE /cues/{id}?force=true`
+   (without `force` a cue still in a stack is refused, `CUE_IN_USE`).
 
 ---
 
@@ -268,11 +270,10 @@ of two stacks stepped off the cue, or read the two rings on a desk screen.
 session 3 (sync `formatVersion` 32) the archive wrote a cue from one entry only, so a push dropped the
 second and a pull deleted it; on a build with session 3 a repo may stay attached:
 
-1. **One cue in two stacks.** No route puts a cue in a second stack until session 4 lets a cue be
-   shared, so add its second entry directly: note the cue's id and the second stack's id
-   (`GET /api/rest/projects/{id}/cue-stacks`), then
-   `sqlite3 <desk db> "INSERT INTO cue_stack_entries (stack_id, cue_id, kind, ordinal, cue_number_auto, auto_advance, uuid) VALUES (<stack>, <cue>, 'CUE', 99, 1, 0, randomblob(16))"`
-   and reload the Show view: the cue is listed in both stacks.
+1. **One cue in two stacks.** On a card of the first stack, *Add to stack…* → the second (R1.4 shares
+   a cue from the Show view): the cue is listed in both stacks, each card showing *in 2 stacks*. This
+   step is also step 1 of [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4), so the two run
+   well together.
 2. **GO both, step one on.** GO the first stack to the cue, then GO the second stack to its entry
    of the same cue. Nothing on the rig moves at the second GO — no fade, no events. Now step the
    first stack on to its next cue. **The cue's state stays** on the rig wherever the next cue does
@@ -283,9 +284,7 @@ second and a pull deleted it; on a build with session 3 a repo may stay attached
 4. **Outline.** With the stack running on the pad's own cue and the pad not pressed, the pad reads
    as an **outline**; pressing it turns it solid, and pressing again leaves the outline (the stack
    still holds it). A cue slot holding the same cue reads the same two ways.
-5. **Clean up.** Delete the inserted entry
-   (`DELETE FROM cue_stack_entries WHERE stack_id = <stack> AND cue_id = <cue>`), or the whole show
-   copy if it was a scratch one.
+5. **Clean up.** *Remove from stack* on the second stack's card, or drop the scratch copy.
 
 ---
 
@@ -313,8 +312,8 @@ pointing at the copy, the desk itself stopped or on another port):
    (auto numbers unchanged, explicit ones unchanged), the same follows, and its markers where they
    were. GO through a few cues; standby and GO TO work from the cue table.
 4. **Same book.** The prompt book's cue anchors sit where they did. A marker's anchor is kept but
-   not drawn until the prompt book reads anchors by entry (cue model plan D4, a later session), so
-   check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
+   not drawn: since R1.4 the book reads anchors by entry, but lists only cue entries' anchors, and no
+   session plans to draw a marker's. So check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
    cue_stack_entries e ON e.id = a.entry_id WHERE e.kind = 'MARKER'"` lists each one against its
    marker. The log's dropped-anchor count should be 0 unless an anchor named a cue already gone.
 5. **Once.** Stop and start again: no migration line, no second backup.

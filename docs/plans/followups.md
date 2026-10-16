@@ -149,6 +149,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
+| [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -2909,6 +2910,21 @@ reports `MissingCue`, as a binding to any deleted cue always has — the 409 lis
 was told. **Trigger**: an operator finds a dead binding left this way confusing. **Then**: delete the
 `FireCue` rows `cueUsesOf` already finds inside the forced delete's transaction, and reload the
 binding service's project.
+
+### `FU-BUSK-PAD-STALE-NUMBER`
+
+**A cue pad's face can show a stale number** · Ready · Venue-visit K2, 2026-10-16
+
+A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with the busk page. R1.4's
+`announceCuePadsChanged` (`routes/cueDelete.kt`) fires `busk.layoutChanged` for the pads of the cues
+it names, from add-cue, an entry's removal, an entry's number and a stack delete. Reorder and
+sort-by-number (`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the
+other `placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack,
+the copy in `routes/projectCues.kt`, Record CREATE into a stack, and MCP `add_cue_to_stack` and
+`build_cue_stack`. The pad keeps the old number until something else refetches the page. This
+predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
+renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
+includes the shared cue itself.
 
 ## Completed
 

@@ -17,6 +17,10 @@
 > **Checked 2026-10-16 (K1).** Twelve sessions had merged since the lanes, S7 while K1 ran. K1 corrected
 > the plans they touched, folded the Rig and output lane, opened Apply next, and gave P5 its claiming rule.
 >
+> **Checked 2026-10-16 (K2).** Due when R1.4 merged. Four sessions had merged since K1 (R1.3, R4.2, Nav.1
+> and R1.4). K2 corrected the plans for the shared cue, recorded R1.4's known gaps with the sessions
+> that own them (and one as `FU-BUSK-PAD-STALE-NUMBER`), and folded the Cues lane.
+>
 > A one-page copy for human readers is
 > [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
 > <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
@@ -152,8 +156,8 @@ The plan adds its own:
     docs, `followups.md` and its plan row, and `ProjectRoundTripTest` and `RichProjectFixture`;
   - never takes or changes a number `main` already has.
 
-  Taken: S11 28, S15 29, R4.1 30, S8 31. Still to bump: the cue model plan's session 3 (R1.3), the
-  effects plan's sessions 2 and 3 (R4.2, R4.3), S16, and possibly venue-attach session 1.
+  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33. Still to bump: the effects plan's session 3
+  (R4.3), S16, and possibly venue-attach session 1.
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -242,7 +246,7 @@ Grouped by area. §4 gives the order.
 **K — Check the course.** Each check lands documents only, as one PR on `claude/vv-k<n>`, and the
 lanes keep running while it does. Checks are numbered as they run. One is due:
 - after about eight sessions have merged since the last check;
-- when R1.4 merges, because the plans still to run were written against the old cue model;
+- when R1.4 merges, because the plans still to run were written against the old cue model (K2 ran it);
 - when every lane is empty, to close the plan.
 
 Each one:
@@ -290,38 +294,34 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
 once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
-chains reach R3.8, each about seven sessions deep: Cues then Cue editor (R1.3, R1.4, R2.3–R2.6), and
-Apply (R3.1–R3.7, with R3.2 behind R4.3). Keep both moving.
+chains reach R3.8: Cue editor (R2.3–R2.6, four deep) and Apply (R3.1–R3.7, seven, with R3.2 behind
+R4.3). Apply is now the longer, so keep it moving.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
 folded the Rig and output lane (S6, S9 and S8 are done), and opened Apply next. R1.3 and R4.2 were in
 flight as it ran.
 
-**Cues.** The critical path. After R1.4 the Cue editor lane starts.
+K2 (2026-10-16) took out R1.3, R4.2, Nav.1 and R1.4 and folded the Cues lane. R1.4 unblocked the Cue
+editor lane and R1.5. R4.3 (PR #176), R3.1 and Nav.2 were in flight as it ran.
+
+**Cue editor.** Starts now: R1.4 has merged.
 
 | Session | From other lanes |
 |---|---|
-| R1.3 Sync | — |
-| R1.4 Sharing and explicit delete | — |
-
-**Cue editor.**
-
-| Session | From other lanes |
-|---|---|
-| R2.3 The action set | R1.4 |
+| R2.3 The action set | — |
 | R2.4 The editor and its two hosts | — |
 | R2.5 The Values grid | — |
 | R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
 
-**Cue library.** S16 can start now; R1.5 waits for R1.4.
+**Cue library.** S16 and R1.5 can both start now; Nav.1 gave R1.5 its Library section.
 
 | Session | From other lanes |
 |---|---|
 | S16 Speed masters on a cue | — |
-| R1.5 The Cues table | R1.4; Nav.1 gives it its Library row, either order |
+| R1.5 The Cues table | — |
 | R1.6 Copy from another show | R2.3 for *Duplicate*, else it builds it |
 | R1.7 The MCP tools | — |
 
@@ -332,18 +332,18 @@ flight as it ran.
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Effects.** R4.6 and R4.7 run before R4.4, which the effects plan allows: they need only R4.1.
+**Effects.** Apply's R3.2 waits on R4.3. R4.6 and R4.7 run before R4.4, which the effects plan
+allows: they need only R4.1.
 
 | Session | From other lanes |
 |---|---|
-| R4.2 Shaping the spread | — |
 | R4.3 One effect over a selection | — |
 | R4.6 Beam effects | — |
 | R4.7 Palette Steps and Slot Steps | — |
 | R4.4 Fading by size | — |
 | R4.5 A stack's effect size | — |
 
-**Apply.** Open it next (K1). While R3.2 waits on R4.3, R3.3–R3.5 may run ahead of it; R3.6 waits
+**Apply.** The longer chain to R3.8. While R3.2 waits on R4.3, R3.3–R3.5 may run ahead of it; R3.6 waits
 for R3.2 (the apply plan's P1).
 
 | Session | From other lanes |
@@ -361,7 +361,6 @@ for R3.2 (the apply plan's P1).
 
 | Session | From other lanes |
 |---|---|
-| Nav.1 Sections and the registry | — |
 | Nav.2 Off the rig | — |
 | Nav.3 The switcher | — |
 | S14 Applied tables | — |
