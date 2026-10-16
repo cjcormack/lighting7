@@ -379,7 +379,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   no gap.
 - **Docs:** `fx-engineering.md` §"Distribution Strategies" (and that `SPLIT` equals `EDGES_IN`).
 
-### Session 3 — One effect over a selection (backend + programmer)
+### Session 3 — One effect over a selection (backend + programmer) — done, `3cefa3ed`
 
 - `TargetRef.Selection` and `FxTargetRef.Selection` (§3.4), the expansion, the effect-only refusal,
   Record and Include, sync (`formatVersion` bump), MCP (`targets` on the effect tools).
