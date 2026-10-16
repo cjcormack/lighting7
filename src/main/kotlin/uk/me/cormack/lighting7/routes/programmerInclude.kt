@@ -360,6 +360,9 @@ internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
     seconds = seconds,
+    size = size,
+    direction = direction,
+    nShot = nShot,
 )
 
 /** The include target for [cueData], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */

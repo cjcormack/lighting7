@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import java.time.Duration
 
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -411,7 +412,10 @@ private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
         parameters == dto.parameters &&
         speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid) &&
         rateSpeedMasterUuid == speedMasterUuidOrNull(dto.rateSpeedMasterUuid) &&
-        seconds == dto.seconds
+        seconds == dto.seconds &&
+        size == dto.size &&
+        direction == dto.direction &&
+        nShot == dto.nShot
 
 /** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
 private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
@@ -427,6 +431,9 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
     speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
     rateSpeedMasterUuid = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
     seconds = dto.seconds
+    size = dto.size
+    direction = EffectSpecCoercion.Names.canonicalDirection(dto.direction)
+    nShot = dto.nShot
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */

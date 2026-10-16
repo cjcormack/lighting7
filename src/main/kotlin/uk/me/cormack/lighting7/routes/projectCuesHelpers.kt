@@ -104,6 +104,9 @@ internal fun captureCurrentState(state: State): CapturedState {
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                 seconds = effect.seconds,
+                size = dyn.size,
+                direction = dyn.direction.name,
+                nShot = dyn.nShot,
             ))
         }
     }
@@ -472,6 +475,9 @@ internal fun validateCueChildren(
             distribution = effect.distribution,
             elementMode = effect.elementMode,
             elementFilter = effect.elementFilter,
+            direction = effect.direction,
+            size = effect.size,
+            nShot = effect.nShot,
         )?.let { return it }
     }
     return null
@@ -703,6 +709,9 @@ internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
     rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     seconds = effect.seconds
+    size = effect.size
+    direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
+    nShot = effect.nShot
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */

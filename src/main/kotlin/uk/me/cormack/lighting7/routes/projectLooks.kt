@@ -297,6 +297,9 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                         seconds = effect.seconds
+                        size = effect.size
+                        direction = effect.direction
+                        nShot = effect.nShot
                         sortOrder = effect.sortOrder
                     }
                 }
@@ -938,6 +941,9 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
             distribution = effect.distribution,
             elementMode = effect.elementMode,
             elementFilter = effect.elementFilter,
+            direction = effect.direction,
+            size = effect.size,
+            nShot = effect.nShot,
         )?.let { return it }
     }
     return null
@@ -1078,6 +1084,9 @@ private fun DaoLookEffect.take(effect: LookEffectDto) {
     speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
     rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     seconds = effect.seconds
+    size = effect.size
+    direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
+    nShot = effect.nShot
     sortOrder = effect.sortOrder
 }
 
@@ -1244,6 +1253,9 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     speedMasterUuid = it.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = it.rateSpeedMasterUuid?.toString(),
                     seconds = it.seconds,
+                    size = it.size,
+                    direction = it.direction,
+                    nShot = it.nShot,
                     sortOrder = it.sortOrder,
                 )
             },

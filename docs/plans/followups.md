@@ -36,6 +36,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
+| [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
+| [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -434,6 +436,50 @@ plus an authoring surface that can name a constituent), not just a per-output ph
 
 **Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
 express it as separate instances.
+
+---
+
+## Effects
+
+### `FU-FX-WIDTH-SOFTNESS`
+
+**One Width and one Softness across effects** · Trigger · effects plan session 1 (§10), 2026-10-15
+
+Every desk surveyed (`effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
+*softness* (how hard the edges are) that read the same on every waveform. Ours are each effect's own
+parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Strobe's
+`onRatio`, Colour Cycle's `fadeRatio` — and the editor labels them as such (*Attack*, *Duty*, *On*,
+*Fade*). Size (D2) and direction (D5) became fields of every effect in session 1; width and softness
+did not, because each built-in means something slightly different by them and a common field would
+change what a stored effect plays (P6).
+
+The shape if it is wanted: a declared parameter role in the `.fx.kts` frontmatter (`role: width`,
+`role: softness`) that the editor reads to put one *Width* and one *Softness* control on every effect
+that declares it, still writing the effect's own parameter — no new stored field, no `formatVersion`.
+
+**Trigger**: an operator looks for one Width or Softness control across effects and finds a
+differently named parameter on each.
+
+---
+
+### `FU-FX-SIZE-OVER-100`
+
+**Size above 100 %** · Trigger · effects plan session 1 (§9, §10), 2026-10-15
+
+Size (D2) stops at 100 %: the weight `out = before + (blended − before) × w` is clamped to `[0, 1]`
+(`FxInstance.weight`), and every write boundary refuses a size above 1
+(`EffectSpecCoercion.Strict.sizeProblem`). MagicQ goes to 800 % and Eos to 2000 % per instance, which
+makes an effect bigger than it was written — a wider circle, a deeper breathe — rather than weighing
+it over what is underneath.
+
+Above 1 the formula extrapolates past the effect (`before + 2 × (blended − before)`), which is a
+different meaning from "more of the effect": a Replace dimmer at 200 % would overshoot its own high,
+clamped at 255. The honest version scales the effect's *amplitude about its own centre* — a second
+operation beside the weight, per effect kind (a circle's radius, a sine's depth) — which is the
+declined *amplitude 0–200 %* of the plan's Question 2.
+
+**Trigger**: an operator wants an effect bigger than it was written and the effect's own parameters
+(a radius, a range) are not the way they want to reach it.
 
 ---
 
@@ -1472,9 +1518,9 @@ a show on a venue inherit its version's parks and adds `showParkReleases/`, keye
 channel, which records nothing about who released a park. The design for machine-local users is still
 owed; flagged again rather than folded in.
 
-**v28–v30 passed without it too** (centre-relative positions, Seconds, and the stored locate,
-venue-visit plan S11, S15 and S8, 2026-10-15): v30 adds `FixturePatchJson.locate`, a unit's stored
-pan and tilt, which records nothing about who set it. The design for machine-local users is still owed;
+**v28–v31 passed without it too** (centre-relative positions, Seconds, size/direction/N-shot and
+the stored locate, venue-visit plan S11, S15, R4.1 and S8, 2026-10-15): v31 adds
+`FixturePatchJson.locate`, a unit's stored pan and tilt, which records nothing about who set it. The design for machine-local users is still owed;
 flagged again rather than folded in.
 
 ### `FU-AUTH-AUDIT-LOG`

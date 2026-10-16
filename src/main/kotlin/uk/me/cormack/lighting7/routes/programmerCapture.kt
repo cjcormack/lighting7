@@ -594,6 +594,9 @@ internal fun fxInstancesToCueChildren(
                     speedMasterUuid = effect.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                     seconds = effect.seconds,
+                    size = dyn.size,
+                    direction = dyn.direction.name,
+                    nShot = dyn.nShot,
                 )
         )
     }

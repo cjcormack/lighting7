@@ -559,6 +559,9 @@ private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
     speedMasterUuid = settings.speedMasterUuid
     rateSpeedMasterUuid = settings.rateSpeedMasterUuid
     seconds = settings.seconds
+    size = settings.size
+    direction = settings.direction
+    nShot = settings.nShot
 }
 
 /**
@@ -584,6 +587,9 @@ private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: Look
     if (edited.elementMode != baseline.elementMode) elementMode = edited.elementMode
     if (edited.elementFilter != baseline.elementFilter) elementFilter = edited.elementFilter
     if (edited.stepTiming != baseline.stepTiming) stepTiming = edited.stepTiming
+    if (edited.size != baseline.size) size = edited.size
+    if (edited.direction != baseline.direction) direction = edited.direction
+    if (edited.nShot != baseline.nShot) nShot = edited.nShot
     // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
     // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
     // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.

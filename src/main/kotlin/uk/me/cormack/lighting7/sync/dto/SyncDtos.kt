@@ -33,13 +33,20 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
-    // v30: stored locate. `FixturePatchJson` gains `locate` (default empty, omitted): the pan and tilt
+    // v30: Size, direction and N-shot (effects plan session 1, venue-visit R4.1). `LookEffectJson`,
+    // `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction` (default
+    // `FORWARD`) and `nShot` (default null), each omitted at its default. The writer's number moves by
+    // the sharp-edge rule: a v29 reader would run a 40 % breathe at full size, a backward cycle
+    // forward and a one-shot forever, and its next wipe-then-export push would write all three away.
+    // `minReader` stays at **5** — every field defaults to what an older row meant. See
+    // `docs/sync-engineering.md` §"Version 30 — Size, direction and N-shot".
+    // v31: stored locate. `FixturePatchJson` gains `locate` (default empty, omitted): the pan and tilt
     // bytes Locate points each of a patch's units at (venue-visit plan D6, D17). A patch with none
-    // exports byte-for-byte as at v29. The writer's number moves by the sharp-edge rule: a v29 reader
+    // exports byte-for-byte as at v30. The writer's number moves by the sharp-edge rule: a v30 reader
     // would import every patch with no stored locate and its next wipe-then-export push would write
     // them away for every peer. `minReader` stays at **5** — a missing locate is the centre. A venue
     // patch's locate is part of its Focus facet, so a show's override of it travels in `showOverrides/`
-    // under the same number. See `docs/sync-engineering.md` §"Version 30 — stored locate".
+    // under the same number. See `docs/sync-engineering.md` §"Version 31 — stored locate".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -256,7 +263,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 30,
+    val formatVersion: Int = 31,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -404,6 +411,12 @@ data class LookEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
     val sortOrder: Int = 0,
 )
 
@@ -480,6 +493,12 @@ data class TemplateEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
 )
 
 /**
@@ -595,8 +614,8 @@ data class FixturePatchJson(
      *  `docs/sync-engineering.md` §"Version 26 — lamps". */
     val lampWatts: Int? = null,
     val lampKelvin: Int? = null,
-    /** The unit's stored locate (v30): the pan and tilt bytes Locate points each unit at, one entry
-     *  per unit; empty — omitted — is none. See `docs/sync-engineering.md` §"Version 30 — stored locate". */
+    /** The unit's stored locate (v31): the pan and tilt bytes Locate points each unit at, one entry
+     *  per unit; empty — omitted — is none. See `docs/sync-engineering.md` §"Version 31 — stored locate". */
     val locate: List<UnitLocate> = emptyList(),
     /** The unit's fitted media (v22); null is the type's stock in every slot. See
      *  `docs/sync-engineering.md` §"Version 22 — fitted media". */
@@ -852,6 +871,12 @@ data class CueAdHocEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
+    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val size: Double = 1.0,
+    /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
+    val direction: String = "FORWARD",
+    /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
+    val nShot: Int? = null,
 )
 
 @Serializable

@@ -164,7 +164,7 @@ Grouped by area. §4 gives the order.
 - ~~S6 — Make rig safe, its Undo, and Quit desk (D9, D18, D19)~~ — done, `fa5291c1`.
 - ~~S9 — Blinder colour (D8)~~ — done, `aeada21c`.
 - ~~S8 — Per-patch locate (D6, D17)~~ — done, `2e6963ee` (DMX bytes per unit, read from the output;
-  in a show on a venue it is the show's Focus override; MCP reads and writes it; `formatVersion` 30).
+  in a show on a venue it is the show's Focus override; MCP reads and writes it; `formatVersion` 31).
 
 **S7 — Group member order in the Groups views.**
 - Drag-reorder members in the group sheet and the Groups list, writing the existing `memberOrder`.

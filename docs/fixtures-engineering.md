@@ -1683,7 +1683,7 @@ no fine byte stored locates with fine 0, as the default does.
 - **It is drawing, not output, for the hold.** `VenueDiff` files `locate` under Focus, drawing only:
   the desk sends a stored locate only while an operator holds Locate, never on a show's own, so a
   publish that moves one reaches a show as a banner, not a hold — Media's case for the same reason.
-- **Sync** at `formatVersion` 30 (`FixturePatchJson.locate`, `docs/sync-engineering.md` §"Version 30 —
+- **Sync** at `formatVersion` 31 (`FixturePatchJson.locate`, `docs/sync-engineering.md` §"Version 31 —
   stored locate"); a show's override of it travels in `showOverrides/` under the same number. A
   retype through `patch_fixtures` keeps only the units the new type has (`StoredLocate.fitTo`). Detach
   copies the effective locate onto the show's own rows, and Extract and clone carry it with the patch.

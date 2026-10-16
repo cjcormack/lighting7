@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.LayerSource
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.floor
 
 /**
  * Filter for selecting which elements of a multi-element fixture receive an effect.
@@ -105,6 +106,41 @@ data class FxTiming(
 )
 
 /**
+ * Which way each head runs its own cycle (effects plan D5, §3.3 step 6): applied to the member's
+ * phase after the spread, so it is a field of every running effect rather than a parameter of the
+ * few effects that once wrote one (Ramp Down, the sweeps' `pingPong` — P6 keeps both).
+ */
+enum class EffectDirection {
+    /** The phase as the clock gives it. */
+    FORWARD,
+
+    /** `1 − p`: the cycle runs from its end to its start. */
+    BACKWARD,
+
+    /** Forward on even cycles and backward on odd ones, counted on the member's own clock. */
+    BOUNCE;
+
+    /** [phase] in `[0, 1)` read in this direction, [cycle] being the member's own cycle count. */
+    fun apply(phase: Double, cycle: Long): Double = when (this) {
+        FORWARD -> phase
+        BACKWARD -> reverse(phase)
+        BOUNCE -> if (cycle and 1L == 0L) phase else reverse(phase)
+    }
+
+    companion object {
+        /** The nullable primitive — see [ElementFilter.byName]; [EffectSpecCoercion] owns the policies. */
+        fun byName(name: String): EffectDirection? =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+        /**
+         * `1 − p`, kept inside `[0, 1)`: phase 0 reads as the very end of the cycle rather than 1.0,
+         * which an effect indexing a list by `floor(phase × n)` would read one past its last entry.
+         */
+        private fun reverse(phase: Double): Double = minOf(1.0 - phase, Math.nextDown(1.0))
+    }
+}
+
+/**
  * How an effect's output blends with the fixture's current value.
  */
 enum class BlendMode {
@@ -194,6 +230,12 @@ data class LookEffectSettings(
     val rateSpeedMasterUuid: java.util.UUID?,
     /** [FxInstance.seconds] — D7's Seconds for a beat effect. */
     val seconds: Boolean = false,
+    /** [FxDynamics.size] — effects plan D2. */
+    val size: Double = 1.0,
+    /** [FxDynamics.direction] — effects plan D5. */
+    val direction: String = EffectDirection.FORWARD.name,
+    /** [FxDynamics.nShot] — effects plan D9; null runs forever. */
+    val nShot: Int? = null,
 )
 
 /**
@@ -217,6 +259,9 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
         seconds = seconds,
+        size = dyn.size,
+        direction = dyn.direction.name,
+        nShot = dyn.nShot,
     )
 }
 
@@ -301,6 +346,24 @@ data class FxDynamics(
      * [FxInstance.expansion]'s validity check: changing it re-derives the expansion.
      */
     val elementFilter: ElementFilter = ElementFilter.ALL,
+
+    /**
+     * Size (effects plan D2): how much of the effect reaches the stage over what is underneath,
+     * 0.0–1.0. The stored half of the weight P3 applies after the blend — `out = before +
+     * (blended − before) × w`, per channel, `w` = this × [FxInstance.intensityMultiplier] (the
+     * envelope). See [FxInstance.weight].
+     */
+    val size: Double = 1.0,
+
+    /** Which way each member runs its cycle (D5); applied by [FxInstance] to every member phase. */
+    val direction: EffectDirection = EffectDirection.FORWARD,
+
+    /**
+     * Run this many cycles and stop (D9), null for forever. Counted from the effect's own start on
+     * its clock; each member runs its N from its own offset, and the instance is spent once the
+     * clock has run N cycles past the largest one. See [FxInstance.nShotPending].
+     */
+    val nShot: Int? = null,
 )
 
 class FxInstance internal constructor(
@@ -535,15 +598,53 @@ class FxInstance internal constructor(
         set(value) { updateDynamics { it.copy(elementFilter = value) } }
 
     /**
-     * Intensity multiplier (0.0 = silent, 1.0 = full). The FxEngine multiplies effect
-     * output by this value during processing.
+     * The **envelope** (effects plan §3.1): the runtime part of the effect's weight, 0.0–1.0, which a
+     * fade moves — session 4's GO, stack stop and programmer gestures (§3.5). Never stored or
+     * recorded: Record takes the row's own [FxDynamics.size].
      *
-     * Used by manual / scripted effect fades. Cue transitions do NOT touch this field —
-     * effects snap on cue transition (outgoing removed, incoming start at full intensity);
-     * only Layer 4 property assignments crossfade. See [CueStackManager] for rationale.
+     * It no longer scales the effect's raw output. That scaling is what once dropped an `OVERRIDE`
+     * effect to 0 on a fade; the envelope is now one factor of [weight], applied after the blend
+     * (P3). Nothing in this session moves it from 1.0.
      */
     @Volatile
     var intensityMultiplier: Double = 1.0
+
+    /**
+     * The weight P3 applies after the blend on this pass: [FxDynamics.size] × [intensityMultiplier],
+     * in `[0, 1]`. Session 5's stack size multiplies in here too. Takes the caller's per-pass
+     * snapshot, like every other tick-path read.
+     */
+    fun weight(dynamics: FxDynamics): Double = (dynamics.size * intensityMultiplier).coerceIn(0.0, 1.0)
+
+    /**
+     * Where an N-shot's count began ([FxDynamics.nShot], D9): the master tick of a beat effect's first
+     * pass with a count, or [UNANCHORED]. Owned by the tick loop the instance runs on, so plain
+     * fields; set again from the next pass whenever the count is cleared, so a count given to a
+     * running effect runs from then. Carried across `FxEngine.updateEffect`'s swap.
+     */
+    var nShotStartTick: Long = UNANCHORED
+
+    /** [nShotStartTick]'s wall-clock twin: [accumulatedScaledMs] at the first pass with a count, or NaN. */
+    var nShotStartScaledMs: Double = Double.NaN
+
+    /**
+     * Set by the phase functions on a pass when some member of an N-shot is still to finish its runs
+     * (running, or waiting for its offset to come round). The tick loop clears it and [nShotEvaluated]
+     * before the effect's pass and reads them after: evaluated but nothing pending means the clock
+     * has run N cycles past the largest member offset, and the effect is spent. Tick-loop owned.
+     */
+    var nShotPending: Boolean = false
+
+    /** Set when a phase was computed for an N-shot on this pass; see [nShotPending]. Tick-loop owned. */
+    var nShotEvaluated: Boolean = false
+
+    /**
+     * An N-shot that has run out but is kept in the engine: a programmer layer's, whose recook would
+     * otherwise spawn it afresh and fire it again (see `FxEngine.finishNShots`). Every member holds
+     * what is underneath; the layer's release removes it. Any other instance is removed when spent.
+     */
+    @Volatile
+    var spent: Boolean = false
 
     /**
      * Most recently calculated phase, for state reporting — the reverse direction from
@@ -695,15 +796,17 @@ class FxInstance internal constructor(
      * clock" silently plausible. The caller passes the tick of *this effect's* master
      * (`frame.tick(speedMasterSlot)`).
      *
+     * The whole-target form of [calculatePhaseForMember]: one member at offset 0, so direction and
+     * N-shot apply exactly as to a member.
+     *
      * @param tick The current clock tick of this effect's speed master
-     * @param dynamics The caller's per-pass snapshot; defaults to a fresh read, which is
-     *   safe here because only one field ([FxDynamics.phaseOffset]) is consulted
-     * @return Phase from 0.0 to 1.0 within the effect cycle
+     * @param dynamics The caller's per-pass snapshot
+     * @return Phase from 0.0 to 1.0 within the effect cycle, or NaN while an N-shot is not running
+     *   ([isHolding]) — the caller then applies nothing and the value underneath stands
      */
     fun calculatePhase(tick: MasterClock.ClockTick, dynamics: FxDynamics = this.dynamics): Double {
-        val basePhase = MasterClock.phaseForDivision(tick.tickNumber, timing.beatDivision)
-        val phase = (basePhase + dynamics.phaseOffset) % 1.0
-        lastPhase = phase
+        val phase = beatPhase(tick, timing.beatDivision, 1, dynamics, 0.0)
+        if (!phase.isNaN()) lastPhase = phase
         return phase
     }
 
@@ -724,17 +827,46 @@ class FxInstance internal constructor(
      * @param groupSize Total number of members in the group
      * @param dynamics The caller's per-pass dynamics snapshot
      * @param distributionOffset This member's offset, from the same snapshot's strategy
-     * @return Phase from 0.0 to 1.0 within the effect cycle
+     * @return Phase from 0.0 to 1.0 within the effect cycle, or NaN while this member of an N-shot is
+     *   not running ([isHolding])
      */
     fun calculatePhaseForMember(
         tick: MasterClock.ClockTick,
         groupSize: Int,
         dynamics: FxDynamics,
         distributionOffset: Double,
+    ): Double = beatPhase(tick, memberCycleDivision(dynamics, groupSize), groupSize, dynamics, distributionOffset)
+
+    /**
+     * A beat effect's clock at [tick] as whole cycles and the fraction of the current one — from the
+     * effect's own start for an N-shot (anchoring [nShotStartTick] on its first pass), from the
+     * master's tick 0 otherwise — handed to [shapeMemberPhase]. Integer arithmetic, as
+     * [MasterClock.phaseForDivision] always was, so a forever effect's phase is unchanged.
+     */
+    private fun beatPhase(
+        tick: MasterClock.ClockTick,
+        division: Double,
+        groupSize: Int,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
     ): Double {
-        val basePhase =
-            MasterClock.phaseForDivision(tick.tickNumber, memberCycleDivision(dynamics, groupSize))
-        return shapeMemberPhase(basePhase, dynamics, distributionOffset, groupSize)
+        val ticksPerCycle = (MasterClock.TICKS_PER_BEAT * division).toLong()
+        if (ticksPerCycle <= 0) return 0.0
+        var ticks = tick.tickNumber
+        if (dynamics.nShot == null) {
+            nShotStartTick = UNANCHORED
+        } else {
+            // A master whose count went backwards (a reload) re-anchors rather than counting negative.
+            if (nShotStartTick == UNANCHORED || ticks < nShotStartTick) nShotStartTick = ticks
+            ticks -= nShotStartTick
+        }
+        return shapeMemberPhase(
+            cycles = ticks / ticksPerCycle,
+            basePhase = (ticks % ticksPerCycle).toDouble() / ticksPerCycle,
+            dynamics = dynamics,
+            distributionOffset = distributionOffset,
+            groupSize = groupSize,
+        )
     }
 
     /**
@@ -750,10 +882,16 @@ class FxInstance internal constructor(
         }
 
     /**
-     * The member-phase shaping shared by the beat and wall-clock forms, which differ only
-     * in where [basePhase] comes from.
+     * The member-phase shaping shared by the beat and wall-clock forms, which differ only in where
+     * the clock comes from: [cycles] whole cycles and [basePhase] of the current one.
+     *
+     * In order (effects plan §3.3): the distribution's own shaping and offset, as before; then N-shot
+     * (D9), whose member runs while its own clock — the effect's less its offset — is in `[0, N)`,
+     * holding underneath before and after (NaN); then direction (D5, step 6), Bounce counting
+     * cycles on that same own clock.
      */
     private fun shapeMemberPhase(
+        cycles: Long,
         basePhase: Double,
         dynamics: FxDynamics,
         distributionOffset: Double,
@@ -773,7 +911,17 @@ class FxInstance internal constructor(
         // Subtract distribution offset so that higher-offset members are *behind*
         // in the cycle, making the visual sweep flow in the natural direction
         // (element 0 → element N for LINEAR, etc.).
-        return (shaped + dynamics.phaseOffset - distributionOffset + 1.0) % 1.0
+        val phase = ((shaped + dynamics.phaseOffset - distributionOffset) % 1.0 + 1.0) % 1.0
+
+        // The member's own clock, in cycles: the effect's, less this member's offset.
+        val own = cycles + basePhase - distributionOffset
+        dynamics.nShot?.let { runs ->
+            nShotEvaluated = true
+            if (own < runs) nShotPending = true
+            if (own < 0.0 || own >= runs) return Double.NaN
+        }
+        val ownCycle = floor(own + dynamics.phaseOffset).toLong()
+        return dynamics.direction.apply(phase, ownCycle)
     }
 
     /**
@@ -806,16 +954,12 @@ class FxInstance internal constructor(
      * For wall-clock effects, [FxTiming.beatDivision] is reinterpreted as cycle
      * duration in seconds (e.g., 4.0 = 4 second cycle).
      *
-     * @param dynamics The caller's per-pass snapshot; defaults to a fresh read, which is
-     *   safe here because only one field ([FxDynamics.phaseOffset]) is consulted
-     * @return Phase from 0.0 to 1.0 within the effect cycle
+     * @param dynamics The caller's per-pass snapshot
+     * @return Phase from 0.0 to 1.0 within the effect cycle, or NaN while an N-shot is not running
      */
     fun calculateWallClockPhase(dynamics: FxDynamics = this.dynamics): Double {
-        val cycleDurationMs = timing.beatDivision * 1000.0
-        if (cycleDurationMs <= 0.0) return 0.0
-        val phase =
-            ((accumulatedScaledMs % cycleDurationMs) / cycleDurationMs + dynamics.phaseOffset) % 1.0
-        lastPhase = phase
+        val phase = wallClockPhase(timing.beatDivision, 1, dynamics, 0.0)
+        if (!phase.isNaN()) lastPhase = phase
         return phase
     }
 
@@ -827,17 +971,38 @@ class FxInstance internal constructor(
      * @param groupSize Total number of members in the group
      * @param dynamics The caller's per-pass dynamics snapshot
      * @param distributionOffset This member's offset, from the same snapshot's strategy
-     * @return Phase from 0.0 to 1.0 within the effect cycle
+     * @return Phase from 0.0 to 1.0 within the effect cycle, or NaN while this member of an N-shot is
+     *   not running
      */
     fun calculateWallClockPhaseForMember(
         groupSize: Int,
         dynamics: FxDynamics,
         distributionOffset: Double,
+    ): Double = wallClockPhase(memberCycleDivision(dynamics, groupSize), groupSize, dynamics, distributionOffset)
+
+    /** [beatPhase]'s wall-clock twin, over [accumulatedScaledMs] and [nShotStartScaledMs]. */
+    private fun wallClockPhase(
+        division: Double,
+        groupSize: Int,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
     ): Double {
-        val cycleDurationMs = memberCycleDivision(dynamics, groupSize) * 1000.0
+        val cycleDurationMs = division * 1000.0
         if (cycleDurationMs <= 0.0) return 0.0
-        val basePhase = (accumulatedScaledMs % cycleDurationMs) / cycleDurationMs
-        return shapeMemberPhase(basePhase, dynamics, distributionOffset, groupSize)
+        var elapsed = accumulatedScaledMs
+        if (dynamics.nShot == null) {
+            nShotStartScaledMs = Double.NaN
+        } else {
+            if (nShotStartScaledMs.isNaN() || elapsed < nShotStartScaledMs) nShotStartScaledMs = elapsed
+            elapsed -= nShotStartScaledMs
+        }
+        return shapeMemberPhase(
+            cycles = floor(elapsed / cycleDurationMs).toLong(),
+            basePhase = (elapsed % cycleDurationMs) / cycleDurationMs,
+            dynamics = dynamics,
+            distributionOffset = distributionOffset,
+            groupSize = groupSize,
+        )
     }
 
     /**
@@ -858,5 +1023,14 @@ class FxInstance internal constructor(
 
         /** [rateMasterSlot] when no rate master is assigned: the effect runs unscaled. */
         const val NO_RATE_MASTER: Int = -1
+
+        /** [nShotStartTick] before an N-shot's first pass. */
+        const val UNANCHORED: Long = -1
+
+        /**
+         * Whether a phase from [calculatePhase] and its siblings means "apply nothing": a member of an
+         * N-shot outside its runs, which holds what is underneath (D9).
+         */
+        fun isHolding(phase: Double): Boolean = phase.isNaN()
     }
 }

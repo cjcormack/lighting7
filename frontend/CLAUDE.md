@@ -726,7 +726,13 @@ Release folds to its glyph and the scope line drops the fade.
   chip: *Seconds* or a master (venue-visit plan D7; `TimingChip`, `timingChoicePatch`). On Seconds the
   effect types its cycle in seconds and follows no master; a wall-clock effect types seconds either
   way, its master being its rate master. Moving a beat effect between the two converts the division
-  at the master's live tempo, so its speed holds (`lib/effectTiming.ts`). A movement
+  at the master's live tempo, so its speed holds (`lib/effectTiming.ts`). **Under Speed sit Size
+  and Direction** (effects plan D11, §4.1; `SizeSection`): Size a slider and a percent field — how
+  much of the effect reaches the stage over what is underneath, which the desk weighs after the
+  blend (a Replace at 50 % sits halfway over the level underneath) — and Direction a segment of
+  three glyphs, → ← ↔, the word on the hover. Both are dynamics fields on the desk, so a write keeps
+  the phase, and both ride the `updateFx` frame only once touched (`OPTIONAL_FIELDS`). The client
+  computes none of it (P2). A movement
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
@@ -734,8 +740,10 @@ Release folds to its glyph and the scope line drops the fade.
   distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
   (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
   behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
-  blend (every effect, so nothing is out of reach), and — on a group or a fixture with heads — step
-  timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
+  blend (every effect, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
+  which each head hands back to what is underneath (effects plan D9; a null count is sent as
+  `runForever: true`, since the frame's absent `nShot` means keep) — and — on a group or a fixture with
+  heads — step timing, Distribution, Element mode and the head filter. The rules are pure, in `fxEditorModel.ts`.
   The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
   (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
   a sheet (`FxAddSheet`, whose Done closes it; in a focused Look layer the effect is absorbed into the
@@ -1293,7 +1301,9 @@ centre shown, until the operator presses Around. The palette sheet's **Value** c
 neither for a blend that is neither), landing `withCentreMode` on every movement palette in the
 batch, a value palette in it named and skipped; any other effect palette still reads out. The
 effect library comes from the route, as the masters do. A pad's face says ***around*** for a
-palette spelled that way (`isAroundSpelling`, in `EffectPadDetail` and `padFace`'s static line).
+palette spelled that way (`isAroundSpelling`, in `EffectPadDetail` and `padFace`'s static line). It adds ← or ↔ for a
+backward or bouncing palette and the size where it is under 100 % — *Colour Cycle · 1 bar · M2 · ← ·
+60 %* (effects plan §4.1, `lib/effectDynamics.ts`'s `effectDynamicsParts`, both lines).
 
 ### The busk layout
 

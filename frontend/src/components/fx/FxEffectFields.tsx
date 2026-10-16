@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
+import type { EffectDirection } from '@/api/fxApi'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -39,6 +40,7 @@ import {
   isRatioParam,
   levelModeOf,
   paramRole,
+  runsWord,
   timingChoicePatch,
   withCentreMode,
   type CentreMode,
@@ -155,6 +157,8 @@ export function FxEffectFields({
         set={set}
       />
 
+      <SizeSection draft={draft} readOnly={readOnly} set={set} />
+
       {centred && (
         <Question
           label="Centre"
@@ -211,6 +215,7 @@ export function FxEffectFields({
         summary={[
           `phase ${Math.round(draft.phaseOffset * 360)}°`,
           draft.blendMode.toLowerCase(),
+          ...(draft.nShot != null ? [runsWord(draft.nShot)] : []),
           ...(stepTiming ? [`step timing ${draft.stepTiming ? 'on' : 'off'}`] : []),
         ]}
       >
@@ -227,6 +232,7 @@ export function FxEffectFields({
           readOnly={readOnly}
           onChange={(v, release) => set({ phaseOffset: v }, release)}
         />
+        <RunsRow draft={draft} readOnly={readOnly} set={set} />
         <SelectRow
           label="Blend"
           value={draft.blendMode}
@@ -276,6 +282,124 @@ export function FxEffectFields({
         )}
       </Disclosure>
     </>
+  )
+}
+
+// ─── Size and direction ───────────────────────────────────────────────────────────────────────
+
+/** The three directions, in the segment's order, each its glyph and its word (on the hover). */
+const DIRECTIONS: readonly { value: EffectDirection; label: string; Icon: typeof ArrowRight }[] = [
+  { value: 'FORWARD', label: 'Forward', Icon: ArrowRight },
+  { value: 'BACKWARD', label: 'Backward', Icon: ArrowLeft },
+  { value: 'BOUNCE', label: 'Bounce', Icon: ArrowLeftRight },
+]
+
+/**
+ * Size and Direction, beside Speed (effects plan D11, §4.1). Size is a percent of the effect that
+ * reaches the stage over what is underneath — a Replace at 50 % sits halfway between the level
+ * underneath and the effect, an Around movement's radius halves about the position underneath —
+ * and Direction is how each head runs its cycle. Both are the desk's to apply (P2): this only
+ * writes the two fields, and edits them in place, so the phase is kept.
+ */
+function SizeSection({
+  draft,
+  readOnly,
+  set,
+}: {
+  draft: FxDraft
+  readOnly: boolean
+  set: (patch: Partial<FxDraft>, release?: boolean) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <SliderRow
+        label="Size"
+        unit="%"
+        value={draft.size}
+        min={0}
+        max={1}
+        step={0.01}
+        display={(v) => Math.round(v * 100)}
+        fromDisplay={(d) => d / 100}
+        displayMin={0}
+        displayMax={100}
+        readOnly={readOnly}
+        onChange={(size, release) => set({ size }, release)}
+      />
+      <div className="flex items-center gap-2">
+        <EditorLabel>Direction</EditorLabel>
+        <span className="flex-1" />
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={draft.direction}
+          disabled={readOnly}
+          onValueChange={(v) => v && set({ direction: v as EffectDirection })}
+          aria-label="Direction"
+        >
+          {DIRECTIONS.map(({ value, label, Icon }) => (
+            <ToggleGroupItem key={value} value={value} aria-label={label} title={label} className="px-2">
+              <Icon className="size-3.5" />
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * *Runs* under Advanced (effects plan D9, §4.1): *Forever*, or a count of cycles after which the
+ * effect stops, each head handing back to what is underneath after its own. The desk counts them
+ * on the effect's clock from when the count is set.
+ */
+function RunsRow({
+  draft,
+  readOnly,
+  set,
+}: {
+  draft: FxDraft
+  readOnly: boolean
+  set: (patch: Partial<FxDraft>, release?: boolean) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <EditorLabel>Runs</EditorLabel>
+      <div className="flex items-center gap-2">
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={draft.nShot == null ? 'forever' : 'count'}
+          disabled={readOnly}
+          onValueChange={(v) => {
+            if (v === 'forever') set({ nShot: null })
+            else if (v === 'count' && draft.nShot == null) set({ nShot: 1 })
+          }}
+          aria-label="Runs"
+        >
+          <ToggleGroupItem value="forever" className="px-2 text-xs">
+            Forever
+          </ToggleGroupItem>
+          <ToggleGroupItem value="count" className="px-2 text-xs">
+            Count
+          </ToggleGroupItem>
+        </ToggleGroup>
+        {draft.nShot != null && (
+          <SheetField
+            label="Runs"
+            value={draft.nShot}
+            min={1}
+            max={999}
+            step={1}
+            disabled={readOnly}
+            onEnter={(n) => n >= 1 && set({ nShot: Math.round(n) })}
+          />
+        )}
+      </div>
+      <EditorReadout>
+        {draft.nShot == null ? 'runs until it is stopped' : 'cycles, then each head hands back to what is underneath'}
+      </EditorReadout>
+    </div>
   )
 }
 

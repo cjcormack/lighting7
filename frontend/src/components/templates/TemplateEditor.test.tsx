@@ -433,3 +433,44 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     expect(body.effect?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
   })
 })
+
+describe('size, direction and runs in a palette (effects plan session 1)', () => {
+  const pulse = (over: object = {}) =>
+    template({
+      name: 'Warm pulse',
+      family: 'COLOUR',
+      kind: 'effect',
+      rows: undefined,
+      effect: {
+        effectType: 'Colour Pulse',
+        category: 'colour',
+        propertyName: null,
+        beatDivision: 1,
+        blendMode: 'OVERRIDE',
+        distribution: 'LINEAR',
+        phaseOffset: 0,
+        parameters: { colourA: '#FF9D4A' },
+        speedMasterUuid: null,
+        rateSpeedMasterUuid: null,
+        timingSource: 'BEAT',
+        ...over,
+      },
+    })
+
+  it('reads an edit of direction alone as unsaved, so closing asks first', async () => {
+    renderEditor({ template: pulse() })
+    fireEvent.click(screen.getByRole('radio', { name: 'Bounce' }))
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(await screen.findByText('Discard changes?')).toBeTruthy()
+  })
+
+  it('carries size, direction and runs across a swap of the effect, as it carries the phase', async () => {
+    const { onSave } = renderEditor({ template: pulse({ size: 0.4, direction: 'BACKWARD', nShot: 2 }) })
+    chooseEffect('Rainbow Cycle')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
+    expect(body.effect).toMatchObject({ effectType: 'Rainbow Cycle', size: 0.4, direction: 'BACKWARD', nShot: 2 })
+  })
+})
+

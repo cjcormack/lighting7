@@ -226,7 +226,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 30`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 31`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -280,18 +280,32 @@ imports such a row back would hold nothing worse than it held before; on this de
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
-### Version 30 — stored locate
+### Version 31 — stored locate
 
 `FixturePatchJson` gains `locate` (venue-visit plan D6, D17; `docs/fixtures-engineering.md` §"Stored
 locate"): the pan and tilt bytes Locate points each of a patch's units at,
 `[{head?, pan, tilt, panFine?, tiltFine?}]`, empty — omitted — for none.
-`SUPPORTED_FORMAT_VERSION = 30`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing locate is the
+`SUPPORTED_FORMAT_VERSION = 31`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing locate is the
 centre, so every older archive decodes as before. The writer's number moves by the sharp-edge rule: a
-v29 reader would import every patch with no stored locate and its next wipe-then-export push would
+v30 reader would import every patch with no stored locate and its next wipe-then-export push would
 write them away for every peer. Imported as stored, canonicalised, with no type check: the write
 boundary refuses a unit the type does not pan and tilt, and Locate ignores an entry it cannot place. A
 venue patch's locate is part of its **Focus** facet, so a show's override of it travels in
-`showOverrides/` under the same number. A patch with no stored locate exports byte-for-byte as at v29.
+`showOverrides/` under the same number. A patch with no stored locate exports byte-for-byte as at v30.
+
+### Version 30 — Size, direction and N-shot
+
+Effects plan session 1 (venue-visit R4.1; `docs/fx-engineering.md` §"Size, direction and N-shot"):
+`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction`
+(default `FORWARD`) and `nShot` (default null), each omitted at its default, and the three tables
+(`look_effects`, `template_effects`, `cue_ad_hoc_effects`) gain the columns `size`, `direction` and
+`n_shot` with the same defaults. `SUPPORTED_FORMAT_VERSION = 30`; `MIN_SUPPORTED_FORMAT_VERSION`
+**stays 5** — each field defaults to what a row without it meant, so every older archive decodes and
+plays as before. The writer's number moves by the sharp-edge rule: a v29 reader would run a 40 %
+breathe at full size, a backward cycle forward and a one-shot forever, and its next wipe-then-export
+push would write all three away for every peer. `RichProjectFixture` sets all three to non-defaults
+on every stored shape. A project that uses none exports byte-for-byte as at v29 (only
+`formatVersion.json` says 30).
 
 ### Version 29 — Seconds
 

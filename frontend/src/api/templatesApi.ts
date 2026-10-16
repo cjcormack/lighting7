@@ -1,4 +1,5 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
+import type { EffectDirection } from './fxApi'
 
 /**
  * A **Template**: a named value for one attribute family, applied to a selection.
@@ -87,6 +88,12 @@ export interface TemplateEffect {
    * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
    */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; absent at 1. */
+  size?: number
+  /** Direction (D5); absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9); absent or null runs forever. */
+  nShot?: number | null
   /**
    * `BEAT` or `WALL_CLOCK` — **resolved server-side on read and ignored on write**, the same
    * contract `TemplateRow.health` has.

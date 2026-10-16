@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import kotlin.math.roundToInt
 import kotlin.reflect.KProperty1
 
 /**
@@ -95,11 +96,18 @@ sealed class FxTarget {
      * @param fixture The fixture or element to apply to
      * @param output The effect output value to apply
      * @param blendMode How to blend with existing value
+     * @param weight The effect's weight this pass (effects plan P3, [FxInstance.weight]), 0.0–1.0:
+     *   each channel lands at `before + (blended − before) × weight`, applied **after** the blend, so
+     *   a Replace at 0.5 sits halfway between what is underneath and the effect — never at half the
+     *   effect's raw value — and an Around position at 0.5 has half its offset about the position
+     *   underneath. A discrete channel (a setting) has no halfway: it takes the effect's value from
+     *   0.5 up and holds what is underneath below ([weighDiscrete]).
      */
     abstract fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double = 1.0,
     )
 
     /**
@@ -122,15 +130,18 @@ sealed class FxTarget {
      * @param fixtureKey The specific fixture key to apply to
      * @param output The effect output value to apply
      * @param blendMode How to blend with existing value
+     * @param weight See [applyValueToFixture]; at 0 nothing is written and the value underneath stands
      */
     fun applyValue(
         fixtures: Fixtures.FixturesWithTransaction,
         fixtureKey: String,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double = 1.0,
     ) {
+        if (weight <= 0.0) return
         val fixture = fixtures.untypedGroupableFixture(fixtureKey)
-        applyValueToFixture(fixture, output, blendMode)
+        applyValueToFixture(fixture, output, blendMode, weight)
     }
 
     /**
@@ -222,14 +233,15 @@ data class SliderTarget(
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double,
     ) {
         if (output !is FxOutput.Slider) return
 
         val slider = getSlider(fixture) ?: return
 
         val baseValue = slider.value ?: 0u
-        val newValue = applyBlendMode(baseValue, output.value, blendMode)
+        val newValue = weigh(baseValue, applyBlendMode(baseValue, output.value, blendMode), weight)
         slider.value = newValue
     }
 
@@ -361,23 +373,28 @@ data class ColourTarget(
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double,
     ) {
         if (output !is FxOutput.Colour) return
 
-        // Apply RGB channels
+        // Apply RGB channels — each weighted on its own (P3's "per channel")
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val baseColour = colour.value ?: Color.BLACK
-        val newColour = applyRgbBlendMode(baseColour, output.color.color, blendMode)
-        colour.value = newColour
+        val blended = applyRgbBlendMode(baseColour, output.color.color, blendMode)
+        colour.value = if (weight >= 1.0) blended else Color(
+            weigh(baseColour.red, blended.red, weight),
+            weigh(baseColour.green, blended.green, weight),
+            weigh(baseColour.blue, blended.blue, weight),
+        )
 
         // Apply extended channels (W/A/UV) to bundled slider properties — on a fixture *or* an
         // element: the bundle comes from the class catalogue, which both carry
         // (`FU-FX-ELEMENT-BUNDLED-COLOUR`).
         val ext = output.color
-        applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode)
-        applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode)
-        applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode)
+        applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode, weight)
+        applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode, weight)
+        applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode, weight)
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
@@ -518,11 +535,17 @@ data class ColourTarget(
         return parkManager.isParked(dmx.universe.universe, dmx.channelNo)
     }
 
-    private fun applyExtendedChannel(fixture: GroupableFixture, category: PropertyCategory, value: UByte, blendMode: BlendMode) {
+    private fun applyExtendedChannel(
+        fixture: GroupableFixture,
+        category: PropertyCategory,
+        value: UByte,
+        blendMode: BlendMode,
+        weight: Double,
+    ) {
         val prop = bundledProperty(fixture, category) ?: return
         val slider = bundledSlider(fixture, prop) ?: return
         val base = slider.value ?: 0u
-        slider.value = applySliderBlendMode(base, value, blendMode)
+        slider.value = weigh(base, applySliderBlendMode(base, value, blendMode), weight)
     }
 
     private fun setExtendedChannel(fixture: GroupableFixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
@@ -604,7 +627,8 @@ data class PositionTarget(
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double,
     ) {
         if (output !is FxOutput.Position) return
 
@@ -613,8 +637,10 @@ data class PositionTarget(
         val basePan = positionFixture.pan.value ?: 128u
         val baseTilt = positionFixture.tilt.value ?: 128u
 
-        val newPan = applyBlendMode(basePan, output.pan, blendMode)
-        val newTilt = applyBlendMode(baseTilt, output.tilt, blendMode)
+        // An Around effect (ADDITIVE about 128) weighted after its blend has its offset scaled, so
+        // a circle at 50 % has half its radius about the position underneath (P3).
+        val newPan = weigh(basePan, applyBlendMode(basePan, output.pan, blendMode), weight)
+        val newTilt = weigh(baseTilt, applyBlendMode(baseTilt, output.tilt, blendMode), weight)
 
         positionFixture.pan.value = newPan
         positionFixture.tilt.value = newTilt
@@ -720,9 +746,12 @@ data class SettingTarget(
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
-        blendMode: BlendMode
+        blendMode: BlendMode,
+        weight: Double,
     ) {
         if (output !is FxOutput.Slider) return
+        // A slot has no halfway: below half weight the setting underneath stands.
+        if (!weighDiscrete(weight)) return
 
         val setting = getSetting(fixture) ?: return
         val transaction = setting.transaction ?: return
@@ -782,3 +811,25 @@ data class SettingTarget(
             SettingTarget(FxTargetRef.group(groupName), propertyName)
     }
 }
+
+/**
+ * One channel of an effect weighted over what is underneath (effects plan P3): `before + (blended −
+ * before) × weight`, rounded, applied after the blend. Weight 1 is the blend as it was; 0 is
+ * [before] untouched.
+ */
+internal fun weigh(before: Int, blended: Int, weight: Double): Int = when {
+    weight >= 1.0 -> blended
+    weight <= 0.0 -> before
+    else -> (before + (blended - before) * weight).roundToInt().coerceIn(0, 255)
+}
+
+/** [weigh] for a byte channel. */
+internal fun weigh(before: UByte, blended: UByte, weight: Double): UByte =
+    if (weight >= 1.0) blended else weigh(before.toInt(), blended.toInt(), weight).toUByte()
+
+/**
+ * Whether a discrete channel — a setting's slot — takes an effect at [weight]: from half up. A slot
+ * cannot sit between two values, so P3's weight becomes a threshold there, and a Size or (session 4)
+ * an envelope moving through 0.5 switches it, as a cue fade switches a discrete value part-way.
+ */
+internal fun weighDiscrete(weight: Double): Boolean = weight >= 0.5

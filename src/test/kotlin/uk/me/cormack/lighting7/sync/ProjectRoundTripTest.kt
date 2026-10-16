@@ -198,6 +198,37 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * Size, direction and runs (effects plan session 1, formatVersion 30) travel on all three stored
+     * effect shapes, each at the non-default `RichProjectFixture` gives it. Asserted on the export
+     * text for the reason the Seconds test above gives.
+     */
+    @Test
+    fun `effect size, direction and runs export on every stored shape`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun <T> docs(folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                    .map { canonicalDecode(serializer, Files.readString(it)) }
+            }
+
+        val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+            .single { it.name == "warm-pulse" }.effects.single()
+        assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.size, lookEffect.direction, lookEffect.nShot))
+        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+        assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.size, templateEffect.direction, templateEffect.nShot))
+        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single()
+        assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.size, adHoc.direction, adHoc.nShot))
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 30, "size, direction and runs sync from v30")
+    }
+
+    /**
      * A paired dimmer's other lanterns travel inside their patch's document, in order, with the
      * rigging named by uuid. The byte-for-byte test proves the importer keeps what the exporter
      * writes; this pins what the exporter writes — and that a patch with none carries no key.
@@ -361,7 +392,7 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * v30: a stored locate on the patch, and absent where unset — a patch with none carries no key, so
+     * v31: a stored locate on the patch, and absent where unset — a patch with none carries no key, so
      * an export of a rig with no stored locate is v29's byte for byte.
      */
     @Test
@@ -375,7 +406,7 @@ class ProjectRoundTripTest {
         val rev = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "rev-1" }
         assertEquals(listOf(UnitLocate(head = null, pan = 140, tilt = 96, panFine = 12, tiltFine = 200)), rev.locate)
         assertTrue(docs.filter { !it.contains("\"rev-1\"") }.none { it.contains("\"locate\"") }, "a patch with none carries no key")
-        assertTrue(SUPPORTED_FORMAT_VERSION >= 30, "stored locate travels from v30")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 31, "stored locate travels from v31")
 
         wipeDatabase()
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)

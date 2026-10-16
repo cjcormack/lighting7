@@ -1,6 +1,7 @@
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isAroundSpelling } from '@/components/fx/centreMode'
+import { effectDynamicsParts } from '@/lib/effectDynamics'
 import { isOnSeconds } from '@/lib/effectTiming'
 import type { TemplateSummary } from '@/api/templatesApi'
 
@@ -33,5 +34,8 @@ export function EffectPadDetail({ template }: { template: TemplateSummary }) {
   // underneath — the one thing about a Circle pad an operator needs before pressing it after a
   // position pad. An Absolute one (every stored Override, call 6) says nothing.
   const around = isAroundSpelling(template.effect) ? 'around' : null
-  return [template.effect.effectType, speed, masterLabel, around].filter(Boolean).join(' · ')
+  // ← / ↔ and a size under 100 % (effects plan §4.1).
+  return [template.effect.effectType, speed, masterLabel, around, ...effectDynamicsParts(template.effect)]
+    .filter(Boolean)
+    .join(' · ')
 }

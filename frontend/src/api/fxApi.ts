@@ -5,6 +5,12 @@ import { sendGesture } from './wsGesture'
 // === Types ===
 
 /**
+ * Which way each head runs its cycle (effects plan D5): the desk applies it to every member's phase.
+ * Forward is the absence on every wire shape.
+ */
+export type EffectDirection = 'FORWARD' | 'BACKWARD' | 'BOUNCE'
+
+/**
  * One running effect, exactly as the backend's single `EffectDto` (`fx/EffectDto.kt`) reports
  * it — the `fxState` frame and `GET /api/rest/fx/active` now return the same shape, so this and
  * `ActiveEffect` in `store/fixtureFx.ts` describe one wire type. Collapsing the two TS
@@ -41,7 +47,7 @@ export interface FxEffectState {
   timingSource?: string
   /** True when the effect sits in the programmer's priority band. */
   programmerOwned?: boolean
-  /** Fade envelope in [0, 1]; the effect's output is scaled by this before blending. */
+  /** The envelope — see `ActiveEffect.intensityMultiplier`. */
   intensityMultiplier?: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
@@ -49,6 +55,12 @@ export interface FxEffectState {
   rateSpeedMasterUuid?: string | null
   /** D7's reading: follows no master. See `ActiveEffect.seconds`. */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
+  size?: number
+  /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. Absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9): the cycles an N-shot runs; absent or null runs forever. */
+  nShot?: number | null
   // `speedMasterIndex` and `rateSpeedMasterIndex` — the 1-based display positions the server
   // numbered the bank at — were declared beside the two uuids and never read. The FX-sheet chip
   // resolves both indices from the live master list, which is the only way they can't drift from a
@@ -95,6 +107,14 @@ export interface UpdateFxRequest {
    * master is master 1; a wall-clock effect must name one).
    */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1. Edited in place: the phase is kept. */
+  size?: number
+  /** Direction (D5). Edited in place. */
+  direction?: EffectDirection
+  /** Runs (D9), at least 1. A new count runs from the next pass. */
+  nShot?: number
+  /** True puts an N-shot back to running forever; never beside [nShot]. */
+  runForever?: boolean
 }
 
 /**

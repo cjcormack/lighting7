@@ -355,14 +355,18 @@ function EffectChip({
   onOpen: (chip: HTMLElement) => void
   onStop: () => void
 }) {
-  const intensityPct = Math.round(effect.intensityMultiplier * 100)
+  // Size (effects plan D2), the stored part of the effect's weight; the envelope stays 1 until fades.
+  const sizePct = Math.round((effect.size ?? 1) * 100)
   // Shared hide-at-M1 rule + own-master-only subscription — see useSpeedMasterDisplay.
   const master = useSpeedMasterDisplay(effect.speedMasterUuid)
   const masterLabel = master ? `M${master.index}` : null
   const tip = [
     effect.effectType,
     effect.isGroupTarget ? `group ${effect.targetKey}` : null,
-    `${intensityPct}% intensity`,
+    `${sizePct}% size`,
+    effect.direction != null && effect.direction !== 'FORWARD' ? effect.direction.toLowerCase() : null,
+    effect.nShot != null ? `${effect.nShot} run${effect.nShot === 1 ? '' : 's'}` : null,
+    effect.spent ? 'Spent — its runs are done' : null,
     effect.blendMode,
     master ? `speed master M${master.index} — ${master.name}` : null,
     effect.programmerOwned ? 'Programmer FX — Clear removes it' : null,
@@ -391,8 +395,8 @@ function EffectChip({
           {masterLabel && (
             <span className="shrink-0 font-mono text-[10px] opacity-70">{masterLabel}</span>
           )}
-          {intensityPct < 100 && (
-            <span className="shrink-0 tabular-nums opacity-70">{intensityPct}%</span>
+          {sizePct < 100 && (
+            <span className="shrink-0 tabular-nums opacity-70">{sizePct}%</span>
           )}
           <button
             type="button"

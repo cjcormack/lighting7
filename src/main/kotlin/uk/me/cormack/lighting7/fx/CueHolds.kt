@@ -558,6 +558,9 @@ internal fun CueAdHocEffectDto.toLookEffectSpec() = LookEffectSpec(
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
     seconds = seconds,
+    size = size,
+    direction = direction,
+    nShot = nShot,
 )
 
 /** What a loose press did: the cue's name, and whether it brought the cue on. */

@@ -229,6 +229,11 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
   `clearEntry` on an effect) and Clear move the envelope over the programmer fade.
 - **Blind** stages an effect at envelope 1 and leaving Blind fades it in like a press.
 - The envelope is runtime, never stored and never recorded: Record takes the row's own `size`.
+- Where it lives (session 1): the envelope is `FxInstance.intensityMultiplier`, and `FxInstance.weight`
+  is the one product the targets apply after the blend (`size × envelope`, clamped to 0–1), so the
+  envelope and session 5's stack size multiply in there. A programmer layer's N-shot that has run its
+  count is kept in the engine painting nothing (`FxInstance.spent`) until its layer goes; a release
+  that fades it fades nothing visible and removes it at 0 like any other.
 
 ### 3.6 Steps (D8)
 
@@ -324,7 +329,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 
 ## 8. Implementation — seven sessions
 
-### Session 1 — Size, direction and N-shot (backend + editor)
+### Session 1 — Size, direction and N-shot (backend + editor) — done, `02b1c4a4`
 
 - `FxDynamics` gains `size`, `direction`, `nShot`; P3's weight replaces the raw-output scaling, with
   `intensityMultiplier` becoming the envelope (§3.5 uses it in session 4).

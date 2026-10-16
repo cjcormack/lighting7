@@ -468,7 +468,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         universeConfig = u0
         fixtureTypeKey = "etc-source4-revolution-base-frame"
         key = "rev-1"; displayName = "Rev 1"; startChannel = 440; sortOrder = 9
-        // A stored locate (v30, venue-visit plan D6): off centre, fine bytes and all, so the round
+        // A stored locate (v31, venue-visit plan D6): off centre, fine bytes and all, so the round
         // trip, a clone, an extract and a detach each carry it or show they lost it.
         storedLocate = listOf(UnitLocate(head = null, pan = 140, tilt = 96, panFine = 12, tiltFine = 200))
         fittedMedia = FittedMedia(
@@ -619,6 +619,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.4
+        direction = "BACKWARD"
+        nShot = 2
         sortOrder = 0
     }
 
@@ -666,6 +671,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.75
+        direction = "BOUNCE"
+        nShot = 3
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -778,6 +788,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // writes never holds a master beside it; the masters stay here, dormant, only so the clone
         // test's remap still has a reference to rewrite.
         seconds = true
+        // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
+        // round trip sees them.
+        size = 0.6
+        direction = "BACKWARD"
+        nShot = 1
     }
     // A timed layer over the deferred look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.

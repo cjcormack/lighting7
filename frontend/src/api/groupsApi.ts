@@ -1,4 +1,5 @@
 import type { ChannelRef } from '../store/fixtures'
+import type { EffectDirection } from './fxApi'
 
 // === Types ===
 
@@ -85,6 +86,12 @@ export interface ApplyFxRequest {
   rateSpeedMasterUuid?: string
   /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; omitted → 1. */
+  size?: number
+  /** Direction (D5); omitted → forward. */
+  direction?: EffectDirection
+  /** Runs (D9), at least 1; omitted → forever. */
+  nShot?: number
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -118,6 +125,14 @@ export interface GroupActiveEffect {
   rateSpeedMasterUuid?: string | null
   /** D7's reading: follows no master. */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; absent at 1. */
+  size?: number
+  /** Direction (D5); absent when forward. */
+  direction?: EffectDirection
+  /** Runs (D9); absent or null runs forever. */
+  nShot?: number | null
+  /** A programmer layer's N-shot that has run its count, kept painting nothing until its layer goes. */
+  spent?: boolean
 }
 
 // === Group Property Types ===

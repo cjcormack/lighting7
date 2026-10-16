@@ -1,5 +1,6 @@
 import type { ApplyFxRequest, BlendMode, DistributionStrategy, ElementMode } from '@/api/groupsApi'
 import type { AddFixtureFxRequest } from '@/store/fixtureFx'
+import type { EffectDirection } from '@/api/fxApi'
 
 /**
  * The one place that knows how "start this effect" is spelled for a fixture and for a group.
@@ -46,6 +47,12 @@ export interface FxCreateRequest {
   rateSpeedMasterUuid?: string | null
   /** On *Seconds* (D7): the division is seconds, no master. */
   seconds?: boolean
+  /** Size (effects plan D2), 0–1; omitted → 1. */
+  size?: number
+  /** Direction (D5); omitted → forward. */
+  direction?: EffectDirection
+  /** Runs (D9), at least 1; omitted → forever. */
+  nShot?: number
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -79,6 +86,9 @@ export function fxCreateAddition(
       ? { rateSpeedMasterUuid: request.rateSpeedMasterUuid }
       : {}),
     ...(request.seconds ? { seconds: true } : {}),
+    ...(request.size != null && request.size !== 1 ? { size: request.size } : {}),
+    ...(request.direction != null && request.direction !== 'FORWARD' ? { direction: request.direction } : {}),
+    ...(request.nShot != null ? { nShot: request.nShot } : {}),
   }
 
   if (target.type === 'group') {
