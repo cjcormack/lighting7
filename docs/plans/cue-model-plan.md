@@ -80,8 +80,9 @@ The findings that shape the plan, from three surveys of the code on `main` at `2
   name and key (`ai/VenueSetupTools.kt:332-700`). The REST `POST /cues/{id}/copy` copies one cue
   into "Unsorted" and keeps the source project's Look and template FKs on its layers
   (`routes/projectCues.kt:385-390`), which is a cross-project leak.
-- **Cue-edit live apply is retired** (sweep D1). Its comments survive at
-  `fx/CueAssignmentLayer.kt:362`, `fx/CueStackManager.kt:373` and `fx/CueApply.kt:439`.
+- **Cue-edit live apply is retired** (sweep D1). Its comments survived at
+  `fx/CueAssignmentLayer.kt:362`, `fx/CueStackManager.kt:373` and `fx/CueApply.kt:439` until
+  session 2, which took them out.
 
 ## 2. Decisions
 
@@ -421,7 +422,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **Then:** Chris runs the migration on a copy of the desk's database before the desk itself
   (§9).
 
-### Session 2 — holds (backend + frontend)
+### Session 2 — holds (backend + frontend) — done, `595aced3`
 
 - **`fx/CueHolds.kt`** (P3) and every path in §3.4 through it: the manager, the crossfade, the
   assignment layer, the trigger manager, timed effects, stomp, stop, delete, events, scenery and the

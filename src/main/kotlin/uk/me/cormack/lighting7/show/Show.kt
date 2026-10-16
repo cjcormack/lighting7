@@ -222,7 +222,14 @@ class Show(
     /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */
     val speedMasterBank: SpeedMasterBank get() = fxEngine.speedMasters
     val locateManager = carried?.locateManager ?: LocateManager()
-    val cueStackManager = CueStackManager(fxEngine)
+    val cueStackManager = CueStackManager(
+        fxEngine,
+        projectId = project.id.value,
+        // The holds frame lives on the State, so a socket subscribed before a project switch keeps
+        // following it; this show's registry publishes into it from its first (empty) frame.
+        holdsSink = state.cueHoldsFrame,
+        onHoldsChanged = { fixtures.cueHoldsChanged() },
+    )
 
     /**
      * Global transmit-time scalers (Blackout, Grand Master) — Phase 3 of
@@ -386,14 +393,14 @@ class Show(
      * crossfades to its new value over [RESUME_FADE_MS].
      *
      * Rebuilt, in order: the effects the operator ran by hand (a cue's or a programmer layer's come
-     * back with their owner; one on a target the reload removed is dropped); each stack's live cue,
+     * back with their owner; one on a target the reload removed is dropped); each stack's live entry,
      * GO'd again without its events (a GO into a cue, not this) — its auto-advance timer starting
-     * again from now — and each armed standby re-armed; the programmer's layers and values, from the
+     * again from now — and each armed standby re-armed; each loose hold taken again in press order,
+     * its events unfired; the programmer's layers and values, from the
      * store [ShowCarry] handed over. Then every patched property is published from what now composes
      * it — so a property nothing drives any more (its cue changed, its stack's cue is gone) releases
      * to its base, as it would have had the change been made live — and every channel no fixture
-     * covers, and no programmer channel holds, goes to zero. A cue applied outside a stack
-     * (`apply_cue`) is not brought back.
+     * covers, and no programmer channel holds, goes to zero.
      */
     fun resume(carry: ShowCarry) {
         val logger = org.slf4j.LoggerFactory.getLogger("Show")
@@ -412,14 +419,19 @@ class Show(
                 if (effects.isNotEmpty()) fxEngine.addEffects(effects)
             }
 
-            for ((stackId, cueId) in carry.liveCues) {
-                runCatching { cueStackManager.activateCueInStack(state, stackId, cueId, fireEvents = false) }
-                    .onFailure { logger.warn("Reload could not bring back cue {} on stack {}: {}", cueId, stackId, it.message) }
+            for ((stackId, entryId) in carry.liveEntries) {
+                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false) }
+                    .onFailure { logger.warn("Reload could not bring back entry {} on stack {}: {}", entryId, stackId, it.message) }
             }
-            // After the GOs, which consume a stack's standby. A cue the reload removed is refused.
-            for ((stackId, cueId) in carry.standbys) {
-                runCatching { cueStackManager.runState.setStandby(state, stackId, cueId) }
-                    .onFailure { logger.info("Reload could not re-arm cue {} on stack {}: {}", cueId, stackId, it.message) }
+            // After the GOs, which consume a stack's standby. An entry the reload removed is refused.
+            for ((stackId, entryId) in carry.standbys) {
+                runCatching { cueStackManager.runState.setStandby(state, stackId, entryId) }
+                    .onFailure { logger.info("Reload could not re-arm entry {} on stack {}: {}", entryId, stackId, it.message) }
+            }
+            // The loose holds, after the stacks and in press order, so the newest is on top again.
+            for (cueId in carry.looseCues) {
+                runCatching { cueStackManager.holds.takeLooseCue(state, cueId, fireEvents = false) }
+                    .onFailure { logger.warn("Reload could not bring back loose cue {}: {}", cueId, it.message) }
             }
 
             step("re-cook the programmer's layers") { programmerLayerStack.reinstate() }
@@ -486,6 +498,9 @@ class Show(
         speedMasterFlushJob?.cancel()
         speedMasterFlushJob = null
         flushSpeedMasterWrites()
+        // The holds go with the show, and the shared `cueHolds.state` frame with them, unless the
+        // next show has already written its own (`CueHolds.close`).
+        cueStackManager.holds.close()
         fxEngine.stop()
         // Stop transmitting last, after the FX engine has stopped writing. `State.shutdown()`
         // calls this directly rather than going through `Fixtures.register(removeUnused)`,

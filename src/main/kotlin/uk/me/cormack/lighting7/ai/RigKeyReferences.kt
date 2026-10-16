@@ -50,8 +50,8 @@ internal object RigKeyReferences {
 
     /** What a rewrite changed: the records to republish and announce. */
     class Touched {
-        /** Cue id → its entry's stack id (null for a cue in no stack), for `republishCueIfLive`. */
-        val cues = LinkedHashMap<Int, Int?>()
+        /** The cues a rewrite touched, for `republishCueIfLive` and `cuesRecomposed`. */
+        val cues = LinkedHashSet<Int>()
         val looks = LinkedHashSet<UUID>()
         val templates = LinkedHashSet<UUID>()
         var bindings = 0
@@ -159,7 +159,7 @@ internal object RigKeyReferences {
             fun cueUser(id: Int) = cues.getValue(id).let { cue ->
                 User("CUE", id, entryOf[id]?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it ${cue.name}" } ?: cue.name)
             }
-            fun touch(id: Int) { touched.cues[id] = entryOf[id]?.stackId }
+            fun touch(id: Int) { touched.cues += id }
             DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList ids }.forEach { row ->
                 val cueId = row.readValues[DaoCuePropertyAssignments.cue].value
                 visit(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }

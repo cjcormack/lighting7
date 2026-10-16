@@ -24,10 +24,12 @@ class ShowCarry internal constructor(
      * show up from dark rather than putting the held show's old-patch levels on the new addresses.
      */
     val values: Map<Universe, Map<Int, UByte>>,
-    /** Each live stack and its live cue, as (stackId, cueId), to GO again. */
-    val liveCues: List<Pair<Int, Int>>,
-    /** Each armed standby, stack → cue, to arm again after the GOs (which consume it). */
+    /** Each live stack and its live entry, as (stackId, entryId), to GO again (cue model plan P2). */
+    val liveEntries: List<Pair<Int, Int>>,
+    /** Each armed standby, stack → entry, to arm again after the GOs (which consume it). */
     val standbys: Map<Int, Int>,
+    /** The loosely held cues, oldest press first, to take again in that order (cue model plan §3.4). */
+    val looseCues: List<Int>,
     /** The programmer itself — values, layers, sideband, Blind — handed over whole. */
     val programmerStore: ProgrammerStore,
     /**
@@ -50,10 +52,11 @@ class ShowCarry internal constructor(
                     show.parkManager.getParkedValue(controller.universe.universe, channel) ?: buffer[channel] ?: 0u
                 }
             },
-            liveCues = show.cueStackManager.getActiveStackIds().mapNotNull { stackId ->
-                show.cueStackManager.getActiveCueId(stackId)?.let { stackId to it }
+            liveEntries = show.cueStackManager.getActiveStackIds().mapNotNull { stackId ->
+                show.cueStackManager.getActiveEntryId(stackId)?.let { stackId to it }
             },
             standbys = show.cueStackManager.runState.armedStandbys(),
+            looseCues = show.cueStackManager.holds.looseCueIdsInPressOrder(),
             programmerStore = show.programmerStore,
             locateManager = show.locateManager,
             effects = show.fxEngine.getActiveEffects().filter {

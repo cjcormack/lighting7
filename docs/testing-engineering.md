@@ -515,7 +515,7 @@ instead of three, each Look snapshot read once, and the layer's targets expanded
 halves rather than once each. Another ~20 %.
 
 Read `[cook-once]` as the real number, because after C8 **nothing calls the split pair any more** —
-the programmer recook, `CueStackManager.activateCueInStack` and the cue-apply route helper all take
+the programmer recook and the hold registry's bring-on (`CueHolds`, every GO and loose press) all take
 `cookAll`. `[cook-split]` is kept as the arm that carries the historical shape, so the scenario
 stays a self-contained before/after instead of depending on this block.
 

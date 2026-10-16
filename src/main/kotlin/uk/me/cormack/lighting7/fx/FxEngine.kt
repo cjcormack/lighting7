@@ -341,9 +341,9 @@ class FxEngine(
 
         /**
          * Reserved priority band for programmer-owned effects (Session 2's busking FX).
-         * Strictly above every cue-derived priority
-         * (`cueDerivedPriority(stackId, sort) = stackId*1M + sort*1K + 1` in
-         * `routes/projectCuesHelpers.kt`) and every manual effect (priority 0). Effects in
+         * Strictly above every cue priority — a stack hold's
+         * (`cueDerivedPriority(stackId, sort) = stackId*1M + sort*1K + 1`, `fx/CueApply.kt`) and a
+         * loose hold's ([CueHolds.LOOSE_BAND] `+ seq`) — and every manual effect (priority 0). Effects in
          * this band are exempt from programmer suppression — they modulate *on top of*
          * programmer values rather than being overridden by them.
          */
@@ -426,10 +426,10 @@ class FxEngine(
      * Rewrite the composition priority of live rows owned by the cues in [priorities]
      * (`cueId → new priority`).
      *
-     * Cue priority is derived from stack position and stamped at apply time
-     * (`cueDerivedPriority`), so reordering a stack that has cues on stage would otherwise leave
-     * those cues composing in their *old* relative order until each was re-applied. Callers that
-     * change `sort_order` hand the fresh map here to keep the engine consistent with the stack.
+     * A live cue's priority is its highest hold's ([CueHolds]) and is stamped as it comes on, so a
+     * hold taken or let go, or a stack reordered under a held cue, would otherwise leave it
+     * composing at its *old* priority until it was re-applied. The registry hands the fresh value
+     * here whenever a hold changes it ([CueHolds.restampEntries] for a reorder).
      *
      * Touches both layers a cue can own — Layer 3 [FxInstance.priority] and the Layer 4
      * assignment rows — and leaves the crossfade weights alone so a repriority mid-crossfade doesn't
@@ -458,17 +458,28 @@ class FxEngine(
     }
 
     /**
-     * Remove all effects that belong to a specific cue stack.
+     * Remove the effects tagged with [stackId] that no cue owns. A cue's effects are removed by cue,
+     * when its last hold goes ([CueHolds]): a stack moving on must not take down the effects of a cue
+     * another hold keeps live (cue model plan D3). What is left for this is a stack's own non-cue
+     * effects, if any remain.
      *
-     * Used both for a cue transition within a stack and for fully deactivating one. There used to
-     * be two functions here because a stack carried a positional colour list that had to survive a
-     * transition but not a deactivation; with that gone the two callers want the same thing.
-     *
-     * @param stackId The cue stack ID whose effects should be removed
      * @return Number of effects removed
      */
-    fun removeEffectsForCueStack(stackId: Int): Int {
-        val toRemove = activeEffects.values.filter { it.cueStackId == stackId }
+    fun removeEffectsForCueStack(stackId: Int): Int =
+        removeWhere { it.cueStackId == stackId && it.cueId == null }
+
+    /**
+     * Remove every effect of [cueId] — its layers', its ad-hoc ones, its timed fires' — leaving its
+     * Layer 4 rows alone, which a crossfade may still be taking down. [CueHolds] calls this when the
+     * cue's last hold goes.
+     *
+     * @return Number of effects removed
+     */
+    fun removeCueEffects(cueId: Int): Int = removeWhere { it.cueId == cueId }
+
+    /** Remove every effect matching [predicate], rebuilding the tick loops' snapshots once. */
+    private fun removeWhere(predicate: (FxInstance) -> Boolean): Int {
+        val toRemove = activeEffects.values.filter(predicate)
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             // Sorted snapshots are read lock-free by [processBeatTick] / [processWallClockTick].
@@ -612,7 +623,7 @@ class FxEngine(
         // Auto-tag with CueContext if set and effect doesn't already have a cueId.
         // Programmer-band effects are exempt: they belong to the operator's programmer, not
         // to whatever cue happens to be running an FX_APPLICATION script at the time, and a
-        // stray cue tag would let `removeEffectsForCue` sweep them out from under a busk.
+        // stray cue tag would let `removeCueEffects` sweep them out from under a busk.
         if (!isProgrammerFxPriority(effect.priority)) {
             currentCueContext?.let { ctx ->
                 if (effect.cueId == null) effect.cueId = ctx.cueId
@@ -1086,24 +1097,6 @@ class FxEngine(
         rebuildSortedSnapshots()
         resetUncoveredProperties(toRemove)
         emitStateUpdate()
-        return toRemove.size
-    }
-
-    /**
-     * Remove all effects that were applied as part of a specific cue.
-     *
-     * @param cueId The cue ID whose effects should be removed
-     * @return Number of effects removed
-     */
-    fun removeEffectsForCue(cueId: Int): Int {
-        val toRemove = activeEffects.values.filter { it.cueId == cueId }
-        toRemove.forEach { activeEffects.remove(it.id) }
-        if (toRemove.isNotEmpty()) {
-            rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
-            emitStateUpdate()
-        }
-        cueLayer.removeAssignments(cueId)
         return toRemove.size
     }
 

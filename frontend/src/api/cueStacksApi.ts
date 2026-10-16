@@ -94,6 +94,13 @@ export interface CueStack {
    * positional, so this type deliberately mirrors only the effective next.
    */
   nextCueId: number | null
+  /**
+   * The entries behind `activeCueId` and `nextCueId`, and the armed one (lighting7 cue model plan
+   * P2): the entry is the playback key, and a cue twice in one stack is told apart only by these.
+   */
+  activeEntryId: number | null
+  nextEntryId: number | null
+  standbyEntryId: number | null
   canEdit: boolean
   canDelete: boolean
   /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. Omitted when empty. */
@@ -133,8 +140,9 @@ export interface ReorderCueStacksRequest {
   stackIds: number[]
 }
 
+/** The entry to start at (cue model plan P2); absent starts at the armed standby, else the first cue. */
 export interface ActivateCueStackRequest {
-  cueId?: number
+  entryId?: number
 }
 
 export interface AdvanceCueStackRequest {
@@ -143,6 +151,7 @@ export interface AdvanceCueStackRequest {
 
 export interface CueStackActivateResponse {
   stackId: number
+  entryId: number
   cueId: number
   cueName: string
   effectCount: number
@@ -202,6 +211,10 @@ export interface CueRunStateEvent {
   stackId: number
   activeCueId: number | null
   nextCueId: number | null
+  /** The entries behind `activeCueId` and `nextCueId`, and the armed one (cue model plan P2). */
+  activeEntryId: number | null
+  nextEntryId: number | null
+  standbyEntryId: number | null
   /** True when `nextCueId` is an operator-armed standby rather than the positional next. */
   nextIsArmed: boolean
   /**
@@ -227,6 +240,9 @@ export interface CueStackRunState {
   activeCueId: number | null
   standbyCueId: number | null
   nextCueId: number | null
+  activeEntryId: number | null
+  standbyEntryId: number | null
+  nextEntryId: number | null
 }
 
 /** One channel of a previewed look — `POST /cue-stacks/{stackId}/preview`. */

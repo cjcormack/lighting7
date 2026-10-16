@@ -126,6 +126,16 @@ export const programStateWs: { callback: null | ((e: unknown) => void) } = { cal
 // `cueRunStateChanged` frame — the desk (or another browser) moving the show.
 export const cueRunStateWs: { callback: null | ((e: unknown) => void) } = { callback: null }
 
+/**
+ * The `cueHolds.state` bridge (`api/cueHoldsApi.ts`): `store/cues.ts` seeds its cache entry from
+ * `get()` and subscribes for the rest, so a test sets `frame` before mounting or fires `callback`
+ * after. Spelled out rather than left to the fallback Proxy because `get()` must answer a frame.
+ */
+export const cueHoldsWs: {
+  callback: null | ((s: unknown) => void)
+  frame: { projectId: number | null; cues: unknown[] }
+} = { callback: null, frame: { projectId: null, cues: [] } }
+
 // Patch-list WS bridge callback captured from store/patches.ts, so a test can
 // fire a synthetic `patchListChanged` and assert on invalidation batching.
 export const patchesWs: { callback: null | (() => void) } = { callback: null }
@@ -661,6 +671,17 @@ export function lightingApiMock() {
         follow: (targetId: string, on: boolean) => {
           windowsWs.sent.push({ type: 'windows.follow', targetId, on })
         },
+      },
+      cueHolds: {
+        subscribe: (fn: (s: unknown) => void) => {
+          cueHoldsWs.callback = fn
+          return {
+            unsubscribe: () => {
+              cueHoldsWs.callback = null
+            },
+          }
+        },
+        get: () => cueHoldsWs.frame,
       },
       cueStacks: {
         subscribe: noopSub,

@@ -19,7 +19,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import uk.me.cormack.lighting7.fx.CueStackManager
-import uk.me.cormack.lighting7.fx.stackCuePriorities
+import uk.me.cormack.lighting7.fx.CueEntryRef
+import uk.me.cormack.lighting7.fx.stackEntryPriorities
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
@@ -182,10 +183,10 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 writeEntryOrder(named + current.filter { it.id.value !in namedIds })
                 // Auto numbers are derived from position, so the moved entries take new ones.
                 renumberAutoEntries(stack, before)
-                stackCuePriorities(stack)
+                stackEntryPriorities(stack)
             }
             // Cue priority is derived from stack position; keep anything already on stage in step.
-            state.show.fxEngine.repriorityCues(priorities)
+            state.show.cueStackManager.holds.restampEntries(priorities)
             state.show.fixtures.cueStackListChanged()
             state.show.fixtures.cueListChanged()
             call.respond(HttpStatusCode.OK)
@@ -246,7 +247,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
 
                 moveEntryTo(stack, entry, insertAt)?.let { return@transaction Triple(it, null, null) }
-                val priorities = stackCuePriorities(stack) + (left?.let { stackCuePriorities(it) } ?: emptyMap())
+                val priorities = stackEntryPriorities(stack) + (left?.let { stackEntryPriorities(it) } ?: emptyMap())
                 Triple(
                     null,
                     stack.toCueStackDetails(isCurrentProject = true, manager),
@@ -258,7 +259,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             if (error != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
-                state.show.fxEngine.repriorityCues(priorities ?: emptyMap())
+                state.show.cueStackManager.holds.restampEntries(priorities ?: emptyMap())
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
                 call.respond(details!!)
@@ -285,13 +286,13 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
                 writeEntryOrder(existing.take(at) + marker + existing.drop(at))
                 // A marker counts in the positions a live cue's priority is derived from.
-                Triple(marker.toCueStackCueEntry(emptyMap()), null, stackCuePriorities(stack))
+                Triple(marker.toCueStackCueEntry(emptyMap()), null, stackEntryPriorities(stack))
             }
             val (entry, error, priorities) = result
             if (entry == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(error ?: "Cue stack not found"))
             } else {
-                state.show.fxEngine.repriorityCues(priorities ?: emptyMap())
+                state.show.cueStackManager.holds.restampEntries(priorities ?: emptyMap())
                 state.show.fixtures.cueStackListChanged()
                 call.respond(HttpStatusCode.Created, entry)
             }
@@ -325,13 +326,13 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val anchors = DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry eq marker.id }
                 marker.delete()
                 // The entries after it move up a place, and a live cue's priority is its place.
-                anchors to stackCuePriorities(stack)
+                anchors to stackEntryPriorities(stack)
             }
             if (removed == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Marker not found"))
             } else {
                 val (removedAnchors, priorities) = removed
-                state.show.fxEngine.repriorityCues(priorities)
+                state.show.cueStackManager.holds.restampEntries(priorities)
                 state.show.fixtures.cueStackListChanged()
                 if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
                 call.respond(HttpStatusCode.NoContent)
@@ -348,12 +349,14 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             try {
                 // A bare /activate on an already-active stack short-circuits, like /show/activate:
                 // it routes to activateAtFirstCue, so honouring the repeat would throw the playhead
-                // back to cue 1 on a live rig. Only a request naming a cue is a deliberate re-fire.
-                val activeCueId = if (request.cueId == null) manager.getActiveCueId(resource.parent.stackId) else null
-                if (activeCueId != null) {
+                // back to cue 1 on a live rig. Only a request naming an entry is a deliberate re-fire.
+                val activeEntryId = if (request.entryId == null) manager.getActiveEntryId(resource.parent.stackId) else null
+                val activeCueId = manager.getActiveCueId(resource.parent.stackId)
+                if (activeEntryId != null && activeCueId != null) {
                     val cueName = transaction(state.database) { DaoCue.findById(activeCueId)?.name } ?: ""
                     call.respond(CueStackActivateResponse(
                         stackId = resource.parent.stackId,
+                        entryId = activeEntryId,
                         cueId = activeCueId,
                         cueName = cueName,
                         effectCount = 0,
@@ -361,8 +364,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     return@withCurrentProject
                 }
 
-                val result = if (request.cueId != null) {
-                    manager.activateCueInStack(state, resource.parent.stackId, request.cueId)
+                val result = if (request.entryId != null) {
+                    manager.activateEntry(state, resource.parent.stackId, request.entryId)
                 } else {
                     manager.activateAtFirstCue(state, resource.parent.stackId)
                 }
@@ -414,8 +417,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val request = call.receive<GoToCueRequest>()
 
             try {
-                val cueId = cueOfEntry(state, resource.parent.stackId, request.entryId)
-                val result = state.show.cueStackManager.goToCue(state, resource.parent.stackId, cueId)
+                val result = state.show.cueStackManager.goToEntry(state, resource.parent.stackId, request.entryId)
                 state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
             } catch (e: Exception) {
@@ -433,18 +435,22 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
             try {
                 if (request.entryId != null) {
-                    manager.runState.setStandby(state, stackId, cueOfEntry(state, stackId, request.entryId))
+                    manager.runState.setStandby(state, stackId, request.entryId)
                 } else {
                     manager.runState.clearStandby(state, stackId)
                 }
                 // No `cueStackListChanged` — the manager already broadcast the run state, and
                 // this changes nothing about the stack collection.
+                val next = manager.runState.effectiveNext(state, stackId)
                 call.respond(
                     CueStackRunStateResponse(
                         stackId = stackId,
                         activeCueId = manager.getActiveCueId(stackId),
                         standbyCueId = manager.runState.getStandbyCueId(stackId),
-                        nextCueId = manager.runState.effectiveNextCueId(state, stackId),
+                        nextCueId = next?.cueId,
+                        activeEntryId = manager.getActiveEntryId(stackId),
+                        standbyEntryId = manager.runState.getStandbyEntryId(stackId),
+                        nextEntryId = next?.entryId,
                     )
                 )
             } catch (e: Exception) {
@@ -457,7 +463,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
     get<CueStackPreviewResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId, "Cannot preview - not current project") { _ ->
             try {
-                when (val result = previewCueLook(state, resource.parent.stackId, resource.cueId)) {
+                when (val result = previewCueLook(state, resource.parent.stackId, resource.entryId)) {
                     null -> call.respond(
                         HttpStatusCode.BadRequest,
                         ErrorResponse("Nothing to preview - the stack has no next cue"),
@@ -508,14 +514,14 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     updatedCues = details.cues,
                     pinnedCount = unparseable,
                     nullNumberCount = unnumbered,
-                ) to stackCuePriorities(stack)
+                ) to stackEntryPriorities(stack)
             }
 
             if (result == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
             } else {
                 val (response, priorities) = result
-                state.show.fxEngine.repriorityCues(priorities)
+                state.show.cueStackManager.holds.restampEntries(priorities)
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
                 call.respond(response)
@@ -567,8 +573,8 @@ data class CueStackStandbyResource(val parent: ProjectCueStackResource)
 @Resource("/preview")
 data class CueStackPreviewResource(
     val parent: ProjectCueStackResource,
-    /** The cue to preview; absent previews the stack's effective next (what GO would fire). */
-    val cueId: Int? = null,
+    /** The entry to preview (cue model plan P2); absent previews the stack's effective next (what GO would fire). */
+    val entryId: Int? = null,
 )
 
 @Resource("/sort-by-cue-number")
@@ -602,9 +608,16 @@ data class CueStackDetails(
     val standbyCueId: Int?,
     /**
      * The cue the next GO fires — [standbyCueId] when set, else the positional next. Server-side
-     * so a page load agrees with every other session; see `CueRunStateTracker.effectiveNextCueId`.
+     * so a page load agrees with every other session; see `CueRunStateTracker.effectiveNext`.
      */
     val nextCueId: Int?,
+    /**
+     * The entries behind the three cue ids above (cue model plan P2): the live entry, the armed one
+     * and the one the next GO fires. A cue twice in one stack (D7) is told apart only by these.
+     */
+    val activeEntryId: Int?,
+    val standbyEntryId: Int?,
+    val nextEntryId: Int?,
     val canEdit: Boolean,
     val canDelete: Boolean,
     /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. */
@@ -686,7 +699,8 @@ data class AddCueToStackRequest(
 
 @Serializable
 data class ActivateCueStackRequest(
-    val cueId: Int? = null,
+    /** The entry to start at (cue model plan P2); absent starts at the armed standby, else the first cue entry. */
+    val entryId: Int? = null,
 )
 
 @Serializable
@@ -712,18 +726,22 @@ data class CueStackRunStateResponse(
     val activeCueId: Int?,
     val standbyCueId: Int?,
     val nextCueId: Int?,
+    val activeEntryId: Int?,
+    val standbyEntryId: Int?,
+    val nextEntryId: Int?,
 )
 
 @Serializable
 data class CueStackActivateResponse(
     val stackId: Int,
+    val entryId: Int,
     val cueId: Int,
     val cueName: String,
     val effectCount: Int,
 )
 
 private fun CueStackManager.ActivateResult.toResponse(): CueStackActivateResponse =
-    CueStackActivateResponse(stackId = stackId, cueId = cueId, cueName = cueName, effectCount = effectCount)
+    CueStackActivateResponse(stackId = stackId, entryId = entryId, cueId = cueId, cueName = cueName, effectCount = effectCount)
 
 @Serializable
 data class CueStackDeactivateResponse(
@@ -757,7 +775,10 @@ private fun DaoCueStack.toCueStackDetails(
     val orderedCues = entries.mapIndexed { position, entry ->
         entry.toCueStackCueEntry(sceneryByCue, position, entry.cueId?.let(cuesById::get))
     }
-    val standardCueIds = orderedCues.mapNotNull { it.id }
+    val ordered = orderedCues.mapNotNull { row -> row.id?.let { CueEntryRef(row.entryId, it) } }
+    // The list overload: the entries are already loaded here, and the rules stay in the tracker
+    // rather than being re-derived from `orderedCues` by the client.
+    val next = manager.runState.effectiveNext(id.value, ordered, loop)
     return CueStackDetails(
         id = id.value,
         name = name,
@@ -768,9 +789,10 @@ private fun DaoCueStack.toCueStackDetails(
         cues = orderedCues,
         activeCueId = manager.getActiveCueId(id.value),
         standbyCueId = manager.runState.getStandbyCueId(id.value),
-        // The list overload: the cues are already loaded here, and the rules stay in the
-        // tracker rather than being re-derived from `orderedCues` by the client.
-        nextCueId = manager.runState.effectiveNextCueId(id.value, standardCueIds, loop),
+        nextCueId = next?.cueId,
+        activeEntryId = manager.getActiveEntryId(id.value),
+        standbyEntryId = manager.runState.getStandbyEntryId(id.value),
+        nextEntryId = next?.entryId,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
         scenery = stackSceneryOf(id).map { it.toDto() },
@@ -816,19 +838,6 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
     )
 }
 
-/**
- * The cue entry [entryId] of stack [stackId] names, for the routes that take an entry (cue model
- * plan P2) and hand a cue id to a runtime still keyed by cue until the plan's session 2. Throws
- * [IllegalArgumentException] — the routes' 400 — for an unknown entry, one of another stack, or a
- * marker, which nothing can go to or arm.
- */
-private fun cueOfEntry(state: State, stackId: Int, entryId: Int): Int = transaction(state.database) {
-    val entry = DaoCueStackEntry.findById(entryId)
-        ?.takeIf { it.stackId == stackId }
-        ?: throw IllegalArgumentException("Entry $entryId is not in stack $stackId")
-    entry.cueId ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be gone to or armed")
-}
-
 /** Marker entry [entryId] of stack [stackId] in [project], or null. Inside a transaction. */
 private fun markerEntry(project: DaoProject, stackId: Int, entryId: Int): DaoCueStackEntry? {
     val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id } ?: return null
@@ -870,6 +879,11 @@ internal fun deleteCueStackRows(state: State, project: DaoProject, stack: DaoCue
         // Updated into, and a surviving target leaves every client's programmer
         // indicator offering a cue that no longer exists.
         state.show.programmerStore.clearIncludeTargetForCue(cue.id.value)
+        // And every hold on it: a pad or slot may hold it loose, and nothing would ever let go of
+        // a deleted cue's contribution (§3.6). Another project's cues hold nothing here.
+        if (project.id == state.projectManager.currentProject.id) {
+            state.show.cueStackManager.holds.dropAll(state, cue.id.value)
+        }
         cue.delete()
     }
 

@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
@@ -130,6 +131,40 @@ If a stored locate lands visibly off the spot it was set on, promote it to a `FU
 `followups.md`.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-2`
+
+**What it proves**: *a cue is live while anything holds it* — venue-visit R1.2, cue model plan
+session 2 (P3, D3, D10, D11): `fx/CueHolds.kt` keys a live cue by what holds it — a stack's entry or
+a loose press — brings it on with its first hold and takes it off with its last, and composes it at
+its highest hold's priority, a press above every stack.
+
+**Why it is here**: `CueHoldsTest` drives the registry with two entries naming one cue, inserted
+directly, against the mock controller. Nothing in review watched a real rig hold its state while one
+of two stacks stepped off the cue, or read the two rings on a desk screen.
+
+**Test**, on the desk, on a show with two stacks:
+
+1. **One cue in two stacks.** No route puts a cue in a second stack until session 4 lets a cue be
+   shared, so add its second entry directly: note the cue's id and the second stack's id
+   (`GET /api/rest/projects/{id}/cue-stacks`), then
+   `sqlite3 <desk db> "INSERT INTO cue_stack_entries (stack_id, cue_id, kind, ordinal, cue_number_auto, auto_advance, uuid) VALUES (<stack>, <cue>, 'CUE', 99, 1, 0, randomblob(16))"`
+   and reload the Show view: the cue is listed in both stacks.
+2. **GO both, step one on.** GO the first stack to the cue, then GO the second stack to its entry
+   of the same cue. Nothing on the rig moves at the second GO — no fade, no events. Now step the
+   first stack on to its next cue. **The cue's state stays** on the rig wherever the next cue does
+   not set it; only stepping the second stack on too takes it off.
+3. **A pad over a stack.** Put a cue on a busk page that sets a colour a running stack's live cue
+   also sets. Press the pad: the pad's colour wins on the rig, and the pad reads **solid**. Press it
+   again: the stack's colour comes back with nothing re-fired, and the pad goes dark.
+4. **Outline.** With the stack running on the pad's own cue and the pad not pressed, the pad reads
+   as an **outline**; pressing it turns it solid, and pressing again leaves the outline (the stack
+   still holds it). A cue slot holding the same cue reads the same two ways.
+5. **Clean up.** Delete the inserted entry
+   (`DELETE FROM cue_stack_entries WHERE stack_id = <stack> AND cue_id = <cue>`), or the whole show
+   copy if it was a scratch one.
 
 ---
 

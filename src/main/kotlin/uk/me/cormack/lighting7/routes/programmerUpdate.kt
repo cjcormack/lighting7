@@ -217,8 +217,8 @@ internal fun buildUpdateChecklist(
                 cueNumber = cueMeta?.number,
                 cueNumberAuto = cueMeta?.numberAuto ?: false,
                 cueName = cueMeta?.name ?: "Cue $cueId",
-                isActive = stackId != null &&
-                    state.show.cueStackManager.getActiveCueId(stackId) == cueId,
+                // Live is held — by a stack or a loose press (cue model plan §3.4).
+                isActive = state.show.cueStackManager.holds.isHeld(cueId),
                 keyCount = keys.size,
                 viaEffectKeyCount = keys.count { it.viaEffect },
                 sample = sorted.take(CHECKLIST_SAMPLE_SIZE),

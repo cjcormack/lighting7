@@ -60,7 +60,7 @@ function draw(
           pad={pad}
           at={AT}
           presence="none"
-          isLive={false}
+          cueRing={null}
           editing={false}
           onPress={() => {}}
           onRemove={() => {}}
@@ -134,12 +134,27 @@ describe('a cue pad', () => {
     expect(screen.getByText('Main Show')).toBeTruthy()
   })
 
-  it('goes green when its stack has that cue on stage, and not otherwise', () => {
-    const { container } = draw(cuePad, { isLive: true })
-    expect(container.querySelector('button')!.className).toContain('border-green-500/70')
-    cleanup()
-    const { container: dark } = draw(cuePad)
-    expect(dark.querySelector('button')!.className).not.toContain('border-green-500/70')
+  // D11: a loose hold is solid and pressed; live only in a stack is an outline, not pressed.
+  it('draws a loose hold solid and pressed', () => {
+    const { container } = draw(cuePad, { cueRing: 'loose' })
+    const button = container.querySelector('button')!
+    expect(button.className).toContain('bg-green-500/25')
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('draws a cue live only in a stack as an outline, not pressed', () => {
+    const { container } = draw(cuePad, { cueRing: 'stack' })
+    const button = container.querySelector('button')!
+    expect(button.className).toContain('border-green-500/80')
+    expect(button.className).not.toContain('bg-green-500/25')
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('draws an off cue with no ring', () => {
+    const { container } = draw(cuePad)
+    const button = container.querySelector('button')!
+    expect(button.className).not.toContain('border-green-500')
+    expect(button.getAttribute('aria-pressed')).toBe('false')
   })
 })
 

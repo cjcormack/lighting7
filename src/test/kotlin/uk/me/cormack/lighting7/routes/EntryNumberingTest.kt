@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -238,8 +239,12 @@ class EntryNumberingTest : RouteIntegrationTest() {
         assertTrue(rows(client, stackId).isEmpty())
     }
 
-    /** A Layer 4 row standing in for [cueId] being on stage, stamped with a deliberately stale priority. */
-    private fun putOnStage(cueId: Int) {
+    /**
+     * [cueId] live in [stackId] — its entry's hold taken by a GO — with a Layer 4 row standing in for
+     * its contribution, stamped with a deliberately stale priority. A restamp reaches what a hold holds.
+     */
+    private fun putOnStage(stackId: Int, cueId: Int) {
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
         state.show.fxEngine.cueLayer.setAssignments(
             cueId,
             listOf(
@@ -254,17 +259,17 @@ class EntryNumberingTest : RouteIntegrationTest() {
     }
 
     private fun livePriority(cueId: Int): Int =
-        state.show.fxEngine.cueLayer.assignmentsExcludingStack(-1).single { it.cueId == cueId }.priority
+        state.show.fxEngine.cueLayer.assignmentsExcludingCues(emptySet()).single { it.cueId == cueId }.priority
 
     @Test
     fun `a delete, a marker and an insert restamp the priority of a cue already on stage`() = testApplication {
-        // A live cue's priority is its entry's position, markers counted (cues-engineering.md
-        // §"Priority"), so every write that shifts positions restamps the cues on stage.
+        // A stack hold's priority is its entry's position, markers counted (cues-engineering.md
+        // §"Priority"), so every write that shifts positions restamps the holds on stage.
         mountTestApp(state)
         val client = jsonClient()
         val stackId = createStack(client)
         val ids = (1..3).map { createCue(client, stackId, "Q$it") }
-        putOnStage(ids[2])
+        putOnStage(stackId, ids[2])
 
         client.delete("/api/rest/projects/$projectId/cues/${ids[0]}")
         assertEquals(cueDerivedPriority(stackId, 1), livePriority(ids[2]), "Q1 deleted: Q3 is second")

@@ -419,8 +419,8 @@ internal class PatchEditTools(private val state: State) {
             if (target.isCurrent) touched.templates.forEach { republishForTemplateEdit(state, it) }
         }
         if (touched.cues.isNotEmpty()) {
-            if (target.isCurrent) touched.cues.forEach { (cueId, stackId) -> republishCueIfLive(state, cueId, stackId) }
-            fixtures.cuesRecomposed(touched.cues.keys.toList())
+            if (target.isCurrent) touched.cues.forEach { republishCueIfLive(state, it) }
+            fixtures.cuesRecomposed(touched.cues.toList())
             fixtures.cueListChanged()
         }
         if (touched.buskTiles > 0) fixtures.buskRigChanged()

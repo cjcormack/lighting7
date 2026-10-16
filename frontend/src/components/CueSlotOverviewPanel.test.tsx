@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { DndContext } from '@dnd-kit/core'
 import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { installRelativeUrlRequest, programmerWs } from '@/test/backendMock'
+import { cueHoldsWs, installRelativeUrlRequest, programmerWs } from '@/test/backendMock'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -35,22 +35,13 @@ const SLOTS = [
   { id: 2, page: 0, slotIndex: 1, itemType: 'look' as const, itemId: 6, itemName: 'Storm Wash' },
 ]
 
-/** Stack 3 holds cue 20 live, so the cue tile reads lit. */
-const STACKS = [
-  {
-    id: 3,
-    name: 'Main Show',
-    loop: false,
-    sortOrder: 0,
-    type: 'STACK',
-    label: null,
-    activeCueId: 20,
-    nextCueId: null,
-    canEdit: true,
-    canDelete: true,
-    cues: [],
-  },
-]
+const STACKS: unknown[] = []
+
+/** Cue 20 held by stack 3 alone, or by a press too — the two looks of D11. */
+const STACK_HOLD = { kind: 'STACK', stackId: 3, entryId: 200 }
+function holding(...holds: unknown[]) {
+  cueHoldsWs.frame = { projectId: 1, cues: [{ cueId: 20, priority: 1000, holds }] }
+}
 
 interface Recorded {
   url: string
@@ -106,6 +97,7 @@ describe('the FX cue-slot overlay', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     programmerWs.reset()
+    cueHoldsWs.frame = { projectId: null, cues: [] }
   })
 
   afterEach(() => {
@@ -129,16 +121,33 @@ describe('the FX cue-slot overlay', () => {
     })
   })
 
-  it('applies a cue tile, and stops it when it is its stack’s live cue', async () => {
+  it('stops a cue tile a press holds, drawn solid and pressed', async () => {
+    holding(STACK_HOLD, { kind: 'LOOSE', seq: 1 })
     const { calls } = draw()
-    // Cue 20 is stack 3's `activeCueId`, so the first press stops it.
-    fireEvent.pointerDown(await screen.findByLabelText('Blackout'))
-    fireEvent.pointerUp(screen.getByLabelText('Blackout'))
+    const tile = await screen.findByLabelText('Blackout')
+    await waitFor(() => expect(tile.getAttribute('aria-pressed')).toBe('true'))
+    fireEvent.pointerDown(tile)
+    fireEvent.pointerUp(tile)
 
     await waitFor(() => {
       expect(writes(calls).some((c) => c.url.includes('/cues/20/stop'))).toBe(true)
     })
     expect(writes(calls).some((c) => c.url.includes('/cues/20/apply'))).toBe(false)
+  })
+
+  it('takes a cue live only in a stack loose, drawn as an outline', async () => {
+    holding(STACK_HOLD)
+    const { calls } = draw()
+    const tile = await screen.findByLabelText('Blackout')
+    await waitFor(() => expect(tile.className).toContain('border-primary/80'))
+    expect(tile.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.pointerDown(tile)
+    fireEvent.pointerUp(tile)
+
+    await waitFor(() => {
+      expect(writes(calls).some((c) => c.url.includes('/cues/20/apply'))).toBe(true)
+    })
+    expect(writes(calls).some((c) => c.url.includes('/cues/20/stop'))).toBe(false)
   })
 
   it('lights a Look tile from the applied feed, and not from a palette with the same id', async () => {

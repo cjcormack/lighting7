@@ -85,7 +85,7 @@ All endpoints under `/api/rest/projects/{projectId}/show`.
 1. If `project.activeEntryId` is non-null, short-circuit — return current state without resetting the running cue stack.
 2. Resolve the project's first STACK entry (sorted by `sortOrder`).
 3. Set `project.activeEntryId = firstStack.id`.
-4. Call `CueStackManager.activateCueInStack` at the target stack's first STANDARD cue.
+4. Call `CueStackManager.activateAtFirstCue` — the target stack's armed standby, else its first cue entry.
 5. Broadcast `showChanged(projectId, activeEntryId, activatedStackId, activatedStackName)`.
 
 If the show is empty (no STACK entries), activation completes without starting a cue stack — `activeEntryId` stays null and the broadcast carries null fields.
@@ -94,7 +94,7 @@ If the show is empty (no STACK entries), activation completes without starting a
 
 1. Read project and resolve the target entry (next STACK for advance, the requested entry for go-to).
 2. If `deactivatePrevious` (default true), deactivate the previous entry's cue stack via `CueStackManager`.
-3. Activate the new entry's cue stack — delegates to `CueStackManager.activateCueInStack` starting at the first STANDARD cue.
+3. Activate the new entry's cue stack — delegates to `CueStackManager.activateAtFirstCue`, its armed standby else its first cue entry.
 4. Update `project.activeEntryId`.
 5. Broadcast `showChanged(projectId, activeEntryId, activatedStackId, activatedStackName)`.
 
