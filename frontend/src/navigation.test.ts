@@ -16,47 +16,73 @@ import {
 } from "./navigation"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import { mostSpecificActiveId } from "./lib/navMatch"
+import { WINDOW_VIEWS } from "./lib/windowViews"
 
 /** Minimal NavItem factory for exercising filterNavItems in isolation. */
-function makeItem(id: string, visibility: NavItem["visibility"]): NavItem {
+function makeItem(id: string, needsRig?: string): NavItem {
   return {
     id,
     label: id,
     icon: Box,
     path: (p) => `/projects/${p}/${id}`,
-    visibility,
+    needsRig,
     pathMatch: `/${id}`,
     section: "run",
   }
 }
 
 describe("filterNavItems", () => {
-  const items = [
-    makeItem("always", "always"),
-    makeItem("active", "active-only"),
-    makeItem("inactive", "inactive-only"),
-  ]
+  const items = [makeItem("anywhere"), makeItem("rig", "Needs it")]
 
-  it("keeps 'always' items regardless of active state", () => {
-    expect(filterNavItems(items, true).map((i) => i.id)).toContain("always")
-    expect(filterNavItems(items, false).map((i) => i.id)).toContain("always")
+  it("offers every row whichever project is viewed (navigation plan D4)", () => {
+    expect(filterNavItems(items, true).map((i) => i.id)).toEqual(["anywhere", "rig"])
+    expect(filterNavItems(items, false).map((i) => i.id)).toEqual(["anywhere", "rig"])
   })
 
-  it("shows 'active-only' items only when viewing the active project", () => {
-    expect(filterNavItems(items, true).map((i) => i.id)).toContain("active")
-    expect(filterNavItems(items, false).map((i) => i.id)).not.toContain("active")
+  it("marks a needsRig row off the rig only while the viewed project is not on it", () => {
+    expect(filterNavItems(items, true).map((i) => i.offRig)).toEqual([false, false])
+    expect(filterNavItems(items, false).map((i) => i.offRig)).toEqual([false, true])
   })
 
-  it("shows 'inactive-only' items only when NOT viewing the active project", () => {
-    expect(filterNavItems(items, false).map((i) => i.id)).toContain("inactive")
-    expect(filterNavItems(items, true).map((i) => i.id)).not.toContain("inactive")
+  it("does not mutate the input", () => {
+    filterNavItems(items, false)
+    expect(items.map((i) => "offRig" in i)).toEqual([false, false])
+  })
+})
+
+/** The nine views D4 talks about: each reads or drives the live show. */
+const NEEDS_RIG = [
+  "programmer",
+  "program",
+  "prompt-book",
+  "fx",
+  "stage-view",
+  "fixtures",
+  "groups",
+  "channels",
+  "surfaces",
+]
+
+describe("off the rig (navigation plan D4)", () => {
+  it("is exactly the nine views, each with the sentence NotOnRig says", () => {
+    const needsRig = navItems.filter((i) => i.needsRig != null)
+    expect(needsRig.map((i) => i.id).sort()).toEqual([...NEEDS_RIG].sort())
+    for (const item of needsRig) expect(item.needsRig).toMatch(/rig that's live/)
   })
 
-  it("preserves declaration order and does not mutate the input", () => {
-    const before = items.map((i) => i.id)
-    const result = filterNavItems(items, true)
-    expect(result.map((i) => i.id)).toEqual(["always", "active"])
-    expect(items.map((i) => i.id)).toEqual(before)
+  it("keeps every row on a project that is not current, and dots the nine", () => {
+    const off = filterNavItems(navItems, false, true)
+    expect(off.map((i) => i.id)).toEqual(filterNavItems(navItems, true, true).map((i) => i.id))
+    expect(off.filter((i) => i.offRig).map((i) => i.id).sort()).toEqual([...NEEDS_RIG].sort())
+  })
+
+  it("dots nothing on the current project", () => {
+    expect(filterNavItems(navItems, true, true).filter((i) => i.offRig)).toEqual([])
+  })
+
+  it("dots a venue's rail the same way, less the views a venue never has", () => {
+    const off = filterNavItems(navItems, false, true, true).filter((i) => i.offRig).map((i) => i.id)
+    expect(off.sort()).toEqual(["channels", "fixtures", "groups", "programmer", "stage-view", "surfaces"])
   })
 })
 
@@ -85,22 +111,6 @@ describe("navItems registry", () => {
     }
   })
 
-  // Guards the intent that Stage and Show are only reachable for the active project.
-  it("scopes Stage and Show to the active project", () => {
-    const stage = navItems.find((i) => i.id === "stage-view")
-    const program = navItems.find((i) => i.id === "program")
-    expect(stage?.visibility).toBe("active-only")
-    expect(program?.visibility).toBe("active-only")
-  })
-
-  it("hides Stage/Show (and other active-only items) when viewing a non-active project", () => {
-    const ids = filterNavItems(navItems, false).map((i) => i.id)
-    expect(ids).not.toContain("stage-view")
-    expect(ids).not.toContain("program")
-    // Sanity: always-visible items survive the same filter.
-    expect(ids).toContain("scripts")
-    expect(ids).toContain("install-settings")
-  })
 })
 
 /**
@@ -435,6 +445,32 @@ describe("window commands", () => {
     commands.find((c) => c.id === "window-show-s-3-looks")!.run()
     expect(inputs.actions.show).toHaveBeenNthCalledWith(1, "s-2", "/projects/1/busk")
     expect(inputs.actions.show).toHaveBeenNthCalledWith(2, "s-3", "/projects/1/looks")
+  })
+
+  it("puts a view that needs the rig on the project on the rig, whatever the target was on (D4)", () => {
+    const inputs = base({
+      windows: [row("s-1", "Screen 1"), row("s-2", "Screen 2", "/projects/4/busk")],
+      currentProjectId: 9,
+      canOpenOnDisplay: true,
+    })
+    const commands = buildWindowCommands(inputs)
+    commands.find((c) => c.id === "window-show-s-2-busk")!.run()
+    commands.find((c) => c.id === "window-show-s-2-stage")!.run()
+    commands.find((c) => c.id === "window-show-s-2-looks")!.run()
+    commands.find((c) => c.id === "window-open-programmer")!.run()
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(1, "s-2", "/projects/9/busk")
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(2, "s-2", "/projects/9/stage")
+    // A library is stored data: it stays on the window's own project.
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(3, "s-2", "/projects/4/looks")
+    expect(inputs.actions.openOnDisplay).toHaveBeenCalledWith("/projects/9/programmer")
+  })
+
+  it("marks exactly the window views whose nav row needs the rig", () => {
+    for (const view of WINDOW_VIEWS) {
+      const row = navItems.find((i) => i.pathMatch === view.segment)
+      expect(row, view.id).toBeDefined()
+      expect(view.needsRig === true, view.id).toBe(row!.needsRig != null)
+    }
   })
 
   it("skips a window whose view names no project when there is no viewed project either", () => {

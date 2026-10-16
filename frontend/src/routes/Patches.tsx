@@ -75,10 +75,10 @@ export function ProjectPatches() {
   const projectIdNum = Number(projectId)
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
 
-  // No "not the current project → redirect" guard, unlike `/fixtures/list`: a patch is stored per
-  // project and every query below takes the id, so an *inactive* project's patch list renders here
-  // exactly as its settings tab did — which is what keeps the nav entry's `visibility: "always"`
-  // honest. Only the bare `/patches` resolves "which project?" (`PatchesRedirect`).
+  // No `RigGate`, unlike `/fixtures/list`: a patch is stored per project and every query below
+  // takes the id, so the patch list of a project that is not on the rig renders here as its
+  // settings tab did — which is why its nav row has no `needsRig`. Only the bare `/patches`
+  // resolves "which project?" (`PatchesRedirect`).
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence.

@@ -8,12 +8,27 @@
  * open at once (a picker over an editor), and the second closing must not clear the first's claim.
  */
 
+import { useSyncExternalStore } from 'react'
+
 const unsaved = new Set<symbol>()
+const listeners = new Set<() => void>()
 
 /** Called by each `Sheet` as its own dirty state moves. Idempotent per id. */
 export function setSheetUnsaved(id: symbol, dirty: boolean): void {
+  const had = unsaved.size > 0
   if (dirty) unsaved.add(id)
   else unsaved.delete(id)
+  if (had !== unsaved.size > 0) for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+/** [hasUnsavedSheets], subscribed: `RigGate` holds a view that is following a switch until it is false. */
+export function useHasUnsavedSheets(): boolean {
+  return useSyncExternalStore(subscribe, hasUnsavedSheets)
 }
 
 export function unsavedSheetCount(): number {
@@ -27,4 +42,5 @@ export function hasUnsavedSheets(): boolean {
 /** Test seam. */
 export function resetUnsavedSheets(): void {
   unsaved.clear()
+  for (const listener of listeners) listener()
 }

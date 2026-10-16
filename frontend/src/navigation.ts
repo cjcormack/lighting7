@@ -38,10 +38,11 @@ import {
 import { useLocation } from "react-router"
 import type { LucideIcon } from "lucide-react"
 import { useAuthStatusQuery } from "./store/auth"
+import { useProjectListQuery } from "./store/projects"
 import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import type { DeskWindow } from "./api/windowsApi"
-import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from "./lib/windowViews"
+import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath, windowViewProject } from "./lib/windowViews"
 import { showViewPath } from "./lib/showPosition"
 import { BUSK_FOCUSES, VIEW_OPTION_PAGE_FOLLOWS, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
@@ -81,8 +82,13 @@ export interface NavItem {
   keywords?: string[]
   icon: LucideIcon
   path: (projectId: number) => string
-  /** Controls when this item is shown based on project status */
-  visibility: "always" | "active-only" | "inactive-only"
+  /**
+   * The row's view needs its project on the rig (navigation plan D4) — it reads or drives the live
+   * show, so it cannot open on stored data. Off the rig the row stays, muted with a hollow dot, and
+   * its route draws `NotOnRig`, which says this sentence: why the view needs the rig, completed
+   * there by *…and <the current show> is on it now.*
+   */
+  needsRig?: string
   /** Used to match active state against the current pathname */
   pathMatch: string
   /**
@@ -110,6 +116,9 @@ export interface NavItem {
   hiddenInVenue?: boolean
 }
 
+/** The Channels row's [NavItem.needsRig], which each universe's ⌘K item shares. */
+const CHANNELS_NEEDS_RIG = "Channels shows what the rig that's live is sending"
+
 /**
  * Shared navigation registry consumed by the sidebar, the command palette and the settings tabs.
  * When adding a new page/route, add an entry here and it will automatically appear in both the
@@ -136,7 +145,7 @@ export const navItems: NavItem[] = [
     label: "Programmer",
     icon: SlidersVertical,
     path: (p) => `/projects/${p}/programmer`,
-    visibility: "active-only",
+    needsRig: "The Programmer writes to the rig that's live",
     pathMatch: "/programmer",
     section: "run",
   },
@@ -153,7 +162,7 @@ export const navItems: NavItem[] = [
     // Back to the stack and cue this window last had open on Show (`lib/showPosition.ts`), read
     // when the entry is pressed — the sidebar and ⌘K both call `path` at the press.
     path: (p) => showViewPath(p),
-    visibility: "active-only",
+    needsRig: "Show runs its cues on the rig that's live",
     pathMatch: "/show",
     section: "run",
     hiddenInVenue: true,
@@ -163,7 +172,7 @@ export const navItems: NavItem[] = [
     label: "Prompt Book",
     icon: BookOpenText,
     path: (p) => `/projects/${p}/prompt-book`,
-    visibility: "active-only",
+    needsRig: "The Prompt Book calls cues on the rig that's live",
     pathMatch: "/prompt-book",
     section: "run",
     hiddenInVenue: true,
@@ -178,7 +187,7 @@ export const navItems: NavItem[] = [
     label: "Busk",
     icon: AudioWaveform,
     path: (p) => `/projects/${p}/busk`,
-    visibility: "active-only",
+    needsRig: "Busk presses its pads onto the rig that's live",
     pathMatch: "/busk",
     section: "run",
     hiddenInVenue: true,
@@ -188,7 +197,7 @@ export const navItems: NavItem[] = [
     label: "Stage",
     icon: Boxes,
     path: (p) => `/projects/${p}/stage`,
-    visibility: "active-only",
+    needsRig: "The Stage view draws the rig that's live",
     pathMatch: "/stage",
     section: "run",
   },
@@ -199,7 +208,6 @@ export const navItems: NavItem[] = [
     label: "Patch List",
     icon: TableProperties,
     path: (p) => `/projects/${p}/patches`,
-    visibility: "always",
     pathMatch: "/patches",
     section: "rig",
   },
@@ -208,7 +216,7 @@ export const navItems: NavItem[] = [
     label: "Fixtures",
     icon: LayoutGrid,
     path: (p) => `/projects/${p}/fixtures`,
-    visibility: "active-only",
+    needsRig: "Fixtures shows the rig that's live",
     pathMatch: "/fixtures",
     section: "rig",
   },
@@ -217,7 +225,7 @@ export const navItems: NavItem[] = [
     label: "Groups",
     icon: Layers,
     path: (p) => `/projects/${p}/groups`,
-    visibility: "active-only",
+    needsRig: "Groups shows the rig that's live",
     pathMatch: "/groups",
     section: "rig",
   },
@@ -228,7 +236,6 @@ export const navItems: NavItem[] = [
     label: "Regions",
     icon: Box,
     path: (p) => `/projects/${p}/settings/stage`,
-    visibility: "always",
     pathMatch: "/settings/stage",
     section: "rig",
   },
@@ -237,7 +244,6 @@ export const navItems: NavItem[] = [
     label: "Rigging",
     icon: Anchor,
     path: (p) => `/projects/${p}/settings/rigging`,
-    visibility: "always",
     pathMatch: "/settings/rigging",
     section: "rig",
   },
@@ -248,7 +254,7 @@ export const navItems: NavItem[] = [
     // No universe in the path: the route resolves the project's first patched universe
     // (rigs don't always start at 0).
     path: (p) => `/projects/${p}/channels`,
-    visibility: "active-only",
+    needsRig: CHANNELS_NEEDS_RIG,
     pathMatch: "/channels",
     section: "rig",
   },
@@ -265,7 +271,6 @@ export const navItems: NavItem[] = [
     label: "Looks",
     icon: SwatchBook,
     path: (p) => `/projects/${p}/looks`,
-    visibility: "always",
     pathMatch: "/looks",
     section: "library",
     hiddenInVenue: true,
@@ -284,7 +289,6 @@ export const navItems: NavItem[] = [
     label: "Palettes",
     icon: Palette,
     path: (p) => `/projects/${p}/palettes`,
-    visibility: "always",
     pathMatch: "/palettes",
     section: "library",
     hiddenInVenue: true,
@@ -296,7 +300,6 @@ export const navItems: NavItem[] = [
     keywords: ["fx library"],
     icon: Sparkles,
     path: (p) => `/projects/${p}/fx-library`,
-    visibility: "always",
     pathMatch: "/fx-library",
     section: "library",
     hiddenInVenue: true,
@@ -308,7 +311,6 @@ export const navItems: NavItem[] = [
     label: "Speed Masters",
     icon: Gauge,
     path: (p) => `/projects/${p}/speed-masters`,
-    visibility: "always",
     pathMatch: "/speed-masters",
     section: "library",
     hiddenInVenue: true,
@@ -318,7 +320,6 @@ export const navItems: NavItem[] = [
     label: "Scripts",
     icon: Braces,
     path: (p) => `/projects/${p}/scripts`,
-    visibility: "always",
     pathMatch: "/scripts",
     section: "library",
     hiddenInVenue: true,
@@ -333,7 +334,6 @@ export const navItems: NavItem[] = [
     keywords: ["configure", "general", "metadata"],
     icon: Settings,
     path: (p) => `/projects/${p}/settings`,
-    visibility: "always",
     pathMatch: "/settings",
     section: "project",
   },
@@ -342,7 +342,7 @@ export const navItems: NavItem[] = [
     label: "Surfaces",
     icon: Sliders,
     path: (p) => `/projects/${p}/settings/surfaces`,
-    visibility: "active-only",
+    needsRig: "Surfaces binds controls on the rig that's live",
     pathMatch: "/settings/surfaces",
     section: "project",
   },
@@ -352,7 +352,6 @@ export const navItems: NavItem[] = [
     commandLabel: "Project sync",
     icon: Cloud,
     path: (p) => `/projects/${p}/settings/sync`,
-    visibility: "always",
     pathMatch: "/settings/sync",
     section: "project",
     adminOnly: true,
@@ -365,7 +364,6 @@ export const navItems: NavItem[] = [
     label: "Projects",
     icon: Folders,
     path: () => "/projects",
-    visibility: "always",
     pathMatch: "/projects",
     pathExact: true,
     section: "desk",
@@ -375,7 +373,6 @@ export const navItems: NavItem[] = [
     label: "Install Settings",
     icon: Computer,
     path: () => "/install",
-    visibility: "always",
     pathMatch: "/install",
     section: "desk",
   },
@@ -384,7 +381,6 @@ export const navItems: NavItem[] = [
     label: "Users",
     icon: Users,
     path: () => "/install/users",
-    visibility: "always",
     pathMatch: "/install/users",
     section: "desk",
     parent: "install-settings",
@@ -396,7 +392,6 @@ export const navItems: NavItem[] = [
     commandLabel: "Desk sync",
     icon: Cloud,
     path: () => "/install/sync",
-    visibility: "always",
     pathMatch: "/install/sync",
     section: "desk",
     parent: "install-settings",
@@ -411,7 +406,6 @@ export const navItems: NavItem[] = [
     label: "Remote Access",
     icon: Globe,
     path: () => "/install/remote",
-    visibility: "always",
     pathMatch: "/install/remote",
     section: "desk",
     parent: "install-settings",
@@ -422,7 +416,6 @@ export const navItems: NavItem[] = [
     label: "Updates",
     icon: Download,
     path: () => "/install/updates",
-    visibility: "always",
     pathMatch: "/install/updates",
     section: "desk",
     parent: "install-settings",
@@ -432,7 +425,6 @@ export const navItems: NavItem[] = [
     label: "Diagnostics",
     icon: Activity,
     path: () => "/install/diagnostics",
-    visibility: "always",
     pathMatch: "/install/diagnostics",
     section: "desk",
     parent: "install-settings",
@@ -460,7 +452,7 @@ export function useUniverseNavItems(): NavItem[] {
         label: `Universe ${universe}`,
         icon: SlidersHorizontal,
         path: (p: number) => `/projects/${p}/channels/${universe}`,
-        visibility: "active-only" as const,
+        needsRig: CHANNELS_NEEDS_RIG,
         pathMatch: `/channels/${universe}`,
         section: "rig" as const,
       })),
@@ -485,7 +477,6 @@ export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family)
   label: `${FAMILY_LABELS[family].singular} Palettes`,
   icon: Palette,
   path: (p: number) => `/projects/${p}/palettes?family=${familySlug(family)}`,
-  visibility: "always" as const,
   // The bare path, not `/palettes/${slug}` — see above. `navigation.test.ts` asserts this against
   // the real array, which is why the array is module-scope rather than built inside the hook.
   pathMatch: "/palettes",
@@ -511,27 +502,33 @@ export function useIsNavAdmin(): boolean {
 }
 
 /**
- * Whether one row is offered — the one predicate behind its sidebar row, its ⌘K item and the
- * settings tab it opens (navigation plan P2), so the three cannot disagree.
+ * How one row is offered: not at all, as itself, or **off the rig** — drawn muted with a hollow
+ * dot, its route drawing `NotOnRig` (navigation plan D4). The one predicate behind a row in the
+ * sidebar, its ⌘K item and the settings tab it opens (P2), so the three cannot disagree.
  */
-export function navItemShown(
+export type NavRowState = "hidden" | "shown" | "offRig"
+
+export function navItemState(
   item: NavItem,
   isViewingActiveProject: boolean,
   isAdmin: boolean = true,
   isVenue: boolean = false,
-): boolean {
-  if (item.adminOnly && !isAdmin) return false
-  if (item.hiddenInVenue && isVenue) return false
-  if (item.visibility === "always") return true
-  if (item.visibility === "active-only") return isViewingActiveProject
-  if (item.visibility === "inactive-only") return !isViewingActiveProject
-  return true
+): NavRowState {
+  if (item.adminOnly && !isAdmin) return "hidden"
+  if (item.hiddenInVenue && isVenue) return "hidden"
+  return item.needsRig != null && !isViewingActiveProject ? "offRig" : "shown"
 }
 
+/** What an off-the-rig row or tab says on its tooltip (navigation plan D4). */
+export const OFF_RIG_LABEL = "Needs the project on the rig"
+
+/** A row [filterNavItems] offers, and whether it is offered off the rig. */
+export type ShownNavItem = NavItem & { offRig: boolean }
+
 /**
- * Filter nav items by project-activity visibility and, for [NavItem.adminOnly] entries,
- * by role. [isAdmin] defaults to true so callers that predate roles — and tests exercising
- * visibility alone — keep their existing behaviour.
+ * The rows offered, by role and kind, each marked [ShownNavItem.offRig] where it needs the rig the
+ * viewed project is not on. [isAdmin] defaults to true so callers that predate roles keep their
+ * behaviour.
  */
 export function filterNavItems(
   items: NavItem[],
@@ -539,26 +536,32 @@ export function filterNavItems(
   isAdmin: boolean = true,
   /** The viewed project is a venue: its rail drops the show's views ([NavItem.hiddenInVenue]). */
   isVenue: boolean = false,
-): NavItem[] {
-  return items.filter((item) => navItemShown(item, isViewingActiveProject, isAdmin, isVenue))
+): ShownNavItem[] {
+  return items.flatMap((item) => {
+    const state = navItemState(item, isViewingActiveProject, isAdmin, isVenue)
+    return state === "hidden" ? [] : [{ ...item, offRig: state === "offRig" }]
+  })
 }
 
 /**
  * Which of a settings page's tabs are offered, by the predicate of the nav row each opens:
- * `tabs` maps a tab to its row's id. A tab whose row is not in the registry is always offered.
+ * `tabs` maps a tab to its row's id, and the answer maps each offered tab to its state, `offRig`
+ * for a tab drawn with D4's dot over a `NotOnRig` body. A tab whose row is not in the registry is
+ * always offered.
  */
 export function useShownTabs<T extends string>(
   tabs: Readonly<Record<T, string>>,
   project?: { isCurrent: boolean; kind?: string } | null,
-): ReadonlySet<T> {
+): ReadonlyMap<T, Exclude<NavRowState, "hidden">> {
   const isAdmin = useIsNavAdmin()
   const isCurrent = project?.isCurrent ?? true
   const isVenue = project?.kind === "VENUE"
   return useMemo(() => {
-    const shown = new Set<T>()
+    const shown = new Map<T, Exclude<NavRowState, "hidden">>()
     for (const tab of Object.keys(tabs) as T[]) {
       const item = navItems.find((i) => i.id === tabs[tab])
-      if (item == null || navItemShown(item, isCurrent, isAdmin, isVenue)) shown.add(tab)
+      const state = item == null ? "shown" : navItemState(item, isCurrent, isAdmin, isVenue)
+      if (state !== "hidden") shown.set(tab, state)
     }
     return shown
   }, [tabs, isCurrent, isAdmin, isVenue])
@@ -589,6 +592,11 @@ export interface WindowCommandInputs {
   windows: readonly DeskWindow[]
   /** This tab's row id, or null before its announce has landed. */
   thisRowId: string | null
+  /**
+   * The project on the rig: a view that needs it is shown there, whatever project the target
+   * window was on (navigation plan D4).
+   */
+  currentProjectId?: number | null
   /** The project a *Show <view> on <window>* lands in when the target's own view names none. */
   projectId: number | null
   fullscreen: boolean
@@ -717,10 +725,10 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
 
   for (const row of inputs.windows) {
     if (row.id === inputs.thisRowId) continue
-    const projectId = projectIdOfPath(row.view) ?? inputs.projectId
+    const projectId = projectIdOfPath(row.view) ?? inputs.projectId ?? inputs.currentProjectId ?? null
     if (projectId == null) continue
     for (const view of WINDOW_VIEWS) {
-      const path = windowViewPath(view, projectId)
+      const path = windowViewPath(view, windowViewProject(view, projectId, inputs.currentProjectId ?? null))
       commands.push({
         id: `window-show-${row.id}-${view.id}`,
         label: `Show ${view.label} on ${row.name}`,
@@ -772,7 +780,7 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
         label: `Open ${view.label} on another display`,
         icon: MonitorUp,
         keywords: ["open", "display", "monitor", "window", "screen", view.label],
-        run: () => actions.openOnDisplay(windowViewPath(view, projectId)),
+        run: () => actions.openOnDisplay(windowViewPath(view, windowViewProject(view, projectId, inputs.currentProjectId ?? null))),
       })
     }
   }
@@ -860,6 +868,8 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
  */
 export function useWindowCommands(projectId: number | null): WindowCommand[] {
   const windows = useDeskWindows()
+  const { data: projects } = useProjectListQuery()
+  const currentProjectId = projects?.find((p) => p.isCurrent)?.id ?? null
   const { active: fullscreen } = useFullscreenState()
   const following = useDeskFollow()
   const thisRowId = thisWindowRow(windows)?.id ?? null
@@ -877,6 +887,7 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
         windows,
         thisRowId,
         projectId,
+        currentProjectId,
         fullscreen,
         canFullscreen: canFullscreen(),
         canOpenOnDisplay: canChooseDisplay(),
@@ -902,7 +913,7 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
           unlink: unlinkFromDeskNow,
         },
       }),
-    [windows, thisRowId, projectId, fullscreen, following, buskFocus, immersive, theme],
+    [windows, thisRowId, projectId, currentProjectId, fullscreen, following, buskFocus, immersive, theme],
   )
 }
 

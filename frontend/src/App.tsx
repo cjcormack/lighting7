@@ -57,6 +57,7 @@ import { useRouterMayStart } from "./lib/sentryReady";
 import { windowViewOf } from "./lib/windowViews";
 import { ErrorBoundary, setTag, wrapCreateBrowserRouter } from "@sentry/react";
 import { Button } from "@/components/ui/button";
+import { RigGate } from "./components/NotOnRig";
 
 // Route-level lazy boundaries for two of the four heavy islands.
 //
@@ -140,7 +141,7 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/fixtures/list",
-          element: <ProjectFixturesList />,
+          element: <RigGate navId="fixtures" to={(p, { search }) => `/projects/${p}/fixtures/list${search}`}><ProjectFixturesList /></RigGate>,
         },
         {
           path: "fixtures/list",
@@ -148,11 +149,11 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/fixtures",
-          element: <ProjectFixtures />,
+          element: <RigGate navId="fixtures"><ProjectFixtures /></RigGate>,
         },
         {
           path: "projects/:projectId/stage",
-          element: <Stage />,
+          element: <RigGate navId="stage-view"><Stage /></RigGate>,
         },
         {
           path: "stage",
@@ -160,7 +161,7 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/groups/list",
-          element: <ProjectGroupsList />,
+          element: <RigGate navId="groups" to={(p, { search }) => `/projects/${p}/groups/list${search}`}><ProjectGroupsList /></RigGate>,
         },
         {
           path: "groups/list",
@@ -168,7 +169,7 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/groups",
-          element: <ProjectGroups />,
+          element: <RigGate navId="groups"><ProjectGroups /></RigGate>,
         },
         {
           path: "groups",
@@ -176,7 +177,7 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/busk",
-          element: <ProjectBusk />,
+          element: <RigGate navId="fx"><ProjectBusk /></RigGate>,
         },
         {
           path: "busk",
@@ -322,17 +323,17 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/channels",
-          element: <ProjectChannelsDefaultUniverse />,
+          element: <RigGate navId="channels"><ProjectChannelsDefaultUniverse /></RigGate>,
         },
         {
           path: "projects/:projectId/channels/:universe",
-          element: <ProjectChannels />,
+          element: <RigGate navId="channels" to={(p, { params }) => `/projects/${p}/channels/${params.universe}`}><ProjectChannels /></RigGate>,
         },
         // The DMX sheet — the cards route's sibling, reached through the Cards · Table switcher
         // and the sticky preference, never from the sidebar (§Navigation Registry).
         {
           path: "projects/:projectId/channels/:universe/table",
-          element: <ProjectChannelsTable />,
+          element: <RigGate navId="channels" to={(p, { params }) => `/projects/${p}/channels/${params.universe}/table`}><ProjectChannelsTable /></RigGate>,
         },
         {
           path: "channels",
@@ -363,17 +364,17 @@ function getAppRouter() {
         // of it into a page of its own; `/program*` below keeps every existing link alive.
         {
           path: "projects/:projectId/show",
-          element: <ShowPage />,
+          element: <RigGate navId="program"><ShowPage /></RigGate>,
         },
         {
           path: "projects/:projectId/show/stacks/:stackId",
-          element: <ShowPage />,
+          element: <RigGate navId="program"><ShowPage /></RigGate>,
         },
         // The cue sheet — the stack's cards route's sibling, reached through the Cards · Table
         // switcher on the stack header and the sticky preference (§Navigation Registry).
         {
           path: "projects/:projectId/show/stacks/:stackId/table",
-          element: <ShowPage stackView="list" />,
+          element: <RigGate navId="program"><ShowPage stackView="list" /></RigGate>,
         },
         {
           path: "show",
@@ -384,7 +385,7 @@ function getAppRouter() {
         // readings of one live object and could never be seen together, which is the whole point.
         {
           path: "projects/:projectId/programmer",
-          element: <ProgrammerPage />,
+          element: <RigGate navId="programmer"><ProgrammerPage /></RigGate>,
         },
         {
           path: "programmer",
@@ -424,7 +425,7 @@ function getAppRouter() {
         },
         {
           path: "projects/:projectId/prompt-book",
-          element: <PromptBookViewerPage />,
+          element: <RigGate navId="prompt-book"><PromptBookViewerPage /></RigGate>,
         },
         {
           path: "prompt-book",

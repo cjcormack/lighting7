@@ -26,7 +26,7 @@ import { useShowBarProps } from '@/hooks/useShowBarProps'
 import { lightingApi } from '@/api/lightingApi'
 import { includedCueId } from '@/lib/includedTarget'
 import { programmerClearAll } from '@/store/programmer'
-import { useCurrentProjectQuery, useProjectQuery } from '@/store/projects'
+import { useProjectQuery } from '@/store/projects'
 import { CurrentProjectRedirect } from '@/components/CurrentProjectRedirect'
 
 const GROUPED_KEY = 'programmer.grouped'
@@ -82,7 +82,6 @@ export function ProgrammerFxRedirect() {
 export function ProgrammerPage() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   // Only `showHeaderProps` is read: this page draws no `ShowBar` (see the note beside the header
   // below). The hook is still the right source for the header's Start/Stop — the same derivation
@@ -100,7 +99,7 @@ export function ProgrammerPage() {
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the grid
   // arrives.
-  if (currentLoading || projectLoading) {
+  if (projectLoading) {
     return (
       <SheetPage>
         <SheetPage.Header>
@@ -109,12 +108,6 @@ export function ProgrammerPage() {
         <SheetPage.Empty loading />
       </SheetPage>
     )
-  }
-
-  if (!Number.isFinite(projectIdNum)) {
-    return currentProject ? (
-      <Navigate to={`/projects/${currentProject.id}/programmer`} replace />
-    ) : null
   }
 
   if (!project) {
@@ -183,7 +176,7 @@ export function ProgrammerPage() {
  * `useProgrammerSheets`.
  *
  * Memoized: its only prop is `projectId`, so this is the barrier that keeps `ProgrammerPage`'s own
- * re-renders (`useShowBarProps`, `useCurrentProjectQuery`, `useProjectQuery`) from cascading into
+ * re-renders (`useShowBarProps`, `useProjectQuery`) from cascading into
  * the whole grid/rail/scope subtree below it.
  */
 const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: number }) {

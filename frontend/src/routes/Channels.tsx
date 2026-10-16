@@ -409,14 +409,8 @@ export function ProjectChannels() {
   const { projectId, universe } = useParams()
   const projectIdNum = Number(projectId)
   const universeNum = Number(universe ?? 0)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const location = useLocation()
-
-  // If viewing a non-current project, redirect to the current project
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/channels/${universeNum}`} replace />
-  }
 
   // Sticky view: the sidebar's single "Channels" entry points here, so honour the last-used view
   // — exactly the Fixtures / Groups wiring (`ProjectFixtures`). The switcher's Cards segment both
@@ -426,7 +420,7 @@ export function ProjectChannels() {
     return <Navigate to={`/projects/${projectIdNum}/channels/${universeNum}/table`} replace />
   }
 
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
         <Loader2 className="size-6 animate-spin" />
