@@ -466,6 +466,31 @@ class ProgrammerStore {
         if (!covered) bumpCoverage()
     }
 
+    /**
+     * As [put], but the slot goes **under** whatever owner holds the key now rather than on top, so
+     * the value on stage does not change; with no owner there, or [owner] the only one, it is the
+     * top. A layer's Detach under a Locate or a flash, which must keep the layer's value for when
+     * that owner lets go.
+     */
+    fun putBeneathTop(
+        owner: ProgrammerOwner,
+        fixtureKey: String,
+        propertyName: String,
+        value: CueAssignmentResolver.PropertyValue,
+        touched: Boolean = true,
+        sourceGroup: String? = null,
+    ) {
+        val slot = Slot(owner, ProgrammerValue.Hard(value), touched, sourceGroup, seq = bumpEpoch())
+        val byProperty = properties.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
+        var covered = false
+        byProperty.compute(propertyName) { _, holder ->
+            covered = holder != null
+            val others = holder?.all().orEmpty().filter { it.owner != owner }
+            if (others.isEmpty()) Single(slot) else Stack(listOf(others[0], slot) + others.drop(1))
+        }
+        if (!covered) bumpCoverage()
+    }
+
     /** One key's share of a cooked layer stack, ready for [putLayerSlots]. */
     data class LayerSlotWrite(
         val fixtureKey: String,

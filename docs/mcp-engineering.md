@@ -318,7 +318,8 @@ gap a model hit: the Shehds' fixture-level colour was refused and nothing said a
 target and `create_look` descriptions say how to name one. The rows then go through the
 REST write path (`validateLookRows`, `writeLookChildren`), so a trigger or command name is refused as
 it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
-and a cue layer's targets are optional for the same reason. `list_fixture_types` with `properties: true`
+and a cue layer's targets are optional for the same reason; its `asValues: true` is
+`POST /looks/{id}/apply` instead, the Look's values and effects as the programmer's own. `list_fixture_types` with `properties: true`
 is where the model learns the names. A layer with no targets on a Look with effects is refused by
 `create_cue` and `build_cue_stack`, as `apply_look` refuses the same press. There is no static
 effect: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
@@ -375,9 +376,10 @@ the code the desk's own gesture goes through, on the current project:
   `programmer.clearTarget`, the grid's *Release*), all checked before any is cleared.
 - `set_blind` `{blind, fadeSeconds?}` — the WS `programmer.setBlind` branch, call for call:
   `programmer.setBlind`, `sceneryService.onBlindChanged`, `effectsService.onBlindChanged`.
-- `apply_palette` `{paletteId | paletteName, targets?, mode?, mask?, fadeSeconds?}` — `LITERALS`
-  is `applyTemplateToProgrammer` (the chip's click), `LAYER` the toggle route's siblingless
-  `programmerLayerStack.toggle` (⌥click). A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
+- `apply_palette` `{paletteId | paletteName, targets?, asValues?, mask?, fadeSeconds?}` — by default
+  the desk's press (apply-model plan D9): the toggle route's `programmerLayerStack.toggle`, with its
+  family replacement and widening, answering `released` when it took heads off another palette.
+  `asValues: true` is `applyTemplateToProgrammer`, the values a click writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
   a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a palette
   outside it (`PALETTE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
   as the desk's doors do.

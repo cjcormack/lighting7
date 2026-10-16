@@ -222,7 +222,8 @@ and a layer records both as its `targets` and `propertyMask`.
 
 - **A focused Look layer.**
   - `POST /palettes/{id}/apply` gains `write: false`, as Spread has: the same resolve and fan-out
-    (`TemplateFanOut`), answering `written[].value` as each head's literal in the Look row grammar, and
+    (`TemplateFanOut`), answering `values[].value` as each head's literal in the Look row grammar
+    (`written` stays the count, since the click already answers it as a number), and
     writing nothing.
   - The client lands those values in `LookRowStore`'s draft, which saves through the ordinary Look PUT.
   - An effect palette's effect, and a bare effect, become the Look's effects through `absorb-effects`,
@@ -245,7 +246,7 @@ and a layer records both as its `targets` and `propertyMask`.
 | `POST /palettes/{id}/toggle`, `/looks/{id}/toggle`, `/busk/pads/{id}/press` | 1 | Replacement siblings (§3.2 rule 3) and widening (rule 4). No request change. |
 | `programmer.detachLayer {layerId}` | 1 | Inbound WS, an operator gesture; a `TraceSampling.WS_MESSAGES` row. Answers `programmer.layerState`. |
 | `POST /looks/{id}/apply` | 1 | `{targets, families?, fadeMs?}`; Apply as values for a Look. |
-| `POST /palettes/{id}/apply` `write` | 1 | `false` answers `written[].value` without writing (D7). |
+| `POST /palettes/{id}/apply` `write` | 1 | `false` answers `values[].value` without writing (D7); `written` is the count. |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
 | `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`; S15, effects plan session 1); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
 | `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |

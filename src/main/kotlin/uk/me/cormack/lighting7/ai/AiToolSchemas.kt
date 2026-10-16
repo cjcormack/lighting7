@@ -311,8 +311,9 @@ internal val deleteLookTool = ToolDef(
 
 internal val applyLookTool = ToolDef(
     name = "apply_look",
-    description = "Apply an existing look in the programmer, or take it off again (a toggle: already on every target, it is removed). " +
-            "Omit targets to press it onto its own fixtures — the ones its values name; a look with effects needs targets for them to run on.",
+    description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on every target, it is removed). " +
+            "Omit targets to press it onto its own fixtures — the ones its values name; a look with effects needs targets for them to run on. " +
+            "asValues true instead writes its values into the programmer and starts its effects as the programmer's own, with no layer — not a toggle.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -325,6 +326,10 @@ internal val applyLookTool = ToolDef(
             put("beatDivision", buildJsonObject {
                 put("type", "number")
                 put("description", "Optional beat division override for the Look's effects that follow a speed master; an effect on Seconds keeps its own cycle")
+            })
+            put("asValues", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Write the look's values and start its effects with no layer. Default false.")
             })
         })
         put("required", buildJsonArray { add("lookId") })
@@ -1266,13 +1271,15 @@ internal val setBlindTool = ToolDef(
 
 internal val applyTemplateTool = ToolDef(
     name = "apply_palette",
-    description = "Apply a palette (by paletteId or paletteName) onto targets, as the desk's palette chips do. " +
-            "mode LITERALS (default) writes the values it resolves to into the programmer — later edits to the " +
-            "palette do not move them — or, for an effect palette, starts a copy of its effect per target. " +
-            "mode LAYER adds a programmer layer that tracks the palette, and toggles: pressing again on the same " +
-            "targets takes it off (get_current_state's `programmer.layers`). A generic palette takes its heads " +
-            "from targets and refuses with none (PALETTE_NEEDS_SELECTION); a per-fixture one lands on its own " +
-            "heads when targets are omitted. A mask refuses a palette outside it (PALETTE_OUTSIDE_MASK).",
+    description = "Press a palette (by paletteId or paletteName) onto targets, as the desk's palette chips and pads do. " +
+            "By default it puts on a programmer layer that tracks the palette, and toggles: pressing again on targets it " +
+            "already covers takes it off them (get_current_state's `programmer.layers`). A palette pressed on heads " +
+            "that hold another palette of its family and kind (value or effect) takes them off that one; pressed on " +
+            "more heads straight after, its layer widens rather than stacking. asValues true instead writes the values " +
+            "it resolves to into the programmer — later edits to the palette do not move them — or, for an effect " +
+            "palette, starts a copy of its effect per target. A generic palette takes its heads from targets and " +
+            "refuses with none (PALETTE_NEEDS_SELECTION); a per-fixture one lands on its own heads when targets are " +
+            "omitted. A mask refuses a palette outside it (PALETTE_OUTSIDE_MASK).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -1282,15 +1289,14 @@ internal val applyTemplateTool = ToolDef(
                 put("type", "array")
                 put("items", targetSchema)
             })
-            put("mode", buildJsonObject {
-                put("type", "string")
-                put("enum", buildJsonArray { add("LITERALS"); add("LAYER") })
-                put("description", "Defaults to LITERALS.")
+            put("asValues", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Write the palette's values (or a copy of its effect) instead of a tracking layer. Default false.")
             })
             put("mask", maskSchema)
             put("fadeSeconds", buildJsonObject {
                 put("type", "number")
-                put("description", "LITERALS only: fade the values in over this many seconds (0–600). Default the palette's own fade.")
+                put("description", "asValues only: fade the values in over this many seconds (0–600). Default the palette's own fade.")
             })
         })
     }

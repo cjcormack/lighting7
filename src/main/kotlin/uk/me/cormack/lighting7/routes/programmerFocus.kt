@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.show.lensDistance
 import uk.me.cormack.lighting7.state.State
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import uk.me.cormack.lighting7.fx.groupHintsForTargets
 
 /** 400 code: the point is missing or not a stage coordinate — [checkStageCoord]'s bound, as aim's. */
 internal const val CODE_FOCUS_INVALID = "FOCUS_INVALID"

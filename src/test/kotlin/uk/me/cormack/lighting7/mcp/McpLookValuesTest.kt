@@ -212,6 +212,27 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `apply_look with asValues writes the values with no layer, and is not a toggle`() {
+        patchRig()
+        val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
+        val created = call(
+            "create_look",
+            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}]}""",
+        )
+        assertTrue(created.success, created.result)
+        val lookId = created.json()["lookId"]!!.jsonPrimitive.int
+
+        repeat(2) {
+            val applied = call("apply_look", """{"lookId":$lookId,"asValues":true}""")
+            assertTrue(applied.success, applied.result)
+            assertEquals(1, applied.json()["written"]!!.jsonPrimitive.int)
+            assertEquals(200, controller.getEffectiveValue(70).toInt())
+        }
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "no layer went on")
+        assertEquals(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, state.show.programmerStore.get("foh-1", "dimmer")?.owner)
+    }
+
+    @Test
     fun `an option named Off is that option, not the first slot`() {
         patchRig()
         val created = call(

@@ -313,6 +313,17 @@ data class ProgrammerRemoveLayerInMessage(
     val fadeMs: Long? = null,
 ) : ProgrammerInMessage()
 
+/**
+ * *Detach* a layer: its values on stage become Local `web` values and its effects Local effects,
+ * and the layer comes off with nothing on stage moving (apply-model plan §3.5). Answers
+ * `programmer.layerState`; an unknown id changes nothing.
+ */
+@Serializable
+@SerialName("programmer.detachLayer")
+data class ProgrammerDetachLayerInMessage(
+    val layerId: Int,
+) : ProgrammerInMessage()
+
 /** Move a layer to [toIndex] among the non-preview layers. The whole list is renumbered. */
 @Serializable
 @SerialName("programmer.moveLayer")
@@ -915,6 +926,10 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         is ProgrammerAddLayerInMessage -> ProgrammerHandler.addLayer(state, message)
         is ProgrammerRemoveLayerInMessage -> {
             state.show.programmerLayerStack.remove(message.layerId, message.fadeMs ?: 0)
+            ProgrammerHandler.layerState(state)
+        }
+        is ProgrammerDetachLayerInMessage -> {
+            state.show.programmerLayerStack.detach(message.layerId)
             ProgrammerHandler.layerState(state)
         }
         is ProgrammerMoveLayerInMessage -> {

@@ -133,3 +133,22 @@ fun Set<PropertyMaskGroup>.toPropertyMask(): String = toMaskNames().joinToString
 /** True when [group] passes [mask]. A null mask passes everything; a null group never does. */
 fun maskAllows(mask: Set<PropertyMaskGroup>?, group: PropertyMaskGroup?): Boolean =
     mask == null || (group != null && group in mask)
+
+/**
+ * The attribute family an effect's declared [category] belongs to.
+ *
+ * The category vocabulary is the effect library's own (`"dimmer"` / `"colour"` / `"position"` /
+ * `"controls"`, plus `"composite"`), the same set `inferPresetCapabilities` switches on.
+ * `"controls"`, `"composite"` and anything unrecognised answer null rather than defaulting into
+ * BEAM, so an unknown category under-banks rather than mis-banks.
+ *
+ * One map for a Look's families, a palette's (fx-templates D4) and the press's family replacement:
+ * two copies would be two answers to "which column of the busk view does this belong in".
+ */
+internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = when (category.lowercase()) {
+    "dimmer" -> PropertyMaskGroup.INTENSITY
+    "colour", "color" -> PropertyMaskGroup.COLOUR
+    "position" -> PropertyMaskGroup.POSITION
+    "beam" -> PropertyMaskGroup.BEAM
+    else -> null
+}

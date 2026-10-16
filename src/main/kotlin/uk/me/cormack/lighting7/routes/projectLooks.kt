@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.familyForEffectCategory
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.parseMaskGroups
@@ -342,12 +343,53 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         }
     }
 
+    // POST /projects/{id}/looks/{lookId}/apply — *Apply as values* (apply-model plan §3.5): the
+    // Look's rows over the selection as `WEB` literals and its effects as Local effects, as a press
+    // followed by Detach would leave them, with no layer ever on the stack. Not a toggle: a second
+    // apply writes the same values again. Targets and mask follow the toggle's rules exactly.
+    post<ApplyLookResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot apply looks in project '${p.name}' - only the current project is live" },
+        ) { project ->
+            val request = call.receive<ApplyLookRequest>()
+            val families = try {
+                parseMaskGroups(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
+            val look = transaction(state.database) {
+                DaoLook.findById(resource.lookId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?.toggleSource(state.show.fixtures)
+            }
+            if (look == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
+                return@withCurrentProject
+            }
+            try {
+                when (val outcome = applyLookAsValues(state, look, request.targets, families, request.fadeMs)) {
+                    is LookApplyOutcome.Refused ->
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
+                    is LookApplyOutcome.Applied -> call.respond(outcome.response)
+                }
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply look"))
+            }
+        }
+    }
+
     // POST /projects/{id}/looks/{lookId}/toggle
     //
     // The ⌥click / cue-slot path: put this Look on these targets, or take it off again, as a
-    // **programmer layer** — the pad adds one, or removes the one it added. Always siblingless: the
-    // busk page's press goes through `POST /busk/pads/{id}/press`, which resolves the bank's
-    // siblings and calls the same `toggle` with them (busk-layout plan D4).
+    // **programmer layer** — the pad adds one, or removes the one it added. No solo siblings, and a
+    // Look replaces nothing (apply-model D6): the busk page's press goes through
+    // `POST /busk/pads/{id}/press`, which resolves the bank's siblings and calls the same `toggle`
+    // with them (busk-layout plan D4).
     //
     // A layer carries the whole Look, so a **bound** row lands on the fixture it names and a
     // *deferred* effect fans over the targets the press supplies. That is what decides the
@@ -453,6 +495,61 @@ internal data class ToggleLookRequest(
     val beatDivision: Double? = null,
     val families: List<String>? = null,
 )
+
+/** Body of `POST /looks/{id}/apply`: [ToggleLookRequest]'s targets and mask, and a fade for the values. */
+@Serializable
+internal data class ApplyLookRequest(
+    val targets: List<CueTargetDto> = emptyList(),
+    val families: List<String>? = null,
+    /** Over every value; absent is each row's own fade, as a press lands them. */
+    val fadeMs: Long? = null,
+)
+
+@Serializable
+internal data class ApplyLookResponse(
+    /** Programmer values written into Local. */
+    val written: Int,
+    /** The Local effects started, one per effect and target. */
+    val effectIds: List<Long> = emptyList(),
+    /** The Look's families the selection's mask left out, as on [ToggleLookResponse]. */
+    val skippedFamilies: List<String> = emptyList(),
+)
+
+internal sealed interface LookApplyOutcome {
+    data class Applied(val response: ApplyLookResponse) : LookApplyOutcome
+    data class Refused(val message: String, val code: String?) : LookApplyOutcome
+}
+
+/**
+ * *Apply as values* for a Look — the REST route's and MCP `apply_look`'s `asValues`: targets by
+ * [resolveLookToggleTargets], mask by [resolveLookMask], then
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.applyAsValues].
+ */
+internal fun applyLookAsValues(
+    state: State,
+    look: LookToggleSource,
+    requested: List<CueTargetDto>,
+    families: Set<PropertyMaskGroup>?,
+    fadeMs: Long?,
+    beatDivision: Double? = null,
+): LookApplyOutcome {
+    val targets = when (val resolved = resolveLookToggleTargets(requested, look)) {
+        is LookTargetResolution.Refused -> return LookApplyOutcome.Refused(resolved.message, resolved.code)
+        is LookTargetResolution.Targets -> resolved.targets
+    }
+    val mask = when (val resolved = resolveLookMask(families, look)) {
+        is LookMaskResolution.Refused -> return LookApplyOutcome.Refused(resolved.message, resolved.code)
+        is LookMaskResolution.Masked -> resolved
+    }
+    val outcome = state.show.programmerLayerStack.applyAsValues(
+        source = look.source,
+        targets = targets,
+        propertyMask = mask.propertyMask,
+        beatDivisionOverride = beatDivision,
+        fadeMs = fadeMs,
+    )
+    return LookApplyOutcome.Applied(ApplyLookResponse(outcome.written, outcome.effectIds, mask.skippedFamilies))
+}
 
 /** 400 code: the Look has a deferred effect, so a press with no targets would assert nothing. */
 internal const val CODE_LOOK_NEEDS_SELECTION = "LOOK_NEEDS_SELECTION"
@@ -609,6 +706,9 @@ internal data class CopyLookResource(val parent: ProjectLooksResource, val lookI
 
 @Resource("/{lookId}/toggle")
 internal data class ToggleLookResource(val parent: ProjectLooksResource, val lookId: Int)
+
+@Resource("/{lookId}/apply")
+internal data class ApplyLookResource(val parent: ProjectLooksResource, val lookId: Int)
 
 // ─── DTOs ───────────────────────────────────────────────────────────────
 
@@ -1147,26 +1247,6 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGr
         familyForEffectCategory(effect.category)?.let { families.add(it) }
     }
     return PropertyMaskGroup.entries.filterTo(LinkedHashSet()) { it in families }
-}
-
-/**
- * The attribute family an effect's declared [category] belongs to.
- *
- * The category vocabulary is the effect library's own (`"dimmer"` / `"colour"` / `"position"` /
- * `"controls"`, plus `"composite"`), the same set [inferPresetCapabilities] switches on.
- * `"controls"`, `"composite"` and anything unrecognised answer null rather than defaulting into
- * BEAM, so an unknown category under-banks rather than mis-banks.
- *
- * `internal` rather than private because the *template* write boundary derives an effect
- * template's family from the same map (fx-templates D4) — `validateTemplateContents`. Two copies
- * would be two answers to "which column of the busk view does this belong in".
- */
-internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = when (category.lowercase()) {
-    "dimmer" -> PropertyMaskGroup.INTENSITY
-    "colour", "color" -> PropertyMaskGroup.COLOUR
-    "position" -> PropertyMaskGroup.POSITION
-    "beam" -> PropertyMaskGroup.BEAM
-    else -> null
 }
 
 /**

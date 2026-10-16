@@ -51,6 +51,20 @@ data class TemplateSnapshot(
 )
 
 /**
+ * The one family this template is in: its first row with a known property, else its effect's
+ * library category. `DaoTemplate.familyOf` is the same derivation over stored rows. The snapshot
+ * holds only rows whose target parses (`loadTemplateSnapshot` drops a corrupt one), so the two can
+ * differ for a template whose lowest-ordered row is corrupt, and only for a row a press would refuse.
+ */
+internal fun TemplateSnapshot.familyOf(): PropertyMaskGroup? =
+    templateFamily(rows.map { it.propertyName }, effect?.category)
+
+/** The one derivation behind both `familyOf`s. */
+internal fun templateFamily(propertyNamesInOrder: List<String>, effectCategory: String?): PropertyMaskGroup? =
+    propertyNamesInOrder.firstNotNullOfOrNull { TemplateProperty.ofOrNull(it)?.family }
+        ?: effectCategory?.let { familyForEffectCategory(it) }
+
+/**
  * Templates, cached by uuid.
  *
  * Deliberately **thinner than [LookRegistry]**, and the difference is the whole point of the two

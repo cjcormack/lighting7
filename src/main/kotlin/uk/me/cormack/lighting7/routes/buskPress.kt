@@ -47,7 +47,8 @@ internal const val CODE_TEMPLATE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
  * (solo off) has no siblings at all.
  *
  * The engine's rules do not move here: `/palettes/{id}/toggle` and `/looks/{id}/toggle` remain
- * for the programmer's ⌥click strip and the AI, always siblingless.
+ * for the programmer's ⌥click strip and the AI, with no solo siblings. A palette's family
+ * replacement (apply-model D2) is `toggle`'s own, so it runs through every door alike.
  */
 internal fun Route.routeApiRestBuskPress(state: State) {
     post<BuskPadPressResource> { resource ->
@@ -114,8 +115,9 @@ internal data class BuskPressResponse(
     val action: String,
     val effectCount: Int,
     /**
-     * What an *on* press in a solo bank turned off: layer siblings narrowed or dropped, plus cue
-     * siblings stopped. Always 0 for an off press and in a stacking bank.
+     * What an *on* press turned off: layer siblings narrowed or dropped and cue siblings stopped in a
+     * solo bank, plus the palettes of a pressed palette's family and kind it replaced (apply-model
+     * D2). Always 0 for an off press.
      */
     val released: Int = 0,
     /**
