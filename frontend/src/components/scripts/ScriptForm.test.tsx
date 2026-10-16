@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectScriptDetail } from '@/api/projectApi'
 import { fakePlayground, mounts, resetKotlinPlaygroundFake } from '@/test/kotlinPlaygroundFake'
 
@@ -69,6 +69,13 @@ async function renderForm(onOpenChange = vi.fn()) {
   const editor = mounts[0].fragment!.codemirror
   return { editor, onOpenChange }
 }
+
+// The sheet lazy-loads the editor; loading it here keeps Vitest's transform out of the first
+// test's 1 s `waitFor`. `React.lazy` still suspends once on it, so that test still mounts the
+// editor outside `act`, as a browser does.
+beforeAll(async () => {
+  await import('./ScriptEditor')
+})
 
 beforeEach(() => {
   resetKotlinPlaygroundFake()
