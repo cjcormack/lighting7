@@ -87,8 +87,6 @@ interface StackDetailProps {
    * Fixtures / Groups wiring — see `ShowPage`.
    */
   view?: CardsListView
-  /** Open a cue's card on the cards view — the sheet's read-outs do this. */
-  onOpenCue?: (cueId: number, entryId: number) => void
   /** Open the Prompt Book at a cue's anchor — the cue sheet's Book column. */
   onOpenBook?: (cueId: number) => void
   /** Lift the show-editing lock, where it is the operator's to lift. */
@@ -116,7 +114,6 @@ export function StackDetail({
   onMarkerRename,
   onMarkerDelete,
   view = 'cards',
-  onOpenCue,
   onOpenBook,
   onRequestUnlock,
 }: StackDetailProps) {
@@ -303,7 +300,6 @@ export function StackDetail({
           locked={locked}
           openedEntryId={openedEntryId}
           placesByCue={placesByCue}
-          onOpenCue={(cueId, entryId) => onOpenCue?.(cueId, entryId)}
           onOpenBook={onOpenBook}
           onRequestUnlock={onRequestUnlock}
           onReorder={handleSheetReorder}

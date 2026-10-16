@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCueInput, formatFadeDuration, parseFadeDuration } from './cueUtils'
+import { buildCueInput, formatFadeDuration, parseFadeDuration, parseFollowDelay } from './cueUtils'
 import type { Cue } from '@/api/cuesApi'
 
 describe('parseFadeDuration', () => {
@@ -45,6 +45,23 @@ describe('parseFadeDuration', () => {
     }
     expect(formatFadeDuration(null)).toBe('')
     expect(formatFadeDuration(0)).toBe('')
+  })
+})
+
+describe('parseFollowDelay', () => {
+  it('reads blank and off as no follow', () => {
+    for (const raw of ['', '  ', 'off', 'OFF', '—', '-']) expect(parseFollowDelay(raw)).toBeNull()
+  })
+  it('keeps 0 as a follow that fires at once, where a fade reads it as a snap', () => {
+    for (const raw of ['0', '0s', '0ms', '0.0', '0 s']) expect(parseFollowDelay(raw)).toBe(0)
+    expect(parseFadeDuration('0')).toBeNull()
+  })
+  it('reads a delay in the fade grammar, and refuses anything else', () => {
+    expect(parseFollowDelay('3s')).toBe(3000)
+    expect(parseFollowDelay('2')).toBe(2000)
+    expect(parseFollowDelay('500ms')).toBe(500)
+    expect(parseFollowDelay('soon')).toBeUndefined()
+    expect(parseFollowDelay('snap')).toBeUndefined()
   })
 })
 

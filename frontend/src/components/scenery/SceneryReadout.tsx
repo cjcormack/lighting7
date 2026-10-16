@@ -17,8 +17,8 @@ export function ElementIcon({ element }: { element: StageElementDto | undefined 
 /**
  * A cue's scenery as its card reads it (stage-view plan session 8, `Cue.dc.html`): the changes the
  * cue makes on GO, each on its clock, and under them — hatched — what the cue shows without moving
- * it, tracked from an earlier cue or held by its stack's set. Read-only, like the rest of the card;
- * the changes are edited in Cue properties.
+ * it, tracked from an earlier cue or held by its stack's set. Read-only; the changes
+ * are edited in the cue editor's Scenery tab.
  */
 export function CueSceneryReadout({
   projectId,

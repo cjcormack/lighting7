@@ -865,7 +865,7 @@ function StompButton({
       }
       onClick={onToggle}
     >
-      {/* Not `Zap`, which already means *script hooks* in `CuePropsPane`, `CueCardEditor` and
+      {/* Not `Zap`, which already means *script hooks* in the cue editor's Cue tab and
           `CueDetailContent` — the same cue editor that draws one of these per layer row, so it
           would be one glyph for two unrelated things on one screen. `Footprints` is the metaphor
           the feature is named after and is unused elsewhere. */}

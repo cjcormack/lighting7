@@ -54,13 +54,14 @@ vi.mock('@/components/cues/CueRowParts', () => ({
 vi.mock('@/hooks/useCueFade', () => ({
   useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }),
 }))
-vi.mock('@/components/cues/CueDetailContent', () => ({
-  CueDetailContent: () => <div data-testid="detail" />,
+/** What the card hands its editor — the editor itself is `CueEditor.test.tsx`'s. */
+const editorProps: { last?: Record<string, unknown> } = {}
+vi.mock('@/components/cues/editor/CueEditor', () => ({
+  CueEditor: (props: Record<string, unknown>) => {
+    editorProps.last = props
+    return <div data-testid="cue-editor" data-cue-editor={String(props.cueId)} data-cue-editor-host={String(props.host)} />
+  },
 }))
-vi.mock('@/components/cues/CuePropertiesSheet', () => ({ CuePropertiesSheet: () => null }))
-// The hand's place target under the read surface — store-touching, like `CueDetailContent` above.
-vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
-vi.mock('@/components/SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
 
 import { CueCardEditor } from './CueCardEditor'
 
@@ -165,12 +166,13 @@ describe('CueCardEditor', () => {
     expect(sortableArgs.disabled).toBe(false)
   })
 
-  it('draws the whole action set under the row while locked, and only reading below it', () => {
+  it('draws the whole action set under the row while locked, and the editor read-only below it', () => {
     // D8: locked, the strip is drawn whole — Blind edit works, the rest ask to unlock — and the
-    // card's editing form (*Cue properties…*) stays away.
+    // editor under it reads (§4.6).
     const unlock = vi.fn()
     draw({ locked: true, expanded: true, onRequestUnlock: unlock })
-    expect(screen.getByTestId('detail')).toBeTruthy()
+    expect(screen.getByTestId('cue-editor')).toBeTruthy()
+    expect(editorProps.last).toMatchObject({ cueId: 1, entryId: 101, locked: true, host: 'card' })
     expect(screen.getByTestId('cue-actions')).toBeTruthy()
     expect(actionProps.last).toMatchObject({
       host: 'strip',
@@ -178,19 +180,23 @@ describe('CueCardEditor', () => {
       onRequestUnlock: unlock,
       rows: [{ cueId: 1, name: 'Q1', cueNumber: '1', entryId: 101, stackId: 7 }],
     })
-    expect(screen.queryByText('Cue properties…')).toBeNull()
   })
 
-  it('draws the action set and the properties door while unlocked', () => {
+  it('draws the action set, then the editor, while unlocked — and no Cue properties door', () => {
     draw({ locked: false, expanded: true })
-    expect(screen.getByTestId('cue-actions')).toBeTruthy()
-    expect(actionProps.last).toMatchObject({ locked: false })
-    expect(screen.getByText('Cue properties…')).toBeTruthy()
+    const strip = screen.getByTestId('cue-actions')
+    const editor = screen.getByTestId('cue-editor')
+    expect(actionProps.last).toMatchObject({ locked: false, fromShowView: true })
+    expect(editorProps.last).toMatchObject({ locked: false, host: 'card' })
+    // The strip directly under the row, then the editor (§4.2).
+    expect(strip.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText(/Cue properties/)).toBeNull()
   })
 
-  it('draws no actions on a closed card', () => {
+  it('draws no actions and no editor on a closed card', () => {
     draw({ expanded: false })
     expect(screen.queryByTestId('cue-actions')).toBeNull()
+    expect(screen.queryByTestId('cue-editor')).toBeNull()
   })
 
   it('writes a number edit to the entry, not the cue', () => {

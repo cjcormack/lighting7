@@ -418,6 +418,45 @@ describe('useShowTransport', () => {
     expect(cancelAnimations).toHaveBeenCalled()
   })
 
+  // ── The entry walk ───────────────────────────────────────────────────────────────────────────
+
+  it('walks a stack holding one cue twice by entry, before the desk answers', () => {
+    // Cue 1 sits at entries 101 and 301; cue 2 is live at 102 and the desk has 301 on deck.
+    const stack = mkStack({
+      cues: [cue(1), cue(2), cue(1, { entryId: 301 }), cue(3)],
+      activeCueId: 2,
+      activeEntryId: 102,
+      nextCueId: 1,
+      nextEntryId: 301,
+    })
+    const { result } = draw({ activeStackId: 10, stacks: [stack] })
+    expect(result.current.standbyEntryId).toBe(301)
+
+    // GO lands on the second place, and the next is the cue after *it*, not after the first place.
+    act(() => result.current.go())
+    expect(result.current.activeEntryId).toBe(301)
+    expect(result.current.standbyCueId).toBe(3)
+    expect(result.current.standbyEntryId).toBe(103)
+
+    // BACK mid-fade puts the place that was fading back on deck — the second, not the first.
+    act(() => result.current.back())
+    expect(result.current.standbyCueId).toBe(1)
+    expect(result.current.standbyEntryId).toBe(301)
+
+    // BACK again walks the deck back from that place, to cue 2.
+    act(() => result.current.back())
+    expect(result.current.standbyCueId).toBe(2)
+    expect(result.current.standbyEntryId).toBe(102)
+  })
+
+  it('backs the deck off the second place of a cue onto the entry above it', () => {
+    // Nothing live; cue 1 at 301 armed. The first place, 101, is two rows up and must be skipped.
+    const stack = mkStack({ cues: [cue(1), cue(2), cue(1, { entryId: 301 })], nextCueId: 1, nextEntryId: 301 })
+    const { result } = draw({ activeStackId: 10, stacks: [stack] })
+    act(() => result.current.back())
+    expect(result.current.standbyEntryId).toBe(102)
+  })
+
   // ── Standby ──────────────────────────────────────────────────────────────────────────────────
 
   it('arms a cue locally and on the server', async () => {
