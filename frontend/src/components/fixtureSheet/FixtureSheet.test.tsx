@@ -405,7 +405,7 @@ describe('FixtureSheet — the shape', () => {
     expect(within(row).queryByRole('button', { name: 'Pause Pulse' })).toBeNull()
     expect(within(row).queryByRole('button', { name: 'Stop Pulse' })).toBeNull()
     expect(screen.queryByTestId('fx-editor')).toBeNull()
-    // Its home opens it: the cue's naming is a button onto that cue's Cue properties, in place.
+    // Its home opens it: the cue's naming is a button onto that cue's editor, in place.
     expect(screen.queryByTestId('owner-editor')).toBeNull()
     // Named by its visible text (WCAG 2.5.3), so "click on Q12" reaches it.
     fireEvent.click(within(row).getByRole('button', { name: 'on Q12' }))

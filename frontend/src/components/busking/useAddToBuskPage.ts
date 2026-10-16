@@ -19,7 +19,7 @@ import {
  * every pad, each pad carrying its record's full summary — and a surface that forgot to subscribe
  * would render an empty menu and blame the operator's data.
  *
- * It is `skip`ped until the menu is first opened, because a cue properties pane that is never asked
+ * It is `skip`ped until the menu is first opened, because a cue editor's Cue tab that is never asked
  * to place anything should not pull that document. The latch is deliberately one-way: unsubscribing
  * when the menu closes would refetch it on every reopen.
  */

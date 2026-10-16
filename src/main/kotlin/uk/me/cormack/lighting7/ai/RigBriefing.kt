@@ -175,6 +175,14 @@ class RigBriefing(private val state: State) {
             val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
             sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}) params: $params")
         }
+        // The two step effects take references rather than values (effects plan §3.6), which
+        // neither the parameter type nor the category says on its own.
+        sb.appendLine(
+            "PaletteSteps steps through generic value palettes of one family (`palettes`: two or more " +
+                "`tmpl:{uuid}`, comma-separated) — store it with that family's category (dimmer, colour, " +
+                "position or beam). SlotSteps steps one setting's options by name (`slots`, e.g. " +
+                "`Gobo 3,Gobo 5`) — name the setting as its propertyName.",
+        )
         sb.appendLine()
 
         // Current state

@@ -1,9 +1,7 @@
-import { useState } from 'react'
-import { ChevronRight, Check, GripVertical, Loader2, Sliders } from 'lucide-react'
+import { ChevronRight, Check, GripVertical } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { targetKey } from '@/lib/targetKey'
 import { usePatchProjectCueMutation } from '@/store/cues'
@@ -25,10 +23,7 @@ import {
 } from '@/components/cues/CueRowParts'
 import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
-import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
-import { CueDetailContent } from '@/components/cues/CueDetailContent'
-import { HandCueLayerStrip } from '@/components/hand/HandLayerTargets'
-import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
+import { CueEditor } from '@/components/cues/editor/CueEditor'
 import { useCueFade } from '@/hooks/useCueFade'
 
 interface CueCardEditorProps {
@@ -71,18 +66,10 @@ interface CueCardEditorProps {
 }
 
 /**
- * Inline-expanding cue card. The collapsed row is the cue summary (Q# · name · target
- * chips · fade); opening it draws the cue's action set directly under that row (`CueActions`,
- * show-cue-editing plan §5) and then the cue **read-only** — the same value grid the programmer
- * draws, its layer stack, its effects and its hooks — with *Cue properties…* for everything a value
- * grid cannot express.
- *
- * **It used to be a three-pane editor** (Targets · Properties · Layers), collapsing to tabs below
- * 1000px, and each expanded card opened its own `cueEdit` WS session. All of that went in session
- * 2a, and the backend protocol behind it was deleted in the post-refactor sweep. Targets and Layers were a second, differently-shaped restatement of what a value grid and a
- * layer stack already say, and keeping two renderings of one state in step is a losing game; the
- * session went with them, because a cue is now edited in exactly one place. The tab machinery went
- * too — there is one body, so there is nothing to switch between.
+ * Inline-expanding cue card — the cards view's host of the cue editor (show-cue-editing plan §4.2).
+ * The collapsed row is the cue summary (Q# · name · target chips · fade); opened, the cue's action
+ * set sits directly under that row (`CueActions`, §5) and then `CueEditor`, the one editor the cue
+ * sheet's bottom pane mounts too.
  */
 export function CueCardEditor({
   cue,
@@ -113,17 +100,14 @@ export function CueCardEditor({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const [propsOpen, setPropsOpen] = useState(false)
-
-  const { cueData, targets, isFetching } = useExpandedCue(projectId, cue.id, expanded, cue.entryId)
+  const { cueData, targets } = useExpandedCue(projectId, cue.id, expanded, cue.entryId)
   const [patchCue] = usePatchProjectCueMutation()
   const [patchEntry] = usePatchCueStackEntryMutation()
 
-
   const targetCount = targets.length
 
-  // Inline edits from the collapsed row. Same PATCH-on-commit contract as the expanded
-  // card's Properties pane, so the two stay consistent — every field auto-saves.
+  // Inline edits from the collapsed row — the editor header's contract: the number is the entry's,
+  // the name and fade the cue's, and every field auto-saves.
   const commitName = (next: string) => {
     const trimmed = next.trim()
     if (trimmed === '') return false
@@ -148,7 +132,7 @@ export function CueCardEditor({
   const fadeCurveLabel =
     cue.fadeDurationMs != null && cue.fadeDurationMs > 0 ? formatFadeCurve(cue.fadeCurve) : ''
 
-  const { fadeProgress, fadeRemainMs } = useCueFade(fadeStackId, cue.id, cue.fadeDurationMs)
+  const { fadeProgress, fadeRemainMs } = useCueFade(fadeStackId, cue.id, cue.fadeDurationMs, cue.entryId)
   const isFading = fadeProgress != null
 
   /**
@@ -363,69 +347,14 @@ export function CueCardEditor({
             />
           </div>
         )}
+        {/* Then the editor (§4.2): the same `CueEditor` the cue sheet's pane mounts, so the two
+            hosts cannot drift. Two cards can be open, each with its own. */}
         {expanded && (
           <div className="border-t bg-background">
-              {!cueData ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground">
-                  {isFetching ? (
-                    <Loader2 className="size-5 animate-spin" />
-                  ) : (
-                    <span className="text-sm">Loading cue…</span>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Scoped to this cue: the show-wide pill in the header reports any write in the
-                      project, which is no use when you want to know that the field you just left
-                      actually landed. The Live / Preview-edit toggle that stood beside it went with
-                      the `cueEdit` session it switched — that session no longer exists on either
-                      side, and with the cue read-only there is nothing here for it to gate; the
-                      programmer's own Blind is the gate that matters.
-
-                      The whole strip is withheld while locked. The properties drawer is an editing
-                      form, and with it gone the row would hold only a save indicator for writes that
-                      cannot happen from here. */}
-                  {!locked && (
-                    <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2">
-                      <SaveStatusIndicator cueId={cue.id} className="justify-start" />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1.5 text-xs"
-                        onClick={() => setPropsOpen(true)}
-                      >
-                        <Sliders className="size-3.5" />
-                        Cue properties…
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* The cue read surface — the same value grid the programmer draws, plus its
-                      layer stack and its effects, all read-only. Session 2a deleted the three-pane
-                      editor that stood here: Targets and Layers were a second, differently-shaped
-                      way to express what a value grid and a layer stack already say, and two
-                      renderings of one thing do not stay in step. Editing a cue is Include -> the
-                      programmer, which is what makes there be exactly one place values are set. */}
-                  <div className="space-y-3 px-3 py-3">
-                    <CueDetailContent cue={cueData} projectId={projectId} />
-                    {/* The hand's target for this cue's stack (multi-screen plan §3.5). Drawn only
-                        while something that can become a layer is held, and never while the show is
-                        locked — locked is the running state, and a cue must not gain a layer from a
-                        stray tap there. It sits under the read surface because that is where the
-                        layer stack it would join is drawn. */}
-                    {!locked && <HandCueLayerStrip projectId={projectId} cue={cueData} />}
-                  </div>
-                </>
-              )}
+            <CueEditor projectId={projectId} cueId={cue.id} entryId={cue.entryId} locked={locked} host="card" />
           </div>
         )}
       </div>
-      <CuePropertiesSheet
-        cue={cueData}
-        projectId={projectId}
-        open={propsOpen}
-        onOpenChange={setPropsOpen}
-      />
     </div>
   )
 }

@@ -30,7 +30,21 @@ import {
 } from '@/lib/attributeFamily'
 import { describeTemplateIntent, type TemplateIntent } from '@/lib/templateIntent'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { findPanProperty, findTiltProperty } from '@/store/fixtures'
+import {
+  findPanProperty,
+  findTiltProperty,
+  useVisibleFixtureListQuery,
+} from '@/store/fixtures'
+import { useTemplateListQuery } from '@/store/templates'
+import {
+  categoryForFamily,
+  isPaletteSteps,
+  isSlotSteps,
+  paletteStepsOffers,
+  rigSettingUnion,
+  seedSlots,
+  serializeStepList,
+} from '@/lib/stepEffects'
 import {
   type TemplateEffect,
   type TemplateInput,
@@ -219,7 +233,7 @@ export function TemplateEditor({
    * (D8) and the family has not moved.
    */
   const chooseEffect = useCallback(
-    (entry: EffectLibraryEntry) => {
+    (entry: EffectLibraryEntry, extra?: EffectStart) => {
       setEffectDraft((prev) => {
         // The timing fields carry over only **within one timing source**: `beatDivision` is beats
         // on the grid and seconds on the clock, so a 10-second cycle carried into a beat effect
@@ -234,10 +248,13 @@ export function TemplateEditor({
         const spec = startingSpec(entry)
         // Seconds (D7) carries within one timing source like the division it qualifies.
         const seconds = sameTiming && prev?.seconds === true
+        // A step effect's start is the controls' (`EffectStart`): Palette Steps is filed under this
+        // family with its palettes, Slot Steps names a setting and its first slots.
+        const category = extra?.category ?? entry.category
         return {
           effectType: entry.name,
-          category: entry.category,
-          propertyName: null,
+          category,
+          propertyName: extra?.propertyName ?? null,
           // A new effect is one bar (venue-visit plan D16) — four seconds for a wall-clock one.
           beatDivision: sameTiming ? (prev?.beatDivision ?? NEW_EFFECT_DIVISION) : NEW_EFFECT_DIVISION,
           blendMode: spec.blendMode,
@@ -246,10 +263,10 @@ export function TemplateEditor({
           elementMode: null,
           elementFilter: null,
           stepTiming: null,
-          parameters: spec.parameters,
+          parameters: { ...spec.parameters, ...extra?.parameters },
           // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere.
           // An effect on Seconds follows none.
-          speedMasterUuid: seconds ? null : masterForCategory(entry.category),
+          speedMasterUuid: seconds ? null : masterForCategory(category),
           rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
           seconds,
           // Size, direction and runs carry over like the phase: each means the same thing whichever
@@ -273,6 +290,13 @@ export function TemplateEditor({
 
   const patchEffect = useCallback((patch: Partial<FxDraft>) => {
     setEffectDraft((prev) => (prev == null ? prev : withTemplateDraft(prev, { ...templateDraftOf(prev), ...patch })))
+  }, [])
+
+  /** The setting a Slot Steps palette steps — the one property an effect palette names. */
+  const setEffectProperty = useCallback((propertyName: string, parameters?: Record<string, string>) => {
+    setEffectDraft((prev) =>
+      prev == null ? prev : { ...prev, propertyName, parameters: { ...prev.parameters, ...parameters } },
+    )
   }, [])
 
   const handleSave = async () => {
@@ -432,12 +456,14 @@ export function TemplateEditor({
 
           {holdsEffect ? (
             <EffectControls
+              projectId={projectId}
               family={family}
               library={library}
               draft={effectDraft}
               entry={effectEntry}
               onChoose={chooseEffect}
               onPatch={patchEffect}
+              onProperty={setEffectProperty}
             />
           ) : isGeneric ? (
             <FamilyControls family={family} values={values} onChange={setIntent} />
@@ -517,29 +543,64 @@ export function TemplateEditor({
  * master offers *Unscaled*, which a draft can hold and a live frame cannot.
  */
 function EffectControls({
+  projectId,
   family,
   library,
   draft,
   entry,
   onChoose,
   onPatch,
+  onProperty,
 }: {
+  projectId: number
   family: AttributeFamily
   library: EffectLibraryEntry[] | undefined
   draft: TemplateEffect | null
   entry: EffectLibraryEntry | undefined
-  onChoose: (entry: EffectLibraryEntry) => void
+  onChoose: (entry: EffectLibraryEntry, extra?: EffectStart) => void
   onPatch: (patch: Partial<FxDraft>) => void
+  onProperty: (propertyName: string, parameters?: Record<string, string>) => void
 }) {
+  // Palette Steps (effects plan §4.4) is offered in this family where two generic value palettes of
+  // it name one property; it starts on all of them, in library order.
+  const { data: templates } = useTemplateListQuery({ projectId })
+  const stepOffer = useMemo(
+    () => paletteStepsOffers(templates ?? [], () => true).find((o) => o.family === family),
+    [templates, family],
+  )
+  // Slot Steps names a setting, which a palette has no head to ask: the rig's settings, by name, each
+  // offering every patched head's options of that name — two models' gobo wheels are one list.
+  const { data: fixtures } = useVisibleFixtureListQuery()
+  const rigSettings = useMemo(() => rigSettingUnion(fixtures ?? []), [fixtures])
+
   // Filtered through the same map the write boundary derives the family with, rather than by string
   // equality against one spelling: `familyForEffectCategory` is case-insensitive and takes `color`
   // as well as `colour`, so an exact match would hide from this picker a script-registered effect
   // that *Save as template…* would happily bank under this very family.
   const offered = useMemo(
-    () => (library ?? []).filter((e) => familyForEffectCategory(e.category) === family),
-    [library, family],
+    () =>
+      (library ?? []).filter((e) =>
+        isPaletteSteps(e.name) ? stepOffer != null : familyForEffectCategory(e.category) === family,
+      ),
+    [library, family, stepOffer],
   )
   const fxDraft = useMemo(() => (draft == null ? null : templateDraftOf(draft)), [draft])
+  const slotSetting = isSlotSteps(draft?.effectType) ? rigSettings.find((p) => p.name === draft?.propertyName) : undefined
+
+  /** What a step effect starts on here: Palette Steps its family's palettes, Slot Steps a gobo wheel. */
+  const startOf = (chosen: EffectLibraryEntry): EffectStart | undefined => {
+    if (isPaletteSteps(chosen.name) && stepOffer != null) {
+      return {
+        category: categoryForFamily(family),
+        parameters: { palettes: serializeStepList(stepOffer.palettes.map((p) => `tmpl:${p.uuid}`)) },
+      }
+    }
+    if (isSlotSteps(chosen.name)) {
+      const setting = rigSettings.find((p) => p.category === 'gobo') ?? rigSettings[0]
+      if (setting != null) return { propertyName: setting.name, parameters: { slots: seedSlots(setting) } }
+    }
+    return undefined
+  }
 
   return (
     <div className="space-y-3">
@@ -553,7 +614,7 @@ function EffectControls({
           value={entry?.name ?? draft?.effectType ?? ''}
           onValueChange={(next) => {
             const chosen = offered.find((e) => e.name === next)
-            if (chosen) onChoose(chosen)
+            if (chosen) onChoose(chosen, startOf(chosen))
           }}
         >
           <SelectTrigger>
@@ -578,13 +639,46 @@ function EffectControls({
         // sheet's spacing. The description is said once, here, under the picker that chose it.
         <div className="flex flex-col gap-3 rounded-md border p-3" data-template-effect-fields>
           {entry.description && <EditorReadout>{entry.description}</EditorReadout>}
+          {isSlotSteps(draft.effectType) && (
+            <div className="flex flex-col gap-1">
+              <Label>Setting</Label>
+              <Select
+                value={draft.propertyName ?? ''}
+                onValueChange={(name) => {
+                  // A different setting has different slots, so the list starts again on its own.
+                  const setting = rigSettings.find((p) => p.name === name)
+                  onProperty(name, { slots: seedSlots(setting) })
+                }}
+              >
+                <SelectTrigger aria-label="Setting">
+                  <SelectValue placeholder="Choose the setting it steps" />
+                </SelectTrigger>
+                <SelectContent>
+                  {draft.propertyName != null && !rigSettings.some((p) => p.name === draft.propertyName) && (
+                    <SelectItem value={draft.propertyName}>{draft.propertyName}</SelectItem>
+                  )}
+                  {rigSettings.map((p) => (
+                    <SelectItem key={p.name} value={p.name}>
+                      {p.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Each head steps this setting by the slots’ names — a head without one holds what is underneath.
+              </p>
+            </div>
+          )}
           <FxEffectFields
             entry={entry}
             timingSource={draft.timingSource}
             draft={fxDraft}
             scope={TEMPLATE_SCOPE}
             extendedChannels={undefined}
-            settingProperty={undefined}
+            settingProperty={slotSetting}
+            propertyName={draft.propertyName}
+            paletteFamily={family}
+            slotsFromRig
             readOnly={false}
             set={(patch) => onPatch(patch)}
             setParam={(name, value) => onPatch({ parameters: { ...fxDraft.parameters, [name]: value } })}
@@ -605,6 +699,16 @@ function EffectControls({
  * `headCount`, since a palette has no target — and nothing else that needs a head.
  */
 const TEMPLATE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, stepTiming: false }
+
+/**
+ * Where a step effect starts on an effect palette (effects plan §3.6): Palette Steps under this
+ * family's category, Slot Steps on a named setting, each with its list filled.
+ */
+interface EffectStart {
+  category?: string
+  propertyName?: string
+  parameters?: Record<string, string>
+}
 
 /**
  * A per-fixture template's values, read-only.
@@ -656,6 +760,7 @@ function effectKey(effect: TemplateEffect | null): string {
   return JSON.stringify([
     effect.effectType,
     effect.category,
+    effect.propertyName ?? null,
     effect.beatDivision,
     effect.blendMode,
     effect.distribution,

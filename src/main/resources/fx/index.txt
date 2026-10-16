@@ -36,5 +36,9 @@ beam/IrisPulse.fx.kts
 beam/FrostPulse.fx.kts
 beam/FocusPull.fx.kts
 
+# Step effects (effects plan §3.6)
+steps/PaletteSteps.fx.kts
+steps/SlotSteps.fx.kts
+
 # Composite effects
 composite/LightningStrike.fx.kts

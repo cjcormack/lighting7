@@ -650,7 +650,11 @@ blend, amount, stomp, speed masters, beat-division override), it takes the press
 what the subtraction left it, instead of a second layer going on: Red on hex-1 and then on hex-1
 and hex-2 is one layer, the same layer, its effects on hex-1 keeping their phase. With another layer pressed on top in between, it is two, so a widening
 never changes what a higher layer shows. The rule is `fx/LayerPress.kt`, pure over a layer list, so
-the cue editor's press (apply-model §3.6) can share it.
+the cue editor's press (apply-model §3.6) can share it. Its effect-side twin is the bare effect
+press's **Local replacement** (apply-model session 2, `POST /programmer/effects`): a library effect
+takes the pressed heads off every other Local effect of its family — read from the property it
+drives, not the library category a palette's family reads — never off a layer's;
+`fx-engineering.md` §"Local effects follow the selection".
 
 **A group is its fixtures**, throughout. `{group: wash}` and the `{fixture: …}` list of its members
 are one selection written two ways, so every side of every coverage question is expanded first
@@ -999,7 +1003,11 @@ The family is then **derived from the effect's library `category`**, through the
 Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `composite` spans
 families, so both answer null and are refused by name. A Beam effect palette holds one of the beam
 built-ins (effects plan D6, `fx-engineering.md` §"Beam Effects"); its stored effect names no
-property, and a press lands it on the one property the effect declares, skipping a head without it.
+property, and a press lands it on the one property the effect declares, skipping a head without it —
+but for Slot Steps, which names the setting it steps as its `propertyName`. Palette Steps is the one
+effect whose family is not its library category's (`palette`, which names none): it is its palettes'
+family, and the write boundary checks the stored category against that (`fx-engineering.md` §"Step
+Effects").
 
 Two things about the effect are the **registry's** answer rather than the author's, and both are
 checked or filled at the boundary rather than trusted. `category` is stored, and the write boundary
@@ -1140,8 +1148,8 @@ of scope.
 ### Effects, and the constraint that cannot be layered away
 
 Effects do not cook — they spawn `FxInstance`s. Spawning them in layer order is sufficient:
-`FxEngine.sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
-counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`. So
+`FxEngine.sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
+the monotonic creation counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`. So
 same-priority effects already resolve last-created-wins, and layer order becomes effect order for
 free — no priority arithmetic, and the uniform per-cue priority stays.
 

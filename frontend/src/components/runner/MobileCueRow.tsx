@@ -48,7 +48,7 @@ export const MobileCueRow = memo(function MobileCueRow({
   fadeStackId,
   onClick,
 }: MobileCueRowProps) {
-  const { fadeProgress } = useCueFade(fadeStackId, cueId, fadeDurationMs)
+  const { fadeProgress } = useCueFade(fadeStackId, cueId, fadeDurationMs, entryId)
   const autoProgress = useCueAutoProgress(fadeStackId, cueId)
   const showFadeBar = fadeProgress != null && fadeProgress > 0 && autoProgress == null
   const showAutoBar = autoProgress != null

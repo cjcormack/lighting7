@@ -368,8 +368,8 @@ A live cue composes at its **highest hold's** priority (cue model plan P3, D10; 
 A cue held twice — by two stacks, by a stack and a press — is one contribution at the higher of the
 two (D3). Manual (uncued) effects keep priority `0`; the programmer band sits above all of it.
 
-The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
-priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
+The engine iterates effects in priority-ascending order, then by compose order (creation order,
+which a split copy takes from its parent), then id. Higher priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
 earlier cues on the same property, and on Layer 4 the higher priority wins every LTP property (HTP
 dimmers still take the highest level). See
 [lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects" and §"Holds and
@@ -482,16 +482,16 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 
 ### UI Components
 
-Cues are authored in the **Program** view (`/projects/:projectId/program`), not in a route of their
+Cues are authored in the **Show** view (`/projects/:projectId/show`), not in a route of their
 own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 
-- `src/routes/ProgramPage.tsx` — the show: an ordered list of stacks, drilling into
-  `/program/stacks/:stackId?cue=:cueId`
-- `src/components/runner/program/CueCardEditor/` — the cue editor's panes (`CuePropsPane`,
-  `TargetsPane`, `LayersPane`)
-- `src/components/cues/CueDetailContent.tsx` — the read-only body, and **the whole cue read
-  surface**: the Run card reaches it through `RunOutputPane`, and the mobile runner and the Prompt
-  Book rail through `CueCardBody`
+- `src/routes/ShowPage.tsx` — the show: an ordered list of stacks, drilling into
+  `/show/stacks/:stackId?cue=:cueId`
+- `src/components/cues/editor/CueEditor.tsx` — the cue editor: the header (the entry's number
+  and follow, the cue's name, fade and curve) and its tabs, mounted by the card
+  (`components/runner/CueCardEditor.tsx`), the cue sheet's bottom pane and `stage/OwnerEditor`
+- `src/components/cues/CueDetailContent.tsx` — the read-only body the mobile runner and the Prompt
+  Book rail draw through `CueCardBody`
 - `src/components/cues/CopyCueDialog.tsx` — Copy to another project
 
 ### Navigation

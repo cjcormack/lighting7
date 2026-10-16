@@ -38,54 +38,7 @@ internal fun Route.routeApiRestFx(state: State) {
         post<AddEffect> {
             val request = call.receive<AddEffectRequest>()
             try {
-                val effect = createEffectFromRequest(request, state)
-                // The effect first: its output type is what tells FxTargetFactory that a
-                // `pan`/`tilt` property name means the position pair (sweep item A11).
-                val target = createTargetFromRequest(request, state, effect.outputType)
-                requireOutputTypeMatch(effect, target)
-                val timing = FxTiming(
-                    beatDivision = request.beatDivision,
-                    startOnBeat = request.startOnBeat
-                )
-                val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
-
-                val instance = FxInstance(effect, target, timing, blendMode)
-                instance.phaseOffset = request.phaseOffset
-                request.distributionStrategy?.let {
-                    instance.distributionStrategy = EffectSpecCoercion.Strict.distribution(it)
-                }
-                request.elementMode?.let {
-                    instance.elementMode = EffectSpecCoercion.Strict.elementMode(it)
-                }
-                request.elementFilter?.let {
-                    instance.elementFilter = EffectSpecCoercion.Strict.elementFilter(it)
-                }
-                request.stepTiming?.let {
-                    instance.stepTiming = it
-                }
-                instance.applyRequestedDynamics(
-                    request.size, request.direction, request.nShot,
-                    SpreadShape(request.spread, request.wings, request.blocks, request.groups),
-                )
-
-                // Propagate timing source and identity from the effect's registration
-                val registration = state.show.fxRegistry.getRegistration(request.effectType)
-                registration?.timingSource?.let { instance.timingSource = it }
-                instance.registrationId = registration?.id
-
-                secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
-                    ?.let { throw IllegalArgumentException(it) }
-                instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
-                instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
-                instance.applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
-
-                markProgrammerOwned(instance, request.programmerOwned)
-                if (request.targets != null) {
-                    require(state.show.fxEngine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
-                        "No fixture in targets has '${request.propertyName}'"
-                    }
-                }
-
+                val instance = buildEffectInstance(state, request)
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
             } catch (e: Exception) {
@@ -112,16 +65,27 @@ internal fun Route.routeApiRestFx(state: State) {
             call.respond(HttpStatusCode.OK)
         }
 
-        // Update a running effect. The parsing is [applyEffectUpdate]'s, shared with the
-        // `updateFx` socket frame so the two doors cannot drift.
+        // Update a running effect — in place, or, with `targets` naming some of its heads, by
+        // splitting those heads off (apply-model plan §3.4). The parsing is [applyEffectUpdate]'s,
+        // shared with the `updateFx` socket frame so the two doors cannot drift.
         put<EffectId> { resource ->
             val request = call.receive<UpdateEffectRequest>()
+            val engine = state.show.fxEngine
             when (val outcome = applyEffectUpdate(state, resource.id, request)) {
-                is EffectUpdateOutcome.Updated -> call.respond(state.show.fxEngine.effectDto(outcome.instance))
+                is EffectUpdateOutcome.Updated -> call.respond(engine.effectDto(outcome.instance))
+                is EffectUpdateOutcome.Split -> call.respond(
+                    EffectSplitResponse(
+                        splitEffectId = resource.id,
+                        edited = engine.effectDtos(outcome.edited),
+                        rest = engine.effectDtos(outcome.rest),
+                    ),
+                )
                 EffectUpdateOutcome.NotFound ->
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found", CODE_FX_NOT_FOUND))
                 is EffectUpdateOutcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, CODE_FX_UPDATE_REFUSED))
+                is EffectUpdateOutcome.Conflict ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, outcome.code))
             }
         }
 
@@ -336,6 +300,28 @@ data class UpdateEffectRequest(
     val wings: Int? = null,
     val blocks: Int? = null,
     val groups: Int? = null,
+    /**
+     * The heads this edit is for (apply-model plan §3.4, D5): fixtures, cells and groups, as a press
+     * names them. Absent, or naming every head the effect paints, is the in-place edit. Naming some
+     * of them splits those heads off: the effect becomes one instance per head it paints, and the
+     * edit lands on the named heads' alone, each starting where it was — answered as
+     * [EffectSplitResponse]. Only a Local effect splits (409 `FX_SPLIT_LAYER_EFFECT` for a layer's,
+     * `FX_SPLIT_NOT_LOCAL` for a cue's or a manual one); a change to the spread's shape (Order,
+     * Spread, Wings, Blocks, Groups, element mode or filter) cannot go to some heads alone and is
+     * refused, as are targets naming none of its heads.
+     */
+    val targets: List<CueTargetDto>? = null,
+)
+
+/**
+ * `PUT /fx/{id}`'s answer when its `targets` split the effect (apply-model plan §3.4): the effect
+ * that is gone, the copies the edit landed on and the copies of the heads it left as they were.
+ */
+@Serializable
+data class EffectSplitResponse(
+    val splitEffectId: Long,
+    val edited: List<EffectDto>,
+    val rest: List<EffectDto>,
 )
 
 
@@ -347,16 +333,29 @@ internal const val CODE_FX_NOT_FOUND = "FX_NOT_FOUND"
 /** An update named a field value the strict policy refuses, an unknown effect type, a bad master (400 / `fxError`). */
 internal const val CODE_FX_UPDATE_REFUSED = "FX_UPDATE_REFUSED"
 
+/** A strict-subset edit named a programmer layer's effect, which splits only with its layer (409, apply-model plan P5). */
+internal const val CODE_FX_SPLIT_LAYER_EFFECT = "FX_SPLIT_LAYER_EFFECT"
+
+/** A strict-subset edit named a cue's effect, or a manual one outside the programmer band: only a Local effect splits (409). */
+internal const val CODE_FX_SPLIT_NOT_LOCAL = "FX_SPLIT_NOT_LOCAL"
+
 /** What [applyEffectUpdate] did. */
 internal sealed interface EffectUpdateOutcome {
     data class Updated(val instance: FxInstance) : EffectUpdateOutcome
+
+    /** `targets` named some of the effect's heads: it is gone, [edited] took the edit and [rest] did not. */
+    data class Split(val edited: List<FxInstance>, val rest: List<FxInstance>) : EffectUpdateOutcome
     data object NotFound : EffectUpdateOutcome
     data class Refused(val message: String) : EffectUpdateOutcome
+
+    /** 409: [code] is [CODE_FX_SPLIT_LAYER_EFFECT] or [CODE_FX_SPLIT_NOT_LOCAL]. */
+    data class Conflict(val code: String, val message: String) : EffectUpdateOutcome
 }
 
 /**
  * Apply [request] to running effect [effectId] through [FxEngine.updateEffect] — the id and the
- * phase kept. **The one parse of an effect update**: `PUT /fx/{id}` and the `updateFx` socket frame
+ * phase kept — or, when its `targets` name some of the effect's heads, split those heads off and
+ * edit theirs alone (apply-model plan §3.4, [planSplit]). **The one parse of an effect update**: `PUT /fx/{id}` and the `updateFx` socket frame
  * (fixture-fx-sheets plan W3) both call it, so the strict coercion
  * ([EffectSpecCoercion.Strict]), the output-type check and the master-uuid check cannot be one
  * thing on one door and another on the other.
@@ -366,6 +365,12 @@ internal sealed interface EffectUpdateOutcome {
 internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffectRequest): EffectUpdateOutcome {
     val engine = state.show.fxEngine
     val existing = engine.getEffect(effectId) ?: return EffectUpdateOutcome.NotFound
+    // Which heads the edit is for (apply-model plan §3.4): every one, or some of them split off.
+    val splitHeads = when (val plan = planSplit(state, existing, request.targets)) {
+        SplitPlan.InPlace -> null
+        is SplitPlan.Heads -> plan.selected
+        is SplitPlan.Refusal -> return plan.outcome
+    }
     return try {
         // Resolve new effect if type or parameters changed
         val newEffect = if (request.effectType != null || request.parameters != null) {
@@ -437,8 +442,29 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             )
         }
 
-        val updated = engine.updateEffect(
-            effectId = effectId,
+        // A split cannot spread the shape over some heads: each split-off head runs alone. Refused
+        // only for a field that would change, so an editor re-sending the shape it shows still splits.
+        if (splitHeads != null) {
+            val dyn = existing.dynamics
+            val shapeMoved = buildList {
+                if (newDistribution != null && newDistribution != dyn.distributionStrategy) add("distributionStrategy")
+                if (newElementMode != null && newElementMode != dyn.elementMode) add("elementMode")
+                if (newElementFilter != null && newElementFilter != dyn.elementFilter) add("elementFilter")
+                if (request.spread != null && request.spread != dyn.spread) add("spread")
+                if (request.wings != null && request.wings != dyn.wings) add("wings")
+                if (request.blocks != null && request.blocks != dyn.blocks) add("blocks")
+                if (request.groups != null && request.groups != dyn.groups) add("groups")
+            }
+            if (shapeMoved.isNotEmpty()) {
+                return EffectUpdateOutcome.Refused(
+                    "${shapeMoved.joinToString(", ")} spread the effect over all its heads, and the heads " +
+                        "split off here would each run alone — select every head the effect runs on to change it",
+                )
+            }
+        }
+
+        fun edit(id: Long) = engine.updateEffect(
+            effectId = id,
             newEffect = newEffect,
             newTiming = newTiming,
             newBlendMode = newBlendMode,
@@ -461,7 +487,15 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             newBlocks = request.blocks,
             newGroups = request.groups,
         )
-        if (updated != null) EffectUpdateOutcome.Updated(updated) else EffectUpdateOutcome.NotFound
+        if (splitHeads == null) {
+            edit(effectId)?.let { EffectUpdateOutcome.Updated(it) } ?: EffectUpdateOutcome.NotFound
+        } else {
+            // Every head becomes its own copy, still running exactly as it was, and then the named
+            // heads' copies take the edit, each through the same in-place edit a whole effect gets.
+            val copies = splitIntoHeads(state, effectId) ?: return EffectUpdateOutcome.NotFound
+            val (named, rest) = copies.partition { it.target.targetKey in splitHeads }
+            EffectUpdateOutcome.Split(edited = named.mapNotNull { edit(it.id) }, rest = rest)
+        }
     } catch (e: Exception) {
         EffectUpdateOutcome.Refused(e.message ?: "Failed to update effect")
     }
@@ -538,6 +572,63 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     groups = dynamics.groups,
     spent = spent,
 )
+
+/**
+ * The instance [request] describes, checked and ready for [FxEngine.addEffect] — `POST /fx/add`'s
+ * body, shared with the programmer's bare effect press (`POST /programmer/effects`, apply-model plan
+ * §3.4), so the two build the same effect from the same fields. Throws on anything the strict policy
+ * refuses; the callers answer 400.
+ */
+internal fun buildEffectInstance(state: State, request: AddEffectRequest): FxInstance {
+    val effect = createEffectFromRequest(request, state)
+    // The effect first: its output type is what tells FxTargetFactory that a
+    // `pan`/`tilt` property name means the position pair (sweep item A11).
+    val target = createTargetFromRequest(request, state, effect.outputType)
+    requireOutputTypeMatch(effect, target)
+    val timing = FxTiming(
+        beatDivision = request.beatDivision,
+        startOnBeat = request.startOnBeat
+    )
+    val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
+
+    val instance = FxInstance(effect, target, timing, blendMode)
+    instance.phaseOffset = request.phaseOffset
+    request.distributionStrategy?.let {
+        instance.distributionStrategy = EffectSpecCoercion.Strict.distribution(it)
+    }
+    request.elementMode?.let {
+        instance.elementMode = EffectSpecCoercion.Strict.elementMode(it)
+    }
+    request.elementFilter?.let {
+        instance.elementFilter = EffectSpecCoercion.Strict.elementFilter(it)
+    }
+    request.stepTiming?.let {
+        instance.stepTiming = it
+    }
+    instance.applyRequestedDynamics(
+        request.size, request.direction, request.nShot,
+        SpreadShape(request.spread, request.wings, request.blocks, request.groups),
+    )
+
+    // Propagate timing source and identity from the effect's registration
+    val registration = state.show.fxRegistry.getRegistration(request.effectType)
+    registration?.timingSource?.let { instance.timingSource = it }
+    instance.registrationId = registration?.id
+
+    secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
+        ?.let { throw IllegalArgumentException(it) }
+    instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
+    instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
+    instance.applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
+
+    markProgrammerOwned(instance, request.programmerOwned)
+    if (request.targets != null) {
+        require(state.show.fxEngine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
+            "No fixture in targets has '${request.propertyName}'"
+        }
+    }
+    return instance
+}
 
 private fun createTargetFromRequest(
     request: AddEffectRequest,

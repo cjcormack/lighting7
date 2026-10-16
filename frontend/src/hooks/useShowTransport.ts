@@ -158,10 +158,13 @@ export function useShowTransport({
   // Live cue: the optimistic runner cursor while a fade animates, else the server's active cue.
   const activeCueId = runner.activeCueId ?? serverActiveCueId
 
-  // The same cursors as entries: the server's entry where it places the cue, else the cue's first
-  // row in the live stack (an optimistic cursor ahead of the desk).
+  // The same cursors as entries. The runner walks by entry, so its optimistic cursors name their
+  // place; the server's are the desk's. A cue twice in one stack is told apart only by these.
   const serverActiveEntryId = entryIdOfCue(activeStack, serverActiveCueId, activeStack?.activeEntryId)
-  const activeEntryId = entryIdOfCue(activeStack, activeCueId, activeStack?.activeEntryId)
+  const activeEntryId =
+    runner.activeCueId != null
+      ? entryIdOfCue(activeStack, runner.activeCueId, runner.activeEntryId)
+      : serverActiveEntryId
   const standbyEntryId = entryIdOfCue(
     activeStack,
     runner.standbyCueId,
@@ -207,12 +210,14 @@ export function useShowTransport({
    */
   const appliedStackRef = useRef<number | null>(null)
   const appliedSigRef = useRef<string | null>(null)
-  const appliedServerCueRef = useRef<number | null>(null)
+  const appliedServerCueRef = useRef<string | null>(null)
+  // Keyed on the entry as well as the cue: a GO between two places of one cue moves no cue id.
+  const serverCursor = `${serverActiveCueId}:${serverActiveEntryId}`
   useEffect(() => {
     if (activeStackId == null || !activeStack) return
     const sameStack = appliedStackRef.current === activeStackId
-    const serverMoved = sameStack && appliedServerCueRef.current !== serverActiveCueId
-    appliedServerCueRef.current = serverActiveCueId
+    const serverMoved = sameStack && appliedServerCueRef.current !== serverCursor
+    appliedServerCueRef.current = serverCursor
     if (activeStack.cues.length === 0) return
     if (sameStack && appliedSigRef.current === stackCueSig && !serverMoved) return
     if (sameStack && runner.activeCueId != null) return
@@ -221,7 +226,9 @@ export function useShowTransport({
         stackId: activeStackId,
         cues: activeStack.cues,
         serverActiveCueId,
+        serverActiveEntryId,
         serverNextCueId: activeStack.nextCueId,
+        serverNextEntryId: activeStack.nextEntryId,
         loop: activeStack.loop,
       }),
     )
@@ -232,7 +239,7 @@ export function useShowTransport({
     // not re-run this. Its live cue participates as the derived primitive above, so a patch or
     // refetch that *moves* it does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStackId, stackCueSig, serverActiveCueId, runner.activeCueId, dispatch])
+  }, [activeStackId, stackCueSig, serverCursor, runner.activeCueId, dispatch])
 
   // ── Fade / auto-advance animation. Keyed on runner.activeCueId, which the optimistic go()
   // below sets the instant GO is pressed. ──

@@ -233,7 +233,10 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 - Record writes a Local effect over a selection as one ad-hoc cue effect with a `selection` target.
   Include brings it back as one.
 - R3's split (`PUT /fx/{id}` with `targets`) narrows the list and starts the edited copy over the
-  subset, each head at the phase it had — the same rule as for a group (D12).
+  subset, each head at the phase it had — the same rule as for a group (D12). *(As built in the
+  apply-model plan's session 2: the effect is rewritten as one instance per head, each carrying its
+  member's offset, and the named heads' copies take the edit — `fx-engineering.md` §"Local effects
+  follow the selection".)*
 
 ### 3.5 Fading (D1, D13)
 
@@ -452,7 +455,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   and presses; a Beam master takes a new beam effect by S15's default.
 - **Docs:** `fx-engineering.md` §"Effect Types", `lighting-composition-model.md`.
 
-### Session 7 — Palette Steps and Slot Steps (backend + editor)
+### Session 7 — Palette Steps and Slot Steps (backend + editor) — done, `b56faf0`
 
 - `FxOutput.Steps` and per-head resolution in the slider, colour, position and setting targets (§3.6);
   the two built-ins.

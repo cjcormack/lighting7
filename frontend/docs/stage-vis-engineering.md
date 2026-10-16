@@ -2509,13 +2509,14 @@ skewed tablet does not replay a finished move.
 **Authoring** is one shared editor, `components/scenery/SceneryEditor.tsx` — element · time ·
 remove over the element's `SceneryControl` (scenery-programmer plan session 2: the per-kind presets —
 Closed / Half / Drawn, In / Out — a range between them, *Shown · Hidden*, in `commit="release"`; a
-key the row does not state is drawn muted, and one it does can be unset) — mounted as *Scenery* in
-Cue properties (with a time: blank moves with the cue's fade), *Set for this stack* in
+key the row does not state is drawn muted, and one it does can be unset) — mounted as the cue editor's
+*Scenery* tab (with a time: blank moves with the cue's fade), *Set for this stack* in
 `CueStackForm` and *Scenery while live* in `LookDetailSheet`. Each gesture saves the owner's
 **whole list**, as the desk's `PUT …/scenery` takes it, and the rows are a draft the editor holds, so
 a refetch landing mid-save (or while a time is typed) never puts an older list back — the
-`StageFocusPanel` rule. The cue card (`CueDetailContent`) reads the cue's own changes and, hatched,
-what it shows by tracking (`CueDetails.trackedScenery`).
+`StageFocusPanel` rule. The cue editor's Scenery tab (locked, `CueSceneryReadout`) and the phone and Prompt Book cards
+(`CueDetailContent`) read the cue's own changes and, hatched, what it shows by tracking
+(`CueDetails.trackedScenery`).
 
 **A click on a piece moves it** (scenery-programmer plan session 4, D11). With Edit off, in every
 camera, a click on a drawn drape, a flown piece or anything on the Set layer (`isSceneryPickable`)
@@ -2553,7 +2554,7 @@ read-only with the reason. Four rules:
 order with their clocks, the stacks whose set holds it, the Looks that show it while live — never
 what an owner only tracks. `components/scenery/MovesWithList.tsx` draws it in the popover (a
 read-out) and in the element form (each entry a press that opens its owner's own editor in place
-over the Stage view — Cue properties, Stack settings, the Look sheet, `stage/OwnerEditor.tsx` —
+over the Stage view — the cue editor, Stack settings, the Look sheet, `stage/OwnerEditor.tsx` —
 since a scenery change is edited on its owner and never on the element). The query is invalidated by
 the cue, stack and Look lists and refetched on every mount, since a Look's own scenery write
 invalidates only that Look. The form also takes the piece's **`travelS`** beside its base states,

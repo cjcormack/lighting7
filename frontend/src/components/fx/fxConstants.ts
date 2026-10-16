@@ -1,4 +1,4 @@
-import { Sun, Palette, Move, Aperture, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type LucideIcon } from 'lucide-react'
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 
 /**
@@ -49,7 +49,8 @@ export const EFFECT_CATEGORY_INFO: Record<
   dimmer: { label: 'Dimmer', icon: Sun, description: 'Intensity and brightness effects' },
   colour: { label: 'Colour', icon: Palette, description: 'RGB colour cycling and effects' },
   position: { label: 'Position', icon: Move, description: 'Pan/tilt movement patterns' },
-  beam: { label: 'Beam', icon: Aperture, description: 'Zoom, iris, frost and focus effects' },
+  beam: { label: 'Beam', icon: Aperture, description: 'Zoom, iris, frost and focus effects, and slot steps' },
+  palette: { label: 'Palette steps', icon: ListOrdered, description: 'Steps through palettes of one family' },
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
 
@@ -123,6 +124,8 @@ export const EFFECT_DESCRIPTIONS: Record<string, string> = {
   irispulse: 'Iris pulsing closed and open',
   frostpulse: 'Frost pulsing in and out',
   focuspull: 'Focus pulled between two distances',
+  palettesteps: 'Steps through palettes of one family — each head goes to its own value for each',
+  slotsteps: 'Steps a gobo or colour wheel through named slots — each head to its own level for each',
 }
 
 export function getEffectDescription(effectName: string, libraryDescription?: string): string {

@@ -300,6 +300,18 @@ internal fun recordingForUpdate(
     )
 }
 
+/**
+ * The sort orders of [cueId]'s ad-hoc effects whose Included instance now runs only as split
+ * copies (apply-model plan §3.4). Update writes the copies as children of their own, one per head,
+ * so the child they stand for is retired, or the cue would play the effect twice.
+ */
+internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
+    state.show.fxEngine.getActiveEffects()
+        .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId }
+        .groupBy { it.programmerOrigin!!.childSortOrder }
+        .filterValues { instances -> instances.all { it.splitMember != null } }
+        .keys
+
 /** What a layer-stack diff changed in the cue, for the response and the log line. */
 internal data class LayerDiffOutcome(
     val added: Int,

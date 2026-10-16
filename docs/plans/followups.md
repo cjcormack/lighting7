@@ -40,6 +40,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
 | [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
+| [`FU-FX-STEPS-COLOUR-WHEEL`](#fu-fx-steps-colour-wheel) | Trigger | FX | an operator steps colour palettes over a group holding a colour-wheel head |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -506,6 +507,23 @@ field changes and no stored effect changes what it plays. `SpreadShapeTest`'s ve
 stay valid, since its offsets are Edges in's.
 
 **Ready**: nothing to wait for; it is a tidy-up the plan chose not to fold into session 2.
+
+---
+
+### `FU-FX-STEPS-COLOUR-WHEEL`
+
+**Colour Palette Steps on a colour-wheel head** · Trigger · effects plan session 7, 2026-10-16
+
+Palette Steps over colour palettes drives the colour target (`ColourTarget`), which only a head with
+a mixed colour (`WithColour`) is a member of, so a head whose colour is a wheel — the MAC 250, the
+Varytec — is skipped, where a colour palette applied as a layer snaps it to its nearest slot
+(`TemplateResolver.resolveColour`, against the head's fitted media). The step's resolution already
+answers per head (`PaletteStepList.resolveStep` asks `TemplateResolver`), and the wheel arm answers a
+`Setting` naming the wheel's own property: what is missing is a target that drives a mixed colour on
+one head and a wheel on the next, and the fitted media the snap reads (`Fixtures.fittedMediaFor`),
+which `PaletteStepList` does not hold. Slot Steps on the wheel by name is today's answer.
+
+**Trigger**: an operator steps colour palettes over a group holding a colour-wheel head.
 
 ---
 

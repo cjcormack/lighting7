@@ -466,8 +466,8 @@ internal object CueComposer {
      * The ordered (layer, effect, target) triples a cue's layers spawn, in layer order.
      *
      * **Spawning in this order is sufficient** — no priority arithmetic needed.
-     * [FxEngine.sortedEffectsComparator] is `compareBy(priority, id)` with `id` a monotonic
-     * creation counter, and per-tick composition is a genuine sequential fold through
+     * [FxEngine.sortedEffectsComparator] is `compareBy(priority, composeOrder, id)` with
+     * `composeOrder` the creation counter, and per-tick composition is a genuine sequential fold through
      * [FxTarget.applyValue]. So same-priority effects already resolve last-created-wins, and layer
      * order becomes effect order for free.
      *

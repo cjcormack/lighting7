@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -29,6 +30,16 @@ import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/group
 import { useIsDeskConnected } from '@/store/status'
 import { useSpeedMasterForCategory } from '@/store/speedMasters'
 import { NEW_EFFECT_DIVISION, isOnSeconds } from '@/lib/effectTiming'
+import { useTemplateListQuery } from '@/store/templates'
+import {
+  categoryForFamily,
+  isPaletteSteps,
+  isSlotSteps,
+  paletteStepsOffers,
+  seedSlots,
+  serializeStepList,
+  type PaletteStepsOffer,
+} from '@/lib/stepEffects'
 import type { BlendMode } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
@@ -124,26 +135,51 @@ export function FxPicker({
           : { type: 'group', capabilities: target.group.capabilities, members: groupMemberFixtures(fixtures, target.group.name) },
     [target, fixtures],
   )
+  const targetNames = useMemo(() => propertyNamesFor([propertyTarget]), [propertyTarget])
+  // Palette Steps names no property of its own — it steps whichever its palettes name — so it is
+  // never offered through the library's property match, only through [stepOffers] below.
   const compatible = useMemo(
-    () => compatibleEffectsFor(library, propertyNamesFor([propertyTarget])),
-    [library, propertyTarget],
+    () => compatibleEffectsFor(library, targetNames).filter((e) => !isPaletteSteps(e.name)),
+    [library, targetNames],
   )
+  // Palette Steps (effects plan §4.4): offered in every family with two or more generic value
+  // palettes naming a property this target has, stepping those palettes on that property.
+  const { projectId } = useParams<{ projectId: string }>()
+  const projectIdNum = projectId ? Number(projectId) : NaN
+  const { data: templates } = useTemplateListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
+  const paletteStepsEntry = useMemo(() => library?.find((e) => isPaletteSteps(e.name)), [library])
+  const stepOffers = useMemo(() => {
+    if (paletteStepsEntry == null) return new Map<PickerFamily, PaletteStepsOffer>()
+    const has = (name: string) => targetNames.has(name) || (name === 'rgbColour' && targetNames.has('colour'))
+    return new Map(paletteStepsOffers(templates ?? [], has, preferredProperty).map((o): [PickerFamily, PaletteStepsOffer] => [o.family, o]))
+  }, [paletteStepsEntry, templates, targetNames, preferredProperty])
   const byFamily = useMemo(() => {
     const grouped = new Map<PickerFamily, EffectLibraryEntry[]>()
     for (const entry of compatible) {
       const family = pickerFamilyOf(entry.category)
       grouped.set(family, [...(grouped.get(family) ?? []), entry])
     }
+    if (paletteStepsEntry != null) {
+      for (const family of stepOffers.keys()) grouped.set(family, [...(grouped.get(family) ?? []), paletteStepsEntry])
+    }
     return grouped
-  }, [compatible])
+  }, [compatible, paletteStepsEntry, stepOffers])
 
+  const settingProps = settingPropertiesFor([propertyTarget])
+  const isSettingRow = preferredProperty != null && settingProps.some((p) => p.name === preferredProperty)
   const firstFamily = PICKER_FAMILIES.find((f) => (byFamily.get(f)?.length ?? 0) > 0) ?? 'INTENSITY'
-  // A Beam row whose property no beam effect drives (prism, a gobo) opens on Controls, where the
-  // effects that can take it are.
+  // A Beam row opens on Beam where a beam effect drives its property — a beam built-in's own, Slot
+  // Steps' on a setting, Palette Steps' over that property's palettes — and otherwise (prism without
+  // slots or palettes) on Controls, where the effects that can take it are.
   const openingFamily =
     initialFamily === 'BEAM' &&
     preferredProperty != null &&
-    !(byFamily.get('BEAM') ?? []).some((e) => e.compatibleProperties.includes(preferredProperty))
+    !(byFamily.get('BEAM') ?? []).some((e) =>
+      isPaletteSteps(e.name)
+        ? stepOffers.get('BEAM')?.propertyName === preferredProperty
+        : e.compatibleProperties.includes(preferredProperty) ||
+          (isSettingRow && e.compatibleProperties.includes(SETTING_SENTINEL)),
+    )
       ? 'CONTROLS'
       : initialFamily
   const [chosenFamily, setChosenFamily] = useState<PickerFamily | null>(null)
@@ -167,21 +203,55 @@ export function FxPicker({
   const [pending, setPending] = useState(false)
 
   const propertyFor = (entry: EffectLibraryEntry, pick = chosen): string | null => {
+    if (isPaletteSteps(entry.name)) return stepOffers.get(family)?.propertyName ?? null
     if (
       preferredProperty != null &&
       entry.compatibleProperties.includes(preferredProperty) &&
-      propertyNamesFor([propertyTarget]).has(preferredProperty)
+      targetNames.has(preferredProperty)
     ) {
       return preferredProperty
     }
+    // A setting row takes an effect offered through the setting sentinel (Slot Steps) itself.
+    if (isSettingRow && pick.setting == null && entry.compatibleProperties.includes(SETTING_SENTINEL)) {
+      return preferredProperty
+    }
+    // Slot Steps from anywhere else starts on a gobo wheel where the head has one (Chris's call,
+    // the palette editor's own default), else the first setting; the *On* row moves it.
+    if (isSlotSteps(entry.name) && pick.setting == null) {
+      const gobo = settingProps.find((p) => p.category === 'gobo')
+      if (gobo != null) return gobo.name
+    }
     return resolveEffectProperty(propertyTarget, entry, pick)
+  }
+
+  /**
+   * The effect's starting spec, with the step lists filled so a tap shows it stepping: Palette
+   * Steps through the family's palettes, Slot Steps through the setting's first slots past its open.
+   */
+  const specFor = (entry: EffectLibraryEntry, propertyName: string) => {
+    const spec = startingSpec(entry)
+    if (isPaletteSteps(entry.name)) {
+      const offer = stepOffers.get(family)
+      if (offer != null) {
+        spec.parameters = { ...spec.parameters, palettes: serializeStepList(offer.palettes.map((p) => `tmpl:${p.uuid}`)) }
+      }
+    } else if (isSlotSteps(entry.name)) {
+      spec.parameters = { ...spec.parameters, slots: seedSlots(settingProps.find((p) => p.name === propertyName)) }
+    }
+    return spec
+  }
+
+  /** The category a master is stamped by: Palette Steps' is its palettes' family's. */
+  const categoryOf = (entry: EffectLibraryEntry) => {
+    const offer = isPaletteSteps(entry.name) ? stepOffers.get(family) : undefined
+    return offer != null ? categoryForFamily(offer.family) : entry.category
   }
 
   const start = async (entry: EffectLibraryEntry, pick = chosen) => {
     if (busy.current) return
     const propertyName = propertyFor(entry, pick)
     if (propertyName == null) return
-    const spec = startingSpec(entry)
+    const spec = specFor(entry, propertyName)
 
     if (running != null && running.propertyName === propertyName) {
       if (normalizeEffectName(running.effectType) === normalizeEffectName(entry.name)) return
@@ -227,7 +297,7 @@ export function FxPicker({
           beatDivision: NEW_EFFECT_DIVISION,
           ...(entry.timingSource === 'WALL_CLOCK'
             ? {}
-            : { speedMasterUuid: masterForCategory(entry.category) }),
+            : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
           blendMode: spec.blendMode as BlendMode,
           phaseOffset: 0,
           parameters: spec.parameters,
@@ -251,10 +321,14 @@ export function FxPicker({
   }
 
   const effects = byFamily.get(family) ?? []
-  const currentEntry = running != null ? compatible.find((e) => normalizeEffectName(e.name) === normalizeEffectName(running.effectType)) : undefined
+  const currentEntry =
+    running != null
+      ? [...compatible, ...(paletteStepsEntry != null ? [paletteStepsEntry] : [])].find(
+          (e) => normalizeEffectName(e.name) === normalizeEffectName(running.effectType),
+        )
+      : undefined
   // The *On* row: an effect offered through a sentinel names no property of its own, so where the
   // target has several it could land on, the operator picks — and the pick restarts it there.
-  const settingProps = settingPropertiesFor([propertyTarget])
   const sliderProps = extraSliderPropertiesFor([propertyTarget])
   const sentinel =
     currentEntry == null || running == null

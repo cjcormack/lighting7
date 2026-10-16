@@ -7,7 +7,7 @@ This document describes the effects subsystem for tempo-synchronized lighting ef
 > assignments (Layer 4) and below the programmer (Layer 2) and parking (Layer 1). The per-tick reset-to-
 > neutral pass resets each property to the **layer below** (via `LayerResolver`), not to
 > hardcoded zero, so direct writes and cue state remain visible under running effects. Effect
-> iteration is a sorted pass (priority ascending, id-ascending tie-break) rather than
+> iteration is a sorted pass (priority ascending, then compose order, then id) rather than
 > undefined map iteration, making multi-effect composition on the same property deterministic.
 
 ## Overview
@@ -84,7 +84,8 @@ Two nullable per-master settings, added for the busk view (see
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
   meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
-  routable; effects in those categories land on master 1. One master per usage per project,
+  routable; effects in those categories land on master 1. Nor is `palette`: a Palette Steps is
+  stamped by its palettes' family's usage instead. One master per usage per project,
   enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
 - **`follow_num` / `follow_den` / `follow_target_uuid`** make the master a *follower* of
   another master (null target = master 1). Following is **phase lock, not just tempo**: a
@@ -279,17 +280,104 @@ in `compatibleProperties`, so the picker offers it only on a head that has that 
 | `FocusPull` | `focus` | Sweep between two focus levels | `start`, `end`, `curve`, `pingPong` |
 
 The values are raw DMX, as every level effect's are. A stepped zoom (the Robe's) is a setting, so
-Zoom Breathe on it writes the byte and lands on whichever step that is.
+Zoom Breathe on it writes the byte and lands on whichever step that is. To step one by name, use
+Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
+which snaps to the step nearest that share of its angles, as a palette does (below).
 
 A stored beam effect that names no property — an effect palette's, a Look's deferred effect — lands
 on the one property its registration declares (`EffectSpawner`'s `beam` arm), on a group only where
 every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's effect must
-declare exactly one property by name (`validateTemplateEffect`). A group or selection is resolved
+name one property, its own `propertyName` or else the one its registration declares, never a
+sentinel (`validateTemplateEffect`) — Slot Steps names the setting it steps. A group or selection is resolved
 through its first head that has the property (`referenceFixtureFor(target, property)`), so a
 selection that starts on a head without zoom still drives the zooms after it. Record files an
-effect on `zoom`, `iris`, `frost` or `focus` as category `beam` (`categoryFromPropertyName`), so a
-recorded Look's families include Beam. A speed master may take `usage: beam`, and a Beam effect
+effect on `zoom`, `iris`, `frost` or `focus` as category `beam` (`categoryFromPropertyName`; a step
+effect by `recordedEffectCategory`, below), so a recorded Look's families include Beam. A speed master may take `usage: beam`, and a Beam effect
 palette holds one of them (`TEMPLATE_EFFECT_FAMILIES`).
+
+### Step Effects (`FxOutput.Steps`)
+
+Effects plan session 7 (D8, §3.6): two built-ins step through **named things**, each resolved for the
+head in hand, which no other effect output can say. Both emit `FxOutput.Steps(from, to, blend,
+steps)` — two step indices, how far between them, and the `StepList` that says what a step is — and
+declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the routes'
+`requireOutputTypeMatch`, `FxInstance`'s warn and a palette press's skip all ask it).
+
+| Effect | Category | Steps through | Parameters |
+|--------|----------|---------------|------------|
+| `PaletteSteps` | its palettes' family | generic value palettes, `tmpl:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
+| `SlotSteps` | `beam` | one setting's option names | `slots` (`slotList`) |
+
+`stepsAt(phase, steps, fadeRatio)` is the timing, Colour Cycle's: equal segments, each step held for
+`1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
+first. Size, direction and the spread apply as to any effect, so a Backward or Bounce phase runs the
+steps back.
+
+**The target resolves a step per head** (`StepList.valueFor`, `colourFor` on the colour target):
+`SliderTarget`, `ColourTarget` and `PositionTarget` blend the two steps in proportion (a byte, an
+`ExtendedColour`, pan and tilt each), and `SettingTarget` snaps to the nearer — a slot has no halfway
+(Slot Steps' level read off the setting the target already holds, `SlotStepList.levelFor`). A head
+that cannot take a step holds what is underneath for it: nothing is written where it shows only that
+step, and part-way between a step it can take and one it cannot it crosses from what is underneath
+(`FxOutput.Steps.blendOn`, which reads what is underneath only then). The blend mode and Size apply
+after, as to any output.
+
+- **Palette Steps** (`PaletteStepList`): each palette's rows, as intents, resolved on the head through
+  `TemplateResolver` — the cook's, *Apply as values*' and the resolves-to panel's one answer — for the
+  target's property: the colour family (the hex mixed for that head's emitters, then any explicit
+  emitter row) on the colour target, the position row on the position target, else the row naming
+  the property. So a centre-relative (`pos:`) and a degree (`deg:`) position palette each land on the
+  head's own pan and tilt, a beam role on its own range (a stepped zoom snapping, `steppedZoomSlot`),
+  and an RGBW head and an RGB one each get their own mix. **A colour step is a layer's colour**: a head
+  missing an emitter the palette names takes none of it (`unmetColourRequirement`, the cook's rule),
+  and what a palette does not name stays as it is underneath (`StepColour.over`) — a UV-only palette
+  moves the UV and leaves the RGB, white and amber alone. A head is resolved once and cached by its
+  key and property, re-resolved when the model under that key changes: the engine builds fresh
+  fixture objects every tick, so an object is no key. Fitted media is not read, since it decides only
+  a **wheel** slot and a wheel head is no colour target's member. The palettes are read through the effect's colour source, which is a
+  `TemplateSource` — the one `createEffectWithTemplates` passes — so `TypedParams.paletteSteps` needs
+  no new factory argument, the references are pre-warmed by the same `templateColourRefsIn` scan, and
+  a palette's edit moves the running steps through the colour caches' version. An entry that is not a
+  generic value palette is dropped, as a colour list drops one.
+- **Slot Steps** (`SlotStepList`): each name looked up in the head's own options of the setting the
+  effect drives, ignoring case, spaces, underscores and dashes (`normaliseSlotName`), so *Gobo 3* is
+  `GOBO_3` on every head, at each head's own level. A head without the slot holds what is underneath on
+  that step. Its levels are cached per option set (a setting's options are its model's enum), so the
+  cache holds one entry per wheel model met. It declares only the `setting` sentinel: the client turns
+  it into the setting chosen.
+
+**What it is filed under.** Palette Steps registers under `category: palette`, which names no
+family on purpose: a stored one carries the family of its palettes (`dimmer`, `colour`, `position` or
+`beam`), and `paletteStepsShape` is the one statement of that shape — every palette in one family,
+and the property it drives, the colour for colour, else the first in the palette vocabulary every
+palette names (zoom, where every Beam palette names zoom and only some frost). A stored Palette Steps
+that names no property (an effect palette's, a Look's deferred effect) lands on that property
+(`EffectSpawner.drivenPropertyOf`); Slot Steps names its setting as the row's `propertyName`. An effect
+palette's write boundary (`validateTemplateEffect`) holds both: Palette Steps needs two generic value
+palettes or more, all readable, and its category must be their family's; Slot Steps needs a
+`propertyName` and two slots or more. Its master is stamped by that family's usage (the picker, the
+palette editor and the MCP tools' `usageMasterFor`), so `palette` is no usage
+(`SpeedMasterUsageVocabularyTest`). Record files a running step effect by `recordedEffectCategory`:
+Slot Steps as `beam`, Palette Steps as its palettes' family read off the property it drives (a strobe
+in an Intensity palette is `dimmer`, not `controls`).
+
+**Neither can be forked.** `/fx/definitions` refuses a `STEPS` output (`validateCompatibleProperties`):
+a step list names this desk's palettes and settings, resolved per head by the targets, and a
+definition syncs to desks that predate the output type. The FX Library draws Fork disabled on both
+with that reason (`forkRefusal`).
+
+**On the client** (`lib/stepEffects.ts`, which never resolves): the picker lists Slot Steps under
+Beam on a setting row and starts it on the setting's first two slots past its open one; it offers
+Palette Steps in each family that has two generic value palettes or more naming a property the
+target has (`paletteStepsOffers`), started on all of them, in name order; Slot Steps from anywhere
+but a setting row starts on a gobo wheel where the head has one, else its first setting. The editor's
+two parameter types are `paletteList` (`FxPaletteListPicker`: palettes in step order, by reference —
+an effect palette's own family only, else one family once one is chosen) and `slotList`
+(`FxSlotListPicker`: the target setting's options, a stored name the head lacks drawn dashed; on an
+effect palette, which names its setting from the rig, every patched head's options of that name
+(`rigSettingUnion`) and typed names besides, a dashed one on no patched head). *Save as palette…* on a
+running step effect banks it as `stepEffectPaletteShape` says — its palettes' family, or Beam naming
+its setting.
 
 ### Stateful Effects (`StatefulEffect`)
 
@@ -417,7 +505,7 @@ Each registered effect provides:
 - `id` — canonical name (e.g., "SineWave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
-- `category` — UI category ("dimmer", "colour", "position", "beam", "composite", "controls")
+- `category` — UI category ("dimmer", "colour", "position", "beam", "palette", "composite", "controls"; `palette` is Palette Steps' alone)
 - `outputType` — primary output type
 - `effectMode` — `STANDARD`, `STATEFUL`, or `COMPOSITE`
 - `parameters` — schema for the API/UI
@@ -447,8 +535,9 @@ table always requires a `project_id` since every user effect belongs to a projec
 fx_definitions table (user effects only):
 ├── effect_id         — canonical ID (e.g., "MyCustomPulse")
 ├── name              — display name (e.g., "My Custom Pulse")
-├── category          — "dimmer", "colour", "position", "beam", "composite", "controls"
-├── output_type       — SLIDER, COLOUR, or POSITION
+├── category          — "dimmer", "colour", "position", "composite", "controls" ("beam" and
+│                       "palette" are the built-ins' own; the New effect sheet offers neither)
+├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step Effects)
 ├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
 ├── compatible_properties — JSON array of property names
@@ -825,7 +914,10 @@ holds read *Programmer* while the Circle was what the rig showed — the plan's 
 instance's id, phase, layer identity and fade. A type swap takes the new type's timing source
 (`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
 running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
-`FX_NOT_FOUND`) is decided before anything moves: a 400 / 404 on REST, an `fxError` on the socket.
+`FX_NOT_FOUND`; a split of an effect that is not Local, `FX_SPLIT_LAYER_EFFECT` / `FX_SPLIT_NOT_LOCAL`)
+is decided before anything moves: a 400 / 404 / 409 on REST, an `fxError` on the socket. With
+`targets` naming some of its heads the edit splits them off instead (§"Local effects follow the
+selection").
 Its client is the live editor (`FxEditor`, session 3): every control writes the draft through
 `useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per effect
 (`store/fixtureFx.ts`), so a drag refused on every frame is one toast.
@@ -958,7 +1050,8 @@ member outside its runs answers `NaN` and paints nothing, and Backward and Bounc
 backward on the member's own cycles. For an N-shot the clock is counted from the effect's start
 rather than the master's tick 0. A forever effect's phase is exactly what it was — the clock is
 still split into whole cycles and a fraction in integer arithmetic — and the whole-target form
-(`calculatePhase`) is the same function at offset 0.
+(`calculatePhase`) is the same function at offset 0 — except for a copy split off a spread
+(`FxInstance.splitMember`), which makes its member's call: that member's offset and group size.
 
 ### EffectContext
 
@@ -1105,8 +1198,96 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   `targetType` and `targetKey`, and `clear_effects` naming targets clears a selection effect only when
   every item it names is among them. A rename rewrites the keys inside a stored selection (`ai/RigKeyReferences.kt`), and a
   venue Update's dead-reference report names each item (`venue/VenueUpdate.kt`).
-- **Not here**: a layer's deferred effects still fan one instance per target, and R3's split (`PUT
-  /fx/{id}` with `targets`) is the apply plan's session 2, built on this.
+- **Not here**: a layer's deferred effects still fan one instance per target. The programmer's bare
+  effect press and the split are built on this — §"Local effects follow the selection" below.
+
+### Local effects follow the selection (apply-model plan session 2)
+
+MagicQ's rule (apply-model plan D5, §3.4): a bare library effect is a **Local** effect on the whole
+selection — the programmer's own, in its priority band and owned by no layer, Look or cue
+(`FxInstance.isLocalEffect`) — and an edit follows the selection: with every head the effect runs on
+selected it changes in place, phase kept; with some selected, those heads split off at the phase they
+had.
+
+**The bare effect press**, `POST /api/rest/projects/{id}/programmer/effects`
+(`routes/programmerEffects.kt`): `{effectType, propertyName, targets, families?, parameters?}` plus
+every effect field `POST /fx/add` takes, built by the same `buildEffectInstance`, so one effect over
+the selection as the add route makes it (a group one group effect, several targets one selection
+effect). The route fixes only where it runs and whose it is:
+
+- **The mask.** The effect's family must be in the selection's mask, else 400 `EFFECT_OUTSIDE_MASK`;
+  no targets is 400 `EFFECT_NEEDS_SELECTION`. The family is `routes/programmerEffects.kt`'s
+  `effectFamily`: the attribute group of the property it drives on the first head it paints
+  (`maskGroupForProperty`, as Record and Include read an effect), so a dimmer-category Pulse on `uv`
+  is Colour. Agreed with Chris during session 2; an effect palette's family stays its library
+  category (`familyForEffectCategory`), since a palette names no property until it lands.
+- **The timing.** No `beatDivision` is one bar; a beat effect naming no master and not on *Seconds* is
+  stamped with the master whose `usage` is its library category, else master 1 (venue-visit plan
+  D16) — `fx/EffectTiming.kt`'s `usageMasterUuidFor`, the one reading MCP's effect tools stamp with
+  too. That is the category, not the property group the mask reads: a Pulse on `uv` is Colour for
+  the mask and takes the dimmer master.
+- **Local replacement**, the effect-side twin of a palette layer's family replacement
+  (`fx/LayerPress.kt`). Before it starts, the press takes the selected heads off every other Local
+  effect of its family, read the same way (a family that resolves to nothing replaces nothing): one
+  whose every painted head is selected stops; one that paints some of them
+  and some others is **narrowed** — rewritten as one instance per head it keeps, each where it was
+  (the split below, with no edit). A layer's effect is never touched. The stops, the narrowing and
+  the new effect are one engine mutation (`FxEngine.replaceEffects`), so no head drops to the layer
+  below between the old effect and the new; an effect another request swapped meanwhile is taken
+  off its current instance. Answers `{effectId, stopped, narrowed: [{effectId, into}]}`.
+
+**The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, cells and groups, as a press
+names them), decided by `planSplit` against the heads the effect **paints** (`FxEngine.paintedHeads`:
+an element filter's left-out cells paint nothing and are not counted):
+
+- No `targets`, or targets covering every painted head (`TargetCoverage.covers`, so a group by its
+  members and a cell by itself or its fixture), is the in-place edit, id kept. Targets covering none
+  are 400 `FX_UPDATE_REFUSED`.
+- Covering some splits them off: `FxEngine.headCopies` rewrites the effect as **one instance per head
+  it paints**, `replaceEffects` swaps them in for it as one mutation, and the named heads' copies then
+  take the edit through the same `updateEffect` an in-place edit uses. The rest run on untouched. REST
+  answers `EffectSplitResponse {splitEffectId, edited, rest}`; the frame answers `fxChanged(REMOVED)`
+  for the effect and `fxChanged(ADDED)` per copy, the edited first.
+- Only a Local effect splits: a programmer layer's is 409 `FX_SPLIT_LAYER_EFFECT` (splitting it would
+  need splitting its layer, apply-model plan P5; *Reset to palette* and *Update palette* stay its
+  edits), and a cue's or a manual one outside the band is 409 `FX_SPLIT_NOT_LOCAL`.
+- A change to the spread's **shape** — Order, Spread, Wings, Blocks, Groups, element mode or filter —
+  sent with some heads is 400 `FX_UPDATE_REFUSED`, nothing moved: a split-off head runs alone, so the
+  shape would do nothing on it (agreed with Chris, session 2). Only a field that differs from what
+  the effect has counts, so an editor re-sending the shape it shows still splits.
+
+**Each copy starts where its head was** (`SplitMember`, on `FxInstance.splitMember`). A copy is the
+member it was: its phase is computed by the same member call the parent's pass made for that head —
+the member's distribution offset, the size of the list it was spread over and its `EffectContext` —
+so a step-timed copy keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
+(Chris chose to carry them rather than refuse those splits), an N-shot copy runs its window from its
+own offset and Bounce counts its cycles from it, and an effect reading its place in the spread still
+sees it. `EffectSplitTest` runs an effect on two rigs, splits one mid-run and compares every channel
+on every tick. A copy also takes the parent's clocks (`accumulatedScaledMs`, the N-shot anchors, the
+start time), masters, timing source, *Seconds*, envelope and band, shares its effect object (as the
+members did; added `carried`, so a stateful effect is not reset), and names its fixture or cell with
+element filter `ALL`.
+
+- **The offset is beside the phase offset, not in it.** Every copy keeps the parent's
+  `phaseOffset`, so an edit that follows the selection sends one value to every copy it covers; a
+  phase offset per copy would collapse them into unison on the first edit. (The plan's §3.4 put the
+  offset in the phase offset and moved the N-shot anchor by it; done together those count the offset
+  twice, which is part of why it is carried instead.) Stored data has no field for it (P7), so what
+  stores a copy folds it in — `FxInstance.storedPhaseOffset`, read by Record into a cue
+  (`captureCurrentState`, `fxInstancesToCueChildren`) and into a Look (`lookEffectSettings`): a
+  recorded copy keeps its phase, though not its set's step cycle or sweep.
+- **Update.** A copy keeps a cue Include's origin (`programmerOrigin`). A cue Update writes each
+  copy as a child of its own, one per head, so it retires the child they stand for once nothing but
+  copies carries it (`splitIncludedChildren`), and the copies drop the origin; otherwise the cue
+  would play the effect twice. A Look Include's (`includedLookEffect`) is not kept: a Look's effect
+  is written back whole, and a copy is the operator's busk of part of it.
+- **Order.** Copies take new ids but keep the parent's `composeOrder`, which the engine sorts by
+  between priority and id, so a split moves nothing in the composition order.
+- **Races.** The copies take the parent's running state again at the swap, so a pause that reached
+  the parent meanwhile is kept, and `updateEffect` swaps by identity, so an edit racing a split
+  cannot put the parent back beside its copies.
+- **Clear and Release** take copies as they take any Local effect: they are in the band, and each
+  names one head.
 
 ### Target Types
 
@@ -1441,7 +1622,7 @@ derived, so retune master 1 or unlink first).
 ```
 GET    /api/rest/fx/active           → [EffectDto...]
 POST   /api/rest/fx/add              ← AddEffectRequest → { effectId }
-PUT    /api/rest/fx/{id}             ← UpdateEffectRequest → EffectDto
+PUT    /api/rest/fx/{id}             ← UpdateEffectRequest → EffectDto | EffectSplitResponse (with targets naming some heads)
 DELETE /api/rest/fx/{id}             (remove effect)
 POST   /api/rest/fx/{id}/pause
 POST   /api/rest/fx/{id}/resume
@@ -1516,6 +1697,10 @@ heads has the property is refused. The distribution and element fields then appl
   "seconds": false
 }
 ```
+
+`targets` (`[{"type": "fixture" | "group", "key": "…"}]`) says which heads the edit is for: absent, or
+naming every head the effect paints, is the in-place edit below; naming some splits them off and
+answers `EffectSplitResponse` instead — see [Local effects follow the selection](#local-effects-follow-the-selection-apply-model-plan-session-2).
 
 All fields are optional. Truly immutable fields (`effectType`, `parameters`, `beatDivision`,
 `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and — because
@@ -1628,8 +1813,9 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
-| `fx/TemplateColourSource.kt` | Colour-palette resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (30 files) |
+| `fx/TemplateColourSource.kt` | Colour-palette resolution, `TemplateSource` (also Palette Steps' palette lookup), and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `fx/StepList.kt` | The step effects' lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
 | `fx/TemplateRegistry.kt` | Palette snapshots cached by uuid — rows, or the one effect an effect palette holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
 | `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |
@@ -1753,8 +1939,9 @@ cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit
 are created as `FxInstance`s tagged with the cue id.
 
 **Effects spawn in layer order, and that alone is enough to make layer order the composition
-order.** `sortedEffectsComparator` is `compareBy(priority, id)` with `id` a monotonic creation
-counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
+order.** `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
+the monotonic creation counter (a split copy keeps its parent's, §"Local effects follow the
+selection"), and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
 same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
 uniform per-cue priority stays. A deferred Look effect fans over the layer's targets; a bound one
 uses its own, filtered by the layer's target set when that set is non-empty.
@@ -1987,9 +2174,10 @@ Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`
 **A new effect is one bar** (venue-visit plan D16): four beats, on the master whose `usage` matches
 its family where one is tagged, else master 1. The master is **stamped as a uuid when the effect is
 written**, never resolved later, so `null` still means master 1 everywhere: by the editor's picker
-(`FxPicker`), the palette editor and the MCP effect tools (`AiTools.parseEffectTiming`, which also
-makes `beatDivision` optional). REST's `AddEffectRequest` and `AddGroupFxRequest` default an omitted
-division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
+(`FxPicker`), the palette editor, the MCP effect tools (`AiTools.parseEffectTiming`, which also
+makes `beatDivision` optional) and the programmer's bare effect press (`POST /programmer/effects`);
+the desk's two read one rule, `fx/EffectTiming.kt`'s `usageMasterUuidFor`. REST's
+`AddEffectRequest` and `AddGroupFxRequest` default an omitted division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
 seconds — since "one bar" means nothing to an effect timed in seconds. Moving a beat effect between
 Seconds and a master in the editor or the palette sheet keeps its speed: the division is converted
 at the master's tempo (4 beats at 120 BPM is 2 s). The effects plan's sessions build on this timing

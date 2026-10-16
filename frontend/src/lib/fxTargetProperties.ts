@@ -28,6 +28,9 @@ export const SETTING_SENTINEL = 'setting'
 /** The synthetic name a target grows when it has an *extra* slider — see `isExtraSliderProperty`. */
 export const SLIDER_SENTINEL = 'slider'
 
+/** Both sentinels — a kind of property, never one; the desk's `EFFECT_PROPERTY_SENTINELS`. */
+export const EFFECT_PROPERTY_SENTINELS: ReadonlySet<string> = new Set([SETTING_SENTINEL, SLIDER_SENTINEL])
+
 /**
  * An FX target with its member fixtures already resolved.
  *

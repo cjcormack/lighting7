@@ -47,7 +47,7 @@ export function effectsRegisteredBy(
   return library.filter((e) => e.sourceDefinitionId === scriptId && fxSourceOf(e, byEffectId) === 'script')
 }
 
-export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'controls', 'composite'] as const
+export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'palette', 'controls', 'composite'] as const
 export type FxCategory = (typeof FX_CATEGORY_ORDER)[number]
 
 export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
@@ -55,6 +55,8 @@ export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
   colour: 'Colour',
   position: 'Position',
   beam: 'Beam',
+  // Palette Steps' own: it is offered in the family of its palettes (effects plan §4.4).
+  palette: 'Palette',
   controls: 'Controls',
   composite: 'Composite',
 }
@@ -67,6 +69,7 @@ export const OUTPUT_TYPE_LABELS: Record<string, string> = {
   SLIDER: 'Slider',
   COLOUR: 'Colour',
   POSITION: 'Position',
+  STEPS: 'Steps',
 }
 
 export const EFFECT_MODE_LABELS: Record<string, string> = {
@@ -137,6 +140,17 @@ export function takenEffectIds(
   definitions: readonly FxDefinition[],
 ): string[] {
   return [...library.map((e) => e.name), ...definitions.map((d) => d.effectId)]
+}
+
+/**
+ * Why a built-in may not be forked, or null where it may. The step effects (effects plan §3.6) are
+ * the desk's own: their lists name this desk's palettes and settings, resolved per head, and the
+ * desk refuses a custom effect with a `STEPS` output.
+ */
+export function forkRefusal(entry: EffectLibraryEntry): string | null {
+  return entry.outputType === 'STEPS'
+    ? `${displayName(entry.name)} is the desk’s own — its steps name this desk’s palettes and settings, so it cannot be forked`
+    : null
 }
 
 /**

@@ -244,6 +244,14 @@ data class LookEffectSettings(
 )
 
 /**
+ * The phase offset to **store** for this instance — a Record into a cue or a Look, programmer
+ * capture: [FxDynamics.phaseOffset] from [dyn], less a split-off copy's member offset
+ * ([SplitMember]), so a recorded copy starts where it ran. Every other instance stores its own.
+ */
+fun FxInstance.storedPhaseOffset(dyn: FxDynamics = dynamics): Double =
+    dyn.phaseOffset - (splitMember?.offset ?: 0.0)
+
+/**
  * This instance's [LookEffectSettings]. Element mode is a group effect's alone, and an element
  * filter or step timing is stored only where it differs from the default, so a row says what the
  * operator chose rather than what the effect would do anyway.
@@ -256,7 +264,7 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
         beatDivision = timing.beatDivision,
         blendMode = blendMode.name,
         distribution = dyn.distributionStrategy.javaClass.simpleName,
-        phaseOffset = dyn.phaseOffset,
+        phaseOffset = storedPhaseOffset(dyn),
         elementMode = if (spreadsOverMembers) dyn.elementMode.name else null,
         elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
         stepTiming = if (dyn.stepTiming != effect.defaultStepTiming) dyn.stepTiming else null,
@@ -305,6 +313,31 @@ data class ProgrammerLayerEffectKey(
 
     override fun hashCode(): Int = hash
 }
+
+/**
+ * Where a one-head copy came from, when it was split off an effect spread over several heads
+ * (apply-model plan §3.4, `FxEngine.headCopies`): the member it was, so its phase is computed
+ * exactly as that member's was — the same call, with the same three inputs.
+ *
+ * - [groupSize] is the size of the list the member was spread over. A step-timed member's cycle is
+ *   its division times the list's distinct slots, and a ping-pong's sweep is scaled by its slot count
+ *   (`FxInstance.memberCycleDivision`, `shapeMemberPhase`); a copy of one head would have neither.
+ *   Agreed with Chris during session 2: the split carries them.
+ * - [offset] is the member's distribution offset, which puts the copy where it was in the cycle, and
+ *   holds an N-shot's window back by it and counts Bounce's cycles from it, as a member's are.
+ * - [context] is the member's [EffectContext], for an effect that reads its place in the spread.
+ *
+ * The offset sits beside the copy's [FxDynamics.phaseOffset] rather than in it, so every copy keeps
+ * the parent's phase offset: an edit that follows the selection sends one value to every copy it
+ * covers, and a phase offset per copy would collapse them into unison. Stored data has no field for
+ * it (apply-model plan P7), so whatever stores a copy folds it in — [storedPhaseOffset] — and a
+ * recorded copy keeps its phase, though not its set's step cycle or sweep. Runtime only otherwise.
+ */
+data class SplitMember(
+    val groupSize: Int,
+    val offset: Double,
+    val context: EffectContext,
+)
 
 /**
  * The parameters of a running [FxInstance] that request threads may change while the tick
@@ -436,7 +469,7 @@ class FxInstance internal constructor(
         // A warn, not a throw: a cue firing mid-show must not die because one recorded row names
         // the wrong property. The REST add/update paths reject it up front instead
         // (`requireOutputTypeMatch`), which is where an operator can still act on it.
-        if (effect.outputType != target.acceptedOutputType) {
+        if (!target.accepts(effect.outputType)) {
             logger.warn(
                 "Effect '{}' outputs {} but target {}.{} applies {} — this effect will produce " +
                     "nothing. Check the effect's compatibleProperties.",
@@ -448,6 +481,13 @@ class FxInstance internal constructor(
 
     /** Unique identifier assigned by FxEngine */
     var id: Long = 0
+
+    /**
+     * Where this effect composes among those of its priority, before [id] breaks a tie: its own id,
+     * except for a copy split off another effect (`FxEngine.headCopies`), which keeps its parent's
+     * place so a split moves nothing in the order. Set by the engine.
+     */
+    var composeOrder: Long = 0
 
     /**
      * The canonical [EffectRegistration.id] this instance was created from, when it was created
@@ -769,6 +809,13 @@ class FxInstance internal constructor(
     var seconds: Boolean = false
 
     /**
+     * Set on a one-head copy split off a spread effect (apply-model plan §3.4): the member it was —
+     * see [SplitMember]. Null for every other instance. Written only before the instance reaches the
+     * engine, as [timingSource] is, and carried across `FxEngine.updateEffect`'s swap.
+     */
+    var splitMember: SplitMember? = null
+
+    /**
      * D7's reading: this effect follows no master — a beat effect on [seconds], or a wall-clock
      * effect with no rate master.
      */
@@ -841,7 +888,8 @@ class FxInstance internal constructor(
      * (`frame.tick(speedMasterSlot)`).
      *
      * The whole-target form of [calculatePhaseForMember]: one member at offset 0, so direction and
-     * N-shot apply exactly as to a member.
+     * N-shot apply exactly as to a member. A copy split off a spread ([splitMember]) runs exactly as
+     * the member it was: its set's size and its own distribution offset.
      *
      * @param tick The current clock tick of this effect's speed master
      * @param dynamics The caller's per-pass snapshot
@@ -849,7 +897,12 @@ class FxInstance internal constructor(
      *   ([isHolding]) — the caller then applies nothing and the value underneath stands
      */
     fun calculatePhase(tick: MasterClock.ClockTick, dynamics: FxDynamics = this.dynamics): Double {
-        val phase = beatPhase(tick, timing.beatDivision, 1, dynamics, 0.0)
+        val carry = splitMember
+        val phase = if (carry == null) {
+            beatPhase(tick, timing.beatDivision, 1, dynamics, 0.0)
+        } else {
+            beatPhase(tick, memberCycleDivision(dynamics, carry.groupSize), carry.groupSize, dynamics, carry.offset)
+        }
         if (!phase.isNaN()) lastPhase = phase
         return phase
     }
@@ -1007,7 +1060,12 @@ class FxInstance internal constructor(
      * @return Phase from 0.0 to 1.0 within the effect cycle, or NaN while an N-shot is not running
      */
     fun calculateWallClockPhase(dynamics: FxDynamics = this.dynamics): Double {
-        val phase = wallClockPhase(timing.beatDivision, 1, dynamics, 0.0)
+        val carry = splitMember
+        val phase = if (carry == null) {
+            wallClockPhase(timing.beatDivision, 1, dynamics, 0.0)
+        } else {
+            wallClockPhase(memberCycleDivision(dynamics, carry.groupSize), carry.groupSize, dynamics, carry.offset)
+        }
         if (!phase.isNaN()) lastPhase = phase
         return phase
     }

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.plugins
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.EffectDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.routes.CODE_FX_NOT_FOUND
 import uk.me.cormack.lighting7.routes.CODE_FX_UPDATE_REFUSED
 import uk.me.cormack.lighting7.routes.EffectUpdateOutcome
@@ -45,7 +46,9 @@ data object ClearFxInMessage : FxInMessage()
  * missed here.
  *
  * Answered `fxChanged(UPDATED)` as `pauseFx` is, or `fxError` for an unknown effect or a refused
- * field. Gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
+ * field. With [targets] naming some of the effect's heads it splits them off (apply-model plan §3.4):
+ * answered `fxChanged(REMOVED)` for the effect and `fxChanged(ADDED)` for each copy, the edited
+ * first, or `fxError` with `FX_SPLIT_LAYER_EFFECT` / `FX_SPLIT_NOT_LOCAL`. Gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
  * `FU-AUTH-WS-PER-MESSAGE` (an *admin-only* operation gaining a socket command) does not fire.
  */
 @Serializable
@@ -72,6 +75,7 @@ data class UpdateFxInMessage(
     val wings: Int? = null,
     val blocks: Int? = null,
     val groups: Int? = null,
+    val targets: List<CueTargetDto>? = null,
 ) : FxInMessage() {
     fun toRequest() = UpdateEffectRequest(
         effectType = effectType,
@@ -94,6 +98,7 @@ data class UpdateFxInMessage(
         blocks = blocks,
         groups = groups,
         runForever = runForever,
+        targets = targets,
     )
 }
 
@@ -132,7 +137,8 @@ data class FxChangedOutMessage(
 /**
  * A refused `updateFx`, to the socket that sent it: [code] is `FX_NOT_FOUND` for an effect that is
  * not running, `FX_UPDATE_REFUSED` for a field the strict policy refuses (an unknown blend, an
- * unknown effect type, a malformed master uuid) — `PUT /fx/{id}`'s 404 and 400, keyed by the effect
+ * unknown effect type, a malformed master uuid), `FX_SPLIT_LAYER_EFFECT` / `FX_SPLIT_NOT_LOCAL` for a
+ * split of an effect that is not Local — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect
  * so a client can replace one toast per effect rather than stack one per drag frame.
  */
 @Serializable
@@ -167,6 +173,11 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
         }
         is UpdateFxInMessage -> when (val outcome = applyEffectUpdate(scope.state, message.effectId, message.toRequest())) {
             is EffectUpdateOutcome.Updated -> scope.send(FxChangedOutMessage(FxChangeType.UPDATED, message.effectId))
+            is EffectUpdateOutcome.Split -> {
+                scope.send(FxChangedOutMessage(FxChangeType.REMOVED, message.effectId))
+                for (copy in outcome.edited + outcome.rest) scope.send(FxChangedOutMessage(FxChangeType.ADDED, copy.id))
+            }
+            is EffectUpdateOutcome.Conflict -> scope.send(FxErrorOutMessage(message.effectId, outcome.code, outcome.message))
             EffectUpdateOutcome.NotFound -> scope.send(
                 FxErrorOutMessage(message.effectId, CODE_FX_NOT_FOUND, "Effect ${message.effectId} is not running"),
             )

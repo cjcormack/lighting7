@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.storedPhaseOffset
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -571,12 +572,12 @@ internal fun fxInstancesToCueChildren(
                     targetType = targetType,
                     targetKey = targetKey,
                     effectType = effect.effectTypeId,
-                    category = categoryFromPropertyName(effect.target.propertyName),
+                    category = recordedEffectCategory(effect),
                     propertyName = effect.target.propertyName,
                     beatDivision = effect.timing.beatDivision,
                     blendMode = effect.blendMode.name,
                     distribution = dyn.distributionStrategy.javaClass.simpleName,
-                    phaseOffset = dyn.phaseOffset,
+                    phaseOffset = effect.storedPhaseOffset(dyn),
                     elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                     elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
                         dyn.elementFilter.name

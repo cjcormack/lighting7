@@ -27,6 +27,7 @@ import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
 import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
+import { CueActionDialogsProvider } from "./components/runner/cueActionDialogs"
 import CommandPalette from "./components/CommandPalette"
 import { FxAddSheet } from "./components/fx/FxAddSheet"
 import type { FxTarget } from "./components/fx/FxPicker"
@@ -318,11 +319,16 @@ export default function Layout() {
               {/* Outside the Suspense, so a route chunk that never arrives is caught here rather
                   than unmounting the desk. Keyed by pathname so navigating away from a failed
                   route clears the boundary instead of pinning the error over every later page. */}
-              <FeatureErrorBoundary key={location.pathname} feature="This page">
-                <Suspense fallback={<RouteFallback />}>
-                  <Outlet />
-                </Suspense>
-              </FeatureErrorBoundary>
+              {/* The cue action set's dialogs, above every host of the set — a card a GO collapses
+                  must not take an open Record sheet with it — and above the boundary keyed on the
+                  path, which a GO into the next stack changes (the Show view follows the playhead). */}
+              <CueActionDialogsProvider>
+                <FeatureErrorBoundary key={location.pathname} feature="This page">
+                  <Suspense fallback={<RouteFallback />}>
+                    <Outlet />
+                  </Suspense>
+                </FeatureErrorBoundary>
+              </CueActionDialogsProvider>
               {/* What the desk is holding (multi-screen plan §3.5). Fixed at the bottom of
                   `<main>`, below every bar and **not** in the header row — D14, which the header
                   comment above already argues. Inside `<main>` so it sits under the same error
