@@ -353,8 +353,10 @@ In one transaction, in this order (the review is the same, rolled back):
 
 ## 7. Dependencies
 
-- **Session 3 needs navigation plan session 4** (`projectActions`). If that hasn't landed,
-  session 3 adds *Attach to venue…* to the Projects card's ⋮ menu, and navigation session 4 moves it.
+- **Session 3 needs navigation plan session 4** (`projectActions`), which has landed: *Attach to
+  venue…* is already an action there, offered on a standalone show and disabled with
+  `ATTACH_NOT_BUILT` (`lib/projectActions.ts`). Session 3 gives it a dialog and a `run`, and its
+  four places (the Projects card, the home's ⋮ and Venue line, ⌘K) follow.
 - **No venue-visit S session is a prerequisite.**
 
 ## 8. Implementation — three sessions

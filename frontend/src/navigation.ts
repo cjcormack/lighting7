@@ -114,6 +114,45 @@ export interface NavItem {
    * The Programmer and the Stage stay, for testing and focus, with Record off.
    */
   hiddenInVenue?: boolean
+  /**
+   * What the row's card on a project's home counts (navigation plan §5.1), from the counts the home
+   * reads; absent, or answering undefined, the card shows none. A count that needs the rig is
+   * undefined off it, where the card is muted anyway.
+   */
+  homeCount?: (counts: HomeCounts) => number | string | undefined
+}
+
+/**
+ * What a project's home counts, each from a query the frontend already makes (P5). Undefined is
+ * "not read": still loading, or a live count on a project that is not on the rig.
+ */
+export interface HomeCounts {
+  patches?: number
+  fixtures?: number
+  groups?: number
+  regions?: number
+  riggings?: number
+  universes?: number
+  /** Runnable stacks; a separator is no stack. */
+  stacks?: number
+  /** The project's cues, each once — a cue in two stacks or in none included. */
+  cues?: number
+  looks?: number
+  palettes?: number
+  speedMasters?: number
+  scripts?: number
+  surfaceBindings?: number
+}
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
+
+/**
+ * Show's card: its stacks, and the project's cues once each — a cue can sit in several stacks or in
+ * none, so a count per stack would count a shared cue twice and miss a loose one.
+ */
+function stacksAndCues(c: HomeCounts): string | undefined {
+  if (c.stacks == null) return undefined
+  return c.cues == null ? plural(c.stacks, "stack") : `${plural(c.stacks, "stack")} · ${plural(c.cues, "cue")}`
 }
 
 /** The Channels row's [NavItem.needsRig], which each universe's ⌘K item shares. */
@@ -165,6 +204,7 @@ export const navItems: NavItem[] = [
     needsRig: "Show runs its cues on the rig that's live",
     pathMatch: "/show",
     section: "run",
+    homeCount: stacksAndCues,
     hiddenInVenue: true,
   },
   {
@@ -210,6 +250,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/patches`,
     pathMatch: "/patches",
     section: "rig",
+    homeCount: (c) => c.patches,
   },
   {
     id: "fixtures",
@@ -219,6 +260,7 @@ export const navItems: NavItem[] = [
     needsRig: "Fixtures shows the rig that's live",
     pathMatch: "/fixtures",
     section: "rig",
+    homeCount: (c) => c.fixtures,
   },
   {
     id: "groups",
@@ -228,6 +270,7 @@ export const navItems: NavItem[] = [
     needsRig: "Groups shows the rig that's live",
     pathMatch: "/groups",
     section: "rig",
+    homeCount: (c) => c.groups,
   },
   {
     // `id` stays "stage" — the handle of the Project Settings tab it opens. The tab says Regions
@@ -238,6 +281,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/settings/stage`,
     pathMatch: "/settings/stage",
     section: "rig",
+    homeCount: (c) => c.regions,
   },
   {
     id: "rigging",
@@ -246,6 +290,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/settings/rigging`,
     pathMatch: "/settings/rigging",
     section: "rig",
+    homeCount: (c) => c.riggings,
   },
   {
     id: "channels",
@@ -257,6 +302,7 @@ export const navItems: NavItem[] = [
     needsRig: CHANNELS_NEEDS_RIG,
     pathMatch: "/channels",
     section: "rig",
+    homeCount: (c) => (c.universes == null ? undefined : plural(c.universes, "universe")),
   },
 
   // ── Library ─────────────────────────────────────────────────────────
@@ -273,6 +319,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/looks`,
     pathMatch: "/looks",
     section: "library",
+    homeCount: (c) => c.looks,
     hiddenInVenue: true,
   },
   {
@@ -291,6 +338,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/palettes`,
     pathMatch: "/palettes",
     section: "library",
+    homeCount: (c) => c.palettes,
     hiddenInVenue: true,
   },
   {
@@ -313,6 +361,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/speed-masters`,
     pathMatch: "/speed-masters",
     section: "library",
+    homeCount: (c) => c.speedMasters,
     hiddenInVenue: true,
   },
   {
@@ -322,6 +371,7 @@ export const navItems: NavItem[] = [
     path: (p) => `/projects/${p}/scripts`,
     pathMatch: "/scripts",
     section: "library",
+    homeCount: (c) => c.scripts,
     hiddenInVenue: true,
   },
 
@@ -345,6 +395,7 @@ export const navItems: NavItem[] = [
     needsRig: "Surfaces binds controls on the rig that's live",
     pathMatch: "/settings/surfaces",
     section: "project",
+    homeCount: (c) => c.surfaceBindings,
   },
   {
     id: "project-sync",
@@ -517,6 +568,18 @@ export function navItemState(
   if (item.adminOnly && !isAdmin) return "hidden"
   if (item.hiddenInVenue && isVenue) return "hidden"
   return item.needsRig != null && !isViewingActiveProject ? "offRig" : "shown"
+}
+
+/**
+ * A project home's sections (navigation plan §5.1): the rows the sidebar offers the same project, in
+ * its sections and order, less Desk — so a new row reaches the home without a hand-picked card.
+ */
+export function homeSectionsOf(
+  shown: readonly ShownNavItem[],
+): { section: NavSection; label: string; items: ShownNavItem[] }[] {
+  return NAV_SECTIONS.filter((s) => s.id !== "desk")
+    .map((s) => ({ section: s.id, label: s.label, items: shown.filter((i) => i.section === s.id && i.parent == null) }))
+    .filter((s) => s.items.length > 0)
 }
 
 /** What an off-the-rig row or tab says on its tooltip (navigation plan D4). */

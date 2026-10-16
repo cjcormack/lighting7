@@ -13,13 +13,14 @@ import { useTelemetryQuery, useUpdateTelemetryMutation } from '@/store/telemetry
 export function TelemetryCard() {
   const { data: telemetry } = useTelemetryQuery()
   const [update, { isLoading: saving }] = useUpdateTelemetryMutation()
-  const { hash } = useLocation()
+  const { hash, key } = useLocation()
   const card = useRef<HTMLDivElement>(null)
   const loaded = telemetry != null
-  // `/install#telemetry` (⌘K's *Telemetry…*) lands here, once the card has drawn.
+  // `/install#telemetry` (⌘K's *Telemetry…*) lands here, once the card has drawn. Keyed on the
+  // location too: choosing it again at the same address is a new location, and scrolls again.
   useEffect(() => {
     if (loaded && hash === '#telemetry') card.current?.scrollIntoView({ block: 'start' })
-  }, [loaded, hash])
+  }, [loaded, hash, key])
   if (telemetry == null) return null
 
   const onToggle = async () => {

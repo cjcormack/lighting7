@@ -311,7 +311,7 @@ venue's hidden ids, so the row adds `cues` to both.)
 | Detach from venue… | a show on a venue held here | venue |
 | Attach to venue… | a standalone show (`venue-attach-plan.md`) | venue |
 | Extract a venue… | admin, a standalone show | venue |
-| History · Publish vN… | a venue (Publish: admin, with draft changes) | venue |
+| History · Publish vN… | an admin on a venue (Publish disabled, *Nothing to publish*, with no draft changes — the band's button's rule) | venue |
 | Delete | a show, or an admin on a venue; disabled when current | danger |
 
 - **The four places render from it:**
@@ -384,7 +384,7 @@ Each session is one PR (P1). All are frontend only (P5), but for session 3's two
   - The confirmation names the incoming show's parks and its hold.
 - **Docs:** the frontend CLAUDE.md, with a new §"The app bar and the switcher".
 
-### Session 4 — One set of project actions, and a show's home
+### Session 4 — One set of project actions, and a show's home — done, `8ac4817`
 
 - §6's `projectActions` with the Projects card, ⌘K and the switcher on it.
 - §5.1's `ProjectHome` for a show: the status block and the sections with counts.

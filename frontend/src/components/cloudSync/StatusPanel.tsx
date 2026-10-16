@@ -14,17 +14,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
-  useCloudSyncConfigQuery,
   useCloudSyncStatusQuery,
-  useCloudSyncConflictsQuery,
   useCloudSyncSnapshotMutation,
-  useCloudSyncRunMutation,
   type SyncConfig,
   type SyncStatus,
 } from "@/store/cloudSync"
-import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
+import { useSyncNow } from "./useSyncNow"
 import { formatError } from "@/lib/formatError"
-import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
 
 /**
  * Working-tree status, "Take snapshot" and "Sync now", with the reason either is unavailable. A
@@ -33,11 +29,11 @@ import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
  */
 export function StatusPanel({ projectId, isVenue = false }: { projectId: number; isVenue?: boolean }) {
   const { data: status, isLoading } = useCloudSyncStatusQuery(projectId)
-  const { data: config } = useCloudSyncConfigQuery(projectId)
-  const { data: conflictsData } = useCloudSyncConflictsQuery(projectId)
-  const { data: identity } = useOauthGithubIdentityQuery()
+  const { config, run: handleSyncNow, isSyncing, disabledReason: syncDisabledReason, enabled: syncEnabled } = useSyncNow(
+    projectId,
+    { isVenue },
+  )
   const [snapshot, { isLoading: isSnapshotting }] = useCloudSyncSnapshotMutation()
-  const [runSync, { isLoading: isSyncing }] = useCloudSyncRunMutation()
   const [snapshotPopoverOpen, setSnapshotPopoverOpen] = useState(false)
   const [message, setMessage] = useState("")
 
@@ -66,68 +62,6 @@ export function StatusPanel({ projectId, isVenue = false }: { projectId: number;
       toast.error(`Snapshot failed: ${formatError(err)}`)
     }
   }
-
-  const handleSyncNow = async () => {
-    try {
-      const result = await runSync(projectId).unwrap()
-      if (isVenue) {
-        // The desk names the versions (`Fetched v3. Pushed v4.`), which a commit count would not.
-        if (result.outcome === "NO_OP") toast(result.message)
-        else toast.success(result.message)
-        return
-      }
-      switch (result.outcome) {
-        case "NO_OP":
-          toast("Already in sync — nothing to push or pull")
-          break
-        case "PUSHED":
-          toast.success(`Pushed ${result.pushed} commit(s) to remote`)
-          break
-        case "FAST_FORWARDED":
-          toast.success(`Pulled ${result.pulled} commit(s) from remote`)
-          break
-        case "MERGED":
-          toast.success(
-            result.pushed + result.pulled > 0
-              ? `Merged ${result.pushed + result.pulled} commit(s) cleanly`
-              : "Merged with remote",
-          )
-          break
-        case "CONFLICTS_PENDING":
-          toast.warning(
-            `Found ${result.conflictCount ?? 0} conflict(s) — resolve them below to continue`,
-            { duration: 8000 },
-          )
-          break
-      }
-    } catch (err) {
-      // `VENUE_MISSING` (this show's new pin is a version the desk lacks) and `VENUE_VERSION_TAKEN`
-      // (two desks published one number) say what to do; anything else is the desk's sentence.
-      const refusal = venueSyncRefusal(err)
-      if (refusal) toast.error(refusal.title, { description: refusal.message })
-      else toast.error(`Sync failed: ${formatError(err)}`)
-    }
-  }
-
-  // Sync-now needs all three prerequisites; the first failing one drives the tooltip text.
-  // Phase 5: also blocked while a conflict session is open — the user has to resolve
-  // (or abort) the existing one first, otherwise the run would 409 SESSION_PENDING.
-  const sessionPending = conflictsData?.activeSession === true
-  // A rejected OAuth identity is not a credential: `connected` alone would enable a
-  // "Sync now" that can only fail. The PAT half still stands on its own — a desk with a
-  // working PAT syncs fine while its OAuth connection is broken.
-  const oauthUsable = identity?.connected === true && identity.reauthRequired !== true
-  const hasCredentials = oauthUsable || config?.tokenPresent === true
-  const syncDisabledReason = (() => {
-    if (!config?.repoUrl) return "No repository attached — enable cloud sync first"
-    if (identity?.reauthRequired === true && config?.tokenPresent !== true) {
-      return "GitHub rejected this desk's authorisation — reconnect above"
-    }
-    if (!hasCredentials) return "Connect GitHub or store a Personal Access Token"
-    if (sessionPending) return "Resolve or abort the open conflict session first"
-    return null
-  })()
-  const syncEnabled = !syncDisabledReason && !isSyncing
 
   return (
     <Card className="p-4 space-y-4">
