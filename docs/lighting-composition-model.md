@@ -995,10 +995,10 @@ Three rules keep the reversal narrow, and each removes a way for it to complicat
 
 The family is then **derived from the effect's library `category`**, through the same
 `familyForEffectCategory` map a Look's derived families use (`dimmer` → Intensity, `colour` →
-Colour, `position` → Position). `controls` has no tempo and `composite` spans families, so both
-answer null and are refused by name; so is `beam`, deliberately by name rather than by the library
-happening to ship no beam effect, so a script-registered one cannot mint a Beam effect palette
-behind the rule.
+Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `composite` spans
+families, so both answer null and are refused by name. A Beam effect palette holds one of the beam
+built-ins (effects plan D6, `fx-engineering.md` §"Beam Effects"); its stored effect names no
+property, and a press lands it on the one property the effect declares, skipping a head without it.
 
 Two things about the effect are the **registry's** answer rather than the author's, and both are
 checked or filled at the boundary rather than trusted. `category` is stored, and the write boundary

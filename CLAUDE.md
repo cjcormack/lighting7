@@ -139,7 +139,7 @@ write disguises itself as a serialization regression. The suite runs in two fork
 claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
 The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
-one), warm or cold alike. The first run after any code change recompiles the 24 built-in FX
+one), warm or cold alike. The first run after any code change recompiles the 28 built-in FX
 effects (editing a source file changes the classpath fingerprint, which invalidates the
 compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
 each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
@@ -390,7 +390,7 @@ Tempo-synchronized effects for continuous animations without complex scripts:
 - **Size, Direction, N-shot** - Every running effect has a `size` (0–1: a weight applied *after* the blend, `out = before + (blended − before) × size × envelope`, so a Replace at 50 % sits halfway over what is underneath and an Around movement's radius halves), a `direction` (Forward, Backward, Bounce, applied to each member's phase) and an optional `nShot` (run N cycles, each member handing back after its own; the instance ends N cycles past the largest offset, a programmer layer's kept *spent*). `intensityMultiplier` is the envelope a fade moves, never a scale on the raw output. Stored on every effect home, synced from `formatVersion` 30 — see `docs/fx-engineering.md` §"Size, direction and N-shot"
 - **The spread's shape** - The distribution strategy is the effect's **Order**, and four more fields shape it (effects plan D4, §3.3): `spread` (0–2, how much of the cycle the members cover; 1 is the Order's own offsets), `wings` (mirrored wings, only under an asymmetric Order — `CENTER_OUT`, `EDGES_IN` and `SPLIT` are two wings already and refuse it), `blocks` (neighbours sharing one phase) and `groups` (the spread repeating every N members; 0 is off), applied in `DistributionPlan.of` after the Order; `distinctSlots` is the rank count after Groups, so a step chase stays gap-free, and N-shot ends N cycles past the largest *shaped* offset. `FxDynamics` fields, edited in place; stored on every effect home, synced from `formatVersion` 33; the editor's phase dials are `frontend/src/lib/spreadShape.ts`, pinned to the desk by `src/test/resources/fx/spreadShape.fixture.json` — see `docs/fx-engineering.md` §"The spread's shape"
 - **One effect over a selection** - An effect may target an ordered list of fixtures and groups (effects plan D3): `EffectTargetRef.Selection` beside `TargetRef` (`models/TargetRef.kt`), effect-only, so a value row, a layer's targets and a binding cannot hold one and their write boundaries refuse it; stored as `targetType: "selection"` with the list's canonical JSON as `targetKey` on a cue's ad-hoc effects and a Look's effects, synced from `formatVersion` 34. `FxEngine.buildSelectionExpansion` flattens it in order — a group as its members, a head named twice once — into one instance's members, distributed and shaped as a group's. `POST /fx/add` takes `targets`, Record and Include keep it one effect, MCP's ad-hoc effects take `targets`; the programmer's `+ Effect` and ⌘K *Apply FX* start one over the selection's rows — see `docs/fx-engineering.md` §"Over a selection"
-- **SpeedMasterBank** - Per-show bank of named tempo buses (persisted, portable in sync); slot 0 = master 1, the global tempo the script API (`setBpm`/`tapTempo`) and a bare AI `set_bpm` mean (that tool takes an optional `speedMasterUuid` to retune any other master, and `create_speed_master` adds one). Effects subscribe via `speedMasterUuid` (null → master 1), and wall-clock effects scale their cycle via `rateSpeedMasterUuid` (null → unscaled); both are settable on every authoring surface. A master may also carry a `usage` (dimmer/colour/position — the apply-time routing default, one per project) and a follow link (`follow_num`/`follow_den`/`follow_target_uuid`: the leader *drives the follower's clock*, so its beats land on the leader's rather than free-running; chains allowed, cycles refused; tempo writes on a follower are refused with `SPEED_MASTER_FOLLOWER`) — see `docs/fx-engineering.md` §"Usage routing and follow". One engine pass per (conflated) tick wake-up, however many masters tick. `SpeedMasterBank.beats` fans every master's beat boundaries into one keyed stream (`speedMasters.beat`) — master 1 included, under its real uuid once the bank has loaded. Hardware drives masters through the `speedMasterBpm` / `speedMasterTap` binding targets.
+- **SpeedMasterBank** - Per-show bank of named tempo buses (persisted, portable in sync); slot 0 = master 1, the global tempo the script API (`setBpm`/`tapTempo`) and a bare AI `set_bpm` mean (that tool takes an optional `speedMasterUuid` to retune any other master, and `create_speed_master` adds one). Effects subscribe via `speedMasterUuid` (null → master 1), and wall-clock effects scale their cycle via `rateSpeedMasterUuid` (null → unscaled); both are settable on every authoring surface. A master may also carry a `usage` (dimmer/colour/position/beam — the apply-time routing default, one per project) and a follow link (`follow_num`/`follow_den`/`follow_target_uuid`: the leader *drives the follower's clock*, so its beats land on the leader's rather than free-running; chains allowed, cycles refused; tempo writes on a follower are refused with `SPEED_MASTER_FOLLOWER`) — see `docs/fx-engineering.md` §"Usage routing and follow". One engine pass per (conflated) tick wake-up, however many masters tick. `SpeedMasterBank.beats` fans every master's beat boundaries into one keyed stream (`speedMasters.beat`) — master 1 included, under its real uuid once the bank has loaded. Hardware drives masters through the `speedMasterBpm` / `speedMasterTap` binding targets.
 - **MasterClock** - One master's tempo clock (20-300 BPM), emits 24 ticks/beat; phase is a pure function of the tick counter (`MasterClock.phaseForDivision`). A *follower's* clock is driven by its leader instead of by a timer (`adoptDriven`/`driveTo`), and its derived BPM is reported unclamped — the 20–300 range guards a timer it doesn't have
 - **FxEngine** - Processes active effects, applies to fixtures via transactions
 - **FxRegistry** - Unified registry for all effect types (built-in and script-defined)
@@ -404,7 +404,7 @@ Effect interfaces:
 - **StatefulEffect** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 - **CompositeEffect** - `(phase, context) → Map<FxOutputType, FxOutput>`, of which only the `outputType` entry is applied — one instance still drives one property (e.g., LightningStrike applies its dimmer half, not its colour half)
 
-Built-in effect types — **all 24 live as `.fx.kts` resources** under
+Built-in effect types — **all 28 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in effect classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
@@ -412,6 +412,8 @@ once it had drifted a file behind the resources and nothing but tests constructe
   CandleFlicker, FluorescentFlicker
 - **Colour**: ColourCycle, RainbowCycle, ColourStrobe, ColourPulse, ColourFade, ColourFlicker
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
+- **Beam**: ZoomBreathe, IrisPulse, FrostPulse, FocusPull — one property each (`zoom`, `iris`,
+  `frost`, `focus`), offered only on a head that has it (effects plan D6)
 - **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
 
 There is no static effect. A fixed level, colour, position or setting is a **value** on the
@@ -423,8 +425,8 @@ A **palette** may hold one effect instead of values — an *effect palette*, the
 named effect. It is always generic (it names no target; the layer's targets are the fan-out), always
 exactly one effect, and never both an effect and rows: which one a palette holds is its identity,
 refused at the write boundary if a write would flip it. Its family is derived from the effect's
-library `category` via `familyForEffectCategory`, so `controls`, `composite` and `beam` are refused
-by name. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
+library `category` via `familyForEffectCategory`, so `controls` and `composite` are refused by name;
+a Beam effect palette holds a beam built-in. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
 palette's one effect goes down the same *deferred* arm a Look's does. See
 `docs/lighting-composition-model.md` §"A palette holds a value *or* an effect". A press is per
 target on **both** arms and is the exact inverse of the pad's lit ring: "already on" is the record

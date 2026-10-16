@@ -839,6 +839,7 @@ internal fun categoryFromPropertyName(propertyName: String): String {
         "dimmer" -> "dimmer"
         "colour", "color", "rgbcolour" -> "colour"
         "position" -> "position"
+        "zoom", "iris", "frost", "focus" -> "beam"
         else -> "controls"
     }
 }

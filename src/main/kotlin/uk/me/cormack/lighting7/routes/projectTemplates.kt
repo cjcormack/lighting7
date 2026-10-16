@@ -1200,17 +1200,12 @@ private fun validateTemplateEffect(
     ownUuid: java.util.UUID?,
 ): String? {
     // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
-    // derived families use. `controls` has no tempo, `composite` spans families, and BEAM is
-    // refused by name rather than by the library happening to ship no beam effect — a
-    // script-registered one must not be able to mint a Beam effect template behind this rule.
+    // derived families use. `controls` has no tempo and `composite` spans families, so neither
+    // names one; a beam effect (effects plan D6) is a Beam palette.
     val family = familyForEffectCategory(effect.category)
         ?: return "A palette cannot hold a '${effect.category}' effect — an effect palette is " +
             "banked by family, and that category has none. Effect palettes are: " +
             TEMPLATE_EFFECT_FAMILIES.joinToString { it.name }
-    if (family !in TEMPLATE_EFFECT_FAMILIES) {
-        return "A ${family.name} palette cannot hold an effect — the effect library has no " +
-            "${family.name.lowercase()} category. A beam effect lives in a recorded look."
-    }
 
     // Rule 3: the library is the authority on what an effect *is*; the stored `category` is a
     // denormalisation for the family derivation and the list DTO, so it must agree or the two
@@ -1219,6 +1214,14 @@ private fun validateTemplateEffect(
         ?: return "'${effect.effectType}' is not an effect this desk knows"
     if (!registration.category.equals(effect.category, ignoreCase = true)) {
         return "'${effect.effectType}' is a ${registration.category} effect, not ${effect.category}"
+    }
+    // A palette's beam effect names no property: a press lands it on the one its registration
+    // declares, so a script-registered one must declare exactly one, by name.
+    if (family == PropertyMaskGroup.BEAM &&
+        registration.compatibleProperties.singleOrNull().let { it == null || it in EFFECT_PROPERTY_SENTINELS }
+    ) {
+        return "A Beam palette's effect must drive one named property — '${effect.effectType}' " +
+            "declares ${registration.compatibleProperties.joinToString().ifEmpty { "none" }}"
     }
 
     // Rule 4: the enum-valued fields, exactly as `validateLookEffects` checks them and for the
@@ -1253,17 +1256,15 @@ private fun validateTemplateEffect(
     return null
 }
 
-/**
- * The families an effect template can be banked under (D4).
- *
- * Not all of [PropertyMaskGroup]: BEAM is absent because the effect library has no beam category,
- * so there would be nothing to put in the column. Adding one is an FX-library change, not a
- * template change.
- */
+/** The property sentinels `fxTargetProperties.ts` offers an effect through, which name no property. */
+private val EFFECT_PROPERTY_SENTINELS = setOf("slider", "setting")
+
+/** The families an effect template can be banked under (D4): every family an effect category names. */
 private val TEMPLATE_EFFECT_FAMILIES = setOf(
     PropertyMaskGroup.INTENSITY,
     PropertyMaskGroup.COLOUR,
     PropertyMaskGroup.POSITION,
+    PropertyMaskGroup.BEAM,
 )
 
 /** Must be called inside a transaction. */

@@ -8,6 +8,7 @@ import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isTemplateRef, resolveColourToHex } from '@/components/fx/colourUtils'
 import { useColourTemplates } from '@/components/fx/FxColourTemplates'
 import { fixturesSupportingFamily, type AttributeFamily } from '@/lib/attributeFamily'
+import { propertyNamesFor } from '@/lib/fxTargetProperties'
 import type { EffectLibraryEntry } from '@/store/fixtureFx'
 import type { TemplateEffect } from '@/api/templatesApi'
 
@@ -68,7 +69,15 @@ export function TemplateRunsOn({
   const rateDisplay = useSpeedMasterDisplay(effect.rateSpeedMasterUuid)
   const colours = useColourTemplates()
 
-  const heads = useMemo(() => fixturesSupportingFamily(fixtures, family), [fixtures, family])
+  // A beam effect drives the one property it declares, so it runs on the heads that have that one.
+  const beamProperty = family === 'BEAM' ? (entry?.compatibleProperties.length === 1 ? entry.compatibleProperties[0] : null) : null
+  const heads = useMemo(
+    () =>
+      beamProperty == null
+        ? fixturesSupportingFamily(fixtures, family)
+        : (fixtures ?? []).filter((fixture) => propertyNamesFor([{ type: 'fixture', fixture }]).has(beamProperty)).length,
+    [fixtures, family, beamProperty],
+  )
   // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — its cycle is what the
   // strip is, with no beat ruler under it.
   const isWallClock = entry?.timingSource === 'WALL_CLOCK' || effect.seconds === true
@@ -128,7 +137,8 @@ export function TemplateRunsOn({
       </div>
       <div className="rounded-md border p-3 space-y-2">
         <p className="text-[11px]">
-          {DESCRIPTION[family]} The same effect on every head, its phase spread by the distribution.
+          {beamProperty != null ? `Any fixture with ${beamProperty}.` : DESCRIPTION[family]} The same effect on every
+          head, its phase spread by the distribution.
         </p>
 
         <div>

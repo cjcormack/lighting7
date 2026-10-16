@@ -177,8 +177,9 @@ export function NewFxDefinitionSheet({
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {/* The library's own vocabulary, so the form offers every category the chips and
-                  dividers draw — it listed four and left Controls out. */}
-              {FX_CATEGORY_ORDER.map((c) => (
+                  dividers draw — it listed four and left Controls out. Beam is the exception: a
+                  beam effect drives one named property, and this form cannot name one. */}
+              {FX_CATEGORY_ORDER.filter((c) => c !== 'beam').map((c) => (
                 <SelectItem key={c} value={c}>
                   {FX_CATEGORY_LABELS[c]}
                 </SelectItem>

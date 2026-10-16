@@ -270,6 +270,12 @@ whole scrolling line) — but the same change widened `BuskBankJson.flow` (and t
 wipe-then-export push, re-flowing the bank for every peer. That is the degraded-record answer, so
 the writer bumped; `minReader` stays at 5 because every earlier archive still decodes.
 
+**A master's `usage` gaining `beam` (effects plan session 6) took no bump, by the same question.**
+`usage` is a free string on the wire: an older reader imports `beam` verbatim, its bank routes
+nothing on it (no effect in its library is `beam`), its write boundary re-validates a usage only when
+a PUT changes it, and its exporter writes the column back as it found it. Nothing degrades, so a v34
+writer is still v34.
+
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
 — a *required* field — disappeared, so both numbers moved. A v4 repo's preset applications name a

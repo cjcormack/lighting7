@@ -24,7 +24,7 @@ import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
 import { useCreateTemplateMutation } from '@/store/templates'
 import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { FAMILY_LABELS, familyForEffectCategory, familyCanHoldEffect } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, familyForEffectCategory } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
 import type { ActiveEffect } from '@/store/fixtureFx'
 import type { TemplateEffect } from '@/api/templatesApi'
@@ -94,7 +94,6 @@ export function NewTemplateFromEffectSheet({
     effect != null &&
     category != null &&
     family != null &&
-    familyCanHoldEffect(family) &&
     Number.isFinite(projectIdNum) &&
     !isLoading
 
@@ -222,7 +221,7 @@ export function NewTemplateFromEffectSheet({
             <AlsoAddToBuskRow projectId={projectIdNum} target={buskTarget} onChange={setBuskTarget} />
           )}
 
-          {entry != null && (family == null || !familyCanHoldEffect(family)) && (
+          {entry != null && family == null && (
             <p className="text-[11px] text-destructive">
               A “{category}” effect cannot be a palette — an effect palette is banked by family,
               and that category has none. It can live in a recorded look instead.

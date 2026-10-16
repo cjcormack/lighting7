@@ -495,6 +495,52 @@ class BuiltInEffectBehaviourTest {
         }
     }
 
+    // --- Beam ---
+
+    @Test
+    fun `ZoomBreathe is a sine between its two zooms`() {
+        val effect = fx("ZoomBreathe", "min" to "40", "max" to "200")
+        assertEquals(120.toUByte(), effect.calculate(0.0).slider())
+        assertEquals(200.toUByte(), effect.calculate(0.25).slider())
+        assertEquals(40.toUByte(), effect.calculate(0.75).slider())
+    }
+
+    @Test
+    fun `IrisPulse and FrostPulse take Pulse's envelope`() {
+        val params = arrayOf("min" to "10", "max" to "150", "attackRatio" to "0.25", "holdRatio" to "0.5", "curve" to "LINEAR")
+        val pulse = fx("Pulse", *params)
+        for (id in listOf("IrisPulse", "FrostPulse")) {
+            val effect = fx(id, *params)
+            for (i in 0..20) {
+                val phase = i / 20.0
+                assertEquals(pulse.calculate(phase).slider(), effect.calculate(phase).slider(), "$id at $phase")
+            }
+        }
+        assertEquals(150.toUByte(), fx("IrisPulse", *params).calculate(0.5).slider())
+    }
+
+    @Test
+    fun `FocusPull sweeps from start to end and back`() {
+        val effect = fx("FocusPull", "start" to "20", "end" to "220", "curve" to "LINEAR")
+        assertEquals(20.toUByte(), effect.calculate(0.0).slider())
+        assertEquals(220.toUByte(), effect.calculate(0.5).slider())
+        assertEquals(20.toUByte(), effect.calculate(1.0).slider())
+
+        val oneWay = fx("FocusPull", "start" to "20", "end" to "220", "curve" to "LINEAR", "pingPong" to "false")
+        assertEquals(120.toUByte(), oneWay.calculate(0.5).slider())
+    }
+
+    @Test
+    fun `each beam built-in declares exactly its own property`() {
+        val expected = mapOf("ZoomBreathe" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
+        val beam = registry.allRegistrations.filter { it.category == "beam" }
+        assertEquals(expected.keys, beam.map { it.id }.toSet())
+        for (reg in beam) {
+            assertEquals(listOf(expected.getValue(reg.id)), reg.compatibleProperties, reg.id)
+            assertEquals(FxOutputType.SLIDER, reg.outputType, reg.id)
+        }
+    }
+
     // --- Composite ---
 
     @Test

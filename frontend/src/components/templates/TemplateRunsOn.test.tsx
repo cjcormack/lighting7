@@ -13,7 +13,7 @@ import type { TemplateEffect } from '@/api/templatesApi'
  * readings are 60× apart, so guessing is worse than saying nothing.
  */
 const fixtures = [
-  { capabilities: ['dimmer', 'colour'] },
+  { capabilities: ['dimmer', 'colour'], properties: [{ type: 'slider', name: 'zoom', category: 'zoom' }] },
   { capabilities: ['dimmer', 'colour'] },
   { capabilities: ['dimmer'] },
   // Infrastructure: in the raw list, never counted — the two hooks disagree about it on purpose.
@@ -100,8 +100,10 @@ describe('TemplateRunsOn', () => {
     expect(screen.queryByText('4')).toBeNull()
   })
 
-  it('counts every head for BEAM, as the busk view does', () => {
-    render(<TemplateRunsOn family="BEAM" effect={effect()} entry={beatEntry} />)
-    expect(screen.getByText('3 heads')).toBeTruthy()
+  it('counts the heads with a beam effect’s one property', () => {
+    const zoomBreathe: EffectLibraryEntry = { ...beatEntry, name: 'Zoom Breathe', category: 'beam', outputType: 'SLIDER', compatibleProperties: ['zoom'] }
+    render(<TemplateRunsOn family="BEAM" effect={effect({ effectType: 'Zoom Breathe', category: 'beam' })} entry={zoomBreathe} />)
+    expect(screen.getByText('1 head')).toBeTruthy()
+    expect(screen.getByText(/Any fixture with zoom\./)).toBeTruthy()
   })
 })

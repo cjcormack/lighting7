@@ -451,20 +451,21 @@ export function sameRequest(a: UpdateFxRequest, b: UpdateFxRequest): boolean {
 
 // ─── The picker's families ─────────────────────────────────────────────────────────────────────
 
-export type PickerFamily = 'INTENSITY' | 'COLOUR' | 'POSITION' | 'CONTROLS'
+export type PickerFamily = 'INTENSITY' | 'COLOUR' | 'POSITION' | 'BEAM' | 'CONTROLS'
 
-export const PICKER_FAMILIES: readonly PickerFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'CONTROLS']
+export const PICKER_FAMILIES: readonly PickerFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM', 'CONTROLS']
 
 export const PICKER_FAMILY_LABELS: Record<PickerFamily, string> = {
   INTENSITY: 'Intensity',
   COLOUR: 'Colour',
   POSITION: 'Position',
+  BEAM: 'Beam',
   CONTROLS: 'Controls',
 }
 
 /**
  * The picker's segment an effect sits under, from its library category. A composite (Lightning
- * Strike) is applied through its dimmer half, so it is Intensity; a category the four do not name —
+ * Strike) is applied through its dimmer half, so it is Intensity; a category the others do not name —
  * `controls`, or a script's own — is Controls, so nothing the library holds goes unlisted.
  */
 export function pickerFamilyOf(category: string): PickerFamily {
@@ -477,21 +478,22 @@ export function pickerFamilyOf(category: string): PickerFamily {
       return 'COLOUR'
     case 'position':
       return 'POSITION'
+    case 'beam':
+      return 'BEAM'
     default:
       return 'CONTROLS'
   }
 }
 
-/** The fixture sheet's row family as the picker's segment — Beam rows' effects are Controls'. */
+/** The fixture sheet's row family as the picker's segment. */
 export function pickerFamilyForSheet(family: string | null | undefined): PickerFamily | null {
   switch (family) {
     case 'INTENSITY':
     case 'COLOUR':
     case 'POSITION':
+    case 'BEAM':
     case 'CONTROLS':
       return family
-    case 'BEAM':
-      return 'CONTROLS'
     default:
       return null
   }

@@ -67,12 +67,14 @@ describe('NewFxDefinitionSheet', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(5))
   })
 
-  it('offers every category the library draws, Controls included', () => {
+  it('offers every category the library draws but Beam, Controls included', () => {
     inSheet(<NewFxDefinitionSheet takenIds={[]} onCreated={() => {}} />)
     fireEvent.click(screen.getAllByRole('combobox')[0])
     for (const label of ['Dimmer', 'Colour', 'Position', 'Controls', 'Composite']) {
       expect(screen.getByRole('option', { name: label })).toBeInTheDocument()
     }
+    // A beam effect drives one named property, which this form cannot name.
+    expect(screen.queryByRole('option', { name: 'Beam' })).toBeNull()
   })
 })
 

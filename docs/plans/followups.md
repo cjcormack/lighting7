@@ -39,6 +39,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
 | [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
+| [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -505,6 +506,26 @@ field changes and no stored effect changes what it plays. `SpreadShapeTest`'s ve
 stay valid, since its offsets are Edges in's.
 
 **Ready**: nothing to wait for; it is a tidy-up the plan chose not to fold into session 2.
+
+---
+
+### `FU-FX-BEAM-ANY-SLIDER`
+
+**A level effect on any beam slider** · Trigger · effects plan session 6 (§9, §10), 2026-10-16
+
+The picker offers an effect where a head has a property the effect declares (`compatibleEffectsFor`),
+every level built-in declares `[dimmer, uv]`, and each beam built-in declares one beam property
+(`fx-engineering.md` §"Beam Effects"). So zoom, iris, frost and focus each have an effect of their own,
+and every other slider — prism, a fixture's own speed channel — has none on offer, though the engine
+drives any slider name (`FxTargetFactory.resolve`) and REST, a cue and the AI can already put Sine Wave
+on one. Offering the level effects on beam sliders was declined (effects plan D6) for named beam
+built-ins.
+
+The shape, if it fires: either another built-in for the property asked for, the D6 way, or the level
+built-ins declaring the `slider` sentinel (`fxTargetProperties.ts`), which offers them on every extra
+slider and puts the *On* row in the picker.
+
+**Trigger**: an operator wants to breathe prism or a fixture's own speed channel.
 
 ---
 
