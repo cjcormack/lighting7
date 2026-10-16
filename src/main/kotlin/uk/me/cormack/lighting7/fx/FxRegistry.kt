@@ -41,7 +41,7 @@ data class EffectRegistration(
     val aliases: Set<String> = emptySet(),
     /** Human-readable display name */
     val name: String,
-    /** UI category (e.g., "dimmer", "colour", "position", "controls") */
+    /** UI category (e.g., "dimmer", "colour", "position", "beam", "controls") */
     val category: String,
     /** Output type this effect produces */
     val outputType: FxOutputType,

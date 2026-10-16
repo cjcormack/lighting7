@@ -18,7 +18,7 @@ import { parseSelectionSource, type SelectionSource } from './selectionApi'
  *
  * **There are three frames and none of them places** (D12). Every target a place can land on
  * already has a mutation with its own validation — `POST /busk/banks/{bankId}/pads`,
- * `assignCueSlot`, `programmer.addLayer`, `patchProjectCue` through `buildCueInput` — so one frame
+ * `assignCueSlot`, the palette or Look press, `patchProjectCue` through `buildCueInput` — so one frame
  * that placed would reimplement four of them behind one name. **A place is the placing window's own
  * mutation followed by [HandWsApi.drop]**, and Undo is that window's inverse mutation. The desk's
  * whole share of a place is letting go. Do not add a `hand.place`.

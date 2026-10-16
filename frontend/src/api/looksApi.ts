@@ -240,6 +240,27 @@ export interface ToggleLookRequest {
   beatDivision?: number
 }
 
+/**
+ * *Apply as values* for a Look (apply-model plan §3.5): its rows over the targets — or its own
+ * fixtures with none — as Local `web` values, its effects as Local effects, and nothing left on the
+ * stack. Not a toggle. `families` is the selection's mask, as on [ToggleLookRequest].
+ */
+export interface ApplyLookRequest {
+  targets: ToggleLookTarget[]
+  families?: AttributeFamily[]
+  /** Over every value; absent is each row's own fade, as a press lands them. */
+  fadeMs?: number
+}
+
+export interface ApplyLookResponse {
+  /** Programmer values written into Local. */
+  written: number
+  /** The Local effects started, one per effect and target. */
+  effectIds: number[]
+  /** The Look's families the mask left out, as on [ToggleLookResponse]. */
+  skippedFamilies: string[]
+}
+
 export interface ToggleLookResponse {
   action: 'applied' | 'removed'
   effectCount: number

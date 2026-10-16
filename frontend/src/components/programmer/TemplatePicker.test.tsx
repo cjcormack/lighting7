@@ -9,12 +9,12 @@ import type { ColumnKey } from '@/components/fixtures-list/columns'
  * The picker: the whole library that fits the selection, as a searchable pad grid.
  *
  * What is pinned here is what the row above it cannot say — the four sections and their membership
- * rules, that search reaches all of them, that a press applies **and leaves the panel open**, that
- * ⌥ takes the other route, and that the three forms come from the cell editor's two media queries
- * rather than from anything of the picker's own.
+ * rules, that search reaches all of them, that a press goes through the strip's press **and leaves
+ * the panel open**, that ⌥ asks for values and a hold for the menu, and that the three forms come
+ * from the cell editor's two media queries rather than from anything of the picker's own. The press
+ * itself is `usePress`'s and the strip's (`usePress.test.tsx`, `TemplateStrip.test.tsx`).
  */
-const applyTemplate = vi.fn()
-const toggleTemplate = vi.fn()
+const onGesture = vi.fn()
 let library: TemplateSummary[] = []
 
 vi.mock('sonner', () => ({
@@ -23,24 +23,17 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: library }),
-  useApplyTemplateMutation: () => [
-    (args: unknown) => {
-      applyTemplate(args)
-      return { unwrap: () => Promise.resolve({ written: 1, skipped: [] }) }
-    },
-  ],
-  useToggleTemplateMutation: () => [
-    (args: unknown) => {
-      toggleTemplate(args)
-      return { unwrap: () => Promise.resolve({ action: 'applied', effectCount: 0 }) }
-    },
-  ],
   useCreateTemplateFromProgrammerMutation: () => [vi.fn(), { isLoading: false, reset: vi.fn() }],
 }))
 
-vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
 // The mask a press carries — none here; `TemplateStrip.test.tsx` pins the masked send.
 vi.mock('@/store/selection', () => ({ usePressFamilies: () => null }))
+
+// The hold menu's *Edit palette…* navigates; nothing here follows it.
+vi.mock('react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router')>()),
+  useNavigate: () => vi.fn(),
+}))
 
 // Counted, not stubbed: the real ordering still runs, but the picker must not call it while shut.
 const recentTemplatesSpy = vi.hoisted(() => vi.fn())
@@ -141,6 +134,9 @@ function picker(over: Partial<React.ComponentProps<typeof TemplatePicker>> = {})
       askedFamilies={['COLOUR']}
       targets={HEX_1}
       offerable={OFFERABLE}
+      into={{ kind: 'programmer' }}
+      presenceOf={() => 'none'}
+      onGesture={onGesture}
       {...over}
     />
   )
@@ -157,8 +153,7 @@ function sectionPads(label: string): string[] {
 }
 
 beforeEach(() => {
-  applyTemplate.mockClear()
-  toggleTemplate.mockClear()
+  onGesture.mockClear()
   newSheetProps.mockClear()
   form.current = 'popover'
   recentTemplatesSpy.mockClear()
@@ -200,29 +195,22 @@ describe('TemplatePicker', () => {
     expect(within(panel()).getByText('4 of 5 fit the selection')).toBeInTheDocument()
   })
 
-  it('applies on a click and stays open, so three colours can be auditioned in a row', async () => {
+  it('presses on a click and stays open, so three colours can be auditioned in a row', async () => {
     render(picker())
-    const pads = within(panel()).getAllByTitle(/Click to set these values/)
+    const pads = within(panel()).getAllByTitle(/Click to put/)
     await act(async () => {
       fireEvent.click(pads[0])
     })
-    expect(applyTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 1, targets: HEX_1 })
-    expect(toggleTemplate).not.toHaveBeenCalled()
+    expect(onGesture).toHaveBeenCalledWith(PRESSED, 'press')
     expect(panel()).toBeInTheDocument()
   })
 
-  it('⌥click adds a tracking layer instead, masked to the palette’s family', async () => {
+  it('⌥click asks for the palette’s values instead', async () => {
     render(picker())
     await act(async () => {
-      fireEvent.click(within(panel()).getAllByTitle(/Click to set these values/)[0], { altKey: true })
+      fireEvent.click(within(panel()).getAllByTitle(/Click to put/)[0], { altKey: true })
     })
-    expect(toggleTemplate).toHaveBeenCalledWith({
-      projectId: 1,
-      templateId: 1,
-      targets: HEX_1,
-      propertyMask: 'COLOUR',
-    })
-    expect(applyTemplate).not.toHaveBeenCalled()
+    expect(onGesture).toHaveBeenCalledWith(PRESSED, 'asValues')
   })
 
   it('names the family and the cell count where cells fix the scope', () => {
@@ -279,21 +267,20 @@ describe('TemplatePicker', () => {
     expect(sectionPads('Recent')).toEqual(['Amber Key'])
   })
 
-  it('refuses a mouse hold, because a mouse has ⌥', () => {
-    // The pad shares `useTemplatePressHandlers` with the chip. A mouse hold would be a second,
-    // silent door to the tracking mutation: a paused pointer would add a layer where literals were
-    // meant, with nothing on screen saying which happened.
+  it('opens the menu on a hold, on any pointer, and never presses', () => {
     vi.useFakeTimers()
     try {
       render(picker())
-      const pad = within(panel()).getAllByTitle(/Click to set these values/)[0]
+      const pad = within(panel()).getAllByTitle(/Click to put/)[0]
       fireEvent.pointerDown(pad, { pointerType: 'mouse' })
-      vi.advanceTimersByTime(1200)
-      expect(toggleTemplate).not.toHaveBeenCalled()
-
-      fireEvent.pointerDown(pad, { pointerType: 'touch' })
-      vi.advanceTimersByTime(1200)
-      expect(toggleTemplate).toHaveBeenCalledTimes(1)
+      act(() => {
+        vi.advanceTimersByTime(600)
+      })
+      fireEvent.pointerUp(pad)
+      fireEvent.click(pad)
+      expect(onGesture).not.toHaveBeenCalled()
+      expect(screen.getByRole('menu', { name: 'Amber Key' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Put on' })).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

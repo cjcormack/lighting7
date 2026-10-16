@@ -216,7 +216,7 @@ export interface ActiveEffect {
    *
    * A sibling of [lookId] rather than a widening of it: the backend kept `lookId` meaning a Look and
    * added this beside it, so the two are never both set and a reader has to check both. Both are
-   * null on a *detached* copy — the one a plain click on an effect template's chip mints — which
+   * null on a *detached* copy — the one *Apply as values* on an effect palette's chip mints — which
    * carries no source at all, deliberately, so nothing can rebuild it as a tracking layer.
    */
   templateId: number | null

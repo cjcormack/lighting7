@@ -30,5 +30,11 @@ position/PanSweep.fx.kts
 position/TiltSweep.fx.kts
 position/RandomPosition.fx.kts
 
+# Beam effects
+beam/ZoomBreathe.fx.kts
+beam/IrisPulse.fx.kts
+beam/FrostPulse.fx.kts
+beam/FocusPull.fx.kts
+
 # Composite effects
 composite/LightningStrike.fx.kts

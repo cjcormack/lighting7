@@ -138,9 +138,17 @@ export function FxPicker({
   }, [compatible])
 
   const firstFamily = PICKER_FAMILIES.find((f) => (byFamily.get(f)?.length ?? 0) > 0) ?? 'INTENSITY'
+  // A Beam row whose property no beam effect drives (prism, a gobo) opens on Controls, where the
+  // effects that can take it are.
+  const openingFamily =
+    initialFamily === 'BEAM' &&
+    preferredProperty != null &&
+    !(byFamily.get('BEAM') ?? []).some((e) => e.compatibleProperties.includes(preferredProperty))
+      ? 'CONTROLS'
+      : initialFamily
   const [chosenFamily, setChosenFamily] = useState<PickerFamily | null>(null)
   const family =
-    chosenFamily ?? (initialFamily != null && (byFamily.get(initialFamily)?.length ?? 0) > 0 ? initialFamily : firstFamily)
+    chosenFamily ?? (openingFamily != null && (byFamily.get(openingFamily)?.length ?? 0) > 0 ? openingFamily : firstFamily)
 
   // The auditioned effect is only a swap target while it is still running — stopped elsewhere, the
   // next tap starts afresh. One this session has just started counts as running until the effect

@@ -11,7 +11,7 @@ import java.util.UUID
  * This grammar is legal in exactly one place: the `parameters` map of an effect. It is refused in a
  * Look row (`validateLookRows`) and in a cue's property assignments
  * ([CueAssignmentResolver.parseAssignmentValue]), because a *value* is a literal and a dependency on
- * a template is expressed by a **layer** — which is what ⌥click on a template chip already builds.
+ * a template is expressed by a **layer** — which is what a tap on a palette chip already builds.
  * An effect parameter has no layer to hang off, so it is the one consumer that needs a reference of
  * its own.
  *

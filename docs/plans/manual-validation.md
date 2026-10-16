@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
@@ -136,6 +137,32 @@ stack landing where the cards say before the desk answers.
    GO goes on to the cue after *it*.
 5. **On Q12.** With a cue's effect running on a fixture, open the fixture's sheet, the tray, and press
    *on Q…*: that cue's editor opens over the sheet; Escape returns to the sheet.
+
+## `FU-MANUAL-VENUE-VISIT-R3-3`
+
+**What it proves**: *one press in the client* — venue-visit R3.3, apply-model plan session 3 (§4.1,
+§4.2, §4.6): every palette door presses through `usePress`, a tap is a tracking layer, ⌥click is
+*Apply as values*, a hold or right-click is the menu and never a press, and a focused Look takes a
+press as values in its draft.
+
+**Why it is here**: the tests pin each route against mocks; nothing pressed them on the desk's
+screens, watched a finger's hold on the iPad, or looked at the stage while a layer was detached.
+
+**Test**, on the dev rig with two colour palettes (Red, Blue) and a Look:
+
+1. **Tap and replace.** Select Hex 1–4, tap Red on row C: one Red layer, the chip lit. Select Hex 3–4,
+   tap Blue: Red's row reads *lost Hex 3–4 to Blue* and Hex 3–4 go blue on stage; the next press
+   clears the note.
+2. **⌥click and the menu.** ⌥click Red on Hex 1: literals in Local, no new layer. On the iPad, hold a
+   chip: the menu opens (*Put on* or *Take off these heads*, *Apply as values*, *Pick up*, *Edit
+   palette…*) and nothing changes on stage; *Edit palette…* opens that palette's editor.
+3. **Detach.** In the rail, a layer's settings → *Detach*: the row goes, nothing on stage moves, the
+   values read as Local and its effect keeps running in phase.
+4. **Into a Look.** Focus a Look layer, tap Red: the Look's rows take Red on the selected heads and
+   save; no programmer layer appears. Place a held Look on the programmer's stack from the hand there:
+   refused, *Looks don't nest*.
+5. **Unlinked.** Unlink a window, select something else in it, and place a held palette on the
+   programmer's stack from the hand: it lands on that window's selection, not the desk's.
 
 ## `FU-MANUAL-VENUE-VISIT-R2-3`
 
@@ -1795,8 +1822,8 @@ MIDI half, the timeout, and the two gestures in step 6.
 3. **Every way of letting go.** The chip's ×; Escape with nothing else claiming it (and Escape while
    a cell editor is open must reach the editor, not the hand — as must Escape while any dialog or
    popover is open); a second *Pick up*, which replaces rather than erroring. Note that the
-   **programmer's layer place offers no Undo** and that is by decision (5e261d1b): `addLayer`
-   answers no id and the stack is shared, so an inverse would be guessing which layer to remove.
+   **programmer's layer place offers no Undo** and that is by decision (5e261d1b): the press
+   answers no layer id and the stack is shared, so an inverse would be guessing which layer to remove.
    The other three places all offer one. Then the one that needs two screens: pick up on Screen 1, **place it**, and
    while the place is in flight pick up something else on Screen 2 — Screen 2's item must survive,
    because the placing window's drop names the record it placed. A bare drop would clear it, and
@@ -1816,14 +1843,14 @@ MIDI half, the timeout, and the two gestures in step 6.
    5e261d1b, so the specific sentence is now the expected reading and the generic unknown-variant
    line is a **failure**, not the tolerable outcome this step once allowed for.
 6. **Two gestures a single window cannot prove, both fixed in review and neither exercised.** On a
-   **touchscreen**, hold the programmer's template chip: it must add the tracking layer and **not**
-   open a pick-up menu. Radix's `ContextMenuTrigger` arms a ~700ms touch long-press of its own, and
-   the chip already owns a 500ms hold, so the first cut fired both; it is a `Popover` opened from
-   `onContextMenu` now, which arms nothing. Right-click on a mouse must still offer *Pick up*. Then,
-   with the desk **socket down** (pull the network, or stop the desk on a rig that is not live),
-   place onto the programmer's layer stack: the hand must **stay held** and the only toast must be
-   "that did not reach the rig". A success toast beside that error means the send verdict is being
-   discarded again.
+   **touchscreen**, hold the programmer's palette chip: it must open the chip's menu **once** and
+   put nothing on (a hold never presses). Radix's `ContextMenuTrigger` arms a ~700ms touch
+   long-press of its own beside the chip's 500ms hold, so the chip's menu is a `Popover`, which arms
+   nothing; a second menu, or a layer, means that has regressed. Right-click on a mouse must open the
+   same menu, *Pick up* in it. Then, with the desk **unreachable** (pull the network, or stop the
+   desk on a rig that is not live), place onto the programmer's layer stack: the place is a press
+   over REST now, so the hand must **stay held** and the only toast must be the request's failure.
+   A success toast beside that error means the press's refusal is being read as a place again.
 7. **The timeout.** Pick something up and leave it for five minutes without placing it: the chip
    clears itself on both screens. Worth pairing with a watch rather than guessing — the point is
    that nobody has to remember they are holding something.
@@ -2054,8 +2081,8 @@ has more checks than the others.
    [`FU-TMPL-WHEEL-PREVIEWS`](followups.md#fu-tmpl-wheel-previews).
 2. **Retune it and watch every tracking layer move**, in a cue and in the programmer's own stack.
    That is `republishForTemplateEdit`, and it is the touring feature.
-3. **The two gestures are visibly different.** Click, then retune — the busked values must *not*
-   move. ⌥click, then retune — they must.
+3. **The two gestures are visibly different.** ⌥click (*Apply as values*), then retune — the
+   busked values must *not* move. Tap, then retune — they must.
 4. **A position template in degrees across two ranges.** The Shehds tilts 0–270°, the MAC 250
    0–257°: the same degrees must land on different DMX, and a clamp must be reported in the panel
    *and* true on stage. (Since venue-visit S11 this is a palette **stored** in degrees, `deg:`, which
@@ -3117,8 +3144,8 @@ from a busk stack card and GO from `/show` move one cursor rather than two.
 
 All four sessions landed green, but an effect template touches the busk pads, the programmer strip,
 the cue editor, the delete guard and the sync round-trip, and the two apply gestures differ in a way
-only a rig shows: a **click** mints a detached programmer-band copy that never follows the template
-again, while **⌥click** adds a template layer that does. Nothing automated distinguishes "it ran"
+only a rig shows: **⌥click** (*Apply as values*) mints a detached programmer-band copy that never follows
+the template again, while a **tap** adds a template layer that does. Nothing automated distinguishes "it ran"
 from "it ran and stayed attached to the right thing".
 
 **Test**: with the desk running and a Front Wash group of four heads:
@@ -3132,12 +3159,12 @@ from "it ran and stayed attached to the right thing".
    instance keeps its old division until the pad is re-pressed **or the programmer's stack next
    recooks for any reason** (a layer patch, a move, another pad) — which respawns it at the new
    division with its phase restarted (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look
-   effects; `completed/fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip click never
+   effects; `completed/fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip ⌥click never
    follows the template at all.
-4. In the programmer, ⌥click the chip with two heads selected, then Record → the cue holds a
+4. In the programmer, tap the chip with two heads selected, then Record → the cue holds a
    template *layer*; GO on that cue runs the effect; the cue editor's layer panel shows tempo and
    amount overrides that work.
-5. Click the chip → *FX running* shows a `programmer band` row; *Save as template…* on it creates a
+5. ⌥click the chip → *FX running* shows a `programmer band` row; *Save as template…* on it creates a
    second template with the same settings; Clear releases the copy.
 6. Delete a template that is both tracked by a cue and running on the programmer → the guard must
    name both, and *Delete anyway* must stop it everywhere.

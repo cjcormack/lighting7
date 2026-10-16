@@ -4,6 +4,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
+import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -21,7 +23,7 @@ import kotlin.test.assertTrue
  * seven.
  *
  * Cost: metadata only. It parses each `.fx.kts` frontmatter via [FxFileLoader.parseFxFile] and
- * never compiles a body — `FxRegistryTest` already pays for the full 24-effect compile, and a
+ * never compiles a body — `FxRegistryTest` already pays for the full built-in compile, and a
  * second one would be a minute of suite time for nothing.
  */
 class FxRegistrationTargetCompatibilityTest {
@@ -37,6 +39,8 @@ class FxRegistrationTargetCompatibilityTest {
     private val representatives: Map<String, Fixture> = run {
         val hex = HexFixture(universe, key = "hex-1", fixtureName = "Hex 1", firstChannel = 1)
         val spot = Fusion100SpotMkIIFixture.Mode15Ch(universe, "spot-1", "Spot 1", 1)
+        val revolution = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
+        val robe = RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1)
         mapOf(
             "dimmer" to hex,
             "uv" to hex,
@@ -44,6 +48,10 @@ class FxRegistrationTargetCompatibilityTest {
             "position" to spot,
             "pan" to spot,
             "tilt" to spot,
+            "zoom" to revolution,
+            "focus" to revolution,
+            "iris" to robe,
+            "frost" to robe,
         )
     }
 
@@ -59,7 +67,7 @@ class FxRegistrationTargetCompatibilityTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 24, "fx/index.txt should list at least 24 effects, got ${index.size}")
+        assertTrue(index.size >= 28, "fx/index.txt should list at least 28 effects, got ${index.size}")
 
         return index.map { path ->
             val text = loader.getResource("fx/$path")!!.readText()

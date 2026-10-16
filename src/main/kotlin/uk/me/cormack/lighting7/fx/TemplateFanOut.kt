@@ -31,8 +31,8 @@ import uk.me.cormack.lighting7.fixture.media.FittedMedia
  *  - **Nothing carries it → the target itself**, so the caller reports the target's own skip, as
  *    before, rather than a skip per cell.
  *
- * Every consumer that resolves a template row onto a selection asks this — the click
- * (`applyTemplateToProgrammer`), the cook (`CueComposer.applyLayer`, so a ⌥click layer and a busk
+ * Every consumer that resolves a template row onto a selection asks this — *Apply as values*
+ * (`applyTemplateToProgrammer`), the cook (`CueComposer.applyLayer`, so a chip's tap and a busk
  * pad), Spread over heads and the editor's resolves-to panel — for the reason [TemplateResolver]
  * is a singleton: four answers to "where does this land" would drift.
  */

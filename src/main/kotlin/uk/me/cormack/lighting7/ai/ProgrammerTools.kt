@@ -55,8 +55,8 @@ private const val MAX_FADE_SECONDS = 600.0
 /**
  * The programmer tools that write it: `set_programmer`, `clear_programmer`, `set_blind`,
  * `apply_palette` and `record_look`. Each is a door onto the code a desk gesture already goes
- * through — the picker's WEB write, Clear and Release, the Blind switch, the template chip's click
- * and ⌥click, Record to Look — so a model and the operator cannot get two different answers.
+ * through — the picker's WEB write, Clear and Release, the Blind switch, the palette chip's ⌥click
+ * and tap, Record to Look — so a model and the operator cannot get two different answers.
  * All act on the current project.
  */
 internal class ProgrammerTools(private val state: State) {

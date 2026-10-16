@@ -439,7 +439,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - **Docs:** `fx-engineering.md`, `midi-control-surface-engineering.md`,
   `websocket-engineering.md`.
 
-### Session 6 — Beam effects (backend + frontend)
+### Session 6 — Beam effects (backend + frontend) — done, `125f9ee`
 
 - `category: beam`: Zoom Breathe (`zoom`, a slow sine between two levels), Iris Pulse (`iris`, Pulse's
   shape), Frost Pulse (`frost`), Focus Pull (`focus`, a sweep between two levels) — `.fx.kts`, each

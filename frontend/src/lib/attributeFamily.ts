@@ -146,41 +146,12 @@ export function familyForEffectCategory(category: string): AttributeFamily | nul
 }
 
 /**
- * The families an **effect template** can be banked under (fx-templates D4).
- *
- * Not all four: BEAM is absent because the effect library has no beam category, so the column would
- * have nothing to put in it. The backend refuses it **by name** rather than by the library happening
- * to ship no beam effect — a script-registered one must not be able to mint a Beam effect template
- * behind the rule — and this list is the client half of that refusal, which is why the sheet shows
- * *Effect* disabled under Beam rather than omitting Beam from the family row.
+ * The families an **effect template** can be banked under (fx-templates D4): all four, since the
+ * effect library's `beam` category (effects plan D6) gave Beam effects of its own.
  *
  * Mirrors `TEMPLATE_EFFECT_FAMILIES` in `routes/projectTemplates.kt`.
  */
-export const TEMPLATE_EFFECT_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION']
-
-/** True when a template of this family may hold an effect rather than values. */
-export function familyCanHoldEffect(family: AttributeFamily): boolean {
-  return TEMPLATE_EFFECT_FAMILIES.includes(family)
-}
-
-/**
- * The effect-library category an effect template of this family draws its effects from — the
- * inverse of [familyForEffectCategory], and the filter behind "the family is the filter".
- *
- * Null for BEAM, which is [TEMPLATE_EFFECT_FAMILIES]' absence read the other way round.
- */
-export function effectCategoryForFamily(family: AttributeFamily): string | null {
-  switch (family) {
-    case 'INTENSITY':
-      return 'dimmer'
-    case 'COLOUR':
-      return 'colour'
-    case 'POSITION':
-      return 'position'
-    case 'BEAM':
-      return null
-  }
-}
+export const TEMPLATE_EFFECT_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
 /**
  * How many patched heads an effect template of this family would run on.

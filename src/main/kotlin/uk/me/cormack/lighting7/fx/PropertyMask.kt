@@ -138,7 +138,7 @@ fun maskAllows(mask: Set<PropertyMaskGroup>?, group: PropertyMaskGroup?): Boolea
  * The attribute family an effect's declared [category] belongs to.
  *
  * The category vocabulary is the effect library's own (`"dimmer"` / `"colour"` / `"position"` /
- * `"controls"`, plus `"composite"`), the same set `inferPresetCapabilities` switches on.
+ * `"beam"` / `"controls"`, plus `"composite"`).
  * `"controls"`, `"composite"` and anything unrecognised answer null rather than defaulting into
  * BEAM, so an unknown category under-banks rather than mis-banks.
  *

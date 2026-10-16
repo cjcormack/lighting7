@@ -18,6 +18,7 @@ import {
   levelModeOf,
   paramAxis,
   paramRole,
+  pickerFamilyForSheet,
   pickerFamilyOf,
   startingSpec,
   templateDraftOf,
@@ -299,6 +300,11 @@ describe('fxEditorModel', () => {
   it('files a composite under Intensity and an unknown category under Controls', () => {
     expect(pickerFamilyOf('composite')).toBe('INTENSITY')
     expect(pickerFamilyOf('scripted')).toBe('CONTROLS')
+  })
+
+  it('files a beam effect under Beam, and a Beam row opens there', () => {
+    expect(pickerFamilyOf('beam')).toBe('BEAM')
+    expect(pickerFamilyForSheet('BEAM')).toBe('BEAM')
   })
 })
 

@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react'
 import type { CellKeyboardPermission } from '../sheet/cellEntry'
+import type { CueTarget } from '../../api/cuesApi'
+import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { ColumnKey } from './columns'
 import type { CellBatch, CellCommit, WriteTarget } from './rowModel'
 import type { SpreadColumn } from './SpreadPopover'
@@ -41,6 +43,12 @@ export interface MarqueeSnapshot {
    * throttle**, the one every cell's commit goes through. Stable for the list's mount.
    */
   commit: (col: ColumnKey, commit: CellCommit) => void
+  /**
+   * Where a press from this window lands — the palette strip's own targets (`templateTargetsFor`)
+   * — and the families the marquee names, null for rows alone. `usePress`'s pair on the
+   * programmer, so a door outside the list (the rail's hand place) presses what the strip would.
+   */
+  press: { targets: readonly CueTarget[]; askedFamilies: readonly AttributeFamily[] | null }
 }
 
 export interface MarqueeStore {

@@ -54,6 +54,7 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   // which went with the editor in session 3; the routes themselves were deleted server-side
   // afterwards, so there is nothing left to classify.
   'toggleLook',
+  'applyLook',
   // The template gestures, for the same reason `toggleLook` is here: they land on the rig and the
   // strip reports what happened itself, so a save-status spinner would be describing a press.
   'applyTemplate',

@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  * same question and must get the same answer:
  *
  *  1. **cook** — [CueComposer.applyLayer], for a layer tracking a template;
- *  2. **click-apply** — `POST /{projectId}/palettes/{id}/apply`, writing literals into the
+ *  2. ***Apply as values*** — `POST /{projectId}/palettes/{id}/apply`, writing literals into the
  *     programmer;
  *  3. **the editor's "resolves to" panel** — `POST /{projectId}/palettes/resolve`.
  *
@@ -151,7 +151,7 @@ object TemplateResolver {
      * had. [rows] may hold rows of any family; the others are ignored here.
      *
      * Lives beside [resolve] rather than in each caller for the reason this whole object is a
-     * singleton: cook, click-apply and the editor's panel must give one answer, and the panel's job
+     * singleton: cook, *Apply as values* and the editor's panel must give one answer, and the panel's job
      * is to show the operator this refusal *before* they save.
      */
     fun unmetColourRequirement(

@@ -73,7 +73,7 @@ internal const val CODE_TEMPLATE_IN_USE = "PALETTE_IN_USE"
 
 /**
  * 400 code: the selection is masked to families the template's own is not in (multi-screen plan
- * D5). Every door — click, ⌥click, pad, button — refuses by this name rather than landing a layer
+ * D5). Every door — tap, ⌥click, pad, button — refuses by this name rather than landing a layer
  * the cook would skip whole, which is the same dead-pad reading `PALETTE_NEEDS_SELECTION` refuses.
  */
 internal const val CODE_TEMPLATE_OUTSIDE_MASK = "PALETTE_OUTSIDE_MASK"
@@ -91,7 +91,7 @@ internal fun templateOutsideMaskMessage(name: String, family: PropertyMaskGroup?
 private const val TEMPLATE_NOT_FOUND = "Palette not found"
 
 /**
- * The template library: CRUD, the two apply gestures, and the editor's resolves-to panel.
+ * The template library: CRUD, the press and *Apply as values*, and the editor's resolves-to panel.
  *
  * Modelled on [routeApiRestProjectLooks] and deliberately *not* merged with it. The two entities
  * differ in what they are for (a template composes values, a Look composes cues), in what they hold
@@ -104,7 +104,7 @@ private const val TEMPLATE_NOT_FOUND = "Palette not found"
  *  - **`/resolve`** takes a *draft* rather than a saved id, because the editor's panel has to answer
  *    "what will this do to my rig?" before anything is written. It is the only reason the resolver
  *    is reachable without a template row.
- *  - **`/apply`** writes **literals** into the programmer. That is the plain-click gesture, and the
+ *  - **`/apply`** writes **literals** into the programmer. That is *Apply as values* (a chip's ⌥click), and the
  *    literals are the point: retuning the template later must not move what you busked.
  *  - **`/from-programmer`** records a selection as a new template, collapsing to one generic row per
  *    property where every target agrees and keeping per-fixture rows where they do not.
@@ -378,7 +378,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/palettes/{templateId}/apply — click: literals into the programmer.
+    // POST /projects/{id}/palettes/{templateId}/apply — *Apply as values* (⌥click): literals into the programmer.
     post<ApplyTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ApplyTemplateRequest>()
@@ -415,7 +415,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/palettes/{templateId}/toggle — ⌥click and the busking pads.
+    // POST /projects/{id}/palettes/{templateId}/toggle — the press: a chip's tap and the busking pads.
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()
@@ -468,7 +468,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     targets = targets,
                     propertyMask = derivedMask,
                 )
-                // The ⌥click / hold door of the press log — the **on** arm only. A second press
+                // The tap door of the press log — the **on** arm only. A second press
                 // takes the layer off, and a release is not a press (`TemplatePressLog`).
                 if (outcome.action == "applied") {
                     TemplatePressLog.record(state, project.id.value, source.id)
@@ -827,7 +827,7 @@ internal data class ApplyTemplateResponse(
     /** Heads the template could not reach, with the reason — the same notes the panel shows. */
     val skipped: List<TemplateSkipDto> = emptyList(),
     /**
-     * The programmer-band effects a click on an **effect** template minted, one per target it
+     * The programmer-band effects an apply of an **effect** template minted, one per target it
      * named; empty for a value template.
      *
      * Ids rather than a count, because the caller has to be able to take *these* copies off again
@@ -1200,17 +1200,12 @@ private fun validateTemplateEffect(
     ownUuid: java.util.UUID?,
 ): String? {
     // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
-    // derived families use. `controls` has no tempo, `composite` spans families, and BEAM is
-    // refused by name rather than by the library happening to ship no beam effect — a
-    // script-registered one must not be able to mint a Beam effect template behind this rule.
+    // derived families use. `controls` has no tempo and `composite` spans families, so neither
+    // names one; a beam effect (effects plan D6) is a Beam palette.
     val family = familyForEffectCategory(effect.category)
         ?: return "A palette cannot hold a '${effect.category}' effect — an effect palette is " +
             "banked by family, and that category has none. Effect palettes are: " +
             TEMPLATE_EFFECT_FAMILIES.joinToString { it.name }
-    if (family !in TEMPLATE_EFFECT_FAMILIES) {
-        return "A ${family.name} palette cannot hold an effect — the effect library has no " +
-            "${family.name.lowercase()} category. A beam effect lives in a recorded look."
-    }
 
     // Rule 3: the library is the authority on what an effect *is*; the stored `category` is a
     // denormalisation for the family derivation and the list DTO, so it must agree or the two
@@ -1219,6 +1214,14 @@ private fun validateTemplateEffect(
         ?: return "'${effect.effectType}' is not an effect this desk knows"
     if (!registration.category.equals(effect.category, ignoreCase = true)) {
         return "'${effect.effectType}' is a ${registration.category} effect, not ${effect.category}"
+    }
+    // A palette's beam effect names no property: a press lands it on the one its registration
+    // declares, so a script-registered one must declare exactly one, by name.
+    if (family == PropertyMaskGroup.BEAM &&
+        registration.compatibleProperties.singleOrNull().let { it == null || it in EFFECT_PROPERTY_SENTINELS }
+    ) {
+        return "A Beam palette's effect must drive one named property — '${effect.effectType}' " +
+            "declares ${registration.compatibleProperties.joinToString().ifEmpty { "none" }}"
     }
 
     // Rule 4: the enum-valued fields, exactly as `validateLookEffects` checks them and for the
@@ -1253,17 +1256,15 @@ private fun validateTemplateEffect(
     return null
 }
 
-/**
- * The families an effect template can be banked under (D4).
- *
- * Not all of [PropertyMaskGroup]: BEAM is absent because the effect library has no beam category,
- * so there would be nothing to put in the column. Adding one is an FX-library change, not a
- * template change.
- */
+/** The property sentinels `fxTargetProperties.ts` offers an effect through, which name no property. */
+private val EFFECT_PROPERTY_SENTINELS = setOf("slider", "setting")
+
+/** The families an effect template can be banked under (D4): every family an effect category names. */
 private val TEMPLATE_EFFECT_FAMILIES = setOf(
     PropertyMaskGroup.INTENSITY,
     PropertyMaskGroup.COLOUR,
     PropertyMaskGroup.POSITION,
+    PropertyMaskGroup.BEAM,
 )
 
 /** Must be called inside a transaction. */
@@ -1596,7 +1597,7 @@ private fun resolveTemplateAgainstPatch(
         fixtures.fixtures.filter { it.key in keys }
     }
 
-    // Every row paired with the heads it lands on, before anything is resolved — the click's and the
+    // Every row paired with the heads it lands on, before anything is resolved — the apply's and the
     // cook's pairing, so the panel promises what the desk does. A per-fixture row answers only for
     // the head it names; a generic row answers for all. A multi-head fixture whose property lives
     // only on its cells (the Shehds' colour, on its three zones) answers once per cell

@@ -3,6 +3,8 @@ import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type {
+  ApplyLookRequest,
+  ApplyLookResponse,
   CopyLookRequest,
   CopyLookResponse,
   LookDetails,
@@ -234,6 +236,23 @@ export const looksApi = restApi.injectEndpoints({
       },
     }),
 
+    /**
+     * *Apply as values* for a Look — ⌥click and the hold menu's second item (apply-model plan
+     * D8). Lands Local values and Local effects, so it invalidates what the toggle does.
+     */
+    applyLook: build.mutation<ApplyLookResponse, { projectId: number; lookId: number } & ApplyLookRequest>({
+      query: ({ projectId, lookId, ...body }) => ({
+        url: `projects/${projectId}/looks/${lookId}/apply`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { targets }) =>
+        targets.map((t) =>
+          t.type === 'fixture'
+            ? ({ type: 'FixtureEffects', id: t.key } as const)
+            : ({ type: 'GroupActiveEffects', id: t.key } as const),
+        ),
+    }),
   }),
   overrideExisting: false,
 })
@@ -246,4 +265,5 @@ export const {
   useCopyLookMutation,
   useAbsorbLookEffectsMutation,
   useToggleLookMutation,
+  useApplyLookMutation,
 } = looksApi

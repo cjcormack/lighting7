@@ -713,7 +713,8 @@ Release folds to its glyph and the scope line drops the fade.
   every member. A fixture's head row sees an effect on the fixture, which the desk paints onto the
   heads (`effectsReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
-  Position · Controls, a family the target cannot take disabled) opening on the family of the row
+  Position · Beam · Controls, a family the target cannot take disabled; Beam lists the beam
+  built-ins, each only where a head has its one property, effects plan §4.4) opening on the family of the row
   open on the sheet, and the effect rows. **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
@@ -939,9 +940,9 @@ two it holds is `kind`, and it is fixed at creation the way the family is; three
 effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
-A **Beam** palette holds values only — the effect library has no beam category, and the backend
-refuses `beam`, `controls` and `composite` **by name** so a script-registered beam effect cannot
-mint one behind the rule. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
+Every family may hold an effect — a **Beam** one a beam built-in (Zoom Breathe, Iris Pulse, Frost
+Pulse, Focus Pull; effects plan D6) — and the backend refuses `controls` and `composite` **by name**,
+since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -1153,7 +1154,7 @@ cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index
 purpose**: the rows render a list and the operator acts on a position in it, so translating
 index → whatever addresses a layer in that world is the host's job. The cue's host PATCHes
 whole arrays through `buildCueInput`; `ProgrammerLookStack`'s maps index → `layerId` and sends
-`programmer.removeLayer` / `moveLayer` / `patchLayer` (`addLayer` is `ProgrammerAddLayerSheet`'s,
+`programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer` (`addLayer` is `ProgrammerAddLayerSheet`'s,
 since the rail's footer and strip own adding). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
 the running effects **in place**, so a drag doesn't restart any effect's phase.
@@ -1321,7 +1322,7 @@ bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
 and `TemplateSummary` carries no `sortOrder` and no `groupId`. **Do not reintroduce a stored library
 order**: the only orders a palette has are this page's name order and the programmer row's
 recency, and neither is a field. The programmer's `TemplateStrip` drew this same name-ordered list
-until it became a recents row — see §"The two apply gestures", where the row is the eight most
+until it became a recents row — see §"Applying to a selection", where the row is the eight most
 recently *pressed* and name order is only the fallback for a library nothing has been pressed from.
 
 The **family filter** stays, and is the page's only partition: a palette is in exactly one family,
@@ -1381,8 +1382,10 @@ the page, and the library went back to being a flat list.
 
 **A press goes through the pad, and the bank decides the siblings.**
 `POST /busk/pads/{padId}/press` is the *only* press on this surface — the three kind-specific
-mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer's ⌥click / touch-hold
-strip's and the AI's now. It has a second door since the MIDI surface's session 4: a `PressPad` binding runs the
+mutations (`toggleTemplate`, `toggleLook`, `goToStack`) are the programmer strip's (through
+`usePress`) and the AI's now. A pad's ⌥click and its menu's *Apply as values* are not a press: they
+go through `usePress` to the apply routes over the busk pair, and touch no bank. The pad press has a
+second door since the MIDI surface's session 4: a `PressPad` binding runs the
 same `BuskPressService` with the desk selection as the targets, which is why that service exists at
 all — the solo rules and the refusals are the pad's behaviour, not the endpoint's. The server reads the pad, its record and, when the bank is **solo**, the records on its
 sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
@@ -2043,14 +2046,14 @@ cells; it is about the busk selection, not the editor), the rig order Pick reads
 hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
 typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, Recent, the footer — is
 `components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
-`programmer.setColour` per selected target, which is what a palette pad's click does and what the
+`programmer.setColour` per selected target, which is what a palette's *Apply as values* does and what the
 programmer's colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no
 library referent for a layer to follow, and *Save as palette…* (`NewTemplateFromSelectionSheet`
 over the sheet's targets, family Colour) is the route to something trackable. **The family mask is
 not consulted**: the desk's mask gates presses, not value writes, so the sheet does not refuse under
 a Position marquee — the rig band's family pill, one row up, is where the mask is read (the tab's
 own header said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A
-*Recent* chip is a press and goes through `useTemplatePress` under the mask like any other. The
+*Recent* chip is a press and goes through `usePress` under the mask like any other. The
 writes go through `components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of
 `BuskSpeedRail` and made generic over the value: dedupe on an equality, a 50 ms floor, a deferred
 value sent when the floor lifts, the release bypassing both. **A group is one group write only
@@ -2093,7 +2096,7 @@ answer read for `skippedFamilies` alone — is the panel's, shared with the prog
 kit), and nothing changed to the eye when it moved. The tab sends two intents of one property's
 shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`; the desk
 interpolates in the intent's own space, resolves one literal per head through the same
-`TemplateResolver` a palette click uses, writes each into Local as an ordinary entry (so it rides
+`TemplateResolver` a palette's *Apply as values* uses, writes each into Local as an ordinary entry (so it rides
 `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and answers
 what it wrote. Only the desk knows a group's member order, each head's range, which cells a fixture
 has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
@@ -2592,19 +2595,20 @@ two.** This hook runs once per bank and *unconditionally* in every `CueSlotCell`
 conditional, so the filled-slot path pays for it too — and a plain subscription woke all of them on
 every `hand.state` frame desk-wide, including the usual case where their own answer was null before
 and after. `useIsDeskConnected` is the same move for the same reason. The strips are split because
-`useDeskSelection` is a second standing subscription: the outer component asks the narrowed offer
+the window's selection pair (`useWindowPressPair`: the marquee store and the selection) is a second
+standing subscription: the outer component asks the narrowed offer
 and renders nothing when the hand holds nothing it can take, so the selection is subscribed to only
 while a placeable record is held. Flat, the programmer's strip re-rendered on every marquee that
 crossed a row boundary — it sits in the rail footer on every visit to `/programmer` — and the cue
 strip multiplied that by however many cue cards are expanded.
 
-**A place that never left the browser is not a place.** `programmer.addLayer` is fire-and-forget, so
-"it landed" can only ever mean "it was sent" — but *was it sent* has a real answer: `sendGesture`
-refuses a closed socket, toasts "that did not reach the rig", and returns false. `addLayer` and
-`programmerAddLayer` now return that boolean, and the programmer strip's `run` answers `null` on
-false so `useHandPlace` keeps the record held and stays quiet. Returning `true` regardless — which
-is how it was first written — dropped the hand and toasted success **beside** that error toast, on
-the one place with no Undo to recover through.
+**A place the desk refused is not a place.** The programmer strip's `run` is the press, which
+answers `null` when refused — already toasted by `errorToastMiddleware` — so `useHandPlace` keeps
+the record held and stays quiet. A press can also take the record **off** (it was already on every
+selected head) or write it **into** a focused Look, and the place's toast says which
+(`HandPlacement.describe`). Answering `true` regardless dropped the hand and toasted success
+**beside** the error, on the one place with no Undo to recover through. (`programmerAddLayer` still
+returns `sendGesture`'s verdict for its remaining callers, the add-layer and Make layer sheets.)
 
 **The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
 whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
@@ -2613,15 +2617,18 @@ the append returned. A **cue slot** is `useAssignCueSlotMutation`, on **empty ti
 live, and a hand held over the panel must not quietly become a second meaning for it; replacing an
 occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectCue`
 through `buildCueInput`, appended at the top (later wins within a cue), and its inverse patches back
-the layers array read *before* the place. The **programmer's layer stack** is `programmerAddLayer`
-and has **no Undo**, which is a decision: that op is fire-and-forget and returns no id, the only way
+the layers array read *before* the place. The **programmer's layer stack** is the press
+(`usePress`, apply-model plan §5) — it toggles, replaces the palette's family and lands in a focused
+Look as the strip's tap does — and has **no Undo**, which is a decision: a press returns no layer id, the only way
 to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
 window's layer on a live rig is worse than none — the row it just added is one click from its own
-remove. Both layer places send the **desk selection** as `targets`, which *supplies* them for a
-palette and *filters* them for a Look, and the family mask is the server's.
+remove. Both layer places send the **window's selection** as `targets` (`useWindowPressPair`: an
+unlinked window's own), which *supplies* them for a palette and *filters* them for a Look, and the
+family mask is the server's.
 
-**Five doors pick something up.** A busk pad's hold now opens a **menu** — *Pick up* first, *View*
-second — where it used to navigate straight to the library, because the hand needed a door there and
+**Five doors pick something up.** A busk pad's hold opens a **menu** — on a palette or Look pad the
+tap's verb and *Apply as values* first (§"Applying to a selection"), then *Pick up* and *View* —
+where it used to navigate straight to the library, because the hand needed a door there and
 a hold cannot mean two things (`CueSlotCell` does the same synthetic-`contextmenu` trick, which
 leaves right-click working on a mouse for free). On `/looks` and `/palettes` it is a **bar verb over
 one row** (library-sheets plan D11): the row menus that carried it are gone with the rows, *Pick up*
@@ -2629,20 +2636,20 @@ sits on the selection bar beside Duplicate and Copy to…, disabled over several
 and it is drawn only for the project the desk is on — the hand is project-scoped server-side, so a
 pick-up from another project's library resolves nothing.
 `LookStack`'s dense row popover picks up the layer's **referent** and leaves the layer alone; it is
-not a `LayerHandlers` member, because those seven are index-based to address *this host's* layer
+not a `LayerHandlers` member, because those members are index-based to address *this host's* layer
 while a pick-up names a library record the row already carries. And the programmer's palette chip
-offers it on **right-click only**: the chip's hold is already ⌥click's touch twin (§"The two apply
-gestures"), so on touch the routes are the library sheet's bar verb and a pad's hold menu.
+offers it in its hold menu — a hold or a right-click, which never presses (§"Applying to a
+selection").
 
-**That chip is a `Popover` opened from `onContextMenu`, and must not become a `ContextMenu`.**
+**That chip is a `Popover` anchored on the button, and must not become a `ContextMenu`.**
 Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`,
 cleared only by its own pointer handlers or by a `contextmenu` reaching the trigger. The pad and the
 cue-slot tile are safe because their holds *dispatch* a synthetic `contextmenu`
 (`dispatchSyntheticContextMenu`, shared by both — clearing that timer is what it is for, not just
-reaching the menu on touch). The chip dispatches nothing: its hold fires a tracking-layer mutation.
-So a stationary touch hold on it added the layer at 500ms and popped the pick-up menu at 700ms —
-two effects from one finger, on a live rig, with the primitive breaking the rule the code had
-written down. `PopoverAnchor` registers no handlers at all.
+reaching the menu on touch). The chip's hold opens its `Popover` directly and dispatches nothing,
+so under a `ContextMenuTrigger` one finger would arm two hold detectors — which, while the chip's
+hold still added a layer, put the layer on at 500ms and popped the menu at 700ms. `PopoverAnchor`
+registers no handlers at all.
 
 **MIDI has three doors of its own** — `pickUpPad(padUuid)`, `handPlaceInBank(bankUuid)` and
 `handDrop`, all BUTTON, mirrored in `lib/surfaceDrop.ts` as §The MIDI surface view requires. There is
@@ -2817,39 +2824,90 @@ member keys, so a marquee over *Front wash* would reach the desk as eight loose 
 group's select LED dark. Edit mode there is **local state**, deliberately not the busk view's Redux
 slice: that one exists only because the cue-slot overlay is a sibling of the routed page.
 
-### The two apply gestures
+### Applying to a selection
 
-A palette has **two** presses, and the difference is invisible on screen — only the route called
-says which happened, so both are stated on the chip's title:
+**One press, whatever it is pressed from** (`../docs/plans/apply-model-plan.md` §4.1, session 3).
+A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
+window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
+that turns that into a route, and every door calls it: the palette strip and its picker, the colour
+editor's Recent chips (busk Colour tab and the programmer's colour cell), a busk pad's *Apply as
+values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
+(`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
+which carries its bank's solo siblings. The effect door — ⌘K *Apply FX* and the picker's Effects
+section — is session 6's, on the desk's `POST /programmer/effects`.
 
-- **click** → `POST /palettes/{id}/apply`. Sets **literal** values in Local. Retuning the palette
-  later does not move them; this is the busking gesture, and it is why the retired `ref:` grammar is
-  not missed.
-- **⌥click, or a hold** → `POST /palettes/{id}/toggle`. Adds a layer that **tracks** it, targeted at the
-  selection and masked to the palette's family — **the server derives the mask** from the
-  palette's own rows, because which family a palette layer belongs to is a fact about the
-  palette, not about the press. This repo sends its `propertyMask` anyway, as the belief it is
-  acting on; the response reports the mask actually applied, so a disagreement surfaces there rather
-  than silently on the rig. Retune the palette and every layer moves. The layer *is* the dependency
-  mechanism — it already was, for Looks — so "a colour I can change everywhere later" and "a colour I
-  want right now" are two gestures on one chip rather than two kinds of palette.
+- **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
+  *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
+  it already covers them all, the desk deciding which; **⌥click** is *Apply as values*
+  (`/palettes/{id}/apply`, `/looks/{id}/apply`): literals and Local effects with no layer, which
+  retuning the record never moves; **hold or right-click** opens the menu — the tap's verb named
+  (*Put on* / *Take off these heads*, from the chip's ring; *Put on or take off its own heads* with
+  nothing selected, where the ring cannot say), *Apply as values*, *Pick up*, *Edit palette…*
+  (`/palettes?edit=<id>` opens that palette's editor, once the current project has loaded) — and
+  **never presses**. Since a hold changes nothing on the rig it is armed for every pointer, a mouse's
+  too, as a busk pad's always was; the click its release generates is swallowed. Only the primary
+  button presses or holds (`useLongPress`): on Windows `contextmenu` follows the release, so a
+  right-click pressed a busk pad before its menu opened. `components/press/PressGestures.tsx` holds the
+  gesture hook, the shared title and `PalettePressButton`, the chip-with-menu the strip, the picker
+  and Recent all draw. **The menu is a modal `Popover` anchored on the button, never a
+  `ContextMenu`**: Radix's `ContextMenuTrigger` arms a ~700ms touch timer of its own that the
+  button's hold would race; and modal, so the tap that dismisses it is not also a press on the chip
+  underneath. A busk pad keeps its `ContextMenu`, reached through the synthetic `contextmenu` its hold
+  dispatches, and gained *Put on* / *Take off these heads* and *Apply as values* (⌥click too) on a
+  palette or Look pad; a cue pad's menu is unchanged, since a cue is playback.
+- **The pair** is the door's: `usePress(projectId, pair)`. A door with none of its own — the rail's
+  hand place — takes the window's through `useWindowPress` (`useWindowPressPair`): on the programmer
+  the list's own, the strip's targets and the marquee's families published through the marquee
+  store as `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an
+  unlinked window's own selection included; elsewhere `useSelectionPair`, the desk's while following
+  and the tab's copy when not. The split is a cost one: a door that brings its own pair — the strip,
+  a cell batch, a fixture sheet's one target, a cue slot's none (the Look's own fixtures) — then
+  subscribes to no marquee frame.
+- **The scope** (D7): with a Look layer focused (`LookRowStore`), a palette press goes **into the
+  Look** — a value palette through `/palettes/{id}/apply` with `write: false`, each head's literal
+  landing in the layer's draft through `setValue`, no `programmer.*` frame sent; an effect palette
+  started on the heads the layer targets and then absorbed (`absorb-effects`, *+ Effect*'s path),
+  and stopped again if the absorb is refused, since a press into a Look must leave the stage as it
+  was; a Look refused, since Looks don't nest. `landValuesInLook` is the draft's one landing, shared
+  with Spread's `write: false` arm. A door that writes Local whatever the grid is pointed at passes `scope: 'programmer'` (the
+  fixture sheet, a cue slot, the busk view). In a focused Look the chips draw no ring and the menu
+  offers *Into <Look>* in place of the first two items. `write: false` stamps no recent.
+- **The desk owns every rule** (plan P2): coverage, family replacement, widening and the mask test
+  are server-side. The hook pre-refuses one thing: a **palette with no targets that would land
+  nowhere** — a generic one on either gesture, a per-fixture one applied as values — which the toggle
+  and apply routes take without refusing (only the busk pad's route refuses it,
+  `PALETTE_NEEDS_SELECTION`). A per-fixture palette's tap names its own heads and a Look with none
+  lands on its own fixtures, so both go out (the menu says so, *Put on or take off its own heads*;
+  a generic palette's reads *Put on — select fixtures first*), and nothing is refused from the mask. A palette's tap sends
+  `propertyMask` (its family) as the belief it acts on, though the desk derives a palette layer's mask
+  from its own rows; the response reports the mask applied, so a disagreement shows there rather
+  than on the rig. A refusal is the
+  desk's sentence, toasted by `errorToastMiddleware`. The hook reports the rest one way: *Apply as
+  values*' per-head skips, *n effects started* for an effect palette (gated on the palette's
+  **kind** — the desk answers a value apply with `effectIds: []` too, and reading that as "nothing
+  started" toasted red on every value press), a Look's `skippedFamilies` in `skippedRowsMessage`'s
+  rows vocabulary, and in a focused Look the values that could not reach its draft. It answers what
+  happened — `on`, `off`, `into`, or `null` for a refusal — which is how the hand's place says *taken
+  off it* when the record was already on every selected head (`HandPlacement.describe`).
+- **The rail** (§4.6): a layer's settings popover has **Detach** on a row of its own
+  (`programmer.detachLayer`, the layer becoming Local with nothing on stage moving), and a row's second
+  line names a replacement while it stands — *lost Hex 3–4 to Amber* — `lib/replacementNotes.ts`'s
+  reading of the last two applied-state frames (heads by the desk's own resolved targets, never a
+  client expansion; a bar lost whole named once, not with every cell; names by `lib/headName.ts`,
+  numbers kept as written), held until a frame that changes anything. It is never stored, and the first frame a window sees says
+  nothing.
 
-**The hold is ⌥click's touch twin — `touch` and `pen` only, never a mouse.** It goes through
-`useLongPress` on the chip, and it is a hold rather than a Set/Track switch in the bar because ⌥ is
-per-press and a mode is state an operator forgets. It is gated on pointer type because a mouse has
-⌥: a mouse hold would be a second, silent door to the tracking mutation, and a slow click on a live
-rig would add a layer where literals were meant. That is the same gate, and the same list, the
-grid's marquee arm makes, and it is the one place the desk's holds differ — a busk pad's mouse hold
-opens an inspector, which changes nothing. A hold is otherwise the press's second meaning everywhere
-on the desk: a pad's inspects it, a speed card's is its fader, and since the desk-findings' group B
-the **grid's is its marquee**: on a touchscreen a finger pans and only a held one marquees
-(`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and refuses
-`touchmove` only while a marquee is live). A chip and a cell never share a point, so the hold never
-means two things where a finger lands. The other phone rules on that row: below `@[600px]` the bar
-is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`; the toolbar's Deselect serves
+**On the grid a hold is the marquee, not a menu** — as a speed card's hold is its fader. On a touchscreen a finger pans and only a held
+one marquees (`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and
+refuses `touchmove` only while a marquee is live). A chip and a cell never share a point, so a hold
+never means two things where a finger lands. The other phone rules on that row: below `@[600px]` the
+bar is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`; the toolbar's Deselect serves
 rows and cells alike since the two became one selection), and a tap on the grid's empty background
-runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles
-a click inside a portalled cell editor up the same tree.
+runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles a
+click inside a portalled cell editor up the same tree.
+
+`useTemplatePress` and `useTemplatePressHandlers` are gone; `usePress.test.tsx` pins the routes, the
+pair and the scope, `TemplateStrip.test.tsx` the strip's gestures, ring and mask filter.
 
 `TemplateStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which hands down the marquee's
 `cells` **and three things the container derives from them** — so **the selection is the filter and
@@ -2862,7 +2920,10 @@ the target**, and there is no picker to open or family dropdown to get wrong:
   *can take* (`targetFamilies`, from descriptors — capability-only, fx-templates D6): a rig of
   dimmer-only pars is offered no colour palette, and nothing with a mover on it offers a position
   one. The press lands on the rows.
-- **Nothing selected**: the whole library shows, and a press toasts that it has nowhere to land.
+- **Nothing selected**: the strip renders nothing (space plan D3).
+
+**The selection's mask filters it too** (apply-model plan §4.2): a palette outside the families the
+press carries is not offered, since the desk would refuse it. An offer, never a refusal of a press.
 
 **`targetEmitters` narrows it further, in every one of those arms.** A palette naming `white`,
 `amber` or `uv` is withheld unless some selected head has every emitter it names — the family cannot
@@ -2882,19 +2943,15 @@ each resolved to what it is — a fixture whole, a cell as that cell — so a ce
 what the cell can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
 row C counts them as *heads*. The strip reads nothing from Redux; `NewTemplateFromSelectionSheet` takes the
 same targets so a press and its "new from selection" cannot name different heads.
-`TemplateStrip.test.tsx` pins the filter, the target and the click/⌥click split.
-
-One trap on the response: the desk answers a **value** apply with `effectIds: []` as well as
-`written`, so the "nothing started" warning is gated on `template.kind === 'effect'`, not on the
-field being present — it toasted red on every successful value press before that. Both presses go
-through **`useTemplatePress`**, shared by the chip and the picker's pads, so the two surfaces cannot
-answer "what does a press do" a chip apart.
+`TemplateStrip.test.tsx` pins the filter, the target and the tap/⌥click split. The chip and the
+picker's pads press through the strip's one `usePress`, so the two cannot answer "what does a press
+do" a chip apart.
 
 **The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
 rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
-— through four doors: the chip's click, ⌥click / hold, a busk pad press, and a MIDI `pressTemplate`
+— through four doors: the chip's ⌥click (*Apply as values*), its tap, a busk pad press, and a MIDI `pressTemplate`
 — so every client and the desk's own hardware agree about what was reached for; a toggle **off** is
-not a press, and neither is a click that reached no head. It arrives as the keyed frame
+not a press, and neither is an *Apply as values* that reached no head. It arrives as the keyed frame
 `palettePressed { templateId, lastPressedAt }`, which `startTemplatesBridge` **patches** into every
 cached `templateList` entry (all `family` args — the filter is a query argument, so the programmer's
 unfiltered list and `/palettes?family=` are two entries of one endpoint). It must not be folded
@@ -2937,23 +2994,23 @@ lands** (multi-screen plan D4, D5; lighting7 af3575a). The four press routes tak
 beside `targets`: `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`, `/palettes/{id}/toggle`
 and `/looks/{id}/toggle` (`buskApi.ts`, `templatesApi.ts`, `looksApi.ts`). The pair is the desk's
 while the tab follows the desk and the tab's own when unlinked — `usePressFamilies` in
-`store/selection.ts` answers it for the strip and the picker (through `useTemplatePress`'s third
-argument), `useBuskingSelection` for the pads. It is the *desk's* mask when following even in the
+`store/selection.ts` answers it for the strip and the picker (the pair they hand `usePress`),
+`useBuskingSelection` for the pads. It is the *desk's* mask when following even in the
 moment another window has moved it under this tab's marquee, because a following tab's press acts
-on the desk's selection and must be masked as the desk is; the strip does not pre-filter on it, and
-a press outside it is refused by name rather than greyed out — but **row C's family pill reads that
+on the desk's selection and must be masked as the desk is; the strip offers nothing outside it, and
+a press that reaches the desk outside it anyway is refused by name — and **row C's family pill reads that
 same pair** (`shownFamilies` in `programmer/SelectionBar.tsx`), drawn over a row-only selection
 too, so the one state where the two differ (another window's mask landed here as rows) is said on
 the bar rather than discovered from a 400. The kit's bar draws the pill outside its cell block for
 that reason; the plain lists keep the marquee's own reading, never bridging.
 
 What the desk does under a mask, per kind: a **palette** is one family, so it lands whole or is
-400 `PALETTE_OUTSIDE_MASK` on every door, click and layer alike; a **Look** spans families, so its
+400 `PALETTE_OUTSIDE_MASK` on every door, apply and layer alike; a **Look** spans families, so its
 layer lands with `propertyMask = mask ∩ its families`, the cook skips the rows outside, and the
 response names them in `skippedFamilies` — nothing inside is 400 `LOOK_OUTSIDE_MASK`; a **cue**
 ignores it. The two refusals carry a message naming both families and reach the screen through
-`errorToastMiddleware`, which toasts every rejected mutation — which is why `useTemplatePress` no
-longer toasts its own failures: it said the same sentence twice.
+`errorToastMiddleware`, which toasts every rejected mutation — which is why `usePress` toasts no
+failure of its own: it would say the same sentence twice.
 
 **The mask is tested on the on arm only, so never pre-refuse a press from the mask this tab holds.**
 A press that turns a lit record off answers `removed` under any mask (`routes/pressArm.kt` reads
@@ -4410,7 +4467,7 @@ button on them, and take the container's gate (`cellKeyboardPermission`) and wor
 palette layer show them disabled with the reason, and Spread makes the same two refusals itself
 (it is also drawn on the two plain routes, which have no scope). There is **one** Set —
 its title names where the value lands (Local, or the focused Look's rows), and that is the scope's
-answer rather than the press's. A "track it" arm the way a palette chip has (⌥click) makes no
+answer rather than the press's. A "track it" arm the way a palette chip has (its tap) makes no
 sense on a value: a typed number has no referent for a layer to follow, and *Make layer* on the
 rail is how local literals become something trackable afterwards. Set and Clear keep their icons
 at every width and only Spread folds on the phone arm, because on a phone Set is the only way into
@@ -4770,7 +4827,7 @@ four relocated, never a fifth.
 view's speed-master work, and both are edited in `SpeedMasterDetailSheet` and in the Speed Masters
 sheet's Usage, Follows and Ratio columns (§Library sheets):
 
-- **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. An effect
+- **Usage** (`dimmer` / `colour` / `position` / `beam`) is the **apply-time routing default**. An effect
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
