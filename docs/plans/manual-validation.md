@@ -210,9 +210,9 @@ its highest hold's priority, a press above every stack.
 directly, against the mock controller. Nothing in review watched a real rig hold its state while one
 of two stacks stepped off the cue, or read the two rings on a desk screen.
 
-**Test**, on the desk, on a scratch copy of a show with two stacks and no repo attached — until the
-cue model plan's session 3 the archive writes a cue from one entry only, so a push would drop the
-second and a pull would delete it:
+**Test**, on the desk, on a scratch copy of a show with two stacks. Before the cue model plan's
+session 3 (sync `formatVersion` 32) the archive wrote a cue from one entry only, so a push dropped the
+second and a pull deleted it; on a build with session 3 a repo may stay attached:
 
 1. **One cue in two stacks.** No route puts a cue in a second stack until session 4 lets a cue be
    shared, so add its second entry directly: note the cue's id and the second stack's id
