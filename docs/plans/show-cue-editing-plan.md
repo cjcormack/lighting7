@@ -69,8 +69,10 @@ running Sleeping Beauty (project 13, `lighting7-tch-2026-sleeping-beauty`, on ve
   `layerId` is null for the cue's own row and names the winning layer otherwise — exactly the
   provenance a grid needs.
 - **Duplicate is client-side.** `ShowPage.tsx:276-291` rebuilds the cue with `buildCueInput` and
-  creates it; there is no route. Delete (`routes/projectCues.kt:290-341`) already tears down live
-  output and sweeps pads, slots and anchors.
+  creates it; there is no route. Delete (`routes/projectCues.kt:274`, its teardown `deleteCues` in
+  `routes/cueDelete.kt` since R1.4) tears down live output and sweeps pads, slots and anchors; it is
+  refused 409 `CUE_IN_USE` until forced, and the Show view has no cue delete, only *Remove from
+  stack*.
 - **The preview route composes without output.** `GET /cue-stacks/{stackId}/preview?cueId=`
   (`routes/projectCueStacks.kt:381`, `routes/cuePreview.kt:85`; `?entryId=` since R1.2, keeping every
   cue another stack or a press holds) composes a cue against the other live stacks in a fresh resolver and answers DMX channels and scenery. Layer 4 only, no effects.
@@ -142,7 +144,7 @@ The plan adds its own:
 |---|---|---|
 | Values, Looks, FX tabs | the cue (`PATCH /cues/{id}`, whole child lists) | when it next comes on (its first hold), or *Update stage* |
 | Header (name, fade, curve, notes) | the cue | no |
-| Header (number, follow) | the entry, on the entry route R1 session 4 adds (today they go through the cue's `PATCH` and `soleEntryOf`, which a shared cue defeats) | no |
+| Header (number, follow) | the entry, `PATCH cue-stacks/{sid}/entries/{entryId}` (R1.4; the cue's `PUT` and `PATCH` no longer write them) | no |
 | Scenery tab | `PUT /cues/{id}/scenery` | drawn at once, as today (scenery is never output) |
 | Events tab | `PUT /cues/{id}/events` | when it next comes on (its first hold), armed only |
 | *Open Look* → Looks library | the Look | republishes live cues, as today |
@@ -368,20 +370,21 @@ phone card's ⋯ menu. Semantics are R1's.
   programmer group, a separator, then the stack group; *Delete…* is red. On the card strip and the
   bar, words fold to glyphs below the strip's measured rungs (session 3 measures them), the split
   button last.
-- ***← Show*** in the programmer's source box returns to `/show/stacks/:stackId?cue=` for the entry the
-  include came from: the include target's `entryId?` (R1 §3.5's row, which R1 session 4 adds). The
-  URL names the entry, so a cue twice in one stack opens the right row; it is drawn only while that include is
-  the current one. *Update* and *Revert* are unchanged.
-- **What goes.** The card's *Remove* (a hard delete, `CueCardEditor.tsx:417`) becomes *Remove from
-  stack*; *Cue properties…* folds into the editor; the cue sheet's Layers and FX read-outs stop
-  opening the card.
+- ***← Show*** in the programmer's source box returns to `/show/stacks/:stackId?cue=…&entry=…` for the
+  entry the include came from: the include target's `entryId?` (R1 §3.5's row, which R1.4 added). The
+  URL names the entry (`?entry=`, which `ShowPage` reads since R1.4), so a cue twice in one stack opens
+  the right row; it is drawn only while that include is the current one. *Update* and *Revert* are
+  unchanged.
+- **What goes.** The card's *Remove* (a hard delete) became *Remove from
+  stack* in R1.4, which also put *Add to stack…* and *Move to stack…* on the card; *Cue properties…*
+  folds into the editor; the cue sheet's Layers and FX read-outs stop opening the card.
 
 ## 6. Implementation — eight sessions
 
 Each session is one PR (P1). Sessions 1 and 2 need nothing from R1 and can land at once. Session 3
 onward needs R1 sessions 1–4 (entries, holds, sharing and explicit delete), venue-visit S3 (the show
 position and *Edit in programmer* opening the programmer) and S4 (the palette rename, so the new copy
-says palette).
+says palette). All of them have merged.
 
 ### Session 1 — Blind holds the programmer's effects (backend + reporters) — done, `6f86273f`
 
@@ -409,6 +412,14 @@ says palette).
   run-state face; Load; Record; Duplicate on its new route (this takes the duplicate route from R1
   session 6, which then builds only the cross-project copy, as R1 §3.8 now notes); Remove from stack; Delete… on R1's
   confirm; ⋯; the locked rule; *← Show*.
+- **What R1.4 left.** The card already has *Remove from stack*, *Add to stack…* and *Move to stack…*
+  (`CueCardEditor.tsx`); this session moves them into `CueActions`. No cue-delete confirm exists yet:
+  the stack-delete dialog lists a dry run's uses through `cueDeletePreview` (`DeleteStackDialog.tsx`),
+  and this session or R1 session 5, whichever lands first, builds D8's cue confirm on it for the other
+  to reuse.
+- ***Move to stack…* drops the entry's place.** R1 §4 makes it add then remove, so the entry's
+  anchor, explicit number and follow are lost on the way (R1.4 shipped it so). Ask Chris whether the
+  action set keeps that or moves the entry whole, before building the ⋯ menu.
 - **Tests:** the face flips with the run state; locked, Blind edit sends Blind then Include and every
   other action asks to unlock; Blind edit with a cue holding an effect sends nothing to the stage
   (with session 1); several rows disable the one-cue actions with the reason; Duplicate appends;
@@ -422,9 +433,14 @@ says palette).
   its grip and its fold; Scenery, Events and Cue tabs from the existing editors; `CuePropertiesSheet`
   retired and its two outside doors (the FX tray's *on Q12*, *Moves with*) opening the editor in
   place through `OwnerEditor`; Values, Looks and FX as today's read-outs for now.
+- **The runner walks by entry.** `store/runnerSlice.ts`'s optimistic GO and BACK still move by cue
+  id (R1.4 keyed the rows, standby and expansion by entry, not the runner). In a stack holding one cue
+  twice, the optimistic next can point at the wrong place until the desk's `cueRunStateChanged`
+  corrects it. Both hosts read it, so this session keys it by entry.
 - **Tests:** one row selected opens the pane, two fold it; the pane's height survives a reload in
   the window; the card and the pane mount the same editor; the header's entry fields write the
-  entry and the rest write the cue (P5); *on Q12* opens the editor.
+  entry and the rest write the cue (P5); *on Q12* opens the editor; a GO and a BACK in a stack holding
+  one cue twice land on the right entry before the desk answers.
 - **Docs:** the frontend CLAUDE.md's §"Sheet kit" (the cue sheet), §"Cues, Stacks & Triggers".
 
 ### Session 5 — the Values grid (frontend + cooked route)

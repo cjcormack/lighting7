@@ -256,7 +256,7 @@ and a layer records both as its `targets` and `propertyMask`.
 | `POST /looks/{id}/apply` | 1 | `{targets, families?, fadeMs?}`; Apply as values for a Look. |
 | `POST /palettes/{id}/apply` `write` | 1 | `false` answers `values[].value` without writing (D7); `written` is the count. |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
-| `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`; S15, effects plan session 1); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
+| `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`, `spread`, `wings`, `blocks`, `groups`; S15, effects plan sessions 1–2); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
 | `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |
 | `POST /cues/{id}/layers/press` | 8 | §3.6, the stored cue's layers. |
 
@@ -422,6 +422,13 @@ Each session is one PR (P1).
 
 - §3.4: `POST /programmer/effects`, the Local replacement, the `targets` split on `PUT /fx/{id}` and
   `updateFx`, the per-member phase carry, `FX_SPLIT_LAYER_EFFECT`.
+- **Ask Chris before building: the split of a step-timed or ping-pong group effect.** A step-timed
+  member's cycle is scaled by `distinctSlots` (`FxInstance.memberCycleDivision`) and a ping-pong's
+  sweep by the slot count. Both predate R4.2, which changed only how `distinctSlots` is counted (after
+  Blocks and Groups). A one-head copy has neither, so carrying the offset as `phaseOffset` (§3.4)
+  keeps the phase but not the cycle or the sweep. Either the split carries the parent's cycle and
+  sweep, or it refuses those effects. A shape edit named with a strict subset of `targets` does
+  nothing on one-head copies: refuse it or ignore it.
 - **Tests:**
   - A bare effect on four fixtures is one Local instance over them (effects plan D3), and on a
     group one.
@@ -505,7 +512,7 @@ Each session is one PR (P1).
   - A palette pressed on cue cells adds a cue layer, and Blue replaces Red in the stored cue.
   - A second press takes it off.
   - No `programmer.*`, `channels.*` or `fx.*` frame is sent.
-- **Docs:** `cue-stacks-engineering.md`, the frontend CLAUDE.md's "The cue editor".
+- **Docs:** `cues-engineering.md` §"REST API", the frontend CLAUDE.md's "The cue editor".
 
 ## 9. Explicitly out of scope
 
