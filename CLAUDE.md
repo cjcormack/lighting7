@@ -97,15 +97,23 @@ Two related facts, both visible in `~/.gradle/daemon/<version>/daemon-*.out.log`
 ### Pre-commit checks
 
 This project has no Makefile — the global `make commit-check` rule does not
-apply. `./gradlew test` is the equivalent pre-commit check for the backend; the
-frontend's is `npm run check` in `frontend/`, which `.githooks/pre-commit` runs
-when anything buildable under `frontend/` is staged (enable it with
-`git config core.hooksPath .githooks`). A recent green
-run earlier in the same session is sufficient; you do not need to re-run it
-just before `git commit` or `gh pr create` if nothing has changed since.
+apply. **Locally, check what the change touches; the full suites run once, in CI**, on every
+PR (`.github/workflows/ci.yml`, see §"Git workflow"). A full local run before pushing only
+repeats CI, and the desktop app's Auto-fix wakes the session if CI fails.
 
-CI runs the same two gates on every PR (`.github/workflows/ci.yml`, see §"Git workflow"). The
-backend job runs `./gradlew build` rather than `test`: that adds the fat jar, whose native-payload
+- **Backend:** `./gradlew compileTestKotlin`, then `./gradlew test --tests '<package>.*'` for
+  each package the change touches and each package that calls into it.
+- **Frontend:** `npm run check:quick` in `frontend/`: the full `tsc` and build, lint (cached, so
+  seconds when warm), and the Vitest files affected by changes since `origin/main`.
+  `.githooks/pre-commit` runs it when anything buildable under `frontend/` is staged (enable it
+  with `git config core.hooksPath .githooks`).
+
+**Run the full suites locally** (`./gradlew test`, `npm run check`) when CI is a slow place to
+find out: a Gradle or build-config change, a sync `formatVersion` bump, a schema migration, or a
+refactor across packages. A recent green run earlier in the same session is sufficient; you do
+not need to re-run it just before `git commit` or `gh pr create` if nothing has changed since.
+
+The backend job runs `./gradlew build` rather than `test`: that adds the fat jar, whose native-payload
 verifier would otherwise first fail on a release build, and the `launcher` module's tests. It runs
 on Linux under `LC_ALL=C.UTF-8` for the reason given under §"Cloud sessions".
 
@@ -149,9 +157,10 @@ hand-off to anyone.
   (`frontend/`), so a route and its client, or a Kotlin rule and its TypeScript mirror, land in
   one PR — never a backend PR and a frontend PR that are each broken without the other. Several
   commits on the branch are fine, and each should still be a coherent step with a real message.
-- **CI must be green before merging.** `.github/workflows/ci.yml` runs two jobs on every PR:
-  `Backend` (`./gradlew build`) and `Frontend` (`npm run check` in `frontend/`). CI is the
-  backstop, not the first run — the local checks below are still expected before pushing.
+- **CI must be green before merging.** `.github/workflows/ci.yml` reports two required checks on every PR:
+  `Backend` (`./gradlew build`) and `Frontend` (`npm run check` in `frontend/`, split into a
+  build-and-lint job and three test shards). CI is where the full suites run; the quick local
+  checks in §"Pre-commit checks" come first.
 - **Merge with a merge commit**, never squash or rebase-merge, and bring a stale branch up to
   date by merging `main` into it rather than rebasing it once pushed. Plan docs and commit
   messages cite SHAs (`docs/plans/*` rows, "session 3 shipped (lighting-react a3699076)"), and a

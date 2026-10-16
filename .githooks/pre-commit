@@ -1,7 +1,8 @@
 #!/bin/sh
 # Pre-commit gate for the frontend — see the "Pre-commit gate" section of
-# frontend/CLAUDE.md. The backend's equivalent, `./gradlew test`, is not hooked:
-# see "Pre-commit checks" in the root CLAUDE.md.
+# frontend/CLAUDE.md. It runs the quick gate, `npm run check:quick`; CI runs the
+# full `npm run check`. The backend is not hooked: see "Pre-commit checks" in
+# the root CLAUDE.md.
 #
 # Enable in a fresh clone with:
 #   git config core.hooksPath .githooks
@@ -44,8 +45,8 @@ if ! printf '%s\n' "$STAGED" | grep -qE '^frontend/(src/|index\.html$|package(-l
   exit 0
 fi
 
-echo "pre-commit: build + tests + lint (npm run check in frontend/)…"
+echo "pre-commit: build + affected tests + lint (npm run check:quick in frontend/)…"
 # Hooks run from the top of the work tree.
 cd frontend
-npm run check
+npm run check:quick
 echo "pre-commit: gate passed."
