@@ -990,6 +990,10 @@ work — mostly Trigger-gated or Blocked, plus a handful of **Ready** items.
 [`docs/plans/manual-validation.md`](docs/plans/manual-validation.md) holds the
 operator-on-the-rig checks. Don't poll either routinely.
 
+**When CI goes red on a test your change doesn't touch, check
+[`docs/plans/flaky-tests.md`](docs/plans/flaky-tests.md)** before root-causing it. If the test is
+there, re-run it once; if it isn't, add it once you have seen it fail on a commit it also passes on.
+
 **Open followups.md when your current change might fire a listed gate** (e.g.
 touching FX tick loops, ArtNet output paths, shared `AssignmentHealth` UI,
 the auth gate's role prefixes, anything that adds a WS command an operator
