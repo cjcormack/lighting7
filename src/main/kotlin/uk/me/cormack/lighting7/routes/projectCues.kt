@@ -78,7 +78,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("cueStackId is required — every cue must belong to a cue stack"))
                 return@withCurrentProject
             }
-            validateCueChildren(newCue.adHocEffects, newCue.layers)?.let { problem ->
+            validateCueChildren(newCue.adHocEffects, newCue.layers, newCue.propertyAssignments)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -156,7 +156,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewCue>()
-            validateCueChildren(updatedData.adHocEffects, updatedData.layers)?.let { problem ->
+            validateCueChildren(updatedData.adHocEffects, updatedData.layers, updatedData.propertyAssignments)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -237,7 +237,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val layers = if (hasLayers)
                 json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
             else null
-            validateCueChildren(effects ?: emptyList(), layers ?: emptyList())?.let { problem ->
+            validateCueChildren(effects ?: emptyList(), layers ?: emptyList(), assignments ?: emptyList())?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }

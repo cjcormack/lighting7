@@ -55,6 +55,7 @@ import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -501,7 +502,7 @@ internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookTo
 internal fun DaoLook.ownTargets(fixtures: Fixtures): List<CueTargetDto> {
     val named = LinkedHashSet<CueTargetDto>()
     rows.forEach { row -> if (row.target != null) named.add(CueTargetDto(row.targetType, row.targetKey)) }
-    effects.forEach { effect -> if (effect.target != null) named.add(CueTargetDto(effect.targetType, effect.targetKey)) }
+    effects.forEach { effect -> effect.target?.items?.mapTo(named) { CueTargetDto(it) } }
     return named.filter { target ->
         when (TargetRef.ofOrNull(target.type, target.key)) {
             is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.isSuccess
@@ -934,10 +935,10 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
 internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
     for (effect in effects) {
         if (effect.targetType != DEFERRED_TARGET_TYPE &&
-            TargetRef.ofOrNull(effect.targetType, effect.targetKey) == null
+            EffectTargetRef.ofOrNull(effect.targetType, effect.targetKey) == null
         ) {
-            return "Unknown effect target type '${effect.targetType}' — " +
-                "expected 'fixture', 'group' or '$DEFERRED_TARGET_TYPE'"
+            return "Unknown effect target '${effect.targetType}' — expected 'fixture', 'group', " +
+                "'${EffectTargetRef.Selection.TYPE}' (a list of fixtures and groups) or '$DEFERRED_TARGET_TYPE'"
         }
         if (effect.effectType.isBlank()) return "Effect type must not be blank"
         EffectSpecCoercion.Strict.problem(
@@ -1051,7 +1052,7 @@ internal fun writeLookChildren(
         }
     }
     if (effects != null) {
-        val pairing = pairByKey(if (created) emptyList() else look.effectsInOrder(), effects, { it.effectKey }, { it.effectKey })
+        val pairing = pairByKey(if (created) emptyList() else look.effectsInOrder(), effects.map { it.canonicalTarget() }, { it.effectKey }, { it.effectKey })
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
             if (stored != null) {

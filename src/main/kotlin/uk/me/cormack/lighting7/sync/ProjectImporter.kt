@@ -189,6 +189,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // wings as one, and write all four away on its next push; MIN stays at 5 because each field defaults to
 // what a row without it meant. Imported as stored: a value out of range is clamped when the effect
 // spawns (`EffectSpecCoercion.Lenient.spreadShape`), not refused here.
+// v34 gave an effect a third target (effects plan session 3, D3): `targetType: "selection"` on a
+// `LookEffectJson` or `CueAdHocEffectJson`, its `targetKey` the canonical JSON of the ordered
+// `[{key, type}]` fixtures and groups it spreads over. No field moved. SUPPORTED moved for v14's
+// reason — a v33 reader would store a target it cannot spawn, and every cue holding one would skip
+// that effect; MIN stays at 5 because nothing older uses the value. Imported as stored: a key that
+// does not parse is refused where the effect spawns, not here.
 //
 // v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
@@ -276,7 +282,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 33
+internal const val SUPPORTED_FORMAT_VERSION = 34
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**

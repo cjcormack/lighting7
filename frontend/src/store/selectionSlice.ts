@@ -5,6 +5,7 @@ import {
   type ListSelectIntent,
 } from '../components/sheet/listSelectionModel'
 import type { RowId } from '../components/fixtures-list/rowModel'
+import type { CueTarget } from '../api/cuesApi'
 
 /**
  * Fixtures-list row selection, lifted out of `FixturesListContainer`'s local state.
@@ -53,11 +54,17 @@ export interface ScopeState {
    * keys, so an element key simply matches nothing and scopes its parent out.
    */
   targetKeys: string[]
+  /**
+   * The selection's rows as targets, in display order — a group row as the group, a cell row as
+   * its cell (`selectedRowTargets`), published by the container beside [targetKeys]. What one
+   * effect over the selection spreads across (effects plan D3), which flattened keys cannot say.
+   */
+  rowTargets: CueTarget[]
 }
 
 type SelectionState = Record<SelectionScope, ScopeState>
 
-const emptyScope = (): ScopeState => ({ ids: [], anchor: null, targetKeys: [] })
+const emptyScope = (): ScopeState => ({ ids: [], anchor: null, targetKeys: [], rowTargets: [] })
 
 const initialState: SelectionState = {
   fixtures: emptyScope(),
@@ -139,10 +146,26 @@ export const selectionSlice = createSlice({
       }
       state[scope].targetKeys = [...targetKeys]
     },
+
+    publishRowTargets(
+      state,
+      action: PayloadAction<{ scope: SelectionScope; targets: readonly CueTarget[] }>,
+    ) {
+      const { scope, targets } = action.payload
+      const current = state[scope].rowTargets
+      // Idempotent on value, for `publishTargets`' reason.
+      if (
+        current.length === targets.length &&
+        current.every((t, i) => t.type === targets[i].type && t.key === targets[i].key)
+      ) {
+        return
+      }
+      state[scope].rowTargets = targets.map((t) => ({ type: t.type, key: t.key }))
+    },
   },
 })
 
-export const { select, setSelection, selectAll, clearSelection, publishTargets } =
+export const { select, setSelection, selectAll, clearSelection, publishTargets, publishRowTargets } =
   selectionSlice.actions
 
 export function selectScopeState(
@@ -150,6 +173,14 @@ export function selectScopeState(
   scope: SelectionScope,
 ): ScopeState {
   return state.selection[scope]
+}
+
+/** The selection's rows as targets, in display order — see [ScopeState.rowTargets]. */
+export function selectRowTargets(
+  state: { selection: SelectionState },
+  scope: SelectionScope,
+): readonly CueTarget[] {
+  return state.selection[scope].rowTargets
 }
 
 /** The selection's expanded write-target keys — what a scoped Record sends as `targets`. */

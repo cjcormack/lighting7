@@ -10,6 +10,7 @@ import {
   differsFromTemplate,
   filteredElementCount,
   orderPatch,
+  selectionHeadCount,
   spreadHeadCount,
   carriesEffectProperty,
   withTemplateDraft,
@@ -193,6 +194,30 @@ describe('fxEditorModel', () => {
     expect(differsFromTemplate({ ...draft, blocks: 2 }, palette, 'm1', {}, { distribution: false })).toBe(true)
     expect(differsFromTemplate({ ...draft, spread: 0.5 }, palette, 'm1', {}, { distribution: false })).toBe(true)
     expect(differsFromTemplate(draft, palette, 'm1', {}, { distribution: false })).toBe(false)
+  })
+
+  it('counts a selection\'s heads as the desk expands one (effects plan D3)', () => {
+    const dimmer = [{ name: 'dimmer', type: 'slider' }]
+    const par = (key: string) => ({ key, properties: dimmer })
+    const heads = (key: string, n: number) => Array.from({ length: n }, (_, i) => ({ key: `${key}.pixel-${i}`, properties: dimmer }))
+    const bar = { key: 'bar', properties: [], elements: heads('bar', 12) }
+    const strip = { key: 'strip', properties: [], elements: heads('strip', 4) }
+    // Every unit a member: one dial each, a repeat counted once.
+    expect(selectionHeadCount([par('p1'), par('p2'), par('p3'), par('p1')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
+    // Every unit its heads: as a group of bars — each bar its own run, or one strip.
+    expect(selectionHeadCount([bar, strip], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    expect(selectionHeadCount([bar, strip], 'dimmer', 'FLAT', 'ALL')).toBe(16)
+    // A mix: each member a run of one beside the bar's twelve — one strip, or the longest run.
+    expect(selectionHeadCount([par('p1'), bar, par('p2')], 'dimmer', 'FLAT', 'ALL')).toBe(14)
+    expect(selectionHeadCount([par('p1'), bar, par('p2')], 'dimmer', 'FLAT', 'ODD')).toBe(7)
+    expect(selectionHeadCount([par('p1'), bar, par('p2')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    // A head named twice counts once, at its first place: a cell, then its bar's other eleven.
+    expect(selectionHeadCount([{ key: 'bar.pixel-2', properties: dimmer }, bar], 'dimmer', 'FLAT', 'ALL')).toBe(12)
+    expect(selectionHeadCount([bar, { key: 'bar.pixel-2', properties: dimmer }], 'dimmer', 'FLAT', 'ALL')).toBe(12)
+    // Only heads that carry the property; a unit with neither is skipped.
+    const mixed = { key: 'm', properties: [], elements: [...heads('m', 2), { key: 'm.uv', properties: [{ name: 'uv', type: 'slider' }] }] }
+    expect(selectionHeadCount([mixed], 'dimmer', 'FLAT', 'ALL')).toBe(2)
+    expect(selectionHeadCount([par('p1'), { key: 'x', properties: [] }], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
   })
 
   it('counts a live effect\'s heads for the dials as the desk distributes them', () => {

@@ -301,6 +301,24 @@ imports such a row back would hold nothing worse than it held before; on this de
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
+### Version 34 — one effect over a selection
+
+Effects plan session 3 (venue-visit R4.3; `docs/fx-engineering.md` §"Over a selection"): an effect's
+target may be a **selection**, an ordered list of fixtures and groups. No field moved and no column was
+added — `LookEffectJson` and `CueAdHocEffectJson` carry it in the `targetType` / `targetKey` they
+always had, as `targetType: "selection"` and a `targetKey` holding the list's canonical JSON,
+`[{"key":"par-1","type":"fixture"},{"key":"Front wash","type":"group"}]` (keys alphabetical, no
+whitespace, in selection order — `EffectTargetRef.Selection.key`). `SUPPORTED_FORMAT_VERSION = 34`;
+`MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since nothing older uses the value. The writer's number
+moves by the sharp-edge rule: a v33 reader stores a target it cannot spawn, so every cue and Look
+holding one would skip that effect. Imported as stored; a key that does not parse is refused where
+the effect spawns. `target_key` is `text` rather than `varchar(255)` on `look_effects` and
+`cue_ad_hoc_effects`, since a selection's key outgrows 255 characters; SQLite enforces no width, so
+an existing database needs no migration. The list names fixtures and groups by key, not uuid, so a clone needs no remap —
+and a rename rewrites the keys inside it (`ai/RigKeyReferences.kt`). `RichProjectFixture` carries one
+Look effect and one cue ad-hoc effect over a selection. A project with none exports byte-for-byte as
+at v33 (only `formatVersion.json` says 34).
+
 ### Version 33 — the spread's shape
 
 Effects plan session 2 (venue-visit R4.2; `docs/fx-engineering.md` §"The spread's shape"):

@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import kotlin.reflect.KProperty1
 
 /**
@@ -66,6 +67,18 @@ object FxTargetFactory {
         outputType: FxOutputType?,
         firstMember: Fixture?,
     ): FxTarget = resolve(FxTargetRef.group(groupName), propertyName, outputType, firstMember)
+
+    /**
+     * Resolve a target on a selection (effects plan D3). The fallback branch reflects on
+     * [firstFixture], the first head the selection resolves to, as [forGroup]'s does on its first
+     * member.
+     */
+    fun forSelection(
+        selection: EffectTargetRef.Selection,
+        propertyName: String,
+        outputType: FxOutputType?,
+        firstFixture: GroupableFixture?,
+    ): FxTarget = resolve(FxTargetRef.SelectionRef(selection), propertyName, outputType, firstFixture)
 
     private fun resolve(
         ref: FxTargetRef,

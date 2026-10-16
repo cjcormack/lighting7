@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.models.withBeatDivisionOverride
@@ -1014,7 +1015,7 @@ class ProgrammerLayerStack(
     private fun build(
         layer: CookLayer,
         effect: EffectEntry,
-        target: TargetRef,
+        target: EffectTargetRef,
         key: ProgrammerLayerEffectKey,
         priority: Int,
         beatDivisionOverride: Double?,
@@ -1022,7 +1023,7 @@ class ProgrammerLayerStack(
         val st = state() ?: return null
         val spec = effect.toEffectSpec().withBeatDivisionOverride(beatDivisionOverride)
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(st, CueTargetDto(target), spec)
+            EffectSpawner.resolveTargetForCue(st, target, spec)
         } catch (e: Exception) {
             logger.warn(
                 "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",

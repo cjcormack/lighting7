@@ -87,7 +87,14 @@ export function FxAddSheet({
     setEditing(false)
   }
 
-  const targetName = target == null ? '' : target.type === 'fixture' ? target.fixture.name : target.group.name
+  const targetName =
+    target == null
+      ? ''
+      : target.type === 'fixture'
+        ? target.fixture.name
+        : target.type === 'selection'
+          ? target.label
+          : target.group.name
 
   return (
     <Sheet open={open && target != null} onOpenChange={(next) => !next && close()}>

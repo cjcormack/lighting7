@@ -21,6 +21,8 @@ import { useIsDeskConnected } from '@/store/status'
 import { useTemplateListQuery } from '@/store/templates'
 import type { Fixture } from '@/store/fixtures'
 import { findEffectEntry, selectedHeadCount, type BuskingTarget } from './buskingTypes'
+import { effectTargetLabel, selectionItems } from '@/lib/effectTargets'
+import type { CueTarget } from '@/api/cuesApi'
 
 const EMPTY: readonly ActiveEffect[] = []
 const EMPTY_FIXTURES: readonly Fixture[] = []
@@ -114,9 +116,17 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
       // Reported by errorToastMiddleware.
     })
   }
-  /** A group's effect listed because a member is selected, not the group: its stop reaches further. */
-  const viaGroup = (e: ActiveEffect) =>
-    e.isGroupTarget && !selected.some((t) => t.type === 'group' && t.name === e.targetKey) ? e.targetKey : null
+  /**
+   * A group's effect listed because a member is selected, not the group, or a selection's that names
+   * something not selected: its stop reaches further.
+   */
+  const isSelected = (t: CueTarget) =>
+    selected.some((s) => (t.type === 'group' ? s.type === 'group' && s.name === t.key : s.type !== 'group' && (s.element?.key ?? s.fixture.key) === t.key))
+  const viaGroup = (e: ActiveEffect) => {
+    const items = selectionItems(e)
+    if (items != null) return items.every(isSelected) ? null : effectTargetLabel(e, nameOfTarget)
+    return e.isGroupTarget && !selected.some((t) => t.type === 'group' && t.name === e.targetKey) ? e.targetKey : null
+  }
   const stop = (e: ActiveEffect) => {
     // It stops the effect on every member of the group, not only the selected heads — the fixture
     // sheet's tray asks first for the same case (Chris's call, session 2 review), and so does this.
@@ -128,8 +138,20 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
     })
     if (editingId === e.id) setEditingId(null)
   }
-  /** Where an effect runs, by name — a fixture, a head or a group. */
+  /** A fixture's, a head's or a group's name. */
+  function nameOfTarget(t: CueTarget): string {
+    if (t.type === 'group') return t.key
+    const fixture = fixtureByKey.get(t.key)
+    if (fixture) return fixture.name
+    for (const f of fixtures) {
+      const element = f.elements?.find((el) => el.key === t.key)
+      if (element) return `${f.name} ${element.displayName}`
+    }
+    return t.key
+  }
+  /** Where an effect runs, by name — a fixture, a head, a group, or a selection's items. */
   const onWhat = (e: ActiveEffect): string => {
+    if (selectionItems(e) != null) return effectTargetLabel(e, nameOfTarget)
     if (e.isGroupTarget) return e.targetKey
     const fixture = fixtureByKey.get(e.targetKey)
     if (fixture) return fixture.name
@@ -208,7 +230,7 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
                   )}
                 </div>
                 <div className="truncate pl-[13px] text-[11px] text-muted-foreground">
-                  → {e.propertyName} · {viaGroup(e) != null ? `via ${e.targetKey}` : onWhat(e)} ·{' '}
+                  → {e.propertyName} · {viaGroup(e) != null ? `via ${viaGroup(e)}` : onWhat(e)} ·{' '}
                   {pad ? `pad${e.sourceName ? ` · ${e.sourceName}` : ''}` : 'programmer'}
                 </div>
               </div>

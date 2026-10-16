@@ -482,9 +482,19 @@ class Show(
         }
     }
 
-    private fun targetExists(target: FxTarget): Boolean = runCatching {
-        if (target.isGroupTarget) fixtures.untypedGroup(target.targetKey) else fixtures.untypedGroupableFixture(target.targetKey)
-    }.isSuccess
+    private fun targetExists(target: FxTarget): Boolean {
+        fun exists(ref: TargetRef) = runCatching {
+            when (ref) {
+                is TargetRef.Group -> fixtures.untypedGroup(ref.key)
+                is TargetRef.Fixture -> fixtures.untypedGroupableFixture(ref.key)
+            }
+        }.isSuccess
+        // A selection stays while anything it names is still patched; the expansion skips the rest.
+        (target.targetRef as? FxTargetRef.SelectionRef)?.let { return it.items.any(::exists) }
+        return runCatching {
+            if (target.isGroupTarget) fixtures.untypedGroup(target.targetKey) else fixtures.untypedGroupableFixture(target.targetKey)
+        }.isSuccess
+    }
 
     fun close() {
         globalScalerState.detach()

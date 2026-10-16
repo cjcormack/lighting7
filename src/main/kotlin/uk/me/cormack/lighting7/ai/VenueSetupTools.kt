@@ -397,6 +397,10 @@ internal class VenueSetupTools(private val state: State) {
         val sourceRegionNames = RigScope.of(source).stageRegions().associate { it.uuid.toString() to it.name }
 
         fun checkTarget(type: String, key: String, by: String) {
+            if (type == EffectTargetRef.Selection.TYPE) {
+                EffectTargetRef.Selection.parseKey(key)?.forEach { checkTarget(it.discriminator, it.key, by) }
+                return
+            }
             val ok = when (type) {
                 TargetRef.Fixture.TYPE -> fixtureKeys.any { key == it || key.startsWith("$it.") }
                 TargetRef.Group.TYPE -> key in groupNames

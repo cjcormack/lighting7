@@ -504,12 +504,12 @@ internal fun programmerBandEffectsById(state: State, ids: List<Long>): List<FxIn
  * - **the timing does not**: there is nowhere to put it. Delay, interval and random window live on
  *   the layer, so a busked "fire after 3s" becomes the layer's delay rather than the Look's.
  *
- * A group-targeted instance stays group-targeted. That keeps the Look reusable in the way the
- * operator built it: a chase over "SL Wash" is about the group, not about four heads that happened
- * to be in it.
+ * A group-targeted instance stays group-targeted, and one over a selection keeps its selection.
+ * That keeps the Look reusable in the way the operator built it: a chase over "SL Wash" is about
+ * the group, not about four heads that happened to be in it.
  */
 internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: RecordMode) {
-    fun targetTypeOf(effect: FxInstance) = if (effect.isGroupEffect) TargetRef.Group.TYPE else TargetRef.Fixture.TYPE
+    fun targetTypeOf(effect: FxInstance) = effect.target.targetRef.discriminator
 
     fun DaoLookEffect.take(effect: FxInstance, sortOrder: Int) {
         category = categoryFromPropertyName(effect.target.propertyName)

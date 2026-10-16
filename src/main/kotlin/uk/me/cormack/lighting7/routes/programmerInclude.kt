@@ -20,9 +20,11 @@ import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.routes.programmerInclude")
 
@@ -255,18 +257,11 @@ private fun spawnIncludedFx(
 
     fun spawn(
         effectSpec: LookEffectSpec,
-        target: TargetRef,
+        target: EffectTargetRef,
         origin: ProgrammerFxOrigin,
     ) {
         if (mask != null) {
-            val reference = try {
-                when (target) {
-                    is TargetRef.Group -> state.show.fixtures.untypedGroup(target.key).fixtures.firstOrNull()
-                    is TargetRef.Fixture -> state.show.fixtures.untypedGroupableFixture(target.key)
-                }
-            } catch (_: Exception) {
-                null
-            }
+            val reference = state.show.fixtures.referenceFixtureFor(target)
             val propertyName = effectSpec.propertyName
             val group = if (reference != null && propertyName != null) {
                 maskGroupForProperty(reference, propertyName)
@@ -304,7 +299,7 @@ private fun spawnIncludedFx(
         }
 
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
+            EffectSpawner.resolveTargetForCue(state, target, effectSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: included fx on '{}' — target unresolvable — skipping: {}",
@@ -320,7 +315,7 @@ private fun spawnIncludedFx(
         instance.programmerOrigin = origin
         spawning += instance
 
-        if (target is TargetRef.Group) groupKeys += target.key
+        target.items.filterIsInstance<TargetRef.Group>().mapTo(groupKeys) { it.key }
         covered += engine.fixtureKeysCoveredBy(instance)
     }
 

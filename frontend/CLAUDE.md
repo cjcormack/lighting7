@@ -696,6 +696,12 @@ Release folds to its glyph and the scope line drops the fade.
   it left running in `partialSweepMessage`'s vocabulary (`outside: 'this fixture'`); no confirm, like
   Clear (call 3). Its count (`heldOnFixture`) is the entries on the fixture and its heads whatever the
   owner but a layer's, the sideband inside its footprint, and its local effects.
+- **An effect over a selection** (effects plan D3) reports `targetType: 'selection'` and its ordered
+  `targets`, and its `targetKey` — the list's canonical JSON — names no fixture or group: every read
+  of which heads an effect reaches goes through `lib/effectTargets.ts` (`effectNames`,
+  `effectAimKeys`, `effectTargetLabel`, the stored-row `storedEffectTargets`), never a comparison of
+  that key. The tray, the badges, Release's count, the grid's ⌫, the FX band and the busk Effects tab
+  all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
   count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ Effect**);
   **open**, the rail's two-line rows with pause and stop, up to half the sheet, scrolling itself; and
@@ -776,7 +782,11 @@ Release folds to its glyph and the scope line drops the fade.
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
   The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
   (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
-  a sheet (`FxAddSheet`, whose Done closes it; in a focused Look layer the effect is absorbed into the
+  a sheet (`FxAddSheet`, whose Done closes it; both start **one effect over the selection** — the
+  rail the programmer's rows in grid order (`selectRowTargets`, published by the list beside its
+  flattened keys), ⌘K's *On the selection* this window's pair — one row being that fixture, cell or
+  group alone, several an `FxTarget` of type `selection` sent as `POST /fx/add`'s `targets`
+  (`components/fx/selectionEffectTarget.ts`, effects plan D3); in a focused Look layer the effect is absorbed into the
   Look once the session ends — closed or unmounted — by the id the create answered, after the editor
   lands its held move). The popover is bounded by the room Radix measures beside its anchor and
   scrolls inside it. `ActiveEffectSheet`,

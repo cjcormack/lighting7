@@ -28,6 +28,7 @@ import { fixtureHeadKeys } from './useRelease'
 import { useCueLabel, useEffectDetail } from './effectLabels'
 import { effectsReaching } from './rowSource'
 import { FINGER_CHIP_CLASS, useFingerSized } from './sheetContext'
+import { effectNames, effectTargetLabel, selectionItems, spreadsOverMembers } from '@/lib/effectTargets'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
 
@@ -63,13 +64,21 @@ const FOLDED_CHIPS = 3
 
 const EMPTY: readonly ActiveEffect[] = []
 
+/** What a start is keyed on: a fixture's key, a group's name or a selection's words. */
+function fxTargetKey(target: FxTarget): string {
+  return target.type === 'group' ? target.group.name : target.type === 'selection' ? target.label : target.fixture.key
+}
+const NO_KEYS: ReadonlySet<string> = new Set()
+
 /**
  * The effects running on a fixture — on it, on one of its heads, or on a group it is in — or on a
- * group. Group effects reach a fixture as *via <group>*: they are the group's, not this sheet's.
+ * group, and an effect over a selection that names any of them (effects plan D3). Group and
+ * selection effects reach a fixture as *via <group>*: they are the group's or the selection's, not
+ * this sheet's.
  */
 export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, target: FxTrayTarget): ActiveEffect[] {
   if (!effects) return []
-  if (target.type === 'group') return effects.filter((e) => e.isGroupTarget && e.targetKey === target.group.name)
+  if (target.type === 'group') return effects.filter((e) => effectNames(e, NO_KEYS, new Set([target.group.name])))
   return effectsReaching(effects, [...fixtureHeadKeys(target.fixture)], target.fixture.groups)
 }
 
@@ -126,7 +135,7 @@ export function FxTray({
   // so a tap there starts afresh rather than swapping an effect on the heads picked before.
   const start = pick?.start
   const startKey =
-    start == null ? 'whole' : 'reason' in start ? null : `${start.target.type === 'group' ? start.target.group.name : start.target.fixture.key}\u0000${start.elementFilter ?? ''}`
+    start == null ? 'whole' : 'reason' in start ? null : `${fxTargetKey(start.target)}\u0000${start.elementFilter ?? ''}`
   const [audition, setAudition] = useState<{ startKey: string | null; effect: AuditionedEffect } | null>(null)
   const auditioned = audition != null && audition.startKey === startKey ? audition.effect : null
   const setAuditioned = (effect: AuditionedEffect | null) => setAudition(effect == null ? null : { startKey, effect })
@@ -161,7 +170,8 @@ export function FxTray({
   const [removeGroupFx] = useRemoveGroupFxMutation()
 
   const ownGroup = target.type === 'group' ? target.group.name : null
-  const via = (e: ActiveEffect) => (e.isGroupTarget && e.targetKey !== ownGroup ? e.targetKey : null)
+  const via = (e: ActiveEffect) =>
+    selectionItems(e) != null ? effectTargetLabel(e) : e.isGroupTarget && e.targetKey !== ownGroup ? e.targetKey : null
 
   const togglePause = (e: ActiveEffect) => {
     const request = e.isGroupTarget
@@ -172,7 +182,7 @@ export function FxTray({
     })
   }
   const stop = (e: ActiveEffect) => {
-    // A group's effect reaching this fixture is the group's: stopping it here stops it on every
+    // A group's or a selection's effect reaching this fixture is theirs: stopping it here stops it on every
     // member, so it asks first (Chris's call, session 2 review). The fixture's own stop does not.
     const group = via(e)
     if (group && !confirm(`Stop ${e.effectType} on every fixture in ${group}?`)) return
@@ -198,7 +208,7 @@ export function FxTray({
         ? null
         : start.target
   const lookTarget =
-    lookFrom == null
+    lookFrom == null || lookFrom.type === 'selection'
       ? null
       : lookFrom.type === 'fixture'
         ? { targetType: 'fixture' as const, targetKey: lookFrom.fixture.key, compatibleLookIds: lookFrom.fixture.compatibleLookIds }
@@ -214,7 +224,8 @@ export function FxTray({
   const cannotStart = start != null && 'reason' in start ? start.reason : null
   const ownKey = target.type === 'fixture' ? target.fixture.key : null
   // An effect on one head or one member, rather than on the sheet's own target, says which.
-  const onWhom = (e: ActiveEffect) => (e.isGroupTarget || e.targetKey === ownKey ? null : (pick?.nameOf(e.targetKey) ?? null))
+  const onWhom = (e: ActiveEffect) =>
+    spreadsOverMembers(e) || e.targetKey === ownKey ? null : (pick?.nameOf(e.targetKey) ?? null)
 
   const shown = effects.slice(0, FOLDED_CHIPS)
   const more = effects.length - shown.length
@@ -416,7 +427,7 @@ export function FxTray({
                     {onWhom(e) && ` · on ${onWhom(e)}`}
                     {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}
-                    {e.isGroupTarget && e.elementMode && ` · ${getElementModeLabel(e.elementMode)}`}
+                    {spreadsOverMembers(e) && e.elementMode && ` · ${getElementModeLabel(e.elementMode)}`}
                     {cueId != null && cueName != null ? (
                       <>
                         {' · '}

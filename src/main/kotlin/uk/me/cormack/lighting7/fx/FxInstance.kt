@@ -257,7 +257,7 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
         blendMode = blendMode.name,
         distribution = dyn.distributionStrategy.javaClass.simpleName,
         phaseOffset = dyn.phaseOffset,
-        elementMode = if (isGroupEffect) dyn.elementMode.name else null,
+        elementMode = if (spreadsOverMembers) dyn.elementMode.name else null,
         elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
         stepTiming = if (dyn.stepTiming != effect.defaultStepTiming) dyn.stepTiming else null,
         parameters = effect.parameters,
@@ -819,6 +819,12 @@ class FxInstance internal constructor(
      * Whether this effect targets a group (vs individual fixture).
      */
     val isGroupEffect: Boolean get() = target.isGroupTarget
+
+    /** Whether this effect targets a selection of fixtures and groups (effects plan D3). */
+    val isSelectionEffect: Boolean get() = target.isSelectionTarget
+
+    /** Whether the engine spreads it over members — a group's, or a selection's. */
+    val spreadsOverMembers: Boolean get() = isGroupEffect || isSelectionEffect
 
     /**
      * The group name if this is a group effect, null otherwise.

@@ -95,7 +95,11 @@ export interface CueLayerDetail extends CueLayer {
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
 export interface CueAdHocEffect {
-  targetType: 'group' | 'fixture'
+  /**
+   * `selection` is one effect over an ordered list of fixtures and groups (effects plan D3), its
+   * [targetKey] the list's canonical JSON — what Record writes for an effect started on a marquee.
+   */
+  targetType: 'group' | 'fixture' | 'selection'
   targetKey: string
   effectType: string
   category: string

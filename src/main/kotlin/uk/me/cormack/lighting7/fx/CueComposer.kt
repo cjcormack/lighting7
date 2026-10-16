@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -273,7 +274,7 @@ internal object CueComposer {
     internal data class FullCook(
         val values: CookResult,
         /** As [cookEffects] returns them; empty when the cook was asked for values only. */
-        val effects: List<Triple<CookLayer, EffectEntry, TargetRef>>,
+        val effects: List<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
         /**
          * `layerId → rank` among the contributing layers — the same number [CookWinner.index]
          * carries, so a caller turning a rank into an effect priority cannot disagree with the rows.
@@ -321,7 +322,7 @@ internal object CueComposer {
         resolveLook: (UUID) -> LookSnapshot?,
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int>,
-        collectEffects: MutableList<Triple<CookLayer, EffectEntry, TargetRef>>?,
+        collectEffects: MutableList<Triple<CookLayer, EffectEntry, EffectTargetRef>>?,
     ): FullCook {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -489,8 +490,8 @@ internal object CueComposer {
          */
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-    ): List<Triple<CookLayer, EffectEntry, TargetRef>> {
-        val out = ArrayList<Triple<CookLayer, EffectEntry, TargetRef>>()
+    ): List<Triple<CookLayer, EffectEntry, EffectTargetRef>> {
+        val out = ArrayList<Triple<CookLayer, EffectEntry, EffectTargetRef>>()
         for (layer in contributingLayers(layers, includeTimed)) {
             val content = resolveContent(layer.source, resolveLook, resolveTemplate) ?: continue
             effectsForLayer(fixtures, cueId, layer, content.effects, LayerTargets(fixtures, cueId, layer), out)
@@ -516,7 +517,7 @@ internal object CueComposer {
         effects: List<EffectEntry>,
         /** The layer's own target set, expanded once — see [LayerTargets]. */
         layerTargets: LayerTargets,
-        out: MutableList<Triple<CookLayer, EffectEntry, TargetRef>>,
+        out: MutableList<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
     ) {
         val refs = layerTargets.refs
         for (effect in effects) {
@@ -529,10 +530,12 @@ internal object CueComposer {
                     )
                     continue
                 }
-                for (target in refs) out.add(Triple(layer, effect, target))
+                for (target in refs) out.add(Triple(layer, effect, EffectTargetRef.Single(target)))
             } else {
-                // A bound effect survives the layer's restriction only if the layer covers it.
-                if (refs.isEmpty() || coversTarget(fixtures, layerTargets, effectTarget)) {
+                // A bound effect survives the layer's restriction only if the layer covers it — a
+                // selection, if it covers any item, as a group survives on any member.
+                val covered = effectTarget.items.any { coversTarget(fixtures, layerTargets, it) }
+                if (refs.isEmpty() || covered) {
                     out.add(Triple(layer, effect, effectTarget))
                 }
             }

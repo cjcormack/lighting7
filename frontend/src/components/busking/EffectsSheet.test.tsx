@@ -136,6 +136,26 @@ describe('EffectsSheet', () => {
     }
   })
 
+  it('names a selection’s items, never its key, when it reaches past the selected heads', () => {
+    const targets = [
+      { type: 'fixture' as const, key: 'spot-1' },
+      { type: 'fixture' as const, key: 'wash-1' },
+    ]
+    state.effects = [
+      makeActiveEffect({
+        id: 31,
+        effectType: 'Pulse',
+        targetKey: JSON.stringify(targets.map((t) => ({ key: t.key, type: t.type }))),
+        targetType: 'selection',
+        targets,
+      }),
+    ]
+    render(<EffectsSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} />)
+    const row = document.querySelector('[data-effect-row="31"]') as HTMLElement
+    expect(within(row).getByText(/via Spot 1, Wash 1/)).toBeTruthy()
+    expect(within(row).queryByText(/\[\{/)).toBeNull()
+  })
+
   it('opens the live editor under a row', () => {
     state.effects = [padCircle('80')]
     render(<EffectsSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} />)

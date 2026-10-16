@@ -10,7 +10,15 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fx.*
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -71,6 +79,11 @@ internal fun Route.routeApiRestFx(state: State) {
                 instance.applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
 
                 markProgrammerOwned(instance, request.programmerOwned)
+                if (request.targets != null) {
+                    require(state.show.fxEngine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
+                        "No fixture in targets has '${request.propertyName}'"
+                    }
+                }
 
                 val effectId = state.show.fxEngine.addEffect(instance)
                 call.respond(AddEffectResponse(effectId))
@@ -169,8 +182,14 @@ data object EffectLibrary
 @Serializable
 data class AddEffectRequest(
     val effectType: String,
-    val fixtureKey: String,
+    /** The fixture or cell to run on. Ignored when [targets] is sent. */
+    val fixtureKey: String = "",
     val propertyName: String,
+    /**
+     * One effect over a selection (effects plan D3): the fixtures, cells and groups in the order the
+     * effect spreads across them, as a group's members are. One item is that fixture or group alone.
+     */
+    val targets: List<CueTargetDto>? = null,
     /** One bar when omitted — venue-visit plan D16's default for a new effect. */
     val beatDivision: Double = BeatDivision.ONE_BAR,
     val blendMode: String = "OVERRIDE",
@@ -230,7 +249,10 @@ data class FixtureEffectsResponse(
 data class IndirectEffectDto(
     val id: Long,
     val effectType: String,
+    /** The group reaching the fixture; a selection's canonical key when [targetType] is `selection`. */
     val groupName: String,
+    /** `group`, or `selection` for an effect over a selection that names the fixture (effects plan D3). */
+    val targetType: String = TargetRef.Group.TYPE,
     val propertyName: String,
     val beatDivision: Double,
     val blendMode: String,
@@ -491,6 +513,7 @@ private fun FxInstance.toIndirectDto() = IndirectEffectDto(
     id = id,
     effectType = effectTypeId,
     groupName = target.targetKey,
+    targetType = target.targetRef.discriminator,
     propertyName = target.propertyName,
     beatDivision = timing.beatDivision,
     blendMode = blendMode.name,
@@ -520,12 +543,60 @@ private fun createTargetFromRequest(
     state: State,
     outputType: FxOutputType?,
 ): FxTarget {
+    request.targets?.let { return createTargetFromList(it, request.propertyName, state, outputType) }
+    require(request.fixtureKey.isNotBlank()) { "Name the effect's fixtureKey, or its targets" }
     // `untypedGroupableFixture`, as `EffectSpawner.createFixtureTargetForCue` does: the two doors
     // must build the same target for the same cell, and the factory's fallback reads its catalogue.
     val fixture = try {
         state.show.fixtures.untypedGroupableFixture(request.fixtureKey)
     } catch (_: Exception) { null }
     return FxTargetFactory.forFixture(request.fixtureKey, request.propertyName, outputType, fixture)
+}
+
+/**
+ * The target for a `targets` list: every item must name a fixture, cell or group the rig has (all
+ * problems at once). Whether any of them has the property is the route's check, on the instance.
+ */
+private fun createTargetFromList(
+    targets: List<CueTargetDto>,
+    propertyName: String,
+    state: State,
+    outputType: FxOutputType?,
+): FxTarget {
+    require(targets.isNotEmpty()) { "targets names no fixture or group" }
+    val fixtures = state.show.fixtures
+    val problems = ArrayList<String>()
+    val refs = targets.mapIndexedNotNull { i, t ->
+        val ref = TargetRef.ofOrNull(t.type, t.key)
+        when {
+            ref == null -> problems += "targets[$i]: '${t.type}' is not a fixture or a group"
+            ref is TargetRef.Fixture && runCatching { fixtures.untypedGroupableFixture(ref.key) }.isFailure ->
+                problems += "targets[$i]: no fixture '${ref.key}'"
+            ref is TargetRef.Group && runCatching { fixtures.untypedGroup(ref.key) }.isFailure ->
+                problems += "targets[$i]: no group '${ref.key}'"
+        }
+        ref
+    }
+    require(problems.isEmpty()) { problems.joinToString("; ") }
+    val target = EffectTargetRef.of(refs)
+    // No effect may drive a one-shot trigger or a fixture command on anything the list names.
+    TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "effect")
+        ?.let { throw TriggerNotStorableException(it) }
+    CommandIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "effect")
+        ?.let { throw CommandNotStorableException(it) }
+    val fxTarget = when (target) {
+        is EffectTargetRef.Selection -> EffectSpawner.createSelectionTarget(state, target, propertyName, outputType)
+        is EffectTargetRef.Single -> when (val single = target.target) {
+            is TargetRef.Fixture -> FxTargetFactory.forFixture(
+                single.key, propertyName, outputType, runCatching { fixtures.untypedGroupableFixture(single.key) }.getOrNull(),
+            )
+            is TargetRef.Group -> {
+                val group = fixtures.untypedGroup(single.key)
+                FxTargetFactory.forGroup(single.key, propertyName, outputType, group.fixtures.firstOrNull() as? Fixture)
+            }
+        }
+    }
+    return fxTarget
 }
 
 private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect =

@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.ai
 
 import uk.me.cormack.lighting7.fx.EffectDirection
+import uk.me.cormack.lighting7.fx.FxInstance
+import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.fixture.FixtureCommands
@@ -182,7 +184,7 @@ class RigBriefing(private val state: State) {
         if (activeEffects.isNotEmpty()) {
             sb.appendLine("Active effects: ${activeEffects.size}")
             for (effect in activeEffects.take(20)) {
-                sb.appendLine("  - ${effect.effect.name} on ${effect.target.targetKey}.${effect.target.propertyName}" +
+                sb.appendLine("  - ${effect.effect.name} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
                         // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
                         (if (effect.onSeconds) " (seconds=" else " (beat=") +
                         "${effect.timing.beatDivision}, blend=${effect.blendMode}" +
@@ -608,3 +610,9 @@ class RigBriefing(private val state: State) {
 
 /** The body's up axis past 60° from level: it stands up, or hangs down. Between, it is on its side. */
 private const val UPRIGHT = 0.5
+
+/** An effect's target as the other tools name it: its key, or a selection's items in order. */
+private fun briefingTargetOf(effect: FxInstance): String =
+    (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items
+        ?.joinToString(", ", "selection(", ")") { if (it is TargetRef.Group) "group:${it.key}" else it.key }
+        ?: effect.target.targetKey

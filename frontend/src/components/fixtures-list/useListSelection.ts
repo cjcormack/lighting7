@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import {
   clearSelection as clearSelectionAction,
   publishTargets as publishTargetsAction,
+  publishRowTargets,
   select as selectAction,
   selectAll as selectAllAction,
   selectScopeState,
@@ -11,6 +12,7 @@ import {
 } from '../../store/selectionSlice'
 import type { ListSelectIntent } from '../sheet/listSelectionModel'
 import type { RowId } from './rowModel'
+import type { CueTarget } from '../../api/cuesApi'
 
 // The pure model lives in the sheet kit (`sheet/listSelectionModel`) so the slice can reduce with it without
 // importing this hook. Re-exported here because this stays the public entry point — callers
@@ -157,4 +159,17 @@ export function usePublishSelectionTargets(
   useEffect(() => {
     dispatch(publishTargetsAction({ scope, targetKeys }))
   }, [dispatch, scope, targetKeys])
+}
+
+/**
+ * Publish the selection's rows as targets, in display order — the counterpart of
+ * [usePublishSelectionTargets] for a reader that needs groups and cells as themselves (the
+ * programmer's `+ Effect`, one effect over the selection).
+ */
+export function usePublishRowTargets(scope: SelectionScope, targets: readonly CueTarget[]): void {
+  const dispatch = useDispatch()
+
+  useEffect(() => {
+    dispatch(publishRowTargets({ scope, targets }))
+  }, [dispatch, scope, targets])
 }
