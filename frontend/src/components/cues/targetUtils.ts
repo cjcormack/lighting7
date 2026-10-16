@@ -1,6 +1,7 @@
 import type { Cue, CueTarget } from '@/api/cuesApi'
 import type { Fixture } from '@/store/fixtures'
 import { targetKey } from '@/lib/targetKey'
+import { storedEffectTargets } from '@/lib/effectTargets'
 
 /**
  * Order: insertion order across the three lists, deduplicated by `type:key`.
@@ -17,7 +18,7 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
   }
 
   for (const a of cue.propertyAssignments) push({ type: a.targetType, key: a.targetKey })
-  for (const e of cue.adHocEffects) push({ type: e.targetType, key: e.targetKey })
+  for (const e of cue.adHocEffects) storedEffectTargets(e.targetType, e.targetKey).forEach(push)
   // A layer with no targets of its own contributes none here: it uses the Look's targets, which
   // this client cannot expand without fetching every Look's rows.
   for (const layer of cue.layers) {

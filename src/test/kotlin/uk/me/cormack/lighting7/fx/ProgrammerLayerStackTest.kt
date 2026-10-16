@@ -283,19 +283,20 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `the same Look on two target sets toggles as two independent pads`() {
-        // What "already on" has to mean for a pad: same Look *and* same targets. Matching on the
-        // Look alone would make the second pad turn the first one off.
+    fun `the same Look pressed on two targets widens, and comes off per target`() {
+        // "Already on" is per target: pressing the Look on a second head widens its layer, and a
+        // press on the first takes only that head off.
         val rig = newRig()
         val uuid = rig.look("Warm", 200)
 
         rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
         rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-2")))
-        assertEquals(2, rig.store.layers.size)
+        // The top layer widens rather than stacking a second (apply-model P3).
+        assertEquals(1, rig.store.layers.size)
 
         rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
 
-        assertEquals(1, rig.store.layers.size)
+        assertEquals(listOf(CueTargetDto("fixture", "hex-2")), rig.store.layers.single().targets)
         assertNull(rig.valueOf("hex-1"))
         assertEquals(200, rig.valueOf("hex-2"), "the other pad is still on")
     }
@@ -662,8 +663,10 @@ class ProgrammerLayerStackTest {
         val red = rig.groupedSource("Red", 200)
 
         rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
+        // A layer between the two presses, so the second adds a layer rather than widening the first.
+        rig.add("Between", 10, "hex-1")
         rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-2")))
-        assertEquals(2, rig.store.layers.size, "two presses on two selections are two layers")
+        assertEquals(2, rig.store.layers.count { it.source == red }, "two presses on two selections are two layers")
 
         val off = rig.stack.toggle(
             red,
@@ -671,7 +674,7 @@ class ProgrammerLayerStackTest {
         )
 
         assertEquals("removed", off.action)
-        assertTrue(rig.store.layers.isEmpty(), "both layers give up the pressed heads")
+        assertTrue(rig.store.layers.none { it.source == red }, "both layers give up the pressed heads")
     }
 
     @Test

@@ -284,7 +284,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `apply_palette lands a template as literals or as a layer that toggles`() {
+    fun `apply_palette puts on a layer that toggles, or literals with asValues`() {
         patchRig()
         ok("create_palette", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
 
@@ -294,24 +294,24 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         val masked = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mask":["POSITION"]}""")
         assertFalse(masked.success)
         assertEquals("PALETTE_OUTSIDE_MASK", masked.json()["code"]!!.jsonPrimitive.content)
-        val maskedLayer = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER","mask":["POSITION"]}""")
-        assertEquals("PALETTE_OUTSIDE_MASK", maskedLayer.json()["code"]!!.jsonPrimitive.content)
+        val maskedValues = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"asValues":true,"mask":["POSITION"]}""")
+        assertEquals("PALETTE_OUTSIDE_MASK", maskedValues.json()["code"]!!.jsonPrimitive.content)
         assertFalse(call("apply_palette", """{"paletteName":"Nope","targets":[{"type":"group","key":"FOH"}]}""").success)
 
-        val literals = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
+        val literals = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"asValues":true}""")
         assertEquals(2, literals["written"]!!.jsonPrimitive.int)
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
         assertEquals(setOf("foh-1", "foh-2"), programmerEntries().map { it.first }.toSet(), "literals sit in the programmer")
         ok("clear_programmer", "{}")
         assertEquals(0, level(1))
 
-        val on = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
+        val on = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
         assertEquals("applied", on["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
         val layers = ok("get_current_state", """{"include":["programmer"]}""")["programmer"]!!.jsonObject["layers"]!!.jsonArray
         assertEquals("Half", layers.single().jsonObject["sourceName"]!!.jsonPrimitive.content)
         assertEquals("PALETTE", layers.single().jsonObject["sourceKind"]!!.jsonPrimitive.content, "Claude reads palette, not the stored kind")
-        val off = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LAYER"}""")
+        val off = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
         assertEquals("removed", off["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(0, 0), listOf(level(1), level(2)))
     }
@@ -325,6 +325,22 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         )["paletteId"]!!.jsonPrimitive.int
         ok("apply_palette", """{"paletteId":$templateId}""")
         assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)))
+        ok("clear_programmer", "{}")
+        ok("apply_palette", """{"paletteId":$templateId,"asValues":true}""")
+        assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)), "as values too")
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+    }
+
+    @Test
+    fun `apply_palette refuses the retired mode rather than guessing`() {
+        patchRig()
+        ok("create_palette", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
+
+        val old = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LITERALS"}""")
+
+        assertFalse(old.success)
+        assertTrue(old.result.contains("asValues"), old.result)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
     }
 
     @Test

@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.midi.PropertyChannelResolver
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
@@ -153,11 +154,7 @@ class ProgrammerWriter internal constructor(
     ): List<List<PropertyChannelResolver.ChannelWrite>> {
         val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
         val keys = HashSet<CueAssignmentResolver.Key>()
-        // A stable partition, and only when the batch holds an emitter at all — the common batch
-        // (a locate, a spread) holds none and keeps its own order at the cost of one scan.
-        val emitter = writes.map { bundleRoleOf(it.fixture, it.propertyName) == CueAssignmentResolver.BundleRole.EMITTER }
-        val order = if (emitter.none { it }) writes.indices else writes.indices.sortedBy { if (emitter[it]) 1 else 0 }
-        for (index in order) {
+        for (index in emittersLast(writes)) {
             val channelWrites = resolved[index]
             if (channelWrites.isEmpty()) continue
             val write = writes[index]
@@ -177,6 +174,40 @@ class ProgrammerWriter internal constructor(
             onProgrammerChanged()
         }
         return resolved
+    }
+
+    /**
+     * Store [writes] as [owner] without publishing, for a caller whose writes leave every key showing
+     * what it already shows — a layer's Detach. [beneathTop] puts each **under** whatever owner holds
+     * the key ([ProgrammerStore.putBeneathTop]); otherwise each goes on top as [writeProperties] puts
+     * it, emitters last for the same reason. The sideband is never absorbed. The programmer's own
+     * readers are told, as for any write.
+     */
+    fun storeUnpublished(owner: ProgrammerOwner, writes: List<PropertyWrite>, beneathTop: Boolean, touched: Boolean = true) {
+        if (writes.isEmpty()) return
+        for (index in emittersLast(writes)) {
+            val write = writes[index]
+            if (beneathTop) {
+                programmerStore.putBeneathTop(
+                    owner, write.fixture.targetKey, write.propertyName, write.value, touched, write.sourceGroup,
+                )
+            } else {
+                programmerStore.putValue(
+                    owner, write.fixture.targetKey, write.propertyName, ProgrammerValue.Hard(write.value), touched, write.sourceGroup,
+                )
+            }
+        }
+        onProgrammerChanged()
+    }
+
+    /**
+     * [writes]' indices with the `bundleWithColour` emitters last — see [writeProperties]. A stable
+     * partition, and only when the batch holds an emitter at all: the common batch (a locate, a
+     * spread) holds none and keeps its own order at the cost of one scan.
+     */
+    private fun emittersLast(writes: List<PropertyWrite>): List<Int> {
+        val emitter = writes.map { bundleRoleOf(it.fixture, it.propertyName) == CueAssignmentResolver.BundleRole.EMITTER }
+        return if (emitter.none { it }) writes.indices.toList() else writes.indices.sortedBy { if (emitter[it]) 1 else 0 }
     }
 
     /**
@@ -537,4 +568,31 @@ class ProgrammerWriter internal constructor(
             Publishability.PUBLISHABLE
         }
     }
+}
+
+/**
+ * `memberFixtureKey → groupKey` for every group in [targets], so a writer that fans a
+ * group-scoped gesture out to members can still stamp `sourceGroup` on each programmer slot.
+ *
+ * Without the hint, Record sees N unrelated fixture entries and emits N cue rows where the
+ * operator wrote one group row. Groups are visited in sorted key order and the first group
+ * claiming a member wins, so overlapping groups produce a stable (if arbitrary) hint rather
+ * than one that flips between calls.
+ */
+internal fun groupHintsForTargets(
+    fixtures: Fixtures,
+    targets: List<TargetRef>,
+): Map<String, String> {
+    val groupKeys = targets.filterIsInstance<TargetRef.Group>().map { it.key }.distinct().sorted()
+    if (groupKeys.isEmpty()) return emptyMap()
+    val out = HashMap<String, String>()
+    for (groupKey in groupKeys) {
+        val group = try {
+            fixtures.untypedGroup(groupKey)
+        } catch (_: IllegalStateException) {
+            continue
+        }
+        for (member in group.fixtures) out.putIfAbsent(member.targetKey, groupKey)
+    }
+    return out
 }

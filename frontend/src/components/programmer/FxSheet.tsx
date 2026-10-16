@@ -23,6 +23,7 @@ import type { ColumnKey } from '../fixtures-list/columns'
 import type { Row } from '../fixtures-list/rowModel'
 import type { Fixture } from '../../store/fixtures'
 import type { GroupSummary } from '../../api/groupsApi'
+import { effectAimKeys, effectTargetLabel } from '@/lib/effectTargets'
 
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
@@ -87,9 +88,7 @@ export function FxSheet() {
     () =>
       effects.map((effect) => ({
         effect,
-        fixtureKeys: effect.isGroupTarget
-          ? (membersByGroup.get(effect.targetKey) ?? [])
-          : [effect.targetKey],
+        fixtureKeys: effectAimKeys(effect, (group) => membersByGroup.get(group) ?? []),
       })),
     [effects, membersByGroup],
   )
@@ -362,7 +361,7 @@ function EffectChip({
   const masterLabel = master ? `M${master.index}` : null
   const tip = [
     effect.effectType,
-    effect.isGroupTarget ? `group ${effect.targetKey}` : null,
+    effect.targetType === 'selection' ? `selection ${effectTargetLabel(effect)}` : effect.isGroupTarget ? `group ${effect.targetKey}` : null,
     `${sizePct}% size`,
     effect.direction != null && effect.direction !== 'FORWARD' ? effect.direction.toLowerCase() : null,
     effect.nShot != null ? `${effect.nShot} run${effect.nShot === 1 ? '' : 's'}` : null,

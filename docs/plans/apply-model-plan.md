@@ -179,7 +179,11 @@ and a layer records both as its `targets` and `propertyMask`.
 ### 3.4 Effects (D5)
 
 - **A bare effect press** is `POST /programmer/effects` (§3.7): one Local instance per selected
-  target, as a layer spawns them (a group stays one group effect, its distribution intact). The mask
+  target, as a layer spawns them (a group stays one group effect, its distribution intact).
+  > *Note (effects plan session 3):* a bare effect press is one instance over the selection,
+  > `effects-plan.md` D3 — `POST /fx/add` takes the ordered `targets`, and the programmer's
+  > `+ Effect` and ⌘K *Apply FX* start one over the selection's rows. Session 2 builds the press and
+  > the split on that instance rather than on one per target. The mask
   must allow the effect's family. With no timing it takes S15's default (venue-visit D16): one bar on
   the master tagged for the family's `usage`, else master 1. The desk stamps it, as MCP's
   `parseEffectTiming` does; today only the client and MCP stamp a master, and `POST /fx/add` defaults
@@ -200,8 +204,9 @@ and a layer records both as its `targets` and `propertyMask`.
   - Refused for a layer's instance (P5) with `FX_SPLIT_LAYER_EFFECT`; a cue's instance stays read-only.
 - **The Effects band and the busk Effects tab** list the effects running on the selected heads:
   Local ones editable by these rules, a palette layer's by P5, a cue's read-only.
-- **Distribution over a hand selection** is out of scope. Loose fixtures run in unison, as they do
-  under a layer today. That is R4's (`FU-FX-SELECTION-DISTRIBUTION`, §10).
+- **Distribution over a hand selection** is R4's, and landed with the effects plan's session 3: one
+  instance spread over the selection in its order (`effects-plan.md` D3, §3.4). A layer's deferred
+  effects still run one instance per target.
 
 ### 3.5 Detach and Apply as values (D1, D8)
 
@@ -211,6 +216,9 @@ and a layer records both as its `targets` and `propertyMask`.
     effects. A spent N-shot (effects plan session 1) is removed instead: only a layer keeps one
     (`FxEngine.finishNShots`).
   - The layer is then removed with no republish of its keys, so the stage does not move.
+  - A Look layer's scenery passes into the programmer's own scenery, so it does not move either
+    (decided with Chris during session 1; §9's "scenery" is about addressing it through the
+    selection, which this does not do).
   - The rail's layer menu and S14's tables carry it.
 - **Apply as values** is ⌥click and the hold menu's second item:
   - for a palette, today's `POST /palettes/{id}/apply` (literals, a detached effect copy);
@@ -222,7 +230,8 @@ and a layer records both as its `targets` and `propertyMask`.
 
 - **A focused Look layer.**
   - `POST /palettes/{id}/apply` gains `write: false`, as Spread has: the same resolve and fan-out
-    (`TemplateFanOut`), answering `written[].value` as each head's literal in the Look row grammar, and
+    (`TemplateFanOut`), answering `values[].value` as each head's literal in the Look row grammar
+    (`written` stays the count, since the click already answers it as a number), and
     writing nothing.
   - The client lands those values in `LookRowStore`'s draft, which saves through the ordinary Look PUT.
   - An effect palette's effect, and a bare effect, become the Look's effects through `absorb-effects`,
@@ -245,7 +254,7 @@ and a layer records both as its `targets` and `propertyMask`.
 | `POST /palettes/{id}/toggle`, `/looks/{id}/toggle`, `/busk/pads/{id}/press` | 1 | Replacement siblings (§3.2 rule 3) and widening (rule 4). No request change. |
 | `programmer.detachLayer {layerId}` | 1 | Inbound WS, an operator gesture; a `TraceSampling.WS_MESSAGES` row. Answers `programmer.layerState`. |
 | `POST /looks/{id}/apply` | 1 | `{targets, families?, fadeMs?}`; Apply as values for a Look. |
-| `POST /palettes/{id}/apply` `write` | 1 | `false` answers `written[].value` without writing (D7). |
+| `POST /palettes/{id}/apply` `write` | 1 | `false` answers `values[].value` without writing (D7); `written` is the count. |
 | MCP `apply_palette` | 1 | `LAYER` by default, `asValues: true` for literals (D9); `apply_look` gains `asValues`. |
 | `POST /programmer/effects` | 2 | `{effectType, propertyName, targets, families?, parameters?}` plus the timing and dynamics fields `POST /fx/add` takes (`beatDivision`, `speedMasterUuid`, `rateSpeedMasterUuid`, `seconds`, `size`, `direction`, `nShot`, `spread`, `wings`, `blocks`, `groups`; S15, effects plan sessions 1–2); a bare effect over the selection, Local. 400 `EFFECT_OUTSIDE_MASK`, `EFFECT_NEEDS_SELECTION`. |
 | `PUT /fx/{id}` `targets` | 2 | The split (§3.4). The `updateFx` frame takes the same field. 409 `FX_SPLIT_LAYER_EFFECT`. |
@@ -387,7 +396,7 @@ only on the next press.
 
 Each session is one PR (P1).
 
-### Session 1 — The press on the desk (backend)
+### Session 1 — The press on the desk (backend) — done, `5613a361`
 
 - `fx/LayerPress.kt` factored out of `ProgrammerLayerStack.toggle`, pure over a layer list.
   `toggle` becomes its caller, with no behaviour change, pinned by the existing toggle tests.
@@ -421,7 +430,8 @@ Each session is one PR (P1).
   sweep, or it refuses those effects. A shape edit named with a strict subset of `targets` does
   nothing on one-head copies: refuse it or ignore it.
 - **Tests:**
-  - A bare effect on four fixtures is four Local instances, and on a group one.
+  - A bare effect on four fixtures is one Local instance over them (effects plan D3), and on a
+    group one.
   - A second colour effect on two of four takes those two off the first.
   - A subset edit of a group effect leaves the rest running and starts the subset at each member's
     old phase.
@@ -519,8 +529,8 @@ Each session is one PR (P1).
 
 In [`followups.md`](followups.md), when the session that creates them lands:
 
-- `FU-FX-SELECTION-DISTRIBUTION` (session 2): a Local effect over a hand selection of loose fixtures
-  runs in unison; distributing it over the selection without a group is R4's call.
+- ~~`FU-FX-SELECTION-DISTRIBUTION`~~ — not recorded: the effects plan's session 3 closed it, one
+  effect over the selection (`effects-plan.md` D3).
 - `FU-PRESS-REPLACE-LOOKS` (session 1): a Look pressed over a Look on the same heads stacks (D6).
   Trigger: an operator expects the second to take the first off outside a solo bank.
 

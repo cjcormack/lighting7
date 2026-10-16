@@ -3,10 +3,14 @@ package uk.me.cormack.lighting7.state
 import io.ktor.server.config.ApplicationConfig
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.channels.OverlappingFileLockException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
 
 /** Read an optional config string, treating absent or blank values as `null`. */
 fun ApplicationConfig.optionalString(key: String): String? =
@@ -57,7 +61,7 @@ fun ApplicationConfig.optionalBoolean(key: String, default: Boolean): Boolean {
 fun appDataDir(): Path = cachedAppDataDir
 
 private val cachedAppDataDir: Path by lazy {
-    val dir = resolveAppDataDir(rawDataDirOverride())
+    val dir = claimSlot(resolveAppDataDir(rawDataDirOverride()))
     try {
         Files.createDirectories(dir)
     } catch (e: FileAlreadyExistsException) {
@@ -68,6 +72,34 @@ private val cachedAppDataDir: Path by lazy {
         )
     }
     dir
+}
+
+/** Held for the life of the JVM: releasing it would let another process claim the same slot. */
+private var slotLock: FileLock? = null
+
+/**
+ * With `-Dlighting7.dataDir.slots=N`, several JVMs share one data-dir root: each takes the first
+ * of `slot-1` … `slot-N` whose lock file it can lock, and uses that directory. The test suite's
+ * forks use this so no two share a compiled-script cache, which is written in place with no
+ * lock, while each fork still finds the same directory, and so a warm cache, run after run.
+ */
+private fun claimSlot(root: Path): Path {
+    val slots = System.getProperty("lighting7.dataDir.slots")?.toIntOrNull() ?: return root
+    Files.createDirectories(root)
+    for (n in 1..slots) {
+        val channel = FileChannel.open(root.resolve("slot-$n.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        val lock = try {
+            channel.tryLock()
+        } catch (e: OverlappingFileLockException) {
+            null
+        }
+        if (lock != null) {
+            slotLock = lock
+            return root.resolve("slot-$n")
+        }
+        channel.close()
+    }
+    throw IllegalStateException("All $slots data-dir slots under $root are in use.")
 }
 
 /** Raw override string from the system property (preferred) or env var; null if neither is set non-blank. */

@@ -384,7 +384,7 @@ class CueHolds internal constructor(
             for ((layer, lookEffect, target) in cooked.effects) {
                 val spec = lookEffect.toEffectSpec()
                 val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), spec)
+                    EffectSpawner.resolveTargetForCue(state, target, spec)
                 } catch (e: Exception) {
                     logger.warn("cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}", cueId, layer.source.name, target.key, e.message)
                     null
@@ -404,7 +404,7 @@ class CueHolds internal constructor(
             for (adHoc in immediateAdHoc) {
                 val spec = adHoc.toLookEffectSpec()
                 val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, CueTargetDto(adHoc.target), spec)
+                    EffectSpawner.resolveTargetForCue(state, adHoc.target, spec)
                 } catch (e: Exception) {
                     logger.warn("cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}", cueId, adHoc.targetKey, e.message)
                     null

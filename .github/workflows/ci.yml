@@ -53,13 +53,15 @@ jobs:
         # it means accepting Gradle's Terms of Use — an owner's decision, not a Dependabot merge.
         uses: gradle/actions/setup-gradle@v6
 
-      # `build`, not just `test`: it also assembles the fat jar, whose doLast verifier fails on
-      # a wrong native payload (see "Building and Running" in CLAUDE.md), and runs the
-      # launcher's tests. `processResources` pulls in buildFrontend, so this compiles the
-      # frontend too — with the Node version Gradle pins, which is not necessarily the one
-      # the Frontend job uses.
+      # `check shadowJar`, not just `test`: `check` runs from the root, so it covers the
+      # launcher's tests as well, and `shadowJar` assembles the fat jar, whose doLast verifier
+      # fails on a wrong native payload (see "Building and Running" in CLAUDE.md). Not `build`:
+      # that adds the dist zips and tars, which nothing here uses. `processResources` pulls in
+      # buildFrontend, so this compiles the frontend too — with the Node version Gradle pins,
+      # which is not necessarily the one the Frontend job uses. With the build cache on
+      # (gradle.properties), a task whose inputs match main's last run is restored, not re-run.
       - name: Build and test
-        run: ./gradlew build --stacktrace
+        run: ./gradlew check shadowJar --stacktrace
 
       - name: Upload test reports
         if: failure()

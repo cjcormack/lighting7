@@ -314,7 +314,7 @@ class CueTriggerManager(
     private fun applyLayerEffectToTarget(
         layer: CookLayer,
         layerEffect: EffectEntry,
-        target: uk.me.cormack.lighting7.models.TargetRef,
+        target: uk.me.cormack.lighting7.models.EffectTargetRef,
         cueId: Int,
         cueStackId: Int?,
         priority: Int,
@@ -322,7 +322,7 @@ class CueTriggerManager(
     ) {
         val effectSpec = layerEffect.toEffectSpec()
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
+            EffectSpawner.resolveTargetForCue(state, target, effectSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed layer on '{}' — target '{}' unresolvable — skipping effect: {}",

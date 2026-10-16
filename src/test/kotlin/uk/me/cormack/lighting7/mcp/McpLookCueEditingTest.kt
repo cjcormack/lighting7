@@ -378,6 +378,34 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `create_cue takes an ad-hoc effect over a selection as one effect`() {
+        patchRig()
+        val targets = """[{"type":"fixture","key":"foh-2"},{"type":"group","key":"Wash"}]"""
+        val effect = """{"targets":$targets,"effectType":"Pulse","category":"dimmer","propertyName":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val cueId = cue("""{"name":"Ripple","adHocEffects":[$effect]}""")
+        transaction(state.database) {
+            val stored = DaoCue[cueId].adHocEffects.single()
+            assertEquals("selection", stored.targetType)
+            assertEquals("""[{"key":"foh-2","type":"fixture"},{"key":"Wash","type":"group"}]""", stored.targetKey)
+        }
+
+        ok("apply_cue", """{"cueId":$cueId}""")
+        val running = state.show.fxEngine.getActiveEffects().single()
+        assertEquals(listOf("foh-2", "hex-1", "hex-2"), state.show.fxEngine.fixtureKeysCoveredBy(running))
+
+        refused(
+            "create_cue",
+            """{"name":"Q","adHocEffects":[{"targets":$targets,"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","blendMode":"OVERRIDE","parameters":{}}]}""",
+            "send targets, or targetType and targetKey",
+        )
+        refused(
+            "create_cue",
+            """{"name":"Q","adHocEffects":[{"targets":[{"type":"selection","key":"x"}],"effectType":"Pulse","category":"dimmer","blendMode":"OVERRIDE","parameters":{}}]}""",
+            "type must be 'fixture' or 'group'",
+        )
+    }
+
+    @Test
     fun `an operator cannot update or delete a look in a venue`() {
         val showId = seedVenueReadyShow(state)
         val venueId = ok("extract_venue", """{"fromProjectId":$showId,"name":"Hall"}""")["venueId"]!!.jsonPrimitive.content.toInt()

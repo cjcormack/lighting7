@@ -40,9 +40,11 @@ import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
+import uk.me.cormack.lighting7.fx.familyForEffectCategory
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.serializeTemplateColourRef
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.fx.templateFamily
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
@@ -403,6 +405,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     request.targets.map { CueTargetDto(it.type, it.key) },
                     request.fadeMs ?: snapshot.fadeDurationMs ?: 0,
                     families,
+                    write = request.write,
                 )
             ) {
                 is ApplyTemplateOutcome.Applied -> call.respond(outcome.response)
@@ -432,9 +435,8 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
             // template has no rows, so the inline copy would have answered null and added an
             // *unmasked* layer — which asserts across every family instead of the effect's own.
             //
-            // Siblingless, always. Exclusivity is the busk page's: a press releases something only
-            // when it goes through a solo bank's pad (`routes/buskPress.kt`). This route serves the
-            // programmer's ⌥click strip and the AI, where two templates on one head are a stack.
+            // No solo siblings: those are a busk bank's (`routes/buskPress.kt`). The family
+            // replacement still runs — `toggle` resolves it for every palette door.
             val found = transaction(state.database) {
                 DaoTemplate.findById(resource.templateId)
                     ?.takeIf { it.project.id == project.id }
@@ -808,6 +810,11 @@ internal data class ApplyTemplateRequest(
      * (`PALETTE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
      */
     val families: List<String>? = null,
+    /**
+     * False resolves without writing anything, answering [ApplyTemplateResponse.values] — the
+     * focused-Look-layer arm, as on the Spread route (apply-model plan D7). Not logged as a press.
+     */
+    val write: Boolean = true,
 )
 
 @Serializable
@@ -828,6 +835,12 @@ internal data class ApplyTemplateResponse(
      * design (see `applyEffectTemplateToProgrammer`).
      */
     val effectIds: List<Long> = emptyList(),
+    /**
+     * Each head's literal for a **value** palette, in the Look row grammar (`PropertyValue.serialize()`)
+     * and on the property it landed on — Spread's answer shape. With `write` false this is all the
+     * route did, and [written] counts what it would have written.
+     */
+    val values: List<SpreadWriteDto> = emptyList(),
 )
 
 @Serializable
@@ -862,8 +875,8 @@ internal data class ToggleTemplateResponse(
      */
     val propertyMask: String? = null,
     /**
-     * How many sibling layers this press took off first — a template group's exclusivity, applied
-     * to layers on the *same* target set. Always 0 on a `removed`, and for an ungrouped template.
+     * How many other palettes' layers this press took the pressed heads off — the palettes of its
+     * family and kind it replaces (apply-model D2, D6). Always 0 on a `removed`.
      */
     val released: Int = 0,
 )
@@ -1495,21 +1508,6 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
     // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
     // this function safe to call whatever the caller has already read.
     templateFamily(rows.sortedBy { it.sortOrder }.map { it.propertyName }, effect?.category)
-
-/**
- * [familyOf] for the registry's cached read — the click door (`applyTemplateToProgrammer`) holds a
- * [TemplateSnapshot], not a row. Same derivation, so a click and a ⌥click of one template test a
- * mask against the same family — with one exception: the snapshot holds only rows whose target
- * parses (`loadTemplateSnapshot` drops a corrupt one), so the two answers can differ for a template
- * whose lowest-ordered row is corrupt, and only for a row the click door would refuse to apply anyway.
- */
-internal fun TemplateSnapshot.familyOf(): PropertyMaskGroup? =
-    templateFamily(rows.map { it.propertyName }, effect?.category)
-
-/** The one derivation behind both `familyOf`s: the first row with a known property, else the effect's category. */
-private fun templateFamily(propertyNamesInOrder: List<String>, effectCategory: String?): PropertyMaskGroup? =
-    propertyNamesInOrder.firstNotNullOfOrNull { TemplateProperty.ofOrNull(it)?.family }
-        ?: effectCategory?.let { familyForEffectCategory(it) }
 
 /**
  * The bundled emitters this template's rows name outright — `TemplateDto.requiredEmitters`.

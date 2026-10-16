@@ -64,6 +64,12 @@ data class FormatVersionJson(
     // as one, and its next wipe-then-export push would write all four away. `minReader` stays at
     // **5** — every field defaults to what an older row meant. See `docs/sync-engineering.md`
     // §"Version 33 — the spread's shape".
+    // v34: one effect over a selection (effects plan session 3, venue-visit R4.3). A `LookEffectJson`
+    // or `CueAdHocEffectJson` may say `targetType: "selection"` with `targetKey` the list's canonical
+    // JSON. The writer's number moves by the sharp-edge rule: a v33 reader would store a target it
+    // cannot spawn, so every cue and Look holding one would skip that effect. `minReader`
+    // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one effect over a
+    // selection".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -280,7 +286,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 33,
+    val formatVersion: Int = 34,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -410,6 +416,7 @@ data class LookRowJson(
 @Serializable
 data class LookEffectJson(
     val uuid: String,
+    /** `fixture`, `group`, `deferred`, or since v34 `selection` (its key the ordered list's canonical JSON). */
     val targetType: String,
     val targetKey: String,
     val effectType: String,
@@ -881,6 +888,7 @@ data class CueLayerJson(
 data class CueAdHocEffectJson(
     val uuid: String,
     val cueUuid: String,
+    /** `fixture`, `group`, or since v34 `selection` (its key the ordered list's canonical JSON). */
     val targetType: String,
     val targetKey: String,
     val effectType: String,

@@ -1,5 +1,6 @@
 import type { ActiveEffect } from '../../store/fixtureFx'
 import type { Fixture } from '../../store/fixtures'
+import { effectAimKeys } from '@/lib/effectTargets'
 
 /**
  * The effect half of the marquee's Backspace: which running effects a cell clear takes with it.
@@ -89,7 +90,7 @@ export function effectsToStop(
   if (cleared.size === 0) return { stop, partial }
   for (const effect of effects) {
     if (!isLocalEffect(effect)) continue
-    const heads = effect.isGroupTarget ? membersOf(effect.targetKey) : [effect.targetKey]
+    const heads = effectAimKeys(effect, membersOf)
     if (heads.length === 0) continue
     let covered = 0
     for (const head of heads) {

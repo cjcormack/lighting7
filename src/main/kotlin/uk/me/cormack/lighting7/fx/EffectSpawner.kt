@@ -4,11 +4,13 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
 import org.slf4j.LoggerFactory
 import java.util.UUID
+import uk.me.cormack.lighting7.show.referenceFixtureFor
 
 /**
  * Turns a stored effect spec into a live [FxInstance] pointed at a live [FxTarget].
@@ -29,14 +31,29 @@ internal object EffectSpawner {
         state: State,
         target: CueTargetDto,
         effectSpec: LookEffectSpec,
+    ): FxTarget? = resolveTargetForCue(state, target.effectTarget, effectSpec)
+
+    fun resolveTargetForCue(
+        state: State,
+        target: EffectTargetRef,
+        effectSpec: LookEffectSpec,
     ): FxTarget? {
         // A recorded row's own `propertyName` wins, and rows recorded while sweep item A11 was live
         // carry `"pan"` for a position effect. The registration's output type is what lets
         // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
         val outputType = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.outputType
-        return when (target.target) {
+        val single = when (target) {
+            is EffectTargetRef.Selection -> {
+                val propertyName = effectSpec.propertyName
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec)
+                    ?: return null
+                return createSelectionTarget(state, target, propertyName, outputType)
+            }
+            is EffectTargetRef.Single -> target.target
+        }
+        return when (single) {
             is TargetRef.Group -> {
-                val group = state.show.fixtures.untypedGroup(target.key)
+                val group = state.show.fixtures.untypedGroup(single.key)
                 val propertyName = effectSpec.propertyName
                     ?: resolveEffectPropertyForCue(effectSpec, group.detectCapabilities())
                     ?: return null
@@ -46,10 +63,23 @@ internal object EffectSpawner {
                 val propertyName = effectSpec.propertyName
                     ?: resolveEffectPropertyForFixtureInCue(effectSpec)
                     ?: return null
-                createFixtureTargetForCue(target.key, propertyName, state, outputType)
+                createFixtureTargetForCue(single.key, propertyName, state, outputType)
             }
         }
     }
+
+    /**
+     * The target for an effect over [selection] (effects plan D3). Never throws for a fixture or
+     * group the selection names that has gone: the engine's expansion skips it, as a group's skips a
+     * member that has.
+     */
+    fun createSelectionTarget(
+        state: State,
+        selection: EffectTargetRef.Selection,
+        propertyName: String,
+        outputType: FxOutputType?,
+    ): FxTarget =
+        FxTargetFactory.forSelection(selection, propertyName, outputType, state.show.fixtures.referenceFixtureFor(selection))
 
     private fun resolveEffectPropertyForCue(
         effectSpec: LookEffectSpec,

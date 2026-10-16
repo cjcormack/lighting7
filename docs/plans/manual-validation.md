@@ -19,6 +19,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R4-3`](#fu-manual-venue-visit-r4-3) | one effect over a hand selection on the rig — eight loose pars and a group of four ripple as one chase in the order picked, a head named twice runs once, and the chase records into a cue and a Look and comes back as one | Venue visit R4.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R4-2`](#fu-manual-venue-visit-r4-2) | the spread's shape on the rig — Spread 50 % tightens a chase into half a cycle, two wings ripple from both ends, blocks of three move as threes, groups of two alternate odd and even, and the editor's dials match what the heads do | Venue visit R4.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
@@ -191,6 +192,35 @@ If a stored locate lands visibly off the spot it was set on, promote it to a `FU
 `followups.md`.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-3`
+
+**What it proves**: *one effect over a selection* — venue-visit R4.3, effects plan session 3 (D3):
+an effect started on a hand selection is one instance spread over it in the order picked, as a
+group's is, rather than heads running in unison.
+
+**Why it is here**: the tests read the expansion's member order and phases off synthetic ticks
+against a mock controller, and the round trips off exported files. Nothing in review watched a chase
+walk across loose fixtures in the order they were marqueed, or a recorded one come back.
+
+**Test**, on Sleeping Beauty, from the programmer:
+
+1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX band
+   shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
+   *Spread* shows eight dials.
+2. **With a group.** Select those eight rows and a group of four below them: one chase, twelve
+   steps, the group's members in the group's own order after the pars. Set Order to *Reverse*: it
+   runs back from the group's last member.
+3. **A head twice.** Add one of the group's members as its own row too: it runs once, at the group's
+   place.
+4. **Record and Include.** Record a cue: its card lists one effect *over* the twelve. Clear, GO the
+   cue: the same chase. Include it into the programmer: one effect again, editable, and Update keeps
+   an edit. Record a Look with the effect ticked: the Look sheet lists it over the selection.
+5. **⌘K.** With the selection standing, ⌘K → *Apply FX* → *On the selection*: one effect over it.
+
+**Time**: 10 minutes.
 
 ---
 

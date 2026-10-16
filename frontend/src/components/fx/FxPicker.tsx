@@ -32,6 +32,7 @@ import { NEW_EFFECT_DIVISION, isOnSeconds } from '@/lib/effectTiming'
 import type { BlendMode } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
+import type { CueTarget } from '@/api/cuesApi'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { normalizeEffectName } from '../busking/buskingTypes'
@@ -44,8 +45,15 @@ import {
   type PickerFamily,
 } from './fxEditorModel'
 
-/** What an effect is started on: one fixture, or a group. */
-export type FxTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
+/**
+ * What an effect is started on: one fixture, a group, or a **selection** — several fixtures and
+ * groups in order, one effect spread over them as a group's members are (effects plan D3). A
+ * selection carries the fixtures it reaches for their properties, and its words for the sheet.
+ */
+export type FxTarget =
+  | { type: 'fixture'; fixture: Fixture }
+  | { type: 'group'; group: GroupSummary }
+  | { type: 'selection'; targets: CueTarget[]; fixtures: Fixture[]; label: string }
 
 /** The effect a picker session started and is auditioning — the one a second tap swaps. */
 export interface AuditionedEffect {
@@ -111,7 +119,9 @@ export function FxPicker({
     (): FxPropertyTarget =>
       target.type === 'fixture'
         ? { type: 'fixture', fixture: target.fixture }
-        : { type: 'group', capabilities: target.group.capabilities, members: groupMemberFixtures(fixtures, target.group.name) },
+        : target.type === 'selection'
+          ? { type: 'group', capabilities: [], members: target.fixtures }
+          : { type: 'group', capabilities: target.group.capabilities, members: groupMemberFixtures(fixtures, target.group.name) },
     [target, fixtures],
   )
   const compatible = useMemo(
@@ -189,7 +199,7 @@ export function FxPicker({
         const request =
           target.type === 'group'
             ? removeGroupFx({ id: running.effectId, groupName: target.group.name })
-            : removeFx({ id: running.effectId, fixtureKey: target.fixture.key })
+            : removeFx({ id: running.effectId, fixtureKey: target.type === 'fixture' ? target.fixture.key : '' })
         await request.unwrap().catch(() => {
           // Reported by errorToastMiddleware; the start below goes ahead.
         })
@@ -197,7 +207,9 @@ export function FxPicker({
       const addition = fxCreateAddition(
         target.type === 'group'
           ? { type: 'group', groupName: target.group.name }
-          : { type: 'fixture', fixtureKey: target.fixture.key },
+          : target.type === 'selection'
+            ? { type: 'selection', targets: target.targets }
+            : { type: 'fixture', fixtureKey: target.fixture.key },
         {
           effectType: entry.name,
           propertyName,
@@ -270,7 +282,7 @@ export function FxPicker({
       {library == null ? (
         <EditorReadout>Reading the effect library…</EditorReadout>
       ) : effects.length === 0 ? (
-        <EditorReadout>Nothing in the library fits this {target.type === 'group' ? 'group' : 'fixture'}.</EditorReadout>
+        <EditorReadout>Nothing in the library fits this {target.type}.</EditorReadout>
       ) : (
         <ul className="flex flex-col gap-0.5" aria-label={`${PICKER_FAMILY_LABELS[family]} effects`}>
           {effects.map((entry) => {

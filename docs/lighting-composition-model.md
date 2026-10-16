@@ -59,7 +59,7 @@ The console-style programmer: a sparse per-(fixture, property) overlay of sticky
 
 Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
 
-The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look`, `apply_palette`'s `LAYER` mode and `create_look`'s `applyToTargets` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
+The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look` and `apply_palette` (each unless `asValues`) and `create_look`'s `applyToTargets` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
 
 **There is exactly one programmer, and it is shared by every client — by design, not by omission.** A second device is a second *window onto one desk*, not a second seat: whoever signs in elsewhere sees this state and may edit it, and the three broadcast frames (`provenanceState`, `programmer.includeTarget`, `programmer.layerState`) exist to keep those windows honest. Concurrent authorship is explicitly not a scenario this desk designs for, which is what spares it a merge rule: `LayerResolver.fallbackFor` returns **one** value per (fixture, property) because DMX is one byte per channel, so two authors would force a "whose value wins?" policy that nothing here expresses — HTP cannot be it (see the line above), and the `Slot.seq` bands are the only extensible axis. Decided 2026-08-23; the reasoning, and two places the cost of the alternative was previously misjudged, are in [`FU-PROG-PER-USER`](plans/followups.md#fu-prog-per-user).
 
@@ -254,6 +254,17 @@ bodies as an inert accepted field only because the frontend still sends it on ev
 ## Layer 3 — Effects
 
 Tempo-synchronised `FxInstance`s that modulate property values each tick. Driven by the Master Clock (24 ticks/beat).
+
+### What an effect runs on
+
+One fixture (or one cell), one group, or a **selection** — an ordered list of fixtures and groups,
+one instance spread over them in that order as a group's members are (effects plan D3). The
+programmer's `+ Effect` and ⌘K *Apply FX* start one over the selection's rows in grid order; Record
+writes it onto a cue or a Look as one effect with its `selection` target, and Include spawns it back
+as one. Only an effect may name a selection: a value row, a layer's targets and a binding name a
+fixture or a group, and the write boundaries refuse anything else. A deferred Look or palette effect
+still fans one instance per target of its layer. The expansion is `docs/fx-engineering.md` §"Over a
+selection".
 
 ### Ordering
 
@@ -532,6 +543,38 @@ reads as unhealthy there, or an effect on a master that is not there and so runs
 the trade both routes make rather than guessing which of the target's records was meant. Neither
 re-validates contents, which already crossed the write boundary once.
 
+### Detach and Apply as values
+
+A press puts on a layer that tracks its record; two gestures take the other road, to values the
+operator owns (apply-model plan §3.5, D1).
+
+**Detach** (`programmer.detachLayer {layerId}`, `ProgrammerLayerStack.detach`) turns a layer into
+Local without the stage moving. The stack is cooked with the layer and without it, and every key the
+two disagree on — the keys it wins, and those a higher layer blends over it — is written as a touched
+`WEB` value at the with-layer value. Under a Locate or a flash the value goes **beneath** that owner
+(`ProgrammerStore.putBeneathTop`), so it is there when the owner lets go; a key the operator's own
+`WEB` value already holds, or a raw channel slot overrides, is left alone (the write never absorbs
+the sideband). A Look's scenery passes into the programmer's own scenery, under what that already
+holds and where no higher Look layer sets it (`ProgrammerScenery.holdUnder`). Its effects lose their
+layer key and source and run on, phase and band priority kept, as Local effects
+(`FxEngine.detachProgrammerLayerEffects`; a spent N-shot is removed, since only a layer keeps one),
+in the same step as the layer comes off, so no concurrent recook retracts them. The recook that
+follows moves nothing the `WEB` slots hold, and nothing is republished for them: each already
+showed its value. One thing does move: a stomping layer's suppression of
+the effects under it ends with it.
+
+**Apply as values** is the same end with no layer ever on the stack. For a palette it is
+`POST /palettes/{id}/apply`, the click described above. For a Look it is `POST /looks/{id}/apply`
+`{targets, families?, fadeMs?}` (`ProgrammerLayerStack.applyAsValues`): the Look cooked on top of
+the stack as the layer a press would add — targets and mask by the toggle's own rules — the keys it
+wins written as `WEB` values at their own fades (or `fadeMs`), its effects started as Local effects
+at the rank that layer would have had, its scenery handed to the programmer's own. Not a toggle.
+
+`POST /palettes/{id}/apply` with `write: false` is the focused-Look arm (D7): the same resolve and
+fan-out, answered as `values` — each head's literal in the Look row grammar, a cell by its element
+key, Spread's `write: false` shape — and nothing written, nor logged as a press. An effect palette
+answers none; its effect joins a Look through `absorb-effects`.
+
 ### A press is recorded, so the desk knows what you reach for
 
 `DaoTemplates.last_pressed_at` is stamped on every press that **applies** a palette, and the
@@ -588,6 +631,26 @@ back to partial on a gesture that says off. The same shape appeared between sibl
 hex-1, Blue on hex-1 and hex-2 kept both, Blue merely winning on stage, so Amber's pad stayed lit
 and releasing Blue popped Amber back onto hex-1.
 
+**A palette replaces its family; a record's top layer widens** (apply-model plan D2, D6, P3). An
+*on* press of a palette takes the pressed heads off every other palette on the stack of the **same
+family and kind** — value palettes off value palettes, effect palettes off effect palettes — so Blue
+on Red's heads leaves Red on the rest, Red pressed back does the same to Blue, and Amber Breathe runs
+over Red rather than replacing it. Looks replace nothing and are replaced by nothing: two Looks on
+one head stack (`FU-PRESS-REPLACE-LOOKS`). `ProgrammerLayerStack.toggle` resolves the replaced set
+itself (`familyReplacements`, from each palette's snapshot), so every door — the toggle routes, a
+busk pad, the MIDI `PressTemplate`, `apply_palette` — gets it without asking, and a solo bank's
+siblings run beside it, never instead (P4). Both count in the answer's `released`. A replacement
+takes off only the heads the palette lands on: a per-fixture palette pressed over heads its rows do
+not name replaces nothing there (`paletteHeads`). A per-fixture palette pressed with no targets
+names its own rows' heads (`pressTargets`, which `pressWouldRelease` asks too), and one already on
+the stack naming none is read as naming them, so both replace and are replaced like any other. Then, when the record's newest layer is the
+**top of the stack** — after the press's own replacements — and carries the press's settings (mask,
+blend, amount, stomp, speed masters, beat-division override), it takes the press's targets beside
+what the subtraction left it, instead of a second layer going on: Red on hex-1 and then on hex-1
+and hex-2 is one layer, the same layer, its effects on hex-1 keeping their phase. With another layer pressed on top in between, it is two, so a widening
+never changes what a higher layer shows. The rule is `fx/LayerPress.kt`, pure over a layer list, so
+the cue editor's press (apply-model §3.6) can share it.
+
 **A group is its fixtures**, throughout. `{group: wash}` and the `{fixture: …}` list of its members
 are one selection written two ways, so every side of every coverage question is expanded first
 (`ProgrammerLayerStack.coverage`): a pad put on the wash is the pad a press with one of its heads
@@ -598,9 +661,11 @@ hand, which is the point. A group the press does not touch keeps its own spellin
 case never splits, and a group that no longer resolves stands for itself rather than covering
 everything or nothing.
 
-One thing stays outside the subtraction: a layer with **empty** targets applies its source's own
+One thing stays outside the subtraction: a **Look's** layer with **empty** targets applies its own
 bound rows, whose fixtures are not in the target list at all, so nothing here can expand it. The
-cook answers that question; a coverage comparison must not guess at it. The exception is a press
+cook answers that question; a coverage comparison must not guess at it. A per-fixture palette's is
+different, since its rows name exactly its heads: it reads as naming them, a subtraction rewrites it
+to the rest, and `appliedState` lights its ring. The exception is a press
 that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
 and takes a sibling's off outright, there being nothing to narrow it to.
 
@@ -658,7 +723,7 @@ one gap left in this family, and it is the FX engine's rather than the fan-out's
 `propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
 the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`,
-`/palettes/{id}/toggle` and `/looks/{id}/toggle`; the MIDI `PressPad` and `PressTemplate` doors
+`/palettes/{id}/toggle`, `/looks/{id}/toggle` and `/looks/{id}/apply`; the MIDI `PressPad` and `PressTemplate` doors
 pass the desk's — `ApplyLook` reads no selection at all, so there is no mask for it to honour). Null
 is every
 attribute, today's press. Under a mask, by kind: a **palette** is one family, so it either lands
@@ -724,8 +789,8 @@ any reshuffle of the page that keeps the bank alive.
 bank is **solo** — the records on its sibling pads in one transaction, then calls the same
 `ProgrammerLayerStack.toggle`
 the `/palettes/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
-`releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, always
-siblingless. A **cue** pad takes or lets go of a **loose hold** (§"Holds and the loose band"),
+`releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, with no
+solo siblings — a palette's family replacement is `toggle`'s own, so it runs on them too. A **cue** pad takes or lets go of a **loose hold** (§"Holds and the loose band"),
 exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
 drawn solid while the press holds it and as an outline while only a stack does.
 

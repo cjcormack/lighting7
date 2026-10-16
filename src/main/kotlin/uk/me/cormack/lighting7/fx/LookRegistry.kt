@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookEffects
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -47,7 +48,8 @@ data class LookRowEntry(
  * [FxInstance.source] instead.
  */
 data class EffectEntry(
-    val target: TargetRef?,
+    /** Null for a deferred effect; a selection (effects plan D3) only on a bound Look effect. */
+    val target: EffectTargetRef?,
     val effectType: String,
     val category: String,
     val propertyName: String?,
@@ -315,7 +317,7 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
     val target = if (targetType == DEFERRED_TARGET_TYPE) {
         null
     } else {
-        TargetRef.ofOrNull(targetType, targetKey) ?: return null
+        EffectTargetRef.ofOrNull(targetType, targetKey) ?: return null
     }
     return EffectEntry(
         target = target,

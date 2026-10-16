@@ -58,6 +58,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
+| [`FU-PRESS-REPLACE-LOOKS`](#fu-press-replace-looks) | Trigger | Look | an operator expects a Look to take another off the same heads outside a solo bank |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
@@ -1110,6 +1111,19 @@ needs to reach it. The cost is entirely in the UI, which would go from two contr
 per property per layer. Recorded rather than silently cut.
 
 **Trigger**: an operator asks for one property of a layer to behave differently from the rest.
+
+### `FU-PRESS-REPLACE-LOOKS`
+
+**A Look pressed over a Look stacks** · Trigger · apply-model plan D6 (venue-visit R3.1)
+
+A palette press takes its heads off every other palette of its family and kind
+(`ProgrammerLayerStack.toggle`'s family replacement), but a Look replaces nothing and is replaced by
+nothing: a Look spans families, so there is no one family to replace within. Two Looks on one head
+stack, the higher winning where they overlap and the lower still lit underneath, as two palettes did
+before D2. A solo bank is the way to make two Looks exclusive today.
+
+**Trigger**: an operator expects pressing one Look to take another off the same heads outside a solo
+bank.
 
 ### `FU-LOOK-NESTED`
 
