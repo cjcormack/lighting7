@@ -61,7 +61,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │         ├─ SelectionProperty → ProgrammerStore, every selected head      │
   │         ├─ SelectTarget / ClearSelection → State.deskSelection           │
   │         ├─ LocateSelection → LocateManager.toggle, per selected target   │
-  │         ├─ CueStackGo / Back / Pause / FireCue → CueStackManager         │
+  │         ├─ CueStackGo / Back / Pause → CueStackManager; FireCue → holds  │
   │         │    (uuid first; a bare int only for a pre-v11 row)             │
   │         ├─ FireTrigger → EffectsService.fireFromSurface (needs the arm)  │
   │         ├─ Flash → L4 write on press, clear on release                   │
@@ -355,7 +355,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `CueStackGo(stackId)` | Button | `CueStackManager.activateAtFirstCue` or `advanceStack(FORWARD)` on press |
 | `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
 | `CueStackPause(stackId)` | Button | `CueStackManager.pauseAutoAdvance(stackId)` |
-| `FireCue(cueId)` | Button | `CueStackManager.fireCue(cueId)` |
+| `FireCue(cueId)` | Button | `CueHolds.toggleLooseCue` — a loose hold on the cue, taken or let go (cue model plan D6) |
 | `FireTrigger(fixtureKey, trigger)` | Button | Fire one tube of a one-shot fixture — the Twin Shot's `output1`, or its label `A` — through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**, like every fire: an unarmed press sends nothing and is announced on every window (`effects.skipped`, source `surface`), as is a spent tube; a blind programmer rehearses it. Fixture-keyed, as `FixtureProperty` is. Health: `missingFixture` with no such patch, `missingProperty` when the fixture has no such trigger — the arm is a fact about this second, never a dead binding. No LED |
 | `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the property cascades to the surviving owner / cue layer / baseline in one publish |
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
@@ -372,7 +372,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `EncoderBankSet(propertyName, colourAxis?)` | Button | `EncoderBankState.set` for the device the button is on; LED lit while that property **and** axis are the device's encoder bank. Health `unknownProperty` when no patched fixture can take it |
 | `ApplyLook(lookUuid)` | Button | `ProgrammerLayerStack.toggle` on the Look's **own fixtures** — `resolveLookToggleTargets` with no targets, never the desk selection. LED lit while the Look has any layer on the stack (selection-independent, `AppliedSource.targets.isNotEmpty()`). A Look with a **deferred effect** has no own targets, so it is refused at bind time (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one after |
 | `PressTemplate(templateUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, siblingless. A *generic* palette with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
-| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring: `appliedState` for a palette or Look pad, the stack's live cue for a cue pad |
+| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring: `appliedState` for a palette or Look pad; for a cue pad, lit while a press holds the cue loose (`CueHolds.looseHeld`, `cueLooseHeldProvider`) — what the next press lets go of — and dark while only a stack holds it |
 | `PickUpPad(padUuid)` | Button | The record on that pad into the desk's **hand**, stamped `SelectionSource.SURFACE` — the surface door of `hand.pickUp` (multi-screen plan §3.5). A pad, not a record, because a pad is the address a button already carries and what it picks up is exactly what it would otherwise press. The pick-up replaces whatever was held. Health `missingPad`. No LED |
 | `HandPlaceInBank(bankUuid)` | Button | Place whatever the hand holds as a pad on that bank, through the **same append** `POST /busk/banks/{bankId}/pads` makes, then let go. An empty hand is a dropped press. The drop is conditional on the append succeeding, so a refused place leaves the item in the hand. Health `missingBank`. No LED |
 | `HandDrop` | Button | `HandState.drop()`; a no-op on an empty hand. Addresses nothing, so it can never be dead. No LED |
@@ -613,7 +613,7 @@ can show. It is the one place in this class where the compiler is not the safety
 | Grand Master fader / toggle | Same as Blackout | **post-composition scale** | The level multiplies the same channels; a strobe is cut only at 0 |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
 | Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI; uuid resolved to the project's row first |
-| Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
+| Fire cue | `CueHolds.toggleLooseCue` | *(Layer 4)* | |
 | Fire trigger | `EffectsService.fireFromSurface` | **above composition, under park** (`TriggerOutput`) | A ~300 ms pulse on the tube's channel, only while the desk is armed; never a value, so no layer holds it |
 | Fader → SelectionProperty | `ProgrammerWriter.writeProperties` (owner `surface`) | **Layer 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
 | Select / Clear button | `State.deskSelection` | *(no layer — the desk's selection)* | What the next selection-relative move acts on |

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -73,7 +74,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
     private suspend fun activate(client: HttpClient, stackId: Int, cueId: Int? = null): CueStackActivateResponse =
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cueId))
+            setBody(ActivateCueStackRequest(entryId = cueId?.let { state.entryIdOf(it) }))
         }.body()
 
     private suspend fun stack(client: HttpClient, stackId: Int): CueStackDetails =
@@ -154,20 +155,21 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         val stackId = createStack(client, "Act 1")
         val cueId = createRowsOnlyCue(client, "warm wash", stackId, 128)
 
-        // The pad's fire: apply routes through the stack manager, so the stack is genuinely
-        // active and the cue's rows are live on Layer 4 — with no effect ever existing.
+        // The pad's fire: a loose hold (cue model plan D6) — the cue's rows are live on Layer 4,
+        // with no effect ever existing, and its stack is not started.
         val applyResp = client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
         assertEquals(HttpStatusCode.OK, applyResp.status, applyResp.bodyAsText())
-        assertEquals(cueId, stack(client, stackId).activeCueId)
+        assertTrue(state.show.cueStackManager.holds.looseHeld(cueId), "the pad holds the cue loose")
+        assertNull(stack(client, stackId).activeCueId, "and names no stack")
         assertTrue(
             cueId in state.show.fxEngine.cueLayer.activeCueIds(),
             "the rows-only cue's assignments are live",
         )
 
-        // The pad's stop: takes the stack-deactivate branch and clears Layer 4.
+        // The pad's stop: lets the loose hold go, its last, which clears Layer 4.
         val stopResp = client.post("/api/rest/projects/$projectId/cues/$cueId/stop")
         assertEquals(HttpStatusCode.OK, stopResp.status, stopResp.bodyAsText())
-        assertNull(stack(client, stackId).activeCueId, "the playhead reads dark again")
+        assertFalse(state.show.cueStackManager.holds.isHeld(cueId))
         assertFalse(
             cueId in state.show.fxEngine.cueLayer.activeCueIds(),
             "the rows-only cue's assignments are gone",

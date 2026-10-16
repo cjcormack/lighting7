@@ -194,7 +194,7 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
 `INCLUDE`-owned slots and programmer-band effects, and returns the fixture keys for the sheet to
 select (MagicQ's "Select Heads on Include"). Two details earn their keep: an FX child the cue is
 already running is *not* re-spawned (there is no FX-vs-FX suppression, so a band duplicate would
-double-apply), and spawned instances leave `cueId` null so `removeEffectsForCue` can't sweep the
+double-apply), and spawned instances leave `cueId` null so `removeCueEffects` can't sweep the
 operator's programmer out from under them when the cue stops. A cue's or Look's **own scenery
 rows** go into the programmer's scenery overlay with them (D8), each replacing what the overlay held
 on that element, a cue row's `transitionMs` kept beside the held state so Update writes it back on
@@ -343,7 +343,7 @@ given the **identical** `priority` and `fadeWeight`. The result was a rule nobod
 
 `buildCueAssignmentsForPreset`'s KDoc claimed the opposite — "the sort order alone decides
 (last-write-wins for OVERRIDE blend)". That described the *FX* layer, which is a genuine
-last-applied-wins sequential fold, and two mechanisms in one `applyCue` were doing opposite things.
+last-applied-wins sequential fold, and two mechanisms in one apply path were doing opposite things.
 The cook step replaced all of it with **one rule for every category: later layers win, and the cue's
 own rows win over all of them**. Across cues, HTP still governs intensity — which is the pairing an
 operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE` exists.
@@ -351,6 +351,31 @@ operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE`
 ### Fade weight
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.
+
+Fade weights are per **cue**, so a cue two holds keep live is one contributor at one weight (D3):
+a GO onto a cue another stack already holds does not fade it in again, and a stack moving off a
+cue a press still holds does not fade it out.
+
+### Holds and the loose band
+
+What makes a cue a Layer 4 contributor is a **hold** (cue model plan P3, `fx/CueHolds.kt`;
+`cue-stacks-engineering.md` §"Holds"): a running stack whose live entry names it
+(`Stack(stackId, entryId)`), or a press with no stack behind it (`Loose(seq)`) — `/cues/{id}/apply`,
+`apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue` and the hand. A cue comes on with its first
+hold and off with its last, and every hold in between only moves its **priority**, which is its
+highest hold's:
+
+| Hold | Priority | Ordering |
+| --- | --- | --- |
+| a stack's entry | `stackId × 1 000 000 + position × 1 000 + 1` | later stacks above earlier, later entries above earlier |
+| a loose press | `LOOSE_BAND + seq` (`2 000 000 000 +`) | above every stack; the newest press on top (D10) |
+| the programmer's own effects | `PROGRAMMER_FX_PRIORITY_BASE` and up | above every cue, loose or not |
+
+So a busk cue pad pressed over a running stack wins every LTP property its cue asserts (HTP
+intensity still takes the highest level), the stack composes underneath it unchanged, and letting the
+press go hands the property back with nothing re-fired. Two presses rank newest first; pressing an
+older one again makes it the newest. Priority decides only LTP: for a dimmer, both cues' levels fold
+by `max` whatever their bands.
 
 ### A bundled emitter's own row beats the colour's copy
 
@@ -700,8 +725,9 @@ bank is **solo** — the records on its sibling pads in one transaction, then ca
 `ProgrammerLayerStack.toggle`
 the `/palettes/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
 `releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, always
-siblingless. A **cue** pad is apply / stop through `CueStackManager`, exactly as a cue slot
-presses: a toggle, lit from its stack's `activeCueId`, live without being the playhead.
+siblingless. A **cue** pad takes or lets go of a **loose hold** (§"Holds and the loose band"),
+exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
+drawn solid while the press holds it and as an outline while only a stack does.
 
 **Solo has one meaning for every kind** (D6): pressing one pad *on* turns its siblings off. A layer
 sibling under a layer press is narrowed on the pressed heads by `toggle`'s own rule — the per-target
@@ -1224,7 +1250,7 @@ winning row supplies the value, the attribution and the fade. A palette's fade s
 rather than the row, so every row of one palette moves together.
 
 **Arrival, not every publish.** Only a publish that puts a source *on stage* may ramp: a cue GO
-(`applyCue`, and `CueStackManager` on the snap path), a timed layer firing
+(a cue's first hold on the snap path, `CueHolds.acquire` — a GO or a loose press), a timed layer firing
 (`CueTriggerManager`), and `add` / Include on the programmer's layer stack. Everything else snaps,
 each for its own reason:
 

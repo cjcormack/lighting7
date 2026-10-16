@@ -59,8 +59,9 @@ export function SlotItemContent({
 /**
  * How a lit tile looks, by what it holds — two different claims, so two different faces.
  *
- * A live **cue** keeps the overlay's own shipped fill: this cue is its stack's live cue, a fact
- * about the show. A **Look** on the rig is a *layer this tile would remove*, so it borrows the busk
+ * A **cue** draws D11's two looks (cue model plan): the overlay's own fill while a press holds it
+ * loose — what the tile's next tap lets go of — and an outline (`outlined`) while only a stack holds
+ * it, which a tap takes loose. A **Look** on the rig is a *layer this tile would remove*, so it borrows the busk
  * pad's presence vocabulary — literally, through [padPresenceClass], rather than by hand. It was
  * hand-rolled first and had already drifted a shade from the pad's `all` state; a shared function
  * is the only version of "one dialect" that stays true.
@@ -68,7 +69,7 @@ export function SlotItemContent({
  * A slot has no selection, so a Look is either present or it is not — `'all'` or `'none'`; the pad's
  * middle rung has no meaning here. The corner pip is the tile's own.
  */
-export function slotLitClass(itemType: CueSlot['itemType'], lit: boolean): string {
-  if (!lit) return ''
+export function slotLitClass(itemType: CueSlot['itemType'], lit: boolean, outlined = false): string {
+  if (!lit) return outlined && itemType === 'cue' ? 'border-primary/80' : ''
   return itemType === 'cue' ? 'border-primary bg-primary/20' : padPresenceClass('all')
 }

@@ -4,9 +4,9 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.telemetry.TraceSampling
 import uk.me.cormack.lighting7.telemetry.Tracing
-import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.*
@@ -19,7 +19,15 @@ private val logger = LoggerFactory.getLogger("CueStackManager")
 /**
  * Manages runtime state for active cue stacks.
  *
- * Tracks which cue is active in each stack and handles auto-advance timers.
+ * Tracks which entry is live in each stack and handles auto-advance timers. The entry is the
+ * playback key (cue model plan P2): a stack's live entry, its standby, a GO TO, a preview and an
+ * activate all name one, so a cue twice in one stack (D7) is never ambiguous.
+ *
+ * What a cue's contribution does on stage is **not** this class's call: a stack's live entry is a
+ * *hold* on its cue, and [holds] — the hold registry, `fx/CueHolds.kt` — decides when a cue comes on,
+ * goes off and at what priority it composes (P3, D3). A GO from entry *a* to entry *b* is
+ * `acquire(cue(b), Stack(s, b))` then `release(cue(a), Stack(s, a))`, sharing one crossfade; a cue
+ * another hold still keeps live stays on stage while this stack moves on.
  *
  * Supports Layer 4 property-assignment crossfades: when a cue has `fadeDurationMs`
  * configured, its outgoing and incoming Layer 4 assignments crossfade using per-cue
@@ -27,34 +35,32 @@ private val logger = LoggerFactory.getLogger("CueStackManager")
  * (outgoing removed, incoming start at full intensity) — matching Eos / grandMA / Hog 4.
  * Auto-advance and crossfade are per-cue settings.
  *
- * The CueStackManager does NOT own the effects — it delegates to [FxEngine]
- * for effect lifecycle. Effects belonging to a stack are tagged with both
- * `cueId` and `cueStackId` on [FxInstance].
- *
  * Two halves of cue-stack running live next door rather than here, because neither needs the
  * firing machinery and both were making this class hard to read:
  * - [CueCrossfadeDriver] ticks the Layer 4 fade envelope (`crossfades`).
  * - [CueRunStateTracker] owns standby arming, the definition of "next", and the [CueRunState]
  *   broadcast ([runState]).
- *
- * What is left is the firing path: read the cue, spawn its effects, publish its Layer 4, and
- * keep the per-stack live-cue and auto-advance bookkeeping the other two read through
- * [LiveStacks].
  */
 class CueStackManager(
     private val fxEngine: FxEngine,
+    projectId: Int? = null,
+    /** Where the registry's frames go — `State.cueHoldsFrame`, which outlives this show. */
+    holdsSink: MutableStateFlow<CueHolds.Frame> = MutableStateFlow(CueHolds.Frame.EMPTY),
+    /** After every hold change: the surfaces' cue-pad LEDs. */
+    onHoldsChanged: () -> Unit = {},
 ) {
     private data class ActiveStackState(
         val stackId: Int,
-        var activeCueId: Int,
+        val activeEntryId: Int,
+        val activeCueId: Int,
         var autoAdvanceJob: Job? = null,
         // The live cue's fade / auto-advance configuration, copied at activation so
         // [CueRunStateTracker.runStateFor] can describe the stack without going back to the DB.
         var fadeDurationMs: Long? = null,
         var autoAdvance: Boolean = false,
         var autoAdvanceDelayMs: Long? = null,
-        // When the live cue's crossfade started, or null when the cue snapped (no outgoing
-        // cue to fade out of, so the configured fade time never ran). Never cleared once set —
+        // When the live cue's crossfade started, or null when nothing faded (no outgoing cue, or a
+        // GO between two holds of cues that were already on and stay on). Never cleared once set —
         // [CueRunStateTracker.runStateFor] treats an elapsed time past the duration as "settled".
         var fadeStartedAtMs: Long? = null,
     )
@@ -65,6 +71,7 @@ class CueStackManager(
     private val liveStacks = object : LiveStacks {
         override fun liveStack(stackId: Int): LiveStack? = activeStacks[stackId]?.let {
             LiveStack(
+                activeEntryId = it.activeEntryId,
                 activeCueId = it.activeCueId,
                 fadeDurationMs = it.fadeDurationMs,
                 fadeStartedAtMs = it.fadeStartedAtMs,
@@ -85,237 +92,113 @@ class CueStackManager(
     /** Layer 4 crossfade envelopes. Owns its own per-stack table — see [CueCrossfadeDriver]. */
     private val crossfades = CueCrossfadeDriver(fxEngine)
 
+    /** What holds each cue live — stacks and loose presses alike. See [CueHolds]. */
+    val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged)
+
     enum class AdvanceDirection { FORWARD, BACKWARD }
 
     data class ActivateResult(
         val stackId: Int,
+        val entryId: Int,
         val cueId: Int,
         val cueName: String,
         val effectCount: Int,
     )
 
     /**
-     * Activate a cue within a stack.
+     * GO to entry [entryId] of stack [stackId] (cue model plan P2).
      *
-     * 1. Cancel any in-flight crossfade and remove outgoing effects (effects always snap)
-     * 2. Apply the cue's effects (tagged with both cueId and cueStackId) and Layer 4
-     *    assignments (at weight 0 if crossfading, 1 otherwise)
-     * 3. Start Layer 4 crossfade coroutine if configured
-     * 4. Start auto-advance timer if configured
+     * 1. Cancel any in-flight crossfade on the stack and the auto-advance timer
+     * 2. Take the incoming entry's hold on its cue — on the cue's first hold that spawns its effects
+     *    and Layer 4 (at weight 0 if crossfading), its timers, triggers and events ([CueHolds.acquire])
+     * 3. Let the outgoing entry's hold go — on the cue's last hold that removes its effects and
+     *    either drops its Layer 4 or leaves it for the crossfade ([CueHolds.release])
+     * 4. Start the Layer 4 crossfade over whichever side really moved
+     * 5. Start the incoming entry's auto-advance timer if configured
+     *
+     * When both entries name the same cue (D7) nothing on stage moves, and the follow timer is the
+     * incoming entry's. [fireEvents] false (GO BACK, a reload) fires no events (D15).
      */
-    fun activateCueInStack(
+    fun activateEntry(
         state: State,
         stackId: Int,
-        cueId: Int,
+        entryId: Int,
         scope: CoroutineScope = GlobalScope,
         fireEvents: Boolean = true,
     ): ActivateResult {
         val started = System.nanoTime()
         return Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
             span?.setData("cue.stack_id", stackId)
-            span?.setData("cue.id", cueId)
-            activate(state, stackId, cueId, scope, fireEvents)
+            span?.setData("cue.entry_id", entryId)
+            activate(state, stackId, entryId, scope, fireEvents)
         }.also { DeskMetrics.global.cueGo.record((System.nanoTime() - started) / 1_000_000.0) }
     }
 
     private fun activate(
         state: State,
         stackId: Int,
-        cueId: Int,
+        entryId: Int,
         scope: CoroutineScope,
         fireEvents: Boolean,
     ): ActivateResult {
-        // Read cue data from DB
         val cueData = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
             if (stack.type == CueStackType.SEPARATOR.name) {
                 throw IllegalArgumentException("Cannot activate a separator")
             }
-            val cue = DaoCue.findById(cueId)
-                ?: throw IllegalArgumentException("Cue not found: $cueId")
-            // The caller names the stack (cue model plan P7); the entry that places the cue in it
-            // is where the GO lands — its position, its number and its follow. A marker is an
-            // entry with no cue, so a cue id can never name one.
-            val entry = entryInStack(stackId, cueId)
-                ?: throw IllegalArgumentException("Cue $cueId does not belong to stack $stackId")
-
-            // The one builder. This used to be a hand-rolled second construction, and `layers`
-            // — added later, to the other one — was inert on this path, the primary firing path,
-            // for a whole session. See `buildCueApplyData`.
+            // The caller names the stack and the entry (cue model plan P2, P7): its position, its
+            // number and its follow are where the GO lands. A marker names no cue and is never gone to.
+            val entry = DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stackId }
+                ?: throw IllegalArgumentException("Entry $entryId is not in stack $stackId")
+            val cue = entry.cue
+                ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be gone to")
+            // The one builder — see `buildCueApplyData`.
             buildCueGoData(cue, entry)
         }
 
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
-        // outgoing cue's Layer 4 assignments, so the new activation starts clean.
-        crossfades.cancel(stackId)
+        // outgoing cue's Layer 4 rows unless a hold has it again, so the new activation starts clean.
+        crossfades.cancel(stackId, holds::isHeld)
         val existingState = activeStacks[stackId]
         existingState?.autoAdvanceJob?.cancel()
 
-        val outgoingCueId = existingState?.activeCueId
-
         val fadeDurationMs = cueData.fadeDurationMs ?: 0L
-        // Governs Layer 4 assignments only — effects always snap (see
-        // `removeEffectsForCueStack` below).
-        val useCrossfade = fadeDurationMs > 0 && outgoingCueId != null
-
-        // Deactivate triggers for the outgoing cue (stop recurring triggers, etc.)
-        if (outgoingCueId != null) {
-            state.cueTriggerManager.deactivateTriggersForCue(outgoingCueId)
-            if (!useCrossfade) {
-                // Snap path: drop outgoing Layer 4 immediately. Crossfade path keeps
-                // assignments live and ticks the weight down — removal happens at end-of-crossfade.
-                fxEngine.cueLayer.removeAssignments(outgoingCueId)
-            }
+        // A GO onto the entry the stack is already on is a deliberate re-fire (the activate route's
+        // word). Its outgoing and incoming holds are the same key, so the order below would restamp
+        // the hold and then release it — taking the cue off while the stack reports it live. So the
+        // re-fire lets its hold go first and takes it again, snapping: the cue re-fires when this
+        // was its only hold, and only restamps while another stack or a press still holds it.
+        val refire = existingState?.activeEntryId == entryId
+        if (refire) {
+            holds.release(state, existingState.activeCueId, CueHold.Stack(stackId, entryId), CueHolds.Departure.SNAP)
         }
+        // Governs Layer 4 assignments only — effects always snap.
+        val useCrossfade = fadeDurationMs > 0 && existingState != null && !refire
 
-        // Outgoing effects always snap off, regardless of crossfade.
-        fxEngine.removeEffectsForCueStack(stackId)
-
-        // 2. Apply cue effects
-        //
-        // Instances are collected and handed to `addEffects` in one go: adding them one at a
-        // time rebuilt the sorted snapshots and re-broadcast the whole active-effect list per
-        // effect, which is O(N²) for a cue of any size (sweep item C7). List order is still
-        // spawn order, so layer order still decides composition.
-        val spawning = mutableListOf<FxInstance>()
-
-        val (immediateAdHoc, timedAdHoc) = cueData.adHocEffects.partition {
-            it.delayMs == null && it.intervalMs == null
-        }
-
-        // One cook for the whole activation (sweep item C8). The effects go up here and the rows
-        // are published further down, but both halves come out of this single pass: the stack is
-        // walked once, and — the part that is a correctness argument rather than a speed one — each
-        // Look snapshot is read once, so a Look edited between the two reads can no longer put its
-        // rows and its effects on stage from different versions of itself.
-        //
-        // `localRows` is hoisted with it. It is a pure read of the cue's own rows, so computing it
-        // here rather than beside the publish changes nothing but the order of its warnings.
-        //
-        // Note this path previously called `buildCueAssignmentsForCue` *alone*, so an immediate
-        // preset's property assignments never reached Layer 4 on a stack GO — unlike `applyCue`,
-        // which concatenated both. Routing both paths through the cook fixes that asymmetry.
-        val cooked = Tracing.span("cue.compose") {
-            val localRows = buildCueAssignmentsForCue(state.show.fixtures, cueData)
-            CueComposer.cookAll(
-                fixtures = state.show.fixtures,
-                cueId = cueData.cueId,
-                priority = cueDerivedPriority(cueData),
-                layers = cueData.layers,
-                localRows = localRows,
-                resolveLook = state.show.lookRegistry::snapshot,
-                resolveTemplate = state.show.templateRegistry::snapshot,
+        // The incoming entry's hold first, then the outgoing's: a GO between two entries of one cue
+        // then never lets it go, and nothing on stage moves.
+        val incoming = holds.acquire(
+            state, cueData, CueHold.Stack(stackId, entryId), cueDerivedPriority(cueData),
+            arrival = if (useCrossfade) CueHolds.Arrival.FADE_IN else CueHolds.Arrival.SNAP,
+            scope = scope, fireEvents = fireEvents, stackTag = stackId,
+        )
+        val outgoing = existingState?.takeIf { !refire }?.let {
+            holds.release(
+                state, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId),
+                if (useCrossfade) CueHolds.Departure.FADE_OUT else CueHolds.Departure.SNAP,
             )
         }
+        // Only the side that really moved fades: an incoming cue already held elsewhere is at full,
+        // an outgoing cue still held elsewhere stays at full.
+        val incomingFades = useCrossfade && incoming.first && incoming.hasRows
+        val outgoingFades = useCrossfade && outgoing?.fadingRows == true
 
-        Tracing.span("cue.spawn") { span ->
-            // Spawn the layers' effects, in layer order — see [CueComposer.cookEffects] for why
-            // spawn order alone is enough to make layer order the composition order.
-            for ((layer, lookEffect, target) in cooked.effects) {
-                val effectSpec = lookEffect.toEffectSpec()
-                val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
-                } catch (e: Exception) {
-                    logger.warn(
-                        "cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}",
-                        cueData.cueId, layer.source.name, target.key, e.message,
-                    )
-                    null
-                } ?: continue
-
-                val instance = EffectSpawner.createEffectInstanceOrNull(
-                    effectSpec, fxTarget, state = state,
-                    context = "cue ${cueData.cueId}: layer on '${layer.source.name}'",
-                    overrideSpeedMasterUuid = layer.speedMasterUuid,
-                    overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-                ) ?: continue
-                instance.cueId = cueData.cueId
-                instance.cueStackId = stackId
-                // The whole source, kind included: a template layer owns effects now (D5), and
-                // `FxInstance.lookId` derives the Look-only id from this.
-                instance.source = layer.source
-                instance.cueLayerId = layer.layerId
-                spawning += instance
-            }
-
-            // Apply immediate ad-hoc effects
-            for (adHoc in immediateAdHoc) {
-                val target = CueTargetDto(adHoc.target)
-                val adHocEffectSpec = LookEffectSpec(
-                    effectType = adHoc.effectType,
-                    category = adHoc.category,
-                    propertyName = adHoc.propertyName,
-                    beatDivision = adHoc.beatDivision,
-                    blendMode = adHoc.blendMode,
-                    distribution = adHoc.distribution,
-                    phaseOffset = adHoc.phaseOffset,
-                    elementMode = adHoc.elementMode,
-                    elementFilter = adHoc.elementFilter,
-                    stepTiming = adHoc.stepTiming,
-                    parameters = adHoc.parameters,
-                    speedMasterUuid = adHoc.speedMasterUuid,
-                    rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
-                    seconds = adHoc.seconds,
-                    size = adHoc.size,
-                    direction = adHoc.direction,
-                    nShot = adHoc.nShot,
-                )
-                val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
-                } catch (e: Exception) {
-                    logger.warn(
-                        "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
-                        cueData.cueId, adHoc.targetKey, e.message,
-                    )
-                    null
-                } ?: continue
-
-                val instance = EffectSpawner.createEffectInstanceOrNull(
-                    adHocEffectSpec, fxTarget, state, "cue ${cueData.cueId}: ad-hoc effect on '${adHoc.targetKey}'",
-                ) ?: continue
-                instance.cueId = cueData.cueId
-                instance.cueStackId = stackId
-                spawning += instance
-            }
-
-            fxEngine.addEffects(spawning)
-            span?.setData("cue.effects", spawning.size)
-        }
-        val effectCount = spawning.size
-
-        // Apply Layer 4 for the incoming cue, from the cook hoisted above. Under crossfade the
-        // incoming starts at weight 0 atomically with the insert; `CueCrossfadeDriver` ticks it up
-        // from there. Stomp runs off the same assignments so HTP/LTP and stomp overlap agree.
-        val incomingStartWeight = if (useCrossfade) 0.0 else 1.0
-        if (cooked.values.rows.isNotEmpty()) {
-            fxEngine.cueLayer.setAssignments(
-                cueData.cueId, cooked.values.rows, incomingStartWeight, cueStackId = stackId,
-                stompSuppression = cooked.values.stompSuppression,
-                // An arrival, so the rows' own fades time it — **unless** the cue is crossfading in,
-                // where the cue-level fade is already the transition and this publish only lands
-                // the weight-0 frame a tick later overwrites. The two never compound on one key.
-                honourRowFades = !useCrossfade,
-            )
-        } else {
-            fxEngine.cueLayer.removeAssignments(cueData.cueId)
-        }
-        // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
-        // `useCrossfade` already implies `outgoingCueId != null`, and the compiler smart-casts on it.
-        if (useCrossfade && cooked.values.rows.isNotEmpty()) {
-            fxEngine.cueLayer.updateFadeWeights(mapOf(outgoingCueId to 1.0))
-        }
-        if (cueData.stomp) {
-            fxEngine.stompForCue(
-                cueData.cueId,
-                buildStompOverlap(state.show.fixtures, cueData, cooked.values),
-            )
-        }
-
-        // 4. Update active state. The GO consumed any armed standby — the next one is
-        // positional again until an operator arms another.
+        // Update active state. The GO consumed any armed standby — the next one is positional again
+        // until an operator arms another.
         activeStacks[stackId] = ActiveStackState(
             stackId = stackId,
+            activeEntryId = entryId,
             activeCueId = cueData.cueId,
             fadeDurationMs = cueData.fadeDurationMs,
             autoAdvance = cueData.autoAdvance,
@@ -323,12 +206,11 @@ class CueStackManager(
             // Only a real crossfade has elapsed time to report. On the snap path the cue is
             // already at full level, and a non-null start would have every client animate a
             // fade that never happened.
-            fadeStartedAtMs = if (useCrossfade) System.currentTimeMillis() else null,
+            fadeStartedAtMs = if (incomingFades || outgoingFades) System.currentTimeMillis() else null,
         )
         runState.consumeStandby(stackId)
 
-        // 5. Start crossfade or finalize
-        if (useCrossfade) {
+        if (incomingFades || outgoingFades) {
             val easingCurve = try {
                 EasingCurve.valueOf(cueData.fadeCurve)
             } catch (_: Exception) {
@@ -336,73 +218,47 @@ class CueStackManager(
             }
             crossfades.start(
                 stackId = stackId,
-                outgoingCueId = outgoingCueId,
-                incomingCueId = if (cooked.values.rows.isNotEmpty()) cueData.cueId else null,
+                outgoingCueId = existingState.activeCueId.takeIf { outgoingFades },
+                incomingCueId = cueData.cueId.takeIf { incomingFades },
                 durationMs = fadeDurationMs,
                 easingCurve = easingCurve,
                 scope = scope,
             )
         }
 
-        // 6. Activate timed effects (delayed/recurring presets and ad-hoc effects)
-        if (cueData.layers.any { it.enabled && it.isTimed } || timedAdHoc.isNotEmpty()) {
-            state.cueTriggerManager.activateTimedEffectsForCue(
-                cueId = cueData.cueId,
-                cueStackId = stackId,
-                priority = cueDerivedPriority(cueData),
-                cueData = cueData,
-                timedAdHocEffects = timedAdHoc,
-                scope = scope,
-            )
-        }
-
-        // 7. Activate script triggers for the new cue
-        if (cueData.triggers.isNotEmpty()) {
-            state.cueTriggerManager.activateTriggersForCue(
-                cueId = cueData.cueId,
-                cueStackId = stackId,
-                triggers = cueData.triggers,
-                scope = scope,
-            )
-        }
-
-        // 8. Start auto-advance timer if configured
+        // The incoming entry's follow, even when it names the cue that was already live (D7).
         if (cueData.autoAdvance && cueData.autoAdvanceDelayMs != null) {
             scheduleAutoAdvance(state, stackId, cueData.autoAdvanceDelayMs, scope)
         }
 
-        // Every activation path lands here — REST, the MIDI surface, a cue-edit live apply and
-        // the auto-advance timer — so this is the one place that has to tell the other sessions.
+        // Every activation path lands here — REST, the MIDI surface and the auto-advance timer —
+        // so this is the one place that has to tell the other sessions.
         runState.publishRunState(state, stackId, transition = true)
-        // And the scenery: the stack's set and its cues down to this one, tracked from the top of
-        // the list, with this cue's own changes moving on their clocks (stage-view plan session 8).
-        Tracing.span("scenery.resolve") { state.sceneryService.onCueLive(stackId, cueData.cueId) }
-        // And its events: fired on GO into this cue only, while armed, at their offsets — scheduled
-        // here and never waited on (stage-view plan session 9). Not on a GO BACK, which steps back
-        // into a cue rather than going to it.
-        if (fireEvents) Tracing.span("cue.events") { state.effectsService.onCueGo(cueData.cueId, cueData.cueLabel, cueData.goEvents) }
+        // And the scenery: the stack's set and its entries down to this one, tracked from the top
+        // of the list, with this cue's own changes moving on their clocks (stage-view plan session 8).
+        Tracing.span("scenery.resolve") { state.sceneryService.onEntryLive(stackId, entryId, cueData.cueId) }
 
         return ActivateResult(
             stackId = stackId,
+            entryId = entryId,
             cueId = cueData.cueId,
             cueName = cueData.cueName,
-            effectCount = effectCount,
+            effectCount = incoming.effectCount,
         )
     }
 
     /**
-     * Advance to the next or previous cue in a stack.
+     * Advance to the next or previous entry in a stack.
      *
-     * FORWARD fires whatever [effectiveNextCueId] names — the armed standby when there is one,
-     * else the positional next. That's the point of the standby living here: a client no longer
-     * has to choose between `advance` and `go-to` depending on what it thinks is armed, and the
-     * MIDI surface's GO fires the same cue the tablet has on deck.
+     * FORWARD fires whatever [CueRunStateTracker.effectiveNext] names — the armed standby when
+     * there is one, else the positional next. That's the point of the standby living here: a client
+     * no longer has to choose between `advance` and `go-to` depending on what it thinks is armed,
+     * and the MIDI surface's GO fires the same entry the tablet has on deck.
      *
-     * Only STANDARD cues are candidates for advancement — MARKERs are skipped.
-     * Respects the stack's loop setting. If at the end and not looping,
-     * stays on the current cue.
+     * Only cue entries are candidates — markers are skipped. Respects the stack's loop setting. If
+     * at the end and not looping, stays on the current entry. BACKWARD fires no events (D15).
      *
-     * @return The result of activating the next cue, or null if the stack has no STANDARD cues
+     * @return The result of activating the next entry, or null if the stack has no cue entries
      */
     fun advanceStack(
         state: State,
@@ -413,64 +269,57 @@ class CueStackManager(
         val currentState = activeStacks[stackId]
             ?: throw IllegalStateException("Stack $stackId is not active")
 
-        val nextCueId = transaction(state.database) {
+        val next = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
 
-            val orderedCues = runState.orderedStandardCueIds(stackId)
-            if (orderedCues.isEmpty()) return@transaction null
+            val ordered = runState.orderedCueEntries(stackId)
+            if (ordered.isEmpty()) return@transaction null
 
             // FORWARD is the shared "next" rule — armed standby, else positional — so a GO
-            // fires exactly the cue every session has on deck. At a boundary of a non-looping
-            // stack, stay on the current cue.
+            // fires exactly the entry every session has on deck. At a boundary of a non-looping
+            // stack, stay on the current entry.
             when (direction) {
-                AdvanceDirection.FORWARD -> runState.nextCueIdFrom(
-                    activeCueId = currentState.activeCueId,
+                AdvanceDirection.FORWARD -> runState.nextFrom(
+                    activeEntryId = currentState.activeEntryId,
                     stackId = stackId,
-                    ordered = orderedCues,
+                    ordered = ordered,
                     loop = stack.loop,
                 )
-                AdvanceDirection.BACKWARD -> runState.positionalCueId(
-                    orderedCues, currentState.activeCueId, direction, stack.loop,
+                AdvanceDirection.BACKWARD -> runState.positional(
+                    ordered, currentState.activeEntryId, direction, stack.loop,
                 )
-            } ?: currentState.activeCueId
-        }
+            } ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
+        } ?: return null
 
-        if (nextCueId == null) {
-            // No STANDARD cues in stack
-            return null
-        }
-
-        // Already on this cue — no-op
-        if (nextCueId == currentState.activeCueId) {
+        // Already on this entry — no-op
+        if (next.entryId == currentState.activeEntryId) {
             return ActivateResult(
                 stackId = stackId,
-                cueId = nextCueId,
+                entryId = next.entryId,
+                cueId = next.cueId,
                 cueName = transaction(state.database) {
-                    DaoCue.findById(nextCueId)?.name ?: "Unknown"
+                    DaoCue.findById(next.cueId)?.name ?: "Unknown"
                 },
                 effectCount = 0,
             )
         }
 
-        return activateCueInStack(state, stackId, nextCueId, scope, fireEvents = direction == AdvanceDirection.FORWARD)
+        return activateEntry(state, stackId, next.entryId, scope, fireEvents = direction == AdvanceDirection.FORWARD)
     }
 
     /**
-     * Go to a specific cue within a stack (arbitrary jump).
+     * Go to a specific entry within a stack (arbitrary jump).
      *
-     * Throws IllegalArgumentException (HTTP 400 at the route) when the cue has no entry in
-     * [stackId]. A marker is an entry with no cue, so a cue id never names one; the route refuses a
-     * marker's entry id before it gets here.
+     * Throws IllegalArgumentException (HTTP 400 at the route) when the entry is not in [stackId], or
+     * is a marker.
      */
-    fun goToCue(
+    fun goToEntry(
         state: State,
         stackId: Int,
-        cueId: Int,
+        entryId: Int,
         scope: CoroutineScope = GlobalScope,
-    ): ActivateResult {
-        return activateCueInStack(state, stackId, cueId, scope)
-    }
+    ): ActivateResult = activateEntry(state, stackId, entryId, scope)
 
     /**
      * Press GO: fire whatever [stackId] has on deck, starting the stack if it is stopped.
@@ -480,9 +329,9 @@ class CueStackManager(
      * to agree on: a MIDI GO button, a tablet, and the AI's `go_cue_stack` all press the same
      * button, and a second copy of "active ? advance : activate" is a show where they disagree.
      *
-     * @return null only when the stack holds no STANDARD cues — at the end of a non-looping stack
-     *   [advanceStack] stays on the live cue and returns it. Nothing here deactivates a stack.
-     * @throws IllegalArgumentException if a stopped stack has no standard cues to start at.
+     * @return null only when the stack holds no cue entries — at the end of a non-looping stack
+     *   [advanceStack] stays on the live entry and returns it. Nothing here deactivates a stack.
+     * @throws IllegalArgumentException if a stopped stack has no cue entries to start at.
      */
     fun go(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult? =
         if (isStackActive(stackId)) {
@@ -493,53 +342,53 @@ class CueStackManager(
 
     /**
      * Start a stack: fire the armed standby if an operator has one on deck, else the stack's
-     * first STANDARD cue.
+     * first cue entry.
      *
      * The standby check is what makes the first GO of a show behave like every later one —
-     * arming cue 5 pre-show and pressing GO fires cue 5, not cue 1. Callers no longer have to
-     * pass the armed cue back in for that to work.
+     * arming Q5 pre-show and pressing GO fires Q5, not Q1. Callers no longer have to pass the
+     * armed entry back in for that to work.
      *
-     * Throws [IllegalArgumentException] if the stack has no standard cues.
+     * Throws [IllegalArgumentException] if the stack has no cue entries.
      */
     fun activateAtFirstCue(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult {
-        val startCueId = transaction(state.database) {
-            val ordered = runState.orderedStandardCueIds(stackId)
-            val armed = runState.getStandbyCueId(stackId)
-            if (armed != null && armed in ordered) armed else ordered.firstOrNull()
+        val startEntryId = transaction(state.database) {
+            val ordered = runState.orderedCueEntries(stackId)
+            val armed = runState.getStandbyEntryId(stackId)
+            if (armed != null && ordered.any { it.entryId == armed }) armed else ordered.firstOrNull()?.entryId
         } ?: throw IllegalArgumentException("Cue stack has no standard cues")
 
-        return activateCueInStack(state, stackId, startCueId, scope)
+        return activateEntry(state, stackId, startEntryId, scope)
     }
 
     /**
-     * Deactivate a stack — remove all its effects and clean up state.
+     * Deactivate a stack — let its live entry's hold go and clean up state. The cue comes off only
+     * if no other hold keeps it live (D3).
      *
      * @return Number of effects removed
      */
-    fun deactivateStack(stackId: Int, appState: State? = null): Int {
+    fun deactivateStack(stackId: Int, appState: State): Int {
         val stackState = activeStacks.remove(stackId)
         stackState?.autoAdvanceJob?.cancel()
-        // Cancelling also drops the mid-flight crossfade's outgoing assignments, if any.
-        crossfades.cancel(stackId)
+        // Cancelling also drops the mid-flight crossfade's outgoing assignments, if no hold has them.
+        crossfades.cancel(stackId, holds::isHeld)
 
-        // `removeEffectsForCueStack` below wipes effects but not Layer 4 — clear the active
-        // cue's assignments here so an assignment-only cue doesn't leave stale state behind.
-        stackState?.activeCueId?.let { fxEngine.cueLayer.removeAssignments(it) }
-
-        // Deactivate triggers for the active cue in this stack
-        appState?.cueTriggerManager?.deactivateTriggersForStack(stackId)
-
-        val removed = fxEngine.removeEffectsForCueStack(stackId)
+        var removed = stackState?.let {
+            holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).effectsRemoved
+        } ?: 0
+        removed += fxEngine.removeEffectsForCueStack(stackId)
         // A stopped stack has nothing on deck: the standby went with it. Published after the
         // teardown so the frame describes the stack as it now is.
         runState.consumeStandby(stackId)
-        appState?.let { runState.publishRunState(it, stackId) }
+        runState.publishRunState(appState, stackId)
         // The stack's set and its cues' scenery let go.
-        appState?.sceneryService?.onStackStopped(stackId)
+        appState.sceneryService.onStackStopped(stackId)
         // And the desk's arm: a stack stopping is a stop (stage-view plan session 9, D16).
-        appState?.effectsService?.onStackStopped(stackId)
+        appState.effectsService.onStackStopped(stackId)
         return removed
     }
+
+    /** The entry live in [stackId], or null if the stack is not active. */
+    fun getActiveEntryId(stackId: Int): Int? = activeStacks[stackId]?.activeEntryId
 
     /**
      * Get the active cue ID for a stack, or null if the stack is not active.
@@ -568,18 +417,17 @@ class CueStackManager(
     }
 
     /**
-     * Reschedule auto-advance on an active stack, re-reading the active cue's configuration.
+     * Reschedule auto-advance on an active stack, re-reading the live entry's follow.
      *
-     * The counterpart to [pauseAutoAdvance], which a surface PAUSE binding still calls. Its own
-     * caller was `cueEdit.endEdit`, retired by sweep item D1 — so nothing in production resumes a
-     * paused stack today. Kept because a surface RESUME binding is the obvious next caller and
-     * deleting half a pause/resume pair is worse than an unused half. No-op if:
+     * The counterpart to [pauseAutoAdvance], which a surface PAUSE binding still calls. Nothing in
+     * production resumes a paused stack today; it is kept because a surface RESUME binding is the
+     * obvious next caller and deleting half a pause/resume pair is worse than an unused half. No-op if:
      * - the stack isn't active
-     * - the active cue has no `autoAdvance` or no `autoAdvanceDelayMs`
+     * - the live entry has no `autoAdvance` or no `autoAdvanceDelayMs`
      * - an auto-advance timer is already running (we don't stack timers)
      *
      * The fresh delay starts from *now* — we don't track remaining time from the original
-     * schedule. Acceptable because the operator just spent time editing; re-starting the
+     * schedule. Acceptable because the operator paused it deliberately; re-starting the
      * countdown is more predictable than racing a stale deadline.
      */
     fun resumeAutoAdvance(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): Boolean {
@@ -587,7 +435,7 @@ class CueStackManager(
         if (stackState.autoAdvanceJob?.isActive == true) return false
 
         val cueConfig = transaction(state.database) {
-            val entry = entryInStack(stackId, stackState.activeCueId) ?: return@transaction null
+            val entry = DaoCueStackEntry.findById(stackState.activeEntryId) ?: return@transaction null
             if (!entry.autoAdvance) return@transaction null
             entry.autoAdvanceDelay?.toMillis()
         } ?: return false
@@ -608,27 +456,6 @@ class CueStackManager(
                 logger.warn("stack {}: auto-advance failed — {}", stackId, e.message)
             }
         }
-    }
-
-    /**
-     * Fire a specific cue without requiring the caller to know its stack id. Takes the stack of the
-     * cue's one entry (cue model plan P4, [soleEntryOf]), then delegates to [activateCueInStack].
-     * Its callers — a busk cue pad, a cue slot, a MIDI `FireCue` — hold the cue loose from the
-     * plan's session 2, which is when this goes.
-     *
-     * Throws [IllegalArgumentException] if the cue doesn't exist or isn't in a stack.
-     */
-    fun fireCue(
-        state: State,
-        cueId: Int,
-        scope: CoroutineScope = GlobalScope,
-    ): ActivateResult {
-        val stackId = transaction(state.database) {
-            val cue = DaoCue.findById(cueId)
-                ?: throw IllegalArgumentException("Cue not found: $cueId")
-            soleEntryOf(cue)?.stackId ?: throw IllegalArgumentException("Cue $cueId is not in a stack")
-        }
-        return activateCueInStack(state, stackId, cueId, scope)
     }
 
     /**

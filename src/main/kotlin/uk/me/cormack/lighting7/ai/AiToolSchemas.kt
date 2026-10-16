@@ -661,14 +661,14 @@ internal val createCueTool = ToolDef(
 
 internal val applyCueTool = ToolDef(
     name = "apply_cue",
-    description = "Apply a saved cue by ID. By default, adds the cue's effects alongside other running cues. Set replaceAll=true to stop all other running cues first. If this cue is already running, its effects are refreshed.",
+    description = "Hold a saved cue live by ID, outside any stack (a loose hold): it composes above every running stack, the newest applied cue on top, and starts its timed effects, triggers and events as a GO does. A cue already applied moves back to the top. A stack that also holds it is unaffected. Set replaceAll=true to let go of every other applied cue first (running stacks are never touched).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to apply") })
             put("replaceAll", buildJsonObject {
                 put("type", "boolean")
-                put("description", "If true, stop all other running cues before applying this one. Default false.")
+                put("description", "If true, let go of every other cue applied with apply_cue (or pressed on a pad, slot or binding) first. Running stacks are untouched. Default false.")
             })
         })
         put("required", buildJsonArray { add("cueId") })
@@ -677,7 +677,7 @@ internal val applyCueTool = ToolDef(
 
 internal val stopCueTool = ToolDef(
     name = "stop_cue",
-    description = "Stop a running cue by ID, removing all its effects. Other running cues are unaffected.",
+    description = "Let go of a cue applied with apply_cue (or pressed on a pad, slot or binding), by ID. The cue comes off the stage unless a running stack also holds it; stop a stack with deactivate_cue_stack.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

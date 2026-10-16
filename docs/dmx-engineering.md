@@ -545,11 +545,13 @@ a frame at zero** unless zero is where the next show puts it.
 - **A reload** carries the rig across (`show/ShowCarry.kt`): the outgoing frame **as the rig shows
   it** — a parked channel at its park, and a held controller at zero bar its parks, so a reload
   that lifts a venue hold brings the new show up from dark rather than putting the held show's
-  old-patch levels on the new addresses — each live stack's live cue and each armed standby, the
+  old-patch levels on the new addresses — each live stack's live **entry** and each armed standby
+  entry, the cues held loose in press order (cue model plan session 2), the
   `ProgrammerStore` itself (values, layers, sideband, Blind) with the `LocateManager` that pairs
   with its LOCATE slots, and every effect no cue or programmer layer owns. The successor's controllers are seeded with the frame and **frozen on it**
-  (`Show.start(seedValues)`) while `Show.resume` puts the effects back, GOes each cue again (events not
-  re-fired; its auto-advance timer starts again from the reload), re-arms each standby, re-cooks the programmer's layers and republishes it, publishes every patched property from
+  (`Show.start(seedValues)`) while `Show.resume` puts the effects back, GOes each entry again (events not
+  re-fired; its auto-advance timer starts again from the reload), re-arms each standby, takes each
+  loose hold again in press order (events not re-fired), re-cooks the programmer's layers and republishes it, publishes every patched property from
   whatever now composes it (so a property nothing drives any more releases to its base), and zeroes
   every channel no fixture covers and no programmer channel holds. Then it unfreezes, ramping every
   channel the rebuild moved from its carried value to its new one over `RESUME_FADE_MS` (2 s). A

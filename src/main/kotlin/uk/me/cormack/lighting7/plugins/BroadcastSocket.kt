@@ -5,6 +5,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fx.CueHold
+import uk.me.cormack.lighting7.fx.CueHolds
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 
@@ -175,6 +177,10 @@ data class CueRunStateChangedOutMessage(
     val stackId: Int,
     val activeCueId: Int?,
     val nextCueId: Int?,
+    /** The entries behind [activeCueId] and [nextCueId], and the armed one (cue model plan P2). */
+    val activeEntryId: Int?,
+    val nextEntryId: Int?,
+    val standbyEntryId: Int?,
     val nextIsArmed: Boolean,
     val transition: Boolean,
     val fadeDurationMs: Long?,
@@ -188,6 +194,9 @@ data class CueRunStateChangedOutMessage(
             stackId = runState.stackId,
             activeCueId = runState.activeCueId,
             nextCueId = runState.nextCueId,
+            activeEntryId = runState.activeEntryId,
+            nextEntryId = runState.nextEntryId,
+            standbyEntryId = runState.standbyEntryId,
             nextIsArmed = runState.nextIsArmed,
             transition = runState.transition,
             fadeDurationMs = runState.fadeDurationMs,
@@ -216,6 +225,49 @@ data object PromptBookChangedOutMessage : BroadcastOutMessage()
 data class ProjectDetailsChangedOutMessage(val projectId: Int) : BroadcastOutMessage()
 
 // ─── Listener wiring ────────────────────────────────────────────────────
+
+/**
+ * What holds each live cue of the current show (cue model plan §3.4, `fx/CueHolds.kt`): per cue,
+ * its holds in the order taken and the priority it composes at. **Outbound only** and
+ * `StateFlow`-backed (`State.cueHoldsFrame`), so the subscription is the connect snapshot and every
+ * change is a whole frame; the socket gains no operation, so `FU-AUTH-WS-PER-MESSAGE` does not fire
+ * and `TraceSampling.WS_MESSAGES` needs no row. Pads, slots and the cues table draw D11's two looks
+ * from it: a cue held loose is solid, one live only through a stack is an outline.
+ */
+@Serializable
+@SerialName("cueHolds.state")
+data class CueHoldsStateOutMessage(
+    val projectId: Int?,
+    val cues: List<LiveCueHoldsDto>,
+) : BroadcastOutMessage() {
+    companion object {
+        fun of(frame: CueHolds.Frame) = CueHoldsStateOutMessage(
+            projectId = frame.projectId,
+            cues = frame.cues.map { cue ->
+                LiveCueHoldsDto(cue.cueId, cue.priority, cue.holds.map(CueHoldDto::of))
+            },
+        )
+    }
+}
+
+@Serializable
+data class LiveCueHoldsDto(val cueId: Int, val priority: Int, val holds: List<CueHoldDto>)
+
+/** One hold: `STACK` with its [stackId] and [entryId], or `LOOSE` with its press [seq] (newest on top). */
+@Serializable
+data class CueHoldDto(
+    val kind: String,
+    val stackId: Int? = null,
+    val entryId: Int? = null,
+    val seq: Long? = null,
+) {
+    companion object {
+        fun of(hold: CueHold) = when (hold) {
+            is CueHold.Stack -> CueHoldDto("STACK", stackId = hold.stackId, entryId = hold.entryId)
+            is CueHold.Loose -> CueHoldDto("LOOSE", seq = hold.seq)
+        }
+    }
+}
 
 /**
  * Registers the [FixturesChangeListener] and the project-change re-registration handler.
@@ -334,6 +386,10 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         currentFixtures = state.show.fixtures
         currentFixtures.registerListener(listener)
     }
+
+    // The holds frame: one subscription for the life of the socket, since the flow is the State's
+    // and every show publishes into it.
+    scope.subscribe(state.cueHoldsFrame) { scope.send(CueHoldsStateOutMessage.of(it)) }
 
     return { currentFixtures.unregisterListener(listener) }
 }

@@ -5,7 +5,7 @@ import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.CueApplyData
-import uk.me.cormack.lighting7.fx.stackCuePriorities
+import uk.me.cormack.lighting7.fx.stackEntryPriorities
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.CueStackType
@@ -122,7 +122,7 @@ internal fun performProgrammerRecord(
                 sortOrder = sortOrder,
                 cueType = cueType,
             )
-            priorities = stackCuePriorities(stack)
+            priorities = stackEntryPriorities(stack)
             val cue = DaoCue.findById(outcome.cueId)!!
             // After the cue exists, so what it would track is read at its own place in the list.
             val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, entryInStack(stack.id.value, cue.id.value), held, mode))
@@ -142,9 +142,9 @@ internal fun performProgrammerRecord(
     }
 
     if (written == null) return RecordCoreResult.Failure(error ?: "Cue not found", notFound = true)
-    state.show.fxEngine.repriorityCues(priorities)
+    state.show.cueStackManager.holds.restampEntries(priorities)
 
-    val republished = republishCueIfLive(state, written.outcome.cueId, written.stackId)
+    val republished = republishCueIfLive(state, written.outcome.cueId)
 
     // Record-then-tweak-then-Update is the obvious next gesture, so point the include target at
     // what we just wrote.
@@ -403,7 +403,7 @@ internal fun performProgrammerUpdate(
             cueName = cueName,
             assignmentsWritten = written.assignmentsWritten,
             fxWritten = written.fxWritten,
-            republishedLive = republishCueIfLive(state, cueId, stackId),
+            republishedLive = republishCueIfLive(state, cueId),
             sceneryWritten = written.scenery.written,
         )
         warnings += written.warnings

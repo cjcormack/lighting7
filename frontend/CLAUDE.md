@@ -1392,8 +1392,11 @@ load-bearing:
 view is.** A slot holds a cue or a **Look with no deferred effect** — `itemType` is `'cue' | 'look'`,
 and the cue-*stack* arm is gone. It has no selection, so it can hold only what needs none: a Look
 tile presses `POST /looks/{id}/toggle` with an **empty target list**, and the desk derives the
-targets from the Look's own patched fixtures. Three rules follow, and each has a reason that is easy
-to undo by accident:
+targets from the Look's own patched fixtures. A **cue** tile is a busk cue pad's twin (§"The cue
+column is gone"): a tap takes a loose hold (`/cues/{id}/apply`) or, while a press holds it, lets go
+(`/cues/{id}/stop`), and it draws the pad's two looks — the overlay's fill for a loose hold, an
+outline (`slotLitClass`'s `outlined`) for a cue live only in a stack. Three rules follow, and each
+has a reason that is easy to undo by accident:
 
 - **A Look tile lights from the programmer's applied feed, never from cue liveness.**
   `lookIsApplied` (`busking/lookPresence.ts`) is a selection-*independent* helper for exactly this:
@@ -5799,9 +5802,9 @@ path may quietly change where it lands.
       went with the pads. A palette or Look pad reads the programmer's **resolved applied state**
       (`useProgrammerAppliedQuery`; the view does not subscribe to the layer stack at all), which
       needs only `{type, key}` per target, so `lookLayerTarget` is the one place the group-name
-      convention is applied and the selection has no ceiling. A **cue** pad reads `useActiveCueIds`
-      instead — its stack has that cue on stage, playhead or not, which is what makes a cue pad a
-      toggle rather than a playhead move.
+      convention is applied and the selection has no ceiling. A **cue** pad reads `cueHolds.state`
+      instead (`useCueRings`, `store/cueHolds.ts`) — what holds the cue, a stack or a press —
+      which is what makes a cue pad a toggle rather than a playhead move.
   - **It does not pass `canOperate`, and the show-editing lock is not consulted.** GO must
     work from a busk pad: busking *is* the live use, and the lock is a stray-click guard for
     editing surfaces rather than a transport gate — the same reasoning that keeps `locked`
@@ -5903,10 +5906,15 @@ path may quietly change where it lands.
   because a cue that wants a pad is now simply placed in a bank. What that decided, and what it
   costs:
 
-  - **A cue pad is apply / stop, not a playhead move.** It presses through `POST /busk/pads/{id}/press`
-    like every other pad, which reaches `CueStackManager` — so the cue goes live *without becoming
-    the playhead*, exactly as a cue slot behaves, and pressing it again stops it. `useActiveCueIds`
-    is what lights it, for the same reason. `GoToStackRequest.cueId` lost its only caller and is
+  - **A cue pad is a loose hold, not a playhead move** (lighting7 cue model plan D6, D10, D11). It
+    presses through `POST /busk/pads/{id}/press` like every other pad, which takes or lets go of a
+    **loose hold** in the desk's hold registry (`fx/CueHolds.kt`) — so the cue goes live *without
+    becoming any stack's playhead*, above every stack (the loose band, newest press on top), exactly
+    as a cue slot behaves, and pressing it again lets go. Its ring has two looks, from
+    `cueHolds.state` through `useCueRings`: **solid** (and `aria-pressed`) while a press holds it,
+    the hold the next press lets go of; an **outline** while only a stack holds it, which a press
+    takes loose. The stack's hold is never the pad's to drop. Its keys are every held cue, for a
+    surface that asks only "is it on stage" (it replaced `useActiveCueIds`). `GoToStackRequest.cueId` lost its only caller and is
     gone: `/show/go-to` names a stack and lands on its first cue.
   - **GO and BACK are the transport's, in one place** — the ShowBar's until the busk-chrome plan's
     session A, the side sheet's Show tab's footer since (§Focus and the side sheet). The stack

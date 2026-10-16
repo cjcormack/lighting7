@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import uk.me.cormack.lighting7.testsupport.inStack
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -12,6 +13,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.takeLooseCue
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
@@ -92,7 +94,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val programmerDimmer = dimmerChannel("hex-2")
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)
 
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
         state.show.fxEngine.programmer.writeProperty(
             ProgrammerOwner.WEB,
             state.show.fixtures.untypedGroupableFixture("hex-2"),
@@ -154,7 +156,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
                 propertyName = "dimmer"; value = "120"; sortOrder = 1
             }
         }
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
         assertEquals(120u.toUByte(), mock().getEffectiveValue(strandedDimmer))
 
         // What a pull brings in: the cue now sets hex-1 to 100 and no longer touches hex-2.
@@ -180,7 +182,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val dimmer = dimmerChannel("hex-1")
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)
         state.show.parkManager.park(0, dimmer, 255u)
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
 
         // What a pull that unparked it brings in: the row is gone.
         transaction(state.database) {
@@ -205,7 +207,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
                 name = "next"
             }.inStack(DaoCueStack.findById(stackId)!!, sortOrder = 1).id.value
         }
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
         state.show.cueStackManager.runState.setStandby(state, stackId, next)
 
         val locate = state.show.locateManager
@@ -241,7 +243,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
         val dimmer = dimmerChannel("hex-1")
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)
-        state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
         state.show.parkManager.park(0, 300, 255u)
         val old = mock()
 
@@ -282,4 +284,39 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
 
     private fun assertNotNullFrozen(controller: MockDmxController): Map<Int, UByte> =
         checkNotNull(controller.frozen) { "the outgoing controller was frozen on its final frame" }
+
+    @Test
+    fun `a reload takes the loose holds again, in press order, beside the stacks`() = runBlocking {
+        LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", startChannel = 20)
+        val (stackId, stacked) = seedStackWithDimmerCue("hex-1", 200)
+        // Two cues in no stack: a loose hold needs none.
+        val (first, second) = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            fun loose(level: Int) = DaoCue.new { this.project = project; name = "loose $level" }.also { cue ->
+                DaoCuePropertyAssignment.new {
+                    this.cue = cue
+                    targetType = "fixture"; targetKey = "hex-2"
+                    propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                }
+            }.id.value
+            loose(120) to loose(60)
+        }
+
+        // A stack's cue, also pressed loose; then two loose presses, oldest first (cue model plan §3.4).
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(stacked))
+        state.show.cueStackManager.holds.takeLooseCue(state, stacked)
+        state.show.cueStackManager.holds.takeLooseCue(state, first)
+        state.show.cueStackManager.holds.takeLooseCue(state, second)
+        val before = state.show.cueStackManager.holds.looseCueIdsInPressOrder()
+        assertEquals(listOf(stacked, first, second), before)
+
+        state.projectManager.switchProject(projectId, reload = true)
+
+        val holds = state.show.cueStackManager.holds
+        assertEquals(before, holds.looseCueIdsInPressOrder(), "the same loose holds, in the same press order")
+        assertEquals(state.entryIdOf(stacked), state.show.cueStackManager.getActiveEntryId(stackId), "and the stack's entry")
+        assertEquals(2, holds.holdsOf(stacked).size, "the stacked cue held twice again: by its stack and loose")
+        assertTrue(holds.priorityOf(second)!! > holds.priorityOf(first)!!, "the newest press still on top")
+    }
 }

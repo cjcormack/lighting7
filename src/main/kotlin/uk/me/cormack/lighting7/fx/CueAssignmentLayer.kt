@@ -40,16 +40,15 @@ class CueAssignmentLayer internal constructor(
     // `docs/plans/completed/cue-authoring-unification-plan.md`.
     private val cueFadeWeights = HashMap<Int, Double>()
 
-    // cueId → the stack that cue belongs to, recorded when its assignments are published.
-    //
-    // The Layer 4 machinery is keyed by cue alone (`cueAssignments`, and the resolver's
-    // `currentCueLayerWinners: Key → cueId`), so a CUE-sourced provenance entry had nowhere to
-    // read a stack from and always reported null — the wire-format asymmetry against EFFECT
-    // sources that `FU-PROG-PROVENANCE-STACKID` tracked. Every caller of [setAssignments]
-    // holds a stack id, so recording it here costs one map write per publish and lets both
-    // provenance and `underlyingSources` answer "which stack" without touching the DB.
-    // Guarded by the publish lock, like the two maps above.
-    private val cueStackIds = HashMap<Int, Int>()
+    /**
+     * Which stack a cue's published rows belong to, for CUE-sourced provenance and
+     * `underlyingSources` (`FU-PROG-PROVENANCE-STACKID`). Since a cue can be live in several places
+     * at once (cue model plan D3) that is the hold registry's question, not one recorded per publish:
+     * [CueHolds] installs this, answering the stack of the cue's highest hold off its volatile view —
+     * lock-free, since provenance asks it under the publish lock. Null means "no stack": a loose hold,
+     * or an engine test publishing a bare cue id.
+     */
+    @Volatile internal var holdStackOf: (Int) -> Int? = { null }
 
     // cueId → that cue's within-cue stomp suppression, straight off `CookResult`. Held per cue so
     // the cue's own lifecycle clears it: a cue that stops, or is republished with a layer's stomp
@@ -74,17 +73,11 @@ class CueAssignmentLayer internal constructor(
      * incoming cue at 0 without briefly flashing its full value onto stage. A weight of 1.0
      * (the default) clears any prior entry in the fade-weight map so reapplying a cue resets
      * it to steady state. Clamped to `[0, 1]`.
-     *
-     * [cueStackId] records which stack the cue belongs to so CUE-sourced provenance and
-     * `underlyingSources` can name it. Defaulted to null rather than required: plenty of
-     * engine-level tests publish assignments for a bare cue id with no stack behind them, and
-     * a null simply means "stack unknown", which is what those callers mean.
      */
     fun setAssignments(
         cueId: Int,
         assignments: List<CueAssignmentResolver.Assignment>,
         weight: Double = 1.0,
-        cueStackId: Int? = null,
         /**
          * [CookResult.stompSuppression] for this publish. Passed alongside the rows rather than set
          * through a call of its own so the two cannot disagree: they are one cook's output, and a
@@ -96,8 +89,8 @@ class CueAssignmentLayer internal constructor(
          */
         stompSuppression: LayerStompSuppression = emptyMap(),
         /**
-         * True only when this publish is the cue **arriving** — a GO, or an immediate apply. False
-         * for the cue-edit and Record/Update rewrites of an already-live cue that come through
+         * True only when this publish is the cue **arriving** — its first hold, a GO or a loose
+         * press, on the snap path. False for the Record/Update rewrites of an already-live cue that come through
          * `republishCueLayer`, which are edits rather than entrances. See
          * [republishAssignments].
          */
@@ -107,13 +100,11 @@ class CueAssignmentLayer internal constructor(
             if (assignments.isEmpty()) {
                 val removed = cueAssignments.remove(cueId) != null
                 cueFadeWeights.remove(cueId)
-                cueStackIds.remove(cueId)
                 if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
                 if (removed) republishAssignments()
                 return@locked
             }
             cueAssignments[cueId] = assignments
-            if (cueStackId != null) cueStackIds[cueId] = cueStackId
             setCueStompLocked(cueId, stompSuppression)
             val clamped = weight.coerceIn(0.0, 1.0)
             if (clamped >= 1.0) {
@@ -166,8 +157,8 @@ class CueAssignmentLayer internal constructor(
                 if (cueId !in cueAssignments) continue
                 if (rows.isEmpty()) {
                     cueAssignments.remove(cueId)
-                    // Weight and stack id intentionally survive removal here too: the cue is still
-                    // mid-fade as far as CueStackManager is concerned, and it owns that lifecycle.
+                    // The weight intentionally survives removal here too: the cue is still mid-fade
+                    // as far as CueStackManager is concerned, and it owns that lifecycle.
                     if (cueStompSuppression.remove(cueId) != null) stompChanged = true
                 } else {
                     cueAssignments[cueId] = rows
@@ -226,7 +217,6 @@ class CueAssignmentLayer internal constructor(
         publisher.locked {
             val removed = cueAssignments.remove(cueId) != null
             cueFadeWeights.remove(cueId)
-            cueStackIds.remove(cueId)
             if (cueStompSuppression.remove(cueId) != null) rebuildStompFlatLocked()
             if (removed) {
                 republishAssignments()
@@ -261,11 +251,6 @@ class CueAssignmentLayer internal constructor(
                 cueStompSuppression.clear()
                 rebuildStompFlatLocked()
             }
-            // Swept even when there is nothing left to republish: [replaceAssignments]
-            // deliberately leaves a mid-fade cue's stack id (and weight) behind when its rows
-            // empty, and a weight already at 1.0 has no map entry — so the early return below
-            // could otherwise strand a stale [cueStackIds] entry forever.
-            cueStackIds.clear()
             if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return@locked
             cueAssignments.clear()
             cueFadeWeights.clear()
@@ -344,8 +329,18 @@ class CueAssignmentLayer internal constructor(
         return layerStomp?.get(fixtureKey)?.contains(propertyName) == true
     }
 
-    /** Which stack [cueId]'s currently-published assignments belong to, if it named one. */
-    fun cueStackIdFor(cueId: Int): Int? = publisher.locked { cueStackIds[cueId] }
+    /** Which stack [cueId]'s published assignments belong to — its highest hold's ([holdStackOf]). */
+    fun cueStackIdFor(cueId: Int): Int? = holdStackOf(cueId)
+
+    /** Whether [cueId] has Layer 4 rows published. */
+    fun hasAssignments(cueId: Int): Boolean = publisher.locked { cueId in cueAssignments }
+
+    /**
+     * The priority [cueId]'s published rows compose at, or null with none. What a republish of a cue
+     * whose last hold has gone but whose rows are still fading out keeps them at — it has no hold to
+     * ask (`CueHolds.priorityOf`), and dropping to its bare priority mid-fade would jump the fade.
+     */
+    fun publishedPriorityOf(cueId: Int): Int? = publisher.locked { cueAssignments[cueId]?.firstOrNull()?.priority }
 
     /**
      * Snapshot the set of cue ids currently contributing Layer 4 assignments. Used by
@@ -357,24 +352,21 @@ class CueAssignmentLayer internal constructor(
     }
 
     /**
-     * The published Layer 4 rows of every cue *except* those belonging to [stackId] — what a GO
-     * on that stack would leave alone, since firing a cue replaces its own stack's contribution
-     * and nothing else. Cues published without a stack (a cue-edit live apply) survive a stack
-     * GO, so they are included.
+     * The published Layer 4 rows of every cue *except* [cueIds] — what a GO would leave alone. The
+     * caller names the cues the GO lets go of: a stack's preview passes [CueHolds.cuesHeldOnlyBy],
+     * so a cue another hold still keeps live stays in (cue model plan §3.4).
      *
-     * Used by the cue-preview compose (`routes/cuePreview.kt`) to recompose a hypothetical cue
-     * set against what is already live without touching [layerResolver]'s state. Filtered in
-     * here rather than by the caller so the rows and the `cueId → stackId` map are read under
-     * one publish-lock acquisition and cannot disagree.
+     * Used by the cue-preview compose (`routes/cuePreview.kt`) to recompose a hypothetical cue set
+     * against what is already live without touching [layerResolver]'s state.
      *
      * Rows carry their stored `fadeWeight` (always 1.0 — live crossfade progress lives in
      * `cueFadeWeights` and is applied at republish time), so the result describes the settled
      * look rather than a cue caught mid-crossfade.
      */
-    fun assignmentsExcludingStack(stackId: Int): List<CueAssignmentResolver.Assignment> =
+    fun assignmentsExcludingCues(cueIds: Set<Int>): List<CueAssignmentResolver.Assignment> =
         publisher.locked {
             cueAssignments.entries
-                .filter { cueStackIds[it.key] != stackId }
+                .filter { it.key !in cueIds }
                 .flatMap { it.value }
         }
 

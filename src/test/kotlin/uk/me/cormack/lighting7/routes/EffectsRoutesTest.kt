@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -355,7 +356,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         runBlocking {
             // Unarmed: one announcement for the whole cue, nothing sent, nothing spent.
             val skipped = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(3_000) { state.effectsService.skipped.first() } }
-            state.show.cueStackManager.goToCue(state, s, q5)
+            state.show.cueStackManager.goToEntry(state, s, state.entryIdOf(q5))
             val skip = skipped.await()
             assertEquals(EffectsService.SkipReason.UNARMED, skip.reason)
             assertEquals("Q5", skip.cueLabel)
@@ -370,13 +371,13 @@ class EffectsRoutesTest : RouteIntegrationTest() {
             assertTrue(state.effectsService.armed.value.spent.isEmpty())
 
             // GO TO a later cue fires nothing (events never track); GO BACK into Q5 fires nothing.
-            state.show.cueStackManager.goToCue(state, s, q6)
+            state.show.cueStackManager.goToEntry(state, s, state.entryIdOf(q6))
             state.show.cueStackManager.advanceStack(state, s, uk.me.cormack.lighting7.fx.CueStackManager.AdvanceDirection.BACKWARD)
             delay(400)
             assertTrue(state.effectsService.armed.value.spent.isEmpty())
 
             // Armed GO into Q5 from Q4: both tubes, in order, once each.
-            state.show.cueStackManager.goToCue(state, s, q4)
+            state.show.cueStackManager.goToEntry(state, s, state.entryIdOf(q4))
             val fires = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(3_000) { state.effectsService.fired.take(2).toList() } }
             state.show.cueStackManager.go(state, s)
             val fired = fires.await()
@@ -388,7 +389,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
             assertEquals(setOf("output1", "output2"), state.effectsService.armed.value.spent.map { it.trigger }.toSet())
 
             // The same GO again: both spent, so announced and nothing sent.
-            state.show.cueStackManager.goToCue(state, s, q4)
+            state.show.cueStackManager.goToEntry(state, s, state.entryIdOf(q4))
             val spent = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(3_000) { state.effectsService.skipped.take(2).toList() } }
             state.show.cueStackManager.go(state, s)
             assertEquals(listOf(EffectsService.SkipReason.SPENT, EffectsService.SkipReason.SPENT), spent.await().map { it.reason })
@@ -409,7 +410,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
 
         runBlocking {
             val fires = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(3_000) { state.effectsService.fired.first() } }
-            state.show.cueStackManager.goToCue(state, s, q1)
+            state.show.cueStackManager.goToEntry(state, s, state.entryIdOf(q1))
             val fired = fires.await()
             assertTrue(fired.rehearsed)
             assertEquals(0, out(1))

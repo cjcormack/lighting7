@@ -63,8 +63,8 @@ class SurfaceInputRouter(
          * Suppress repeat dead-dispatch warnings for the same `(bindingId, health)`
          * signature inside a 30s window. Fader drags fire dozens of events per second, so
          * without a throttle a single dead binding floods the log while the operator tries
-         * to figure out why nothing's happening. Mirrors the `applyCue` throttle in
-         * `routes/projectCues.kt`.
+         * to figure out why nothing's happening. Mirrors the dead-assignment throttle in
+         * `fx/CueHolds.kt`.
          */
         private const val DEAD_WARN_THROTTLE_MS = 30_000L
 

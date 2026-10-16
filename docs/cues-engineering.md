@@ -165,8 +165,8 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | PUT | `/{projectId}/cues/{cueId}` | Update a cue (current project only) |
 | DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only) |
 | POST | `/{projectId}/cues/{cueId}/copy` | Copy cue to another project |
-| POST | `/{projectId}/cues/{cueId}/apply` | Apply cue (current project only). Query param: `replaceAll=true` to stop all other cues first. |
-| POST | `/{projectId}/cues/{cueId}/stop` | Stop a running cue, removing its effects |
+| POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
+| POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
 | POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
 
 Writing the *programmer* into a cue lives outside this namespace, under
@@ -188,17 +188,29 @@ triggers and timed effects the old route left to chance.
 
 ### Apply Semantics
 
-When a cue is applied:
-1. **Remove previous effects for this cue** — only effects tagged with this cue's ID are removed (allows other cues to keep running). If `replaceAll=true`, all effects tagged with any `cueId` are removed instead.
-2. The layer stack is cooked to one contributor per (fixture, property), then each layer's effects are spawned **in layer order**
-3. Each ad-hoc effect is applied directly from its stored definition
-4. All new FxInstances are tagged with the cue's ID
+An apply is a **loose hold** (cue model plan D6, D10; `cue-stacks-engineering.md` §"Holds"), the
+same as a busk cue pad, a cue slot, MIDI `FireCue`, the hand and the AI's `apply_cue`. Through the
+hold registry:
+
+1. If the cue is not live, its **first hold brings it on**, exactly as a GO would: the layer stack
+   is cooked to one contributor per (fixture, property) and published as Layer 4 rows, each layer's
+   effects are spawned **in layer order**, each ad-hoc effect from its stored definition, its stomp
+   applied, its timed effects and triggers started, and its events fired (D15). Every new
+   `FxInstance` is tagged with the cue's ID.
+2. If something already holds it — a stack, or an earlier press — nothing on stage moves: the press
+   only restamps it to the top of the loose band.
+3. `replaceAll=true` first lets every other loose hold go; stacks are untouched.
 
 ### Stop Semantics
 
-When a cue is stopped via `POST /{cueId}/stop`:
-1. All effects tagged with the cue's ID are removed from FxEngine
-2. Other running cues are unaffected
+When a cue is stopped via `POST /{cueId}/stop` (or `stop_cue`, or a second pad or slot press):
+1. Its **loose hold** is let go. If that was its last hold, the cue comes off — triggers stopped,
+   effects removed, its rows dropped (a snap).
+2. If a stack still holds it, it stays on stage at that stack's priority. A stop never moves a
+   stack's playhead; stopping the stack is the stack's own gesture.
+3. Other running cues are unaffected.
+
+Deleting a cue drops **every** hold it has (`holds.dropAll`).
 
 ### Colour resolution
 
@@ -271,42 +283,57 @@ did, its `cueStackUuid`, `sortOrder` (the entry's position), number and follow r
 entry, and a marker entry as a MARKER cue whose uuid is the entry's — which is why the migration
 gives a marker entry its marker cue's uuid. The importer reads a MARKER cue back as a marker entry.
 
-Two ways put a cue on stage, and both go through the stack:
+Two kinds of **hold** put a cue on stage, and both go through the hold registry (`fx/CueHolds.kt`;
+`cue-stacks-engineering.md` §"Holds"):
 
-| Path | What it does |
-|------|--------------|
-| A stack GO, GO TO, BACK, a busk pad, `POST /cues/{id}/apply` | `CueStackManager.activateCueInStack` — the cue becomes its stack's live cue, with the crossfade and auto-advance it carries |
-| The AI's `apply_cue` | `applyCue` — the cue's effects and Layer 4 rows alongside other running cues; it stands in for its stack's live cue for scenery and fires its events through the same hook a GO does |
+| Path | Hold |
+|------|------|
+| A stack GO, GO TO, BACK, activate, auto-advance | `Stack(stackId, entryId)` through `CueStackManager.activateEntry` — the entry becomes its stack's live one, with the crossfade and auto-advance it carries |
+| `POST /cues/{id}/apply`, the AI's `apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue`, the hand | `Loose(seq)` — the cue live above every stack, the newest press on top, with no stack moved; its effects, rows, timed effects, triggers, scenery and events exactly as a GO's |
 
 ## FxInstance Integration
 
 The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerId` and
 `programmerLayerId`, which name what spawned it). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
-- The apply logic to identify and remove effects from a specific cue (not all cues)
-- The stop endpoint to remove only the target cue's effects
-- Active cue tracking in the frontend (derived from effect cueIds in WebSocket state)
+- The hold registry to remove a cue's own effects when its last hold goes (not all cues)
+- The effect list (`EffectDto`, `get_current_state`) to name the cue an effect belongs to
 
 ### Priority
 
-Cue-owned `FxInstance`s receive a derived `priority` at apply time via `cueDerivedPriority`
-in [`projectCues.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/projectCues.kt):
-`stackId * 1_000_000 + position * 1_000 + 1`, where `position` is the cue's entry's place in the
-stack's list, markers counted (`entryPlacement` in `fx/CueApply.kt`). Manual (uncued) effects keep priority `0`.
+A live cue composes at its **highest hold's** priority (cue model plan P3, D10; `fx/CueHolds.kt`):
+
+- A **stack hold** — `cueDerivedPriority` in
+  [`fx/CueApply.kt`](../src/main/kotlin/uk/me/cormack/lighting7/fx/CueApply.kt):
+  `stackId * 1_000_000 + position * 1_000 + 1`, where `position` is the entry's place in the stack's
+  list, markers counted.
+- A **loose hold** — `LOOSE_BAND + seq`, `LOOSE_BAND = 2_000_000_000` and `seq` the registry's
+  press counter: above every stack, and the newest press on top. A press over a cue it already holds
+  re-stamps it as the newest.
+
+A cue held twice — by two stacks, by a stack and a press — is one contribution at the higher of the
+two (D3). Manual (uncued) effects keep priority `0`; the programmer band sits above all of it.
 
 The engine iterates effects in priority-ascending order, id-ascending tie-break. Higher
 priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
-earlier cues on the same property. See
-[lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects". Note that a property held by the programmer (Layer 2) suppresses cue-owned effects on it entirely.
+earlier cues on the same property, and on Layer 4 the higher priority wins every LTP property (HTP
+dimmers still take the highest level). See
+[lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects" and §"Holds and
+the loose band". Note that a property held by the programmer (Layer 2) suppresses cue-owned effects on it entirely.
 
-Because priority is derived from the entry's position, **reordering a stack changes precedence**. Priority
-is stamped at apply time, so every write that moves an entry's position — reorder, `add-cue`
-(and the AI's `add_cue_to_stack`), `sort-by-cue-number`, a cue created or recorded mid-list, a cue
-deleted, a marker added or removed (a marker counts in the positions) — calls
-`FxEngine.repriorityCues(cueId → priority)` after writing the entries' order. That restamps both layers a
-cue can own — `FxInstance.priority` and the Layer 4 `Assignment.priority` rows — so cues already on
-stage compose in the new order without needing to be re-applied. Crossfade weights are left
-untouched, and cues whose derived priority didn't change are skipped, which makes the ordinary
+Because a stack hold's priority is derived from the entry's position, **reordering a stack changes
+precedence**. Every write that moves an entry's position — reorder, `add-cue` (and the AI's
+`add_cue_to_stack`), `sort-by-cue-number`, a cue created or recorded mid-list, a cue deleted, a
+marker added or removed (a marker counts in the positions) — calls
+`holds.restampEntries(stackEntryPriorities(stack))` after writing the entries' order. That re-ranks
+the stack holds whose entries it names and restamps each affected cue to its new highest hold
+through `FxEngine.repriorityCues`, which moves both layers a cue owns — `FxInstance.priority` and
+the Layer 4 `Assignment.priority` rows — so cues already on stage compose in the new order without
+being re-applied. A cue a press holds keeps its loose priority. Crossfade weights are left
+untouched, and cues whose priority didn't change are skipped, which makes the ordinary
 single-live-cue reorder a no-op.
+
+Timed effects and timed layers stamp the cue's priority **when they fire**, from the registry, so
+a timer that fires after a press has raised the cue composes at the raised priority.
 
 ### Stomp
 
@@ -319,12 +346,20 @@ Manual effects and effects owned by the stomping cue itself are never stomped. S
 
 ## Active Cue Tracking
 
-A cue is live when its stack has it as `activeCueId` — the stack's own run state, kept by
-`CueStackManager` and streamed as `cueRunStateChanged`. The frontend's `useActiveCueIds()`
-(`store/cues.ts`) reads exactly that, from the cue-stack list: it used to derive "active" from
-`FxInstance.cueId` over the `fxState` stream, which could never see a cue made only of values (no
-effect carries its id). `FxInstance.cueId` is still carried — by `EffectDto`, `GroupEffectDto` and
-`get_current_state` — because it is what the apply and stop paths use to find a cue's own effects.
+A cue is live while anything **holds** it (`cue-stacks-engineering.md` §"Holds"): a stack whose live
+entry names it, or a loose press. The registry publishes every live cue with its holds as
+`cueHolds.state` (`State.cueHoldsFrame`, a `StateFlow`), and that frame is the frontend's one
+answer:
+
+- `useCueRings()` (`store/cueHolds.ts`) — its keys every held cue, and how a busk cue pad and a cue
+  slot draw it (D11): **solid**
+  while a `LOOSE` hold is among its holds (the next press lets it go), an **outline** while only
+  stacks hold it (the next press takes it loose).
+
+It used to be read from each stack's `activeCueId`, which could never see a cue held loose, and
+before that derived from `FxInstance.cueId` over the `fxState` stream, which could never see a cue
+made only of values (no effect carries its id). A stack's own run state — `cueRunStateChanged`,
+keyed by entry — still says which **entry** each stack is on; holds say which **cues** are on stage.
 
 ## Cue events
 
@@ -332,10 +367,12 @@ effect carries its id). `FxInstance.cueId` is still carried — by `EffectDto`, 
 cue** (stage-view plan session 9, D15, D16). Events are the cannons' door into a show, and they are
 deliberately unlike everything else a cue carries:
 
-- **They fire on GO into this cue only.** Every path that makes the cue its stack's live cue fires
-  them — GO, GO TO the cue itself, a busk pad, `POST /cues/{id}/apply`, the auto-advance timer — and
-  the AI's `apply_cue` fires them through the same hook (`EffectsService.onCueGo`, from
-  `activateCueInStack` and `applyCue`). **They never track**: GO TO a *later* cue fires nothing of
+- **They fire when the cue comes on, once** (cue model plan D15). The hold registry fires them on
+  the cue's **first** hold (`EffectsService.onCueGo`, from `CueHolds.acquire`): a GO, GO TO the cue
+  itself or the auto-advance timer making it a stack's live cue, or a loose press — a busk pad, a
+  cue slot, `POST /cues/{id}/apply`, the AI's `apply_cue`. A hold on a cue something already holds
+  fires none: a second stack going onto it, a press over a stack that has it, a GO between two
+  entries of it. **They never track**: GO TO a *later* cue fires nothing of
   an earlier one's, and a **GO BACK** into the cue fires nothing either (`fireEvents = false` on the
   BACKWARD arm), since stepping back is a correction, not a go. **They are never previewed**: only
   the GO builder (`buildCueGoData`) carries them, so a Next GO preview, a republish or a cook cannot.
@@ -385,7 +422,7 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 - `src/api/fxApi.ts` — `FxEffectState` includes `cueId`
 
 ### State Management
-- `src/store/cues.ts` — RTK Query endpoints with `CueList` tag, `stopCue` mutation, `useActiveCueIds()` hook
+- `src/store/cues.ts` — RTK Query endpoints with `CueList` tag, `stopCue` mutation; liveness is `store/cueHolds.ts`'s `useCueRings()`, which replaced `useActiveCueIds()`
 - `src/store/restApi.ts` — `CueList` added to tag types
 
 ### UI Components
@@ -412,8 +449,11 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 Three tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
 - `create_cue` — Create a named cue with layers (a Look, or a palette by `paletteId`), its own
   `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects
-- `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
-- `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
+- `apply_cue` — Take a **loose hold** on a saved cue by ID (§"Apply Semantics"): live above every
+  stack, newest on top, no stack moved. Optional `replaceAll` lets every other loose hold go first;
+  stacks are never touched.
+- `stop_cue` — Let the cue's loose hold go. It comes off unless a running stack also holds it; other
+  running cues are unaffected.
 
 Plus the three programmer gestures, which is how a cue gets *authored* rather than described:
 `record_cue` (the programmer into a cue, in any `RecordMode` — CREATE / MERGE / UPDATE_EXISTING / REMOVE), `include_into_programmer`

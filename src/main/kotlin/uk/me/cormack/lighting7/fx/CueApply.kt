@@ -28,7 +28,8 @@ private val logger = LoggerFactory.getLogger("cueApply")
  * `CueTriggerManager` and `CueComposer` all imported `routes/` to fire a cue — the engine depending
  * on the transport that happened to call it first. What stayed behind in `projectCuesHelpers.kt` is
  * the part that really is transport: state capture for Record, the `CueDetails` response builder,
- * cue-child persistence, and `applyCue` itself, which returns a REST response type.
+ * and cue-child persistence. Bringing a cue on and taking it off is the hold registry's
+ * (`fx/CueHolds.kt`).
  *
  * `fx/` no longer *imports* `routes/` after this, but it is not yet free of it: the descriptor
  * family `detectCapabilities` inspects (`GroupSliderPropertyDescriptor` and friends) is declared in
@@ -61,6 +62,11 @@ internal data class CueApplyData(
     val goEvents: List<EffectsService.CueEventFire> = emptyList(),
     /** How a skipped event announces the cue: `Q5`, or its name when unnumbered. */
     val cueLabel: String = cueName,
+    /**
+     * The priority the cue composes at while it is live — its highest hold's ([CueHolds]). Null for
+     * a build no hold has stamped yet, which composes at its placement's ([cueDerivedPriority]).
+     */
+    val livePriority: Int? = null,
 )
 
 /**
@@ -85,7 +91,7 @@ private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayO
  * Build a [CueApplyData] snapshot from a [DaoCue] entity. Must be called inside an Exposed
  * transaction — dereferences the cue's child collections eagerly.
  *
- * **This is the only builder.** `CueStackManager.activateCueInStack` and `AiTools.applyCue` each
+ * **This is the only builder.** The stack GO path and the AI's apply-cue each once
  * hand-rolled a near-identical one, and each in turn shipped with a field the author forgot:
  * `layers`, added later, was inert on the stack GO path — the primary firing path — while the
  * standalone apply-cue route worked. Two independent authors reproducing one omission is why a
@@ -100,9 +106,10 @@ internal fun buildCueApplyData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyD
     cue.load(*CUE_APPLY_RELATIONS).toCueApplyData(entry?.let(::entryPlacement))
 
 /**
- * [buildCueApplyData] plus the cue's events — what a **GO** into the cue builds, and nothing else:
- * `CueStackManager.activateCueInStack` and the AI's `apply_cue`. Events fire on GO into their cue
- * only (stage-view plan session 9), so the republish, preview and cook builders never carry them.
+ * [buildCueApplyData] plus the cue's events — what a hold that may bring the cue **on** builds, and
+ * nothing else: a stack GO (`CueStackManager.activateEntry`) and a loose press (`takeLooseCue`, with
+ * no entry, so it is labelled by name). Events fire as the cue comes on, on its first hold (cue model
+ * plan D15), so the republish, preview and cook builders never carry them.
  * Must be called inside a transaction.
  */
 internal fun buildCueGoData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyData = buildCueApplyData(cue, entry).copy(
@@ -123,13 +130,10 @@ internal data class EntryPlacement(
 
 /**
  * [entry]'s placement. Its position is its index in the stack's list, markers counted — the slot a
- * cue's `sort_order` used to be — so [stackCuePriorities] and a GO derive one priority.
+ * cue's `sort_order` used to be — so [stackEntryPriorities] and a GO derive one priority.
  */
 internal fun entryPlacement(entry: DaoCueStackEntry): EntryPlacement =
     entryPlacement(entry, entriesOfStack(entry.stack.id).indexOfFirst { it.id == entry.id }.coerceAtLeast(0))
-
-/** [entryPlacement] at a [position] already known — a [soleEntrySlotsOf] batch's. */
-internal fun entryPlacement(slot: EntrySlot): EntryPlacement = entryPlacement(slot.entry, slot.position)
 
 private fun entryPlacement(entry: DaoCueStackEntry, position: Int) = EntryPlacement(
     stackId = entry.stackId,
@@ -147,13 +151,11 @@ private fun entryPlacement(entry: DaoCueStackEntry, position: Int) = EntryPlacem
  */
 internal fun buildCueApplyDataForCues(cueIds: Collection<Int>): Map<Int, CueApplyData> {
     if (cueIds.isEmpty()) return emptyMap()
-    val cues = DaoCue.find { DaoCues.id inList cueIds.toList() }
+    // No placement: a republish keeps a live cue at the priority its holds give it, which
+    // [buildCombinedCueLayerRows] asks the registry for — not at any one entry's.
+    return DaoCue.find { DaoCues.id inList cueIds.toList() }
         .with(*CUE_APPLY_RELATIONS)
-        .toList()
-    // A republish keeps a live cue where it is: its one entry's placement (cue model plan P4;
-    // session 2's hold registry answers which hold a live cue composes at) — batched like the rest.
-    val slots = soleEntrySlotsOf(cues.map { it.id.value })
-    return cues.associate { it.id.value to it.toCueApplyData(slots[it.id.value]?.let(::entryPlacement)) }
+        .associate { it.id.value to it.toCueApplyData(null) }
 }
 
 /** The shared body. Assumes [CUE_APPLY_RELATIONS] are already loaded. */
@@ -209,28 +211,30 @@ internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
 
 
 /**
- * Derived priority for a cue-owned effect. `+1` keeps manual effects (priority 0) strictly
- * below; the magnitude gaps leave room for per-effect fine-tuning without renumbering.
+ * The priority [cueData] composes at: the one its holds give it ([CueApplyData.livePriority]) when a
+ * hold has stamped it, else its placement's. `+1` keeps manual effects (priority 0) strictly below;
+ * the magnitude gaps leave room for per-effect fine-tuning without renumbering.
  */
 internal fun cueDerivedPriority(cueData: CueApplyData): Int =
-    cueDerivedPriority(cueData.cueStackId, cueData.sortOrder)
+    cueData.livePriority ?: cueDerivedPriority(cueData.cueStackId, cueData.sortOrder)
 
 /**
- * Position-only form, for recomputing the priority of *already applied* rows after a stack is
- * reordered — see [uk.me.cormack.lighting7.fx.FxEngine.repriorityCues].
+ * A stack hold's priority: the stack's band plus its entry's position, markers counted — what
+ * [CueHolds.restampEntries] recomputes after a stack's order changes.
  */
 internal fun cueDerivedPriority(cueStackId: Int?, sortOrder: Int): Int =
     (cueStackId ?: 0) * 1_000_000 + sortOrder * 1_000 + 1
 
 /**
- * `cueId → cueDerivedPriority` for every cue in [stack] at its entry's current position. Hand the
- * result to [uk.me.cormack.lighting7.fx.FxEngine.repriorityCues] after changing the order, so
- * cues already on stage compose in the new order without needing to be re-applied.
+ * `entryId → cueDerivedPriority` for every cue entry in [stack] at its current position. Hand the
+ * result to [CueHolds.restampEntries] after changing the order, so a cue a stack holds on stage
+ * composes in the new order without being re-applied — at its highest hold's priority, which a
+ * loose hold may keep above it.
  */
-internal fun stackCuePriorities(stack: DaoCueStack): Map<Int, Int> =
+internal fun stackEntryPriorities(stack: DaoCueStack): Map<Int, Int> =
     entriesOf(stack).withIndex()
-        .mapNotNull { (position, entry) -> entry.cueId?.let { it to cueDerivedPriority(stack.id.value, position) } }
-        .toMap()
+        .filter { (_, entry) -> entry.cueId != null }
+        .associate { (position, entry) -> entry.id.value to cueDerivedPriority(stack.id.value, position) }
 
 /**
  * The **cue-level** (cross-cue) stomp overlap: every `(target, property)` this cue holds, from both
@@ -466,9 +470,9 @@ internal fun buildCueAssignmentsForCue(
 /**
  * Republish Layer 4 for [cueId] from pre-built [applyData], combining the cue's own property
  * assignments with those of each immediate preset application (timed presets don't contribute
- * — matching [applyCue]). Effects are left alone: this is the Layer 4 half of an apply.
+ * — matching a GO's first publish). Effects are left alone: this is the Layer 4 half of an apply.
  *
- * Used by cue-edit persists and by Record/Update after they rewrite a cue that is currently
+ * Used by Record/Update and the programmer surface after they rewrite a cue that is currently
  * live. Without it the DB rows and the published layer disagree, and the next Clear would
  * snap the rig back to the cue's pre-edit values.
  */
@@ -478,7 +482,6 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
     if (combined.rows.isNotEmpty()) {
         engine.cueLayer.setAssignments(
             cueId, combined.rows,
-            cueStackId = applyData.cueStackId,
             stompSuppression = combined.stompSuppression,
         )
     } else {
@@ -488,8 +491,8 @@ internal fun republishCueLayer(state: State, cueId: Int, applyData: CueApplyData
 
 /**
  * The cook [republishCueLayer] would publish: the cue's layer stack flattened with its own local
- * rows on top (timed layers don't contribute unless named in [firedTimedLayerIds] — matching
- * [applyCue]).
+ * rows on top (timed layers don't contribute unless named in [firedTimedLayerIds] — matching a
+ * GO's first publish).
  *
  * Returns the whole [CookResult], not just its rows. A caller that only wants values takes `.rows`;
  * one that *publishes* must carry `.stompSuppression` with them, or a stomping layer's effect
@@ -510,13 +513,24 @@ internal fun buildCombinedCueLayerRows(
     cueId: Int,
     applyData: CueApplyData,
     firedTimedLayerIds: Set<Int>? = null,
+    /**
+     * The priority to cook at; null is the cue's live one (its holds'), else the one its fading rows
+     * publish at, else [applyData]'s own.
+     */
+    priority: Int? = null,
 ): CookResult {
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, applyData)
+    // A live cue composes at its holds' priority, whichever entry (or none) [applyData] was built from.
+    // A cue whose last hold has gone while its rows still fade out keeps the priority they publish at.
+    val live = priority
+        ?: state.show.cueStackManager.holds.priorityOf(cueId)
+        ?: state.show.fxEngine.cueLayer.publishedPriorityOf(cueId)
+    val data = live?.let { applyData.copy(livePriority = it) } ?: applyData
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data)
     return CueComposer.cook(
         fixtures = state.show.fixtures,
         cueId = cueId,
-        priority = cueDerivedPriority(applyData),
-        layers = applyData.layers,
+        priority = cueDerivedPriority(data),
+        layers = data.layers,
         localRows = cueOwn,
         resolveLook = state.show.lookRegistry::snapshot,
         resolveTemplate = state.show.templateRegistry::snapshot,

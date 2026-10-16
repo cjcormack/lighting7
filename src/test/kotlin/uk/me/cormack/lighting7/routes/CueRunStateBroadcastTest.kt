@@ -68,7 +68,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             // A GO fired over HTTP — the "desk" — observed from this socket, the "tablet".
             val go = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
                 contentType(ContentType.Application.Json)
-                setBody(ActivateCueStackRequest(cueId = cue1))
+                setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue1)))
             }
             assertEquals(HttpStatusCode.OK, go.status)
 
@@ -113,7 +113,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
         }
         state.show.fixtures.registerListener(listener)
         try {
-            state.show.cueStackManager.activateCueInStack(state, stackId, cue1)
+            state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cue1))
         } finally {
             state.show.fixtures.unregisterListener(listener)
         }
@@ -149,7 +149,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
         }.body<CueDetails>().id
         createCue(client, "a2", stackId)
 
-        state.show.cueStackManager.activateCueInStack(state, stackId, cue1)
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cue1))
         assertTrue(
             state.show.cueStackManager.runState.runStateFor(state, stackId).autoAdvance,
             "a live timer means the stack will roll forward",
@@ -178,7 +178,7 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cue1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue1)))
         }
 
         // Now open a socket, as a phone joining a show already in progress.

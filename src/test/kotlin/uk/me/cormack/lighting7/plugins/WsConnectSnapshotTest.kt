@@ -71,6 +71,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The grand master (venue-visit S5), a StateFlow following the live show: at full on a fresh
         // desk, which is still the level every Grand Master panel starts from.
         GrandMasterStateOutMessage::class,
+        // The cue holds (cue model plan §3.4), a StateFlow hosted on State: on a fresh desk nothing
+        // is held, and that empty frame is still what every cue pad's and cue slot's ring starts from.
+        CueHoldsStateOutMessage::class,
     )
 
     @Test

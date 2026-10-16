@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.takeLooseCue
 import uk.me.cormack.lighting7.testsupport.inStack
 import uk.me.cormack.lighting7.models.LayerSource
 import io.ktor.server.testing.testApplication
@@ -25,8 +26,6 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import uk.me.cormack.lighting7.fx.buildCueApplyData
-import uk.me.cormack.lighting7.models.soleEntryOf
 
 /**
  * The touring feature: editing a Look moves every live cue that depends on it, without re-firing a
@@ -78,11 +77,8 @@ class LookRepublishTest : RouteIntegrationTest() {
      */
     private fun applyCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
         val cueId = seedCueReferencing(fixtureKey, lookUuid, hex)
-        val applyData = transaction(state.database) {
-            val cue = DaoCue.findById(cueId)!!
-            buildCueApplyData(cue, soleEntryOf(cue))
-        }
-        applyCue(state, applyData, replaceAll = false)
+        // Held loose, as a pad press holds it — live with no stack behind it.
+        state.show.cueStackManager.holds.takeLooseCue(state, cueId)
         return cueId
     }
 

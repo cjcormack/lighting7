@@ -68,6 +68,9 @@ const STACK: CueStack = {
   cues: [cue(1), cue(2), cue(3, { cueType: 'MARKER', name: 'Interval' }), cue(4), cue(5)],
   activeCueId: null,
   nextCueId: null,
+  activeEntryId: null,
+  nextEntryId: null,
+  standbyEntryId: null,
   canEdit: true,
   canDelete: true,
 }

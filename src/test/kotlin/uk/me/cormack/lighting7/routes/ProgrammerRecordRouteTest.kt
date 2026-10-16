@@ -88,7 +88,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                     value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
-            cueStackId = stackId,
         )
 
         val response: ProgrammerRecordResponse = client.record(
@@ -121,7 +120,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                     value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
-            cueStackId = stackId,
         )
         setProgrammer("hex-1", "dimmer", "200")
 
@@ -592,7 +590,6 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                     value = CueAssignmentResolver.PropertyValue.Slider(90u),
                 )
             ),
-            cueStackId = stackId,
         )
         setProgrammer("hex-1", "dimmer", "200")
 

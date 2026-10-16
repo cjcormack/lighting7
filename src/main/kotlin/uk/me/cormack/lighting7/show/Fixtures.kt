@@ -105,6 +105,8 @@ interface FixturesChangeListener {
     fun showChanged(projectId: Int, activeStackId: Int?, activeStackName: String?) {}
     /** A cue stack's live cue, armed next, or fade progress changed. */
     fun cueRunStateChanged(runState: CueRunState) {}
+    /** A cue's holds changed (`fx/CueHolds.kt`) — taken, let go or restamped. The frame is `cueHolds.state`. */
+    fun cueHoldsChanged() {}
     fun promptBookChanged() {}
     /**
      * A project's own row changed — its name, description or stage bounding box. Keyed by
@@ -586,6 +588,10 @@ class Fixtures {
         changeListeners.forEach {
             it.cueRunStateChanged(runState)
         }
+    }
+
+    fun cueHoldsChanged() {
+        changeListeners.forEach { it.cueHoldsChanged() }
     }
 
     fun promptBookChanged() {

@@ -37,7 +37,7 @@ class CueTriggerManager(
     /** Effect IDs created by timed effects/triggers per cue ID (for targeted cleanup) */
     private val triggerEffectIds = ConcurrentHashMap<Int, MutableList<Long>>()
 
-    /** Map of cueId → stackId for stack-level cleanup */
+    /** cueId → the stack whose hold brought it on, for its DEACTIVATION scripts' `CueContext`. */
     private val cueToStack = ConcurrentHashMap<Int, Int>()
 
     /**
@@ -79,14 +79,14 @@ class CueTriggerManager(
      * Call this after the cue's immediate effects have been applied. Only effects
      * with non-null delayMs or intervalMs should be passed here.
      *
-     * [priority] is the cue-derived Layer 4 priority (see
-     * [cueDerivedPriority]). Timed Look fires produce Layer 4
-     * rows at this priority so they compose consistently with the cue's apply-time rows.
+     * [priority] answers the priority the cue composes at **now** — its highest hold's ([CueHolds]),
+     * which a hold taken or let go after this activation moves. Timed fires produce Layer 4 rows and
+     * effects at it, so they compose consistently with the cue's apply-time rows.
      */
     internal fun activateTimedEffectsForCue(
         cueId: Int,
         cueStackId: Int?,
-        priority: Int,
+        priority: () -> Int,
         cueData: CueApplyData,
         timedAdHocEffects: List<CueAdHocEffectDto>,
         scope: CoroutineScope,
@@ -134,7 +134,7 @@ class CueTriggerManager(
                     state.show.templateRegistry::snapshot,
                     includeTimed = setOf(layer.layerId),
                 )) {
-                    applyLayerEffectToTarget(firedLayer, layerEffect, target, cueId, cueStackId, effectIds)
+                    applyLayerEffectToTarget(firedLayer, layerEffect, target, cueId, cueStackId, priority(), effectIds)
                 }
 
                 val cooked = fireCook.cook(fired.toSet())
@@ -156,7 +156,7 @@ class CueTriggerManager(
         // Launch timed ad-hoc effects
         for (effect in timedAdHocEffects) {
             val job = launchTimedAction(effect.delayMs, effect.intervalMs, effect.randomWindowMs, scope) {
-                applyAdHocEffect(effect, cueId, cueStackId, effectIds)
+                applyAdHocEffect(effect, cueId, cueStackId, priority(), effectIds)
             }
             if (job != null) jobs.add(job)
         }
@@ -266,19 +266,6 @@ class CueTriggerManager(
         fxEngine.cueLayer.clearStompSuppression(cueId)
     }
 
-    /**
-     * Deactivate all timed effects and triggers for all cues in a stack.
-     */
-    fun deactivateTriggersForStack(stackId: Int) {
-        val cueIds = cueToStack.entries
-            .filter { it.value == stackId }
-            .map { it.key }
-
-        for (cueId in cueIds) {
-            deactivateTriggersForCue(cueId)
-        }
-    }
-
     // ─── Internal helpers ──────────────────────────────────────────────────
 
     /**
@@ -330,6 +317,7 @@ class CueTriggerManager(
         target: uk.me.cormack.lighting7.models.TargetRef,
         cueId: Int,
         cueStackId: Int?,
+        priority: Int,
         effectIds: MutableList<Long>,
     ) {
         val effectSpec = layerEffect.toEffectSpec()
@@ -353,6 +341,7 @@ class CueTriggerManager(
         instance.cueLayerId = layer.layerId
         instance.cueId = cueId
         instance.cueStackId = cueStackId
+        instance.priority = priority
 
         val id = fxEngine.addEffect(instance)
         synchronized(effectIds) { effectIds.add(id) }
@@ -365,28 +354,11 @@ class CueTriggerManager(
         effect: CueAdHocEffectDto,
         cueId: Int,
         cueStackId: Int?,
+        priority: Int,
         effectIds: MutableList<Long>,
     ) {
         val toggleTarget = CueTargetDto(effect.target)
-        val adHocEffectSpec = LookEffectSpec(
-            effectType = effect.effectType,
-            category = effect.category,
-            propertyName = effect.propertyName,
-            beatDivision = effect.beatDivision,
-            blendMode = effect.blendMode,
-            distribution = effect.distribution,
-            phaseOffset = effect.phaseOffset,
-            elementMode = effect.elementMode,
-            elementFilter = effect.elementFilter,
-            stepTiming = effect.stepTiming,
-            parameters = effect.parameters,
-            speedMasterUuid = effect.speedMasterUuid,
-            rateSpeedMasterUuid = effect.rateSpeedMasterUuid,
-            seconds = effect.seconds,
-            size = effect.size,
-            direction = effect.direction,
-            nShot = effect.nShot,
-        )
+        val adHocEffectSpec = effect.toLookEffectSpec()
 
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(state, toggleTarget, adHocEffectSpec)
@@ -403,6 +375,7 @@ class CueTriggerManager(
         ) ?: return
         instance.cueId = cueId
         instance.cueStackId = cueStackId
+        instance.priority = priority
 
         val id = fxEngine.addEffect(instance)
         synchronized(effectIds) { effectIds.add(id) }
@@ -486,7 +459,8 @@ class CueTriggerManager(
  * **Invalidation is a stamp, not a listener.** Anything a cook reads besides the fixed
  * [CueApplyData] carries a version: the patch register ([Fixtures.structureVersion]), the Look
  * cache ([LookRegistry.version]) and, scoped to the templates this cue actually names,
- * [TemplateRegistry.versionFor]. A mid-cue Look edit republishes the cue through
+ * [TemplateRegistry.versionFor] — and the cue's own priority, which a hold taken or let go moves
+ * ([CueHolds]). A mid-cue Look edit republishes the cue through
  * `republishForLookEdit` *and* bumps that version, so the next fire re-cooks rather than serving a
  * pre-edit result and quietly reverting the operator's save.
  *
@@ -497,7 +471,8 @@ class CueTriggerManager(
 private class TimedFireCook(
     private val state: State,
     private val cueId: Int,
-    private val priority: Int,
+    /** The cue's priority now — its highest hold's, which a hold taken or let go moves. */
+    private val priority: () -> Int,
     private val cueData: CueApplyData,
 ) {
     /** Scoped so an edit to some *other* template doesn't drop this cue's memo. */
@@ -506,7 +481,7 @@ private class TimedFireCook(
         .map { it.source.uuid }
         .distinct()
 
-    private data class Stamp(val structure: Long, val looks: Long, val templates: Long)
+    private data class Stamp(val structure: Long, val looks: Long, val templates: Long, val priority: Int)
 
     private var stamp: Stamp? = null
     private var localRows: List<CueAssignmentResolver.Assignment>? = null
@@ -527,6 +502,7 @@ private class TimedFireCook(
             structure = state.show.fixtures.structureVersion,
             looks = state.show.lookRegistry.version,
             templates = state.show.templateRegistry.versionFor(templateUuids),
+            priority = priority(),
         )
         if (now != stamp) {
             stamp = now
@@ -537,12 +513,12 @@ private class TimedFireCook(
         cooked?.let { if (firedKey == fired) return it }
 
         val rows = localRows
-            ?: buildCueAssignmentsForCue(state.show.fixtures, cueData)
+            ?: buildCueAssignmentsForCue(state.show.fixtures, cueData.copy(livePriority = now.priority))
                 .also { localRows = it }
         val result = CueComposer.cook(
             fixtures = state.show.fixtures,
             cueId = cueId,
-            priority = priority,
+            priority = now.priority,
             layers = cueData.layers,
             localRows = rows,
             resolveLook = state.show.lookRegistry::snapshot,

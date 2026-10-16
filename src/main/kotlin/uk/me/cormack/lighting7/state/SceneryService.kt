@@ -129,12 +129,27 @@ class SceneryService(private val state: State) {
     private var entries: Map<UUID, Entry> = emptyMap()
     private var staged: Map<UUID, Entry> = emptyMap()
     private var seq = 0L
-    /** The cue each stack last went to by the stack manager's GOs, and when. */
-    private val goes = HashMap<Int, Pair<Int, Long>>()
-    /** Cues the AI's `apply_cue` applied outside the stack manager, by stack. */
-    private val applied = HashMap<Int, Pair<Int, Long>>()
-    /** GOs no recompute has read yet: the cue each stack went to. */
+    /** The entry each stack last went to by the stack manager's GOs, its cue, and when. */
+    private val goes = HashMap<Int, Go>()
+    /**
+     * Cues held loose (cue model plan §3.4), and when: each folds in as a one-cue stack in GO order —
+     * its own rows, no set, no tracking.
+     */
+    private val loose = HashMap<Int, Long>()
+    /** GOs no recompute has read yet: the cue each track went to, keyed as [liveCues] keys them. */
     private val pendingGos = HashMap<Int, Int>()
+
+    /** One stack's live entry, the cue it names, and the GO's sequence number. */
+    private data class Go(val entryId: Int, val cueId: Int, val seq: Long)
+
+    /** What a track is live on — a stack's entry, or a loose cue — and when it went. */
+    private sealed interface Track {
+        val cueId: Int
+        val seq: Long
+
+        data class Stack(val stackId: Int, val entryId: Int, override val cueId: Int, override val seq: Long) : Track
+        data class Loose(override val cueId: Int, override val seq: Long) : Track
+    }
 
     private var listenedFixtures: uk.me.cormack.lighting7.show.Fixtures? = null
     private var layersJob: Job? = null
@@ -164,12 +179,13 @@ class SceneryService(private val state: State) {
             listenedFixtures?.unregisterListener(listener)
             show.fixtures.registerListener(listener)
             listenedFixtures = show.fixtures
-            applied.clear()
             if (reload) {
                 goes.keys.retainAll(show.cueStackManager.getActiveStackIds())
-                pendingGos.keys.retainAll(goes.keys)
+                loose.keys.retainAll(show.cueStackManager.holds.looseCueIdsInPressOrder().toSet())
+                pendingGos.keys.retainAll(goes.keys + loose.keys.map(::looseKey))
             } else {
                 goes.clear()
+                loose.clear()
                 pendingGos.clear()
                 entries = emptyMap()
                 staged = emptyMap()
@@ -198,26 +214,33 @@ class SceneryService(private val state: State) {
 
     // ─── Hooks ───────────────────────────────────────────────────────────────────────────────
 
-    /** A stack GO — `CueStackManager.activateCueInStack`, by every path that fires one. */
-    fun onCueLive(stackId: Int, cueId: Int) {
+    /**
+     * A stack GO to [entryId] — `CueStackManager.activateEntry`, by every path that fires one. The
+     * stack tracks down its entry list to this entry (cue model plan §3.4), even when the GO only
+     * moved between two entries of one cue.
+     */
+    fun onEntryLive(stackId: Int, entryId: Int, cueId: Int) {
         synchronized(lock) {
-            goes[stackId] = cueId to ++seq
-            applied.remove(stackId)
+            goes[stackId] = Go(entryId, cueId, ++seq)
             pendingGos[stackId] = cueId
         }
         recompute()
     }
 
-    /**
-     * A cue applied outside the stack manager — the AI's `apply_cue` and the REST apply route. It
-     * stands in for its stack's live cue until the stack goes or stops; [replaceAll] lets go of
-     * every other applied cue, as the apply stops their effects.
-     */
-    fun onCueApplied(stackId: Int, cueId: Int, replaceAll: Boolean) {
+    /** A cue held loose (`CueHolds.takeLoose`): it joins in GO order, as of this press. */
+    fun onLooseHeld(cueId: Int) {
         synchronized(lock) {
-            if (replaceAll) applied.clear()
-            applied[stackId] = cueId to ++seq
-            pendingGos[stackId] = cueId
+            loose[cueId] = ++seq
+            pendingGos[looseKey(cueId)] = cueId
+        }
+        recompute()
+    }
+
+    /** A loose hold let go (`CueHolds.dropLoose`): the cue's scenery leaves with it. */
+    fun onLooseReleased(cueId: Int) {
+        synchronized(lock) {
+            loose.remove(cueId)
+            pendingGos.remove(looseKey(cueId))
         }
         recompute()
     }
@@ -226,15 +249,8 @@ class SceneryService(private val state: State) {
     fun onStackStopped(stackId: Int) {
         synchronized(lock) {
             goes.remove(stackId)
-            applied.remove(stackId)
             pendingGos.remove(stackId)
         }
-        recompute()
-    }
-
-    /** `stop_cue` and the REST stop route: an applied cue lets go. */
-    fun onCueStopped(cueId: Int) {
-        synchronized(lock) { applied.entries.removeIf { it.value.first == cueId } }
         recompute()
     }
 
@@ -303,7 +319,7 @@ class SceneryService(private val state: State) {
             val (live, gos, keep) = synchronized(lock) {
                 val live = liveCues()
                 // A stack stopped, or let go of an applied cue, since its GO has nothing left to move.
-                val gos = pendingGos.filter { (stackId, cueId) -> live[stackId]?.first == cueId }
+                val gos = pendingGos.filter { (key, cueId) -> live[key]?.cueId == cueId }
                 pendingGos.clear()
                 Triple(live, gos, entries.keys + staged.keys)
             }
@@ -384,9 +400,9 @@ class SceneryService(private val state: State) {
      * published or remembered. Read on the caller's thread (a request, outside any transaction),
      * with [lock] held only to snapshot what it compares against.
      */
-    fun preview(stackId: Int, cueId: Int): List<PreviewEntry> {
+    fun preview(stackId: Int, entryId: Int, cueId: Int): List<PreviewEntry> {
         val (live, current) = synchronized(lock) {
-            liveCues().toMutableMap().also { it[stackId] = cueId to (seq + 1) } to entries
+            liveCues().toMutableMap().also { it[stackId] = Track.Stack(stackId, entryId, cueId, seq + 1) } to entries
         }
         val input = load(live, state.programmerScenery.readForResolve(takeReleases = false).first, current.keys) ?: return emptyList()
         val now = System.currentTimeMillis()
@@ -413,15 +429,14 @@ class SceneryService(private val state: State) {
     }
 
     /**
-     * The cue each live stack is on, and when it went — [goes], with `apply_cue`'s over it. Under
-     * [lock]. Not the manager's own table: it changes a stack's cue before the GO's hook fires.
+     * What each track is live on, and when it went — every stack's entry ([goes]) and every loose
+     * cue ([loose]), keyed by stack id or by [looseKey]. Under [lock]. Not the manager's own table:
+     * it changes a stack's entry before the GO's hook fires.
      */
-    private fun liveCues(): Map<Int, Pair<Int, Long>> {
-        val out = HashMap(goes)
-        for ((stackId, cue) in applied) {
-            val existing = out[stackId]
-            if (existing == null || cue.second > existing.second) out[stackId] = cue
-        }
+    private fun liveCues(): Map<Int, Track> {
+        val out = HashMap<Int, Track>()
+        for ((stackId, go) in goes) out[stackId] = Track.Stack(stackId, go.entryId, go.cueId, go.seq)
+        for ((cueId, at) in loose) out[looseKey(cueId)] = Track.Loose(cueId, at)
         return out
     }
 
@@ -446,8 +461,9 @@ class SceneryService(private val state: State) {
         fun holder(source: SceneryResolver.Source): Holder = when (source) {
             SceneryResolver.Source.Base -> Holder.BASE
             is SceneryResolver.Source.StackSet -> Holder("set", stackId = source.stackId, name = stackNames[source.stackId])
-            is SceneryResolver.Source.CueRow -> Holder("cue", stackId = source.stackId, cueId = source.cueId, label = source.cueLabel)
-            is SceneryResolver.Source.CueLook -> Holder("cueLook", stackId = source.stackId, lookId = source.lookId, name = lookNames[source.lookId])
+            // A loose cue's track key is no stack's id (see [looseKey]): it holds in no stack.
+            is SceneryResolver.Source.CueRow -> Holder("cue", stackId = source.stackId.takeIf { it > 0 }, cueId = source.cueId, label = source.cueLabel)
+            is SceneryResolver.Source.CueLook -> Holder("cueLook", stackId = source.stackId.takeIf { it > 0 }, lookId = source.lookId, name = lookNames[source.lookId])
             is SceneryResolver.Source.ProgrammerLook -> Holder("programmerLook", lookId = source.lookId, name = lookNames[source.lookId])
             is SceneryResolver.Source.Programmer -> Holder("programmer")
         }
@@ -459,7 +475,7 @@ class SceneryService(private val state: State) {
      * — an entry the last frame carried, so a piece the programmer let go flies home rather than
      * vanishing from the frame mid-move.
      */
-    private fun load(live: Map<Int, Pair<Int, Long>>, overlay: ProgrammerScenery.Snapshot, keep: Set<UUID>): Input? {
+    private fun load(live: Map<Int, Track>, overlay: ProgrammerScenery.Snapshot, keep: Set<UUID>): Input? {
         val show = state.showOrNull ?: return null
         val project = runCatching { state.projectManager.currentProject }.getOrNull() ?: return null
         val store = show.programmerStore
@@ -488,11 +504,17 @@ class SceneryService(private val state: State) {
             val controlled = named + held.map { it.elementId }
             val elements = all.filter { it.id.value in controlled || it.uuid in keep }.map { it.toSceneryElement() }
 
-            val stacks = live.mapNotNull { (stackId, cue) ->
-                val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == dao.id } ?: return@mapNotNull null
-                liveStack(stack, cue.first, cue.second)
+            val stacks = live.values.mapNotNull { track ->
+                when (track) {
+                    is Track.Stack -> {
+                        val stack = DaoCueStack.findById(track.stackId)?.takeIf { it.project.id == dao.id } ?: return@mapNotNull null
+                        liveStack(stack, track.entryId, track.seq)
+                    }
+                    is Track.Loose -> looseStack(dao, track.cueId, track.seq)
+                }
             }
-            val stackNames = stacks.mapNotNull { s -> DaoCueStack.findById(s.stackId)?.let { s.stackId to it.name } }.toMap()
+            val stackNames = stacks.filter { it.stackId > 0 }
+                .mapNotNull { s -> DaoCueStack.findById(s.stackId)?.let { s.stackId to it.name } }.toMap()
             val lookIds = (stacks.flatMap { it.layeredLookIds } + programmerLooks).toSet()
             val lookScenery = if (lookIds.isEmpty()) emptyMap() else
                 DaoLookSceneryRow.find { DaoLookScenery.look inList lookIds }
@@ -509,45 +531,75 @@ class SceneryService(private val state: State) {
 
     /**
      * One live stack's set, its cue entries down to the live one, and the live cue's layered Looks.
-     * Tracking walks the stack's entries (cue model plan §3.4); the live cue is the first entry
-     * naming it, which is its only one until the plan's session 2 keys the runtime on entries.
+     * Tracking walks the stack's entries down to the live **entry** (cue model plan §3.4), so a cue
+     * twice in one stack tracks from the place the stack is actually at.
      */
-    private fun liveStack(stack: DaoCueStack, liveCueId: Int, goSeq: Long): SceneryResolver.LiveStack? {
+    private fun liveStack(stack: DaoCueStack, liveEntryId: Int, goSeq: Long): SceneryResolver.LiveStack? {
         val entries = entriesOf(stack).filter { !it.isMarker && it.cueId != null }
-        val liveIndex = entries.indexOfFirst { it.cueId == liveCueId }.takeIf { it >= 0 } ?: return null
+        val liveIndex = entries.indexOfFirst { it.id.value == liveEntryId }.takeIf { it >= 0 } ?: return null
         val tracked = entries.take(liveIndex + 1)
-        val cueById = DaoCue.find { DaoCues.id inList tracked.map { it.cueId!! } }.associateBy { it.id.value }
+        val cueById = DaoCue.find { DaoCues.id inList tracked.map { it.cueId!! }.distinct() }.associateBy { it.id.value }
         val cues = tracked.mapNotNull { e -> cueById[e.cueId!!]?.let { e to it } }
         val set = DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq stack.id }
             .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
             .map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
-        val rows = DaoCueSceneryRow.find { DaoCueScenery.cue inList cues.map { it.second.id } }
-            .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-            .groupBy { it.cue.id.value }
-        val live = cueById[liveCueId] ?: return null
-        val layered = DaoCueLayer.find { DaoCueLayers.cue eq live.id }
-            .filter { it.enabled && it.amount > 0.0 && it.delay == null && it.interval == null }
-            .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-            .mapNotNull { it.look?.id?.value }
+        val rows = cueSceneryRows(cues.map { it.second })
+        val live = cueById[tracked.last().cueId!!] ?: return null
         return SceneryResolver.LiveStack(
             stackId = stack.id.value,
             goSeq = goSeq,
             set = set,
-            cues = cues.map { (entry, cue) ->
-                val fade = cue.fadeDuration?.toMillis() ?: 0L
-                SceneryResolver.Cue(
-                    cueId = cue.id.value,
-                    label = entry.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name,
-                    changes = rows[cue.id.value].orEmpty().map {
-                        SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), it.transition?.toMillis() ?: fade)
-                    },
-                )
-            },
-            layeredLookIds = layered,
+            cues = cues.map { (entry, cue) -> sceneryCue(cue, entry.cueNumber?.takeIf { it.isNotBlank() } ?: cue.name, rows) },
+            layeredLookIds = layeredLookIds(live),
         )
     }
 
+    /**
+     * A loose cue as a one-cue stack (§3.4): its own rows, no set, no tracking, in GO order as of its
+     * press. Keyed by [looseKey], which no stack id can be.
+     */
+    private fun looseStack(project: DaoProject, cueId: Int, goSeq: Long): SceneryResolver.LiveStack? {
+        val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id } ?: return null
+        return SceneryResolver.LiveStack(
+            stackId = looseKey(cueId),
+            goSeq = goSeq,
+            set = emptyList(),
+            cues = listOf(sceneryCue(cue, cue.name, cueSceneryRows(listOf(cue)))),
+            layeredLookIds = layeredLookIds(cue),
+        )
+    }
+
+    private fun cueSceneryRows(cues: List<DaoCue>): Map<Int, List<DaoCueSceneryRow>> =
+        DaoCueSceneryRow.find { DaoCueScenery.cue inList cues.map { it.id }.distinct() }
+            .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+            .groupBy { it.cue.id.value }
+
+    private fun sceneryCue(cue: DaoCue, label: String, rows: Map<Int, List<DaoCueSceneryRow>>): SceneryResolver.Cue {
+        val fade = cue.fadeDuration?.toMillis() ?: 0L
+        return SceneryResolver.Cue(
+            cueId = cue.id.value,
+            label = label,
+            changes = rows[cue.id.value].orEmpty().map {
+                SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), it.transition?.toMillis() ?: fade)
+            },
+        )
+    }
+
+    /** The Looks [cue] layers live — enabled, a non-zero amount, untimed — in layer order. */
+    private fun layeredLookIds(cue: DaoCue): List<Int> =
+        DaoCueLayer.find { DaoCueLayers.cue eq cue.id }
+            .filter { it.enabled && it.amount > 0.0 && it.delay == null && it.interval == null }
+            .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+            .mapNotNull { it.look?.id?.value }
+
     companion object {
+        /**
+         * A loose cue's track key in the live table and in [SceneryResolver.LiveStack.stackId]: the
+         * cue's id negated, which no stack's (always positive) id can collide with. The holder a
+         * client reads maps it back to "no stack".
+         */
+        fun looseKey(cueId: Int): Int = -cueId
+
         /** The programmer's live Look layers, bottom first: templates carry no scenery (D11). */
         fun programmerLookIds(layers: List<ProgrammerLayer>): List<Int> =
             layers.filter { it.source.kind == LayerSourceKind.LOOK && it.enabled && it.amount > 0.0 }

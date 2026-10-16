@@ -582,7 +582,7 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
 }
 
 /**
- * Republish [cueId]'s Layer 4 if it is the live cue of its stack.
+ * Republish [cueId]'s Layer 4 if anything holds it live — a stack or a loose press.
  *
  * Without this the cue's DB rows and its published contribution disagree after a Record, and
  * the next Clear would drop the rig back to the pre-record values — the look would appear to
@@ -592,18 +592,18 @@ private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
  * from are still running, and spawning cue-owned twins would double-apply them. The cue's FX
  * children go live on its next GO.
  */
-internal fun republishCueIfLive(state: State, cueId: Int, cueStackId: Int?): Boolean {
-    if (cueStackId == null) return false
-    if (state.show.cueStackManager.getActiveCueId(cueStackId) != cueId) return false
-    val applyData = loadCueApplyDataForRepublish(state, cueId, cueStackId) ?: return false
+internal fun republishCueIfLive(state: State, cueId: Int): Boolean {
+    // Live is held — by a stack or a loose press (cue model plan §3.4). It composes at its holds'
+    // priority, which the republish asks the registry for, so it needs no entry here.
+    if (!state.show.cueStackManager.holds.isHeld(cueId)) return false
+    val applyData = loadCueApplyDataForRepublish(state, cueId) ?: return false
     republishCueLayer(state, cueId, applyData)
     return true
 }
 
-private fun loadCueApplyDataForRepublish(state: State, cueId: Int, cueStackId: Int): CueApplyData? =
+private fun loadCueApplyDataForRepublish(state: State, cueId: Int): CueApplyData? =
     org.jetbrains.exposed.v1.jdbc.transactions.transaction(state.database) {
-        // A republish keeps the live cue where it plays: the stack the caller checked it is live in.
-        DaoCue.findById(cueId)?.let { buildCueApplyData(it, entryInStack(cueStackId, cueId)) }
+        DaoCue.findById(cueId)?.let { buildCueApplyData(it, null) }
     }
 
 /** Targets a preset application already covers, for dedupe. */

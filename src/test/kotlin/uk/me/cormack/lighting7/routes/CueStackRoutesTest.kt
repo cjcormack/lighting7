@@ -91,6 +91,9 @@ class CueStackRoutesTest {
             activeCueId = 10,
             standbyCueId = null,
             nextCueId = null,
+            activeEntryId = 110,
+            standbyEntryId = null,
+            nextEntryId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -112,6 +115,9 @@ class CueStackRoutesTest {
             activeCueId = null,
             standbyCueId = null,
             nextCueId = null,
+            activeEntryId = null,
+            standbyEntryId = null,
+            nextEntryId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -134,6 +140,9 @@ class CueStackRoutesTest {
             activeCueId = null,
             standbyCueId = null,
             nextCueId = null,
+            activeEntryId = null,
+            standbyEntryId = null,
+            nextEntryId = null,
             canEdit = false,
             canDelete = false,
         )
@@ -179,6 +188,9 @@ class CueStackRoutesTest {
             activeCueId = null,
             standbyCueId = null,
             nextCueId = null,
+            activeEntryId = null,
+            standbyEntryId = null,
+            nextEntryId = null,
             canEdit = true,
             canDelete = true,
         )
@@ -198,17 +210,17 @@ class CueStackRoutesTest {
     }
 
     @Test
-    fun `ActivateCueStackRequest defaults cueId to null`() {
+    fun `ActivateCueStackRequest defaults entryId to null`() {
         val request = ActivateCueStackRequest()
-        assertNull(request.cueId)
+        assertNull(request.entryId)
     }
 
     @Test
-    fun `ActivateCueStackRequest with specific cueId`() {
-        val request = ActivateCueStackRequest(cueId = 10)
+    fun `ActivateCueStackRequest with specific entryId`() {
+        val request = ActivateCueStackRequest(entryId = 10)
         val serialized = json.encodeToString(request)
         val deserialized = json.decodeFromString<ActivateCueStackRequest>(serialized)
-        assertEquals(10, deserialized.cueId)
+        assertEquals(10, deserialized.entryId)
     }
 
     @Test
@@ -233,6 +245,7 @@ class CueStackRoutesTest {
     fun `CueStackActivateResponse serialization round-trips`() {
         val response = CueStackActivateResponse(
             stackId = 1,
+            entryId = 110,
             cueId = 10,
             cueName = "Opening",
             effectCount = 5,
@@ -302,6 +315,9 @@ class CueStackRoutesTest {
             activeCueId = 102,
             standbyCueId = null,
             nextCueId = null,
+            activeEntryId = 202,
+            standbyEntryId = null,
+            nextEntryId = null,
             canEdit = true,
             canDelete = true,
         )
