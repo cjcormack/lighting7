@@ -32,6 +32,7 @@ vi.mock('@/store/busk', () => ({
 }))
 vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1', launchImmersive: () => null }))
 vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => ({ id: 1, name: 'Show', isCurrent: true }) }))
+vi.mock('@/store/projects', () => ({ useProjectListQuery: () => ({ data: [{ id: 1, name: 'Show', isCurrent: true }] }) }))
 
 const fullscreen = { active: false, enter: vi.fn(), exit: vi.fn() }
 vi.mock('@/lib/fullscreen', () => ({

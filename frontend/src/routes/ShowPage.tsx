@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import { useProjectCueStackListQuery } from '../store/cueStacks'
 import { useProjectProgramStateQuery } from '../store/cueStacks'
 import { setShowPosition } from '../lib/showPosition'
@@ -72,7 +72,6 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     if (stackView === 'list') setStoredCardsListView(SHOW_VIEW_KEY, 'list')
   }, [stackView])
 
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: stacks, isLoading: stacksLoading, isFetching: stacksFetching } =
     useProjectCueStackListQuery(projectIdNum)
@@ -401,9 +400,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    * no card — so a stale address is never remembered and handed back. A cue the list has not
    * caught up with yet (a duplicate's, just created) is written once the refetch brings it.
    */
-  const viewingAnotherProject = currentProject != null && projectIdNum !== currentProject.id
   useEffect(() => {
-    if (!stacks || viewingAnotherProject) return
+    if (!stacks) return
     if (drillStackId == null) {
       setShowPosition(projectIdNum, null)
       return
@@ -412,12 +410,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     if (stack == null) return
     const cueId = openedCueId != null && stack.cues?.some((c) => c.id === openedCueId) ? openedCueId : null
     setShowPosition(projectIdNum, { stackId: drillStackId, cueId })
-  }, [stacks, viewingAnotherProject, drillStackId, openedCueId, projectIdNum])
-
-  // Loading / redirect guards
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/show`} replace />
-  }
+  }, [stacks, drillStackId, openedCueId, projectIdNum])
 
   // Sticky view: a drilled stack lands on the cue sheet once that has been chosen, unless this
   // arrival is the switcher's own Cards click. `?cue=` rides along — the Prompt Book mints it.
@@ -431,7 +424,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell) for both views — the
   // loaded page is the same full-height column whichever it draws.
-  if (projectLoading || currentLoading || stacksLoading) {
+  if (projectLoading || stacksLoading) {
     return (
       <SheetPage>
         <SheetPage.Header>

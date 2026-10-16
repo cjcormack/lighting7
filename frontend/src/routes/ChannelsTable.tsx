@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react"
-import { useParams, useNavigate, Navigate } from "react-router"
+import { useParams, useNavigate } from "react-router"
 import { SheetPage } from "@/components/sheet/SheetPage"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Lock, LockOpen } from "lucide-react"
 import { useGetChannelMappingListQuery } from "../store/channelMapping"
 import { useGetParkStateListQuery, useGetReleasedParkListQuery, useUnparkChannelMutation, type ParkState, type ReleasedPark } from "../store/park"
 import { unparkConfirm } from "../lib/parkOwner"
-import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { useProjectQuery } from "../store/projects"
 import { useIsDeskConnected } from "../store/status"
 import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
 import { useGetUniverseQuery } from "../store/universes"
@@ -25,7 +25,6 @@ export function ProjectChannelsTable() {
   const { projectId, universe } = useParams()
   const projectIdNum = Number(projectId)
   const universeNum = Number(universe ?? 0)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
 
   // Record this as the last-used channels view even when arriving by deep link, so the sidebar's
@@ -34,13 +33,9 @@ export function ProjectChannelsTable() {
     setStoredCardsListView(CHANNELS_VIEW_KEY, 'list')
   }, [])
 
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/channels/${universeNum}/table`} replace />
-  }
-
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence.
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <SheetPage>
         <SheetPage.Header />

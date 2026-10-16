@@ -2,7 +2,7 @@ import { Suspense, useState } from 'react'
 import { useParams, useLocation, Navigate } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import { useGroupListQuery } from '../store/groups'
 import { GroupCard } from '../components/groups/GroupCard'
 import { GroupDetailModal } from '../components/fixtures/GroupDetailModal'
@@ -24,14 +24,8 @@ export function GroupsRedirect() {
 export function ProjectGroups() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const location = useLocation()
-
-  // If viewing a non-current project, redirect to the current project
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    return <Navigate to={`/projects/${currentProject.id}/groups`} replace />
-  }
 
   // Sticky view: the sidebar's "Groups" entry points here, so honour the
   // last-used view. The switcher's Cards segment both rewrites the preference
@@ -41,7 +35,7 @@ export function ProjectGroups() {
     return <Navigate to={`/projects/${projectIdNum}/groups/list`} replace />
   }
 
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
         <Loader2 className="size-6 animate-spin" />

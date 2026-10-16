@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react'
-import { Navigate, useLocation, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import {
@@ -7,7 +7,7 @@ import {
   FixturesViewSwitcher,
   setStoredCardsListView,
 } from '../components/ViewSwitcher'
-import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useProjectQuery } from '../store/projects'
 import { FixturesListContainer } from '../components/fixtures-list/FixturesListContainer'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
@@ -19,8 +19,6 @@ export function FixturesListRedirect() {
 export function ProjectFixturesList() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { search } = useLocation()
-  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
 
   // Record this as the last-used fixtures view even when arriving via a
@@ -30,17 +28,10 @@ export function ProjectFixturesList() {
     setStoredCardsListView(FIXTURES_VIEW_KEY, 'list')
   }, [])
 
-  if (!currentLoading && currentProject && projectIdNum !== currentProject.id) {
-    // Carry ?select= across, matching FixturesListRedirect — a shared link's
-    // deep-link target shouldn't be dropped just because the project id in
-    // the URL wasn't the active one.
-    return <Navigate to={`/projects/${currentProject.id}/fixtures/list${search}`} replace />
-  }
-
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the list
   // arrives.
-  if (projectLoading || currentLoading) {
+  if (projectLoading) {
     return (
       <SheetPage>
         <SheetPage.Header />

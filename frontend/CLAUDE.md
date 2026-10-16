@@ -5594,7 +5594,7 @@ position when it lands, so the next return goes where that door left the window.
 **What a remembered position meets on arrival is the Show view's ordinary handling**: a stack that
 has gone redirects to `/show` (the stale-stack effect) and is then forgotten; a cue that has gone
 opens no card and is forgotten; another project's entry is never read, being keyed by project, and
-a window on a project that is not current is redirected to the current one's `/show` as before.
+a window on a project that is not current draws `NotOnRig` (§Navigation Registry) and writes nothing.
 `ShowPage.cueActions.test.tsx` drives the round trip through the real switcher, and the stale
 cases with the stored position seeded.
 
@@ -6177,19 +6177,68 @@ path may quietly change where it lands.
   can read whose *actions* are admin-only: **Updates** is shown to everyone, as its
   tab is, and the panel disables what an operator cannot do.
   `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
-  them for operators so neither the sidebar nor Cmd+K offers a page that can only
+  them for operators — role and kind are the only things that drop a row — so neither the sidebar nor Cmd+K offers a page that can only
   answer 403. `useIsNavAdmin()` supplies the flag and treats *anything but a
   resolved OPERATOR* as admin: during the `auth/status` round-trip, and on a
   bootstrap-open desk, the API really is reachable, and the backend refuses the
   call either way. This is presentation, never permission.
-- **A row and its page share one predicate** (navigation plan P2): who sees a row, its ⌘K item and
-  the settings tab it opens is `navItemShown`, beside the registry, and nothing else. The settings
-  pages map each tab to its row's id (`TAB_NAV_IDS` in `routes/InstallSettings.tsx` and
-  `routes/ProjectSettings.tsx`) and draw a tab only where `useShownTabs` says its row is shown — so
-  the two Sync tabs are an admin's alone, as every cloud-sync route is, and Project Settings' Surfaces
-  tab is the project on the rig's, as its `active-only` row is. A tab its row hides, reached by URL, opens General, which is
-  the row the sidebar lights there. A new tab gets its row's predicate by being in the map; a tab
-  with no row is always drawn.
+- **A row and its page share one predicate** (navigation plan P2): how a row, its ⌘K item and the
+  settings tab it opens are offered is `navItemState` — `hidden`, `shown` or `offRig` — beside the
+  registry, and nothing else. The settings pages map each tab to its row's id (`TAB_NAV_IDS` in
+  `routes/InstallSettings.tsx` and `routes/ProjectSettings.tsx`) and draw a tab only where
+  `useShownTabs` offers its row — so the two Sync tabs are an admin's alone, as every cloud-sync
+  route is — and draw it off the rig where its row is (below). A tab its row hides, reached by URL,
+  opens General, which is the row the sidebar lights there. A new tab gets its row's predicate by
+  being in the map; a tab with no row is always drawn.
+- **Off the rig, every row stays** (navigation plan D4, Nav.2). A row whose view reads or drives the
+  live show carries `needsRig` — the nine are Programmer, Show, Prompt Book, Busk, Stage, Fixtures,
+  Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
+  `NotOnRig` says (*The Stage view draws the rig that's live*). On a project that is not on the rig
+  `filterNavItems` keeps those rows and marks them `offRig`, and three places draw the mark, all
+  from that one answer:
+  - the **sidebar** row takes the muted colour and `OffRigDot` — a 6px hollow dot where the Sync
+    row's attention dot sits, at the icon's corner on the rail — with *Needs the project on the
+    rig* (`OFF_RIG_LABEL`) on its tooltip, expanded and collapsed alike; the header's badge says
+    **Not on the rig**;
+  - **⌘K** lists the row too, muted, with *Not on the rig* as its trailing hint, and opens it as
+    the sidebar does — onto the `NotOnRig` page, not past it. A row that drew in one and not the
+    other would be two answers to one question. The per-universe items are the exception, offered
+    only on the project on the rig: they name the live rig's universes, not the viewed project's;
+  - **Project Settings' Surfaces tab** is drawn with the dot over a `NotOnRig` body, since its
+    bindings editor reads the live desk's devices — outside the tabs' disabled fieldset, because
+    *Make current* is a runtime gesture an operator may make on a venue.
+
+  **The route draws `NotOnRig` in place of the view** (`components/NotOnRig.tsx`). Every `needsRig`
+  route in `App.tsx` is wrapped in `RigGate navId=…`, which draws the view only while the project
+  in the URL is on the rig; the view never mounts otherwise, so none of its queries run for a
+  project that is not current. It replaced the redirects to the current project that eight of the
+  routes carried (Fixtures, Groups, both lists, Channels, the DMX sheet, Show and Busk) and gives
+  the three that had none — Programmer, Prompt Book and Stage, which drew the live show's state
+  under another project's name — the same answer. The page says *TCH venue isn't on the rig. The
+  Stage view draws the rig that's live, and Sleeping Beauty is on it now.*, with **Make TCH venue
+  current** (through `ProjectSwitchConfirmDialog`; withheld, with the reason, for a show whose
+  venue version is not on this desk) and **Open Sleeping Beauty's Stage** (the row's `path` on the
+  current project; withheld where that project is a venue the view is hidden in). **The URL is
+  never touched**: a `?cue=` or `?page=` deep link stays where it was, and *Make current* lands on
+  exactly the address that was asked for, since the gate draws the view the moment the project
+  list says `isCurrent`. A route's `to` is its own address on another project — the lists keep
+  `?select=`, Channels its universe and table — and is where *Open …* goes. On the rig is that
+  server fact and nothing else (P4): the gate, the sidebar and ⌘K all read the project list's
+  `isCurrent`, and nothing added here says *active*. The gate never draws the view for an id the
+  list does not hold (a venue version's snapshot is never listed) or when the list cannot be read.
+
+  **A view that was showing the project on the rig follows a switch made elsewhere** (the Projects
+  page, another window, MCP's `switch_project`) to its `to` on the new project, with `replace` —
+  the job the routes' redirects did for a desk screen, now for every routed view `RigGate` wraps —
+  and draws `NotOnRig` only where the new project has no such view (a venue). Project Settings'
+  Surfaces tab is the exception: a tab inside the settings page, never gated, it draws `NotOnRig`
+  at once on a switch, as it fell back to General before. It waits while a sheet holds unsaved edits
+  (`useHasUnsavedSheets`, the count `windows.show` declines on), keeping the view until the sheet
+  is saved or let go. A view *opened* on a project that is not on the rig never follows; that is
+  D4's page. And a command that puts another window on a view that needs the rig — the Screens
+  row's view picker, ⌘K's *Show <view> on <window>* and *Open <view> on another display* — names
+  the project on the rig (`WindowView.needsRig`, `windowViewProject`), whatever project that window
+  was left on; a library keeps the window's own.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
   `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
   `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in
