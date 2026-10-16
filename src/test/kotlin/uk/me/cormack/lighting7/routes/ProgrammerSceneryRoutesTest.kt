@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.testsupport.entryIdOf
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.websocket.receiveDeserialized
 import io.ktor.client.plugins.websocket.sendSerialized
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.post
@@ -32,6 +33,7 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.plugins.InMessage
+import uk.me.cormack.lighting7.plugins.OutMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerClearSceneryInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerErrorOutMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerSceneryStateOutMessage
@@ -45,6 +47,7 @@ import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -325,10 +328,22 @@ class ProgrammerSceneryRoutesTest : RouteIntegrationTest() {
             assertEquals(emptyList(), snapshot.elements)
 
             sendSerialized<InMessage>(ProgrammerSetSceneryInMessage(moon, trim(3.0), fadeMs = 1000))
-            val held = awaitOfType<ProgrammerSceneryStateOutMessage> { it.elements.isNotEmpty() }
+            // Two collectors answer the write, in either order, so read until both have.
+            var held: ProgrammerSceneryStateOutMessage? = null
+            var drawn: SceneryStateOutMessage? = null
+            var frames = 0
+            while ((held == null || drawn == null) && frames++ < 100) {
+                when (val msg = receiveDeserialized<OutMessage>()) {
+                    is ProgrammerSceneryStateOutMessage -> if (msg.elements.isNotEmpty()) held = msg
+                    is SceneryStateOutMessage ->
+                        if (msg.elements.any { it.elementUuid == moon && it.source.kind == "programmer" }) drawn = msg
+                    else -> Unit
+                }
+            }
+            assertNotNull(held, "no programmer scenery frame held the Moon")
+            assertNotNull(drawn, "no scenery frame drew the Moon from the programmer")
             assertEquals(moon, held.elements.single().elementUuid)
             assertEquals(3.0, held.elements.single().state["trimM"]!!.jsonPrimitive.content.toDouble())
-            val drawn = awaitOfType<SceneryStateOutMessage> { m -> m.elements.any { it.elementUuid == moon && it.source.kind == "programmer" } }
             assertEquals(1000L, drawn.elements.single { it.elementUuid == moon }.durationMs)
             assertNull(drawn.staged)
 

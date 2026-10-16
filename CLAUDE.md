@@ -103,9 +103,11 @@ run earlier in the same session is sufficient; you do not need to re-run it
 just before `git commit` or `gh pr create` if nothing has changed since.
 
 CI runs the same two gates on every PR (`.github/workflows/ci.yml`, see §"Git workflow"). The
-backend job runs `./gradlew build` rather than `test`: that adds the fat jar, whose native-payload
-verifier would otherwise first fail on a release build, and the `launcher` module's tests. It runs
-on Linux under `LC_ALL=C.UTF-8` for the reason given under §"Cloud sessions".
+backend job runs `./gradlew check shadowJar` rather than `test`: `check` adds the `launcher`
+module's tests, and `shadowJar` the fat jar, whose native-payload verifier would otherwise first
+fail on a release build. It runs on Linux under `LC_ALL=C.UTF-8` for the reason given under
+§"Cloud sessions". The build cache is on (`gradle.properties`): CI restores the cache main's last
+run saved, so a task whose inputs haven't changed is restored rather than re-run.
 
 **Warnings fail the build.** Kotlin compiler warnings in `src/` and `launcher/`
 (`compilerOptions.allWarningsAsErrors`), in the `*.gradle.kts` scripts
@@ -123,17 +125,17 @@ be running. `testAppConfig` cannot do this job: `lighting7.dataDir` is read
 before any config is parsed. **If you ever see `FileSystemException … Operation
 not permitted` there, or a `MissingFieldException` on a route DTO, suspect that
 pin has been lost** — the route 500s and returns `ErrorResponse`, so a denied
-write disguises itself as a serialization regression.
+write disguises itself as a serialization regression. The suite runs in two forks, and each
+claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
-The suite takes ~1 minute warm, and ~55 s longer on the first run after any code
-change (editing a source file changes the classpath fingerprint, which invalidates
-the compiled-script jar cache and recompiles the 24 built-in FX effects). That cost
-lands on whichever class first builds a `Show` — currently
-`ParkSurvivesFixtureReloadTest`, a one-test class that therefore *looks* like the
-slowest thing in the suite. It is not slow; it is first. Before optimising anything
-in the test suite, read [`docs/testing-engineering.md`](docs/testing-engineering.md):
-four specific changes took it from 14 minutes to 1, and each has a guard test that
-explains why it is safe.
+The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
+one), warm or cold alike. The first run after any code change recompiles the 24 built-in FX
+effects (editing a source file changes the classpath fingerprint, which invalidates the
+compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
+each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
+anything in the test suite, read [`docs/testing-engineering.md`](docs/testing-engineering.md):
+four specific changes took it from 14 minutes to 1 when it was half its current size, and each
+has a guard test that explains why it is safe.
 
 ### Git workflow
 
@@ -148,7 +150,7 @@ hand-off to anyone.
   one PR — never a backend PR and a frontend PR that are each broken without the other. Several
   commits on the branch are fine, and each should still be a coherent step with a real message.
 - **CI must be green before merging.** `.github/workflows/ci.yml` runs two jobs on every PR:
-  `Backend` (`./gradlew build`) and `Frontend` (`npm run check` in `frontend/`). CI is the
+  `Backend` (`./gradlew check shadowJar`) and `Frontend` (`npm run check` in `frontend/`). CI is the
   backstop, not the first run — the local checks below are still expected before pushing.
 - **Merge with a merge commit**, never squash or rebase-merge, and bring a stale branch up to
   date by merging `main` into it rather than rebasing it once pushed. Plan docs and commit

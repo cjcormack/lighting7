@@ -8,20 +8,20 @@ sufficient; you do not need to re-run it just before `git commit` if nothing has
 
 ## Shape of the suite
 
-~1790 tests in ~180 classes, on **JUnit 4** (`kotlin-test-junit`; `org.junit.Test`,
+~3360 tests in ~340 classes, on **JUnit 4** (`kotlin-test-junit`; `org.junit.Test`,
 `@Before`/`@After`). There is no `useJUnitPlatform()` and no `junit-platform.properties`, so
 JUnit 5 features — `@Execution(CONCURRENT)`, `@ResourceLock`, `@Isolated` — are not available.
-Tests run in **one forked JVM, sequentially**.
+Tests run in **two forked JVMs**, each taking its classes one after another (§"Two forks").
 
 Two broad kinds:
 
-- **Pure unit tests** (~1650) — DTOs, resolvers, registries, wire formats. Collectively a few
+- **Pure unit tests**, most of them — DTOs, resolvers, registries, wire formats. Collectively a few
   seconds. Add tests here by preference.
-- **Integration tests** (~140) that build a real `State`: a fresh SQLite file, the full schema,
+- **Integration tests** that build a real `State`: a fresh SQLite file, the full schema,
   a `Show`, and for route tests a Ktor `testApplication`. `testsupport/RouteIntegrationTest`
   is the base class; its `@Before` runs **per test method**.
 
-## Why the suite is ~1 minute and not ~14
+## Why the suite is not ~14 minutes
 
 It was 14 minutes until 2026-08-24. Almost all of it was fixed per-test cost, not test work —
 every integration test paid the same ~1.3 s floor regardless of what it asserted. Four changes
@@ -83,14 +83,22 @@ eagerly and does not stop it when collected, so each discarded `Show` leaked one
 
 ## Two speed regimes
 
-- **Warm** (no code changed since the last run): ~55–60 s.
-- **Cold** (any rebuild): **~+55 s**. The compiled-script jar cache is keyed partly on a
-  fingerprint of the classpath, so editing any source file invalidates all 24 built-in FX jars
-  and they recompile from source. In a normal edit-test loop this is paid every time.
+- **Warm** (no code changed since the last run) and **cold** (any rebuild). The compiled-script
+  jar cache is keyed partly on a fingerprint of the classpath, so editing any source file
+  invalidates all 24 built-in FX jars and they recompile from source, once per fork. In a normal
+  edit-test loop this is paid every time.
 
-The cost lands on whichever test class first builds a `Show` — today
-`ParkSurvivesFixtureReloadTest`, which is why that one-test class can look like the slowest
-thing in the suite. It is not slow; it is first. Don't optimise it.
+Measured on 2026-10-16 (`./gradlew test --rerun`, an M-series Mac with a desk running), the two
+regimes no longer differ by more than run-to-run noise:
+
+| | one JVM | two forks |
+|---|---|---|
+| warm | 225, 239 s | 117, 123 s |
+| cold | 230, 252 s | 127, 128 s |
+
+The recompile lands on whichever test class first builds a `Show` in each fork, which is why
+that class can look like the slowest thing in the suite. It is not slow; it is first. Don't
+optimise it.
 
 ## Test data lives under `build/test-data`
 
@@ -107,6 +115,9 @@ property is the only hook — `testAppConfig` can pin `database.path` but not th
 **If you ever see `FileSystemException … Operation not permitted`, or a `MissingFieldException`
 on a route DTO, suspect the pin has been lost** — the route 500s and returns `ErrorResponse`,
 so a denied write disguises itself as a serialization regression.
+
+Each fork works in its own `slot-1` or `slot-2` under it, not in the directory itself (§"Two
+forks"), so a fork's script cache, exports and credential store are under `build/test-data/slot-N`.
 
 The directory is not pruned between runs. `script-cache` accumulates a generation of jars per
 build fingerprint; `clean` discards the lot.
@@ -166,22 +177,30 @@ Known latent coupling, currently harmless but worth knowing when a test starts b
   seeds `MOCK` deliberately; use `RecordingTransport` (`testsupport/ArtNetTestSupport.kt`) to
   assert on what would have been transmitted.
 
-## Why the suite is not run in parallel
+## Two forks
 
-`maxParallelForks` is unset. It was considered and is not currently worth it: after the changes
-above the suite is ~1 minute, of which a large part is a single cold FX compile that forking
-would duplicate rather than divide, and the remainder is dominated by the wall-clock tests
-above — exactly what CPU oversubscription breaks.
+`tasks.test` sets `maxParallelForks = 2`, which halves the suite (table under §"Two speed
+regimes"). `-PtestForks=1` puts it back in one JVM, for chasing an order dependence.
 
-Forking would also need per-worker data-dir isolation. `build/test-data` is shared, and Kotlin's
-`CompiledScriptJarsCache.store()` is a truncate-then-write with no lock or tmp+rename, while all
-forks compute *identical* jar filenames — so two workers can tear each other's cached jars.
+**Each fork needs its own data directory.** All forks compute identical compiled-script jar
+filenames, and Kotlin's `CompiledScriptJarsCache.store()` is a truncate-then-write with no lock
+or tmp+rename, so two forks sharing `build/test-data` can tear each other's cached jars
 (`FxFileLoader` already defends against a corrupt cached jar, which is a hint about how this
-fails.) `exports/` and `credentials.enc` are not config-overridable, so pinning individual keys
-in `testAppConfig` would not cover them; the data dir itself would have to become per-worker.
+fails). `exports/` and `credentials.enc` are not config-overridable either. So the test task also
+passes `-Dlighting7.dataDir.slots=2`, and `AppDataDir.kt`'s `claimSlot` has each JVM lock the first
+free `slot-N.lock` under the pinned directory and use `slot-N`. A slot rather than Gradle's worker
+id, because worker ids keep counting up across builds in one daemon: a directory per id would be
+new every run, and the script cache would never be warm.
 
-If the suite grows back past a few minutes, that is the change to make — and this paragraph is
-the reason it was not made now.
+**Two, not more.** The wall-clock tests above are the first to fail on an oversubscribed machine,
+and CI's runner has four vCPUs.
+
+**Forking changes which classes share a JVM, and when.** That is how it found a latent race in
+`ProgrammerSceneryRoutesTest`, whose socket test hung in 3 of 5 two-fork runs and 0 of 5 in one
+JVM. It awaited a frame from one collector and then a frame from another (`awaitOfType` twice);
+when the second arrived first, the first wait read past it and the second waited for a frame that
+never came. Waiting for both in one read loop fixed it. `WsTestHelpers.kt` describes the same
+hazard for `awaitEachOf`; suspect it first when a socket test times out only with forks.
 
 ## Opt-in harnesses
 
