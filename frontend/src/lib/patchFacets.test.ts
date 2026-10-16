@@ -37,6 +37,13 @@ describe('facetValueOf', () => {
     expect(focus.placements[0]).toMatchObject({ placementUuid: 'pl-1', iris: 0.6, lanternType: null })
     expect(facetValueOf(p, 'MEDIA')).toEqual({ gelCode: 'L201', media: null, placements: [{ placementUuid: 'pl-1', media: null }] })
   })
+
+  it('carries the stored locate whole in Focus, so making Focus the show’s keeps it', () => {
+    const locate = [{ pan: 140, tilt: 96, panFine: 12, tiltFine: 200 }, { head: 1, pan: 10, tilt: 20 }]
+    expect((facetValueOf(patch({ locate }), 'FOCUS') as { locate: unknown }).locate).toEqual(locate)
+    expect((facetValueOf(patch(), 'FOCUS') as { locate: unknown }).locate).toEqual([])
+    expect(describeFacet('FOCUS', { lanternType: null, locate })).toBe('Default lantern · locate set')
+  })
 })
 
 describe('facet chips', () => {

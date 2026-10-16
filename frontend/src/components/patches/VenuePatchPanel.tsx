@@ -13,6 +13,7 @@ import { useGelIndex } from '@/hooks/useGelIndex'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { PATCH_FACETS, type FixturePatch } from '@/api/patchApi'
 import { VenueFacetCard, type FacetCardContext } from './VenueFacetCard'
+import { LocateBox } from './LocateBox'
 
 /**
  * A **venue's** fixture opened from a show (venue plan sessions 3 and 5, `Show.dc.html`'s Edit
@@ -107,6 +108,7 @@ export function VenuePatchPanel({
         {PATCH_FACETS.map((facet) => (
           <VenueFacetCard key={facet} facet={facet} patch={patch} ctx={ctx} />
         ))}
+        <LocateBox patch={patch} projectId={projectId} />
       </SheetBody>
       <SheetFooter className="flex-row justify-between">
         <Button variant="outline" onClick={hide} disabled={isLoading} title="Leave this fixture out of this show's rig — Hidden brings it back">

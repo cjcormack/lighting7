@@ -81,6 +81,27 @@ class LocateManager {
     }
 
     /**
+     * Re-run [assert] for every located target [affects] names, keeping what it records — how a
+     * changed stored locate (venue-visit plan D6) reaches a unit that is located while it changes, so
+     * releasing what was holding the head where it was focused does not snap it back to the old point.
+     * [assert] follows [toggle]'s contract: null drops a stale target, and it must not throw.
+     */
+    fun reassert(affects: (TargetRef) -> Boolean, assert: (TargetRef) -> List<LocateWrite>?) = synchronized(lock) {
+        var changed = false
+        for (target in active.keys.toList()) {
+            if (!affects(target)) continue
+            val next = assert(target)
+            if (next == null) {
+                active.remove(target)
+                changed = true
+            } else {
+                active[target] = next
+            }
+        }
+        if (changed) _activeTargets.value = active.keys.toSet()
+    }
+
+    /**
      * Drop all locate bookkeeping without running any release callbacks. Used by
      * programmer clear-all, which sweeps every `LOCATE` store entry itself — running the
      * per-target clears afterwards would double-release, and leaving the bookkeeping would

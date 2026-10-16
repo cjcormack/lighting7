@@ -12,6 +12,7 @@ import { useLanternIndex } from '@/hooks/useLanternIndex'
 import { effectiveLantern, focusFields, FOCUS_KEYS, LANTERN_FAMILY_KIND, type LanternFocus } from '@/lib/lanterns'
 import { LanternBox } from './LanternBox'
 import { MediaBox } from './MediaBox'
+import { LocateBox } from './LocateBox'
 import { useGelIndex } from '@/hooks/useGelIndex'
 import { loadableSettings, mediaEqual, normaliseMedia, type FittedMedia } from '@/lib/fittedMedia'
 import { KindOverrideField } from './KindOverrideField'
@@ -362,6 +363,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             onPlacementsChange={setExtraPlacements}
           />
         )}
+
+        <LocateBox patch={patch} projectId={projectId} />
 
         <ExtraPlacementsFields
           projectId={projectId}

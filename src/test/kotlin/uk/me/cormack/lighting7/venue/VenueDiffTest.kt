@@ -96,6 +96,9 @@ class VenueDiffTest {
         assertEquals(listOf(VenueFacet.POSITION), facetsOf(""","stageX":1.5"""))
         assertEquals(listOf(VenueFacet.POSITION), facetsOf(""","riggingUuid":"$lx1""""))
         assertEquals(listOf(VenueFacet.FOCUS), facetsOf(""","zoomDeg":24"""))
+        // A stored locate (venue-visit plan D6) is Focus, and drawing only: it is sent only while an
+        // operator holds Locate, never by the show on its own, so it never holds a show.
+        assertEquals(listOf(VenueFacet.FOCUS), facetsOf(""","locate":[{"pan":40,"tilt":200}]"""))
         assertEquals(listOf(VenueFacet.MEDIA), facetsOf(""","gelCode":"L201""""))
         assertEquals(listOf(VenueFacet.IDENTITY), facetsOf(""","headNumber":7"""))
         assertEquals(listOf(VenueFacet.POSITION), facetsOf(""","extraPlacements":[{"uuid":"$lx2","stageX":2.0}]"""))

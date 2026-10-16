@@ -89,6 +89,8 @@ export function facetValueOf(patch: FixturePatch, facet: PatchFacet): FacetValue
         beamAngleDeg: patch.beamAngleDeg,
         lampWatts: patch.lampWatts ?? null,
         lampKelvin: patch.lampKelvin ?? null,
+        // Carried whole, so making Focus this show's own keeps the venue's stored locate.
+        locate: patch.locate ?? [],
         placements: placements.map((p) => ({ placementUuid: p.uuid, ...focusFields(p) })),
       }
     case 'MEDIA':
@@ -137,6 +139,7 @@ export function describeFacet(facet: PatchFacet, value: FacetValue, names: Facet
       if (v.lampKelvin != null) parts.push(`${v.lampKelvin} K`)
       if (v.iris != null && v.iris < 1) parts.push(`iris ${Math.round(v.iris * 100)}%`)
       if (v.shutters?.some((b) => b.depth > 0)) parts.push('shuttered')
+      if ((v.locate?.length ?? 0) > 0) parts.push('locate set')
       return parts.join(' · ')
     }
     case 'MEDIA': {

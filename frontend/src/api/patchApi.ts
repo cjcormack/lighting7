@@ -86,6 +86,15 @@ export interface FixturePatch extends LanternFocus {
    */
   media?: FittedMedia | null;
   /**
+   * The unit's **stored locate** (venue-visit plan D6, D17): the pan and tilt Locate points each of
+   * its units at instead of the centre of travel, as DMX bytes — `head` absent for the fixture's own,
+   * a head's index from 0 otherwise. Absent or empty is none. Part of the Focus facet; set by *Set
+   * locate from current* (`POST …/locate/store`) and cleared by *Clear locate*, never by the patch's
+   * `PUT`. Shown on the centre-relative scale (`lib/positionScale.ts`). Optional because a desk that
+   * predates it omits it, and the desk omits an empty list.
+   */
+  locate?: UnitLocate[];
+  /**
    * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
    * own, `VENUE` for its venue's at the pinned version. A venue row's identity is the venue's and the
    * desk refuses a patch write to one through a show (`VENUE_OWNED`); a show can hide it, or make one
@@ -154,10 +163,22 @@ export interface PositionFacetValue extends PositionFields {
   placements?: (PositionFields & { placementUuid: string })[];
 }
 
+/** One unit's stored locate: coarse pan and tilt, and the fine bytes where it has fine channels. */
+export interface UnitLocate {
+  /** Absent for the fixture's own pan and tilt; a head's zero-based index otherwise. */
+  head?: number | null;
+  pan: number;
+  tilt: number;
+  panFine?: number | null;
+  tiltFine?: number | null;
+}
+
 export interface FocusFacetValue extends LanternFocus {
   beamAngleDeg?: number | null;
   lampWatts?: number | null;
   lampKelvin?: number | null;
+  /** The stored locate — the patch's alone, so no placement carries one. */
+  locate?: UnitLocate[];
   placements?: (LanternFocus & { placementUuid: string })[];
 }
 

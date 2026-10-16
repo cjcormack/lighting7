@@ -97,6 +97,12 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
      *  metadata carries it for the template resolver's wheel snap. See `docs/fixtures-engineering.md`
      *  §"Fitted media". */
     val media = text("media").nullable()
+    /** The unit's **stored locate** (venue-visit plan D6, D17): the pan and tilt bytes Locate points
+     *  each of its units at instead of the centre of travel, as canonical JSON
+     *  `[{head?, pan, tilt, panFine?, tiltFine?}]` (`fixture/locate/StoredLocate.kt`). Null is none.
+     *  Part of the Focus facet; portable. The loader never builds a fixture from it, but the runtime
+     *  patch metadata carries it for Locate. See `docs/fixtures-engineering.md` §"Stored locate". */
+    val locate = text("locate").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -138,6 +144,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var lampWatts by DaoFixturePatches.lampWatts
     var lampKelvin by DaoFixturePatches.lampKelvin
     var media by DaoFixturePatches.media
+    var locate by DaoFixturePatches.locate
     var uuid by DaoFixturePatches.uuid
 }
 

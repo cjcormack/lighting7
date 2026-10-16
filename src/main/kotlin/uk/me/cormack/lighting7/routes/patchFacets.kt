@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.fixture.lantern.effectiveKind
 import uk.me.cormack.lighting7.fixture.lantern.focus
 import uk.me.cormack.lighting7.fixture.lantern.lampKelvinError
 import uk.me.cormack.lighting7.fixture.lantern.lampWattsError
+import uk.me.cormack.lighting7.fixture.locate.StoredLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.models.AddressFacet
 import uk.me.cormack.lighting7.models.DaoProject
@@ -58,7 +59,8 @@ import java.util.UUID
  *   it stands for, every problem at once (400 `FACET_INVALID`): Address a universe of this rig and a
  *   start channel the type fits from (an overlap is allowed — P8 — and answered in `warnings`, the way
  *   the Patch list rings one); Position the stage ranges, a rigging of this rig, a length only on a type
- *   that takes one; Focus the lantern library and the type's focus rules; Media the type's loadable
+ *   that takes one; Focus the lantern library and the type's focus rules, and a stored locate only on
+ *   units of the type that pan and tilt (`StoredLocate.parse`); Media the type's loadable
  *   settings. A placement is named by its venue uuid and must be one of the patch's.
  * - `POST …/facets/{facet}/keep-mine` — *Keep mine*: the override stays and its base becomes the
  *   venue's current value, so the drift clears.
@@ -88,7 +90,7 @@ internal fun Route.routeApiRestPatchFacets(state: State) {
                 val changed = ShowOverrides.put(project, target, facet, value)
                 facetResponse(target, changed, if (value is AddressFacet) addressOverlaps(target) else emptyList())
             }
-            announceFacetChange(state, project.id.value, facet, response.changed)
+            announceFacetChange(state, project.id.value, facet, response.changed, response.patch)
             call.respond(response)
         }
     }
@@ -122,14 +124,16 @@ private fun facetResponse(target: ShowOverrides.Target, changed: Boolean, warnin
     return FacetWriteResponse(target.patch.toDto(target.placements, rig), changed, warnings)
 }
 
-private fun announceFacetChange(state: State, projectId: Int, facet: PatchFacet, changed: Boolean) {
+private fun announceFacetChange(state: State, projectId: Int, facet: PatchFacet, changed: Boolean, patch: FixturePatchDto) {
     if (!changed) return
+    val current = state.projectManager.currentProject.id.value == projectId
     // The loader builds a fixture at its address and carries its fitted media in the patch metadata;
-    // position and focus are drawn, never built from.
-    if ((facet == PatchFacet.ADDRESS || facet == PatchFacet.MEDIA) &&
-        state.projectManager.currentProject.id.value == projectId
-    ) {
+    // position and focus are drawn, never built from — but for Focus's stored locate, which the patch
+    // metadata carries for Locate and is refreshed in place.
+    if ((facet == PatchFacet.ADDRESS || facet == PatchFacet.MEDIA) && current) {
         DbFixtureLoader.loadFixtures(projectId, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+    } else if (facet == PatchFacet.FOCUS && current) {
+        refreshStoredLocate(state, patch.key, patch.locate)
     }
     state.show.fixtures.patchListChanged()
 }
@@ -334,7 +338,7 @@ private fun parsePosition(reader: FieldReader, target: ShowOverrides.Target, typ
 private val FOCUS_FIELDS = LanternFocus.KEYS.toSet()
 
 private fun parseFocus(reader: FieldReader, obj: JsonObject, target: ShowOverrides.Target, typeKey: String): FocusFacet {
-    reader.allow(FOCUS_FIELDS + "beamAngleDeg" + "lampWatts" + "lampKelvin" + "placements")
+    reader.allow(FOCUS_FIELDS + "beamAngleDeg" + "lampWatts" + "lampKelvin" + "locate" + "placements")
     val focus = LanternFocus.parse(obj).getOrElse { reader.problems += it.message.orEmpty(); LanternFocus() }
     val beam = reader.int("beamAngleDeg")
     if (beam != null && beam !in 2..120) reader.problems += "beamAngleDeg must be between 2 and 120"
@@ -343,6 +347,8 @@ private fun parseFocus(reader: FieldReader, obj: JsonObject, target: ShowOverrid
     lampWattsError(lampWatts)?.let { reader.problems += it }
     lampKelvinError(lampKelvin)?.let { reader.problems += it }
     if (lampWatts != null || lampKelvin != null) lamplessRefusal(typeKey)?.let { reader.problems += it }
+    // The stored locate (venue-visit plan D6): each unit one of the type's that pans and tilts.
+    val locate = StoredLocate.parse(obj["locate"], "locate", typeKey).getOrElse { reader.problems += it.message.orEmpty(); emptyList() }
     // The kind the facet leaves the patch with, as a write derives it, and the type's rules against it.
     val patch = target.patch
     val kind = effectiveKind(typeKey, kindUnderLantern(focus.lanternType, patch.lanternType, patch.kindOverride), focus.lanternType)
@@ -368,7 +374,7 @@ private fun parseFocus(reader: FieldReader, obj: JsonObject, target: ShowOverrid
     }
     return FocusFacet(
         focus.lanternType, beam, lampWatts, lampKelvin, focus.zoomDeg, focus.lampRotationDeg, focus.shutters, focus.gateRotationDeg,
-        focus.iris, focus.focusSoftness, placements,
+        focus.iris, focus.focusSoftness, locate, placements,
     )
 }
 

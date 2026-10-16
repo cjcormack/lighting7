@@ -166,14 +166,8 @@ Grouped by area. §4 gives the order.
 - ~~S7 — Group member order in the Groups views~~ — done, `d48ff355` (drag in the group sheet's
   Members view, the list numbered and undragged by Chris's call; each strategy's step from the desk;
   a spread over one group runs in its member order).
-
-**S8 — Per-patch locate (D6).**
-- **Stored values (D17).** A patch's Focus facet gains a locate pan and tilt, with the fine
-  channels. They are portable on the patch DTO and the venue facet. Check whether `formatVersion`
-  needs a bump, per `docs/sync-engineering.md`.
-- **Resolver.** `LocateValueResolver` uses a unit's stored pan and tilt where it has them. Every
-  other property keeps its category default.
-- **UI.** *Set locate from current* and *Clear locate* go in the programmer and the patch sheet.
+- ~~S8 — Per-patch locate (D6, D17)~~ — done, `2e6963ee` (DMX bytes per unit, read from the output;
+  in a show on a venue it is the show's Focus override; MCP reads and writes it; `formatVersion` 31).
 
 ### Programmer
 

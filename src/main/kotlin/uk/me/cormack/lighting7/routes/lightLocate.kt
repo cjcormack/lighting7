@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.LocateValueResolver
+import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.LocateManager
 import uk.me.cormack.lighting7.state.State
@@ -141,7 +143,14 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     }
 
     val (assignments, unpublishable) = fixtures
-        .flatMap { LocateValueResolver.resolve(it, state.show.fixtures.fittedMediaFor(it.targetKey)) }
+        .flatMap {
+            LocateValueResolver.resolve(
+                it,
+                state.show.fixtures.fittedMediaFor(it.targetKey),
+                // A head's stored locate is its parent patch's, entry by index.
+                state.show.fixtures.storedLocateFor(patchKeyOf(it)),
+            )
+        }
         .partition {
             engine.programmer.publishability(it.target, it.propertyName) ==
                 ProgrammerWriter.Publishability.PUBLISHABLE
@@ -181,6 +190,30 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
         assignments.map { LocateManager.LocateWrite(it.target.targetKey, it.propertyName) }
     }
     return LocateApplyResult(writes.distinct())
+}
+
+/** The key of the patch [fixture] is — its parent's for a head. */
+internal fun patchKeyOf(fixture: GroupableFixture): String =
+    (fixture as? FixtureElement<*>)?.parentFixture?.key ?: fixture.targetKey
+
+/**
+ * Re-assert every active locate that reaches a unit of the patches keyed [patchKeys] — after their
+ * stored locate changed (`locateStore.kt`), so a head located while the operator focused it points at
+ * the new value at once. A no-op when nothing located reaches them.
+ */
+internal fun reassertLocates(state: State, patchKeys: Set<String>) {
+    if (patchKeys.isEmpty()) return
+    state.show.locateManager.reassert(
+        affects = { target ->
+            runCatching {
+                when (target) {
+                    is TargetRef.Fixture -> listOf(state.show.fixtures.untypedGroupableFixture(target.key))
+                    is TargetRef.Group -> state.show.fixtures.untypedGroup(target.key).fixtures
+                }
+            }.getOrDefault(emptyList()).any { patchKeyOf(it) in patchKeys }
+        },
+        assert = { t -> applyLocate(state, t).let { if (it.stale) null else it.writes } },
+    )
 }
 
 /**

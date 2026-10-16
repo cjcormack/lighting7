@@ -1,6 +1,13 @@
 import { useCallback, type ReactNode } from 'react'
-import { Crosshair, Flashlight, X } from 'lucide-react'
+import { ChevronDown, Crosshair, Flashlight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useStoredLocateActions } from '@/hooks/useStoredLocateActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useLocateStateQuery, useToggleLocateMutation } from '../../store/locate'
@@ -43,6 +50,7 @@ export function SelectionToolbar({
 }: SelectionToolbarProps) {
   const { data: locateState } = useLocateStateQuery()
   const [toggleLocate] = useToggleLocateMutation()
+  const storedLocate = useStoredLocateActions()
   const getTargets = useCallback(() => [...targets], [targets])
   const highlight = useHighlight(getTargets)
 
@@ -94,6 +102,37 @@ export function SelectionToolbar({
           {allLocated ? 'Release locate on the selection' : 'Locate the selection: white beam at centre'}
         </TooltipContent>
       </Tooltip>
+      {/* Where Locate points each unit (venue-visit plan D6): stored on the patch, read from what the
+          desk is sending now. Folds with Locate, so the phone's row C — measured to the pixel — keeps
+          its budget; there the patch sheet's Locate box is the way in. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(STRIP_MID_FOLDED_CLASS, '-ml-1 px-1.5')}
+            aria-label="Locate options"
+            title="Where Locate points the selection"
+            disabled={locateTargets.length === 0 || storedLocate.projectId == null}
+          >
+            <ChevronDown className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            disabled={storedLocate.busy}
+            onSelect={() => storedLocate.storeFromCurrent(locateTargets)}
+          >
+            Set locate from current
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={storedLocate.busy}
+            onSelect={() => storedLocate.clearLocate(locateTargets)}
+          >
+            Clear locate
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
