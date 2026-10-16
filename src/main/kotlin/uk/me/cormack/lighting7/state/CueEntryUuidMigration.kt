@@ -71,22 +71,23 @@ internal fun JdbcTransaction.keyCueEntriesByCue() {
  * makes of it. The startup migration renormalised a desk's own rows to `1.0, 2.0, …`, while a desk
  * that has pulled since holds the archive's `0.0, 1.0, …`; without this the two would write
  * different bytes for the same `cueStackEntries/` file and the first v32 sync would conflict on
- * every entry. The order is the one the stack already plays — ordinal, then uuid, every stack's
- * ordinals distinct before this session — so nothing moves.
+ * every entry.
+ *
+ * The order is the one this desk played until now — ordinal, then **id** — so nothing on stage
+ * moves. Ordering by uuid, as the desk does from here on, would swap any two entries an older
+ * archive left on one ordinal (agreed 2026-10-16). Two desks that played such a tie differently
+ * then write different positions for the same files, which their first sync settles as an ordinary
+ * change; every stack the migration renormalised has no ties to play differently.
  */
 private fun JdbcTransaction.renumberOrdinalsAsPositions() {
-    data class Row(val id: Int, val stackId: Int, val ordinal: Double, val uuid: String)
+    data class Row(val id: Int, val stackId: Int, val ordinal: Double)
     val rows = ArrayList<Row>()
-    exec("SELECT id, stack_id, ordinal, uuid FROM cue_stack_entries") { rs ->
-        while (rs.next()) {
-            val bytes = rs.getBytes("uuid") ?: ByteArray(0)
-            // Lowercase hex of the 16 bytes orders exactly as the uuid's canonical text does.
-            rows += Row(rs.getInt("id"), rs.getInt("stack_id"), rs.getDouble("ordinal"), bytes.joinToString("") { "%02x".format(it) })
-        }
+    exec("SELECT id, stack_id, ordinal FROM cue_stack_entries") { rs ->
+        while (rs.next()) rows += Row(rs.getInt("id"), rs.getInt("stack_id"), rs.getDouble("ordinal"))
     }
     var moved = 0
     rows.groupBy { it.stackId }.values.forEach { stack ->
-        stack.sortedWith(compareBy({ it.ordinal }, { it.uuid })).forEachIndexed { position, row ->
+        stack.sortedWith(compareBy({ it.ordinal }, { it.id })).forEachIndexed { position, row ->
             if (row.ordinal != position.toDouble()) {
                 exec("UPDATE cue_stack_entries SET ordinal = ${position.toDouble()} WHERE id = ${row.id}")
                 moved++

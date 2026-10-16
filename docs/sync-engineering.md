@@ -311,14 +311,22 @@ a state is (D2), and each place in a list is its own record.
 * `cueStackEntries/{uuid}.json` (`CueStackEntryJson`), one file per entry: `{uuid, cueStackUuid,
   cueUuid?, kind?, label?, ordinal, cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`. `kind` is
   omitted for a cue entry; a marker says `MARKER` and carries its `label` (D12). `ordinal` is a double
-  (§"Ordinal contract"). **`cueNumber` is written only when explicit** (P5): every reader derives the
-  auto numbers from position (`renumberAutoEntries` from scratch, per stack, after the entries land),
-  so a drag changes one file rather than every auto-numbered entry after it. The exporter writes
+  (§"Ordinal contract"). **`cueNumber` is written when explicit, and an auto number only where a
+  reader could not derive it** (P5, as amended 2026-10-16): every reader derives the rest from position
+  (`renumberAutoEntries` from scratch, per stack, after the entries land), so a drag changes one file
+  rather than every auto-numbered entry after it. The exception is a number venue-visit D11 holds in
+  place — an explicit renumber still waiting for *Fix Order* keeps its neighbours' labels (1, 4.5, 3, 4,
+  5) where a reader starting from nothing would anchor on the 4.5 (4, 4.5, 4.6, 4.7, 4.8).
+  `heldAutoNumbers` finds those, growing the set until the reader's derivation gives every number left
+  out, and the exporter writes them; the reader takes them as explicit, so a pull or a clone shows the
+  labels this desk does, and a held number stops renumbering by itself from the first import on. A
+  stack nothing holds writes no auto number at all. The exporter writes
   entries from the rows themselves, never through the P4 bridge (`soleEntryOf`), so a shared or loose
   cue (session 4) already travels: several entries may name one cue, and a cue no entry names is loose.
 * `promptBookAnchors/` names the entry it marks (`entryUuid`) instead of a cue (D4).
 * One file per entry is the merge story: two desks adding to one stack add two records, a drag
-  rewrites one, and a renumber rewrites only the entries whose explicit number changed.
+  rewrites one, and a renumber rewrites only the entries whose written number changed — the one
+  renumbered, and any neighbour whose number it now holds.
 
 `SUPPORTED_FORMAT_VERSION = 32`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. The writer's number moves
 because a v31 reader would import every cue with no stack and its next wipe-then-export push would
@@ -341,7 +349,10 @@ import — so the desk names them the same way once, at startup (`state/CueEntry
 every cue's one entry takes its cue's uuid, every entry's ordinal becomes its 0-based position in its
 stack (the session-1 migration renormalised a desk's own rows to `1.0, 2.0, …`, a pull since then
 stored the archive's `0.0, 1.0, …`, and the two must write the same bytes), and `PRAGMA user_version`
-is set to 1 so it never runs again. It must not: from session 4 a cue's remaining entry after *Remove from stack* is not the place
+is set to 1 so it never runs again. The positions follow the order the desk played until then —
+ordinal, then **id** — not the uuid order it plays from then on, so two entries an older archive left
+on one ordinal keep their places on stage; two desks that played such a tie differently write different
+positions, which their first sync settles as an ordinary change. It must not: from session 4 a cue's remaining entry after *Remove from stack* is not the place
 it had before the bump, and renaming it would resurrect the uuid its removed sibling's tombstone
 retired. Without it, the first sync of two desks after the bump would merge both desks' entries for
 every cue, and every cue would sit twice in its stack.
@@ -350,7 +361,9 @@ every cue, and every cue would sit twice in its stack.
 importer resolves every stack before a row is written: the entry with the lower uuid keeps the number
 and the other is made auto, so `uq_entry_number_per_stack` never sees the pair and a pull never aborts
 on it. Numbers compare exactly, as the index does. Each clash is answered in
-`ProjectImporter.Result.numberClashes`, carried by `SyncRunResult.numberClashes` and said in the run's
+`ProjectImporter.Result.numberClashes`, returned by the engine's import (`importTree`) to the path that
+ran it, which puts it on the `SyncRunResult` it answers (a push-rejected retry that imports again
+answers its own), carried by `SyncRunResult.numberClashes` and said in the run's
 message — which the activity log and the sync-done notification (`SyncNotifications.tsx`) show; the
 Sync tab's own success toasts are fixed strings and do not — and on the two import responses. The merge
 commit itself still holds both numbers; the merging desk's next snapshot writes the loser without one,
@@ -358,7 +371,7 @@ and every desk that reads the merged tree resolves it alike in the meantime.
 
 **What an archive can no longer abort a pull with.** An entry naming a stack or a cue the archive
 lacks — a peer's new entry merged with this side's delete — is dropped with a warning, and so is an
-anchor naming an entry that is not there; of two anchors on one entry (two desks each marked it) the
+anchor naming an entry that is not there, or naming none at all; of two anchors on one entry (two desks each marked it) the
 lower uuid is kept. The next snapshot writes each drop as a deletion. A v31 archive's cue naming an
 unknown stack is still refused, as before.
 
@@ -366,7 +379,8 @@ unknown stack is still refused, as before.
 `…Uuid` fields and its identity is its `uuid`, so a clone re-points them blind (the order caveat is
 in §"Ordinal contract"). `copy_to_project` copies whole stacks, so a cue two copied stacks share is
 copied once and shared in the target. `RichProjectFixture` carries two markers, an explicit number
-beside an auto one, a follow and two entries sharing an ordinal.
+beside an auto one, a follow, two entries sharing an ordinal, a cue in two stacks anchored at both
+places, a cue twice in one stack and a loose cue on a busk pad (§3.2 of the plan).
 
 ### Version 31 — stored locate
 

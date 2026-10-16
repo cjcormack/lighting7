@@ -225,7 +225,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // defaults, and a v23 archive imports unchanged.
 //
 // v32 moved a stack's list out of the cue files (cue model plan session 3, §3.9): each entry is its
-// own `cueStackEntries/{uuid}.json` — a double `ordinal`, the number only when explicit, a marker as
+// own `cueStackEntries/{uuid}.json` — a double `ordinal`, the number only when explicit or not derivable, a marker as
 // a labelled entry — and an anchor names its entry. SUPPORTED moved because a v31 reader would import
 // every cue with no stack and its next push would write every stack empty. MIN stays at 5: a v5–v31
 // archive's lists still import from its cue files (`CUE_ENTRIES_FORMAT_VERSION`).
@@ -1363,7 +1363,9 @@ class ProjectImporter(private val state: State) {
      *    the sync result can name it. Resolved before a row is written, so `uq_entry_number_per_stack`
      *    never sees the pair and a pull never aborts on it.
      *  * **Auto numbers are derived, never read** (P5): each stack is numbered from scratch once its
-     *    entries are in, from position alone, so every desk reading the archive numbers it alike.
+     *    entries are in, from position and the numbers the archive carries, so every desk reading it
+     *    numbers it alike. A number the archive carries is explicit — including one the writer held
+     *    as auto but a reader could not derive (`heldAutoNumbers`).
      */
     private fun importCueStackEntries(
         dir: Path,
@@ -2000,7 +2002,10 @@ class ProjectImporter(private val state: State) {
         val taken = HashSet<Int>()
         parsed.entries.sortedBy { it.key.toString() }.forEach { (uuid, a) ->
             val ref = a.entryUuid ?: a.cueUuid
-                ?: throw ImportError.invalidArchive("Prompt book anchor ${a.uuid} names no entry")
+            if (ref == null) {
+                logger.warn("Import: prompt book anchor {} names no entry; left out", a.uuid)
+                return@forEach
+            }
             val entry = entryMap[UUID.fromString(ref)]
             if (entry == null) {
                 logger.warn("Import: prompt book anchor {} names {}, which has no entry here; left out", a.uuid, ref)

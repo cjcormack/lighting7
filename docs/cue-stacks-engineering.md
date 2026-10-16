@@ -81,9 +81,11 @@ no `cue_stack_id`, so a second start does nothing. Its KDoc explains why it is t
 
 From `formatVersion` 32 (cue model plan session 3, `docs/sync-engineering.md` §"Version 32") each
 entry is its own record, `cueStackEntries/{uuid}.json`: its stack, its cue (or `kind: MARKER` and a
-label), its ordinal, its follow, and its number **only when explicit** — every reader derives the auto
+label), its ordinal, its follow, and its number when explicit — every reader derives the auto
 numbers from position, so a drag is one changed file and a renumber touches only the entries whose
-explicit number moved. An anchor names its entry. A cue file says nothing about where the cue sits.
+written number moved. An auto number a reader could not derive, one D11 holds beside an explicit
+renumber waiting for *Fix Order*, is written too and read back as explicit (`heldAutoNumbers`), so a
+pull or a clone shows the labels this desk does. An anchor names its entry. A cue file says nothing about where the cue sits.
 
 A v5–v31 archive still imports: each cue becomes one entry in its stack, named with **its cue's
 uuid** at its 0-based place, and a MARKER cue a marker entry; a cue with no stack is loose. The

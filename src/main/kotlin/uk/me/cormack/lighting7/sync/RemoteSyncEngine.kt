@@ -63,12 +63,6 @@ class RemoteSyncEngine(
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
 
     /**
-     * The cue number clashes the current run's latest import resolved, by project ([importTree]).
-     * Runs on one project are serialised by [projectLocks], so a key is only ever one run's.
-     */
-    private val runNumberClashes = ConcurrentHashMap<Int, List<CueNumberClash>>()
-
-    /**
      * Pull credentials for [repoUrl] via [authResolver], translating its typed errors
      * into the [SyncException] codes the route layer maps to HTTP statuses.
      */
@@ -220,7 +214,6 @@ class RemoteSyncEngine(
         if (trigger.logsIdleRuns) {
             syncLogger.info(projectId, SyncLogEvent.RUN_STARTED, "Starting sync run")
         }
-        runNumberClashes.remove(projectId)
         val (repoUrl, branch) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                 ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "Sync config has not been initialised for this project.")
@@ -249,7 +242,7 @@ class RemoteSyncEngine(
         }
 
         val workingTreePath = workingTree.pathFor(projectUuid)
-        val outcome = withNumberClashes(projectId, withContext(Dispatchers.IO) {
+        val outcome = withNumberClashes(withContext(Dispatchers.IO) {
             val repo = JGitClient.open(workingTreePath)
                 ?: throw SyncException(
                     SyncErrorCode.NO_REPO,
@@ -397,10 +390,10 @@ class RemoteSyncEngine(
                 )
             }
             is HistoryRelation.RemoteAhead -> {
-                fastForwardTo(repo, projectId, remoteRef)
+                val clashes = fastForwardTo(repo, projectId, remoteRef)
                 val head = JGitClient.head(repo)?.sha ?: error("RemoteAhead fast-forward produced no HEAD")
                 bootstrapSyncStateAtHead(projectId, repo, head)
-                SyncRunResult(SyncOutcome.FAST_FORWARDED, pushed = 0, pulled = relation.behind, replaced = 0, headSha = head, message = "Pulled ${relation.behind} commit(s) from remote.", sessionId = null, conflictCount = 0)
+                SyncRunResult(SyncOutcome.FAST_FORWARDED, pushed = 0, pulled = relation.behind, replaced = 0, headSha = head, message = "Pulled ${relation.behind} commit(s) from remote.", sessionId = null, conflictCount = 0, numberClashes = clashes)
             }
             is HistoryRelation.Diverged -> {
                 handleDiverged(
@@ -669,7 +662,7 @@ class RemoteSyncEngine(
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
         stampFormatVersion(workingTreePath)
 
-        importTree(projectId, workingTreePath)
+        val clashes = importTree(projectId, workingTreePath)
 
         // Ensure the merged tree carries the PDF matching the merged scriptHash (the
         // overlay above only writes record JSON, not the binary), and hydrate the local
@@ -693,7 +686,7 @@ class RemoteSyncEngine(
                 pushed = 0, pulled = behind, replaced = 0,
                 headSha = head,
                 message = "Merged with remote (no local-only changes).",
-                sessionId = null, conflictCount = 0,
+                sessionId = null, conflictCount = 0, numberClashes = clashes,
             )
         }
         val shortInstall = installUuid.toString().take(8)
@@ -719,7 +712,7 @@ class RemoteSyncEngine(
                 pushed = 0, pulled = behind, replaced = 0,
                 headSha = remoteSha,
                 message = "Merged ${ahead + behind} commit(s). $PUSH_DISABLED_PREFIX the merge is kept in the working tree.",
-                sessionId = null, conflictCount = 0,
+                sessionId = null, conflictCount = 0, numberClashes = clashes,
             )
         }
 
@@ -731,6 +724,7 @@ class RemoteSyncEngine(
                 isFromConflictSession = isFromConflictSession,
                 rejectionMessage = pushed.message ?: pushed.status.toString(),
                 attemptsRemaining = attemptsRemaining,
+                clashes = clashes,
             )
         }
         ensurePushOk(pushed)
@@ -742,7 +736,7 @@ class RemoteSyncEngine(
             pushed = ahead, pulled = behind, replaced = 0,
             headSha = merged.sha,
             message = "Merged ${ahead + behind} commit(s) and pushed.",
-            sessionId = null, conflictCount = 0,
+            sessionId = null, conflictCount = 0, numberClashes = clashes,
         )
     }
 
@@ -784,6 +778,9 @@ class RemoteSyncEngine(
      * Push was rejected (a peer raced us between fetch and push). HEAD is at our merge
      * commit; the DB is at the merged state. Re-fetch and either re-merge against the
      * new remote tip (if no new conflicts emerge) or surface the new conflicts.
+     *
+     * [clashes] are the cue number clashes the merge's import resolved: an answer that leaves the
+     * DB as that import did carries them, and one that imports again carries its own.
      */
     private fun retryAfterPushReject(
         repo: Repository,
@@ -795,6 +792,7 @@ class RemoteSyncEngine(
         isFromConflictSession: Boolean,
         rejectionMessage: String,
         attemptsRemaining: Int,
+        clashes: List<CueNumberClash>,
     ): SyncRunResult {
         if (attemptsRemaining <= 0) {
             throw SyncException(
@@ -829,7 +827,7 @@ class RemoteSyncEngine(
                     outcome = SyncOutcome.MERGED, pushed = 0, pulled = 0, replaced = 0,
                     headSha = newLocalSha,
                     message = "Merge already on remote after retry.",
-                    sessionId = null, conflictCount = 0,
+                    sessionId = null, conflictCount = 0, numberClashes = clashes,
                 )
             }
             HistoryRelation.RemoteAbsent -> {
@@ -842,7 +840,7 @@ class RemoteSyncEngine(
                     return retryAfterPushReject(
                         repo, projectId, installUuid, installFriendlyName,
                         branch, credentials, isFromConflictSession,
-                        pushed.message ?: pushed.status.toString(), attemptsRemaining - 1,
+                        pushed.message ?: pushed.status.toString(), attemptsRemaining - 1, clashes,
                     )
                 }
                 ensurePushOk(pushed)
@@ -851,13 +849,13 @@ class RemoteSyncEngine(
                     outcome = SyncOutcome.MERGED, pushed = newRelation.ahead, pulled = 0, replaced = 0,
                     headSha = newLocalSha,
                     message = "Pushed merge after retry.",
-                    sessionId = null, conflictCount = 0,
+                    sessionId = null, conflictCount = 0, numberClashes = clashes,
                 )
             }
             // Remote moved ahead of us in a strict-superset way (peer fast-forwarded our
             // merge commit and then added more) — fast-forward our HEAD and re-import.
             is HistoryRelation.RemoteAhead -> {
-                fastForwardTo(repo, projectId, remoteRef)
+                val pulledClashes = fastForwardTo(repo, projectId, remoteRef)
                 val head = JGitClient.head(repo)?.sha ?: error("Null HEAD after fast-forward retry")
                 bootstrapSyncStateAtHead(projectId, repo, head)
                 SyncRunResult(
@@ -865,7 +863,7 @@ class RemoteSyncEngine(
                     pushed = 0, pulled = newRelation.behind, replaced = 0,
                     headSha = head,
                     message = "Fast-forwarded to peer's superset after retry.",
-                    sessionId = null, conflictCount = 0,
+                    sessionId = null, conflictCount = 0, numberClashes = pulledClashes,
                 )
             }
             // The common case: a peer's commit lands during our push window. Re-do the
@@ -901,7 +899,7 @@ class RemoteSyncEngine(
                         outcomes, newConflictKeys,
                         localSnapshots, remoteSnapshots, baseSha,
                         newLocalSha, remoteSha,
-                    )
+                    ).copy(numberClashes = clashes)
                 }
 
                 autoMerge(
@@ -1040,8 +1038,7 @@ class RemoteSyncEngine(
         val credentials = resolveCredentials(view.repoUrl)
 
         val workingTreePath = workingTree.pathFor(projectUuid)
-        runNumberClashes.remove(projectId)
-        val result = withNumberClashes(projectId, withContext(Dispatchers.IO) {
+        val result = withNumberClashes(withContext(Dispatchers.IO) {
             val repo = JGitClient.open(workingTreePath)
                 ?: throw SyncException(SyncErrorCode.NO_REPO, "Working tree at $workingTreePath has no git repo.")
             repo.use { applyMergeFromSession(it, projectId, installUuid, installFriendlyName, view, credentials) }
@@ -1167,11 +1164,11 @@ class RemoteSyncEngine(
      * remote carrying identical record content, which the three-way diff classifies as all
      * `NoOp` — a content-identical no-op merge with no data loss.
      */
-    private fun fastForwardTo(repo: Repository, projectId: Int, remoteRef: String) {
+    private fun fastForwardTo(repo: Repository, projectId: Int, remoteRef: String): List<CueNumberClash> {
         val remoteSha = repo.resolve(remoteRef)?.name
             ?: error("Cannot fast-forward: $remoteRef does not resolve")
         val scratch = Files.createTempDirectory("lighting7-ff-")
-        try {
+        val clashes = try {
             for ((relPath, content) in JGitClient.walkTree(repo, remoteSha)) {
                 writeWorkingTreeFile(scratch, relPath, content)
             }
@@ -1185,28 +1182,28 @@ class RemoteSyncEngine(
         // without a manual re-import. No reconcile: a fast-forward adopts the remote tree
         // wholesale, so it already matches the pulled scriptHash exactly.
         reconcileAndHydratePromptScripts(projectId, repo.workTree.toPath(), reconcile = false)
+        return clashes
     }
 
     /**
-     * Apply a pulled or merged tree to the DB ([ProjectImporter.replaceFromWorkingTree]) and keep the
-     * cue number clashes it resolved for this run's result. The latest import of a run wins: a
-     * push-rejected retry imports again, and the DB is what that last import left.
+     * Apply a pulled or merged tree to the DB ([ProjectImporter.replaceFromWorkingTree]) and answer the
+     * cue number clashes it resolved, for the run's result. Every path that imports puts them on the
+     * [SyncRunResult] it answers; a push-rejected retry that imports again answers its own, since the
+     * DB is what that last import left.
      */
-    private fun importTree(projectId: Int, dir: Path) {
-        val result = importer.replaceFromWorkingTree(projectId, dir)
-        runNumberClashes[projectId] = result.numberClashes
-    }
+    private fun importTree(projectId: Int, dir: Path): List<CueNumberClash> =
+        importer.replaceFromWorkingTree(projectId, dir).numberClashes
 
     /**
-     * [result] naming the cue number clashes this run's imports resolved (cue model plan §3.9), in
-     * [SyncRunResult.numberClashes] and in its message — which the activity log and the sync-done
-     * notification carry. Consumes them, so the next run starts clean.
+     * [result] with the cue number clashes its run's import resolved (cue model plan §3.9,
+     * [SyncRunResult.numberClashes]) said in its message too — which the activity log and the
+     * sync-done notification carry.
      */
-    private fun withNumberClashes(projectId: Int, result: SyncRunResult): SyncRunResult {
-        val clashes = runNumberClashes.remove(projectId).orEmpty()
+    private fun withNumberClashes(result: SyncRunResult): SyncRunResult {
+        val clashes = result.numberClashes
         if (clashes.isEmpty()) return result
         val said = clashes.joinToString(" ") { clash -> clash.describe().replaceFirstChar { it.uppercase() } + "." }
-        return result.copy(numberClashes = clashes, message = "${result.message} $said")
+        return result.copy(message = "${result.message} $said")
     }
 
     /** Write [content] to `relPath` under [workingTreePath], creating parent dirs. */

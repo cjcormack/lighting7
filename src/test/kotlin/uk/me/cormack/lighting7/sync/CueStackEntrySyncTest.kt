@@ -100,6 +100,7 @@ class CueStackEntrySyncTest {
         val book = UUID.randomUUID()
         val onBuild = UUID.randomUUID()
         val onInterval = UUID.randomUUID()
+        val onNothing = UUID.randomUUID()
         val region = """[{"page":0,"x":0.1,"y":0.1,"w":0.5,"h":0.05}]"""
         write(dir, "formatVersion.json", """{"formatVersion":31,"minReader":5}""")
         write(dir, "project.json", """{"uuid":"$project","name":"Legacy show"}""")
@@ -112,6 +113,8 @@ class CueStackEntrySyncTest {
         write(dir, "promptBooks/$book.json", """{"uuid":"$book","scriptHash":"${"a".repeat(64)}","pageCount":4}""")
         write(dir, "promptBookAnchors/$onBuild.json", """{"uuid":"$onBuild","cueUuid":"$build","region":$region,"label":"LX 2"}""")
         write(dir, "promptBookAnchors/$onInterval.json", """{"uuid":"$onInterval","cueUuid":"$interval","region":$region}""")
+        // An anchor naming neither an entry nor a cue is left out, never the end of the import.
+        write(dir, "promptBookAnchors/$onNothing.json", """{"uuid":"$onNothing","region":$region}""")
 
         val imported = ProjectImporter(state).import(dir, nameOverride = null)
         assertTrue(imported.numberClashes.isEmpty())
@@ -181,7 +184,7 @@ class CueStackEntrySyncTest {
     // ── One file per entry ─────────────────────────────────────────────────────
 
     @Test
-    fun `a drag changes one file, and an explicit renumber only the entry renumbered`() {
+    fun `a drag changes one file, and an explicit renumber only the entries whose written number changed`() {
         val projectId = seedMinimalProject(state)
         val entries = seedStack(projectId, "Act 1", listOf("1", null, null, "4", null, null))
         val a = export(projectId)
@@ -196,7 +199,9 @@ class CueStackEntrySyncTest {
         val b = export(projectId)
         assertEquals(setOf("cueStackEntries/${entries[5]}.json"), changedFiles(a, b))
 
-        // Type an explicit number on the third entry: only that entry's file changes.
+        // Type an explicit number on the third entry (1, 1.1, 1.2, 1.3, 4, 5 after the drag). Its file
+        // changes, and so does the fourth's: D11 holds its 1.3, which a reader anchoring on the new
+        // 1.25 would derive as 1.26, so the archive now writes it (P5, as amended 2026-10-16).
         transaction(state.database) {
             val stack = DaoCueStack.find { DaoCueStacks.project eq projectId }.single()
             val before = cueEntryIds(stack)
@@ -206,8 +211,45 @@ class CueStackEntrySyncTest {
             renumberAutoEntries(stack, before)
         }
         val c = export(projectId)
-        val third = transaction(state.database) { entriesOf(DaoCueStack.find { DaoCueStacks.project eq projectId }.single())[2].uuid }
-        assertEquals(setOf("cueStackEntries/$third.json"), changedFiles(b, c))
+        val (third, fourth) = transaction(state.database) {
+            entriesOf(DaoCueStack.find { DaoCueStacks.project eq projectId }.single()).let { it[2].uuid to it[3].uuid }
+        }
+        assertEquals(setOf("cueStackEntries/$third.json", "cueStackEntries/$fourth.json"), changedFiles(b, c))
+        assertEquals("1.3", canonicalDecode(CueStackEntryJson.serializer(), c.getValue("cueStackEntries/$fourth.json")).cueNumber)
+    }
+
+    /**
+     * An auto number D11 held in place survives an import (P5, as amended 2026-10-16): an explicit
+     * renumber waiting for *Fix Order* keeps its neighbours' labels on this desk, a reader deriving
+     * from position alone would not, so the archive writes them — and a pull or a clone shows the
+     * labels this desk does.
+     */
+    @Test
+    fun `an auto number held by an explicit renumber survives an import`() {
+        val projectId = seedMinimalProject(state)
+        seedStack(projectId, "Act 1", listOf(null, null, null, null, null))
+        transaction(state.database) {
+            val stack = DaoCueStack.find { DaoCueStacks.project eq projectId }.single()
+            val before = cueEntryIds(stack)
+            val second = entriesOf(stack)[1]
+            second.cueNumber = "4.5"
+            second.cueNumberAuto = false
+            renumberAutoEntries(stack, before)
+        }
+        fun labels(id: Int) = transaction(state.database) {
+            entriesOf(DaoCueStack.find { DaoCueStacks.project eq id }.single()).map { it.cueNumber }
+        }
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), labels(projectId), "test sanity: D11 held the neighbours")
+
+        val dir = Files.createTempDirectory(scratchRoot, "held-")
+        ProjectExporter(state).export(projectId, dir)
+        val written = readExportFiles(dir).filterKeys { it.startsWith("cueStackEntries/") }
+            .values.map { canonicalDecode(CueStackEntryJson.serializer(), it).cueNumber }
+        assertEquals(setOf("1", "4.5", "3", "4", "5"), written.filterNotNull().toSet(), "a reader would not derive them")
+
+        // A clone is that export imported again — what a pull does to this desk's own rows.
+        val cloned = ProjectCloner(state).clone(projectId, "Held", description = null).projectId
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), labels(cloned))
     }
 
     @Test

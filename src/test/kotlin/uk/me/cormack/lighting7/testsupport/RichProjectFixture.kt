@@ -851,7 +851,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val snap = DaoCue.new { this.project = project; name = "snap" }
     DaoCueStackEntry.new {
         stack = stack1; cue = snap; ordinal = 3.0
-        cueNumber = "7"; cueNumberAuto = true
+        // The auto number a renumber gives it after cue 1's 1.5 — one a reader derives too, so it
+        // is never exported (a held one is: `CueStackEntrySyncTest`).
+        cueNumber = "1.9"; cueNumberAuto = true
         autoAdvance = true
     }
     // A marker entry: a labelled divider, no cue (cue model plan D12).

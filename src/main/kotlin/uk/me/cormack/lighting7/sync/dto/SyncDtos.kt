@@ -51,7 +51,7 @@ data class FormatVersionJson(
     // `cues/{uuid}.json` drops `cueStackUuid`, `sortOrder`, `cueNumber`, `cueNumberAuto`,
     // `autoAdvance`, `autoAdvanceDelayMs` and `cueType`, and each place in a list is its own record,
     // `cueStackEntries/{uuid}.json` ([CueStackEntryJson]) — a double `ordinal` (P6), the number only
-    // when explicit (P5), and a marker as an entry with a label. `promptBookAnchors/` names its entry
+    // when explicit or not derivable (P5), and a marker as an entry with a label. `promptBookAnchors/` names its entry
     // (`entryUuid`) instead of a cue. A v31 reader would import every cue with no stack and its next
     // wipe-then-export push would write every stack empty for every peer, so the writer moves;
     // `minReader` stays at **5** — the reader still takes a v5–v31 archive's lists from its cue
@@ -951,8 +951,10 @@ data class LegacyCuePlacementJson(
  *  * [ordinal] is the entry's position (P6): ascending, ties broken by [uuid], so two desks that
  *    inserted into the same gap — the same midpoint — play the two entries in the same order. No
  *    default, so it is always written.
- *  * [cueNumber] is written **only when explicit** (P5). An auto number is derived from position by
- *    every reader, so a drag changes one file rather than every auto-numbered entry after it.
+ *  * [cueNumber] is written when explicit, and an auto number only where a reader could not derive
+ *    it from position (P5, as amended: `heldAutoNumbers`); a reader takes every number it finds as
+ *    explicit. The rest are derived by every reader, so a drag changes one file rather than every
+ *    auto-numbered entry after it.
  *  * [autoAdvance] and [autoAdvanceDelayMs] are the entry's follow (D2).
  */
 @Serializable

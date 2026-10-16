@@ -342,6 +342,40 @@ private fun flushPendingEntryWrites() {
 }
 
 /**
+ * The auto numbers in [stack] a reader could not derive from position, by entry id: what the archive
+ * writes beside the explicit ones (cue model plan P5, as amended 2026-10-16).
+ *
+ * A reader derives every number the archive leaves out from scratch — [renumberAutoEntries] with no
+ * `before` — so an auto number venue-visit D11 held in place would move on the next pull or clone:
+ * an explicit renumber still waiting for *Fix Order* holds its neighbours (1, 4.5, 3, 4, 5), where
+ * a reader with no numbers would anchor on the 4.5 (4, 4.5, 4.6, 4.7, 4.8). Each such number is
+ * written, and so read back as explicit, so every desk shows the labels this one does. Writing one
+ * can change what the reader derives for the rest, so the set grows until that derivation gives
+ * every auto number left out. A stack nothing holds writes none; a blank auto number (no label
+ * fitted) is never written, since the archive cannot say blank.
+ */
+internal fun heldAutoNumbers(stack: DaoCueStack): Map<Int, String> {
+    val entries = cueEntriesInOrder(stack)
+    val held = HashMap<Int, String>()
+    while (true) {
+        // The inputs exactly as the importer's renumber sees them: the numbers the archive carries.
+        val derived = computeAutoCueNumbers(
+            entries.mapIndexed { index, entry ->
+                val written = if (entry.hasExplicitNumber()) entry.cueNumber else held[index]
+                AutoNumberInput(written, auto = written == null)
+            },
+        )
+        val more = entries.withIndex().filter { (index, entry) ->
+            !entry.hasExplicitNumber() && index !in held && !entry.cueNumber.isNullOrEmpty() &&
+                derived[index] != entry.cueNumber
+        }
+        if (more.isEmpty()) break
+        more.forEach { (index, entry) -> held[index] = entry.cueNumber!! }
+    }
+    return held.entries.associate { (index, number) -> entries[index].id.value to number }
+}
+
+/**
  * Release [number] from any *auto*-numbered cue entry in [stack] (other than [exceptEntryId]) so an
  * operator typing an explicit number can always claim it.
  *

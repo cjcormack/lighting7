@@ -235,6 +235,36 @@ class CueModelMigrationTest {
         assertTrue(cueEntries.all { it["entry"] == it["cue"] }, "each cue's one entry carries its cue's uuid: $cueEntries")
     }
 
+    /**
+     * Two entries a desk played tied — an older archive's equal sortOrders, imported after cue model
+     * session 1 — become positions in the order the desk played them, by id, never by uuid, so the
+     * step moves nothing on stage (agreed 2026-10-16).
+     */
+    @Test
+    fun `entries the desk played tied become positions in the order it played them`() {
+        startDesk()
+        stopDesk()
+        // The marker of stack 1 and that stack's first cue entry, on one ordinal; the marker — the
+        // later id, and a marker's uuid is never renamed — gets the lowest uuid there is, so an order
+        // by uuid would put it first. Then the one-shot step runs again.
+        val marker = rows("SELECT id, stack_id FROM cue_stack_entries WHERE kind = 'MARKER' AND label = 'Interval'").single()
+        val markerId = (marker["id"] as Number).toInt()
+        val stackId = (marker["stack_id"] as Number).toInt()
+        val cueId = (rows("SELECT id FROM cue_stack_entries WHERE kind = 'CUE' AND stack_id = $stackId ORDER BY id LIMIT 1").single()["id"] as Number).toInt()
+        assertTrue(cueId < markerId, "test sanity: the cue entry is the earlier id")
+        DriverManager.getConnection("jdbc:sqlite:${IntegrationTestDb.path}").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.executeUpdate("UPDATE cue_stack_entries SET ordinal = 2.5 WHERE id IN ($cueId, $markerId)")
+                statement.executeUpdate("UPDATE cue_stack_entries SET uuid = zeroblob(16) WHERE id = $markerId")
+                statement.executeUpdate("PRAGMA user_version = 0")
+            }
+        }
+        startDesk()
+        stopDesk()
+        fun ordinal(id: Int) = (rows("SELECT ordinal FROM cue_stack_entries WHERE id = $id").single()["ordinal"] as Number).toDouble()
+        assertTrue(ordinal(cueId) < ordinal(markerId), "the tie keeps the order the desk played: ${ordinal(cueId)}, ${ordinal(markerId)}")
+    }
+
     @Test
     fun `cue entries are named after their cues once, and never again`() {
         startDesk()

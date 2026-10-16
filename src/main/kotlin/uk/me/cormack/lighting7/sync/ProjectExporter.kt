@@ -85,6 +85,7 @@ import java.nio.file.Path
 import java.util.UUID
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.entriesOf
+import uk.me.cormack.lighting7.routes.heldAutoNumbers
 
 /**
  * Exports a project's portable graph to a folder of canonical JSON files.
@@ -269,7 +270,9 @@ class ProjectExporter(private val state: State) {
 
             // v32: each place in a stack's list is its own record, written from the entry itself — never
             // through the P4 bridge (`soleEntryOf`), so a shared or loose cue travels as it is. The
-            // number only when explicit (P5): every reader derives the auto ones from position.
+            // number when explicit, and an auto one only where a reader deriving from position could
+            // not give it (P5, as amended 2026-10-16: `heldAutoNumbers`).
+            val heldNumbers = project.cueStacks.flatMap { heldAutoNumbers(it).entries }.associate { it.key to it.value }
             count += writeAll(
                 targetDir, "cueStackEntries",
                 project.cueStacks.flatMap { entriesOf(it) },
@@ -282,7 +285,11 @@ class ProjectExporter(private val state: State) {
                     kind = CueStackEntryKind.MARKER.name.takeIf { e.isMarker },
                     label = e.label.takeIf { e.isMarker },
                     ordinal = e.ordinal,
-                    cueNumber = e.cueNumber.takeIf { !e.cueNumberAuto && !e.isMarker && !it.isNullOrEmpty() },
+                    cueNumber = when {
+                        e.isMarker -> null
+                        !e.cueNumberAuto && !e.cueNumber.isNullOrEmpty() -> e.cueNumber
+                        else -> heldNumbers[e.id.value]
+                    },
                     autoAdvance = e.autoAdvance && !e.isMarker,
                     autoAdvanceDelayMs = e.autoAdvanceDelay?.toMillis()?.takeIf { !e.isMarker },
                 )
