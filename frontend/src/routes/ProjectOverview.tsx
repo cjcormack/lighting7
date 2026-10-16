@@ -87,7 +87,7 @@ export default function ProjectOverview() {
     <>
       <div className="p-4 space-y-6">
         {/* Breadcrumbs */}
-        <Breadcrumbs projectName={project.name} isActive={project.isCurrent} />
+        <Breadcrumbs projectName={project.name} />
 
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -95,7 +95,7 @@ export default function ProjectOverview() {
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold">{project.name}</h1>
               <Badge variant={project.isCurrent ? "default" : "outline"}>
-                {project.isCurrent ? "active" : "inactive"}
+                {project.isCurrent ? "On the rig" : "Not on the rig"}
               </Badge>
             </div>
             {project.description && (
