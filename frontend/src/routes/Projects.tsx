@@ -20,9 +20,7 @@ import { Cloud, CloudDownload, Landmark, MoreVertical, PackageOpen, PlusCircle, 
 import { cn } from "@/lib/utils"
 import {
   useProjectListQuery,
-  useCurrentProjectQuery,
   useDeleteProjectMutation,
-  useSetCurrentProjectMutation,
 } from "../store/projects"
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
 import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
@@ -244,22 +242,13 @@ function ProjectCard({
   // A venue is an admin's to change (venue plan D3): an operator may open one, nothing more.
   const canChange = !isVenue || isAdmin
 
-  const { data: currentProject } = useCurrentProjectQuery()
-
   const [deleteProject, { isLoading: isDeleting, error: deleteError }] =
     useDeleteProjectMutation()
-  const [setCurrentProject, { isLoading: isSwitching }] =
-    useSetCurrentProjectMutation()
 
   const handleActivate = () => {
     if (!project.isCurrent) {
       setSwitchOpen(true)
     }
-  }
-
-  const handleConfirmSwitch = async () => {
-    await setCurrentProject(project.id)
-    setSwitchOpen(false)
   }
 
   const handleDelete = async () => {
@@ -296,14 +285,7 @@ function ProjectCard({
         onConfirm={handleDelete}
         onCancel={() => setDeleteOpen(false)}
       />
-      <ProjectSwitchConfirmDialog
-        open={switchOpen}
-        currentProjectName={currentProject?.name || ""}
-        newProjectName={project.name}
-        isSwitching={isSwitching}
-        onConfirm={handleConfirmSwitch}
-        onCancel={() => setSwitchOpen(false)}
-      />
+      <ProjectSwitchConfirmDialog project={switchOpen ? project : null} onClose={() => setSwitchOpen(false)} />
       <CloneProjectDialog
         open={cloneOpen}
         setOpen={setCloneOpen}

@@ -44,6 +44,13 @@ export interface ProjectSummary {
   venue?: ProjectVenue | null;
   /** A venue's card (venue plan session 7); absent for a show, and from an older desk. */
   venueSummary?: VenueSummary | null;
+  /**
+   * The channels the project parks — its effective parks, a venue's included — which a switch to it
+   * keeps at their parked levels. Absent from a desk older than the switcher (navigation plan §4.3).
+   */
+  parks?: number;
+  /** *Make rig safe*'s blackout still holds on the project, so it opens dark. Runtime only. */
+  safeBlackout?: boolean;
 }
 
 /**

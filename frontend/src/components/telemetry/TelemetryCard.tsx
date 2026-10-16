@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import { useLocation } from 'react-router'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -11,6 +13,13 @@ import { useTelemetryQuery, useUpdateTelemetryMutation } from '@/store/telemetry
 export function TelemetryCard() {
   const { data: telemetry } = useTelemetryQuery()
   const [update, { isLoading: saving }] = useUpdateTelemetryMutation()
+  const { hash } = useLocation()
+  const card = useRef<HTMLDivElement>(null)
+  const loaded = telemetry != null
+  // `/install#telemetry` (⌘K's *Telemetry…*) lands here, once the card has drawn.
+  useEffect(() => {
+    if (loaded && hash === '#telemetry') card.current?.scrollIntoView({ block: 'start' })
+  }, [loaded, hash])
   if (telemetry == null) return null
 
   const onToggle = async () => {
@@ -21,7 +30,7 @@ export function TelemetryCard() {
   }
 
   return (
-    <Card className="p-4 max-w-2xl space-y-2">
+    <Card ref={card} id="telemetry" className="p-4 max-w-2xl space-y-2 scroll-mt-4">
       <div className="flex items-center justify-between gap-4">
         <h3 className="text-sm font-medium">Send diagnostics</h3>
         <button

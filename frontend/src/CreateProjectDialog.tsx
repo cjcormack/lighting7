@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCreateProjectMutation, useProjectListQuery } from "./store/projects"
 import { useSeatingPresetsQuery } from "./store/venues"
 import { publishedDate } from "./lib/venue"
-import type { ProjectSummary } from "./api/projectApi"
+import type { ProjectDetail, ProjectSummary } from "./api/projectApi"
 
 /** The Venue select's "none": a standalone show, which holds its whole rig as every project did. */
 const NO_VENUE = "none"
@@ -31,6 +31,8 @@ interface CreateProjectDialogProps {
    * become its draft. A show by default.
    */
   kind?: "SHOW" | "VENUE"
+  /** After the desk has made it; the switcher and ⌘K open its home here. */
+  onCreated?: (project: ProjectDetail) => void
 }
 
 /**
@@ -44,6 +46,7 @@ export default function CreateProjectDialog({
   open,
   setOpen,
   kind = "SHOW",
+  onCreated,
 }: CreateProjectDialogProps) {
   const isVenue = kind === "VENUE"
   const [name, setName] = useState("")
@@ -75,8 +78,9 @@ export default function CreateProjectDialog({
   const handleCreate = async () => {
     // Reported by errorToastMiddleware; keep the sheet open (and the typed name) if the create
     // didn't land.
+    let created: ProjectDetail
     try {
-      await createProject({
+      created = await createProject({
         name,
         description: description || undefined,
         ...(isVenue ? { kind } : {}),
@@ -87,6 +91,7 @@ export default function CreateProjectDialog({
       return
     }
     handleClose()
+    onCreated?.(created)
   }
 
   const isValid = name.trim().length > 0
