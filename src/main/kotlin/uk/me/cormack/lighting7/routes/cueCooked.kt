@@ -58,6 +58,16 @@ data class CookedRowDto(
     val layerId: Int? = null,
     /** What that layer applies — a Look or a template, named. */
     val layerSource: LayerSourceDto? = null,
+    /**
+     * The own row's or layer row's **own** target, before group expansion (show-cue-editing plan
+     * §3.8): `group` + its name for a row a group held, which every member's composed row then
+     * carries, else the fixture or cell the row named. [targetType] says only that the value
+     * arrived through a group and [targetKey] is always the head; these two say which row wrote it,
+     * so the cue editor can draw a group's own row on the group's row. Null on a row the cook did
+     * not attribute (none today).
+     */
+    val sourceTargetType: String? = null,
+    val sourceTargetKey: String? = null,
 )
 
 @Serializable
@@ -95,6 +105,8 @@ internal fun Route.routeApiRestCueCooked(state: State) {
                             value = row.value.serialize(),
                             layerId = row.layerWinner?.layerId,
                             layerSource = row.layerWinner?.source?.toDto(),
+                            sourceTargetType = row.sourceTarget?.discriminator,
+                            sourceTargetKey = row.sourceTarget?.key,
                         )
                     },
                 ),

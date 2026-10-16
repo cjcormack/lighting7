@@ -1,0 +1,505 @@
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
+import { lookRowKey } from '@/components/programmer/lookRowKey'
+import { fetchLatestCue, usePatchProjectCueMutation, useProjectCueCookedQuery, useProjectCueQuery } from '@/store/cues'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { withoutInfrastructure } from '@/lib/infrastructure'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
+import type { CookedRow, Cue, CuePropertyAssignment } from '@/api/cuesApi'
+import {
+  CueRowDraft,
+  applyCueRowEntries,
+  canonicalCueProperty,
+  cueRowKey,
+  restoreCueRows,
+  rowsWithKeys,
+  type CueRowTargetType,
+} from './cueRowDraft'
+
+/** What one save changed: the rows' keys, and the rows the cue held under them before it. */
+interface UndoStep {
+  keys: readonly string[]
+  rows: readonly CuePropertyAssignment[]
+}
+
+/**
+ * Where a composed cell's value came from (show-cue-editing plan D2): one of the cue's **own** rows,
+ * or the Look layer that won it. `overrides` names the Look an own value sits over, where this
+ * editor has seen one win the cell.
+ */
+export type CueCellSource =
+  | { kind: 'own'; targetType: CueRowTargetType; targetKey: string; overrides?: string }
+  | { kind: 'layer'; layerId: number | null; name: string | null }
+
+/** One composed value: the canonical assignment string and what said it. */
+export interface CueCellValue {
+  value: string
+  source: CueCellSource
+}
+
+export type CueRowSaveState = 'clean' | 'dirty' | 'saving' | 'error'
+
+/**
+ * One cue's own rows, in the shape the Values grid reads and writes them (show-cue-editing plan
+ * §3.3) — `LookRowStore`'s shape, over a cue.
+ *
+ * **Server state** is the cue's details (its `propertyAssignments`) and its cook (`/cooked`); the
+ * **draft** holds own values the operator set and own rows they took away, notifying per key.
+ * Writes go to the draft and schedule a flush — 400 ms of quiet, 2 s at most (D10) — which builds
+ * the whole `propertyAssignments` list from the cue **as the desk holds it at flush time** — read
+ * past the cache (`fetchLatestCue`), since another client's edit does not invalidate it — keeping
+ * each row's fade, move-in-dark and sort order, and PATCHes it. A flush sends only the entries no
+ * save has carried, and saves run one after another. The PATCH is a stored write and sends nothing
+ * to the stage (P2): a live cue lands it on its next first hold.
+ *
+ * **Undo** is one step per editor, the exact inverse of the last save that landed: the rows it
+ * changed put back as they were, every other row as the desk holds it now — from the toast each
+ * save raises, or ⌘Z in the editor. A save that failed leaves the previous Undo standing.
+ *
+ * Every editor mounts its own, so two editors of one cue (two cards, a cue twice in a stack) keep
+ * their own drafts and Undo: what they share is the cue, which each re-reads.
+ */
+export interface CueRowStoreValue {
+  projectId: number
+  cueId: number
+  /** `Q1`, or the cue's name where it has no number — the editors' scope word. */
+  cueLabel: string
+  /** Locked, or another project's cue: the grid reads and writes nothing. */
+  readOnly: boolean
+  loaded: boolean
+  /** The cook could not be read (another project's cue answers 409): the grid says so rather than waiting. */
+  cookFailed: boolean
+  draft: CueRowDraft
+  /** What the grid draws at one head and property — the draft over the cook. See [lookupCueCell]. */
+  lookup: (headKey: string, propertyName: string, group?: string) => CueCellValue | undefined
+  /**
+   * The value a single-axis position edit takes its other axis from: the draft, else the composed
+   * cell — never the wire (the Look arm's rule).
+   */
+  composedValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => string | undefined
+  setValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => void
+  removeValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => void
+  /** Every head the cue holds an own row on, or a layer composes onto — D14's rows. */
+  heads: ReadonlySet<string>
+  /** Groups holding an own row of the cue's — drawn as a group row. */
+  ownGroups: ReadonlySet<string>
+  /** Heads and groups with an own row (stored or pending) — *Own only*. */
+  ownTargets: ReadonlySet<string>
+  undo: () => void
+  canUndo: boolean
+  /** Save whatever is pending now. */
+  flush: () => void
+}
+
+const CueRowStoreContext = createContext<CueRowStoreValue | null>(null)
+const CueRowSaveStateContext = createContext<CueRowSaveState>('clean')
+
+/** The editor's cue row store, or null outside one. */
+export function useCueRowStore(): CueRowStoreValue | null {
+  return useContext(CueRowStoreContext)
+}
+
+/** Whether the Values grid has edits waiting, in flight, or refused — for the header. */
+export function useCueRowSaveState(): CueRowSaveState {
+  return useContext(CueRowSaveStateContext)
+}
+
+/** Quiet time before a save. */
+export const CUE_ROW_SAVE_DEBOUNCE_MS = 400
+/** …and the ceiling, so a long drag saves as it goes. */
+export const CUE_ROW_SAVE_CEILING_MS = 2000
+
+const EMPTY_ROWS: readonly CookedRow[] = []
+const EMPTY_ASSIGNMENTS: readonly CuePropertyAssignment[] = []
+
+export function CueRowStoreProvider({
+  projectId,
+  cueId,
+  entryId,
+  readOnly,
+  children,
+}: {
+  projectId: number
+  cueId: number
+  entryId?: number | null
+  readOnly: boolean
+  children: ReactNode
+}) {
+  const { data: cue } = useProjectCueQuery({ projectId, cueId, entryId })
+  const {
+    data: cookedData,
+    fulfilledTimeStamp: cookAt,
+    isSuccess: cookLoaded,
+    isError: cookFailed,
+  } = useProjectCueCookedQuery({ projectId, cueId })
+  const { fixtures } = useFixtureLookup()
+  const [patchCue] = usePatchProjectCueMutation()
+  const [saveState, setSaveState] = useState<CueRowSaveState>('clean')
+  const [canUndo, setCanUndo] = useState(false)
+  const toastId = `cue-values-${useId()}`
+
+  // One draft per cue, minted on the change — and the cue it belongs to rides beside it, so a flush
+  // on the way out (the teardown below) writes to the cue its edits were made on: `LookRowStore`'s
+  // pairing, for its reason.
+  const entryRef = useRef<{ cueId: number; draft: CueRowDraft; cue: Cue | undefined }>({
+    cueId,
+    draft: new CueRowDraft(),
+    cue: undefined,
+  })
+  if (entryRef.current.cueId !== cueId) {
+    entryRef.current = { cueId, draft: new CueRowDraft(), cue: undefined }
+  }
+  const entry = entryRef.current
+  if (cue && cue.id === cueId) {
+    entry.cue = cue
+  }
+  const draft = entry.draft
+
+  const timerRef = useRef<number | null>(null)
+  const ceilingRef = useRef<number | null>(null)
+  const writesRef = useRef(0)
+  /** Every save and Undo, one after another: each builds on the cue the one before it left. */
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve())
+  /** What the last save changed — the rows' keys and the rows they replaced — for its Undo. */
+  const undoRef = useRef<UndoStep | null>(null)
+  const cueLabel = cue ? cueLabelOf(cue) : 'Cue'
+  const labelRef = useRef(cueLabel)
+  labelRef.current = cueLabel
+  const readOnlyRef = useRef(readOnly)
+  readOnlyRef.current = readOnly
+  const argsRef = useRef({ projectId, cueId, entryId })
+  argsRef.current = { projectId, cueId, entryId }
+
+  const clearTimers = () => {
+    if (timerRef.current != null) window.clearTimeout(timerRef.current)
+    if (ceilingRef.current != null) window.clearTimeout(ceilingRef.current)
+    timerRef.current = null
+    ceilingRef.current = null
+  }
+
+  /**
+   * One write, queued behind the last: read the cue as the desk holds it now (the cache can be
+   * behind — `fetchLatestCue` says why), build the whole list from it with [build], PATCH it. The
+   * cached cue stands in only when the read fails, so a desk that cannot be read is still written.
+   */
+  const enqueue = useCallback(
+    (build: (stored: readonly CuePropertyAssignment[]) => CuePropertyAssignment[] | null) => {
+      const writesAtStart = writesRef.current
+      const run = async (): Promise<{ ok: boolean; before: readonly CuePropertyAssignment[] } | null> => {
+        const args = { ...argsRef.current, cueId: entry.cueId }
+        let latest: Cue | undefined
+        try {
+          latest = await fetchLatestCue(args)
+        } catch {
+          latest = entry.cue
+        }
+        if (!latest) return { ok: false, before: [] }
+        const before = latest.propertyAssignments
+        const list = build(before)
+        if (list == null) return null
+        setSaveState('saving')
+        try {
+          await patchCue({ projectId: args.projectId, cueId: args.cueId, propertyAssignments: list }).unwrap()
+          setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
+          return { ok: true, before }
+        } catch {
+          setSaveState('error')
+          ignoreReportedError()
+          return { ok: false, before }
+        }
+      }
+      const next = chainRef.current.then(run, run)
+      chainRef.current = next
+      return next
+    },
+    [entry, patchCue],
+  )
+
+  const undo = useCallback(() => {
+    const step = undoRef.current
+    if (step == null || readOnlyRef.current) return
+    // The flush timers stay: an edit to another row still lands, queued behind this.
+    undoRef.current = null
+    setCanUndo(false)
+    // Pending edits to the rows the save changed go with it; an edit to any other row still lands.
+    draft.discard(step.keys)
+    toast.dismiss(toastId)
+    void enqueue((stored) => restoreCueRows(stored, step.keys, step.rows)).then((result) => {
+      if (result?.ok) toast(`${labelRef.current} · values put back`, { id: toastId })
+    })
+  }, [draft, enqueue, toastId])
+
+  const flush = useCallback(() => {
+    clearTimers()
+    // Only what no save has carried yet: a sent entry is in the cue, or about to be, and sending it
+    // again would re-assert it over a later edit of that row from elsewhere.
+    const sent = draft.unsaved()
+    if (sent.size === 0) return
+    draft.markSending(sent)
+    const keys = [...sent.keys()]
+    void enqueue((stored) => applyCueRowEntries(stored, sent)).then((result) => {
+      if (!result?.ok) {
+        draft.markFailed(sent)
+        return
+      }
+      draft.markSaved(sent, Date.now())
+      // Undo is set only by a save that landed, and names exactly what it changed.
+      undoRef.current = { keys, rows: rowsWithKeys(result.before, keys) }
+      setCanUndo(true)
+      toast(`${labelRef.current} · values saved`, {
+        id: toastId,
+        action: { label: 'Undo', onClick: () => undo() },
+      })
+    })
+  }, [draft, enqueue, toastId, undo])
+
+  // Read through a ref by the timers and the teardown, so neither holds a stale `flush` — and, for
+  // the teardown, so a new `flush` identity is not an unmount: an effect keyed on it would run its
+  // cleanup, and so save, on every change of the mutation trigger or the toast's Undo.
+  const flushRef = useRef(flush)
+  flushRef.current = flush
+  const schedule = useCallback(() => {
+    writesRef.current += 1
+    setSaveState('dirty')
+    if (timerRef.current != null) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => flushRef.current(), CUE_ROW_SAVE_DEBOUNCE_MS)
+    if (ceilingRef.current == null) ceilingRef.current = window.setTimeout(() => flushRef.current(), CUE_ROW_SAVE_CEILING_MS)
+  }, [])
+
+  const setValue = useCallback(
+    (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => {
+      if (readOnlyRef.current) return
+      draft.set(targetType, targetKey, propertyName, value)
+      schedule()
+    },
+    [draft, schedule],
+  )
+  const removeValue = useCallback(
+    (targetType: CueRowTargetType, targetKey: string, propertyName: string) => {
+      if (readOnlyRef.current) return
+      const key = cueRowKey(targetType, targetKey, propertyName)
+      const stored = (entry.cue?.propertyAssignments ?? []).some(
+        (row) => cueRowKey(row.targetType, row.targetKey, row.propertyName) === key,
+      )
+      if (!stored && !draft.isSent(key)) {
+        // No own row to take away: ⌫ over a Look-won cell, or over a value set here and not yet
+        // saved, which is simply forgotten. Nothing to write, and no toast to say it was saved.
+        draft.discard([key])
+        return
+      }
+      draft.remove(targetType, targetKey, propertyName)
+      schedule()
+    },
+    [draft, entry, schedule],
+  )
+
+  // Retire what the server now states, once a cook read after the save has landed.
+  useEffect(() => {
+    if (!cue || cookAt == null) return
+    draft.reconcile(cue.propertyAssignments, cookAt)
+  }, [cue, cookAt, draft])
+
+  // A pending edit lands when the editor goes — a card collapsing on a GO from elsewhere, a pane
+  // folding, a page left — as the header's fields do with `commitOnUnmount`.
+  useEffect(() => {
+    const onLeave = () => flushRef.current()
+    window.addEventListener('beforeunload', onLeave)
+    return () => {
+      window.removeEventListener('beforeunload', onLeave)
+      flushRef.current()
+    }
+  }, [])
+
+  const rows = cookedData?.rows ?? EMPTY_ROWS
+  const assignments = cue?.propertyAssignments ?? EMPTY_ASSIGNMENTS
+  const cookedByKey = useMemo(() => {
+    const out = new Map<string, CookedRow>()
+    for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row)
+    return out
+  }, [rows])
+
+  // The Look that last won each cell, while this editor has been open — what an own value typed
+  // over it *overrides*. The cook keeps only the winner, so once the own row is saved the Look under
+  // it is no longer said anywhere but here.
+  const overriddenRef = useRef(new Map<string, string>())
+  for (const row of rows) {
+    if (row.layerId != null && row.layerSource?.name) {
+      overriddenRef.current.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row.layerSource.name)
+    }
+  }
+
+  const groupsByHead = useMemo(() => {
+    const out = new Map<string, readonly string[]>()
+    for (const fixture of fixtures ?? []) out.set(fixture.key, fixture.groups)
+    return out
+  }, [fixtures])
+
+  // A layer's group targets bring the members the rig shows, never an infrastructure fixture (a
+  // dimmer on hard power): `useFixtureLookup` is the raw list, kept raw for the keys it resolves.
+  const visibleFixtures = useMemo(() => withoutInfrastructure(fixtures), [fixtures])
+
+  // Which targets hold a pending own value — the rows *Own only* and the heads read. A value typed
+  // over an existing row changes no shape, so a keystroke re-renders nothing through it.
+  const [draftShape, setDraftShape] = useState('')
+  useEffect(() => {
+    const read = () => {
+      const keys: string[] = []
+      for (const [key, pending] of draft.snapshot()) if (pending.kind === 'set') keys.push(key)
+      const shape = keys.sort().join('\u0001')
+      setDraftShape((prev) => (prev === shape ? prev : shape))
+    }
+    read()
+    return draft.subscribeAll(read)
+  }, [draft])
+
+  const storedGroupRows = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const row of assignments) {
+      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.propertyName), row.value)
+    }
+    return out
+  }, [assignments])
+
+  const value = useMemo<CueRowStoreValue>(() => {
+    // The heads and own targets below read the draft's set entries; `draftShape` is what changes
+    // when those do, so the memo is rebuilt then and not on every keystroke.
+    void draftShape
+    const own = (targetType: CueRowTargetType, targetKey: string, v: string, cellKey: string): CueCellValue => ({
+      value: v,
+      source: { kind: 'own', targetType, targetKey, overrides: overriddenRef.current.get(cellKey) },
+    })
+    const lookup = (headKey: string, rawProperty: string, group?: string): CueCellValue | undefined => {
+      const propertyName = canonicalCueProperty(rawProperty)
+      const cellKey = lookRowKey(headKey, propertyName)
+      if (group != null) {
+        // A group row draws the group's **own** row and nothing else: what its members compose to is
+        // on their own rows.
+        const pending = draft.get('group', group, propertyName)
+        if (pending?.kind === 'removed') return undefined
+        if (pending?.kind === 'set') return own('group', group, pending.value, cellKey)
+        const stored = storedGroupRows.get(cueRowKey('group', group, propertyName))
+        return stored == null ? undefined : own('group', group, stored, cellKey)
+      }
+      const pending = draft.get('fixture', headKey, propertyName)
+      if (pending?.kind === 'set') return own('fixture', headKey, pending.value, cellKey)
+      const cooked = cookedByKey.get(cellKey)
+      const sourceType = cooked?.sourceTargetType ?? (cooked ? (cooked.targetType === 'group' ? 'group' : 'fixture') : null)
+      const sourceKey = cooked?.sourceTargetKey ?? cooked?.targetKey
+      const cookedOwn = cooked != null && cooked.layerId == null
+      if (cookedOwn && sourceType === 'fixture' && pending?.kind !== 'removed') {
+        return own('fixture', sourceKey ?? headKey, cooked.value, cellKey)
+      }
+      // A group's own row reaches its members unless a fixture row of their own beats it.
+      for (const name of groupsByHead.get(headKey) ?? []) {
+        const groupPending = draft.get('group', name, propertyName)
+        if (groupPending?.kind === 'set') return own('group', name, groupPending.value, cellKey)
+      }
+      if (cookedOwn && sourceType === 'group' && sourceKey != null) {
+        if (draft.get('group', sourceKey, propertyName)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
+        return undefined
+      }
+      if (cooked != null && cooked.layerId != null) {
+        return { value: cooked.value, source: { kind: 'layer', layerId: cooked.layerId, name: cooked.layerSource?.name ?? null } }
+      }
+      return undefined
+    }
+    const composedValue = (targetType: CueRowTargetType, targetKey: string, rawProperty: string): string | undefined => {
+      const propertyName = canonicalCueProperty(rawProperty)
+      const pending = draft.get(targetType, targetKey, propertyName)
+      if (pending?.kind === 'set') return pending.value
+      if (targetType === 'group') {
+        const stored = storedGroupRows.get(cueRowKey('group', targetKey, propertyName))
+        if (stored != null) return stored
+        const member = (fixtures ?? []).find((f) => f.groups.includes(targetKey))
+        return member ? cookedByKey.get(lookRowKey(member.key, propertyName))?.value : undefined
+      }
+      return cookedByKey.get(lookRowKey(targetKey, propertyName))?.value
+    }
+
+    const heads = new Set<string>()
+    const ownGroups = new Set<string>()
+    const ownTargets = new Set<string>()
+    for (const row of rows) {
+      heads.add(row.targetKey)
+      if (row.layerId == null) ownTargets.add(row.targetKey)
+    }
+    for (const row of assignments) {
+      if (row.targetType === 'group') {
+        ownGroups.add(row.targetKey)
+        ownTargets.add(row.targetKey)
+      } else {
+        heads.add(row.targetKey)
+        ownTargets.add(row.targetKey)
+      }
+    }
+    for (const [key, entry] of draft.snapshot()) {
+      if (entry.kind !== 'set') continue
+      const [targetType, targetKey] = key.split('\u0000')
+      ownTargets.add(targetKey)
+      if (targetType === 'group') ownGroups.add(targetKey)
+      else heads.add(targetKey)
+    }
+    // A layer's own targets bring their fixtures even where the layer composes nothing on them.
+    for (const layer of cue?.layers ?? []) {
+      for (const target of layer.targets ?? []) {
+        if (target.type === 'fixture') heads.add(target.key)
+        else for (const fixture of visibleFixtures ?? []) if (fixture.groups.includes(target.key)) heads.add(fixture.key)
+      }
+    }
+
+    return {
+      projectId,
+      cueId,
+      cueLabel,
+      readOnly,
+      loaded: cue != null && cookLoaded,
+      cookFailed: cookFailed === true,
+      draft,
+      lookup,
+      composedValue,
+      setValue,
+      removeValue,
+      heads,
+      ownGroups,
+      ownTargets,
+      undo,
+      canUndo,
+      flush,
+    }
+    // `saveState` is not read here: it rides its own context so a keystroke does not re-render
+    // every row. `rows`/`assignments` stand for the cook and the cue; the draft is a stable object
+    // whose own subscription wakes the cells.
+  }, [
+    projectId,
+    cueId,
+    cueLabel,
+    readOnly,
+    cue,
+    cookLoaded,
+    cookFailed,
+    draftShape,
+    visibleFixtures,
+    draft,
+    rows,
+    assignments,
+    cookedByKey,
+    storedGroupRows,
+    groupsByHead,
+    fixtures,
+    setValue,
+    removeValue,
+    undo,
+    canUndo,
+    flush,
+  ])
+
+  return (
+    <CueRowStoreContext.Provider value={value}>
+      <CueRowSaveStateContext.Provider value={saveState}>{children}</CueRowSaveStateContext.Provider>
+    </CueRowStoreContext.Provider>
+  )
+}
+
+function cueLabelOf(cue: Cue): string {
+  return cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
+}

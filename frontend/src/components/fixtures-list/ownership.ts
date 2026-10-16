@@ -1,7 +1,7 @@
 import { computeCombinedCss } from '../../lib/colourMath'
 import { resolveSettingOption } from '../../hooks/usePropertyValues'
 import type { CellResolution } from './columns'
-import type { CellState } from './scopedCellValue'
+import type { CellState, CueCellStateSource } from './scopedCellValue'
 import type { CellValue } from './useRowValues'
 import type {
   CellLayer,
@@ -72,6 +72,40 @@ export function layerCellClass(state: CellState | undefined): string {
   if (state.tone === 'untargeted') return 'rounded-sm border border-dashed border-border opacity-55'
   if (state.value) return 'rounded-sm ring-1 ring-inset ring-primary/70 bg-primary/10'
   return ''
+}
+
+/**
+ * Cell styling for the **cue editor's Values grid** (show-cue-editing plan D2, §4.1): a 3px left
+ * edge saying where the composed value came from — blue for one of the cue's own rows (with the
+ * faint wash an own value wears on the board), the Look's teal for a value a layer won, and a
+ * muted edge where the row's heads disagree. A cell the cue composes nothing on gets nothing.
+ */
+export function cueSourceCellClass(source: CueCellStateSource | undefined): string {
+  if (!source) return ''
+  switch (source.kind) {
+    case 'own':
+      return 'rounded-sm shadow-[inset_3px_0_0_var(--color-blue-400)] bg-blue-500/10'
+    case 'layer':
+      return 'rounded-sm shadow-[inset_3px_0_0_var(--color-teal-400)]'
+    case 'mixed':
+      return 'rounded-sm shadow-[inset_3px_0_0_var(--color-muted-foreground)]'
+  }
+}
+
+/** The hover naming a cue cell's source: *Own*, *Own · overrides Scrim*, *From Scrim*. */
+export function cueSourceTitle(source: CueCellStateSource | undefined): string | undefined {
+  if (!source) return undefined
+  switch (source.kind) {
+    case 'own': {
+      const parts = [source.group != null ? `Own · ${source.group}’s row` : 'Own']
+      if (source.overrides) parts.push(`overrides ${source.overrides}`)
+      return parts.join(' · ')
+    }
+    case 'layer':
+      return source.name ? `From ${source.name}` : 'From a Look layer'
+    case 'mixed':
+      return 'Mixed across this row — own rows and Looks'
+  }
 }
 
 /**

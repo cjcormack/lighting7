@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, type RefObject } from 'react'
+import { isEditableTarget } from '@/lib/domUtils'
 import { editorIsOpen } from '../editor/EditorSurface'
 import { isForeignControl, keyTargetIsGuarded, marqueeOwnsKeyTarget } from './cellEntry'
+import { activeKeyRegion, useKeyRegionTracking } from './keyRegion'
 import type { CellKeyboardPermission } from './cellEntry'
 import { arrowOfKey, type CellArrow, type RowId } from './cellSelectionModel'
 
@@ -70,6 +72,14 @@ export interface SheetCellKeys {
  * `<button>` — the rename's double-click trigger — so without the exemption the Enter the operator
  * presses next would activate that button rather than open the row. The pencil is *not* exempt:
  * Enter on it is its own press, and opens the same record anyway.
+ *
+ * **Key regions** (show-cue-editing plan §4.5, `keyRegion.ts`). Two grids can share a page — the cue
+ * sheet and its bottom pane, two open cue cards — and each listens on the window. A grid inside a
+ * region passes [region] and claims a key only while that region is the active one (it holds focus
+ * or took the last pointer press); every other sheet's listener yields while *any* region is
+ * active. So a marquee drawn in the pane, with focus left on the page, still keeps ⌫ and the arrows
+ * from the cue sheet behind it. A page with no region — the programmer's — never sees one, and
+ * nothing changes there.
  */
 export function useSheetKeyboard<C extends string>({
   cellCount,
@@ -83,14 +93,20 @@ export function useSheetKeyboard<C extends string>({
   onOpenRow,
   rowKeys,
   cellKeys,
+  region,
 }: {
   /** How many cells are selected — zero means the cell arms are inert and only Escape is heard. */
   cellCount: number
   /** The surface's gate; a refused key is left to whoever else wants it. */
   permission: CellKeyboardPermission
   isCellSelected: (rowId: RowId, col: C) => boolean
-  /** Escape with no editor open: the cells-then-rows ladder. */
-  onEscape: () => void
+  /**
+   * Escape with no editor open: the cells-then-rows ladder. Inside a [region], answering true —
+   * something was cleared — claims the key, so the sheet the region is opened in (the cue editor's
+   * right-hand sheet, a Radix dialog that dismisses on an Escape nobody prevented) stays open; the
+   * next Escape, with nothing left to clear, closes it.
+   */
+  onEscape: () => void | boolean
   /** Enter (`''`) or a character: open the first selected cell's editor, seeded. */
   onOpen: (seed: string) => void
   /** Backspace / Delete: clear the selected cells. */
@@ -127,17 +143,23 @@ export function useSheetKeyboard<C extends string>({
    * any, even over a cell selection, as it always has.
    */
   cellKeys?: SheetCellKeys
+  /**
+   * The key region this sheet lives in — the cue editor's root. Given, the hook hears a key only
+   * while that region is the active one; absent, it hears none while any region is.
+   */
+  region?: RefObject<Element | null>
 }): void {
+  useKeyRegionTracking()
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (keyTargetIsGuarded(e.target)) return
+      if (!ownsKey(e.target, region)) return
 
       if (e.key === 'Escape') {
         // An open editor takes Escape first, and keeps the selection: Radix will close it from its
         // own document listener, and the selection it was opened for survives. Asked here, in
         // capture, while the panel is still mounted.
         if (editorIsOpen()) return
-        onEscape()
+        if (onEscape() === true && region != null) e.preventDefault()
         return
       }
       if (cellCount === 0) {
@@ -205,6 +227,7 @@ export function useSheetKeyboard<C extends string>({
     onRefused,
     rowCount,
     onOpenRow,
+    region,
   ])
 
   // **The row and cell keys listen in the bubble phase**, the programmer's phase, and stand aside
@@ -225,7 +248,7 @@ export function useSheetKeyboard<C extends string>({
     if (rowKeys == null && cellKeys == null) return
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return
-      if (keyTargetIsGuarded(e.target) || isForeignControl(e.target)) return
+      if (!ownsKey(e.target, region) || isForeignControl(e.target)) return
       if (editorIsOpen()) return
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
         const selectAll = rowKeys?.onSelectAll ?? cellKeys?.onSelectAll
@@ -247,7 +270,24 @@ export function useSheetKeyboard<C extends string>({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [rowKeys, cellKeys, cellCount])
+  }, [rowKeys, cellKeys, cellCount, region])
+}
+
+/**
+ * Whether a key at [target] is this sheet's to hear. Without a [region]: not while a region holds
+ * the keys, and not where `keyTargetIsGuarded` says so — a field, a dialog, a menu, a list or a key
+ * region. With one: only while that region is active, and the same guards **less the region's own
+ * ancestry** — the region itself is a `[data-key-region]`, and the right-hand sheet the cue editor
+ * opens in from outside the Show view is a `role="dialog"` around it.
+ */
+function ownsKey(target: EventTarget | null, region: RefObject<Element | null> | undefined): boolean {
+  if (region == null) return activeKeyRegion() == null && !keyTargetIsGuarded(target)
+  const mine = region.current
+  if (mine == null || activeKeyRegion() !== mine) return false
+  if (!(target instanceof Element)) return true
+  if (isEditableTarget(target)) return false
+  const blocker = target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
+  return blocker == null || blocker.contains(mine)
 }
 
 /** A focused button, link or menu item — a control whose own Enter the grid must not take. */

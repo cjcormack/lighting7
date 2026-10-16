@@ -836,6 +836,7 @@ export function CueSheet({
           cueId={cueOf(paneRow).id}
           entryId={paneRow.entry.entryId}
           locked={locked}
+          onRequestUnlock={onRequestUnlock}
           tabRequest={tabRequest?.entryId === paneRow.entry.entryId ? tabRequest : null}
           columnRef={columnRef}
           sheetRef={sheetRef}

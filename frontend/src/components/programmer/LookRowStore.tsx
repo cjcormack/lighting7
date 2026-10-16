@@ -85,6 +85,11 @@ export function useLookSaveState(): LookSaveState {
   return useContext(LookSaveStateContext)
 }
 
+/** No focused Look layer below here — `NoProgrammerScope`'s twin, for its reason. */
+export function NoLookRowStore({ children }: { children: ReactNode }) {
+  return <LookRowStoreContext.Provider value={null}>{children}</LookRowStoreContext.Provider>
+}
+
 /** Quiet time before a save. */
 const SAVE_DEBOUNCE_MS = 400
 /** …and the ceiling, so a long drag persists progressively rather than all at the end. */

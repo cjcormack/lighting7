@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS, columnFamily, columnLabel } from './columns'
 import { rowLocateTarget } from './rowModel'
-import { buildRowCells, useRowValues } from './useRowValues'
+import { buildCueRowCells, buildRowCells, useRowValues } from './useRowValues'
 import { useScopedRowValues } from './useScopedRowValues'
 import { parsePropertyMask } from '../../lib/attributeFamily'
 import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
@@ -34,7 +34,7 @@ import { useRowOwnership } from './useRowOwnership'
 import { useHeldBackReach } from './useHeldBackReach'
 import { cellHoldsBack } from '../../lib/heldBack'
 import { lightingApi } from '../../api/lightingApi'
-import { applyStagedValue, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
+import { applyStagedValue, cueSourceCellClass, cueSourceTitle, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from '../sheet/cellSelection'
 import { useCellMarquee } from '../sheet/useCellMarquee'
 import { describeCellScope, type CellRef } from '../sheet/cellSelectionModel'
@@ -192,6 +192,11 @@ export interface FixturesTableProps {
    * selection it just made.
    */
   onBackgroundClick?: () => void
+  /**
+   * Draw the selection dimmed: this grid is not the key region (show-cue-editing plan §4.5) — two
+   * cue editors on one page, and the other one has the keys.
+   */
+  selectionDimmed?: boolean
 }
 
 /**
@@ -226,6 +231,7 @@ export function FixturesTable({
   closeEditorCell,
   onMarqueeDragChange,
   onBackgroundClick,
+  selectionDimmed = false,
 }: FixturesTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   // One subscription for the whole grid; every row takes the answer as a prop.
@@ -496,6 +502,7 @@ export function FixturesTable({
                     selectionEmpty={selectionEmpty}
                     editorAnchorRef={editorAnchorRef}
                     onEmptyCellClick={onEmptyCellClick}
+                    selectionDimmed={selectionDimmed}
                   />
                 </div>
               )
@@ -635,6 +642,8 @@ interface RowViewProps {
    * table's own `onEmptyCellClick`.
    */
   onEmptyCellClick?: () => void
+  /** See `FixturesTableProps.selectionDimmed`. */
+  selectionDimmed: boolean
 }
 
 const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
@@ -695,20 +704,27 @@ const RowView = React.memo(function RowView({
   selectionEmpty,
   editorAnchorRef,
   onEmptyCellClick,
+  selectionDimmed,
 }: RowViewProps) {
-  // Hooks run unconditionally; divider rows just have no cells.
-  const cells = useMemo(() => buildRowCells(row, visibleColumns), [row, visibleColumns])
-  // Always the live wire read: it is what the editor opens at, so a busk begins where the rig is
-  // even in a scope that displays an em-dash. Free when the scope is Output, which reads the same
-  // values through this same hook.
-  const liveValues = useRowValues(cells)
-  const scoped = useScopedRowValues(cells, liveValues)
-  const scope = useProgrammerScope()
   // A cell edit reaches the wire in every context but `lookLayer`, where it lands in the Look row
   // draft instead. Derived from the context rather than from `scope.kind === 'layer'` so it cannot
   // disagree with `useCellWriters`, which routes on exactly this — layer scope without a row store
   // is still a live write.
   const editorContext = useEditorContext()
+  // The cue editor's Values grid writes the stored cue and reaches neither the rig nor the desk
+  // (show-cue-editing plan P2): no Locate, no fixture sheet, no Add-to-targets on its rows.
+  const inCue = editorContext.kind === 'cue'
+  // Hooks run unconditionally; divider rows just have no cells.
+  const cells = useMemo(
+    () => (inCue ? buildCueRowCells(row, visibleColumns) : buildRowCells(row, visibleColumns)),
+    [inCue, row, visibleColumns],
+  )
+  // Always the live wire read: it is what the editor opens at, so a busk begins where the rig is
+  // even in a scope that displays an em-dash. Free when the scope is Output, which reads the same
+  // values through this same hook.
+  const liveValues = useRowValues(cells)
+  const scoped = useScopedRowValues(cells, liveValues, row.kind === 'group' ? row.name : undefined)
+  const scope = useProgrammerScope()
   const cellsInert = !deskConnected && editorContext.kind === 'live'
   // Passing an empty cell list is the "off" state: useRowOwnership then registers no
   // subscriptions and returns a constant, so the plain list views pay nothing for this.
@@ -782,7 +798,10 @@ const RowView = React.memo(function RowView({
   // on the sticky cell's overlay rather than here; see below for why.
   return (
     <div
-      className={cn(SHEET_ROW_CLASS, selected ? 'bg-foreground/[0.06]' : 'hover:bg-accent/30')}
+      className={cn(
+        SHEET_ROW_CLASS,
+        selected ? (selectionDimmed ? 'bg-foreground/[0.03]' : 'bg-foreground/[0.06]') : 'hover:bg-accent/30',
+      )}
       style={{ gridTemplateColumns }}
       data-state={selected ? 'selected' : undefined}
       // With `data-cell` on each value cell, this is how the container finds the DOM cell to anchor
@@ -803,7 +822,9 @@ const RowView = React.memo(function RowView({
         <div
           className={`pointer-events-none absolute inset-0 ${
             selected
-              ? 'bg-foreground/[0.06] shadow-[inset_3px_0_0_var(--foreground)]'
+              ? selectionDimmed
+                ? 'bg-foreground/[0.03] shadow-[inset_3px_0_0_var(--muted-foreground)]'
+                : 'bg-foreground/[0.06] shadow-[inset_3px_0_0_var(--foreground)]'
               : 'group-hover/row:bg-accent/30'
           }`}
         />
@@ -872,7 +893,7 @@ const RowView = React.memo(function RowView({
             reaching the name cell's selection click. focus-within keeps the
             buttons tabbable — once anything in the row has focus they display,
             entering the tab order for keyboard users. */}
-        {locate && (
+        {locate && !inCue && (
           <span
             className="relative hidden shrink-0 items-center gap-0.5 group-hover/row:inline-flex group-focus-within/row:inline-flex"
             onClick={(e) => e.stopPropagation()}
@@ -969,7 +990,8 @@ const RowView = React.memo(function RowView({
               'relative h-full min-w-0 py-0.5 pr-[18px]',
               ownershipCellClass(owned),
               layerCellClass(scope?.kind === 'layer' ? state : undefined),
-              cellSelectionClass(selectedCell),
+              cueSourceCellClass(state?.source),
+              cellSelectionClass(selectedCell, true, selectionDimmed),
               // Output is a read of the cook. Editing it would have to pick a destination, and
               // choosing one is what the scope switcher is for — so the cell reads and the
               // overlay button below takes the click instead.
@@ -987,7 +1009,7 @@ const RowView = React.memo(function RowView({
                 ? DESK_OFFLINE_LABEL
                 : heldBack
                   ? `${ownershipTitle(owned) ?? 'Programmer'} · holds an effect back — open the cell for its stack`
-                  : ownershipTitle(owned)
+                  : (cueSourceTitle(state?.source) ?? ownershipTitle(owned))
             }
           >
             {/* The held-back dot (D19): an amber corner dot in the top-right, inside the ownership

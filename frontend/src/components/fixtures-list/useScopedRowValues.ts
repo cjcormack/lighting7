@@ -8,9 +8,11 @@ import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
+import { useEditorContext } from '../programmer/EditorContext'
+import { useCueRowStore, type CueCellSource, type CueRowStoreValue } from '../cues/editor/CueRowStore'
 import { useRowValues } from './useRowValues'
 import type { AttributeFamily } from '../../lib/attributeFamily'
-import type { CellState, RowCellStates, StagedPart } from './scopedCellValue'
+import type { CellState, CueCellStateSource, RowCellStates, StagedPart } from './scopedCellValue'
 import type { RowCell } from './useRowValues'
 import type { LookRowStoreValue } from '../programmer/LookRowStore'
 import type { FocusedTemplateLayerValue } from '../programmer/FocusedTemplateLayer'
@@ -36,10 +38,18 @@ export function useScopedRowValues(
    * where the grid is at its widest.
    */
   live: ReturnType<typeof useRowValues>,
+  /** The row's group, where the row is a group row — the cue arm draws the group's own row there. */
+  group?: string,
 ): RowCellStates {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
   const focusedTemplate = useFocusedTemplateLayer()
+  // The cue editor's Values grid (show-cue-editing plan §3.3): the draft over the cook. A fourth
+  // source, called on every row like the other three and handed no cells when it is off.
+  const editor = useEditorContext()
+  const cueStore = useCueRowStore()
+  const inCue = editor.kind === 'cue' && cueStore != null
+  const cue = useCueRowValues(inCue ? cells : EMPTY_CELLS, inCue ? cueStore : null, group)
 
   // **`null` is not `output`.** No scope at all means the plain `/fixtures` and `/groups` lists,
   // which have no scope concept and must behave exactly as they did before this existed: live
@@ -53,6 +63,7 @@ export function useScopedRowValues(
   const template = useTemplateRowValues(layerCells, focusedTemplate, live)
 
   return useMemo(() => {
+    if (inCue) return cue
     if (kind === undefined) return EMPTY_STATES
     if (kind === 'local') return local
     // A focused template layer is a **read**, and neither store answers for it: `LookRowStore`
@@ -70,7 +81,7 @@ export function useScopedRowValues(
       if (value) states[cell.col] = { value, editable: false }
     }
     return states
-  }, [kind, cells, live, local, layer, template, focusedTemplate])
+  }, [inCue, cue, kind, cells, live, local, layer, template, focusedTemplate])
 }
 
 const EMPTY_CELLS: readonly RowCell[] = []
@@ -275,3 +286,72 @@ function cellFamily(cell: RowCell): AttributeFamily {
   return columnFamily(cell.col)
 }
 
+/**
+ * One cue's composed cells, read through its `CueRowStore`: the draft over the cook, each cell's
+ * value with where it came from — an own row (blue), or the Look that won it (teal).
+ *
+ * Subscribed to the draft **whole** rather than per key: a group own row's edit reaches every
+ * member's row, and a cue grid is tens of rows, not the rig's hundreds. Committed state — the cue
+ * and its cook — arrives as the store's context value, which every row already re-renders on.
+ */
+function useCueRowValues(
+  cells: readonly RowCell[],
+  store: CueRowStoreValue | null,
+  group: string | undefined,
+): RowCellStates {
+  const draft = store?.draft
+  const versionRef = useRef(0)
+  const subscribe = useCallback(
+    (callback: () => void) => {
+      if (!draft) return () => {}
+      return draft.subscribeAll(() => {
+        versionRef.current += 1
+        callback()
+      })
+    },
+    [draft],
+  )
+  const getVersion = useCallback(() => versionRef.current, [])
+  const draftVersion = useSyncExternalStore(subscribe, getVersion, getVersion)
+
+  return useMemo(() => {
+    void draftVersion
+    if (cells.length === 0 || !store) return EMPTY_STATES
+    const states: RowCellStates = {}
+    for (const cell of cells) {
+      const sources: CueCellSource[] = []
+      const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
+        const hit = store.lookup(targetKey, propertyName, group)
+        if (!hit) return undefined
+        const staged = parseProgrammerValue(hit.value)
+        if (staged) sources.push(hit.source)
+        return staged ?? undefined
+      }
+      const parts = cell.resolutions.map((res, i) => stagedPartFor(res, cell.targetKeys[i], lookup))
+      const value = cellValueFromParts(cell.resolutions, parts)
+      const state: CellState = { value, editable: !store.readOnly }
+      if (value) state.source = cueSourceOf(sources)
+      states[cell.col] = state
+    }
+    return states
+  }, [cells, store, group, draftVersion])
+}
+
+/** One cell's source from its parts': own, one Look, or mixed. */
+function cueSourceOf(sources: readonly CueCellSource[]): CueCellStateSource {
+  const first = sources[0]
+  if (first == null) return { kind: 'mixed' }
+  if (sources.every((s) => s.kind === 'own')) {
+    const overrides = sources.find((s) => s.kind === 'own' && s.overrides != null)
+    const groupName = first.kind === 'own' && first.targetType === 'group' ? first.targetKey : undefined
+    return {
+      kind: 'own',
+      overrides: overrides?.kind === 'own' ? overrides.overrides : undefined,
+      group: sources.every((s) => s.kind === 'own' && s.targetType === 'group' && s.targetKey === groupName) ? groupName : undefined,
+    }
+  }
+  if (first.kind === 'layer' && sources.every((s) => s.kind === 'layer' && s.layerId === first.layerId)) {
+    return { kind: 'layer', name: first.name }
+  }
+  return { kind: 'mixed' }
+}
