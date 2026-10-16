@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
-import { useActiveCueIds } from '@/store/cues'
+import { useCueRings } from '@/store/cueHolds'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { enterBuskEdit, exitBuskEdit, selectBuskEdit } from '@/store/buskEditSlice'
 import {
@@ -145,9 +145,9 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * nothing left to be per.
  *
  * **No transport of its own.** The stack cards and the pinned-cue grid went with the layout; GO and
- * BACK live on the side sheet's Show tab, and a cue pad's green comes from `useActiveCueIds` — its
- * stack has that cue on stage, playhead or not, which is what makes a cue pad a toggle rather than
- * a playhead move.
+ * BACK live on the side sheet's Show tab, and a cue pad's ring comes from `cueHolds.state`
+ * (`useCueRings`): solid while a press holds the cue loose, an outline while only a stack holds it
+ * (cue model plan D11). A press takes or lets go of a loose hold and never moves a playhead.
  */
 /** Sonner id for the D3 relink, so a second one replaces the toast rather than stacking. */
 export const RELINK_TOAST_ID = 'busk-relinked'
@@ -180,7 +180,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const { data: rig } = useBuskRigQuery(projectId)
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
-  const activeCueIds = useActiveCueIds(projectId)
+  const cueRings = useCueRings(projectId)
   const { editing } = useSelector(selectBuskEdit)
 
   const [createPage, { isLoading: creating }] = useCreateBuskPageMutation()
@@ -380,7 +380,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const behaviour = useMemo<PadBehaviour>(
     () => ({
       presenceOf,
-      isLive: (pad) => pad.kind === 'CUE' && pad.cue != null && activeCueIds.has(pad.cue.id),
+      cueRing: (pad) => (pad.kind === 'CUE' && pad.cue != null ? (cueRings.get(pad.cue.id) ?? null) : null),
       onPress: (pad) => {
         // A pad the layout write has not answered for yet has no id to press. It cannot be reached
         // in practice — presses are off while editing — but the guard keeps the type honest.
@@ -452,7 +452,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     }),
     [
       presenceOf,
-      activeCueIds,
+      cueRings,
       pressPad,
       projectId,
       selectedLayerTargets,

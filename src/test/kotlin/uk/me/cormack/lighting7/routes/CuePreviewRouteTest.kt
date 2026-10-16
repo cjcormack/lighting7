@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -70,11 +71,11 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
     private suspend fun activate(client: HttpClient, stackId: Int, cueId: Int) =
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cueId))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cueId)))
         }
 
     private suspend fun preview(client: HttpClient, stackId: Int, cueId: Int? = null): HttpResponse {
-        val query = if (cueId != null) "?cueId=$cueId" else ""
+        val query = if (cueId != null) "?entryId=${state.entryIdOf(cueId)}" else ""
         return client.get("/api/rest/projects/$projectId/cue-stacks/$stackId/preview$query")
     }
 

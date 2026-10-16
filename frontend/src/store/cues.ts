@@ -1,8 +1,6 @@
-import { useMemo } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
-import { useProjectCueStackListQuery } from './cueStacks'
 import type {
   Cue,
   CueInput,
@@ -184,21 +182,3 @@ export const {
   useApplyCueMutation,
   useStopCueMutation,
 } = cuesApi
-
-/**
- * The cue ids currently on stage, read from the playhead (`CueStack.activeCueId`, seeded by the
- * stack-list fetch and kept live by `cueRunStateChanged`) — never from the FX effect stream. A cue
- * made of property assignments and effect-free Look layers spawns no `FxInstance` at all, so any
- * surface answering "is it on stage?" from `activeEffects` reads a rows-only cue as never running.
- * Static cues are the common case, and a pad that can't see one re-fires instead of stopping.
- */
-export function useActiveCueIds(projectId: number | undefined): Set<number> {
-  const { data: stacks } = useProjectCueStackListQuery(projectId!, { skip: !projectId })
-  return useMemo(() => {
-    const ids = new Set<number>()
-    for (const stack of stacks ?? []) {
-      if (stack.activeCueId != null) ids.add(stack.activeCueId)
-    }
-    return ids
-  }, [stacks])
-}

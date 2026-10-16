@@ -80,8 +80,9 @@ The findings that shape the plan, from three surveys of the code on `main` at `2
   name and key (`ai/VenueSetupTools.kt:332-700`). The REST `POST /cues/{id}/copy` copies one cue
   into "Unsorted" and keeps the source project's Look and template FKs on its layers
   (`routes/projectCues.kt:385-390`), which is a cross-project leak.
-- **Cue-edit live apply is retired** (sweep D1). Its comments survive at
-  `fx/CueAssignmentLayer.kt:362`, `fx/CueStackManager.kt:373` and `fx/CueApply.kt:439`.
+- **Cue-edit live apply is retired** (sweep D1). Its comments survived at
+  `fx/CueAssignmentLayer.kt:362`, `fx/CueStackManager.kt:373` and `fx/CueApply.kt:439` until
+  session 2, which took them out.
 
 ## 2. Decisions
 

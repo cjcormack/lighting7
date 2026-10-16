@@ -157,6 +157,9 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.activeCueId(stackId: Int): Int? =
         get("/api/rest/projects/$projectId/cue-stacks/$stackId").body<CueStackDetails>().activeCueId
 
+    /** Whether a press holds [cueId] loose — what a cue pad toggles (cue model plan D6, D11). */
+    private fun looseHeld(cueId: Int): Boolean = state.show.cueStackManager.holds.looseHeld(cueId)
+
     /** `name@key+key` per live programmer layer — the idiom the template-group tests left behind. */
     private fun live(): Set<String> = state.show.programmerStore.layers
         .map { layer -> "${layer.source.name}@${layer.targets.map { it.key }.sorted().joinToString("+")}" }
@@ -351,12 +354,13 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val on = client.press(pad)
         assertEquals("CUE", on.kind)
         assertEquals("applied", on.action)
-        assertEquals(opening, client.activeCueId(stackId))
+        assertTrue(looseHeld(opening), "a pad holds its cue loose")
+        assertNull(client.activeCueId(stackId), "and names no stack: the cue's stack stays dark")
         assertTrue(opening in state.show.fxEngine.cueLayer.activeCueIds(), "the rows-only cue is live on Layer 4")
 
         val off = client.press(pad)
         assertEquals("removed", off.action)
-        assertNull(client.activeCueId(stackId), "the stack reads dark again")
+        assertFalse(looseHeld(opening), "the second press lets the hold go")
         assertFalse(opening in state.show.fxEngine.cueLayer.activeCueIds())
     }
 
@@ -389,12 +393,12 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val (amberPad, cuePad) = client.bank("keys", solo = true, tpl(amber), cue(opening))
 
         client.press(cuePad)
-        assertEquals(opening, client.activeCueId(stackId))
+        assertTrue(looseHeld(opening))
 
         val on = client.press(amberPad, "hex-1")
         assertEquals("applied", on.action)
         assertEquals(1, on.released, "the live cue sibling was stopped")
-        assertNull(client.activeCueId(stackId))
+        assertFalse(looseHeld(opening))
         assertEquals(setOf("amber@hex-1"), live())
     }
 
@@ -418,7 +422,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals("applied", on.action)
         assertEquals(2, on.released, "both layer siblings came off, whatever heads they held")
         assertTrue(state.show.programmerStore.layers.isEmpty())
-        assertEquals(opening, client.activeCueId(stackId))
+        assertTrue(looseHeld(opening))
 
         // Off: nothing else moves.
         assertEquals(0, client.press(cuePad).released)
@@ -439,7 +443,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals(0, client.press(bluePad, "hex-1").released)
         assertEquals(0, client.press(cuePad).released)
         assertEquals(setOf("amber@hex-1", "blue@hex-1"), live())
-        assertEquals(opening, client.activeCueId(stackId))
+        assertTrue(looseHeld(opening))
     }
 
     @Test
@@ -564,7 +568,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val cue = client.press(cuePad, "hex-1", families = listOf("COLOUR"))
         assertEquals("CUE", cue.kind)
         assertEquals("applied", cue.action, "a cue has no targets to be masked on")
-        assertEquals(cueId, client.activeCueId(stackId))
+        assertTrue(looseHeld(cueId))
     }
 
     @Test

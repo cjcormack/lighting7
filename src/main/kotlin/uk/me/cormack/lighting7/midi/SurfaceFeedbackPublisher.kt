@@ -147,12 +147,13 @@ class SurfaceFeedbackPublisher(
      */
     private val windowRegistry: WindowRegistry? = null,
     /**
-     * A stack's live cue, for a `PressPad` on a **cue** pad — its ring is stack liveness, not the
-     * layer stack, exactly as the busk view's cue pads read `useActiveCueIds` rather than the
-     * applied state. A function of one stack rather than the manager itself, because that is the
-     * whole of what this class asks of it.
+     * Whether a cue is held loose, for a `PressPad` on a **cue** pad. A press toggles the cue's
+     * loose hold (cue model plan D11), so the LED says what the press would let go of: lit when the
+     * pad's press has the cue on, dark when it is live only through a stack — the screen's outline,
+     * which an LED has no way to draw. A function of one cue rather than the registry itself,
+     * because that is the whole of what this class asks of it.
      */
-    private val cueStackActiveCueIdProvider: ((stackId: Int) -> Int?)? = null,
+    private val cueLooseHeldProvider: ((cueId: Int) -> Boolean)? = null,
     /**
      * What each busk pad presses and what id each busk page has — the database half of a record LED.
      *
@@ -227,16 +228,16 @@ class SurfaceFeedbackPublisher(
      * resync; doing it here costs one read per rebuild, and rebuild already happens on exactly the
      * events that can stale it (a binding change, a Look / template list change, a layout write).
      *
-     * [layerUuid] is a Look's or template's uuid, for the applied-state read; [cue] is
-     * `(cueId, stackId)` for a pad holding a cue, whose ring comes from stack liveness instead and
-     * has nothing to do with the layer stack at all. Exactly one is set. Both null means the record
+     * [layerUuid] is a Look's or template's uuid, for the applied-state read; [cue] is the cue id
+     * for a pad holding a cue, whose ring comes from the cue's loose hold instead and has nothing to
+     * do with the layer stack at all. Exactly one is set. Both null means the record
      * has gone — health says so, and the LED is dark.
      */
     private data class RecordLedEntry(
         val entry: LedEntry,
         val kind: RecordLedKind,
         val layerUuid: UUID?,
-        val cue: Pair<Int, Int>? = null,
+        val cue: Int? = null,
     )
 
     /**
@@ -344,6 +345,7 @@ class SurfaceFeedbackPublisher(
         // A cue pad's ring is its stack's live cue, so a GO or a release moves it. Discrete — this
         // fires on transitions, not per fade frame.
         override fun cueRunStateChanged(runState: CueRunState) { resyncRecordLeds() }
+        override fun cueHoldsChanged() { resyncRecordLeds() }
     }
 
     private val jobs = mutableListOf<Job>()
@@ -770,7 +772,7 @@ class SurfaceFeedbackPublisher(
                     RecordLedKind.COVERS_SELECTION,
                     ref.sourceUuid,
                 )
-                is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId to ref.stackId)
+                is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId)
                 // The pad is gone; health says so and the LED stays dark.
                 null -> RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, null)
             }
@@ -1083,8 +1085,8 @@ class SurfaceFeedbackPublisher(
      * press is dropped.
      */
     private fun recordLedOn(record: RecordLedEntry, applied: List<AppliedSource>): Boolean = when (record.kind) {
-        RecordLedKind.CUE_LIVE -> record.cue?.let { (cueId, stackId) ->
-            runCatching { cueStackManagerActiveCueId(stackId) }.getOrNull() == cueId
+        RecordLedKind.CUE_LIVE -> record.cue?.let { cueId ->
+            runCatching { cueLooseHeldProvider?.invoke(cueId) }.getOrNull() == true
         } ?: false
         RecordLedKind.LOOK_APPLIED -> {
             val uuid = record.layerUuid
@@ -1109,9 +1111,6 @@ class SurfaceFeedbackPublisher(
 
     private fun appliedSources() =
         runCatching { programmerLayerStackProvider?.invoke()?.appliedState() }.getOrNull().orEmpty()
-
-    private fun cueStackManagerActiveCueId(stackId: Int): Int? =
-        cueStackActiveCueIdProvider?.invoke(stackId)
 
     /** True when the selection is non-empty and every target in it is located. */
     private fun selectionLocated(located: Set<TargetRef>): Boolean {
@@ -1315,5 +1314,6 @@ sealed interface PadRef {
     /** A template or a Look, by the uuid `ProgrammerLayerStack.appliedState` reports. */
     data class Layer(val sourceUuid: UUID, val isLook: Boolean) : PadRef
 
-    data class Cue(val cueId: Int, val stackId: Int) : PadRef
+    /** A cue pad's cue; its LED is the cue's loose hold. */
+    data class Cue(val cueId: Int) : PadRef
 }

@@ -15,12 +15,14 @@ import {
 interface NextGoTarget {
   projectId: number | null
   stackId: number | null
+  /** The entry the next GO fires (cue model plan P2) — what the preview is asked for. */
+  entryId: number | null
   cueId: number | null
   /** How the cue is named in the prompt book — for the View menu, not for the request. */
   cueLabel: string | null
 }
 
-const NOTHING: NextGoTarget = { projectId: null, stackId: null, cueId: null, cueLabel: null }
+const NOTHING: NextGoTarget = { projectId: null, stackId: null, entryId: null, cueId: null, cueLabel: null }
 
 /**
  * Which cue the Next GO preview is of.
@@ -57,10 +59,11 @@ function useNextGoTargetState(enabled: boolean): { target: NextGoTarget; settled
     if (skip || projectId == null || stackId == null) return NOTHING
     const stack = stackList?.find((s) => s.id === stackId)
     const cueId = stack?.nextCueId ?? null
-    if (cueId == null) return { projectId, stackId, cueId: null, cueLabel: null }
-    const cue = stack?.cues.find((c) => c.id === cueId)
+    const entryId = stack?.nextEntryId ?? null
+    if (cueId == null || entryId == null) return { projectId, stackId, entryId: null, cueId: null, cueLabel: null }
+    const cue = stack?.cues.find((c) => c.entryId === entryId)
     const cueLabel = cue ? (cue.cueNumber ? `${cue.cueNumber} · ${cue.name}` : cue.name) : null
-    return { projectId, stackId, cueId, cueLabel }
+    return { projectId, stackId, entryId, cueId, cueLabel }
   }, [skip, projectId, stackId, stackList])
 
   const read = (q: { isSuccess: boolean; isError: boolean }) => q.isSuccess || q.isError
@@ -81,10 +84,10 @@ function useNextGoTargetState(enabled: boolean): { target: NextGoTarget; settled
  * `docs/stage-vis-engineering.md`.
  */
 function usePreviewOfTarget(target: NextGoTarget) {
-  const { projectId, stackId, cueId } = target
-  const ready = projectId != null && stackId != null && cueId != null
+  const { projectId, stackId, entryId } = target
+  const ready = projectId != null && stackId != null && entryId != null
   return usePreviewCueLookQuery(
-    { projectId: projectId!, stackId: stackId!, cueId: cueId! },
+    { projectId: projectId!, stackId: stackId!, entryId: entryId! },
     { skip: !ready, refetchOnMountOrArgChange: true },
   )
 }
@@ -217,7 +220,7 @@ export function useOnGoScenery(projectId: number, enabled = true): OnGoScenery {
   const { data: elements } = useStageElementListQuery(projectId, { skip: !ours })
   const { data: stacks } = useProjectCueStackListQuery(projectId, { skip: !ours })
 
-  const cue = ours ? stacks?.find((st) => st.id === target.stackId)?.cues.find((c) => c.id === target.cueId) : undefined
+  const cue = ours ? stacks?.find((st) => st.id === target.stackId)?.cues.find((c) => c.entryId === target.entryId) : undefined
   const cueLabel = cue == null ? null : cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
 
   // What would make the preview stale: where each live piece is going, and the cue's own changes.

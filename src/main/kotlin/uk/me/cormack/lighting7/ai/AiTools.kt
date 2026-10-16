@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.ai
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
-import uk.me.cormack.lighting7.fx.stackCuePriorities
+import uk.me.cormack.lighting7.fx.stackEntryPriorities
 import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
 import uk.me.cormack.lighting7.dmx.UnparkOutcome
@@ -1269,38 +1269,25 @@ class AiTools(private val state: State) {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
         val replaceAll = input["replaceAll"]?.jsonPrimitive?.booleanOrNull ?: false
 
-        val cueData = transaction(state.database) {
-            val cue = DaoCue.findById(cueId) ?: return@transaction null
-            // The one builder — this was a third hand-rolled construction, and it silently
-            // dropped the cue's own property assignments and its triggers, plus every timing and
-            // speed-master field on an ad-hoc effect. See `buildCueApplyData`. The GO form, so the
-            // cue's events fire through `applyCue`'s hook exactly as a stack GO fires them.
-            // In its one entry's stack (cue model plan P4) until the plan's session 2 holds it loose.
-            buildCueGoData(cue, soleEntryOf(cue))
-        } ?: return errorResult("Cue not found: $cueId")
+        val project = state.projectManager.currentProject
+        val exists = transaction(state.database) { DaoCue.findById(cueId)?.project?.id == project.id }
+        if (!exists) return errorResult("Cue not found: $cueId")
 
-        val result = applyCue(state, cueData, replaceAll)
-
-        // `applyCue` is the standalone apply path: it fires the immediate half and leaves the
-        // timed half alone (a timed layer is excluded from its cook, a timed ad-hoc effect by
-        // `delayMs == null && intervalMs == null`). Only a stack GO owns the timers, and their
-        // teardown. Reported rather than dropped in silence: until this builder collapse the
-        // hand-rolled DTO omitted the timing fields, so a delayed effect fired *instantly* here —
-        // an operator who relied on that needs to see why it stopped.
-        val skippedTimed = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null } +
-            cueData.layers.count { it.enabled && it.amount > 0.0 && it.isTimed }
-        val timedNote = if (skippedTimed == 0) "" else
-            "; $skippedTimed timed item(s) skipped — timed content only runs from a stack GO"
+        // A loose hold (cue model plan D6, D10), the same one a pad or `/cues/{id}/apply` takes: built
+        // as a GO builds it, so its events fire and its timed effects and triggers start.
+        val holds = state.show.cueStackManager.holds
+        if (replaceAll) holds.dropAllLoose(state, exceptCueId = cueId)
+        val press = holds.takeLooseCue(state, cueId) ?: return errorResult("Cue not found: $cueId")
 
         return ToolExecutionResult(
             success = true,
-            description = "Applied cue '${result.cueName}' (${result.effectCount} effects)" +
-                (if (replaceAll) " [replaced all other cues]" else "") + timedNote,
+            description = "Applied cue '${press.cueName}' (${press.acquired.effectCount} effects)" +
+                (if (replaceAll) " [let go of every other applied cue]" else "") +
+                (if (press.acquired.first) "" else " — it was already live, and now composes on top"),
             result = buildJsonObject {
-                put("cueName", result.cueName)
-                put("effectCount", result.effectCount)
+                put("cueName", press.cueName)
+                put("effectCount", press.acquired.effectCount)
                 put("replaceAll", replaceAll)
-                put("skippedTimed", skippedTimed)
             }.toString()
         )
     }
@@ -1487,9 +1474,8 @@ class AiTools(private val state: State) {
     private fun executeStopCue(input: JsonObject): ToolExecutionResult {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
 
-        val removedCount = state.show.fxEngine.removeEffectsForCue(cueId)
-        // An `apply_cue`'d cue's scenery lets go with it.
-        state.sceneryService.onCueStopped(cueId)
+        // Its loose hold only (§3.4): a running stack that holds it keeps it on stage.
+        val removedCount = state.show.cueStackManager.holds.dropLoose(state, cueId).effectsRemoved
 
         return ToolExecutionResult(
             success = true,
@@ -1538,7 +1524,15 @@ class AiTools(private val state: State) {
         // marker cues and fires an armed standby when there is one, so arming cue 5 pre-show and
         // then activating starts at 5 — which the local query silently got wrong.
         val result = if (cueId != null) {
-            manager.activateCueInStack(state, stackId, cueId)
+            // The tool still names a cue (cue model plan §3.10 moves it to an entry); the GO lands on
+            // its first entry in the stack it names.
+            val entryId = transaction(state.database) { entryInStack(stackId, cueId)?.id?.value }
+                ?: return errorResult("Cue $cueId is not in stack $stackId")
+            try {
+                manager.activateEntry(state, stackId, entryId)
+            } catch (e: IllegalArgumentException) {
+                return errorResult(e.message ?: "Failed to activate stack $stackId")
+            }
         } else {
             try {
                 manager.activateAtFirstCue(state, stackId)
@@ -1617,24 +1611,30 @@ class AiTools(private val state: State) {
         val manager = state.show.cueStackManager
         val runState = manager.runState
         try {
-            if (cueId != null) runState.setStandby(state, stackId, cueId) else runState.clearStandby(state, stackId)
+            if (cueId != null) {
+                // The tool names a cue (§3.10 moves it to an entry): its first entry in the stack.
+                val entryId = transaction(state.database) { entryInStack(stackId, cueId)?.id?.value }
+                    ?: return errorResult("Cue $cueId is not in stack $stackId")
+                runState.setStandby(state, stackId, entryId)
+            } else {
+                runState.clearStandby(state, stackId)
+            }
         } catch (e: IllegalArgumentException) {
             return errorResult(e.message ?: "Failed to change the standby on stack $stackId")
         }
 
         // The effective next, not the arming, is what the model needs back: disarming leaves the
         // positional successor on deck, and that is the cue the next GO actually fires.
-        val (nextCueId, nextCueName) = transaction(state.database) {
-            val next = runState.effectiveNextCueId(state, stackId)
-            next to next?.let { DaoCue.findById(it)?.name }
-        }
+        val next = runState.effectiveNext(state, stackId)
+        val nextCueId = next?.cueId
+        val nextCueName = nextCueId?.let { id -> transaction(state.database) { DaoCue.findById(id)?.name } }
 
         return ToolExecutionResult(
             success = true,
             description = if (cueId != null) {
                 // Arming the cue that is already live is not an error, but it does not do what
-                // "stand by cue 5" sounds like: `nextCueIdFrom` ignores a standby equal to the
-                // active cue, so the next GO advances past it. Say so rather than promising a
+                // "stand by cue 5" sounds like: `nextFrom` ignores a standby equal to the
+                // active entry, so the next GO advances past it. Say so rather than promising a
                 // fire the run state then contradicts.
                 if (cueId == manager.getActiveCueId(stackId)) {
                     "Cue $cueId is already live on stack $stackId — the next GO advances to " +
@@ -1713,14 +1713,14 @@ class AiTools(private val state: State) {
             val left = entry.stack.takeIf { it.id != stack.id }
             moveEntryTo(stack, entry, sortOrder)?.let { return@transaction null to it }
             // Both lists' positions moved, and a live cue's priority is its position.
-            priorities = stackCuePriorities(stack) + (left?.let { stackCuePriorities(it) } ?: emptyMap())
+            priorities = stackEntryPriorities(stack) + (left?.let { stackEntryPriorities(it) } ?: emptyMap())
 
             cue.name to null
         }
 
         val (cueName, error) = result
         if (error != null) return errorResult(error)
-        state.show.fxEngine.repriorityCues(priorities)
+        state.show.cueStackManager.holds.restampEntries(priorities)
 
         state.show.fixtures.cueStackListChanged()
         state.show.fixtures.cueListChanged()

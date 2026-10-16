@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import uk.me.cormack.lighting7.fx.CueHold
+import uk.me.cormack.lighting7.fx.CueHolds
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ColourAxis
@@ -651,6 +653,9 @@ class SocketMessageWireFormatTest {
                 stackId = 4,
                 activeCueId = 11,
                 nextCueId = 12,
+                activeEntryId = 21,
+                nextEntryId = 22,
+                standbyEntryId = 22,
                 nextIsArmed = true,
                 transition = true,
                 fadeDurationMs = 2000,
@@ -662,8 +667,33 @@ class SocketMessageWireFormatTest {
         )
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"cueRunStateChanged""""))
+        // The entries beside the cue ids (cue model plan P2): a cue twice in one stack is told apart only by them.
+        assertTrue(encoded.contains(""""activeEntryId":21"""))
+        assertTrue(encoded.contains(""""standbyEntryId":22"""))
         assertFalse(encoded.contains("seq"), "the gate's ordering key stays on the server")
         assertEquals(out, assertIs<CueRunStateChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `broadcast domain — cueHolds state carries each live cue's holds`() {
+        val out = CueHoldsStateOutMessage.of(
+            CueHolds.Frame(
+                projectId = 3,
+                cues = listOf(
+                    CueHolds.LiveCue(
+                        cueId = 11,
+                        priority = CueHolds.loosePriority(2),
+                        holds = listOf(CueHold.Stack(stackId = 4, entryId = 21), CueHold.Loose(seq = 2)),
+                        stackId = null,
+                    ),
+                ),
+            ),
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"cueHolds.state""""), encoded)
+        assertTrue(encoded.contains("""{"kind":"STACK","stackId":4,"entryId":21}"""), encoded)
+        assertTrue(encoded.contains("""{"kind":"LOOSE","seq":2}"""), encoded)
+        assertEquals(out, assertIs<CueHoldsStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
     @Test

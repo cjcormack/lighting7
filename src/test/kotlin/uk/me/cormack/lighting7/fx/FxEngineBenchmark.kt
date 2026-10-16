@@ -1054,7 +1054,7 @@ class FxEngineBenchmark {
      * read once, the layer's targets expanded once for both halves.
      *
      * **`[cook-split]` is a historical shape, not a live one** — after C8 the programmer recook,
-     * `CueStackManager.activateCueInStack` and the cue-apply route helper all take `cookAll`. It is
+     * and the hold registry's bring-on (`CueHolds`, every GO and loose press) both take `cookAll`. It is
      * kept because both arms run the same per-layer code, so the hoists inside it move *both*
      * numbers: without the split arm the scenario could not tell "the cook got cheaper" from "the
      * consolidation helped", and it would need a historical block to say anything at all.

@@ -72,7 +72,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cue1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue1)))
         }
 
         stack(client, stackId).let {
@@ -114,7 +114,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cue1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue1)))
         }
         arm(client, stackId, cue3)
         val cleared = arm(client, stackId, null).body<CueStackRunStateResponse>()
@@ -195,7 +195,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cue2))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue2)))
         }
         arm(client, stackId, cue3)
 
@@ -214,7 +214,7 @@ class CueStandbyRouteTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
             contentType(ContentType.Application.Json)
-            setBody(ActivateCueStackRequest(cueId = cue1))
+            setBody(ActivateCueStackRequest(entryId = state.entryIdOf(cue1)))
         }
         arm(client, stackId, cue2)
         client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/deactivate")

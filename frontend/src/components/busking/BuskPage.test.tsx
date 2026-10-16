@@ -85,7 +85,7 @@ const page: BuskPage = {
 
 const behaviour: PadBehaviour = {
   presenceOf: () => 'none',
-  isLive: () => false,
+  cueRing: () => null,
   onPress: () => {},
   onInspect: () => {},
   onPickUp: () => {},

@@ -39,6 +39,7 @@ import {createHandWsApi, HandWsApi} from "./handApi";
 import {createSceneryWsApi, SceneryWsApi} from "./sceneryApi";
 import {createEffectsWsApi, EffectsWsApi} from "./effectsApi";
 import {createVenueHoldWsApi, VenueHoldWsApi} from "./venueHoldApi";
+import {createCueHoldsWsApi, CueHoldsWsApi} from "./cueHoldsApi";
 import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
 import {createRigSafetyWsApi, RigSafetyWsApi} from "./rigSafetyApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
@@ -81,6 +82,7 @@ interface LightingApi {
   scenery: SceneryWsApi
   effects: EffectsWsApi
   venueHold: VenueHoldWsApi
+  cueHolds: CueHoldsWsApi
   grandMaster: GrandMasterWsApi
   rigSafety: RigSafetyWsApi
   stageRender: StageRenderWsApi
@@ -151,6 +153,7 @@ function createLightingApi(): LightingApi {
   const sceneryWsApi = createSceneryWsApi(connection)
   const effectsWsApi = createEffectsWsApi(connection)
   const venueHoldWsApi = createVenueHoldWsApi(connection)
+  const cueHoldsWsApi = createCueHoldsWsApi(connection)
   const grandMasterWsApi = createGrandMasterWsApi(connection)
   const rigSafetyWsApi = createRigSafetyWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
@@ -196,6 +199,7 @@ function createLightingApi(): LightingApi {
     scenery: sceneryWsApi,
     effects: effectsWsApi,
     venueHold: venueHoldWsApi,
+    cueHolds: cueHoldsWsApi,
     grandMaster: grandMasterWsApi,
     rigSafety: rigSafetyWsApi,
     stageRender: stageRenderWsApi,

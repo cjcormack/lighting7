@@ -449,7 +449,7 @@ class FxInstance internal constructor(
      * appending a duplicate.
      *
      * Distinct from [cueId]/[cueStackId], which stay null on included instances on purpose:
-     * a band effect must not be swept by `removeEffectsForCue` when the cue it was included
+     * a band effect must not be swept by `removeCueEffects` when the cue it was included
      * from stops. Cleared for free by `removeProgrammerBandEffects()`.
      */
     var programmerOrigin: ProgrammerFxOrigin? = null

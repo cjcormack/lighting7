@@ -19,7 +19,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.stackCuePriorities
+import uk.me.cormack.lighting7.fx.stackEntryPriorities
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
@@ -115,7 +115,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     autoAdvance = newCue.autoAdvance,
                     autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration(),
                 )
-                priorities = stackCuePriorities(stack)
+                priorities = stackEntryPriorities(stack)
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
             }
             val (cueDetails, error) = result
@@ -123,7 +123,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to create cue"))
                 return@withCurrentProject
             }
-            state.show.fxEngine.repriorityCues(priorities)
+            state.show.cueStackManager.holds.restampEntries(priorities)
             state.show.fixtures.cueListChanged()
             state.show.fixtures.cueStackListChanged()
             call.respond(HttpStatusCode.Created, cueDetails)
@@ -300,12 +300,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // priorities of those already on stage, which are their positions.
                 val stacks = deleteCueEntries(cue)
                 cue.delete()
-                Triple(removedAnchors, pageIds, stacks.fold(emptyMap<Int, Int>()) { acc, s -> acc + stackCuePriorities(s) })
+                Triple(removedAnchors, pageIds, stacks.fold(emptyMap<Int, Int>()) { acc, s -> acc + stackEntryPriorities(s) })
             }
 
             if (result != null) {
                 val (removedAnchors, pageIds, priorities) = result
-                state.show.fxEngine.repriorityCues(priorities)
+                state.show.cueStackManager.holds.restampEntries(priorities)
                 // A deleted cue can't be Updated into. Update re-validates its target anyway,
                 // but dropping it here keeps the programmer indicator from offering a cue that
                 // no longer exists.
@@ -317,10 +317,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // And its live output. Nothing else ever will: every republish path rebuilds
                 // from the DB row that no longer exists (and skips it with a warning), so a
                 // live deleted cue would otherwise keep painting its old Layer 4 rows and
-                // effects until the whole stack was released.
-                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
-                state.show.fxEngine.removeEffectsForCue(resource.cueId)
-                state.show.fxEngine.cueLayer.removeAssignments(resource.cueId)
+                // effects until every hold on it was released.
+                // Every hold on it, released (§3.6): a stack that held it keeps its live entry until
+                // its next GO, which then has nothing to let go of.
+                state.show.cueStackManager.holds.dropAll(state, resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
@@ -488,63 +488,46 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
-    // POST /{projectId}/cues/{cueId}/apply - Apply a cue (current project only)
+    // POST /{projectId}/cues/{cueId}/apply - Hold a cue loose (current project only)
     post<ApplyCueResource> { resource ->
         withCurrentProject(
             state,
             resource.parent.projectId,
             { p -> "Cannot apply cues from project '${p.name}' - only the current project's cues can be applied" },
         ) { project ->
-            // Applying a cue activates it within its stack (activating the stack if needed): the
-            // stack of its one entry (cue model plan P4), until the plan's session 2 holds it loose.
-            val cueStackId = transaction(state.database) {
-                val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
-                if (cue.project.id != project.id) return@transaction null
-                soleEntryOf(cue)?.stackId
+            val exists = transaction(state.database) {
+                DaoCue.findById(resource.cueId)?.project?.id == project.id
             }
-
-            if (cueStackId == null) {
+            if (!exists) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
                 return@withCurrentProject
             }
-
-            try {
-                val stackResult = state.show.cueStackManager.activateCueInStack(
-                    state, cueStackId, resource.cueId
-                )
-                call.respond(ApplyCueResponse(
-                    effectCount = stackResult.effectCount,
-                    cueName = stackResult.cueName,
-                ))
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply cue"))
+            // A loose hold (cue model plan D6, D10): the cue composes above every stack, newest
+            // press on top, with no follow and no tracking, whatever stacks it is in. A cue slot and
+            // the hand's place-and-press come through here; `replaceAll` lets go of every other loose
+            // hold first and never touches a stack's.
+            val holds = state.show.cueStackManager.holds
+            if (call.request.queryParameters["replaceAll"] == "true") holds.dropAllLoose(state, exceptCueId = resource.cueId)
+            val press = holds.takeLooseCue(state, resource.cueId)
+            if (press == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            } else {
+                call.respond(ApplyCueResponse(effectCount = press.acquired.effectCount, cueName = press.cueName))
             }
         }
     }
 
-    // POST /{projectId}/cues/{cueId}/stop - Stop a running cue (remove its effects)
+    // POST /{projectId}/cues/{cueId}/stop - Let a cue's loose hold go
     post<StopCueResource> { resource ->
         withCurrentProject(
             state,
             resource.parent.projectId,
             { p -> "Cannot stop cues from project '${p.name}' - only the current project's cues can be stopped" },
         ) { _ ->
-            // Check if this cue belongs to an active stack
-            val cueStackId = transaction(state.database) {
-                DaoCue.findById(resource.cueId)?.let(::soleEntryOf)?.stackId
-            }
-            val manager = state.show.cueStackManager
-            if (cueStackId != null && manager.isStackActive(cueStackId)) {
-                // Cue is in an active stack — deactivate the entire stack
-                // (CueStackManager integration handles trigger deactivation)
-                val removedCount = manager.deactivateStack(cueStackId, state)
-                call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
-            } else {
-                state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
-                val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
-                state.sceneryService.onCueStopped(resource.cueId)
-                call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
-            }
+            // The loose hold only (§3.4): a stack that holds the cue keeps it, and stopping a stack
+            // is the stack's own `deactivate`. The cue comes off when nothing else holds it.
+            val released = state.show.cueStackManager.holds.dropLoose(state, resource.cueId)
+            call.respond(StopCueResponse(removedCount = released.effectsRemoved, cueId = resource.cueId))
         }
     }
 

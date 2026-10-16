@@ -799,6 +799,14 @@ class State(val config: ApplicationConfig) {
     val sceneryService: SceneryService by lazy { SceneryService(this) }
 
     /**
+     * What holds each live cue in the current show (`cueHolds.state`, cue model plan §3.4). Here
+     * rather than on the show's registry ([uk.me.cormack.lighting7.fx.CueHolds]) so a socket's one
+     * subscription outlives a project switch; each show's registry publishes into it, its frames
+     * carrying the show's project id.
+     */
+    val cueHoldsFrame = kotlinx.coroutines.flow.MutableStateFlow(uk.me.cormack.lighting7.fx.CueHolds.Frame.EMPTY)
+
+    /**
      * The programmer's own scenery (scenery-programmer plan D1): what the operator's hands hold,
      * the resolver's top tier — `programmer.sceneryState`. Runtime only and project-scoped: attached
      * to the current project at start and again by the collector below, which drops it; Clear
@@ -933,8 +941,8 @@ class State(val config: ApplicationConfig) {
             programmerLayerStackProvider = { show.programmerLayerStack },
             buskPageState = buskPageState,
             windowRegistry = windowRegistry,
-            cueStackActiveCueIdProvider = { stackId ->
-                runCatching { show.cueStackManager.getActiveCueId(stackId) }.getOrNull()
+            cueLooseHeldProvider = { cueId ->
+                runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
             buskRefsProvider = ::buildBuskRefs,
             latencyTracker = midiLatencyTracker,
@@ -956,11 +964,8 @@ class State(val config: ApplicationConfig) {
                     when (pad.kind) {
                         BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.template!!.uuid, isLook = false)
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
-                        // The pad names the cue; its stack is the cue's one entry's until a press holds it
-                        // loose (cue model plan session 2). A cue in no stack lights nothing.
-                        BuskPadKind.CUE -> pad.cue!!.let { c ->
-                            soleEntryOf(c)?.let { entry -> pad.uuid to PadRef.Cue(c.id.value, entry.stackId) }
-                        }
+                        // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
+                        BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
                         // A malformed pad is absent everywhere it is read, an LED included.
                         null -> null
                     }

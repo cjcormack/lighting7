@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import uk.me.cormack.lighting7.testsupport.inStack
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.delay
@@ -105,7 +106,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
         }
 
         try {
-            state.show.cueStackManager.activateCueInStack(state, stackId, cueId)
+            state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
             awaitColour("hex-1", "#ff8800", "the timed layer fired and published its Look")
 
             // Several more fires, all served from the memo: the published rows must not drift.

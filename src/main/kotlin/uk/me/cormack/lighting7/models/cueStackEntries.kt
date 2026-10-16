@@ -105,9 +105,10 @@ fun entriesOfStack(stackId: EntityID<Int>): List<DaoCueStackEntry> =
         .toList()
 
 /**
- * The entry in stack [stackId] that places cue [cueId] — the caller names the stack (cue model plan
- * P7). The first in the stack's order should the cue ever appear twice in it (D7), which until the
- * plan's session 2 keys the runtime on entries is the one a cue-keyed GO means.
+ * The first entry in stack [stackId] that places cue [cueId], in the stack's order — the caller names
+ * the stack (cue model plan P7). Only for a caller that still names a cue where the runtime takes an
+ * entry (P2): the MCP stack tools until the plan's session 7, a Record into a stack, and the include
+ * indicator's number. A cue twice in one stack (D7) is told apart only by its entries.
  */
 fun entryInStack(stackId: Int, cueId: Int): DaoCueStackEntry? =
     DaoCueStackEntry.find { (DaoCueStackEntries.stack eq stackId) and (DaoCueStackEntries.cue eq cueId) }
@@ -122,14 +123,14 @@ fun entriesOfCue(cue: DaoCue): List<DaoCueStackEntry> =
 /**
  * [cue]'s one entry, while the cue model plan's P4 holds — every cue in exactly one stack.
  *
- * **This is the P4 bridge, not a home stack.** It exists only for the callers that today name a
- * cue and nothing else yet still need a stack: a busk cue pad, a cue slot, a MIDI `FireCue`,
- * `/cues/{id}/apply`, MCP `apply_cue` (each becomes a loose hold in the plan's session 2), and the
- * cue-shaped reads that report a cue's stack and number (`CueDetails`, the briefing, the prompt
- * book's cue-keyed anchors, the scenery tracked into a cue), which take an entry from their caller
- * as the later sessions reach them. It never chooses: a cue with no entry or several answers null,
- * which every caller treats as "this cue is in no stack" — so the day session 4 lets a cue be
- * shared, a caller still on it fails visibly rather than picking one.
+ * **This is the P4 bridge, not a home stack.** Nothing that makes a cue live goes through it: a
+ * busk cue pad, a cue slot, a MIDI `FireCue`, the hand, `/cues/{id}/apply` and MCP `apply_cue` hold
+ * the cue loose (the plan's session 2, `fx/CueHolds.kt`) and need no entry. What is left are the
+ * cue-shaped reads and writes that report or move a cue's stack and number (`CueDetails`, the
+ * briefing, the prompt book's cue-keyed anchors, the scenery tracked into a cue, `add-cue`), which
+ * take an entry from their caller as the later sessions reach them. It never chooses: a cue with no
+ * entry or several answers null, which every caller treats as "this cue is in no stack" — so the day
+ * session 4 lets a cue be shared, a caller still on it fails visibly rather than picking one.
  */
 fun soleEntryOf(cue: DaoCue): DaoCueStackEntry? = entriesOfCue(cue).singleOrNull()
 

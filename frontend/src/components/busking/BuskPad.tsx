@@ -12,6 +12,7 @@ import {
 import { dispatchSyntheticContextMenu, useLongPress } from '@/hooks/useLongPress'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
 import type { BuskPad } from '@/api/buskApi'
+import type { CueRing } from '@/api/cueHoldsApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
 import { useBuskEdit } from './BuskEditProvider'
 import type { EffectPresence } from './buskingTypes'
@@ -98,10 +99,14 @@ const CUE_SHELL = 'flex-col items-start gap-0.5 px-2.5 py-2 text-left'
 export interface BuskPadButtonProps {
   pad: BuskPad
   at: PadAddress
-  /** For a template or Look pad. A cue pad reads {@link isLive} instead. */
+  /** For a template or Look pad. A cue pad reads {@link cueRing} instead. */
   presence: EffectPresence
-  /** For a cue pad: its stack has this cue on stage — live, without being the playhead. */
-  isLive: boolean
+  /**
+   * For a cue pad (D11): `loose` — a press holds it, drawn solid, and the next press lets it go;
+   * `stack` — live only because a stack holds it, drawn as an outline, and a press takes it loose;
+   * null — off.
+   */
+  cueRing: CueRing
   editing: boolean
   onPress: () => void
   onRemove: () => void
@@ -115,7 +120,7 @@ export function BuskPadButton({
   pad,
   at,
   presence,
-  isLive,
+  cueRing,
   editing,
   onPress,
   onRemove,
@@ -177,13 +182,17 @@ export function BuskPadButton({
         {...(editing ? listeners : handlers)}
         // The notes are off the pad's face — the mock has room for a name and one line of detail.
         title={editing ? face.name : (face.notes ?? face.name)}
-        aria-pressed={isCue ? isLive : presence !== 'none'}
+        aria-pressed={isCue ? cueRing === 'loose' : presence !== 'none'}
         className={cn(
           PAD_SHELL,
           'w-full',
           isCue ? CUE_SHELL : PAD_FACE_SHELL,
           isCue
-            ? cn('bg-card', isLive && 'border-green-500/70 bg-green-500/10 ring-1 ring-green-500/35')
+            ? cn(
+                'bg-card',
+                cueRing === 'loose' && 'border-green-500 bg-green-500/25 ring-1 ring-green-500/50',
+                cueRing === 'stack' && 'border-green-500/80 ring-1 ring-green-500/35',
+              )
             : padPresenceClass(presence),
           editing
             ? 'cursor-grab'

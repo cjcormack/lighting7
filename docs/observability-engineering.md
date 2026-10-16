@@ -147,7 +147,7 @@ in-process Sentry whose transport sends nothing (`withTestSentry`).
 | Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per effect whose `cache` is `memory`, `disk` or `compiled`: the
 parallel workers' threads hold no scope, so the cache lookup is this attribute rather than a
 `cache.get` span), `fixtures` (`show.fixtures`, `show.prewarm`), `mdns` |
-| Cue GO | `cue.go` | `CueStackManager.activateCueInStack` | `cue.compose`, `cue.spawn`, `scenery.resolve`, `cue.events` |
+| Cue GO | `cue.go` | `CueStackManager.activateEntry` | `cue.compose`, `cue.spawn`, `scenery.resolve`, `cue.events` |
 | Project switch | `project.switch` | `ProjectManager.switchProject` | `project.unload`, `project.load`, `project.start`, `project.notify` |
 | Sync run | `sync.run` | `RemoteSyncEngine.runSync` | `sync.export`, git `http.client`, `sync.diff`, `sync.apply` |
 | Venue operations | `venue.publish`, `venue.update`, `venue.extract`, `venue.detach` | `venue/` | `venue.diff`, `venue.snapshot`, `venue.behind`; `venue.dry_run` marks the review |
@@ -289,7 +289,7 @@ Every flush reads and resets what it reports, and sends nothing for a window tha
 | `ws.outbound.dropped` | count | frames a socket never sent, see below | `type` (the frame's `@SerialName`), `reason` (`conflated`, `closed`) |
 | `midi.latency` | histogram | `MidiLatencyTracker`, read and never reset | `stage` (`ingressButton`, …) |
 | `db.connection.wait` | histogram | Hikari's `recordConnectionAcquiredNanos`, through `DbConnectionMetrics` | — |
-| `cue.go.duration` | event (ms) | `CueStackManager.activateCueInStack`, around the call whether or not its span is sampled | — |
+| `cue.go.duration` | event (ms) | `CueStackManager.activateEntry`, around the call whether or not its span is sampled | — |
 | `boot.duration` | event (s) | `module()`'s first line to the show being ready | `cache`: `cold` if the Kotlin compiler ran, else `warm` |
 | `script.cache` | count | `ScriptCacheProbe.record`, once per compile | `result` (`hit`, `miss`), `cache` (`memory`, `disk`, `compiled`) |
 | `sync.run` | count | `RemoteSyncEngine.runSync` | `outcome` (`no_op`, `pushed`, …, `failed`), `trigger` (`auto`, `manual`) |
