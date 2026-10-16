@@ -295,7 +295,7 @@ See `docs/fixtures-engineering.md` §"Venue parks".
 | `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `clearFx` | — | Replies `fxChanged(CLEARED)` |
-| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master; `size?`, `direction?`, `nShot?` and `runForever` — effects plan session 1, edited with the phase kept; `spread?`, `wings?`, `blocks?`, `groups?` — session 2, the spread's shape, `groups: 0` off, wings refused under a mirrored order) | Replies `fxChanged(UPDATED, id)` \| `fxError` |
+| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master; `size?`, `direction?`, `nShot?` and `runForever` — effects plan session 1, edited with the phase kept; `spread?`, `wings?`, `blocks?`, `groups?` — session 2, the spread's shape, `groups: 0` off, wings refused under a mirrored order; `targets?` — apply-model plan session 2, the heads the edit is for, naming some of them splits them off) | Replies `fxChanged(UPDATED, id)` \| on a split `fxChanged(REMOVED, id)` then `fxChanged(ADDED, copy)` per copy, the edited first \| `fxError` |
 
 Adding effects is REST (`POST /api/rest/fx/add`), not WS. **Updating one is both**: `updateFx` is
 `PUT /api/rest/fx/{id}` as a frame (fixture-fx-sheets plan W3), for a live FX editor whose every
@@ -305,6 +305,12 @@ rather than the boards' `fx.update`. Both doors call one parse, `applyEffectUpda
 master-uuid check — so the two cannot drift, and `FxLiveEditRoutesTest` pins the frame's field list
 to the request's. The id and the phase are kept (`FxEngine.updateEffect`); a type swap takes the
 new type's timing source with it, as the add path does. A refusal decides before anything moves.
+`targets` naming some of the effect's heads is the split (apply-model plan §3.4): the effect becomes
+one instance per head it paints, each where it was, and the named heads' copies take the edit, so
+the frame answers the effect `REMOVED` and each copy `ADDED` rather than `UPDATED`. Only a Local
+effect splits — `fxError` `FX_SPLIT_LAYER_EFFECT` for a programmer layer's, `FX_SPLIT_NOT_LOCAL` for
+a cue's or a manual one — and a shape change sent with some heads is `FX_UPDATE_REFUSED`. See
+`fx-engineering.md` §"Local effects follow the selection".
 It is gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
 `FU-AUTH-WS-PER-MESSAGE`'s trigger (an *admin-only* operation gaining a socket command) does not
 fire.
@@ -720,7 +726,7 @@ among its holds, outline while only stacks hold it), and what "on stage" means t
 |---|---|---|
 | `fxState` | `activeEffects: [EffectDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
 | `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the five FX writes |
-| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404 and 400, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame |
+| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED\|FX_SPLIT_LAYER_EFFECT\|FX_SPLIT_NOT_LOCAL`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame |
 
 `fxState` is purely an effect frame. It carried `bpm` / `isClockRunning` before the speed-master
 bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `EffectDto` is defined in

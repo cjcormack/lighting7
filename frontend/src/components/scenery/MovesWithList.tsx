@@ -12,7 +12,7 @@ import type { StageElementDto } from '@/api/stageElementApi'
  * Stage popover's read-out and the element form's *Moves with* — one list, so the two cannot name a
  * piece's owners two ways.
  *
- * With [onOpen] each entry is a press that opens that owner's own editor — Cue properties, Stack
+ * With [onOpen] each entry is a press that opens that owner's own editor — the cue editor, Stack
  * settings, the Look sheet — since scenery changes are edited on their owner and never on the
  * element; without it the list only reads. Read afresh on every mount: a Look's own scenery write
  * invalidates that Look's entry alone, which the read does not carry.
@@ -87,7 +87,7 @@ export function MovesWithList({
 export function ownerEditor(entry: Pick<MovesWithEntry, 'kind' | 'owner'>): string {
   switch (entry.kind) {
     case 'cue':
-      return `${entry.owner}'s cue properties`
+      return `${entry.owner} in the cue editor`
     case 'set':
       return 'the stack settings'
     case 'look':

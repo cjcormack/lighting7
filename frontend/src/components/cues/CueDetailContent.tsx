@@ -60,41 +60,20 @@ interface CueDetailContentProps {
 }
 
 /**
- * Reusable read-only detail body for a cue: transition, notes, palette, **its composed values**,
- * layers, ad-hoc effects and script hooks.
+ * Reusable read-only detail body for a cue: transition, notes, **its composed values**, layers,
+ * ad-hoc effects and script hooks.
  *
- * **This is the cue read surface, all of it.** Four component trees reach it and none of them render
- * cue content themselves: the cue card → here, and `RunMobileCueCard` and
- * `PromptBookCueCard` → `CueCardBody` → here. Deepening a section here therefore lights up all four,
- * which is why the plan's estimate of "four independent read renderers" turned out to be one file.
- *
- * The doc used to say "presets" and name a `CueDetailSheet` that no longer exists: presets became
- * Looks applied through layers, and the sheet was folded into the Run card's inline panel.
+ * **The read-out the phone card and the Prompt Book draw**: `RunMobileCueCard` and
+ * `PromptBookCueCard` reach it through `CueCardBody`. The desktop card and the cue sheet's pane mount
+ * `CueEditor` instead (show-cue-editing plan §4.2), whose Looks and FX tabs draw this file's
+ * `CueLayersReadout` and `CueEffectsReadout`, so a layer or an effect reads the same in both.
  */
 export const CueDetailContent = memo(function CueDetailContent({
   cue,
   projectId,
   enabled = true,
 }: CueDetailContentProps) {
-  const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
-  const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
-  // The template library, for the same reason the Look library is here: a layer row says what it
-  // applies, and since fx-templates a template's badge also says *which kind* it holds. Without this
-  // an effect template drew as a plain template chip on the one surface an operator reads a cue
-  // from. One cached list, already warm — the programmer and the busk view mount the same entry.
-  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !enabled })
-
   const layers = cue?.layers ?? []
-  // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
-  // hundred Looks was doing twelve hundred comparisons per render.
-  const looksById = useMemo(
-    () => new Map((looks ?? []).map((look) => [look.id, look])),
-    [looks],
-  )
-  const templatesById = useMemo(
-    () => new Map((templates ?? []).map((template) => [template.id, template])),
-    [templates],
-  )
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
   const scenery = cue?.scenery ?? []
@@ -158,46 +137,16 @@ export const CueDetailContent = memo(function CueDetailContent({
           off, targets, timing — which meant the read surface and the authoring surface drifted apart
           the moment either grew a field. Sharing the row is the same argument `LookStack` makes for
           serving both the cue editor and the programmer: a cue *is* a saved programmer stack, so a
-          layer that looked different here would be describing one structure twice.
-
-          This is the whole read surface: the expanded cue card renders it directly, and
-          `RunMobileCueCard` and `PromptBookCueCard` through `CueCardBody`. */}
+          layer that looked different here would be describing one structure twice. */}
       <div className="space-y-1.5">
         <SectionHeader icon={Layers} label="Layers" count={layers.length} />
-        {layers.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">None.</p>
-        ) : (
-          layers.map((layer, index) => (
-            <LayerRow
-              key={`layer-${index}`}
-              layer={layer}
-              index={index}
-              // Both libraries, so a template layer reads here exactly as it does in the programmer
-              // — family badge, and the wave when it holds an effect. This surface used to pass no
-              // template library at all and `describeStackSource` therefore declined to paint a
-              // template layer as missing; with the list loaded that verdict becomes honest, and a
-              // layer naming a deleted template now says so here too.
-              // `librariesLoaded` waits for *both*, as `ProgrammerLookStack` does: with only one
-              // list back, every layer applying the other would paint as missing for the length of
-              // a fetch.
-              info={describeStackSource(
-                layer.source,
-                looksById,
-                templatesById,
-                looks != null && templates != null,
-              )}
-              sortable={false}
-              showTargets
-              readOnly
-            />
-          ))
-        )}
+        <CueLayersReadout cue={cue} projectId={projectId} enabled={enabled} />
       </div>
 
       {/* ── Scenery ──
           What the cue moves on GO, on its own clocks, and — hatched — what it shows without moving
           it: scenery tracks, so the set at this cue is every change from the top of the stack down
-          (stage-view plan session 8). Read-only; Cue properties edits it. Only drawn when there is
+          (stage-view plan session 8). Read-only; the cue editor's Scenery tab edits it. Only drawn when there is
           something to draw, so a rig with no scenery keeps its cards as they were. */}
       {(scenery.length > 0 || trackedScenery.length > 0) && (
         <div className="space-y-1.5">
@@ -207,8 +156,8 @@ export const CueDetailContent = memo(function CueDetailContent({
       )}
 
       {/* ── Events ──
-          The cannons this cue fires on GO into it (stage-view plan session 9). Read-only; Cue
-          properties edits them. Only drawn when there are some. */}
+          The cannons this cue fires on GO into it (stage-view plan session 9). Read-only; the cue
+          editor's Events tab edits them. Only drawn when there are some. */}
       {events.length > 0 && (
         <div className="space-y-1.5">
           <SectionHeader icon={Flame} label="Events" count={events.length} />
@@ -219,24 +168,7 @@ export const CueDetailContent = memo(function CueDetailContent({
       {/* ── Ad-hoc Effects ── */}
       <div className="space-y-1.5">
         <SectionHeader icon={AudioWaveform} label="Effects" count={adHocEffects.length} />
-        {adHocEffects.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">None.</p>
-        ) : (
-          adHocEffects.map((effect, index) => (
-            <EffectSummary
-              key={`effect-${index}`}
-              effect={fromCueAdHocEffect(effect, library)}
-              target={{ type: effect.targetType, key: effect.targetKey }}
-              actions={
-                <TimingBadge
-                  delayMs={effect.delayMs}
-                  intervalMs={effect.intervalMs}
-                  randomWindowMs={effect.randomWindowMs}
-                />
-              }
-            />
-          ))
-        )}
+        <CueEffectsReadout cue={cue} enabled={enabled} />
       </div>
 
       {/* ── Script Hooks ── */}
@@ -253,3 +185,62 @@ export const CueDetailContent = memo(function CueDetailContent({
     </>
   )
 })
+
+/**
+ * A cue's layer stack, read-only — the same `LayerRow` the programmer draws, top of the array last.
+ * The read surface's Layers section and the cue editor's Looks tab both draw it.
+ */
+export function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projectId: number; enabled?: boolean }) {
+  const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
+  // The template library, for the same reason the Look library is here: a layer row says what it
+  // applies, and since fx-templates a template's badge also says *which kind* it holds. One cached
+  // list, already warm — the programmer and the busk view mount the same entry.
+  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !enabled })
+  // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
+  // hundred Looks was doing twelve hundred comparisons per render.
+  const looksById = useMemo(() => new Map((looks ?? []).map((look) => [look.id, look])), [looks])
+  const templatesById = useMemo(
+    () => new Map((templates ?? []).map((template) => [template.id, template])),
+    [templates],
+  )
+  const layers = cue.layers
+  if (layers.length === 0) return <p className="text-[11px] text-muted-foreground">None.</p>
+  return (
+    <>
+      {layers.map((layer, index) => (
+        <LayerRow
+          key={`layer-${index}`}
+          layer={layer}
+          index={index}
+          // `librariesLoaded` waits for *both*, as `ProgrammerLookStack` does: with only one list
+          // back, every layer applying the other would paint as missing for the length of a fetch.
+          info={describeStackSource(layer.source, looksById, templatesById, looks != null && templates != null)}
+          sortable={false}
+          showTargets
+          readOnly
+        />
+      ))}
+    </>
+  )
+}
+
+/** A cue's own effects, read-only, each with its fire timing. The Effects section and the FX tab. */
+export function CueEffectsReadout({ cue, enabled = true }: { cue: Cue; enabled?: boolean }) {
+  const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
+  const adHocEffects = cue.adHocEffects
+  if (adHocEffects.length === 0) return <p className="text-[11px] text-muted-foreground">None.</p>
+  return (
+    <>
+      {adHocEffects.map((effect, index) => (
+        <EffectSummary
+          key={`effect-${index}`}
+          effect={fromCueAdHocEffect(effect, library)}
+          target={{ type: effect.targetType, key: effect.targetKey }}
+          actions={
+            <TimingBadge delayMs={effect.delayMs} intervalMs={effect.intervalMs} randomWindowMs={effect.randomWindowMs} />
+          }
+        />
+      ))}
+    </>
+  )
+}

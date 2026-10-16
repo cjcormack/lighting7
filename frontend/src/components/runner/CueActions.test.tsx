@@ -57,6 +57,7 @@ const toastError = vi.fn()
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: (m: string) => toastError(m) } }))
 
 import { CueActions, ONE_CUE_REASON, type CueActionRow } from './CueActions'
+import { CueActionDialogsProvider } from './cueActionDialogs'
 import { resetShowIncludeForTests } from '@/lib/showInclude'
 
 const ROWS: CueActionRow[] = [
@@ -233,6 +234,43 @@ describe('CueActions', () => {
     hostClick.mockClear()
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }))
     expect(hostClick).not.toHaveBeenCalled()
+  })
+
+  describe('the dialogs outlive their host', () => {
+    /** A live card: its strip is drawn only while it is open, as the cards view's is. */
+    function LiveCard({ open }: { open: boolean }) {
+      return open ? <CueActions projectId={1} host="strip" rows={[ROWS[0]]} locked={false} /> : null
+    }
+    function drawCard(open: boolean) {
+      return (
+        <MemoryRouter>
+          <CueActionDialogsProvider>
+            <LiveCard open={open} />
+          </CueActionDialogsProvider>
+        </MemoryRouter>
+      )
+    }
+
+    it('a GO from elsewhere collapsing the live card does not close its Record sheet', () => {
+      const view = render(drawCard(true))
+      fireEvent.click(screen.getByRole('button', { name: 'Record…' }))
+      expect(screen.getByTestId('record-sheet').textContent).toBe('1')
+      // The GO: the card was open only because it was live, and it closes.
+      view.rerender(drawCard(false))
+      expect(screen.queryByRole('button', { name: 'Record…' })).toBeNull()
+      expect(screen.getByTestId('record-sheet').textContent).toBe('1')
+    })
+
+    it('nor its delete confirm', async () => {
+      preview = { uses: [] }
+      const view = render(drawCard(true))
+      fireEvent.click(screen.getByRole('button', { name: 'Delete…' }))
+      await screen.findByRole('dialog')
+      view.rerender(drawCard(false))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+      expect(deleteCues).toHaveBeenCalledWith({ projectId: 1, cueIds: [1] })
+    })
   })
 
   it('Record… opens the Record sheet on the cue', () => {

@@ -46,8 +46,6 @@ interface ShowViewProps {
   onRecordIntoStack?: (stackId: number) => void
   /** Cards or the cue sheet, for the drilled stack. See `StackDetail`. */
   view?: 'cards' | 'list'
-  /** Open a cue's card on the cards view. */
-  onOpenCue?: (cueId: number, entryId: number) => void
   onOpenBook?: (cueId: number) => void
   onRequestUnlock?: () => void
 }
@@ -80,7 +78,6 @@ export const ShowView = memo(function ShowView({
   openedEntryId,
   onRecordIntoStack,
   view,
-  onOpenCue,
   onOpenBook,
   onRequestUnlock,
 }: ShowViewProps) {
@@ -158,7 +155,6 @@ export const ShowView = memo(function ShowView({
         onMarkerRename={handleMarkerRename}
         onMarkerDelete={handleMarkerDelete}
         view={view}
-        onOpenCue={onOpenCue}
         onOpenBook={onOpenBook}
         onRequestUnlock={onRequestUnlock}
       />

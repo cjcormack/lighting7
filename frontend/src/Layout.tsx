@@ -27,6 +27,7 @@ import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
 import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
+import { CueActionDialogsProvider } from "./components/runner/cueActionDialogs"
 import CommandPalette from "./components/CommandPalette"
 import { FxAddSheet } from "./components/fx/FxAddSheet"
 import type { FxTarget } from "./components/fx/FxPicker"
@@ -42,6 +43,8 @@ import { ScreensSheet, type WindowViewControls } from "./components/screens/Scre
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 import { StageRenderHost } from "./components/stageRender/StageRenderHost"
+import { AppBarSwitcher } from "./components/appBar/AppBarSwitcher"
+import { DeskName, useDocumentTitle } from "./components/appBar/DeskName"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -97,6 +100,8 @@ export default function Layout() {
   // This window's announce to the desk's windows registry, and the handler for the commands
   // another window sends it. Here and not in a store, because it needs the router (see the hook).
   useWindowsBridge()
+  // *Show · Desk name* on every route, the app bar's switcher's name in the tab (navigation plan §4.1).
+  useDocumentTitle()
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -187,13 +192,13 @@ export default function Layout() {
               ShowBar uses them — the desktop sidebar insets this region by 64–240px, so at a
               768px viewport the header really has ~528px to work with. Viewport breakpoints
               expand the status/programmer chips into space that isn't there, which then
-              squeezes the title down to a stub.
+              squeezes the switcher down to a stub.
 
-              The thresholds are measured, not guessed: the title is 188px, the compact tool
-              row 320px, and the row grows to ~455px once the status and programmer chips
-              show their labels. So the title appears at 620px (fits untruncated even with
-              the mobile hamburger) and the chips expand at 760px (title + expanded row +
-              padding ≈ 691px, with margin).
+              The left of the row is the desk's name and the switcher (navigation plan §4.1): the
+              name hides below 640px of header, the switcher button names the show on the rig and
+              truncates first, and the pin chip after it gives way before it does. The chips on the
+              right never shrink. Measured at 375px in the app; see the switcher's docs in
+              frontend/CLAUDE.md §"The app bar and the switcher".
 
               **It stops being sticky under 500px of viewport HEIGHT** (space plan D8). On a
               landscape phone this bar is 53 of 393px, and it is the one band on the page that
@@ -232,13 +237,10 @@ export default function Layout() {
                   <Menu className="size-5" />
                 </Button>
               )}
-              {/* Hidden rather than truncated when the row is tight: a title clipped to
-                  "C" is noise, and the hamburger plus the page's own breadcrumbs already
-                  say where you are. */}
-              <h1 className="hidden min-w-0 flex-1 truncate text-base font-semibold @[620px]:block @[760px]:text-lg">
-                Chris&apos; DMX Controller v7
-              </h1>
-              <div className="flex-1 @[620px]:hidden" />
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <DeskName />
+                <AppBarSwitcher />
+              </div>
               <div className="flex shrink-0 items-center gap-1 overflow-x-auto sm:gap-2">
                 {/* The desk's arm, first: red, counting down, a tap disarms (stage-view session 9). */}
                 <ArmedChip />
@@ -317,11 +319,16 @@ export default function Layout() {
               {/* Outside the Suspense, so a route chunk that never arrives is caught here rather
                   than unmounting the desk. Keyed by pathname so navigating away from a failed
                   route clears the boundary instead of pinning the error over every later page. */}
-              <FeatureErrorBoundary key={location.pathname} feature="This page">
-                <Suspense fallback={<RouteFallback />}>
-                  <Outlet />
-                </Suspense>
-              </FeatureErrorBoundary>
+              {/* The cue action set's dialogs, above every host of the set — a card a GO collapses
+                  must not take an open Record sheet with it — and above the boundary keyed on the
+                  path, which a GO into the next stack changes (the Show view follows the playhead). */}
+              <CueActionDialogsProvider>
+                <FeatureErrorBoundary key={location.pathname} feature="This page">
+                  <Suspense fallback={<RouteFallback />}>
+                    <Outlet />
+                  </Suspense>
+                </FeatureErrorBoundary>
+              </CueActionDialogsProvider>
               {/* What the desk is holding (multi-screen plan §3.5). Fixed at the bottom of
                   `<main>`, below every bar and **not** in the header row — D14, which the header
                   comment above already argues. Inside `<main>` so it sits under the same error

@@ -153,6 +153,10 @@ Precedent: commit `51965fc` removed a tick-delivery assertion from `SpeedMasterB
 held only on an idle machine — it failed 3 of 4 full runs and 0 of 5 runs of the class alone.
 `Dispatchers.Default` is shared with the integration tests, and it saturates.
 
+Effects run on the live clock too, so a test that compares channels must not compare one an
+effect is running on: an engine tick between the two reads moves it (`ProgrammerDetachTest`
+leaves out the channel its Pulse drives; see [`plans/flaky-tests.md`](plans/flaky-tests.md)).
+
 `RouteIntegrationTest` puts a 60 s `Timeout` rule on every test so a hung one fails loudly
 instead of stalling the run until the worker idle timeout (~30 min). Note that JUnit 4's
 `Timeout` runs the test body on a *separate thread*, which changes thread confinement.

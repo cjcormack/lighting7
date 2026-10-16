@@ -5,10 +5,11 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
-  ListOrdered, SlidersHorizontal,
+  ListOrdered, SlidersHorizontal, CirclePlay, Activity,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useProjectListQuery } from "@/store/projects"
+import { useAuthStatusQuery } from "@/store/auth"
 import { cn } from "@/lib/utils"
 import { useVisibleFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
@@ -28,6 +29,10 @@ import type { FxTarget } from "@/components/fx/FxPicker"
 import { effectTargetOf, useWindowSelectionTargets } from "@/components/fx/selectionEffectTarget"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
+import type { ProjectSummary } from "@/api/projectApi"
+import { makeCurrentRefusal } from "@/lib/projectSwitch"
+import ProjectSwitchConfirmDialog from "@/ProjectSwitchConfirmDialog"
+import CreateProjectDialog from "@/CreateProjectDialog"
 
 export interface ToggleState {
   label: string
@@ -147,6 +152,9 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const [everOpened, setEverOpened] = useState(false)
   const closed = { skip: !everOpened }
   const [pages, setPages] = useState<string[]>([])
+  // *Make … current* and *Create New Project* open their dialogs over the closed palette.
+  const [confirming, setConfirming] = useState<ProjectSummary | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState("")
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery(undefined, closed)
@@ -172,6 +180,9 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const universeNavItems = useUniverseNavItems()
   const templateFamilyNavItems = useTemplateFamilyNavItems()
   const isNavAdmin = useIsNavAdmin()
+  // The telemetry card is drawn for a signed-in admin only (`InstallSettings`), so its command is too.
+  const { data: authStatus } = useAuthStatusQuery()
+  const isAdmin = authStatus?.user?.role === "ADMIN"
 
   const { data: parkStateList } = useGetParkStateListQuery(undefined, closed)
   const { data: channelMappings } = useGetChannelMappingListQuery(undefined, closed)
@@ -229,6 +240,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   }
 
   return (
+    <>
     <Command.Dialog
       open={open}
       onOpenChange={handleOpenChange}
@@ -357,12 +369,25 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
               )}
               <Command.Item
                 value="Create New Project"
-                onSelect={() => runAction(() => navigate("/projects"))}
+                keywords={["new", "show", "project", "create"]}
+                onSelect={() => runAction(() => setCreateOpen(true))}
                 className={itemClassName}
               >
                 <PlusCircle className="size-4 text-muted-foreground" />
                 Create New Project
               </Command.Item>
+              {/* One switch inside General, so a command rather than a nav row (navigation plan §7). */}
+              {isAdmin && (
+                <Command.Item
+                  value="Telemetry"
+                  keywords={["diagnostics", "sentry", "send", "install"]}
+                  onSelect={() => runAction(() => navigate("/install#telemetry"))}
+                  className={itemClassName}
+                >
+                  <Activity className="size-4 text-muted-foreground" />
+                  Telemetry…
+                </Command.Item>
+              )}
               {viewedProject && isViewingActiveProject && parkedCount > 0 && (
                 <>
                   <Command.Item
@@ -496,19 +521,12 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {projects && projects.length > 0 && (
               <Command.Group heading="Projects" className={groupClassName}>
                 {projects.map((project) => (
-                  <Command.Item
+                  <ProjectCommandItems
                     key={project.id}
-                    value={`Go to ${project.name}`}
-                    keywords={[project.name]}
-                    onSelect={() => runAction(() => navigate(`/projects/${project.id}`))}
-                    className={itemClassName}
-                  >
-                    <FolderOpen className="size-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">{project.name}</span>
-                    {project.isCurrent && (
-                      <span className="text-xs text-muted-foreground">Active</span>
-                    )}
-                  </Command.Item>
+                    project={project}
+                    onGo={() => runAction(() => navigate(`/projects/${project.id}`))}
+                    onMakeCurrent={() => runAction(() => setConfirming(project))}
+                  />
                 ))}
               </Command.Group>
             )}
@@ -615,5 +633,55 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
         </span>
       </div>
     </Command.Dialog>
+    {/* Immersive mode hides the app bar's switcher, so this is the switch's door there (navigation plan §4.1). */}
+    <ProjectSwitchConfirmDialog project={confirming} onClose={() => setConfirming(null)} />
+    <CreateProjectDialog
+      open={createOpen}
+      setOpen={setCreateOpen}
+      onCreated={(project) => navigate(`/projects/${project.id}`)}
+    />
+    </>
+  )
+}
+
+/**
+ * A project's two ⌘K rows: *Go to <name>* (its home) and, for a project not on the rig, *Make <name>
+ * current* through the one confirmation. A show whose venue is not on this desk offers no make-current.
+ */
+function ProjectCommandItems({
+  project,
+  onGo,
+  onMakeCurrent,
+}: {
+  project: ProjectSummary
+  onGo: () => void
+  onMakeCurrent: () => void
+}) {
+  const canMake = !project.isCurrent && makeCurrentRefusal(project) == null
+  return (
+    <>
+      <Command.Item
+        value={`Go to ${project.name}`}
+        keywords={[project.name]}
+        onSelect={onGo}
+        className={itemClassName}
+      >
+        <FolderOpen className="size-4 text-muted-foreground" />
+        <span className="flex-1 truncate">Go to {project.name}</span>
+        {project.isCurrent && <span className="text-xs text-muted-foreground">On the rig</span>}
+      </Command.Item>
+      {canMake && (
+        <Command.Item
+          // The id keeps two projects of one name apart; the label still matches through keywords.
+          value={`make-current-${project.id}`}
+          keywords={[`Make ${project.name} current`, project.name, "switch", "rig"]}
+          onSelect={onMakeCurrent}
+          className={itemClassName}
+        >
+          <CirclePlay className="size-4 text-muted-foreground" />
+          <span className="flex-1 truncate">Make {project.name} current</span>
+        </Command.Item>
+      )}
+    </>
   )
 }

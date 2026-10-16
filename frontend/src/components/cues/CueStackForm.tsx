@@ -123,7 +123,7 @@ export function CueStackForm({
             </button>
           </div>
 
-          {/* Set for this stack (stage-view plan session 8). Saves itself, like Cue properties, rather
+          {/* Set for this stack (stage-view plan session 8). Saves itself, like the cue editor's Scenery tab, rather
               than waiting for Save — a new stack has no id to hang one on, so it appears once the
               stack exists. */}
           {stack != null && stack.type === 'STACK' && (

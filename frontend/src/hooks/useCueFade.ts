@@ -25,17 +25,19 @@ export function useCueFade(
   stackId: number | null | undefined,
   cueId: number,
   fadeDurationMs: number | null,
+  /** The row's entry: of a cue twice in one stack, only the place being faded into draws it. */
+  entryId?: number,
 ) {
   // `activeCueId` is the optimistic cursor: set the instant GO is pressed, cleared when the fade
   // completes. That is exactly the window a fade should be drawn in.
   const isLive = useSelector((state: RunnerRoot) => {
     if (stackId == null) return false
-    return selectStackRunner(state, stackId).activeCueId === cueId
+    return isFadingRow(selectStackRunner(state, stackId), cueId, entryId)
   })
   const fade = useSelector((state: RunnerRoot) => {
     if (stackId == null) return null
     const runner = selectStackRunner(state, stackId)
-    if (runner.activeCueId !== cueId) return null
+    if (!isFadingRow(runner, cueId, entryId)) return null
     return runner.fade?.cueId === cueId ? runner.fade : null
   })
 
@@ -50,6 +52,15 @@ export function useCueFade(
       : Math.max(0, fadeDurationMs * (1 - fadeProgress))
 
   return { fadeProgress, fadeRemainMs }
+}
+
+function isFadingRow(
+  runner: { activeCueId: number | null; activeEntryId: number | null },
+  cueId: number,
+  entryId: number | undefined,
+): boolean {
+  if (runner.activeCueId !== cueId) return false
+  return entryId == null || runner.activeEntryId == null || runner.activeEntryId === entryId
 }
 
 /**

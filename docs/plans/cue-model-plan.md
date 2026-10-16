@@ -520,6 +520,10 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   made a loose cue since session 4, and this session's table is where one is found.
 - **A loose cue's pad opens the table.** The busk view's "open cue" opens a cue's first entry, and
   does nothing for a loose cue since session 4 (§4); it opens the Cues table filtered to that cue.
+- **The loose cue's sheet mounts `CueEditor`** (show-cue-editing plan §4.7): R2 session 4 landed
+  first, so this session makes the swap. Mounted with no entry it edits the cue and says it has no
+  number or follow (`frontend/src/components/cues/editor/CueEditor.tsx`; `stage/OwnerEditor`'s cue
+  sheet is the precedent).
 - **D8's cue confirm** exists: R2 session 3 built `CueDeleteDialog`
   (`frontend/src/components/cues/CueDeleteDialog.tsx`) on `cueDeletePreview`, one confirm for one cue
   or several that lists every entry, pad, slot, anchor and binding, then deletes with `force`. The

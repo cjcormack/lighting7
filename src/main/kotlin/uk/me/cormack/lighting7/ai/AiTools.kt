@@ -2234,14 +2234,10 @@ class AiTools(private val state: State) {
     /** D16's default master for a beat effect named in [obj]: the one tagged for its family, or null. */
     private fun usageMasterFor(obj: JsonObject): String? {
         val effectType = obj["effectType"]?.jsonPrimitive?.contentOrNull ?: return null
-        val registration = state.show.fxRegistry.getRegistration(effectType)
-        if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
-        // Palette Steps is filed under its palettes' family, which only the call names.
-        val family = registration?.category?.takeUnless { it == PALETTE_STEPS_CATEGORY }
-            ?: obj["category"]?.jsonPrimitive?.contentOrNull ?: return null
-        return state.show.fxEngine.speedMasters.masterStates()
-            .firstOrNull { it.usage == family }
-            ?.uuid?.toString()
+        return usageMasterUuidFor(
+            state.show.fxRegistry, state.show.fxEngine.speedMasters, effectType,
+            obj["category"]?.jsonPrimitive?.contentOrNull,
+        )?.toString()
     }
 
     /**

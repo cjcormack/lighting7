@@ -1,12 +1,12 @@
 import { useCallback } from 'react'
 import { toast } from 'sonner'
-import { CuePropertiesSheet } from '@/components/cues/CuePropertiesSheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { CueEditor } from '@/components/cues/editor/CueEditor'
 import { CueStackForm } from '@/components/cues/CueStackForm'
 import { LookDetailSheet } from '@/components/looks/LookDetailSheet'
 import { duplicateName } from '@/lib/duplicateName'
 import { formatError } from '@/lib/formatError'
 import type { MovesWithEntry } from '@/lib/scenery'
-import { useProjectCueQuery } from '@/store/cues'
 import { useProjectCueStackListQuery, useSaveProjectCueStackMutation } from '@/store/cueStacks'
 import { useCopyLookMutation, useLookListQuery } from '@/store/looks'
 import type { CueStackInput } from '@/api/cueStacksApi'
@@ -14,10 +14,11 @@ import type { LookSummary } from '@/api/looksApi'
 
 /**
  * The editor a *Moves with* entry opens (scenery-programmer plan D11), in place over the Stage view:
- * a cue's **Cue properties**, a stack's **Stack settings** (its set) or the **Look sheet** — the
- * three places a scenery change is edited, since it is never edited on the element. Each is the
- * owner's own sheet, mounted here rather than reached by navigating away, so the operator keeps the
- * stage, the camera and the element form they came from.
+ * a cue's **cue editor** (show-cue-editing plan D15), a stack's **Stack settings** (its set) or the
+ * **Look sheet** — the three places a scenery change is edited, since it is never edited on the
+ * element. Each is the owner's own editor, mounted here rather than reached by navigating away, so
+ * the operator keeps the stage, the camera and the element form they came from. The fixture sheet's
+ * *on Q12* opens a cue through it too.
  */
 export function OwnerEditor({
   projectId,
@@ -37,16 +38,30 @@ export function OwnerEditor({
   )
   return (
     <>
-      <CueEditor projectId={projectId} cueId={entry?.kind === 'cue' ? entry.id : null} onOpenChange={onOpenChange} />
+      <CueEditorSheet projectId={projectId} cueId={entry?.kind === 'cue' ? entry.id : null} onOpenChange={onOpenChange} />
       <StackEditor projectId={projectId} stackId={entry?.kind === 'set' ? entry.id : null} onOpenChange={onOpenChange} />
       <LookEditor projectId={projectId} lookId={entry?.kind === 'look' ? entry.id : null} onOpenChange={onOpenChange} />
     </>
   )
 }
 
-function CueEditor({ projectId, cueId, onOpenChange }: { projectId: number; cueId: number | null; onOpenChange: (open: boolean) => void }) {
-  const { currentData: cue } = useProjectCueQuery({ projectId, cueId: cueId ?? 0 }, { skip: cueId == null })
-  return <CuePropertiesSheet cue={cueId == null ? null : (cue ?? null)} projectId={projectId} open={cueId != null} onOpenChange={onOpenChange} />
+/**
+ * The cue editor in a right-hand sheet — the host for a cue opened from outside the Show view. It
+ * is opened by cue, not by place: a cue in one stack edits that entry's number and follow, one in
+ * several says they are each place's. The show-editing lock is the Show view's, so it does not
+ * reach here.
+ */
+function CueEditorSheet({ projectId, cueId, onOpenChange }: { projectId: number; cueId: number | null; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Sheet open={cueId != null} onOpenChange={onOpenChange}>
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-2xl" aria-describedby={undefined}>
+        <SheetHeader className="border-b pr-12">
+          <SheetTitle>Cue</SheetTitle>
+        </SheetHeader>
+        {cueId != null && <CueEditor projectId={projectId} cueId={cueId} locked={false} host="sheet" className="min-h-0 flex-1" />}
+      </SheetContent>
+    </Sheet>
+  )
 }
 
 function StackEditor({ projectId, stackId, onOpenChange }: { projectId: number; stackId: number | null; onOpenChange: (open: boolean) => void }) {

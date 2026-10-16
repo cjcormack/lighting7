@@ -47,6 +47,12 @@ interface InlineEditFieldProps {
   multiline?: boolean
   /** Rows for the `multiline` textarea. */
   rows?: number
+  /**
+   * Commit an open edit when the field unmounts, as a blur would. React fires no blur for an input
+   * that is removed, so without it a host that can go mid-edit — a live cue card a GO collapses —
+   * drops what was typed.
+   */
+  commitOnUnmount?: boolean
 }
 
 /**
@@ -76,6 +82,7 @@ export function InlineEditField({
   title,
   multiline = false,
   rows = 3,
+  commitOnUnmount = false,
 }: InlineEditFieldProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -96,6 +103,16 @@ export function InlineEditField({
       if (pendingTimer.current) clearTimeout(pendingTimer.current)
     }
   }, [])
+
+  // What an unmount would commit, read at teardown: the open draft, against the value it edits.
+  const unmountCommit = useRef<(() => void) | null>(null)
+  unmountCommit.current =
+    commitOnUnmount && editing && draft !== value
+      ? () => {
+          onCommit(draft)
+        }
+      : null
+  useEffect(() => () => unmountCommit.current?.(), [])
 
   // Safety valve: a save the server normalises to the value we already had never changes
   // `value`, so nothing would clear the optimistic text.

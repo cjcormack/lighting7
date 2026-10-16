@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { navItems } from '@/navigation'
 import ProjectSwitchConfirmDialog from '@/ProjectSwitchConfirmDialog'
-import { useProjectListQuery, useSetCurrentProjectMutation } from '@/store/projects'
+import { useProjectListQuery } from '@/store/projects'
 import type { ProjectSummary } from '@/api/projectApi'
 import { useHasUnsavedSheets } from '@/lib/unsavedSheets'
+import { makeCurrentRefusal, venueMissing as isVenueMissing } from '@/lib/projectSwitch'
 import { SheetPage } from './sheet/SheetPage'
 import { ImmersiveEscape } from './ImmersiveEscape'
 
@@ -35,13 +36,12 @@ export function NotOnRig({
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery()
   const [confirming, setConfirming] = useState(false)
-  const [setCurrentProject, { isLoading: isSwitching }] = useSetCurrentProjectMutation()
 
   const item = navItems.find((i) => i.id === navId)
   const current = projects?.find((p) => p.isCurrent) ?? null
   const why = item?.needsRig ?? 'This view works on the rig that’s live'
   // A show whose venue is not on this desk cannot be made current (VENUE_MISSING).
-  const venueMissing = project.venue != null && project.venue.id == null
+  const venueMissing = isVenueMissing(project)
   const canOpenOnCurrent = item != null && current != null && viewOnProject(item.hiddenInVenue, current)
 
   const body = (
@@ -53,8 +53,7 @@ export function NotOnRig({
       </p>
       {venueMissing && (
         <p className="text-sm text-muted-foreground">
-          Its venue, {project.venue?.name ?? 'the venue'} v{project.venue?.version}, isn&rsquo;t on this desk, so it
-          can&rsquo;t be made current.
+          {makeCurrentRefusal(project)}, so it can&rsquo;t be made current.
         </p>
       )}
       <div className="flex flex-wrap justify-center gap-2 pt-1">
@@ -67,18 +66,8 @@ export function NotOnRig({
           </Button>
         )}
       </div>
-      <ProjectSwitchConfirmDialog
-        open={confirming}
-        currentProjectName={current?.name ?? ''}
-        newProjectName={project.name}
-        isSwitching={isSwitching}
-        onConfirm={async () => {
-          // A refusal is toasted by `errorToastMiddleware`; the page stays as it is.
-          await setCurrentProject(project.id)
-          setConfirming(false)
-        }}
-        onCancel={() => setConfirming(false)}
-      />
+      {/* A refusal is toasted by `errorToastMiddleware`; the page stays as it is. */}
+      <ProjectSwitchConfirmDialog project={confirming ? project : null} onClose={() => setConfirming(false)} />
     </div>
   )
 
