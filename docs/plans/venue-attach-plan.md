@@ -69,6 +69,12 @@ What the code does today, read on `main` at `d35463c`:
 - **Show content names fixtures by key.** Cue rows and ad-hoc effects, Look rows and effects, palette
   rows and surface bindings carry `targetType` + `targetKey`. Group members, busk rig tiles, cue
   events and scenery use row ids, which `VenueLinks` re-points.
+  - Since R4.3 (`3cefa3ed`) a cue's ad-hoc effect or a Look effect may target a `selection`, whose
+    key is a JSON list of fixture keys and group names (`EffectTargetRef.Selection`,
+    `models/TargetRef.kt`). A key match must look inside it.
+  - `ai/RigKeyReferences.kt` already walks all of these for MCP's `rename_fixtures` and
+    `unpatch_fixtures`: `rewrite` renames a key everywhere, a selection's items and busk rig cell
+    tiles included, and `users` finds who names one, scripts included.
 
 ## 2. Decisions
 
@@ -169,8 +175,9 @@ Each pair compares S with T, and with O where there is an origin (P3):
   - For a group, its members, which may include venue patches (D12), are kept.
 - **Take venue's** for identity is inherit, plus a **rename**:
   - Every key-named row the show owns that names the show's key is rewritten to the target's key:
-    cue property assignments and ad-hoc effects, Look rows and effects, palette rows, and surface
-    bindings.
+    cue property assignments, layer targets and ad-hoc effects, Look rows and effects, palette rows,
+    surface bindings, busk rig cell tiles, and each item of a selection effect. That is
+    `RigKeyReferences.rewrite` (§1), which the rename reuses rather than copies.
   - A changed fixture type keeps rows the new type can't take. They read as *Missing property*
     (`AssignmentHealth`).
   - Scripts aren't rewritten. They are listed as dead references.
@@ -275,7 +282,8 @@ In one transaction, in this order (the review is the same, rolled back):
    head number and name) and the overlap comparison, before against after. Any clash is a blocker. An
    introduced overlap is a decision.
 8. **Collect the leftovers.** Collect `deadReferences` (keys and group names leaving the rig that
-   cue, Look and palette rows still name, and every script naming a renamed key) and the output and
+   cue, Look and palette rows still name, a selection effect's items included as Update's own
+   collection reads them since R4.3, and every script naming a renamed key) and the output and
    drawing lists.
 9. **Commit or roll back.** Roll back on `dryRun`, on blockers, or on an undecided overlap. Otherwise
    commit.
@@ -343,8 +351,8 @@ In one transaction, in this order (the review is the same, rolled back):
   - `projectActions`' *Attach to venue…* (navigation plan §6), on a standalone show's card, home and
     ⌘K;
   - the home's *No venue · Attach to venue…* status line.
-- **The detach dialog** gains one line: *TCH venue v7 will be remembered, so the show can be attached
-  again.*
+- **The detach dialog** (`components/venue/DetachVenueDialog.tsx`) gains one line: *TCH venue v7
+  will be remembered, so the show can be attached again.*
 
 ## 6. Migration
 
@@ -355,8 +363,9 @@ In one transaction, in this order (the review is the same, rolled back):
 
 - **Session 3 needs navigation plan session 4** (`projectActions`), which has landed: *Attach to
   venue…* is already an action there, offered on a standalone show and disabled with
-  `ATTACH_NOT_BUILT` (`lib/projectActions.ts`). Session 3 gives it a dialog and a `run`, and its
-  four places (the Projects card, the home's ⋮ and Venue line, ⌘K) follow.
+  `ATTACH_NOT_BUILT` (`lib/projectActions.ts`). Session 3 gives it a dialog and a `run`. The
+  Projects card, the home's ⋮ and ⌘K follow. The home's Venue line does not: `ProjectHome`'s
+  `VenueRow` draws a disabled button from the action's label and reason alone.
 - **No venue-visit S session is a prerequisite.**
 
 ## 8. Implementation — three sessions
@@ -401,7 +410,7 @@ Each session is one PR (P1).
   - The review equals the apply's answer.
   - Every blocker.
   - An undecided overlap is refused, and is applied when answered.
-  - A rename rewrites cue, Look, palette and binding rows.
+  - A rename rewrites cue, Look, palette and binding rows, and an item inside a selection effect.
   - No uuid is held by both a show row and a visible venue row afterwards (P5).
   - The dry run leaves the database unchanged.
   - A running show reloads, and one attached behind runs against.
@@ -413,13 +422,19 @@ Each session is one PR (P1).
 ### Session 3 — The sheet
 
 - §5: `AttachVenueSheet`, the entry points, and the Detach dialog's line.
+- **The entry points** (§7): an `attach` dialog in `ProjectDialog`, mounted by `ProjectActionDialogs`
+  (`components/projectActions/ProjectActions.tsx`) beside Detach's; the action's `run` opens it, and
+  `ATTACH_NOT_BUILT` goes. `VenueRow` takes the whole action, so its button runs it.
 - **Tests:**
   - The sheet defaults to the origin venue and the installed version.
   - It says three-way or not.
   - A decision row's answer reaches the POST.
   - Attach is disabled on a blocker.
-  - A standalone show's actions offer *Attach to venue…* and a show on a venue doesn't.
-- **Docs:** the frontend CLAUDE.md's venue paragraphs.
+  - *Attach to venue…* is enabled and opens the sheet from the card, the home's ⋮ and Venue line,
+    and ⌘K. Who sees it is pinned since navigation session 4 (`projectActions.test.ts`), and that
+    test and `ProjectHome.test.tsx` change from the disabled slot.
+- **Docs:** the frontend CLAUDE.md's venue paragraphs, and its §"The app bar and the switcher" action
+  table row and §"A project's home", which describe the disabled slot.
 
 ## 9. Out of scope
 

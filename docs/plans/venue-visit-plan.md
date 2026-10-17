@@ -156,8 +156,8 @@ The plan adds its own:
     docs, `followups.md` and its plan row, and `ProjectRoundTripTest` and `RichProjectFixture`;
   - never takes or changes a number `main` already has.
 
-  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33. Still to bump: the effects plan's session 3
-  (R4.3), S16, and possibly venue-attach session 1.
+  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34. Still to bump: S16, and possibly
+  venue-attach session 1.
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -213,12 +213,27 @@ Grouped by area. §4 gives the order.
   - Applied FX
   - Applied Looks
   - Applied Palettes
-- They share one table shell and the row actions the rail already has.
+- They share one table shell and the row actions the rail already has (`ProgrammerLookStack.tsx`,
+  `ProgrammerFxList.tsx`):
+  - a layer row's *Detach* and its *lost Hex 3–4 to Amber* note (`lib/replacementNotes.ts`). Both
+    reached the rail with R3.3 (`a14d8220`), so S14 lands second and carries *Detach* (apply-model
+    plan §7);
+  - an effect row's *Edit…* (`FxEditorPopover`), *Save as palette…* and *Stop*. R3.6 puts the split
+    edit in that popover wherever it opens, so the table gets it by mounting the same popover.
 - Applied FX reads what the desk reports: timing (a master or *Seconds*, S15), size, direction and
   runs with *spent* (R4.1), and *held · Blind* (R2.1). Applied Palettes marks a layer's spent effect.
+- Applied FX is one row per running instance, as the rail is:
+  - an effect over a selection (R4.3, `3cefa3ed`) is one row, its reach read through
+    `lib/effectTargets.ts`, since its key names no fixture;
+  - an effect split by an edit (R3.2, `4212865a`) is one row per head copy;
+  - a step effect (R4.7) names its palettes or slots, as `EffectSummary` does.
 - Each remembers its sort, filter and scroll, and takes them from a query string.
-- Each is registered in `lib/windowViews.ts`, so the Screens ("Windows") sheet can open it on any
-  window.
+- Each is registered in `lib/windowViews.ts` with `needsRig: true`, so the Screens ("Windows") sheet
+  can open it on any window.
+- Each needs a nav row too. `navigation.test.ts` requires every window view to have a row in
+  `navigation.ts` with the same `pathMatch` and a matching `needsRig` (Nav.1), and its route sits in
+  `RigGate` (Nav.2). **Ask Chris** whether they are Run rows, each a card on a show's home
+  (`homeSectionsOf`, Nav.4), or children of the Programmer row, which a home leaves off.
 - R3 may later change what a row can do, but not the tables themselves.
 
 ### Effects
@@ -237,8 +252,18 @@ Grouped by area. §4 gives the order.
   fires where events don't. A reload's re-GO (`Show.resume`) sets no tempo, though it shares GO
   BACK's `fireEvents = false`, so S16 needs its own flag (D15: a tap wins until the next cue).
 - **Ask Chris first** whether a loose press (a pad, a slot, `apply_cue`) sets tempo. Since R1.2 it
-  brings a cue on as a GO does, but D15 and D20 name only GOs.
+  brings a cue on as a GO does, but D15 and D20 name only GOs. R3.1 and R3.3 changed palette and Look
+  presses only: a cue's loose press is still `takeLooseCue` (`fx/CueHolds.kt`). A reload calls that
+  too (`Show.resume`, `fireEvents = false`), so a yes needs the same flag there.
 - It's a field of the cue, not of its entries, so a shared cue sets the same tempo from every stack.
+- **Where it's edited.** The cue editor's **Cue** tab (`components/cues/editor/CueTab.tsx`, R2.4
+  `a4ab679`), which holds what the header leaves. Its three hosts get it at once: the card, the cue
+  sheet's pane (`CueEditorPane`) and `OwnerEditor`'s sheet. Cue properties is gone
+  (show-cue-editing plan D15).
+- **Copies carry it.** S16 adds the list to `copyCueRecord` (`routes/projectCuesHelpers.kt`), which
+  makes R2.3's *Duplicate* and the cross-project `POST /cues/{id}/copy`, and to `copy_to_project`'s
+  copier (`ai/VenueSetupTools.kt`), which R1.6 reuses. Across projects a master maps by index, as that
+  copier's masters do (cue model plan §3.8).
 - It's a portable cue field, so expect a `formatVersion` bump (P5).
 
 ### Course checks
@@ -296,8 +321,8 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
 once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
-chains reach R3.8: Cue editor (R2.3–R2.6, four deep) and Apply (R3.1–R3.7, seven, with R3.2 behind
-R4.3). Apply is now the longer, so keep it moving.
+chains reach R3.8: Cue editor (R2.5–R2.6, two deep with R2.5 in flight) and Apply (R3.5–R3.7, three).
+They are level now, so keep both moving.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
@@ -307,75 +332,66 @@ flight as it ran.
 K2 (2026-10-16) took out R1.3, R4.2, Nav.1 and R1.4 and folded the Cues lane. R1.4 unblocked the Cue
 editor lane and R1.5. R4.3 (PR #176), R3.1 and Nav.2 were in flight as it ran.
 
-**Cue editor.** Starts now: R1.4 has merged.
+K3 (2026-10-17) took out R3.1, R4.3, Nav.2, R2.3, R4.6, R3.3, Nav.3, R2.4, R3.2, R4.7, Nav.4 and R3.4,
+and every need they met. R2.5 (#190), Nav.5 (#191) and R4.4 (#192) were in flight as it ran. Three
+lanes have not started: Cue library, Programmer and Venue attach. Each can start now.
+
+**Cue editor.** R2.5 is in flight (#190).
 
 | Session | From other lanes |
 |---|---|
-| R2.3 The action set | — |
-| R2.4 The editor and its two hosts | — |
 | R2.5 The Values grid | — |
 | R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
 
-**Cue library.** S16 and R1.5 can both start now; Nav.1 gave R1.5 its Library section.
+**Cue library.** Not started; S16 and R1.5 can both start now.
 
 | Session | From other lanes |
 |---|---|
 | S16 Speed masters on a cue | — |
 | R1.5 The Cues table | — |
-| R1.6 Copy from another show | R2.3 for *Duplicate*, else it builds it |
+| R1.6 Copy from another show | — |
 | R1.7 The MCP tools | — |
 
-**Programmer.**
+**Programmer.** Not started.
 
 | Session | From other lanes |
 |---|---|
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Effects.** Apply's R3.2 waits on R4.3. R4.6 and R4.7 run before R4.4, which the effects plan
-allows: they need only R4.1.
+**Effects.** R4.4 is in flight (#192).
 
 | Session | From other lanes |
 |---|---|
-| R4.3 One effect over a selection | — |
-| R4.6 Beam effects | — |
-| R4.7 Palette Steps and Slot Steps | — |
 | R4.4 Fading by size | — |
 | R4.5 A stack's effect size | — |
 
-**Apply.** The longer chain to R3.8. While R3.2 waits on R4.3, R3.3–R3.5 may run ahead of it; R3.6 waits
-for R3.2 (the apply plan's P1).
+**Apply.** R3.5 and R2.6 both change `AddLayerSheet`: R3.5 moves the programmer's door and R3.8 the
+cue editor's, so either order works (the apply plan's §5).
 
 | Session | From other lanes |
 |---|---|
-| R3.1 The press on the desk | — |
-| R3.2 Local effects follow the selection | R4.3 |
-| R3.3 One press in the client | — |
-| R3.4 One mask | — |
 | R3.5 The palette popup and the one picker | — |
 | R3.6 Effects in the popup | — |
 | R3.7 The busk side sheets | — |
 | R3.8 Into the cue editor | R2.6 |
 
-**Navigation.**
+**Navigation.** Nav.5 is in flight (#191). Nav.4 ran ahead of S14, which stays unclaimed.
 
 | Session | From other lanes |
 |---|---|
-| Nav.2 Off the rig | — |
-| Nav.3 The switcher | — |
 | S14 Applied tables | — |
-| Nav.4 One set of project actions, and a show's home | — |
 | Nav.5 A venue's home | — |
 
-**Venue attach.**
+**Venue attach.** Not started. Nav.4 has merged, so Att.3 hangs off its project actions.
 
 | Session | From other lanes |
 |---|---|
 | Att.1 The origin, and the pairing | — |
 | Att.2 The attach | — |
-| Att.3 The sheet | Nav.4, else it uses the card's ⋮ |
+| Att.3 The sheet | — |
 
 ## 5. Not in this plan
 

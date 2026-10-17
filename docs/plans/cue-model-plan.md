@@ -297,8 +297,9 @@ and the rule-3 sentence naming `/cues` change with it.
   string, as the venue-visit plan's S14 tables are.
 - **Multi-select:** *Add to stack…* (shares, appended or by number), *Duplicate*, *Delete…* (the
   D8 confirm), *Copy from another show…* (§3.8).
-- **A row opens** the cue in its first entry's stack. A loose cue opens the read-only cue sheet
-  (`CueDetailContent`) with *Include in programmer*. Editing a cue in place is R2's.
+- **A row opens** the cue in its first entry's stack. A loose cue opens `CueEditor` in a
+  right-hand sheet, as `stage/OwnerEditor` opens a cue (R2.4, `a4ab679`); with no entry it says
+  the cue has no number or follow.
 
 ### 3.8 Copy from another show (D9)
 
@@ -315,6 +316,9 @@ into the project in the path. It reuses `copy_to_project`'s copier
   them, as an Update's dead references are.
 - A cue event or a scenery row that doesn't resolve is **dropped and reported**. Anchors are never
   copied.
+- **An effect parameter naming a palette** (`tmpl:{uuid}`: a colour reference, and since R4.7
+  Palette Steps' `palettes` list, `b56faf0`) maps as a layer's palette does, by name, else copied.
+  `copy_to_project` copies parameters as they are today, so they name the source's palettes.
 - The answer is `{copied: [{fromCueId, cueId, entryId?}], unresolved: [...]}`; `dryRun` is the same
   run rolled back.
 
@@ -383,6 +387,11 @@ That is the number an operator reads off the Show view, and it is unique in its 
 | `include_into_programmer` | Names the cue, and optionally the entry it is included from (`entryId` or `{stackId, number}`), so the include target carries it as the Show view's does (session 4). |
 | `update_from_programmer`, `set_cue_events`, `set_scenery` | Unchanged: they name the cue. Update's preview lists each cue once, with its entries. |
 
+Session 4 (`2d82cea0`) already made `create_cue` loose, `add_cue_to_stack` share (its description
+too) and `delete_cue_stacks` leave its cues and count them (`cuesLeftLoose`, its description too).
+What those rows still need is `create_cue`'s `stackId`, and `add_cue_to_stack`'s `number` and
+`after` (it takes `sortOrder`) and an answer naming the entry.
+
 ## 4. UX
 
 R2 designs the Show view's cue editing and its standard action set. This plan settles only what
@@ -400,8 +409,8 @@ the model forces:
   > and prompt-book anchor go with it. Add then remove dropped all four.
 - **A cue pad's ring** follows D11: solid, outline, or off. A pad's face shows the cue's name, and
   its numbers when it has any.
-- **The busk view's "open cue"** (`BuskingView.tsx:415`) opens the cue's first entry, or the Cues
-  table filtered to it when it is loose.
+- **The busk view's "open cue"** (`BuskingView.tsx`'s `onInspect`) opens the cue's first entry, or
+  the Cues table filtered to it when it is loose.
 
 ## 5. Implementation — seven sessions
 
@@ -513,7 +522,8 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 ### Session 5 — the Cues table (frontend + backend)
 
-- §3.7, with the list endpoint gaining each cue's entries and *Used by*. `RecordCuePicker`
+- §3.7, with the list endpoint gaining *Used by*; each cue's entries it has carried since session 4
+  (`CueDetails.entries`). `RecordCuePicker`
   (venue-visit S10) reads the same list and labels rows from `cueNumber` and `cueStackName`, so it moves
   to the entries too.
 - **The Record sheet's stack select gains *No stack*** (§10, 19): Record CREATE without a stack has
@@ -521,13 +531,26 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **A loose cue's pad opens the table.** The busk view's "open cue" opens a cue's first entry, and
   does nothing for a loose cue since session 4 (§4); it opens the Cues table filtered to that cue.
 - **The loose cue's sheet mounts `CueEditor`** (show-cue-editing plan §4.7): R2 session 4 landed
-  first, so this session makes the swap. Mounted with no entry it edits the cue and says it has no
-  number or follow (`frontend/src/components/cues/editor/CueEditor.tsx`; `stage/OwnerEditor`'s cue
+  first, so the sheet is the editor from the start. Mounted with no entry it edits the cue and says
+  it has no number or follow (`frontend/src/components/cues/editor/CueEditor.tsx`; `stage/OwnerEditor`'s cue
   sheet is the precedent).
 - **D8's cue confirm** exists: R2 session 3 built `CueDeleteDialog`
   (`frontend/src/components/cues/CueDeleteDialog.tsx`) on `cueDeletePreview`, one confirm for one cue
   or several that lists every entry, pad, slot, anchor and binding, then deletes with `force`. The
   table's multi-select *Delete…* mounts it.
+- **So does the action set.** R2 session 3's `CueActions` (`frontend/src/components/runner/`) does
+  *Duplicate*, *Delete…*, *Add to stack…* and *Move to stack…* over several rows, and takes a loose
+  row (`entryId` and `stackId` null). The table's bar mounts it as a fourth host, with rungs of its
+  own in `FOLDS`, rather than drawing its own buttons. It takes the show-editing lock (`locked`).
+  **Ask Chris** whether the table honours that lock while the show runs, as the cue sheet does, or
+  is read-only only off the rig, as the Looks sheet is (`libraryPermission`).
+- **The home's cue count moves to this row** (Nav.4, `8ac4817`; frontend `CLAUDE.md` §"A project's
+  home"). Show's card counts its stacks and the project's cues (`stacksAndCues` in
+  `navigation.ts`) until the Cues row lands; then the row takes `homeCount: (c) => c.cues` and
+  Show's card its stacks. The row is Library, so it has no `needsRig` (Nav.2) and is drawn off the
+  rig. `useHomeCounts` reads the cue list only on the rig, so it reads it everywhere for this row,
+  as it does the Looks (`GET /cues` is `withProject`). `ProjectHome.test.tsx` pins *2 stacks · 35
+  cues*.
 - **Tests:** frontend tests for the filters and the multi-select actions; a route test for the
   list's shape.
 - **Docs:** `frontend/CLAUDE.md`'s views (§Navigation Registry, its ⌘K count of the seven views, the
@@ -535,9 +558,14 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 ### Session 6 — copy from another show (backend + frontend)
 
-- §3.8: the route and *Copy from another show…* in the Cues table. The REST `/cues/{id}/copy` goes.
+- §3.8: the route and *Copy from another show…* in the Cues table. The REST `/cues/{id}/copy` goes,
+  and with it `getOrCreateUnsortedStack`, which only that copy still calls (session 4). No client
+  calls the copy.
   *Duplicate* and its route landed with R2 session 3, so this session builds only the cross-project
-  copy, from the `copyCueRecord` helper the duplicate and the old copy share.
+  copy, from the `copyCueRecord` helper the duplicate and the old copy share. That helper copies
+  scenery and events only within one project, and a layer's Look and palette, an effect's
+  parameters and every layer's and effect's speed-master uuids as they are, so the copy maps all
+  five (§3.8; the masters by index).
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;
@@ -555,6 +583,10 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   bridge (the first entry of the cue in that stack) gives way to `entryId` or `number` (§3.10).
 - **`include_into_programmer` names an entry**, so an AI include sets the target's `entryId` as the
   Show view's does.
+- **No MCP tool moves an entry.** Since R2 session 3 the UI's *Move to stack…* moves the entry
+  whole (`POST /cue-stacks/{id}/entries/{entryId}/move {toStackId}`), but a model can only add then
+  remove, which drops the explicit number, the follow and the anchor. **Ask Chris** whether
+  §3.10 gains a move tool on that route.
 - **Tests:** each new tool, and each changed one naming an entry by number.
 - **Docs:** `mcp-engineering.md`, `cue-stacks-engineering.md` §"MCP tools".
 

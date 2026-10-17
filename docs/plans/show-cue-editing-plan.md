@@ -115,7 +115,9 @@ The plan adds its own:
   before each PR.
 - **P2 — Nothing in the Show view sends output but *Update stage*.** The cue grid mounts none of the
   surfaces that reach the rig or the desk: the desk-selection bridge, Release, Locate, Highlight,
-  the palette strip, `useClearCellEffects` and the live writers. Its selection is local state. A test
+  the palette strip, the colour editor's Recent chips (a press since R3.3, `a14d8220`: the grid's
+  colour editor takes no `recent`), `useClearCellEffects` and the live writers. Its selection is
+  local state. A test
   per tab asserts that a full editing pass sends no `programmer.*`, `channels.*` or `fx.*` frame.
 - **P3 — A cue's children keep their uuids across a write**, reconciled by natural key as a Look's
   are. A per-gesture save then changes one record in sync, and *Update stage* can tell an edited
@@ -214,10 +216,10 @@ effect across writes. No `formatVersion` change: the archive already carries eac
   that stack's own GO, and a cue held only loose has no stack. So the fade is the cue's own, keyed by
   cue: the stage's rows to the new cook, over the cue's fade and curve.
 - **Effects** reconcile by uuid against the running instances the cue's holds spawned: a changed one
-  through `applyEffectUpdate` with the stored Seconds, size, direction and runs (id kept; phase kept
-  but for a move between *Seconds* and a master, S15; a changed count runs from the update, effects
-  plan session 1), a removed one stopped, a new one spawned at the
-  cue's priority. A changed layer set brings its Look's deferred effects in line the same way.
+  through `applyEffectUpdate` with the stored Seconds, size, direction, runs and the spread's shape
+  (`spread`, `wings`, `blocks`, `groups`, effects plan D4; id kept; phase kept but for a move
+  between *Seconds* and a master, S15; a changed count runs from the update, effects plan session
+  1), a removed one stopped, a new one spawned at the cue's priority. A changed layer set brings its Look's deferred effects in line the same way.
 - **Events** are not fired and **scenery** is not re-run.
 
 ### 3.6 Blind holds the programmer's effects (D7)
@@ -244,8 +246,9 @@ effect across writes. No `formatVersion` change: the archive already carries eac
   (`source: 'edit'`, `editEntry` / `editCue`), so the Screens sheet can point another window at it.
 - **The channels** come from R1's entry-keyed preview (`GET …/cue-stacks/{sid}/preview?entryId=`,
   P2 of R1) or, for a loose cue, a route of its own (R1.2's preview takes only an `entryId` under a
-  stack's path, composed against that stack's context), composed as a loose press; refetched on a
-  `cueListChanged` naming the cue, debounced at 300 ms. Because edits save as they go (D10), the
+  stack's path, composed against that stack's context), composed as a loose press; refetched,
+  debounced at 300 ms, on every `cueListChanged` (it names no cue) and on a `cuesRecomposed` whose
+  `cueIds` hold the cue (a Look or palette contents edit under it). Because edits save as they go (D10), the
   stored cue is the edit, at most one flush behind.
 - **The toggle.** The editor's header *Show on stage* sets this window's source to `edit` with its
   cue, and lights while the window shows it; another editor's toggle moves it. *Output* puts the
@@ -290,8 +293,10 @@ No WS inbound frame, no `formatVersion` change, no table.
 - **FX**: one row per stored effect: target, effect, property, speed (a master or *Seconds*, S15),
   size, direction and runs (effects plan session 1), and its fire timing. A row opens
   `FxEffectFields` over the stored effect (`cueEffectDraftOf` / `withCueEffectDraft` in
-  `fxEditorModel.ts`, carrying Seconds, size, direction and runs as `withTemplateDraft` does, its
-  `FxScope` from the effect's target), with the cue's *Delay · Interval · Random* under it. *+ Effect* opens `FxPicker` in draft over the Values selection (D17). A Look's deferred effects
+  `fxEditorModel.ts`, carrying Seconds, size, direction, runs and the spread's shape as
+  `withTemplateDraft` does, its `FxScope` from the effect's target — a `selection` target's head
+  count through `selectionHeadCount`, effects plan D3), with the cue's *Delay · Interval · Random*
+  under it. *+ Effect* opens `FxPicker` in draft over the Values selection (D17). A Look's deferred effects
   are listed under their Look, read-only.
 - **Scenery**: `CueSceneryEditor`'s body. **Events**: `CueEventsEditor`. **Cue**: notes, script
   hooks (`CueTriggerEditor`) and the busk-page append, as `CuePropsPane` had them.
@@ -347,8 +352,7 @@ the sheet's yields to it then. A pane or card that is not the region draws its s
 
 R1's Cues table opens a cue in its first entry's stack, and a loose cue in a read-only sheet. Once
 session 4 lands, that sheet mounts `CueEditor` (no entry, so no number or follow), so a loose cue is
-edited in the same editor. R1 session 5 or this plan's session 4, whichever lands second, makes the
-swap.
+edited in the same editor. Session 4 landed first (`a4ab679`), so R1 session 5 makes the swap.
 
 ## 5. The action set
 
@@ -420,7 +424,7 @@ says palette). All of them have merged.
   to reuse.
 - ***Move to stack…* drops the entry's place.** R1 §4 makes it add then remove, so the entry's
   anchor, explicit number and follow are lost on the way (R1.4 shipped it so). Ask Chris whether the
-  action set keeps that or moves the entry whole, before building the ⋯ menu.
+  action set keeps that or moves the entry whole, before building the ⋯ menu. Answered: §11, 17.
 - **Tests:** the face flips with the run state; locked, Blind edit sends Blind then Include and every
   other action asks to unlock; Blind edit with a cue holding an effect sends nothing to the stage
   (with session 1); several rows disable the one-cue actions with the reason; Duplicate appends;
@@ -461,9 +465,26 @@ says palette). All of them have merged.
 - §4.1's Looks and FX: the cue host for `LookStack` with `onSetTargets`, the add-layer pickers,
   *Open Look*; the FX table, `cueEffectDraftOf` / `withCueEffectDraft`, the cue timing fields, the
   picker in draft (D17); a Look's effects read-only.
+- **What is there.** The two tabs draw `CueLayersReadout` and `CueEffectsReadout`
+  (`CueDetailContent.tsx`) inside `CueEditor`; this session replaces them there, and the phone card
+  and the Prompt Book keep them (D9). Session 5 (PR #190) builds `CueRowStore` over own rows alone:
+  if it lands so, this session gives the store its layers and effects lists, each flushed whole
+  from the latest cue with its own Undo step (§3.3).
+- **The add doors.** `AddLayerSheet` (`LayerPicker`) is the shared picker, with its timing fields on
+  for a cue (`allowTiming`); it takes one `preselectedTarget`, so it learns to take the Values
+  selection's targets (R3.8 later moves both doors to the apply plan's picker and retires the sheet).
+  `FxPicker` has no draft arm: its tap runs a programmer effect. The draft arm writes the stored
+  effect with the tap's start — `startingSpec`, the step effects' seeded lists (`lib/stepEffects.ts`,
+  R4.7), D16's master through `useSpeedMasterForCategory` — on `effectTargetOf`'s target
+  (`components/fx/selectionEffectTarget.ts`): one row as itself, several as one `selection` effect
+  (effects plan D3, R4.3). The `FxScope` is `FxEditor`'s own derivation, lifted to be shared.
+- ***Open Look* has no address to go to.** `/looks` opens no single Look (a palette has `?edit=`,
+  R3.3); `stage/OwnerEditor` opens `LookDetailSheet` in place for *Moves with*. Ask Chris whether
+  *Open Look* gains a `/looks` address or opens the Look in place, before building it.
 - **Tests:** a reorder restates every `sortOrder` and keeps uuids (with session 2); a disabled layer
   is stored; an effect added in draft sends no `fx.add`; a swap replaces it; an effect's Seconds,
-  size, direction and runs survive an edit and a reorder; P2's no-frame test over both tabs.
+  size, direction, runs and spread shape survive an edit and a reorder; an effect added over two
+  rows is stored as one `selection` effect; P2's no-frame test over both tabs.
 - **Docs:** the frontend CLAUDE.md's "The cue editor"; `fx-engineering.md` (a cue effect edited in
   draft).
 
@@ -472,6 +493,15 @@ says palette). All of them have merged.
 - §3.5: the mark on R1's holds, `cueHolds.state`'s `edited`, the route with its `dryRun`, the cue's
   own fade, the effect reconcile; the chip on the card, the row, the pane and the
   phone, and the confirm.
+- **An instance names no stored effect.** `FxInstance` carries its `cueId` and `cueLayerId`, never
+  the uuid of the stored effect it came from, so `CueHolds.bringOn` (and `CueTriggerManager`'s
+  timed spawn) tags each ad-hoc instance with it, to reconcile against. An edit goes in place with no `targets`: since
+  R3.2 a split of a cue's effect is 409 `FX_SPLIT_NOT_LOCAL`, and a moved target is a new uuid by
+  §3.4's key, so it stops and starts.
+- **Where it draws.** The chip and *Update stage…* join `CueEditorHeader`
+  (`components/cues/editor/CueEditor.tsx`), the cue sheet's row and `CueCardBody`'s ⋯
+  (`CueActions`). The confirm lives in `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`)
+  beside Record and Delete, since a GO can collapse the card that opened it (R2.4).
 - **Tests:** an own-row edit to a held cue marks it and a scenery edit does not; its first hold
   clears it, and a GO into it while another hold keeps it live does not; Update stage fades the rows
   over the cue's fade and snaps a snap cue; an edited effect keeps its id and phase, a removed one stops, a new one starts; events do not fire; `CUE_NOT_LIVE`.
@@ -482,6 +512,17 @@ says palette). All of them have merged.
 
 - §3.7: the `edit` source, its announce keys, the Screens sheet's Source segment, the toggle in the
   header; the loose cue's preview route (R1.2's takes only an `entryId`).
+- **Where the source lives.** `VisSource` is `hooks/useVisSource.ts`'s, per window; it is announced
+  by `stageViewOptions`, applied by `applyStageViewOptions` and read on arrival by
+  `consumeLaunchStageOptions` (`lib/stageViewpoint.ts`), and a Screens row's *Copy link* carries it
+  as `source=` (`windowSetupUrl`). The edit target rides beside it in all four.
+- **The Screens row cannot name a cue.** Its Source is `STAGE_SOURCE_OPTION`, an `enum` segment of
+  two of the four sources (*Output · Next GO*, `lib/windowViews.ts`). Ask Chris whether the row
+  offers *Cue in edit* only while that window already shows one, or picks a cue through a `picker`
+  control as the viewpoint's does.
+- **Off the rig.** The Stage view draws only the project on the rig (`RigGate`, Nav.2) and the
+  preview route is `withCurrentProject`, so *Show on stage* is withheld, with the reason, for a cue
+  the editor reads as another project's (`canEdit` false).
 - **Tests:** the toggle sets this window's source and announces it; another editor's toggle moves
   it; an edit refetches the preview once per flush; the source draws nothing to output.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Sources", `desk-screens.md`.
@@ -494,7 +535,9 @@ carries, and every other change is a route, a field on an answer or a per-window
 ## 8. Explicitly out of scope
 
 - **Pressing a palette onto cue cells.** How a palette, a Look or an effect reaches a selection is
-  R3's (venue-visit R3). The cue grid has no palette strip until R3 says what it is.
+  R3's (venue-visit R3). R3 has answered it ([`apply-model-plan.md`](apply-model-plan.md) §3.6): its
+  session 8 adds `POST /cues/{id}/layers/press` on `fx/LayerPress.kt` (R3.1) and the bands and
+  picker to the Values grid and the Looks tab, after sessions 5 and 6 here.
 - **Editing a Look's contents from inside a cue** (D3).
 - **A row's own fade and move-in-dark.** Kept on every write and shown on the cell's hover; editing
   them is `FU-CUE-ROW-TIMING` (§9).
@@ -511,8 +554,9 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 - `FU-CUE-ROW-TIMING`: editing an own row's fade and move-in-dark in the Values grid (session 5).
 - `FU-BLIND-FX-DRAWN`: the Stage view's programmer sources drawing a held programmer effect
   (session 1).
-- `FU-VENUE-BANNER-PHONE`: the venue-behind banner on a 390 px phone puts its buttons beside a
+- ~~`FU-VENUE-BANNER-PHONE`~~: the venue-behind banner on a 390 px phone puts its buttons beside a
   one-word column; stack them under the text below `sm` (seen on the desk during R2; any session).
+  Not needed: Nav.4 (`8ac4817`) gave the sentence a basis, so on a phone the buttons wrap under it.
 
 ## 10. Verification
 

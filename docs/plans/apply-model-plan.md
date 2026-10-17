@@ -255,6 +255,12 @@ and a layer records both as its `targets` and `propertyMask`.
 - **One rule, two stacks.** `fx/LayerPress.kt` is the press as a pure function over a layer list:
   `(layers, source, targets, mask, siblings) → layers + outcome`. `ProgrammerLayerStack.toggle`
   becomes its programmer caller and the cue route its stored caller, so the two cannot drift.
+  > *Note (session 1, as built):* `LayerPress.press(layers, arriving, ops, coverage, siblings,
+  > replaces, replacesOn)`, generic over the layer type through `LayerPress.Ops`. It takes the
+  > replacement set rather than finding it, and the mask is the arriving layer's. What finds the
+  > set — `familyReplacements`, `paletteHeads`, `pressTargets` — is private to
+  > `ProgrammerLayerStack`, and the arm a door asks before its mask test (`pressWouldRelease`,
+  > `routes/pressArm.kt`) reads the programmer's store. Session 8 needs both over a cue's layers.
 
 ### 3.7 The wire
 
@@ -323,7 +329,9 @@ calls:
 - **Palettes band**: the family's palettes that fit the heads, filtered as the strip filters, recent
   first, then by name, up to two rows, with *All …*.
   - A Beam cell offers the Beam palettes that set its property (a zoom cell, those with a zoom row).
-  - A setting cell (gobo, prism) has no band: a palette can't carry a slotted role.
+  - A setting cell (gobo, prism) has no band: a value palette can't carry a slotted role. R4.7's
+    Slot Steps is an effect on a setting, and a palette of it an effect palette (session 6 asks
+    about its band).
 - **The editor**, unchanged. A drag or a typed value is a Local value.
 - **Effects band**:
   - the effects running on these heads, lit;
@@ -380,7 +388,7 @@ showed the strip, now show the band too, since it is the family's offer and the 
 | Palette strip | A shortcut: recents, the press, the ring (§4.2). |
 | Palette picker | The one picker (§4.2). |
 | Busk pads | A shortcut, unchanged; solo banks stay theirs (P4). |
-| Add-layer sheet | Folds into the picker on the selection (§4.6). |
+| Add-layer sheet | Folds into the picker on the selection (§4.6): the programmer's in session 5, the cue editor's in session 8. |
 | FX sheet, ⌘K *Apply FX* | Fold into the Effects band and the picker's Effects section, over the whole selection (§3.4). |
 | Busk Colour and Spread sheets | Colour becomes a family tab (§4.5); Spread stays a direct-value tool. |
 | Busk Effects sheet | Gains *+ Effect* and the split edit. |
@@ -494,6 +502,14 @@ Each session is one PR (P1).
 - §4.3's `PaletteBands` on the colour, slider and position editors; *Save as palette* for every family.
 - §4.2's `ApplyPicker`, replacing `TemplatePicker` and the add-layer sheet's source and target steps
   (§4.6). Its Effects section is session 6's.
+- **The cue editor keeps its own.** `AddLayerSheet` (`LayerPicker`, its `CueTargetPicker` step) has
+  one host today, the rail's `ProgrammerAddLayerSheet`; R2.6 gives it a second, the cue editor's
+  *+ Look* and *+ Palette* (show-cue-editing §4.1). This session moves only the programmer's door.
+  The cue's moves to the picker in session 8.
+- **No band in the cue grid.** R2.5's Values grid mounts the same cells with no press door (R2 P2:
+  no palette strip, no Recent, which has pressed through `usePress` since session 3). A band press
+  there would reach the programmer, so the bands are not drawn in it until session 8 routes them to
+  the cue.
 - **Tests:**
   - A dimmer cell offers Intensity palettes and a zoom cell the Beam palettes with a zoom row.
   - A gobo cell has no band.
@@ -509,8 +525,31 @@ Each session is one PR (P1).
 - The split editor (§4.5's *Apply to Hex 1–2 · Select all 4*) in the FX editor popover, wherever it
   opens.
 - `FxAddSheet` retired into the band and the picker.
+- **What R4.3 left.** *+ Effect* and ⌘K *Apply FX* already start one effect over the selection,
+  through `FxAddSheet` on `POST /fx/add` with `targets` (`effectTargetOf`,
+  `components/fx/selectionEffectTarget.ts`), programmer-owned and so Local. They send no mask and
+  replace nothing, and they read two selections: *+ Effect* the programmer list's rows, ⌘K
+  `useWindowSelectionTargets`. This session sends both through `POST /programmer/effects` with
+  the window's pair.
+- **A focused Look stays on `/fx/add`.** `POST /programmer/effects` takes the heads off other Local
+  effects before it starts, which a press into a Look must not do (§3.2 rule 6). There the band and
+  *+ Effect* keep `/fx/add` then `absorb-effects`, as session 3's effect-palette press does.
+- **A split answers new ids.** `PUT /fx/{id}` answers `EffectSplitResponse {splitEffectId, edited,
+  rest}`; the `updateFx` frame answers only `fxChanged` REMOVED + ADDED. An open editor follows the
+  edited copy.
+- **What the band offers.** Its family is the cell property's group, as the press reads it (session
+  2: a Pulse on uv is Colour). A zoom, iris, frost or focus cell offers R4.6's beam effect that
+  drives it (Zoom Breathe, Iris Pulse, Frost Pulse, Focus Pull) and its Beam effect palettes. R4.7's
+  Palette Steps is offered where `FxPicker` offers it (two generic value palettes or more naming
+  the property).
+- **Ask Chris before building: a setting cell's popup.** §4.3 gives a gobo or prism cell no band
+  and session 5 wraps only colour, slider and position editors. R4.7 added Slot Steps on a setting
+  and its effect palettes. Does a setting cell gain the popup with only its Effects band, or stay
+  as it is with Slot Steps reached through *+ Effect* in the rail?
 - **Tests:**
-  - *+ Effect* over a four-head selection starts four, not one.
+  - *+ Effect* over a four-head selection starts one effect over them (effects plan D3), and takes
+    those heads off another Local effect of its family.
+  - A zoom cell's band offers Zoom Breathe.
   - A subset edit sends `targets`.
   - A palette layer's effect offers no split.
   - In a focused Look, an effect is absorbed.
@@ -528,9 +567,12 @@ Each session is one PR (P1).
 
 ### Session 8 — Into the cue editor (backend + frontend)
 
-- §3.6's `POST /cues/{id}/layers/press` on `LayerPress`.
-- The cue editor's Values grid and Looks tab gain the bands and the picker over its own selection,
-  writing the cue (R2's P2: nothing sent).
+- §3.6's `POST /cues/{id}/layers/press` on `LayerPress`. The replacement set, a per-fixture
+  palette's targets and the press's arm are the programmer's today (§3.6's note); lift them beside
+  `LayerPress` so the cue route and `ProgrammerLayerStack.toggle` find them one way.
+- `CueEditor`'s (`components/cues/editor/`, R2.4) Values grid and Looks tab gain the bands and the
+  picker over its own selection, writing the cue (R2's P2: nothing sent). The Looks tab's *+ Look*
+  and *+ Palette* leave R2.6's `AddLayerSheet` for the picker, which retires it.
 - **Tests:**
   - A palette pressed on cue cells adds a cue layer, and Blue replaces Red in the stored cue.
   - A second press takes it off.
@@ -539,13 +581,14 @@ Each session is one PR (P1).
 
 ## 9. Explicitly out of scope
 
-- **Distribution over a hand selection** (§3.4). Loose fixtures run an effect in unison, as today.
+- ~~**Distribution over a hand selection**~~ — R4's, landed with the effects plan's session 3
+  (`3cefa3ed`): one effect over the selection in its order (§3.4).
 - **Effect parameters and families** beyond what exists: R4's.
 - **Per-head overrides inside one effect instance** (Eos's Effect Channels). The split gives each
   subset its own instance instead.
 - **Splitting a palette layer's effect** (P5).
 - **Palettes for slotted roles** (gobo, prism wheel slots). A Look holds them; the closed vocabulary
-  stands.
+  stands. R4.7's Slot Steps palette is an effect palette, not one of these.
 - **Scenery.** It is addressed by element, never through the selection, and nothing here changes that.
 
 ## 10. Follow-ups to record
