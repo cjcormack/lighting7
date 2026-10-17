@@ -130,6 +130,8 @@ internal object BuskPressService {
      *
      * Runs outside any transaction: it touches the engine, not the database. [beatDivision] is the
      * screen's only extra — hardware has no way to send one — and is null for a surface press.
+     * [fadeMs] is the screen's programmer fade (effects plan D13), 0 for a surface press; a cue pad's
+     * loose hold ignores it, as a loose hold has no fade.
      *
      * [families] null is every attribute. Under a mask (multi-screen plan D5, table in §3.3): a
      * **template** whose family is outside it is refused by name — a template's layer is already
@@ -145,6 +147,7 @@ internal object BuskPressService {
         targets: List<CueTargetDto>,
         families: Set<PropertyMaskGroup>? = null,
         beatDivision: Double? = null,
+        fadeMs: Long = 0,
     ): Outcome {
         val holds = state.show.cueStackManager.holds
         val stack = state.show.programmerLayerStack
@@ -205,6 +208,7 @@ internal object BuskPressService {
                         propertyMask = (record as? PressRecord.Template)?.family?.name ?: lookMask?.propertyMask,
                         beatDivisionOverride = beatDivision,
                         releaseSiblings = plan.layerSiblings,
+                        fadeMs = fadeMs,
                     )
                     val stopped = if (outcome.action == "applied") stopCueSiblings() else 0
                     // The busk-pad door of the press log. Templates only — a Look has no recents

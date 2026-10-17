@@ -451,6 +451,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     targets = targets,
                     propertyMask = mask.propertyMask,
                     beatDivisionOverride = request.beatDivision,
+                    fadeMs = request.fadeMs ?: 0,
                 )
                 // Skips belong to the arm that put the layer on — the busk door's rule, kept here so
                 // the two doors onto one gesture cannot toast differently.
@@ -495,6 +496,12 @@ internal data class ToggleLookRequest(
     val targets: List<CueTargetDto> = emptyList(),
     val beatDivision: Double? = null,
     val families: List<String>? = null,
+    /**
+     * The programmer fade, over which a press grows its effects and a release shrinks them (effects
+     * plan D13), and which then covers every value too. Absent or 0: values at each row's own fade
+     * on the way on and a snap on the way off, effects at once — the press as it was.
+     */
+    val fadeMs: Long? = null,
 )
 
 /** Body of `POST /looks/{id}/apply`: [ToggleLookRequest]'s targets and mask, and a fade for the values. */

@@ -336,6 +336,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
                     wings = fx.wings,
                     blocks = fx.blocks,
                     groups = fx.groups,
+                    uuid = fx.uuid,
                 )
             },
         )

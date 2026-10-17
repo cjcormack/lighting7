@@ -487,7 +487,7 @@ internal fun programmerBandEffectsById(state: State, ids: List<Long>): List<FxIn
     return ids.mapNotNull { id ->
         val effect = byId[id] ?: return@mapNotNull null
         if (!FxEngine.isProgrammerFxPriority(effect.priority)) return@mapNotNull null
-        if (effect.programmerLayerId != null) return@mapNotNull null
+        if (effect.programmerLayerId != null || effect.leaving) return@mapNotNull null
         effect
     }
 }
@@ -672,7 +672,7 @@ private fun resolveLookTarget(
  */
 private fun includedLookEffectsOf(state: State, lookId: Int, mask: Set<PropertyMaskGroup>?): List<FxInstance> =
     state.show.fxEngine.getActiveEffects().filter { effect ->
-        if (effect.includedLookEffect?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority)) {
+        if (effect.includedLookEffect?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority) || effect.leaving) {
             return@filter false
         }
         if (mask == null) return@filter true

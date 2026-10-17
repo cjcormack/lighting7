@@ -600,6 +600,7 @@ class AiTools(private val state: State) {
                             if (dyn.groups != 0) put("groups", dyn.groups)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
+                            if (effect.leaving) put("leaving", true)
                             effect.cueId?.let { put("cueId", it) }
                             effect.cueStackId?.let { put("cueStackId", it) }
                         }

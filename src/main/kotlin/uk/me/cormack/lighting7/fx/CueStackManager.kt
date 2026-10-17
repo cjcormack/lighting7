@@ -29,10 +29,11 @@ private val logger = LoggerFactory.getLogger("CueStackManager")
  * `acquire(cue(b), Stack(s, b))` then `release(cue(a), Stack(s, a))`, sharing one crossfade; a cue
  * another hold still keeps live stays on stage while this stack moves on.
  *
- * Supports Layer 4 property-assignment crossfades: when a cue has `fadeDurationMs`
- * configured, its outgoing and incoming Layer 4 assignments crossfade using per-cue
- * fade weights and the configured [EasingCurve]. Effects always snap on cue transition
- * (outgoing removed, incoming start at full intensity) — matching Eos / grandMA / Hog 4.
+ * Supports crossfades: when a cue has `fadeDurationMs` configured, its outgoing and incoming Layer 4
+ * assignments crossfade using per-cue fade weights and the configured [EasingCurve], and its effects
+ * fade by size over the same time and curve (effects plan D1) — the outgoing cue's shrinking to
+ * nothing and removed, the incoming cue's growing from nothing, and an effect the two cues share
+ * running on untouched (P4). A 0 s fade, a first GO and a stack stop snap, values and effects alike.
  * Auto-advance and crossfade are per-cue settings.
  *
  * Two halves of cue-stack running live next door rather than here, because neither needs the
@@ -115,10 +116,12 @@ class CueStackManager(
      *
      * 1. Cancel any in-flight crossfade on the stack and the auto-advance timer
      * 2. Take the incoming entry's hold on its cue — on the cue's first hold that spawns its effects
-     *    and Layer 4 (at weight 0 if crossfading), its timers, triggers and events ([CueHolds.acquire])
-     * 3. Let the outgoing entry's hold go — on the cue's last hold that removes its effects and
-     *    either drops its Layer 4 or leaves it for the crossfade ([CueHolds.release])
-     * 4. Start the Layer 4 crossfade over whichever side really moved
+     *    (growing from nothing if crossfading, the outgoing cue's continuing ones adopted) and Layer 4
+     *    (at weight 0 if crossfading), its timers, triggers and events ([CueHolds.acquire])
+     * 3. Let the outgoing entry's hold go — on the cue's last hold that removes its effects, or sets
+     *    them shrinking to nothing, and either drops its Layer 4 or leaves it for the crossfade
+     *    ([CueHolds.release])
+     * 4. Start the crossfade over whichever side really moved
      * 5. Start the incoming entry's auto-advance timer if configured
      *
      * When both entries name the same cue (D7) nothing on stage moves, and the follow timer is the
@@ -164,7 +167,7 @@ class CueStackManager(
 
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
         // outgoing cue's Layer 4 rows unless a hold has it again, so the new activation starts clean.
-        crossfades.cancel(stackId, holds::isHeld)
+        crossfades.cancel(stackId, holds::isHeld, returning = cueData.cueId)
         val existingState = activeStacks[stackId]
         existingState?.autoAdvanceJob?.cancel()
 
@@ -178,8 +181,20 @@ class CueStackManager(
         if (refire) {
             holds.release(state, existingState.activeCueId, CueHold.Stack(stackId, entryId), CueHolds.Departure.SNAP)
         }
-        // Governs Layer 4 assignments only — effects always snap.
+        // Layer 4 rows and effects alike: the effects' envelopes ramp over the same time and curve.
         val useCrossfade = fadeDurationMs > 0 && existingState != null && !refire
+        val easingCurve = try {
+            EasingCurve.valueOf(cueData.fadeCurve)
+        } catch (_: Exception) {
+            EasingCurve.LINEAR
+        }
+
+        // The cue this GO takes off, when it does: its last hold is this stack's live entry. Its
+        // continuing effects are the incoming cue's to adopt (effects plan P4) — handed over before
+        // it is released, since the incoming hold is taken first.
+        val leavingCueId = existingState?.takeIf { !refire && it.activeCueId != cueData.cueId }
+            ?.takeIf { holds.holdsOf(it.activeCueId) == listOf(CueHold.Stack(stackId, it.activeEntryId)) }
+            ?.activeCueId
 
         // The incoming entry's hold first, then the outgoing's: a GO between two entries of one cue
         // then never lets it go, and nothing on stage moves.
@@ -187,17 +202,23 @@ class CueStackManager(
             state, cueData, CueHold.Stack(stackId, entryId), cueDerivedPriority(cueData),
             arrival = if (useCrossfade) CueHolds.Arrival.FADE_IN else CueHolds.Arrival.SNAP,
             scope = scope, fireEvents = fireEvents, stackTag = stackId,
+            fadeMs = fadeDurationMs, curve = easingCurve, adoptFrom = leavingCueId,
         )
         val outgoing = existingState?.takeIf { !refire }?.let {
             holds.release(
                 state, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId),
                 if (useCrossfade) CueHolds.Departure.FADE_OUT else CueHolds.Departure.SNAP,
+                fadeMs = fadeDurationMs, curve = easingCurve,
             )
         }
+        // A press took the outgoing cue between the two holds, so it stays on: what the incoming cue
+        // took over goes back to it, and the incoming cue runs its own.
+        if (outgoing?.last != true) holds.giveBack(incoming.adopted, respawnFor = cueData.cueId)
         // Only the side that really moved fades: an incoming cue already held elsewhere is at full,
-        // an outgoing cue still held elsewhere stays at full.
-        val incomingFades = useCrossfade && incoming.first && incoming.hasRows
-        val outgoingFades = useCrossfade && outgoing?.fadingRows == true
+        // an outgoing cue still held elsewhere stays at full. Either side's rows or effects make it a
+        // fade, so an effect-only cue fades too (and a cancel can find what it was fading).
+        val incomingFades = useCrossfade && incoming.first && (incoming.hasRows || incoming.fadingEffects > 0)
+        val outgoingFades = useCrossfade && outgoing != null && (outgoing.fadingRows || outgoing.fadingEffects > 0)
 
         // Update active state. The GO consumed any armed standby — the next one is positional again
         // until an operator arms another.
@@ -216,11 +237,6 @@ class CueStackManager(
         runState.consumeStandby(stackId)
 
         if (incomingFades || outgoingFades) {
-            val easingCurve = try {
-                EasingCurve.valueOf(cueData.fadeCurve)
-            } catch (_: Exception) {
-                EasingCurve.LINEAR
-            }
             crossfades.start(
                 stackId = stackId,
                 outgoingCueId = existingState.activeCueId.takeIf { outgoingFades },

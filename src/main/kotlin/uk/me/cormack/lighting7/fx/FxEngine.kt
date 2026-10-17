@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
@@ -420,7 +421,10 @@ class FxEngine(
     )
 
     /** PROGRAMMER-layer write delegation. */
-    val programmer: ProgrammerWriter = ProgrammerWriter(fixtures, programmerStore, cascade) {
+    val programmer: ProgrammerWriter = ProgrammerWriter(
+        fixtures, programmerStore, cascade,
+        onBlindLifting = { fadeMs -> growProgrammerBand(fadeMs) },
+    ) {
         provenance.emitUpdate()
     }
 
@@ -478,6 +482,200 @@ class FxEngine(
      * @return Number of effects removed
      */
     fun removeCueEffects(cueId: Int): Int = removeWhere { it.cueId == cueId }
+
+    // ─── Envelope fades (effects plan §3.5) ───────────────────────────────────────────────────
+
+    /**
+     * Set when an instance was marked leaving, cleared by a [retireFinishedLeaving] sweep that
+     * found none left — so the 50 Hz sweep walks the effect list only while a fade-out is running.
+     */
+    @Volatile private var leavingPending = false
+
+    /**
+     * Grow [effects] from where each stands to full over [durationMs] on [curve] (a press, a GO's
+     * arrival, a cue brought back on) — a 0 ms fade lands them at full now. A leaving instance taken
+     * this way is no longer leaving; a retired one is skipped. Returns how many were set.
+     */
+    fun fadeInEffects(
+        effects: Collection<FxInstance>,
+        durationMs: Long,
+        curve: EasingCurve = EasingCurve.LINEAR,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Int = effects.count { effect ->
+        effect.updateEnvelope { EffectEnvelope.ramp(it.at(nowMs), 1.0, durationMs, curve, nowMs) }
+    }
+
+    /**
+     * Let [effects] go over [durationMs] on [curve] (effects plan D1, D13): each shrinks from where it
+     * stands to 0, leaving ([FxInstance.leaving]), and is removed once there by
+     * [retireFinishedLeaving]. A 0 ms fade removes them now, which is the snap. Returns how many
+     * were let go.
+     */
+    fun fadeOutEffects(
+        effects: Collection<FxInstance>,
+        durationMs: Long,
+        curve: EasingCurve = EasingCurve.LINEAR,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Int {
+        if (effects.isEmpty()) return 0
+        if (durationMs <= 0) return removeInstances(effects)
+        val leaving = effects.count { effect ->
+            effect.updateEnvelope { EffectEnvelope.ramp(it.at(nowMs), 0.0, durationMs, curve, nowMs, leaving = true) }
+        }
+        if (leaving > 0) leavingPending = true
+        // The leaving instances drop out of the band's lists (`programmerLayerEffects`, the Local
+        // rule); clients read `EffectDto.leaving` off this broadcast.
+        emitStateUpdate()
+        return leaving
+    }
+
+    /**
+     * Whether [effect] paints a key [valueMoves] names — a (fixture, property) where the programmer
+     * value under it is about to move.
+     */
+    fun paintsMovingValue(effect: FxInstance, valueMoves: (fixtureKey: String, propertyName: String) -> Boolean): Boolean {
+        val property = effect.target.propertyName
+        return fixtureKeysCoveredBy(effect).any { valueMoves(it, property) }
+    }
+
+    /**
+     * Let the programmer's [effects] go at [fadeMs] (effects plan D13), split by what is under each:
+     * one painting a key whose programmer value this same gesture moves
+     * ([valueMoves]) is stopped now, so that value ramps — a key an effect covers never fades, and the
+     * value under a shrinking effect would snap; every other one shrinks to nothing over the fade. At
+     * 0 every one is stopped. Returns how many were let go.
+     */
+    fun releaseEffects(
+        effects: Collection<FxInstance>,
+        fadeMs: Long,
+        valueMoves: (fixtureKey: String, propertyName: String) -> Boolean,
+    ): Int {
+        if (fadeMs <= 0) return fadeOutEffects(effects, 0)
+        val (stop, shrink) = effects.partition { paintsMovingValue(it, valueMoves) }
+        return removeInstances(stop) + fadeOutEffects(shrink, fadeMs)
+    }
+
+    /**
+     * Take [effects] back from a fade-out: a cue brought on again before its fade-out ended keeps
+     * its instances, phase intact. Each is held at the level it
+     * had reached, no longer leaving, for the caller to fade on from there. Answers the ones taken
+     * back; an instance missing from the answer was retired first and is gone.
+     */
+    fun reclaimEffects(effects: Collection<FxInstance>, nowMs: Long = System.currentTimeMillis()): List<FxInstance> =
+        effects.filter { effect -> effect.updateEnvelope { EffectEnvelope.constant(it.at(nowMs)) } }
+
+    /** Hold [effects] where they stand now, ending any fade — a cancelled GO's arrival is pinned at full. */
+    fun settleEffects(effects: Collection<FxInstance>, level: Double = 1.0): Int =
+        effects.count { effect -> effect.updateEnvelope { EffectEnvelope.constant(level) } }
+
+    /**
+     * Rewrite live [effects]' ownership — cue, stack, priority, layer — with [retag], as one mutation:
+     * one re-sort for the tick loops, one broadcast. A cue's GO adopting the outgoing cue's continuing
+     * effects (effects plan P4), and a cue taking its fading ones back.
+     */
+    fun retagEffects(effects: Collection<FxInstance>, retag: (FxInstance) -> Unit) {
+        if (effects.isEmpty()) return
+        effects.forEach(retag)
+        rebuildSortedSnapshots()
+        emitStateUpdate()
+    }
+
+    /**
+     * Grow the programmer-band instances from nothing over [fadeMs] — leaving Blind, which held them
+     * (effects plan §3.5). By [releaseEffects]' rule: one over a value the programmer holds lands at
+     * full, as before, since that value's own Blind fade would snap under it. A leaving one is left to
+     * finish going. A 0 ms fade leaves them as they are.
+     */
+    private fun growProgrammerBand(fadeMs: Long, nowMs: Long = System.currentTimeMillis()) {
+        if (fadeMs <= 0) return
+        for (effect in activeEffects.values) {
+            if (!isProgrammerFxPriority(effect.priority) || effect.leaving) continue
+            if (paintsMovingValue(effect) { key, property -> programmerStore.get(key, property) != null }) continue
+            effect.updateEnvelope { if (it.leaving) it else EffectEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, nowMs) }
+        }
+    }
+
+    /**
+     * Let every programmer-band instance go over [fadeMs] — the programmer's Clear (effects plan
+     * D13), by [releaseEffects]' rule against everything the programmer holds, which Clear releases.
+     * A 0 ms fade removes them now, as [removeProgrammerBandEffects] does. Returns how many.
+     */
+    fun fadeOutProgrammerBandEffects(fadeMs: Long): Int =
+        if (fadeMs <= 0) removeProgrammerBandEffects()
+        else releaseEffects(activeEffects.values.filter { isProgrammerFxPriority(it.priority) && !it.leaving }, fadeMs) { key, property ->
+            programmerStore.get(key, property) != null
+        }
+
+    /**
+     * Give [effects] fresh compose orders in the order given, so same-priority effects compose in
+     * that order whatever they were created in — a cue's layer order over instances it carried over
+     * from another cue or from its own fade-out.
+     */
+    fun restampComposeOrder(effects: List<FxInstance>) {
+        if (effects.isEmpty()) return
+        for (effect in effects) effect.composeOrder = nextEffectId.incrementAndGet()
+        rebuildSortedSnapshots()
+    }
+
+    /** Every live instance of [cueId] that is leaving — what its fade-out is still taking down. */
+    fun leavingCueEffects(cueId: Int): List<FxInstance> =
+        activeEffects.values.filter { it.cueId == cueId && it.leaving }
+
+    /** Every live instance of [cueId] that is not leaving. */
+    fun cueEffects(cueId: Int): List<FxInstance> =
+        activeEffects.values.filter { it.cueId == cueId && !it.leaving }
+
+    /**
+     * Remove now every leaving instance [predicate] picks — a fade cut short, its instances snapped
+     * off as its rows are dropped. Each is retired first, so a cue being brought back on at the same
+     * moment cannot reclaim it after it is gone. Returns how many were removed.
+     */
+    fun retireLeaving(predicate: (FxInstance) -> Boolean): Int {
+        val gone = activeEffects.values.filter { effect ->
+            if (!predicate(effect)) return@filter false
+            val envelope = effect.envelope
+            envelope === EffectEnvelope.RETIRED || (envelope.leaving && effect.retire(envelope))
+        }
+        return removeInstances(gone)
+    }
+
+    /**
+     * Remove every leaving instance whose fade has run to 0. Swept by the wall-clock loop at 50 Hz,
+     * whether or not any effect is running, so a fade-out ends on time even when every effect is
+     * paused. `internal` so tests can sweep at a chosen instant.
+     */
+    internal fun retireFinishedLeaving(nowMs: Long = System.currentTimeMillis()): Int {
+        if (!leavingPending) return 0
+        leavingPending = false
+        val leaving = activeEffects.values.filter { it.leaving }
+        if (leaving.isEmpty()) return 0
+        // An instance already retired is still here only when an edit swapped it in after the
+        // retirement and before the removal ([updateEffect] shares the envelope cell): it goes now.
+        val gone = leaving.filter { effect ->
+            val envelope = effect.envelope
+            envelope === EffectEnvelope.RETIRED || (envelope.spentAt(nowMs) && effect.retire(envelope))
+        }
+        val removed = removeInstances(gone)
+        if (removed < leaving.size) leavingPending = true
+        return removed
+    }
+
+    /** False stops the wall-clock pass sweeping leaving instances, so a test sweeps at its own instants. */
+    @Volatile internal var sweepsLeaving: Boolean = true
+
+    /**
+     * Remove exactly these instances, as one mutation. By identity: an id an edit has since swapped
+     * for a new instance ([updateEffect]) is that edit's, and stays.
+     */
+    private fun removeInstances(effects: Collection<FxInstance>): Int {
+        val removed = effects.filter { activeEffects.remove(it.id, it) }
+        if (removed.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            resetUncoveredProperties(removed)
+            emitStateUpdate()
+        }
+        return removed.size
+    }
 
     /** Remove every effect matching [predicate], rebuilding the tick loops' snapshots once. */
     private fun removeWhere(predicate: (FxInstance) -> Boolean): Int {
@@ -802,7 +1000,7 @@ class FxEngine(
     /** What a copy takes from its parent each time it is built or swapped in ([headCopies]). */
     private fun FxInstance.takeRunningStateFrom(parent: FxInstance) {
         dynamicsRef.set(parent.dynamics.copy(elementFilter = ElementFilter.ALL))
-        intensityMultiplier = parent.intensityMultiplier
+        carryEnvelope(parent.envelope)
         lastPhase = parent.lastPhase
         accumulatedScaledMs = parent.accumulatedScaledMs
         nShotStartTick = parent.nShotStartTick
@@ -856,7 +1054,9 @@ class FxEngine(
      */
     fun programmerLayerEffects(): Map<ProgrammerLayerEffectKey, FxInstance> =
         activeEffects.values.mapNotNull { effect ->
-            effect.programmerLayerEffectKey?.let { it to effect }
+            // A leaving instance is no longer its layer's (effects plan D13): a release faded it,
+            // and the layer pressed again spawns afresh beside it rather than adopting it.
+            effect.programmerLayerEffectKey?.takeUnless { effect.leaving }?.let { it to effect }
         }.toMap()
 
     /**
@@ -1053,6 +1253,8 @@ class FxEngine(
                     // mode/filter, step timing) travel by this shared cell, not by copying —
                     // which is what makes a pause/resume racing this swap unlosable.
                     dynamicsRef = existing.dynamicsRef,
+                    // The envelope too, so a fade or a retirement racing the swap reaches both.
+                    envelopeRef = existing.envelopeCell,
                 ).apply {
                     id = existing.id
                     composeOrder = existing.composeOrder
@@ -1069,9 +1271,7 @@ class FxEngine(
                     cueId = existing.cueId
                     cueStackId = existing.cueStackId
                     priority = existing.priority
-                    // A manual fade lives here; without it, editing an effect mid-fade snaps it to
-                    // full output.
-                    intensityMultiplier = existing.intensityMultiplier
+                    layerEffectUuid = existing.layerEffectUuid
                     startedAtMs = existing.startedAtMs
                     startedAtBeat = existing.startedAtBeat
                     lastPhase = existing.lastPhase
@@ -1240,7 +1440,7 @@ class FxEngine(
      * removed instead, since only a layer keeps one. Returns how many keep running.
      */
     fun detachProgrammerLayerEffects(layerId: Int): Int {
-        val spawned = activeEffects.values.filter { it.programmerLayerEffectKey?.layerId == layerId }
+        val spawned = activeEffects.values.filter { it.programmerLayerEffectKey?.layerId == layerId && !it.leaving }
         if (spawned.isEmpty()) return 0
         val (spent, running) = spawned.partition { it.spent }
         for (effect in running) {
@@ -1471,6 +1671,11 @@ class FxEngine(
         val now = System.currentTimeMillis()
         val deltaMs = if (lastWallClockTickMs > 0) now - lastWallClockTickMs else 0L
         lastWallClockTickMs = now
+
+        // Fade-outs that have reached 0 end here, before the early returns below: this loop runs
+        // at 50 Hz whatever is running, so a leaving instance is removed on time even when it, and
+        // every other effect, is paused or on the beat loop.
+        if (sweepsLeaving) retireFinishedLeaving(now)
 
         val wallClockEffects = sortedWallClockEffects
         if (wallClockEffects.isEmpty()) return

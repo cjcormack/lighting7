@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.EffectTargetRef
@@ -307,6 +308,11 @@ class ProgrammerLayerStack(
      * pressed on top in between it is two, so a widening never changes what a higher layer shows.
      *
      * A layer with **empty** targets is the one thing no subtraction reaches — see [LayerPress].
+     *
+     * [fadeMs] is the programmer fade (effects plan D13): above 0 the press's effects grow from
+     * nothing over it and a release's shrink to nothing, and every value it moves goes at it too, as
+     * [add] and [remove] take it. 0 is the press as it was: each row's own fade on the way on, a snap
+     * off, effects at once.
      */
     fun toggle(
         source: LayerSource,
@@ -314,8 +320,10 @@ class ProgrammerLayerStack(
         propertyMask: String? = null,
         beatDivisionOverride: Double? = null,
         releaseSiblings: Set<UUID> = emptySet(),
+        fadeMs: Long = 0,
     ): ToggleOutcome {
         val pressTargets = pressTargets(source.uuid, targets)
+        val fade = fadeMs.coerceAtLeast(0)
         val arriving = ProgrammerLayer(
             layerId = store.mintLayerId(),
             source = source,
@@ -337,9 +345,9 @@ class ProgrammerLayerStack(
             renumber(result.layers) to result
         }
         return when (result) {
-            is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next).effectsRetracted)
+            is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next, fade).effectsRetracted)
             is LayerPress.Result.Applied ->
-                ToggleOutcome("applied", recook(next, arrival = true).effectsSpawned, result.released)
+                ToggleOutcome("applied", recook(next, fade, arrival = true).effectsSpawned, result.released)
         }
     }
 
@@ -905,7 +913,7 @@ class ProgrammerLayerStack(
             newBlocks = fresh.dynamics.blocks,
             newGroups = fresh.dynamics.groups,
         ) ?: return ResetToTemplateOutcome.NotFound
-        updated.programmerLayerEffectKey = key.copy(effect = entry)
+        updated.programmerLayerEffectKey = ProgrammerLayerEffectKey.of(key.layerId, entry, key.targetKey)
         ResetToTemplateOutcome.Reset(updated)
     }
 
@@ -929,7 +937,7 @@ class ProgrammerLayerStack(
         // Look snapshots.
         val cooked = cookStack(layers, withEffects = true)
         val (moved, rowFades) = materialise(cooked.values)
-        val fx = syncEffects(layers, cooked)
+        val fx = syncEffects(layers, cooked, fadeMs, moved)
         if (moved.isNotEmpty()) {
             val eng = engine()
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
@@ -1028,10 +1036,17 @@ class ProgrammerLayerStack(
      * an instance.** An amount, mask, target or *order* change re-ranks what is already running.
      * Respawning on a reorder would restart every effect's phase, which is exactly the glitch the
      * layer-index priority scheme exists to avoid.
+     *
+     * At [fadeMs] above 0 an arriving instance grows from nothing and a retracted one shrinks to
+     * nothing, removed at 0 (effects plan D13) — except one over a key whose value this recook moves
+     * ([moved]), which lands or goes at once so that value can ramp ([FxEngine.releaseEffects]). At
+     * 0 both snap.
      */
     private fun syncEffects(
         layers: List<ProgrammerLayer>,
         cooked: CueComposer.FullCook,
+        fadeMs: Long,
+        moved: Set<CueAssignmentResolver.Key>,
     ): EffectSync = synchronized(effectsLock) {
         val eng = engine()
         // The engine's record *is* the band: anything removed by another surface (the FX sheet's
@@ -1054,7 +1069,7 @@ class ProgrammerLayerStack(
         val spawning = mutableListOf<FxInstance>()
 
         for ((layer, effect, target) in desired) {
-            val key = ProgrammerLayerEffectKey(layer.layerId, effect, target.key)
+            val key = ProgrammerLayerEffectKey.of(layer.layerId, effect, target.key)
             // A Look holding the same effect twice on one target would collide here; the second is
             // dropped rather than spawning a second instance under the same identity — the retract
             // pass matches on the key, so only one of the twins could ever be seen.
@@ -1069,13 +1084,18 @@ class ProgrammerLayerStack(
             spawning += build(layer, effect, target, key, priority, override) ?: continue
         }
 
+        val valueMoves = { key: String, property: String -> CueAssignmentResolver.Key.fixture(key, property) in moved }
+        // Set before the add, so no pass paints an arriving instance at full first.
+        if (fadeMs > 0) {
+            val nowMs = System.currentTimeMillis()
+            for (instance in spawning) {
+                if (eng.paintsMovingValue(instance, valueMoves)) continue
+                instance.carryEnvelope(EffectEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, nowMs))
+            }
+        }
         val spawned = eng.addEffects(spawning).size
 
-        var retracted = 0
-        for ((key, instance) in live) {
-            if (key in wanted) continue
-            if (eng.removeEffect(instance.id)) retracted++
-        }
+        val retracted = eng.releaseEffects(live.filterKeys { it !in wanted }.values, fadeMs, valueMoves)
 
         val repriorised = eng.repriorityProgrammerLayerEffects(repriorities)
         EffectSync(spawned, retracted, repriorised)

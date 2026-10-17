@@ -59,8 +59,9 @@ class ShowCarry internal constructor(
             looseCues = show.cueStackManager.holds.looseCueIdsInPressOrder(),
             programmerStore = show.programmerStore,
             locateManager = show.locateManager,
+            // A leaving instance is on its way out, and the successor has no fade to finish it.
             effects = show.fxEngine.getActiveEffects().filter {
-                it.cueId == null && it.cueStackId == null && it.programmerLayerEffectKey == null
+                it.cueId == null && it.cueStackId == null && it.programmerLayerEffectKey == null && !it.leaving
             },
         )
     }

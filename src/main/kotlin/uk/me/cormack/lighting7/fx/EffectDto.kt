@@ -70,9 +70,14 @@ data class EffectDto(
     val programmerOwned: Boolean = false,
     /**
      * The envelope in `[0, 1]` ([FxInstance.intensityMultiplier]): the runtime factor of the effect's
-     * weight a fade moves, beside [size] (effects plan P3). 1 until session 4's fades move it.
+     * weight a fade moves, beside [size] (effects plan P3), read at the moment this was built.
      */
     val intensityMultiplier: Double = 1.0,
+    /**
+     * Let go on a fade and shrinking to nothing ([FxInstance.leaving]): nobody's — not the
+     * operator's to Release or Record — and removed at 0.
+     */
+    val leaving: Boolean = false,
     /** Size (effects plan D2), 0–1: how much of the effect reaches the stage over what is underneath. */
     val size: Double = 1.0,
     /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. */
@@ -187,6 +192,7 @@ internal fun FxInstance.toEffectDto(
         blocks = dyn.blocks,
         groups = dyn.groups,
         spent = spent,
+        leaving = leaving,
         speedMasterUuid = reportedSpeedMasterUuid,
         speedMasterIndex = masterStates.getOrNull(speedMasterSlot)?.index ?: 1,
         rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
