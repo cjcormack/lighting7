@@ -132,6 +132,16 @@ open window** to draw it offscreen and send the frame back. What the operator sh
   in a background tab still renders; a machine that is asleep does not, and the tool times out
   naming the window it asked.
 
+## A window can show the cue in edit
+
+The cue editor's *Show on stage* (show-cue-editing plan D13) points the Stage view and Positions
+plan of the window the editor is in at that cue, drawn as stored and never sent. A window on the
+Stage view announces it as `source: 'edit'` with `editEntry` or `editCue` inside `viewOptions`, and
+*Copy link* carries both. Another screen cannot be pointed at a cue from the Screens sheet: its Source
+segment offers *Cue in edit* only while that window already shows one, so the row can only leave it.
+A picker over every cue was declined. To put the hall screen on a cue, open the cue's editor there,
+for instance from the Stage view's *Moves with*, or use a copied link.
+
 ## Kiosk mode
 
 Not built, and nothing to build. For a screen nobody should be able to leave — a front-of-house

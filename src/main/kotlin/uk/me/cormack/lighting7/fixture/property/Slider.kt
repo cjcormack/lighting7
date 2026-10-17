@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fixture.property
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
+
 /**
  * Interface for controlling a single-value property (e.g., dimmer, UV, pan, tilt).
  *
@@ -37,8 +39,9 @@ interface Slider {
      *
      * @param value Target value to fade to
      * @param fadeMs Duration of the fade in milliseconds
+     * @param curve The fade's shape
      */
-    fun fadeToValue(value: UByte, fadeMs: Long)
+    fun fadeToValue(value: UByte, fadeMs: Long, curve: EasingCurve = EasingCurve.LINEAR)
 }
 
 /**

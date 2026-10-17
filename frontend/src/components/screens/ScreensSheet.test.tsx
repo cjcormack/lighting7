@@ -329,6 +329,25 @@ describe('ScreensSheet', () => {
       expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { workLights: 'on' } }])
     })
 
+    it('offers Cue in edit on a Stage row’s Source only while that window shows one (show-cue-editing plan §11, 19)', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'plan', source: 'output', workLights: 'off' } })
+      const view = render(<ScreensSheet />)
+      const offered = () => within(within(rowFor('Hall')).getByRole('radiogroup', { name: 'Source on Hall' })).queryAllByRole('radio').map((r) => r.getAttribute('aria-label'))
+      expect(offered()).toEqual(['Output', 'Next GO'])
+      view.unmount()
+
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', {
+        view: '/projects/1/stage',
+        viewOptions: { viewpoint: 'plan', source: 'edit', editEntry: '170', workLights: 'off' },
+      })
+      render(<ScreensSheet />)
+      expect(offered()).toEqual(['Output', 'Next GO', 'Cue in edit'])
+      const source = within(rowFor('Hall')).getByRole('radiogroup', { name: 'Source on Hall' })
+      expect(within(source).getByRole('radio', { name: 'Cue in edit' })).toHaveAttribute('aria-checked', 'true')
+      fireEvent.click(within(source).getByRole('radio', { name: 'Output' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { source: 'output' } }])
+    })
+
     it('reads a picker option as text where the shell has no control for it', () => {
       registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'side' } })
       render(<ScreensSheet />)

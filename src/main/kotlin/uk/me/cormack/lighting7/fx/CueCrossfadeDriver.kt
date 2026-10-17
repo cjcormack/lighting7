@@ -53,6 +53,9 @@ internal class CueCrossfadeDriver(
         @Volatile var outgoingCueId: Int? = null
 
         @Volatile var incomingCueId: Int? = null
+
+        /** The weight this fade last gave [incomingCueId]. */
+        @Volatile var incomingWeight: Double = 0.0
     }
 
     private val fades = ConcurrentHashMap<Int, Fade>()
@@ -133,6 +136,9 @@ internal class CueCrossfadeDriver(
         }
     }
 
+    /** The weight a fade in flight is bringing [cueId] in at, or null when none is. */
+    fun incomingWeight(cueId: Int): Double? = fades.values.firstOrNull { it.incomingCueId == cueId }?.incomingWeight
+
     private suspend fun runFade(fade: Fade, durationMs: Long, easingCurve: EasingCurve) {
         val startTime = System.currentTimeMillis()
 
@@ -150,6 +156,7 @@ internal class CueCrossfadeDriver(
                     if (outgoingCueId != null) put(outgoingCueId, 1.0 - easedProgress)
                     if (incomingCueId != null) put(incomingCueId, easedProgress)
                 }
+                fade.incomingWeight = easedProgress
                 fxEngine.cueLayer.updateFadeWeights(updates)
             }
 

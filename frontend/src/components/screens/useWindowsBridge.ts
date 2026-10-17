@@ -17,7 +17,7 @@ import { VIEW_OPTION_IMMERSIVE, applyImmersiveViewOption, useImmersive } from '@
 import { applyStageViewOptions, stageViewOptions, useStageViewpoint } from '@/lib/stageViewpoint'
 import { VIEW_OPTION_APPLIED_TABLE, applyAppliedViewOptions, useAppliedTable } from '@/lib/appliedTables'
 import { useWorkLights } from '@/components/stage3d/scene/workLights'
-import { useVisSource } from '@/hooks/useVisSource'
+import { useEditTarget, useVisSource } from '@/hooks/useVisSource'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
 import { unlinkFromDeskNow } from '@/store/selection'
@@ -97,13 +97,14 @@ export function useWindowsBridge(): void {
   const immersive = useImmersive()
   const stageViewpoint = useStageViewpoint()
   const stageSource = useVisSource()
+  const stageEditTarget = useEditTarget()
   const stageWorkLights = useWorkLights()
   const appliedTable = useAppliedTable()
   const announced = announcedViewOptions(
     windowViewOf(view),
     buskOptions,
     immersive ? 'on' : 'off',
-    stageViewOptions(stageViewpoint, stageSource, stageWorkLights),
+    stageViewOptions(stageViewpoint, stageSource, stageWorkLights, stageEditTarget),
     { [VIEW_OPTION_APPLIED_TABLE]: appliedTable },
   )
   // A string key rather than the object: the hook mints a fresh map per render, and the effect

@@ -2250,8 +2250,9 @@ refuses one, and so does MCP's `switch_project`), and **refuses every write**: t
 of the `/projects/{id}/…` subtree (`routes/projectWriteGuard.kt`) answers any request but `GET`,
 `HEAD` and `OPTIONS` to one with 409 `VENUE_VERSION_READ_ONLY` — every `withProject` route, and the
 few that resolve their project another way (a project's `PUT` and `DELETE`, `set-current`, clone,
-export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts|cues}/{id}/copy`),
-so the four copy routes judge the target by the same rule (`refusedCopyTarget`). Its reads answer, so a client draws a removed patch from the installed version's patch list.
+export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts}/{id}/copy`),
+so the three copy routes judge the target by the same rule (`refusedCopyTarget`); `POST /cues/copy-from`
+names its target in the path, so the guard judges it there. Its reads answer, so a client draws a removed patch from the installed version's patch list.
 Deleting a venue deletes its versions with it, and is refused 409 `VENUE_IN_USE` while a show pins
 it.
 
@@ -2431,6 +2432,15 @@ on the venue with its version — which the Publish sheet and History name. A ve
 from the project list instead, which says how far behind each is, with *Open* and *Make current*;
 beside the Projects page it is where a venue's version, draft and sync are read, and History and
 *Publish vN…* have a door there as well as on the band.
+
+**Copying cues between shows on one venue** (cue model plan §3.8, D18; `docs/cues-engineering.md`
+§"Copying"). A cue's events and scenery name the pinned version's rows, so a cue copied from a show
+on another version names rows the target cannot reach. The cue copier matches a **venue record by
+uuid** whenever both projects are on the same venue: a published version keeps every record's uuid,
+so the cannon or the house tabs resolve to the target's own pinned version's row even when the two
+shows pin different versions, and even when that version re-keyed or renamed them. A show's own
+patch or element, a record the target hides, and anything copied from a project on another venue or
+none, fall back to a patch's key and fixture type and an element's name.
 
 ### Facet overrides
 

@@ -599,17 +599,20 @@ not current — and a cue's `values`, which resolve against the loaded rig), and
 id with their cues, and Looks by id from one project into another, in one transaction that a
 `dryRun` rolls back. Copies are new records with fresh uuids, keeping their names; a name the target
 already uses (an element in its scene, a hidden venue element included; a Look; a stack) is refused
-with every clash at once. Everything is re-resolved **by name in the target**: a scenery change
-finds the target's element of that name — its own, the venue version's row, or one copied in the
-same call — a cue event its patch by key and type, a script trigger its script by name, a speed
-master by index, a platform's region by name; a cue layer's Look or palette is the target's of
-that name (`looksLinked`) or is copied along. What cannot resolve is listed in `unresolved` rather
+with every clash at once. A stack's cues are copied through the one cue copier
+(`docs/cues-engineering.md` §"Copying"), which `POST /cues/copy-from` shares: a scenery change finds
+the target's element — by uuid between two projects on one venue, else one copied in the same call,
+else by name — a cue event its patch by uuid on one venue, else by key and type, a script trigger its
+script by name, a speed master by index; a cue layer's Look or palette, and one a `tmpl:` effect
+parameter names, is the target's of that name (`looksLinked`) or is copied along. A platform's
+region is found by name. What cannot resolve is listed in `unresolved` rather
 than guessed: rows naming a fixture or group the target lacks are kept, reading as missing, as a
 venue Update's dead references do; a scenery change, event or trigger that cannot resolve is left
 out; prompt-book anchors are never copied. Painted elements bring their images into the target's
 store (`SceneImageStore.hydrate`), on a real run only. The copier is hand-written rather than an
 export/import subset because the importer only ever populates a whole project; when a portable
-column is added to a cue, Look, palette, stack or element, add it here too.
+column is added to a cue, Look, palette, stack or element, add it to the copier (or, for a stack or
+element, here) too.
 
 ### Tools on a live venue
 

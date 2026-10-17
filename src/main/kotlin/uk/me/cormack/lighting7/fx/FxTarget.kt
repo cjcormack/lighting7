@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
@@ -193,8 +194,9 @@ sealed class FxTarget {
      *   loop always snaps; only explicit clear/blind/set publishes pass a fade, and only
      *   for keys no running effect covers (a covered key's ramp would be killed by the
      *   next tick's snap write through the conflated channel changer).
+     * @param curve The ramp's shape, when [fadeMs] is above 0.
      */
-    abstract fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long = 0)
+    abstract fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long = 0, curve: EasingCurve = EasingCurve.LINEAR)
 
     /**
      * Compose the programmer layer's contribution for this target + fixture over [below]
@@ -290,10 +292,10 @@ data class SliderTarget(
         return getSlider(fixture) != null
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long, curve: EasingCurve) {
         if (fallback !is FxOutput.Slider) return
         val slider = getSlider(fixture) ?: return
-        if (fadeMs > 0) slider.fadeToValue(fallback.value, fadeMs) else slider.value = fallback.value
+        if (fadeMs > 0) slider.fadeToValue(fallback.value, fadeMs, curve) else slider.value = fallback.value
     }
 
     override fun composeProgrammerOver(
@@ -461,16 +463,16 @@ data class ColourTarget(
         )
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long, curve: EasingCurve) {
         if (fallback !is FxOutput.Colour) return
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val ext = fallback.color
-        if (fadeMs > 0) colour.fadeToColour(ext.color, fadeMs) else colour.value = ext.color
+        if (fadeMs > 0) colour.fadeToColour(ext.color, fadeMs, curve) else colour.value = ext.color
 
         // Apply extended channels (W/A/UV) to bundled slider properties using the fallback values.
-        setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs)
-        setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs)
-        setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs)
+        setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs, curve)
+        setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs, curve)
+        setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs, curve)
     }
 
     override fun composeProgrammerOver(
@@ -612,10 +614,16 @@ data class ColourTarget(
         slider.value = weigh(base, applySliderBlendMode(base, value, blendMode), weight)
     }
 
-    private fun setExtendedChannel(fixture: GroupableFixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
+    private fun setExtendedChannel(
+        fixture: GroupableFixture,
+        category: PropertyCategory,
+        value: UByte,
+        fadeMs: Long = 0,
+        curve: EasingCurve = EasingCurve.LINEAR,
+    ) {
         val prop = bundledProperty(fixture, category) ?: return
         val slider = bundledSlider(fixture, prop) ?: return
-        if (fadeMs > 0) slider.fadeToValue(value, fadeMs) else slider.value = value
+        if (fadeMs > 0) slider.fadeToValue(value, fadeMs, curve) else slider.value = value
     }
 
     /**
@@ -721,12 +729,12 @@ data class PositionTarget(
         positionFixture.tilt.value = newTilt
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long, curve: EasingCurve) {
         if (fallback !is FxOutput.Position) return
         val positionFixture = fixture as? WithPosition ?: return
         if (fadeMs > 0) {
-            positionFixture.pan.fadeToValue(fallback.pan, fadeMs)
-            positionFixture.tilt.fadeToValue(fallback.tilt, fadeMs)
+            positionFixture.pan.fadeToValue(fallback.pan, fadeMs, curve)
+            positionFixture.tilt.fadeToValue(fallback.tilt, fadeMs, curve)
         } else {
             positionFixture.pan.value = fallback.pan
             positionFixture.tilt.value = fallback.tilt
@@ -847,7 +855,7 @@ data class SettingTarget(
         transaction.setValue(setting.universe, setting.channelNo, level)
     }
 
-    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
+    override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long, curve: EasingCurve) {
         // Settings are discrete — snap regardless of fadeMs (a wheel mid-ramp is garbage).
         if (fallback !is FxOutput.Slider) return
         val setting = getSetting(fixture) ?: return

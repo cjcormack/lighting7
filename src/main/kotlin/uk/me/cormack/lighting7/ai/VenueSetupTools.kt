@@ -25,6 +25,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.routes.CueCopier
 import uk.me.cormack.lighting7.routes.afterAttach
 import uk.me.cormack.lighting7.routes.announceCueStacksDeleted
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
@@ -304,21 +305,11 @@ internal class VenueSetupTools(private val state: State) {
 
     // ─── copy_to_project ────────────────────────────────────────────────
 
-    /** What a copy did, or would do — and every reference it could not carry. */
-    private class CopyReport {
+    /** What a copy did beside the cue copier's own report: the elements, stacks and images. */
+    private class CopyTally {
         val elements = mutableListOf<String>()
-        val looks = mutableListOf<String>()
-        val looksLinked = mutableListOf<String>()
-        val templates = mutableListOf<String>()
-        val templatesLinked = mutableListOf<String>()
         val stacks = mutableListOf<Pair<String, Int>>()
         var images = 0
-        /** Problem → who has it, in the order met. */
-        val unresolved = LinkedHashMap<String, LinkedHashSet<String>>()
-
-        fun unresolved(what: String, by: String) {
-            unresolved.getOrPut(what) { LinkedHashSet() } += by
-        }
     }
 
     fun copyToProject(input: JsonObject): ToolExecutionResult {
@@ -341,41 +332,43 @@ internal class VenueSetupTools(private val state: State) {
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
-        val report = CopyReport()
+        val tally = CopyTally()
         // A dry run is the same run rolled back. Images are files, so only a real run copies them; one
         // whose transaction then fails leaves images nothing names, which the store's prune removes.
-        transaction(state.database) {
-            copy(DaoProject[from.project.id], DaoProject[to.project.id], elementNames, stackIds, lookIds, dryRun, report, problems)
+        val report = transaction(state.database) {
+            val copier = CueCopier(DaoProject[from.project.id], DaoProject[to.project.id])
+            copy(copier, elementNames, stackIds, lookIds, dryRun, tally, problems)
             if (problems.isNotEmpty() || dryRun) TransactionManager.current().rollback()
+            copier.report
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
         if (!dryRun) {
             val fixtures = state.show.fixtures
-            if (report.elements.isNotEmpty()) fixtures.stageElementListChanged()
+            if (tally.elements.isNotEmpty()) fixtures.stageElementListChanged()
             if (report.looks.isNotEmpty()) fixtures.lookListChanged()
             if (report.templates.isNotEmpty()) fixtures.templateListChanged()
-            if (report.stacks.isNotEmpty()) {
+            if (tally.stacks.isNotEmpty()) {
                 fixtures.cueStackListChanged()
                 fixtures.cueListChanged()
             }
         }
         return success(
-            "${if (dryRun) "Checked" else "Copied"}: ${report.elements.size} element(s), ${report.looks.size} Look(s), " +
-                "${report.templates.size} palette(s), ${report.stacks.size} stack(s) into project ${to.project.id.value}" +
+            "${if (dryRun) "Checked" else "Copied"}: ${tally.elements.size} element(s), ${report.looks.size} Look(s), " +
+                "${report.templates.size} palette(s), ${tally.stacks.size} stack(s) into project ${to.project.id.value}" +
                 if (report.unresolved.isEmpty()) "" else "; ${report.unresolved.size} reference(s) did not resolve",
             buildJsonObject {
                 put("dryRun", dryRun)
                 put("toProjectId", to.project.id.value)
-                putJsonArray("elements") { report.elements.forEach { add(it) } }
+                putJsonArray("elements") { tally.elements.forEach { add(it) } }
                 putJsonArray("looks") { report.looks.forEach { add(it) } }
                 if (report.looksLinked.isNotEmpty()) putJsonArray("looksLinked") { report.looksLinked.forEach { add(it) } }
                 if (report.templates.isNotEmpty()) putJsonArray("palettes") { report.templates.forEach { add(it) } }
                 if (report.templatesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.templatesLinked.forEach { add(it) } }
                 putJsonArray("stacks") {
-                    report.stacks.forEach { (name, cues) -> addJsonObject { put("name", name); put("cues", cues) } }
+                    tally.stacks.forEach { (name, cues) -> addJsonObject { put("name", name); put("cues", cues) } }
                 }
-                put("imagesCopied", report.images)
+                put("imagesCopied", tally.images)
                 putJsonArray("unresolved") {
                     report.unresolved.forEach { (what, by) ->
                         addJsonObject { put("problem", what); putJsonArray("in") { by.forEach { add(it) } } }
@@ -384,7 +377,7 @@ internal class VenueSetupTools(private val state: State) {
                 put(
                     "note",
                     "Copies are new records with new ids, named as the source names them. A cue two copied stacks share is copied " +
-                        "once and shared in the target. A Look or palette a copied cue layers is " +
+                        "once and shared in the target. A Look or palette a copied cue layers or an effect parameter names is " +
                         "copied with it, or — when the target already has one of that name — linked to the target's (looksLinked). " +
                         "Rows naming a fixture or group the target lacks are kept and read as missing; a scenery change, cue event " +
                         "or script trigger that cannot resolve is left out. Prompt-book anchors are never copied: anchor the cues " +
@@ -396,15 +389,16 @@ internal class VenueSetupTools(private val state: State) {
 
     /** The copy itself, inside the caller's transaction, which rolls it back on any problem. */
     private fun copy(
-        source: DaoProject,
-        target: DaoProject,
+        copier: CueCopier,
         elementNames: List<String>,
         stackIds: List<Int>,
         lookIds: List<Int>,
         dryRun: Boolean,
-        report: CopyReport,
+        tally: CopyTally,
         problems: MutableList<String>,
     ) {
+        val source = copier.source
+        val target = copier.target
         // ── What is copied ──
         val sourceElements = stageElementsOf(source).associateBy { it.name }
         val elements = elementNames.distinct().mapNotNull { name ->
@@ -418,17 +412,11 @@ internal class VenueSetupTools(private val state: State) {
             DaoLook.findById(id)?.takeIf { it.project.id == source.id }
                 ?: run { problems += "looks: no Look $id in project ${source.id.value}"; null }
         }
-        // Each stack's list is its entries, markers included (cue model plan §3.2); its cues are the
-        // ones its entries place.
-        val entriesByStack = stacks.associateWith { s -> entriesOf(s) }
-        val cues = entriesByStack.mapValues { (_, entries) -> entries.mapNotNull { it.cue } }
-        val layers = cues.values.flatten().associateWith { it.layers.sortedBy { l -> l.sortOrder } }
 
         // ── The target's names ──
         val targetScene = stageElementsOf(target).associateBy { it.name }
         val targetHidden = ShowHides.list(target).filter { it.kind == HideKind.ELEMENT }.mapNotNull { it.name }.toSet()
-        val targetLooks = DaoLook.find { DaoLooks.project eq target.id }.associateBy { it.name }
-        val targetTemplates = DaoTemplate.find { DaoTemplates.project eq target.id }.associateBy { it.name }
+        val targetLooks = DaoLook.find { DaoLooks.project eq target.id }.map { it.name }.toSet()
         val targetStacks = DaoCueStack.find { (DaoCueStacks.project eq target.id) and (DaoCueStacks.type eq CueStackType.STACK.name) }
             .map { it.name }.toSet()
         for (e in elements) {
@@ -442,48 +430,14 @@ internal class VenueSetupTools(private val state: State) {
         for (s in stacks) {
             if (s.name in targetStacks) problems += "cueStacks: project ${target.id.value} already has a cue stack named '${s.name}'"
         }
-        // A Look or template a copied cue layers: the target's of that name, else copied with it.
-        val layerLooks = layers.values.flatten().mapNotNull { it.look }.distinctBy { it.id }
-        val layerTemplates = layers.values.flatten().mapNotNull { it.template }.distinctBy { it.id }
-        val looksToCopy = (namedLooks + layerLooks.filter { it.name !in targetLooks }).distinctBy { it.id }
-        val templatesToCopy = layerTemplates.filter { it.name !in targetTemplates }
         if (problems.isNotEmpty()) return
 
-        // ── What the target can resolve ──
-        val rig = RigScope.of(target)
-        val fixtureKeys = rig.patches().map { it.key }.toSet()
-        val groupNames = rig.groups().map { it.name }.toSet()
-        val patchesByKey = rig.patches().associateBy { it.key }
-        val scriptsByName = DaoScript.find { DaoScripts.project eq target.id }.associateBy { it.name }
-        val masterByIndex = DaoSpeedMaster.find { DaoSpeedMasters.project eq target.id }.associate { it.masterIndex to it.uuid }
-        val sourceMasterIndex = DaoSpeedMaster.find { DaoSpeedMasters.project eq source.id }.associate { it.uuid to it.masterIndex }
-        val targetRegions = rig.stageRegions().associate { it.name to it.uuid.toString() }
+        val targetRegions = RigScope.of(target).stageRegions().associate { it.name to it.uuid.toString() }
         val sourceRegionNames = RigScope.of(source).stageRegions().associate { it.uuid.toString() to it.name }
-
-        fun checkTarget(type: String, key: String, by: String) {
-            if (type == EffectTargetRef.Selection.TYPE) {
-                EffectTargetRef.Selection.parseKey(key)?.forEach { checkTarget(it.discriminator, it.key, by) }
-                return
-            }
-            val ok = when (type) {
-                TargetRef.Fixture.TYPE -> fixtureKeys.any { key == it || key.startsWith("$it.") }
-                TargetRef.Group.TYPE -> key in groupNames
-                else -> true
-            }
-            if (!ok) report.unresolved("project ${target.id.value} has no ${if (type == TargetRef.Group.TYPE) "group" else "fixture"} '$key'", by)
-        }
-        fun master(uuid: UUID?, by: String): UUID? {
-            uuid ?: return null
-            val index = sourceMasterIndex[uuid]
-            val mapped = index?.let { masterByIndex[it] }
-            if (mapped == null) report.unresolved("speed master ${index?.plus(1) ?: uuid} is not in project ${target.id.value}; master 1 drives it", by)
-            return mapped
-        }
 
         // ── Elements, and the images they are painted with ──
         val sourceStores = sceneImageStoresOf(source)
         val targetUuid = target.uuid.toString()
-        val copiedElements = mutableMapOf<String, DaoStageElement>()
         var order = (RigScope.of(target).own.stageElements().maxOfOrNull { it.sortOrder } ?: -1) + 1
         for (e in elements) {
             var params = storedParamsObject(e.params)
@@ -491,161 +445,44 @@ internal class VenueSetupTools(private val state: State) {
             if (region != null) {
                 val mapped = sourceRegionNames[region]?.let { targetRegions[it] }
                 params = if (mapped != null) JsonObject(params + ("regionUuid" to JsonPrimitive(mapped))) else {
-                    report.unresolved("stage region '${sourceRegionNames[region] ?: region}' is not in project ${target.id.value}; the platform decks no region", "element '${e.name}'")
+                    copier.report.unresolved("stage region '${sourceRegionNames[region] ?: region}' is not in project ${target.id.value}; the platform decks no region", "element '${e.name}'")
                     JsonObject(params - "regionUuid")
                 }
             }
             for (hash in sceneImageHashesOf(e.params)) {
                 val src = sourceStores.firstNotNullOfOrNull { state.sceneImages.original(it, hash)?.first }
                 if (src == null) {
-                    report.unresolved("image $hash is missing on this machine", "element '${e.name}'")
+                    copier.report.unresolved("image $hash is missing on this machine", "element '${e.name}'")
                 } else if (!state.sceneImages.exists(targetUuid, hash)) {
-                    if (dryRun || state.sceneImages.hydrate(targetUuid, hash, src)) report.images++
+                    if (dryRun || state.sceneImages.hydrate(targetUuid, hash, src)) tally.images++
                 }
             }
-            copiedElements[e.name] = DaoStageElement.new {
-                project = target
-                name = e.name
-                kind = e.kind
-                layer = e.layer
-                positionX = e.positionX
-                positionY = e.positionY
-                positionZ = e.positionZ
-                yawDeg = e.yawDeg
-                widthM = e.widthM
-                depthM = e.depthM
-                heightM = e.heightM
-                finishColour = e.finishColour
-                finishPattern = e.finishPattern
-                emissive = e.emissive
-                this.params = storedParamsText(params)
-                hidden = e.hidden
-                sortOrder = order++
-            }
-            report.elements += e.name
-        }
-        // Scenery names an element by name across the projects: the target's scene, plus what this copy adds.
-        fun element(named: DaoStageElement, by: String): DaoStageElement? =
-            (copiedElements[named.name] ?: targetScene[named.name])
-                ?: run { report.unresolved("element '${named.name}' is not in project ${target.id.value}'s scene; its scenery change is left out", by); null }
-
-        // ── Looks and templates ──
-        val lookMap = mutableMapOf<Int, DaoLook>()
-        for (l in layerLooks) targetLooks[l.name]?.let { lookMap[l.id.value] = it; report.looksLinked += l.name }
-        for (l in looksToCopy) {
-            val by = "Look '${l.name}'"
-            val copy = DaoLook.new {
-                project = target
-                name = l.name
-                notes = l.notes
-            }
-            l.rows.forEach { r ->
-                checkTarget(r.targetType, r.targetKey, by)
-                DaoLookRow.new {
-                    look = copy
-                    targetType = r.targetType
-                    targetKey = r.targetKey
-                    propertyName = r.propertyName
-                    value = r.value
-                    fadeDuration = r.fadeDuration
-                    elementKey = r.elementKey
-                    sortOrder = r.sortOrder
-                }
-            }
-            l.effects.forEach { e ->
-                checkTarget(e.targetType, e.targetKey, by)
-                DaoLookEffect.new {
-                    look = copy
-                    targetType = e.targetType
-                    targetKey = e.targetKey
-                    effectType = e.effectType
-                    category = e.category
-                    propertyName = e.propertyName
-                    beatDivision = e.beatDivision
-                    blendMode = e.blendMode
-                    distribution = e.distribution
-                    phaseOffset = e.phaseOffset
-                    elementMode = e.elementMode
-                    elementFilter = e.elementFilter
-                    stepTiming = e.stepTiming
-                    parameters = e.parameters
-                    speedMasterUuid = master(e.speedMasterUuid, by)
-                    rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
-                    seconds = e.seconds
-                    size = e.size
-                    direction = e.direction
-                    nShot = e.nShot
-                    this.spread = e.spread
-                    this.wings = e.wings
-                    this.blocks = e.blocks
-                    this.groups = e.groups
-                    sortOrder = e.sortOrder
-                }
-            }
-            DaoLookSceneryRow.find { DaoLookScenery.look eq l.id }.forEach { s ->
-                val el = element(s.element, by) ?: return@forEach
-                DaoLookSceneryRow.new {
-                    look = copy
-                    element = el
-                    stateJson = s.stateJson
-                    sortOrder = s.sortOrder
-                }
-            }
-            lookMap[l.id.value] = copy
-            report.looks += l.name
-        }
-        val templateMap = mutableMapOf<Int, DaoTemplate>()
-        for (t in layerTemplates) targetTemplates[t.name]?.let { templateMap[t.id.value] = it; report.templatesLinked += t.name }
-        for (t in templatesToCopy) {
-            val by = "palette '${t.name}'"
-            val copy = DaoTemplate.new {
-                project = target
-                name = t.name
-                notes = t.notes
-                fadeDuration = t.fadeDuration
-            }
-            t.rows.forEach { r ->
-                checkTarget(r.targetType, r.targetKey, by)
-                DaoTemplateRow.new {
-                    template = copy
-                    targetType = r.targetType
-                    targetKey = r.targetKey
-                    propertyName = r.propertyName
-                    value = r.value
-                    sortOrder = r.sortOrder
-                }
-            }
-            t.effects.forEach { e ->
-                DaoTemplateEffect.new {
-                    template = copy
-                    effectType = e.effectType
-                    category = e.category
-                    propertyName = e.propertyName
-                    beatDivision = e.beatDivision
-                    blendMode = e.blendMode
-                    distribution = e.distribution
-                    phaseOffset = e.phaseOffset
-                    elementMode = e.elementMode
-                    elementFilter = e.elementFilter
-                    stepTiming = e.stepTiming
-                    parameters = e.parameters
-                    speedMasterUuid = master(e.speedMasterUuid, by)
-                    rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
-                    seconds = e.seconds
-                    size = e.size
-                    direction = e.direction
-                    nShot = e.nShot
-                    this.spread = e.spread
-                    this.wings = e.wings
-                    this.blocks = e.blocks
-                    this.groups = e.groups
-                }
-            }
-            templateMap[t.id.value] = copy
-            report.templates += t.name
+            copier.elementAdded(
+                DaoStageElement.new {
+                    project = target
+                    name = e.name
+                    kind = e.kind
+                    layer = e.layer
+                    positionX = e.positionX
+                    positionY = e.positionY
+                    positionZ = e.positionZ
+                    yawDeg = e.yawDeg
+                    widthM = e.widthM
+                    depthM = e.depthM
+                    heightM = e.heightM
+                    finishColour = e.finishColour
+                    finishPattern = e.finishPattern
+                    emissive = e.emissive
+                    this.params = storedParamsText(params)
+                    hidden = e.hidden
+                    sortOrder = order++
+                },
+            )
+            tally.elements += e.name
         }
 
-        // ── Stacks and their cues ──
+        // ── Looks named outright, then stacks and their cues ──
+        namedLooks.forEach(copier::copyLook)
         // A cue is copied once however many copied entries place it (cue model plan §3.9): two copied
         // stacks that share a cue — or one that holds it twice — share its copy in the target.
         val copiedCues = HashMap<Int, DaoCue>()
@@ -660,7 +497,7 @@ internal class VenueSetupTools(private val state: State) {
                 sortOrder = stackOrder++
             }
             DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq s.id }.forEach { row ->
-                val el = element(row.element, "stack '${s.name}'") ?: return@forEach
+                val el = copier.element(row.element, "stack '${s.name}'") ?: return@forEach
                 DaoCueStackSceneryRow.new {
                     stack = copy
                     element = el
@@ -668,7 +505,8 @@ internal class VenueSetupTools(private val state: State) {
                     sortOrder = row.sortOrder
                 }
             }
-            val stackEntries = entriesByStack.getValue(s)
+            // Each stack's list is its entries, markers included (cue model plan §3.2).
+            val stackEntries = entriesOf(s)
             val placedEntries = ArrayList<DaoCueStackEntry>(stackEntries.size)
             for (sourceEntry in stackEntries) {
                 // The entry is copied as it stands — its place, number and follow — and a marker
@@ -686,140 +524,15 @@ internal class VenueSetupTools(private val state: State) {
                 placedEntries += placed
                 val c = sourceEntry.cue ?: continue
                 val anchors = DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq sourceEntry.id }.count()
-                if (anchors > 0) report.unresolved("prompt-book anchors are not copied", "stack '${s.name}'")
-                val shared = copiedCues[c.id.value]
-                if (shared != null) {
-                    placed.cue = shared
-                    continue
-                }
-                val by = "cue ${sourceEntry.cueNumber ?: c.name} of '${s.name}'"
-                val cue = DaoCue.new {
-                    name = c.name
-                    project = target
-                    fadeDuration = c.fadeDuration
-                    fadeCurve = c.fadeCurve
-                    notes = c.notes
-                    stomp = c.stomp
-                    speedMasters = c.speedMasters.mapNotNull { pair ->
-                        val index = sourceMasterIndex[UUID.fromString(pair.speedMasterUuid)]
-                        val mapped = index?.let { masterByIndex[it] }
-                        if (mapped == null) report.unresolved("speed master ${index ?: "(deleted)"} is not in project ${target.id.value}; its tempo is left out", by)
-                        mapped?.let { pair.copy(speedMasterUuid = it.toString()) }
-                    }
-                }
-                placed.cue = cue
-                copiedCues[c.id.value] = cue
-                for (l in layers.getValue(c)) {
-                    l.targets.forEach { t -> checkTarget(t.type, t.key, by) }
-                    DaoCueLayer.new {
-                        this.cue = cue
-                        look = l.look?.let { lookMap.getValue(it.id.value) }
-                        template = l.template?.let { templateMap.getValue(it.id.value) }
-                        sortOrder = l.sortOrder
-                        enabled = l.enabled
-                        targets = l.targets
-                        propertyMask = l.propertyMask
-                        blendMode = l.blendMode
-                        amount = l.amount
-                        stomp = l.stomp
-                        speedMasterUuid = master(l.speedMasterUuid, by)
-                        rateSpeedMasterUuid = master(l.rateSpeedMasterUuid, by)
-                        delay = l.delay
-                        interval = l.interval
-                        randomWindow = l.randomWindow
-                    }
-                }
-                c.adHocEffects.forEach { e ->
-                    checkTarget(e.targetType, e.targetKey, by)
-                    DaoCueAdHocEffect.new {
-                        this.cue = cue
-                        targetType = e.targetType
-                        targetKey = e.targetKey
-                        effectType = e.effectType
-                        category = e.category
-                        propertyName = e.propertyName
-                        beatDivision = e.beatDivision
-                        blendMode = e.blendMode
-                        distribution = e.distribution
-                        phaseOffset = e.phaseOffset
-                        elementMode = e.elementMode
-                        elementFilter = e.elementFilter
-                        stepTiming = e.stepTiming
-                        parameters = e.parameters
-                        delay = e.delay
-                        interval = e.interval
-                        randomWindow = e.randomWindow
-                        sortOrder = e.sortOrder
-                        speedMasterUuid = master(e.speedMasterUuid, by)
-                        rateSpeedMasterUuid = master(e.rateSpeedMasterUuid, by)
-                        seconds = e.seconds
-                        size = e.size
-                        direction = e.direction
-                        nShot = e.nShot
-                        this.spread = e.spread
-                        this.wings = e.wings
-                        this.blocks = e.blocks
-                        this.groups = e.groups
-                    }
-                }
-                c.propertyAssignments.forEach { a ->
-                    checkTarget(a.targetType, a.targetKey, by)
-                    DaoCuePropertyAssignment.new {
-                        this.cue = cue
-                        targetType = a.targetType
-                        targetKey = a.targetKey
-                        propertyName = a.propertyName
-                        value = a.value
-                        fadeDuration = a.fadeDuration
-                        sortOrder = a.sortOrder
-                        moveInDark = a.moveInDark
-                    }
-                }
-                c.triggers.forEach { t ->
-                    val script = scriptsByName[t.script.name]
-                    if (script == null) {
-                        report.unresolved("script '${t.script.name}' is not in project ${target.id.value}; its trigger is left out", by)
-                        return@forEach
-                    }
-                    DaoCueTrigger.new {
-                        this.cue = cue
-                        triggerType = t.triggerType
-                        this.script = script
-                        delay = t.delay
-                        interval = t.interval
-                        randomWindow = t.randomWindow
-                        sortOrder = t.sortOrder
-                    }
-                }
-                DaoCueSceneryRow.find { DaoCueScenery.cue eq c.id }.forEach { row ->
-                    val el = element(row.element, by) ?: return@forEach
-                    DaoCueSceneryRow.new {
-                        this.cue = cue
-                        element = el
-                        stateJson = row.stateJson
-                        transition = row.transition
-                        sortOrder = row.sortOrder
-                    }
-                }
-                DaoCueEvent.find { DaoCueEvents.cue eq c.id }.forEach { ev ->
-                    val patch = patchesByKey[ev.patch.key]?.takeIf { it.fixtureTypeKey == ev.patch.fixtureTypeKey }
-                    if (patch == null) {
-                        report.unresolved("project ${target.id.value} has no '${ev.patch.key}' of type ${ev.patch.fixtureTypeKey}; its ${ev.trigger} event is left out", by)
-                        return@forEach
-                    }
-                    DaoCueEvent.new {
-                        this.cue = cue
-                        this.patch = patch
-                        trigger = ev.trigger
-                        offset = ev.offset
-                        sortOrder = ev.sortOrder
-                    }
+                if (anchors > 0) copier.report.unresolved("prompt-book anchors are not copied", "stack '${s.name}'")
+                placed.cue = copiedCues.getOrPut(c.id.value) {
+                    copier.copyCue(c, c.name, "cue ${sourceEntry.cueNumber ?: c.name} of '${s.name}'")
                 }
             }
             // The copies keep the source's ordinals but not its uuids, and a uuid breaks an ordinal tie
             // (P6): write the source's order out, which moves only an entry a tie would now misplace.
             writeEntryOrder(placedEntries)
-            report.stacks += s.name to stackEntries.count { !it.isMarker }
+            tally.stacks += s.name to stackEntries.count { !it.isMarker }
         }
     }
 

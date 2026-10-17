@@ -11,6 +11,9 @@ import type {
   DeleteCuesRequest,
   DeleteCuesResponse,
   DuplicateCueResponse,
+  CopyCuesFromRequest,
+  CopyCuesFromResponse,
+  UpdateStageResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -188,9 +191,27 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    // `copyCue` stood here, fired by a `CopyCueDialog` that was deleted before this sweep;
-    // copying a cue between projects is `cloneProject` or an export/import today. The route
-    // remains server-side.
+    /**
+     * *Copy from another show…*: cues of `fromProjectId` copied into this project, each loose or a
+     * new entry at the end of `stackId`. A dry run writes nothing and invalidates nothing.
+     */
+    copyCuesFrom: build.mutation<CopyCuesFromResponse, { projectId: number } & CopyCuesFromRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/cues/copy-from`,
+        method: 'POST',
+        body: body satisfies CopyCuesFromRequest,
+      }),
+      invalidatesTags: (result, _error, { projectId, dryRun }) =>
+        result == null || dryRun
+          ? []
+          : [
+              { type: 'CueList', id: projectId },
+              'CueList',
+              { type: 'CueStackList', id: projectId },
+              'LookList',
+              'TemplateList',
+            ],
+    }),
 
     applyCue: build.mutation<
       ApplyCueResponse,
@@ -220,6 +241,19 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * *Update stage* (show-cue-editing plan §3.5, D11): a live cue's stored rows and effects to the
+     * stage over its own fade. `dryRun` answers the counts and sends nothing. Stores nothing, so it
+     * invalidates nothing: `cueHolds.state` clears the mark.
+     */
+    updateCueStage: build.mutation<UpdateStageResponse, { projectId: number; cueId: number; dryRun: boolean }>({
+      query: ({ projectId, cueId, dryRun }) => ({
+        url: `projects/${projectId}/cues/${cueId}/update-stage`,
+        method: 'POST',
+        body: { dryRun },
+      }),
+    }),
+
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
     // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
     // capture, plus the programmer overlay it used to miss, as one Record source among
@@ -239,8 +273,10 @@ export const {
   useCueDeletePreviewQuery,
   useDeleteCuesMutation,
   useDuplicateCueMutation,
+  useCopyCuesFromMutation,
   useApplyCueMutation,
   useStopCueMutation,
+  useUpdateCueStageMutation,
 } = cuesApi
 
 /**

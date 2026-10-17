@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, renderHook, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
@@ -58,6 +58,7 @@ import { store } from './index'
 import { restApi } from './restApi'
 import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
 import { handleWindowCommand, useWindowsBridge } from '@/components/screens/useWindowsBridge'
+import { ShowOnStageButton } from '@/components/cues/editor/ShowOnStageButton'
 import type { DeskWindow } from '@/api/windowsApi'
 
 /**
@@ -251,6 +252,30 @@ describe('the announce', () => {
     expect((windowsWs.announced[3] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'on' })
     // Six keys, never a seventh: the source and the work lights ride inside `viewOptions`.
     expect(Object.keys(windowsWs.announced[3] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+  })
+
+  it('carries the cue in edit beside its source once a cue editor’s Show on stage points the window (show-cue-editing plan §3.7)', async () => {
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/1/stage']}>
+          <Routes>
+            <Route path="*" element={<><Probe /><ShowOnStageButton cueId={17} entryId={170} /></>} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    )
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: /show on stage/i }))
+    expect(visSource()).toBe('edit')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({
+      viewpoint: 'orbit',
+      source: 'edit',
+      editEntry: '170',
+      workLights: 'off',
+    })
+    // Inside `viewOptions`, never beside it: the announce's six keys hold.
+    expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
   })
 
   it('carries the applied tables’ table, and re-announces when it moves (venue-visit plan S14)', async () => {

@@ -157,7 +157,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
-| [`FU-CUE-COPY-ROUTE`](#fu-cue-copy-route) | Blocked | Cues | cue model plan session 6 (venue-visit R1.6) |
+| [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
+| [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -3036,7 +3037,7 @@ A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with th
 it names, from add-cue, an entry's removal, an entry's number and a stack delete. Reorder and
 sort-by-number (`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the
 other `placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack,
-the copy in `routes/projectCues.kt`, Record CREATE into a stack, and MCP `add_cue_to_stack` and
+Record CREATE into a stack, and MCP `add_cue_to_stack` and
 `build_cue_stack`. The pad keeps the old number until something else refetches the page. This
 predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
 renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
@@ -3055,23 +3056,37 @@ move-in-dark set from the Show view rather than by re-recording. **Then**: the t
 cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
 cell), written through the same `CueRowStore` flush as a third kind of draft entry.
 
-### `FU-CUE-COPY-ROUTE`
+### `FU-UPDATE-STAGE-TIMED`
 
-**The REST cue copy drops what it cannot map, unreported** · Blocked · Venue-visit S16 review,
-2026-10-17
+**Update stage leaves a cue's timed effects and timed layers to its next GO** · Trigger ·
+Show-cue-editing plan session 7 (venue-visit R2.7), 2026-10-17
 
-`POST /cues/{id}/copy` (`routes/projectCues.kt`) copies one cue into another project through
-`copyCueRecord`. A speed master the target lacks by index is left out with only a log line
-(`mapCueSpeedMasters`), and `CopyCueResponse` has nowhere to say so, where `copy_to_project` reports
-it under `unresolved`. Its layers are worse: `look` and `template` are copied as they stand, so a
-layer copied across projects still names the source project's Look or palette. No client calls the
-route — the frontend's `CopyCueDialog` is gone — and only tests do. **Blocked on**: cue model plan
-session 6 (venue-visit R1.6), which removes it and `getOrCreateUnsortedStack` with it, and builds the
-cross-project copy on `copy_to_project`'s mapping. **Then**: delete the route, `CopyCueRequest` /
-`CopyCueResponse` and their tests (`CueRoutesTest`, `CueLayerSourceInvariantTest`, the copy step in
-`CueSpeedMastersTest`), and check the replacement reports every unmapped speed master as
-`copy_to_project` does. If R1.6 slips and the route is wanted sooner, fix both gaps instead: map a
-layer's Look and palette by name and add an `unresolved` list to the response.
+*Update stage* (`routes/cueUpdateStage.kt`) brings a live cue's rows and its untimed effects in line
+with the stored cue, and leaves what `CueTriggerManager` fires on a delay or an interval as the cue's
+last first hold armed it (Chris's call, 2026-10-17): the timers hold the cue data they were armed
+with, so an edited or removed timed effect keeps firing as it was, a new one waits for the next GO,
+and a recurring timed layer's next fire re-cooks the rows from `TimedFireCook`'s armed copy — which
+undoes the Update stage's rows for that cue until its next GO. The last is not new: a Record or Update
+republish of the same cue has the same result. An effect moved from timed to untimed is started by
+Update stage beside the copy its timer already fired, untagged with its uuid, and the two run together
+until the next GO. **Trigger**: an operator edits a live cue's timed
+effect or timed layer and expects *Update stage* (or a Record) to send it. **Then**: let the timers
+read the cue from a per-cue holder *Update stage* and `republishCueIfLive` replace — the fired set
+kept for layers that survive, unfired delays keeping their start — rather than re-arming them, which
+would fire a delay again after the press.
+
+### `FU-UPDATE-STAGE-EFFECT-RAMP`
+
+**Update stage's ramp skips a key a running effect covers** · Trigger · Show-cue-editing plan
+session 7 (venue-visit R2.7), 2026-10-17
+
+*Update stage* ramps the cue's rows at transmit (`TransmitFade` through
+`publishCueLayerToControllers`), which leaves every key in `coveredByRunningEffects()` to the effect.
+The effect's tick resets such a key to its base with no fade each pass, so the base under a running
+effect moves at once, and under an effect the same press starts the ramp is overwritten on that
+effect's first tick. A row's own fade has the same limit. **Trigger**: an operator sees the base under
+a running effect jump on *Update stage* where they expected it to fade. **Then**: a per-cue ramp in
+the resolver — the base value interpolated where the tick reads it — rather than a transmit-time fade.
 
 ## Completed
 
@@ -3083,6 +3098,10 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 - `FU-VENUE-UPDATE-BINDINGS` — Update's and Attach's dead references read every place a key is stored
   through `RigKeyReferences` (bindings, cue layer targets, Look element keys and scripts too),
   `VenueRigChecks.deadReferences` (venue-attach plan session 2).
+- `FU-CUE-COPY-ROUTE` — the REST `POST /cues/{id}/copy` is gone, with `getOrCreateUnsortedStack`; `POST
+  /cues/copy-from` copies through the one cue copier `copy_to_project` and Duplicate share, mapping
+  each layer's Look and palette by name and reporting every master it could not map (cue model plan
+  session 6, venue-visit R1.6).
 - `FU-FX-RATE-MASTER-CLEAR` — the wire can say *unscaled*: `seconds: true` on `PUT /fx/{id}` and
   `updateFx` puts an effect on *Seconds*, which for a wall-clock effect is no rate master, and the
   live editor's Revert sends it (venue-visit plan S15, D7; its done-marker cites the commit).

@@ -840,7 +840,8 @@ internal val publishVenueTool = ToolDef(
 internal val copyToProjectTool = ToolDef(
     name = "copy_to_project",
     description = "Copy show content from one project into another, without switching to either: scene elements by name, cue stacks by id with all their cues, and Looks by id. " +
-        "Everything is matched by name in the target: a cue's scenery finds the target's element of the same name (or one copied in the same call), a cue event its fixture by key, a cue layer's Look or palette the target's of the same name — copied along when the target has none. " +
+        "References are found in the target: between two projects on one venue a cue's scenery and events find the venue's element and fixture by identity, whatever version each pins; otherwise a scenery change finds the element of the same name (or one copied in the same call) and an event the fixture of the same key and type. " +
+        "A cue layer's Look or palette, and a palette an effect parameter names (tmpl:), is the target's of the same name — copied along when the target has none. Speed masters map by number, scripts by name. " +
         "Painted cloths bring their images. Copies get new ids and keep their names; a name the target already uses is refused. " +
         "Anything that does not resolve in the target is listed in `unresolved` rather than guessed: rows naming a fixture or group the target lacks are kept (they read as missing), a scenery change, event or script trigger that cannot resolve is left out. Prompt-book anchors are not copied. " +
         "All or nothing; run it with dryRun first. Stored data only — it changes no output.",

@@ -176,14 +176,12 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
             cue.id.value to template.id.value
         }
 
-        // Into the same project: a cross-project copy would also carry the source project's
-        // template reference across, which is a different problem and not this test's.
-        val resp = client.post("/api/rest/projects/$projectId/cues/$sourceCueId/copy") {
+        val resp = client.post("/api/rest/projects/$projectId/cues/$sourceCueId/duplicate") {
             contentType(ContentType.Application.Json)
-            setBody(CopyCueRequest(targetProjectId = projectId, newName = "copied"))
+            setBody(DuplicateCueRequest())
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
-        val copiedCueId = resp.body<CopyCueResponse>().cueId
+        val copiedCueId = resp.body<DuplicateCueResponse>().cueId
 
         transaction(state.database) {
             val layer = DaoCue.findById(copiedCueId)!!.layers.single()

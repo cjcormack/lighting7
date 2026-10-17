@@ -63,6 +63,11 @@ export type WindowViewOption =
       label: string
       kind: 'enum'
       values: readonly string[]
+      /**
+       * Values offered only while the row already holds one — the Stage source's *Cue in edit*,
+       * which needs a cue the row cannot name (show-cue-editing plan §11, 19).
+       */
+      whileShown?: readonly string[]
       /** A label per value, for an enum whose wire spelling is not what the row should say. */
       valueLabels?: Readonly<Record<string, string>>
       /**
@@ -142,14 +147,17 @@ export const STAGE_VIEWPOINT_OPTION: WindowViewOption = {
  * will look like from row F"). Two of the four on purpose: the board draws the two a hall screen is
  * set to, and the View menu on the window itself still offers all four — a row whose window is on
  * Output + Programmer or Programmer only shows neither pressed, which is the truth: it is on neither.
- * The target applies the value through `lib/stageViewpoint.ts`'s `applyStageViewOptions`.
+ * *Cue in edit* is offered only while the row's window already shows one (show-cue-editing plan §11,
+ * 19): the row cannot name a cue, so it can only leave it; a cue editor's *Show on stage* points the
+ * window. The target applies the value through `lib/stageViewpoint.ts`'s `applyStageViewOptions`.
  */
 export const STAGE_SOURCE_OPTION: WindowViewOption = {
   key: VIEW_OPTION_SOURCE,
   label: 'Source',
   kind: 'enum',
   values: ['output', 'nextGo'],
-  valueLabels: { output: 'Output', nextGo: 'Next GO' },
+  whileShown: ['edit'],
+  valueLabels: { output: 'Output', nextGo: 'Next GO', edit: 'Cue in edit' },
 }
 
 /**

@@ -516,16 +516,3 @@ fun deleteCueScenery(cueId: EntityID<Int>): Int = DaoCueScenery.deleteWhere { Da
 fun deleteStackScenery(stackId: EntityID<Int>): Int = DaoCueStackScenery.deleteWhere { DaoCueStackScenery.stack eq stackId }
 
 fun deleteLookScenery(lookId: EntityID<Int>): Int = DaoLookScenery.deleteWhere { DaoLookScenery.look eq lookId }
-
-/** [from]'s scenery written onto [to] — a copied cue moves the set exactly as its original does. */
-fun copyCueScenery(from: DaoCue, to: DaoCue) {
-    for (row in cueSceneryOf(from.id)) {
-        DaoCueSceneryRow.new {
-            cue = to
-            element = row.element
-            stateJson = row.stateJson
-            transition = row.transition
-            sortOrder = row.sortOrder
-        }
-    }
-}

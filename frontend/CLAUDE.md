@@ -457,7 +457,7 @@ canvas lays each element's interpolated state over its `params.states` before bu
 (`lib/scenery.ts`'s `sceneryElements`), so the builders draw tabs and trims unchanged and **beam
 reach reads closed tabs** for free; `useSceneryClock` invalidates every frame only while a move is in
 flight. The vis source picks the scenery too (`StageSceneryContext` from `StageChannelSourceProvider`:
-Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in the cue
+Next GO and Cue in edit draw their previews'). Authoring is one `components/scenery/SceneryEditor.tsx` in the cue
 editor's Scenery tab, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
 holding its draft over a refetch; since the scenery-programmer plan's session 2 each of its rows is
 element select · time · × over a `SceneryControl` (§"The editor kit") in `commit="release"`, so a row
@@ -5324,16 +5324,17 @@ top-level announce key would drop the frame (`windowsApi.test.ts` still pins the
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
 the libraries, carrying three options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
 Plan | Front | Side*), since session 3 `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
-GO*, an `enum` segment) and since the stage-view menu plan's session 2 `workLights`
+GO*, an `enum` segment, with *Cue in edit* while the window shows one) and since the stage-view menu plan's session 2 `workLights`
 (`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*) — and **no immersive** — it is a window view,
 not a live view, so it has no `ShowHeader` to leave standing. `announcedViewOptions` takes the Stage
 options (`stageViewOptions`: the viewpoint, the source and the work lights) as its fourth argument
 and sends them only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose
 descriptor carries it and the three only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
 which ignores a value outside each vocabulary — a camera, a saved view's uuid since session 2 or an
-unsaved seat since session 3; one of the four vis sources; `off | on`). ⌘K gains *Show Stage on
-<window>* and *Open Stage on another display* from the same list, and `windowSetupUrl` carries
-`viewpoint=`, `source=` and `workLights=`, which the Stage route applies on arrival and strips
+unsaved seat since session 3; one of the five vis sources, `edit` only beside a positive `editEntry`
+or `editCue`; `off | on`). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
+the same list, and `windowSetupUrl` carries `viewpoint=`, `source=` (with `editEntry=` or `editCue=`
+under `edit`) and `workLights=`, which the Stage route applies on arrival and strips
 (`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
@@ -5753,8 +5754,36 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   the keys — not on a focused control or field — and asks to unlock, as the Values grid's refused
   keys do. `CueEditorIsolation` clears the programmer's scope, focused layers and rail-tab claim
   above both tabs, for the grid's reason.
+- **Edited since GO and Update stage** (session 7, D4, D11, §3.5): these tabs' writes send nothing
+  to the stage, so the desk marks a held cue they changed in what Update stage sends — a row's
+  value, an untimed layer or effect, not a row's own fade or a timed one — and a live cue whose Look
+  or palette had its effects edited; a Record leaves the mark. It is `cueHolds.state`'s `edited`, read by
+  `useCueEdited` (`store/cueHolds.ts`, narrowed to the one answer). `EditedSinceGoChip`
+  (`components/cues/EditedSinceGo.tsx`) draws *Edited since GO* on the editor's header, the cue
+  sheet's Name cell and the phone card under its identity (`CueCardBody`), and nothing otherwise;
+  `UpdateStageButton` sits beside it in the header and `CueActions`' ⋯ menu has *Update stage…*
+  under *Record…*. Both open **one confirm per press**, `UpdateStageDialog`, held in
+  `CueActionDialogsProvider` beside Record and Delete since a GO can collapse the card that opened
+  it, and mounted only while open: it reads `POST /cues/{id}/update-stage {dryRun: true}` for the
+  counts and the cue's fade (`lib/updateStage.ts`'s `updateStageLines`: *3 values change, over its
+  2.0s fade · 1 effect edited in place · 1 stopped*), names the cue and what is not re-fired, and its *Update stage* sends
+  the one real request. Locked, both ask to unlock (§4.6), or are disabled with the reason where the
+  lock is not the operator's. It is REST, so the P2 no-frame tests are unchanged. The header reaches
+  the provider through `runner/cueActionDialogsContext.ts`, the openers alone, so the editor does not
+  import the dialogs; under no provider (a test) the button is not drawn.
+- **Show on stage** (session 8, D13, §3.7; `ShowOnStageButton.tsx`) sits after *Update stage…* in
+  the header, so the card, the pane and `CueEditorSheet` all draw it. It points **this window's**
+  Stage view and Positions plan at the cue through the `edit` vis source — the entry it was opened
+  from, else the cue itself (`EditTarget`, `useVisSource.ts`), announced inside `viewOptions` as
+  `editEntry` / `editCue` — and draws the stored cue through the desk's preview, never output: an
+  entry's in its stack's context, a cue with no entry on `GET cues/{id}/preview` as a loose press,
+  refetched 300 ms after each `cueListChanged` and each `cuesRecomposed` naming the cue
+  (`hooks/useEditCuePreview.ts`). It is lit while the window shows that cue. Another editor's press
+  moves it, and a press while lit goes back to Output. It works locked, and is withheld with the
+  reason for another project's cue. The Screens row and the View menu offer *Cue in edit* only while
+  the window shows one. See `docs/stage-vis-engineering.md` §"The fifth source: Cue in edit".
 - **Not yet**: a row's own fade and move-in-dark are kept on every write but not edited here
-  (`FU-CUE-ROW-TIMING`); *Edited since GO* and *Update stage* are session 7.
+  (`FU-CUE-ROW-TIMING`).
 
 #### The cue action set
 
@@ -5764,8 +5793,8 @@ sheet's selection bar (after Set · Clear · Spread, before Deselect), the phone
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
 Prompt Book's rail card), and the Cues table's selection bar (`host="table"`, §"The Cues table"). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
-hands in nothing else. **Its Record sheet, delete confirm and unlock question live above every
-host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
+hands in nothing else. **Its Record sheet, delete confirm, Update stage confirm
+(`UpdateStageDialog`) and unlock question live above every host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
 the routed page and **above its path-keyed error boundary** — because a host can go mid-gesture: a
 card open only because it is live collapses on a GO from MIDI or another window, and a GO into the
 next stack moves the Show view to that stack's path, which remounts everything under the boundary. Without a
@@ -5787,7 +5816,8 @@ provider (a test drawing the set alone) the set draws them itself.
   multi-select *Delete…* is the same confirm. **⋯** is *Add to stack…*, *Move to stack…* —
   `useMoveCueStackEntryMutation`, the entry moved whole by the desk (Chris's call, 2026-10-16, over
   R1.4's add then remove, which dropped the number, follow and anchor) — and *Copy link*, the
-  card's address with `?entry=`.
+  card's address with `?entry=`. On the phone's ⋯ menu *Update stage…* follows *Record…* while the
+  one cue is edited since GO (§The cue editor).
 - **Locked, only Blind edit works** (D8, §4.6): every other action — *Copy link* included, the
   plan's rule — opens `UnlockShowDialog` (`components/runner/`, lifted from the cue sheet, whose
   refused cell verbs open it too), or is disabled with the reason where the lock is not the
@@ -5997,8 +6027,9 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   a loose one says *In no stack · no number or follow* in their place, and one in several places
   opened from none (as the sheet host can be) keeps the fields, disabled, saying why. A
   header field half-typed when its host goes — a GO collapsing a live card — commits
-  (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did.
-  *Edited since GO*, *Update stage…* and *Show on stage* are sessions 7 and 8, and draw nothing yet.
+  (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did. While the
+  desk marks the cue edited since GO it draws the *Edited since GO* chip and *Update stage…* (§The
+  cue editor); *Show on stage* points this window's Stage view at the cue (§The cue editor).
 - **The tabs are *Values n · Looks n · FX n · Scenery n · Events n · Cue*.** Values counts the
   values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
   (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and
@@ -6093,6 +6124,16 @@ is found — Record's *No stack* makes one.
   with `ShowLockControl` in the header, the cells inert and every action but *Blind edit* asking to
   unlock, the loose cue's editor read-only. Off the running project it reads only and draws no
   action set — every one would act on the running show — and no row opens.
+- ***Copy from another show…* is the library row's verb** (cue model plan §3.8, §10, 22), in
+  `LibraryRow`'s create slot, drawn on the current project only: `CopyFromShowSheet`
+  (`components/cues/`), mounted while open, picks the source project (any other, shows before
+  venues), its cues (a multi-select over its `GET /cues`, filtered by name or place), then where they
+  go — *No stack* or a stack, at its end — and runs `POST /cues/copy-from` as a **dry run** for its
+  review: the cues, the Looks and palettes copied or linked by name, and what will not resolve, each
+  with the records that hold it. *Copy n cues* sends the same request without `dryRun`. The mapping
+  is the desk's alone. Locked it asks to unlock first (the action set's `UnlockShowDialog`, through
+  `useCueActionDialogs`), and a GO that re-locks closes it. A copied cue whose fixture the rig lacks
+  reads as missing in its editor (`AssignmentHealth`).
 
 #### The Show position
 

@@ -296,36 +296,6 @@ class CueRoutesTest {
         assertEquals(detail, deserialized)
     }
 
-    // ─── CopyCueRequest / CopyCueResponse ────────────────────────────────
-
-    @Test
-    fun `CopyCueRequest serialization round-trips`() {
-        val request = CopyCueRequest(targetProjectId = 5, newName = "Copied Cue")
-        val serialized = json.encodeToString(request)
-        val deserialized = json.decodeFromString<CopyCueRequest>(serialized)
-        assertEquals(request, deserialized)
-    }
-
-    @Test
-    fun `CopyCueRequest newName defaults to null`() {
-        val request = CopyCueRequest(targetProjectId = 5)
-        assertNull(request.newName)
-    }
-
-    @Test
-    fun `CopyCueResponse serialization round-trips`() {
-        val response = CopyCueResponse(
-            cueId = 10,
-            cueName = "Test Cue",
-            targetProjectId = 5,
-            targetProjectName = "Other Show",
-            message = "Cue copied successfully",
-        )
-        val serialized = json.encodeToString(response)
-        val deserialized = json.decodeFromString<CopyCueResponse>(serialized)
-        assertEquals(response, deserialized)
-    }
-
     // ─── ApplyCueResponse ────────────────────────────────────────────────
 
     @Test

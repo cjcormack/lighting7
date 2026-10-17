@@ -10,6 +10,7 @@ import {
 import { descriptorsByTarget, type DescriptorsByTarget } from '../lib/programmerChannels'
 import { useFixtureLookup } from './useFixtureLookup'
 import { useNextGoSourceState } from './useNextGoPreview'
+import { useEditCueSourceState } from './useEditCuePreview'
 import { StageSceneryContext } from './stageScenery'
 import { useLiveScenery } from '../store/scenery'
 import type { LiveScenery } from '../api/sceneryApi'
@@ -111,14 +112,20 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
     visSource === 'outputProgrammer' || visSource === 'programmer',
   )
   const nextGo = useNextGoSourceState(visSource === 'nextGo')
-  // Every source but Next GO draws the stage's own scenery — the desk already counts the
+  const edit = useEditCueSourceState(visSource === 'edit')
+  // Every source but the two previews draws the stage's own scenery — the desk already counts the
   // programmer's scenery and live Looks in what it resolves — and the two programmer sources lay
   // Blind's staged moves over it (scenery-programmer plan D12), as their channels preview the blind
   // programmer. Output draws live. Memoised, so a frame with nothing staged is the frame itself.
   const live = useLiveScenery()
   const scenery = useMemo(
-    () => (visSource === 'nextGo' ? (nextGo.scenery ?? live) : sceneryForSource(live, visSource)),
-    [visSource, nextGo.scenery, live],
+    () =>
+      visSource === 'nextGo'
+        ? (nextGo.scenery ?? live)
+        : visSource === 'edit'
+          ? (edit.scenery ?? live)
+          : sceneryForSource(live, visSource),
+    [visSource, nextGo.scenery, edit.scenery, live],
   )
   const source = useMemo(() => {
     switch (visSource) {
@@ -136,9 +143,12 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
         return nextGo.source
           ? createOverlayChannelSource(outputChannelSource, nextGo.source)
           : outputChannelSource
+      case 'edit':
+        // Overlaid as Next GO is, and for its reason. Drawn only: nothing here writes the rig.
+        return edit.source ? createOverlayChannelSource(outputChannelSource, edit.source) : outputChannelSource
     }
-  }, [visSource, programmer.source, nextGo.source])
-  return { source, settled: programmer.settled && nextGo.settled, scenery }
+  }, [visSource, programmer.source, nextGo.source, edit.source])
+  return { source, settled: programmer.settled && nextGo.settled && edit.settled, scenery }
 }
 
 /**
