@@ -20,17 +20,52 @@ let looks: LookSummary[] = []
 
 const press = vi.fn(async () => 'on' as const)
 const pairs: PressPair[] = []
+/** A focused Look layer, where a test says so: `usePress` lands there, and the effects arm absorbs. */
+const focus = vi.hoisted(() => ({ look: null as null | { projectId: number; lookId: number; lookName: string } }))
 vi.mock('@/hooks/usePress', () => ({
   usePress: (_projectId: number, pair: PressPair) => {
     pairs.push(pair)
-    return { press, into: { kind: 'programmer' } }
+    return { press, into: focus.look != null ? { kind: 'look', lookName: focus.look.lookName } : { kind: 'programmer' } }
   },
+  usePressLook: () => focus.look,
 }))
 
 vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: library }),
 }))
-vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
+const absorb = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve() })))
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }), useAbsorbLookEffectsMutation: () => [absorb] }))
+const stopEffect = vi.hoisted(() => vi.fn())
+vi.mock('@/components/fx/useEffectControls', () => ({ useStopEffect: () => stopEffect }))
+const fxWire = vi.hoisted(() => ({ active: [] as unknown[] }))
+vi.mock('@/store/fixtureFx', () => ({
+  useActiveEffectsQuery: () => ({ data: fxWire.active }),
+  useEffectLibraryQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
+vi.mock('@/hooks/useFixtureLookup', () => ({
+  useFixtureLookup: () => ({ fixtures: [{ key: 'hex-1', name: 'Hex 1', groups: [], properties: [], elements: [] }], fixtureByKey: new Map() }),
+}))
+/** The effects arm's `FxPicker`, by the props it is handed; a press on it starts effect 77, as a tap would. */
+const fxPicker = vi.hoisted(() => vi.fn())
+vi.mock('@/components/fx/FxPicker', () => ({
+  FxPicker: (props: { onCurrent: (c: unknown) => void }) => {
+    fxPicker(props)
+    return (
+      <button type="button" data-fx-picker onClick={() => props.onCurrent({ effectId: 77, effectType: 'Pulse', propertyName: 'dimmer' })}>
+        start
+      </button>
+    )
+  },
+}))
+vi.mock('@/components/fx/FxEditor', () => ({
+  FxEditor: ({ onStop }: { onStop?: () => void }) =>
+    onStop == null ? null : (
+      <button type="button" onClick={onStop}>
+        stop it
+      </button>
+    ),
+}))
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
 vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdit: true }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: vi.fn() }))
@@ -184,7 +219,7 @@ const panel = () => screen.getByRole('dialog')
 /** A section's pads' names, by the section's key. */
 function sectionPads(key: string): string[] {
   const section = panel().querySelector(`[data-picker-section="${key}"]`)
-  return [...(section?.querySelectorAll('button') ?? [])].map(
+  return [...(section?.querySelectorAll('button:not([data-picker-bare-effects])') ?? [])].map(
     (pad) => pad.querySelector('span span:last-child')?.textContent ?? '',
   )
 }
@@ -197,6 +232,11 @@ beforeEach(() => {
   recentTemplatesSpy.mockClear()
   library = [PRESSED, GENERIC, PER_FIXTURE, EFFECT, WHITE_KEY, FULL, WIDE, SOFT]
   looks = []
+  focus.look = null
+  fxPicker.mockClear()
+  absorb.mockClear()
+  stopEffect.mockClear()
+  fxWire.active = []
 })
 afterEach(cleanup)
 
@@ -397,5 +437,78 @@ describe('ApplyPicker — Looks', () => {
     render(picker({ library: 'looks', pair: { targets: HEX_1, families: null } }))
     fireEvent.click(within(panel()).getByText('On its own fixtures'))
     expect(pairs.at(-1)).toEqual({ targets: [], families: null })
+  })
+})
+
+/**
+ * The effects arm (apply-model plan §8 session 6): what ⌘K *Apply FX*, the rail's *+ Effect* and a
+ * band's *+ Effect …* open — `FxPicker` on the bare effect press over the door's pair, above the
+ * effect palettes; under a focused Look the effect starts on `/fx/add` and is absorbed on close.
+ */
+describe('ApplyPicker — effects', () => {
+  const MASKED: PressPair = { targets: HEX_1, families: ['COLOUR'] }
+
+  it('hands FxPicker the bare effect press with the door’s mask, on the cell’s property', () => {
+    render(picker({ library: 'effects', pair: MASKED, family: 'COLOUR', property: 'uv' }))
+    expect(fxPicker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        press: { projectId: 1, families: ['COLOUR'] },
+        initialFamily: 'COLOUR',
+        preferredProperty: 'uv',
+        target: expect.objectContaining({ type: 'fixture' }),
+      }),
+    )
+    expect(sectionPads('effect-palettes')).toEqual(['Amber Breathe'])
+  })
+
+  it('sizes the effects to their list, where the palettes hold their height', () => {
+    render(picker({ library: 'effects', pair: MASKED }))
+    expect(panel().className).not.toContain('h-[540px]')
+    cleanup()
+    render(picker())
+    expect(panel().className).toContain('h-[540px]')
+  })
+
+  it('reaches the bare effects from the palettes’ Effects section, and back', () => {
+    render(picker())
+    fireEvent.click(panel().querySelector('[data-picker-bare-effects]')!)
+    expect(panel().querySelector('[data-fx-picker]')).not.toBeNull()
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Palettes' }))
+    expect(panel().querySelector('[data-picker-section="all"]')).not.toBeNull()
+  })
+
+  it('in a focused Look starts on /fx/add and absorbs the effect it ends on, once, when it closes', () => {
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    expect(fxPicker).toHaveBeenLastCalledWith(expect.objectContaining({ press: undefined }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    expect(absorb).toHaveBeenCalledTimes(1)
+    expect(absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, effectIds: [77] })
+    cleanup()
+    expect(absorb).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops the auditioned effect from its editor’s ×, and then absorbs nothing', () => {
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    fxWire.active = [{ id: 77, effectType: 'Pulse', propertyName: 'dimmer' }]
+    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    fxPicker.mock.lastCall![0].onEdit()
+    rerender(picker({ library: 'effects', pair: MASKED }))
+    fireEvent.click(within(panel()).getByRole('button', { name: 'stop it' }))
+    expect(stopEffect).toHaveBeenCalledWith(expect.objectContaining({ id: 77 }))
+    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    expect(absorb).not.toHaveBeenCalled()
+  })
+
+  it('absorbs nothing on the programmer, or when nothing was started', () => {
+    const { rerender, unmount } = render(picker({ library: 'effects', pair: MASKED }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    unmount()
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    render(picker({ library: 'effects', pair: MASKED })).unmount()
+    expect(absorb).not.toHaveBeenCalled()
   })
 })

@@ -369,7 +369,7 @@ showed the strip, now show the band too, since it is the family's offer and the 
   live picker as its editor, with the band replacing its Recent chips.
 - **Effects** lists what runs on the selection (§3.4), gains *+ Effect …*, and edits by selection: with
   part of an effect selected its editor says *Hex 1–2 of 1–4* and offers *Apply to Hex 1–2* and
-  *Select all 4*.
+  *Edit all 4* (session 6's decisions say why it is not *Select all 4*).
 
 ### 4.6 The rail
 
@@ -541,11 +541,11 @@ Each session is one PR (P1).
   during session 5): a press carries neither, and the toggle routes take neither. Recorded as
   `FU-PRESS-LAYER-MASTER`; a cue layer keeps them in the cue's sheet.
 
-### Session 6 — Effects in the popup (frontend)
+### Session 6 — Effects in the popup (frontend) — done, `e8217314`
 
 - The Effects band (§4.3); *+ Effect*, ⌘K *Apply FX* and `ApplyPicker`'s Effects section on
   `POST /programmer/effects`.
-- The split editor (§4.5's *Apply to Hex 1–2 · Select all 4*) in the FX editor popover, wherever it
+- The split editor (§4.5's *Apply to Hex 1–2 · Edit all 4*) in the FX editor popover, wherever it
   opens.
 - `FxAddSheet` retired into the band and the picker.
 - **What R4.3 left.** *+ Effect* and ⌘K *Apply FX* already start one effect over the selection,
@@ -576,6 +576,38 @@ Each session is one PR (P1).
   - A palette layer's effect offers no split.
   - In a focused Look, an effect is absorbed.
 - **Docs:** the frontend CLAUDE.md's FX paragraphs.
+- `FxAddSheet` went into the one picker as its **effects arm** (decided during session 6):
+  `ApplyPicker` with `library="effects"` is `FxPicker` on the bare effect press (a tap starts, a second
+  swaps, phase kept, *Edit <name>* opens the editor in the panel) above the effect palettes that fit.
+  ⌘K *Apply FX*, the rail's *+ Effect* and a band's *+ Effect …* open it, and the palettes' Effects
+  section reaches it through an *Effect…* pad. The bare effects are `FxPicker` there rather than pads,
+  so auditioning by tapping keeps its swap and its editor.
+- *+ Effect* and ⌘K read one pair, `useWindowEffectPair` (decided during session 6): the targets
+  `useWindowSelectionTargets` gives, so a group row stays one group effect with its distribution
+  (§3.4), and the mask a press from the window carries. The marquee's heads (`useWindowPressPair`)
+  would have expanded a group row to its members.
+- **A subset edit is held, then sent once** (decided during session 6): with part of a Local effect
+  selected the editor sends nothing as it moves, and *Apply to Hex 1–2* sends the edit as `PUT /fx/{id}`
+  with those heads as `targets`. A split answers one copy per head, so the editor follows the edited
+  copies, sending every later move to each. Splitting on every move of a drag would mint a set of
+  copies per frame. Which heads are covered is the client's reading, for the words alone
+  (`components/fx/effectSplit.ts`); the split stays the desk's.
+- *Select all 4* became ***Edit all 4*** (decided during session 6): it sends what is held to the whole
+  effect in place and carries on live, without moving the selection. Inside a cell's popup the batch is
+  the selection and cannot be moved from within it, and moving the desk's from an editor would retarget
+  every other door. §4.5 and the session's scope above use the new words.
+- The Effects band lists the effects **on its property** that paint one of the heads (decided during
+  session 6); a cue's is drawn but not opened, its home being the cue. `paletteFits` narrows a Beam
+  cell's effect palettes by the property the effect drives, as it narrows value palettes by their rows.
+  The colour editor draws the band only in the programmer's cell: the busk Colour tab's effects are its
+  Effects tab's (session 7).
+- **⌘K on the programmer opens the rail's *+ Effect*** (decided during session 6): the palette is
+  mounted outside the programmer's marquee store and scope, so a picker of its own there could read
+  neither the window's mask nor a focused Look layer. Elsewhere ⌘K opens its own picker on the window's
+  pair.
+- The effects view of the picker sizes to its list, up to the same 540px, where the palettes and Looks
+  hold their height; and it opens over the cell's popup, its own lit row the feedback while it is open
+  (Chris's calls during session 6's review).
 
 ### Session 7 — The busk side sheets (frontend)
 

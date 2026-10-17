@@ -261,6 +261,7 @@ const RgbColourCell = memo(function RgbColourCell({
         targets={targets}
         projectId={projectId}
         palettes={palettes}
+        effects={palettes}
         // The heads a colour commit reaches — `targets`, not `batch.count`, which also counts a
         // colour-wheel head the commit refuses; the read-out counts the same list.
         labelLine={

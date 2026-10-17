@@ -792,16 +792,42 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
-  (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
-  a sheet (`FxAddSheet`, whose Done closes it; both start **one effect over the selection** — the
-  rail the programmer's rows in grid order (`selectRowTargets`, published by the list beside its
-  flattened keys), ⌘K's *On the selection* this window's pair — one row being that fixture, cell or
-  group alone, several an `FxTarget` of type `selection` sent as `POST /fx/add`'s `targets`
-  (`components/fx/selectionEffectTarget.ts`, effects plan D3); in a focused Look layer the effect is absorbed into the
-  Look once the session ends — closed or unmounted — by the id the create answered, after the editor
-  lands its held move). The popover is bounded by the room Radix measures beside its anchor and
-  scrolls inside it. `ActiveEffectSheet`,
+  The programmer rail's *Edit…*, the applied FX table's, `FxSheet`'s chips and a cell popup's
+  Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), which **follows the
+  selection** (apply-model plan D5, §4.5): with every head the effect paints selected, or none, a
+  move edits it in place; with **some** of a Local effect's heads selected it says *Hex 1–2 of Hex
+  1–4*, **holds** the edit (`FxEditor`'s `hold`), and *Apply to Hex 1–2* sends it once over REST —
+  `PUT /fx/{id}` with those heads as `targets` (`useUpdateFxMutation`) — and the desk splits them off,
+  each where it was, answering the copies (`EffectSplitResponse`, put into the running list at once).
+  The editor then follows the edited copies: the host reads the first by id (`onFollow`) and every
+  later move goes to each (`alsoIds`), and pause and × act on each too. *Edit all 4* sends what is held
+  to the whole effect in place. A held edit is never the live floor's: if the selection moves off the
+  subset it is dropped and the editor redrawn from the effect, rather than landing on every head. A
+  close ends the session, so a copy opened again later is edited alone; the editor stays where its row
+  was though the split took that row away (a remembered anchor); and while the split is on its way the
+  editor is inert and a close keeps it closed.
+  The split goes over REST because the `updateFx` frame answers one only as `fxChanged` REMOVED and
+  ADDED, which names no copy to follow. A palette layer's effect (plan P5), a cue's and a manual one
+  never offer a split. Which heads the selection covers is the client's reading, for the words alone
+  (`components/fx/effectSplit.ts`, over the cell batch or the window's pair); the split is the
+  desk's, from the heads named. ⌘K *Apply FX* and the rail's `+ Effect` open the one picker's
+  **effects arm** (`ApplyPicker`, `library="effects"`): `FxPicker` on the **bare effect press**
+  (its `press` prop — a tap is `POST /programmer/effects` with the door's pair, one Local effect over
+  it, the desk first taking those heads off every other Local effect of its family), above the
+  effect palettes that fit, the editor opening in the panel and its Done coming back to the list.
+  The two doors read one pair, `useWindowEffectPair` (`components/fx/selectionEffectTarget.ts`):
+  the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
+  kept a group so its effect is one group effect with its distribution, the desk's while following,
+  else the busk view's copy — and the mask a press from this window carries. **On the programmer
+  ⌘K's *On the selection* opens the rail's `+ Effect`** (`programmer/addEffectDoor.ts`, the rail
+  registering its door while mounted): the palette lives in `Layout`, outside the programmer's
+  marquee store and scope, so a picker of its own there could read neither the marquee's mask nor a
+  focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
+  and per-group items press that one target with no mask. In a focused Look layer the bare effect starts
+  on `/fx/add` alone and is absorbed into the Look once the panel's session ends — closed or
+  unmounted — by the id the create answered, after the editor lands its held move: the press's
+  replacement would take heads off other Local effects, which a press into a Look must not do. The
+  popover is bounded by the room Radix measures beside its anchor and scrolls inside it. `ActiveEffectSheet`,
   `AddEditFxSheet` and (session 5) `EffectParameterForm` are deleted. A refused write comes back as
   `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
 - **A pad's running effect** (§3.3, D20; session 5): an instance a **programmer** palette layer
@@ -921,8 +947,8 @@ offline and on a parked row, the picker and the inline editor in the tray — an
 the two hosts. Session 3's list is `FxPicker.test.tsx` (a tap starts a programmer-owned effect; a
 second tap is one `updateFx` and no add), `FxEditor.test.tsx` (a drag at most one frame per 50 ms
 with the release landing, Revert's snapshot, Around as `ADDITIVE` + 128 with the centre hidden and
-read back, Within as `MULTIPLY`) `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect) and `FxAddSheet.test.tsx` (the layer
-absorb, once, after the editor's flush).
+read back, Within as `MULTIPLY`) and `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect);
+the layer absorb, once, is `ApplyPicker.test.tsx`'s effects arm.
 
 Session 4's list is `HeadsGroups.test.tsx` — the pick resets when the target changes, a run selects,
 *All* on a group sends one group write, a subset sends member writes carrying the group, no raw channel
@@ -2856,8 +2882,12 @@ that turns that into a route, and every door calls it: the palette strip, the on
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour tab), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
-which carries its bank's solo siblings. The effect door — ⌘K *Apply FX* and the picker's Effects
-section — is session 6's, on the desk's `POST /programmer/effects`.
+which carries its bank's solo siblings. The **bare effect** is the one source `usePress` does not
+take: ⌘K *Apply FX*, the rail's *+ Effect*, a band's *+ Effect …* and the picker's Effects section
+press it through `FxPicker`'s `press` arm, `POST /programmer/effects` with the door's pair (one Local
+effect over the selection; the desk takes those heads off the family's other Local effects), or, in a
+focused Look, `/fx/add` then `absorb-effects` (§3.2 rule 6) — see §FX in the fixture sheet's
+paragraphs.
 
 - **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
   *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
@@ -2992,7 +3022,7 @@ under the operator's hand on the second press.
 one picker every library door opens: on every family the selection fits from `All · n` and the rail's
 *+ Palette*, on one family from a popup band's *All …*, on the Looks from the rail's *+ Look*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · Effects
-(effect palettes; session 6 adds bare effects) · **Outside the mask** — what the heads could take but
+(the effect palettes, and *Effect…*, the way to the bare effects) · **Outside the mask** — what the heads could take but
 the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
 **still pressable**, since the mask is tested on the on arm only and a lit one must come off. Built
 from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and
@@ -3009,7 +3039,16 @@ desk — the rail mounts it only while open, since its pair is a marquee subscri
 it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
 a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
 `@container` is not an ancestor and a container class there would match nothing, silently.
-`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm and the Look's own fixtures.
+**The effects arm** (`library="effects"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
+rail's *+ Effect* and a band's *+ Effect …* open, and the palettes' *Effect…* switches to (with a way
+back): `FxPicker` over the pair on the bare effect press, opening on the door's family and preferring
+its property (`property`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
+the **effect palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
+Look the effect starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
+unless the editor's × stopped it. It sizes to its list (up to the same 540px), where the palettes and
+Looks hold their height so a search never moves the panel under the pointer.
+`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Look's own fixtures and the
+effects arm's press and absorb.
 
 **Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
 / Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
@@ -4042,10 +4081,21 @@ each was:
   would close the sheet with it. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists and the cue editor's Values grid draw the
   editor bare (R2 P2), and a slider cell whose property no value palette can carry (`paletteCarries`,
-  the closed `TEMPLATE_PROPERTIES` vocabulary) has no band. A setting cell (gobo, prism) has none
-  because `SettingCell` is not wrapped — prism is in that vocabulary.
-  The Effects band below the editor is session 6's. `PaletteBands.test.tsx` pins the offer per
-  cell, the press and the bare arm.
+  the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
+  (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
+  carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
+  Effects band** (`EffectsBand`, session 6; `ColourEditor` draws it itself under the cell, not in
+  the busk Colour tab): the effects on this property that paint one of the heads, **lit** — a tap
+  opens `FxEditorPopover` beside the chip over the cell batch, so a Local effect on more heads than
+  these offers the split; a cue's is drawn but not opened — then the family's **effect palettes**
+  that fit, pressed through `usePress` as the Palettes band's are, and *+ Effect …*, the picker's
+  effects arm on this property under the cell's family. Its family is the property's group as the
+  press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's effect
+  palettes by the property the effect drives — a beam built-in's library property, Slot Steps' named
+  setting, Palette Steps' palettes' rows (`effectPaletteDrives`, given the library and palette list
+  through its `EffectFitContext`) — so a zoom cell is offered the Zoom Breathe palettes and a gobo cell
+  the Slot Steps of its gobo. `PaletteBands.test.tsx` pins the offer per cell, the press, the bare
+  arm and the Effects band's offer, lit chips and setting-cell popup.
 
 - **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
   session 2): one scene element's state wherever it is edited, built from the kit — an
@@ -4751,8 +4801,9 @@ meant to hide it narrow but the nearest `@container` is the whole workspace. The
 the key is what tells them apart. Only the layer *position* is written out beside the home badge;
 the other two details ride the badge's title.
 
-`+ Effect` follows the same rule as a value edit: focused layer → into that Look (via
-`POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the programmer band,
+`+ Effect` follows the same rule as a value edit: focused layer → into that Look (started on
+`/fx/add`, then `POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the
+bare effect press (`POST /programmer/effects`), one Local effect over the selection under its mask,
 which Record writes onto the cue; Output → disabled, naming the two places that can take one.
 **Make layer** promotes a Local selection into a named Look applied here — record-look, then
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays

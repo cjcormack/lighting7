@@ -1345,6 +1345,20 @@ element filter `ALL`.
 - **Clear and Release** take copies as they take any Local effect: they are in the band, and each
   names one head.
 
+**The client's side** (apply-model plan session 6; `frontend/CLAUDE.md`'s FX paragraphs). ⌘K *Apply
+FX*, the rail's *+ Effect*, a cell popup's Effects band and the picker's Effects section start a
+library effect through `FxPicker`'s `press` arm, the bare effect press above with the door's
+selection pair; a tap swaps the auditioned effect through `updateFx`, phase kept. The fixture sheet's
+FX tray is not one of them: it starts on its own pick of heads through `POST /fx/add`. A focused Look
+layer is the other exception: there the effect starts on `POST /fx/add` and is moved into the
+Look (`absorb-effects`), since the press's replacement would take heads off other Local effects. The
+live editor (`FxEditorPopover`) follows the selection: it reads which of the effect's heads the
+window's pair (or a cell's batch) covers, for its words alone, and with some of a Local effect's heads
+covered it holds the edit until *Apply to …*, which sends it once as `PUT /fx/{id}` with those heads
+as `targets` — REST, because only REST answers the copies (`EffectSplitResponse`) for the editor to
+follow; the frame's `fxChanged` names none. It then sends every later move to each edited copy. A
+layer's, a cue's or a manual effect is edited in place and never offered the split.
+
 ### Target Types
 
 | Target | Properties | Fixture Trait |

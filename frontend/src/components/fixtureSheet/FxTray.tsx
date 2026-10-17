@@ -20,7 +20,7 @@ import { FxEditor } from '../fx/FxEditor'
 import { FxPicker, type AuditionedEffect, type FxTarget } from '../fx/FxPicker'
 import { LookTogglePicker } from '../fx/LookTogglePicker'
 import { HELD_BLIND_WORDS, HeldBlindMark } from '../fx/HeldBlindMark'
-import type { PickerFamily } from '../fx/fxEditorModel'
+import { isCueEffect, type PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
 import { OwnerEditor } from '../stage/OwnerEditor'
@@ -47,17 +47,6 @@ export interface TrayPick {
   noun: string
 }
 
-/**
- * **A cue's effect is read-only in the tray** (Fx board, *Open*; fixture-fx-sheets session 5): it
- * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put
- * back anything changed here (W5 refuses a cue's instance for the same reason). Session 3 left it
- * editable, as `ActiveEffectSheet` had; a *pad's* instance is edited (D20), being the programmer's.
- * The open row's naming of the cue is the board's *opens it*: a button that opens the cue's **cue
- * editor** in place, through `OwnerEditor` — the Stage view's *Moves with* path, not a second one.
- */
-export function isCueEffect(effect: Pick<ActiveEffect, 'programmerOwned' | 'cueId'>): boolean {
-  return !effect.programmerOwned && effect.cueId != null
-}
 
 /** How many chips the folded tray draws before *+n*. */
 const FOLDED_CHIPS = 3

@@ -1,6 +1,9 @@
+import { useCallback } from 'react'
+import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
 import type { CueTarget } from '@/api/cuesApi'
-import type { EffectDirection } from '@/api/fxApi'
+import type { EffectDirection, UpdateFxRequest } from '@/api/fxApi'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
@@ -171,6 +174,50 @@ export interface AddFixtureFxRequest {
 }
 
 /**
+ * The bare effect press, `POST /projects/{id}/programmer/effects` (apply-model plan §3.4, D5): an
+ * effect type from the library onto the selection as **one Local effect** over it. The effect's
+ * fields are [AddFixtureFxRequest]'s; where it runs is always the selection and whose it is always
+ * the programmer's, so neither `fixtureKey` nor `programmerOwned` is sent.
+ */
+export interface ProgrammerEffectRequest
+  extends Omit<AddFixtureFxRequest, 'fixtureKey' | 'targets' | 'programmerOwned' | 'beatDivision' | 'startOnBeat'> {
+  projectId: number
+  /** The selection, in the order the effect spreads over it. */
+  targets: CueTarget[]
+  /** The selection's attribute mask; absent is every attribute. */
+  families?: AttributeFamily[]
+  /** One bar when absent (venue-visit plan D16). */
+  beatDivision?: number
+  startOnBeat?: boolean
+  elementMode?: string
+}
+
+/**
+ * The press's answer: the new effect, the Local effects of its family it stopped (every head they
+ * painted was selected), and those it narrowed — gone, their unselected heads now run by `into`.
+ */
+export interface ProgrammerEffectResponse {
+  effectId: number
+  stopped: number[]
+  narrowed: { effectId: number; into: number[] }[]
+}
+
+/**
+ * `PUT /fx/{id}`'s answer when its `targets` named some of the effect's heads (apply-model plan
+ * §3.4): the effect that is gone, the copies the edit landed on, and the copies left as they were.
+ */
+export interface EffectSplitResponse {
+  splitEffectId: number
+  edited: ActiveEffect[]
+  rest: ActiveEffect[]
+}
+
+/** Whether a `PUT /fx/{id}` answered a split rather than the effect edited in place. */
+export function isEffectSplit(answer: ActiveEffect | EffectSplitResponse): answer is EffectSplitResponse {
+  return 'splitEffectId' in answer
+}
+
+/**
  * One running effect, as `GET /api/rest/fx/active` reports it. Richer than the `fxState`
  * WebSocket frame, which carries no `propertyName` or group flag — both of which the FX
  * sheet needs to place a chip in the right fixture x column.
@@ -308,6 +355,30 @@ export const fixtureFxApi = restApi.injectEndpoints({
         fixtureKey != null ? [{ type: 'FixtureEffects', id: fixtureKey }] : ['FixtureEffects'],
     }),
 
+    /** The bare effect press ([ProgrammerEffectRequest]). Current project only. */
+    pressProgrammerEffect: build.mutation<ProgrammerEffectResponse, ProgrammerEffectRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/programmer/effects`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['FixtureEffects'],
+    }),
+
+    /**
+     * An edit over REST, for the one the socket frame cannot answer: with `targets` naming some of
+     * the effect's heads it splits them off and answers the copies ([EffectSplitResponse]), where the
+     * `updateFx` frame answers only `fxChanged` REMOVED and ADDED. Without, the in-place edit.
+     */
+    updateFx: build.mutation<ActiveEffect | EffectSplitResponse, { id: number; update: UpdateFxRequest }>({
+      query: ({ id, update }) => ({
+        url: `fx/${id}`,
+        method: 'PUT',
+        body: update,
+      }),
+      invalidatesTags: ['FixtureEffects'],
+    }),
+
     removeFx: build.mutation<void, { id: number; fixtureKey: string }>({
       query: ({ id }) => ({
         url: `fx/${id}`,
@@ -360,8 +431,43 @@ export const {
   useActiveEffectsQuery,
   useEffectLibraryQuery,
   useAddFixtureFxMutation,
+  usePressProgrammerEffectMutation,
+  useUpdateFxMutation,
   useRemoveFxMutation,
   usePauseFxMutation,
   useResumeFxMutation,
   useResetFxToTemplateMutation,
 } = fixtureFxApi
+
+/**
+ * `PUT /fx/{id}` for an editor that follows what it edits: answers as the mutation does, null on a
+ * refusal (already toasted), and puts a split's copies into the running list **before** it answers —
+ * so a host reading the edited copy by id finds it at once, rather than reading nothing until the
+ * refetch the invalidation starts comes back, and closing its editor in between.
+ */
+export function useSplitFx(): {
+  splitFx: (id: number, update: UpdateFxRequest) => Promise<ActiveEffect | EffectSplitResponse | null>
+  splitting: boolean
+} {
+  const dispatch = useDispatch<typeof store.dispatch>()
+  const [updateFx, { isLoading }] = useUpdateFxMutation()
+  const splitFx = useCallback(
+    async (id: number, update: UpdateFxRequest) => {
+      const answer = await updateFx({ id, update })
+        .unwrap()
+        .catch(() => null)
+      if (answer != null && isEffectSplit(answer)) {
+        dispatch(
+          fixtureFxApi.util.updateQueryData('activeEffects', undefined, (effects) => [
+            ...effects.filter((e) => e.id !== answer.splitEffectId),
+            ...answer.edited,
+            ...answer.rest,
+          ]),
+        )
+      }
+      return answer
+    },
+    [dispatch, updateFx],
+  )
+  return { splitFx, splitting: isLoading }
+}

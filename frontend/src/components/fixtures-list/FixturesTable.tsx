@@ -1338,6 +1338,7 @@ function PropertyCell({
           label={label}
           batch={batch}
           scopeLabel={scopeLabel}
+          projectId={projectId}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}

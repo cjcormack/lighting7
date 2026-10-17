@@ -43,6 +43,31 @@ describe('paletteFits', () => {
     // A colour cell's property says nothing about which colour palettes fit: only Beam is narrowed.
     expect(paletteFits(palette({}), { families: ['COLOUR'], emitters: [], property: 'white' })).toBe(true)
   })
+
+  it('narrows a Beam cell’s effect palettes to the property the effect drives', () => {
+    const effect = (effectType: string, extra: Partial<NonNullable<TemplateSummary['effect']>> = {}) =>
+      palette({
+        family: 'BEAM',
+        kind: 'effect',
+        rows: [],
+        effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR', parameters: {}, ...extra },
+      })
+    const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
+    const library = [{ name: 'ZoomBreathe', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
+    // A beam built-in by the library's property.
+    expect(paletteFits(effect('ZoomBreathe'), zoomFit, { library })).toBe(true)
+    expect(paletteFits(effect('IrisPulse'), zoomFit, { library })).toBe(false)
+    // Slot Steps by the setting it names.
+    expect(paletteFits(effect('SlotSteps', { propertyName: 'gobo' }), { ...zoomFit, property: 'gobo' })).toBe(true)
+    expect(paletteFits(effect('SlotSteps', { propertyName: 'prism' }), { ...zoomFit, property: 'gobo' })).toBe(false)
+    // Palette Steps by its palettes' rows.
+    const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
+    const steps = effect('PaletteSteps', { parameters: { palettes: 'tmpl:w' } })
+    expect(paletteFits(steps, zoomFit, { templates: [wide] })).toBe(true)
+    expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { templates: [wide] })).toBe(false)
+    // Without what it needs to read, it is not narrowed.
+    expect(paletteFits(effect('IrisPulse'), zoomFit)).toBe(true)
+  })
 })
 
 describe('the mask', () => {

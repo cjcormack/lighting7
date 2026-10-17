@@ -24,7 +24,12 @@ vi.mock('@/store/templates', () => ({
 }))
 // A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
-vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/fixtureFx', () => ({
+  useRemoveFxMutation: () => [vi.fn()],
+  useEffectLibraryQuery: () => ({ data: [] }),
+  useActiveEffectsQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
