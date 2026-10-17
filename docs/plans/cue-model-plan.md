@@ -574,7 +574,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **Docs:** `frontend/CLAUDE.md`'s views (§Navigation Registry, its ⌘K count of the seven views, the
   routes rules, and §Windows' `WINDOW_VIEWS` entries).
 
-### Session 6 — copy from another show (backend + frontend)
+### Session 6 — copy from another show (backend + frontend) — done, `6ffcb054`
 
 - §3.8: the route and *Copy from another show…* in the Cues table. The REST `/cues/{id}/copy` goes,
   and with it `getOrCreateUnsortedStack`, which only that copy still calls (session 4). No client
