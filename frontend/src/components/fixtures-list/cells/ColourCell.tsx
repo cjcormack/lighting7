@@ -6,6 +6,7 @@ import type { CellResolution } from '../columns'
 import { templateTargetsOf, type CellBatch, type CellCommit, type WriteTarget } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import type { ColourPaletteSource } from '../../editor/ColourEditor'
+import { useCueBandProject, usePressCue } from '../../press/pressCue'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { useEditorCramped, type CellClickBehaviour } from '../../editor/EditorSurface'
@@ -34,7 +35,8 @@ interface ColourCellOwnProps {
    * what the Palettes band lists and presses into and what *Save as palette…* records into. The
    * container passes it for the **programmer alone**: the two plain lists deliberately draw no
    * palette strip (§List shell), and Save records from the programmer, so their cells get a disabled
-   * Save, no band and no leaves — as does a read-only mount or a test, which pass none.
+   * Save, no band and no leaves — as does a read-only mount or a test, which pass none. The cue
+   * editor passes none either; its cells draw the bands through `PressCue` (`useCueBandProject`).
    */
   projectId?: number
   /**
@@ -228,9 +230,14 @@ const RgbColourCell = memo(function RgbColourCell({
   // A white-mix row in a batch with RGB heads opens this picker, but its face still reads as a
   // warmth, as the same row does outside the batch.
   const rowMix = isWarmthOnly(resolutions) ? firstWhiteMix(resolutions) : undefined
+  // The bands' project: the programmer's, else the cue editor's, whose presses land in the cue.
+  // Only the programmer's draws the appearance leaves and *Save as palette…*, which read the stage.
+  const cueProjectId = useCueBandProject()
+  const inCue = usePressCue() != null
+  const bandProject = projectId ?? cueProjectId
   const palettes = useMemo<ColourPaletteSource | undefined>(
-    () => (projectId == null ? undefined : { projectId, targets: templateTargets, families: COLOUR_FAMILY }),
-    [projectId, templateTargets],
+    () => (bandProject == null ? undefined : { projectId: bandProject, targets: templateTargets, families: COLOUR_FAMILY }),
+    [bandProject, templateTargets],
   )
 
   const [saveMounted, setSaveMounted] = useState(false)
@@ -282,10 +289,9 @@ const RgbColourCell = memo(function RgbColourCell({
                 onSpread({ r: channels.r, g: channels.g, b: channels.b })
               }
         }
-        // The footer's verbs act on a batch. A cell mounted with none — the cue grid's read-only
-        // colour, whose trigger is still tabbable — has nothing for Pick to read or Save to record,
-        // so it draws no footer rather than an enabled Pick that toasts.
-        footer={batch != null}
+        // Pick and Save read the stage over a batch: a cell with no batch (the cue grid's read-only
+        // colour) or in the cue editor, which records nothing from the stage, draws no footer.
+        footer={batch != null && !inCue}
         // The grid cell's only editor, so this is where the typed R/G/B and emitter boxes belong
         // (`PD-COLOUR-EDITOR-INPUTS`). Off by default, for a caller with its own channel bank beside
         // the swatch — the property visualisers were, until fixture-fx-sheets session 4.

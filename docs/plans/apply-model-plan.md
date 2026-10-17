@@ -261,6 +261,11 @@ and a layer records both as its `targets` and `propertyMask`.
   > set — `familyReplacements`, `paletteHeads`, `pressTargets` — is private to
   > `ProgrammerLayerStack`, and the arm a door asks before its mask test (`pressWouldRelease`,
   > `routes/pressArm.kt`) reads the programmer's store. Session 8 needs both over a cue's layers.
+  > *Note (session 8, as built):* the set and the heads are `fx/LayerPressRules.kt`, read from the
+  > palettes and never from a store, and the arm is `LayerPress.wouldRelease` — the same decision
+  > `press` makes — so `ProgrammerLayerStack.toggle` (through its `wouldRelease`, which
+  > `pressWouldRelease` now delegates to) and the cue route (`routes/cueLayerPress.kt`) find all three
+  > one way.
 
 ### 3.7 The wire
 
@@ -679,7 +684,7 @@ Each session is one PR (P1).
   Effects band do: no editor, pause or stop, its home the cue. It had listed the programmer's alone
   since fixture-fx-sheets D20. A script's effect stays out.
 
-### Session 8 — Into the cue editor (backend + frontend)
+### Session 8 — Into the cue editor (backend + frontend) — done, `2deb7fb0`
 
 - §3.6's `POST /cues/{id}/layers/press` on `LayerPress`. The replacement set, a per-fixture
   palette's targets and the press's arm are the programmer's today (§3.6's note); lift them beside
@@ -709,6 +714,67 @@ Each session is one PR (P1).
   - A second press takes it off.
   - No `programmer.*`, `channels.*` or `fx.*` frame is sent.
 - **Docs:** `cues-engineering.md` §"REST API", the frontend CLAUDE.md's "The cue editor".
+- **The cue arm is a context, not a scope** (decided during session 8): `PressCue`
+  (`components/press/pressCue.ts`), provided by `CueRowStoreProvider`, which `usePress` reads before
+  the programmer's scope and answers `PressInto {kind: 'cue', cueLabel}`. So every door under the
+  editor — a cell's bands, the Looks tab's picker — writes the cue without a prop, none outside the
+  editor can, and a door passing `scope: 'programmer'` still writes Local. The bands' existing
+  `scope` prop is unchanged.
+- **The press goes through the store's save chain** (decided during session 8): whatever the editor
+  has pending lands first, then `POST /cues/{id}/layers/press`, one Undo (the layers as they stood);
+  the answer's layers land in the cue's cache at once and the `Cue` tag re-reads the cook. A refused
+  press leaves the save state as it was — it is the desk's word on a gesture, already toasted.
+- **The route decides outside its write transaction** (decided during session 8): a palette's
+  snapshot loads in its own and must not meet rows the route's transaction has already loaded (Exposed
+  refuses to order loaded data), so the route reads, decides with `LayerPress`, then writes in a second
+  transaction that re-reads the layers and decides again if another write moved them
+  (`CUE_LAYERS_MOVED` after three tries).
+- **A Look pressed with no targets is a layer naming none** (decided during session 8): the cue's
+  own-targets layer, which follows the Look as it is edited, rather than the programmer's derived
+  list of its fixtures — the twin rule then takes it off on a second press. The programmer's refusals
+  stand (`LOOK_NEEDS_SELECTION` for a deferred effect, `LOOK_NO_TARGETS` unless it has scenery), and a
+  generic palette with none is `PALETTE_NEEDS_SELECTION`, as a busk pad. Such a layer reads as naming
+  the Look's own fixtures when that Look is pressed, so a press on some of them covers them and
+  narrows it to the rest, as the programmer's explicit layer would. With no such layer, a press
+  naming no targets over layers of the Look already on every one of its own fixtures takes them off,
+  as the programmer's press does, rather than adding a second layer beside them (Chris's call).
+- **The pressing Look doors decide arm first** (decided during session 8): `resolveLookPress`
+  (`routes/pressArm.kt`) is the one sequence for the cue route, `/looks/{id}/toggle` and the busk pad
+  — a press that would take the Look off is refused neither by its targets nor by the mask — so a
+  stored own-fixtures layer still comes off after its Look gains a deferred effect. MCP's `apply_look`
+  and the surface's `applyLook` still resolve targets first; neither is this session's door. Request targets
+  that are neither a fixture nor a group are a 400 before anything is read.
+- **The ring in the cue is by record** (decided during session 8): a chip is lit *partly* where the
+  cue layers its record anywhere (`cuePresence`), never *all*. Telling a cue layer covering every
+  pressed head apart would copy the desk's coverage rule into the client (P2), and the press's answer
+  says which arm it took. The band's line reads *Into Q4 · as a layer*, sky rather than the focused
+  Look's teal.
+- **The Effects band lists the cue's stored effects** (decided during session 8): on its property and
+  reaching its heads (`storedEffectReaches`, `effectPaintedHeads` over the stored effect), drawn and
+  not opened — the FX tab edits them, so no live editor or `SplitFxEditor`. *+ Effect …* is `FxPicker`'s
+  draft arm through `PressCue.pickEffect`, with no *Edit* (`onEdit` became optional). The FX tab's
+  `storedEffectOf` / `selectionKeyOf` moved to `components/fx/draftEffect.ts` for both. A pick
+  appends with every `sortOrder` restated, and a second pick on the same selection swaps the effect
+  it stored, found in the desk's list by type, property and target; a pick whose write did not land
+  is forgotten, so the next tap cannot swap an effect it did not store; a pick on another selection
+  adds afresh. An effect stored with no property of its own is the desk's to resolve per head, so the band
+  lists it under its family (`familyForEffectCategory`) wherever it reaches the heads.
+- **A read-only cue draws its cells bare** (decided during session 8): locked, or another project's,
+  the bands are not drawn (`useCueBandProject`), and a press that reaches the cue anyway is refused out
+  loud. The Looks tab's picker offers what the Values selection's heads can take (`cueWriteTargets`,
+  the strip's `targetFamilies` and `targetEmitters`), and the hand's place there is a press too.
+- ***Apply as values* in the cue is its own rows** (decided during session 8): ⌥click on a value
+  palette resolves on the desk with `write: false` and lands each literal as an own row through the
+  store, as a focused Look takes them. A Look's or an effect palette's ⌥click is refused with a toast,
+  its tap being its layer.
+- **No *Save as palette…* in the cue** (decided during session 8): the footer records from the
+  programmer, so the cue's cells draw both bands and no footer, and pass no project to the appearance
+  leaves either.
+- **Timing and masters in the wide row's popover** (decided during session 8): `LayerTimingFields`
+  (`components/looks/`), the add sheet's last step lifted, drawn by `LookStack`'s wide-row popover when
+  the host passes `LayerHandlers.onSetTiming` — only the cue Looks tab does. Typed timing coalesces on
+  the store's flush; a master pick saves at once. `FU-PRESS-LAYER-MASTER` stays open, its fix now
+  naming this popover.
 
 ## 9. Explicitly out of scope
 
@@ -731,8 +797,9 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 - `FU-PRESS-REPLACE-LOOKS` (session 1): a Look pressed over a Look on the same heads stacks (D6).
   Trigger: an operator expects the second to take the first off outside a solo bank.
 - `FU-PRESS-LAYER-MASTER` (session 5, recorded then): a programmer layer has no speed or rate master
-  override since the add-layer sheet left the programmer. Session 8 meets the same question for a
-  cue layer.
+  override since the add-layer sheet left the programmer. Session 8 met the same question for a
+  cue layer and answered it in the cue Looks tab's layer settings popover (§11, 12); the programmer's
+  stays open.
 
 ## 11. Questions
 

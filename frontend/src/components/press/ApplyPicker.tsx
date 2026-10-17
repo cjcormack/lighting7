@@ -19,11 +19,14 @@ import {
   padPresenceClass,
   templateSwatch,
 } from '@/components/busking/padFace'
-import { lookIsApplied, lookLayerPresence, templateLayerPresence } from '@/components/busking/lookPresence'
+import { lookIsApplied } from '@/components/busking/lookPresence'
 import type { EffectPresence } from '@/components/busking/buskingTypes'
 import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
 import { LookPressButton, PalettePressButton, templatePressTitle } from './PressGestures'
-import { usePress, usePressLook, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
+import { usePress, usePressInCue, usePressLook, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
+import { usePressCue } from './pressCue'
+import { pressPresence } from './pressPresence'
+import { selectionKeyOf, storedEffectOf } from '@/components/fx/draftEffect'
 import { FxEditor } from '@/components/fx/FxEditor'
 import { FxPicker, type AuditionedEffect } from '@/components/fx/FxPicker'
 import { pickerFamilyForSheet } from '@/components/fx/fxEditorModel'
@@ -42,6 +45,7 @@ import { useTemplateListQuery } from '@/store/templates'
 import { useVenueMode } from '@/store/venues'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
+import type { CueAdHocEffect } from '@/api/cuesApi'
 
 /**
  * Which library the picker draws. `effects` is the bare effects (`FxPicker` on the bare effect
@@ -71,6 +75,9 @@ export type ApplyLibrary = 'palettes' | 'looks' | 'effects'
  *  - **A Look can land on its own fixtures** — *On its own fixtures*, chosen by default with nothing
  *    selected. A Look whose effects take the layer's targets has none to land on, and is shown
  *    outside with that reason.
+ *  - **In the cue editor it writes the cue** (`usePressCue`, apply-model plan §3.6): a palette or a
+ *    Look goes on as a cue layer, or comes off, and the effects arm stores a bare effect in draft;
+ *    a pad is ringed where the cue layers its record. Nothing reaches the stage.
  *  - **Three forms, from the cell editor** (`useEditorForm`): a popover under the door on a desk, a
  *    bottom sheet on an upright phone, a right-hand sheet where the viewport is short. A door with no
  *    anchor of its own (the rail's footer, strip and handle) takes the right-hand sheet on a desk.
@@ -150,6 +157,7 @@ export function ApplyPicker({
   )
   const { press, into } = usePress(projectId, pressPair, scope == null ? undefined : { scope })
   const { data: applied } = useProgrammerAppliedQuery()
+  const cue = usePressCue()
 
   const onTemplate = useCallback(
     (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
@@ -257,15 +265,13 @@ export function ApplyPicker({
   const drawnSections = sections === NO_SECTIONS ? lastSections.current : sections
 
   const presenceOfTemplate = (template: TemplateSummary): EffectPresence =>
-    into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], pair.targets, template.id)
+    pressPresence(into, cue, applied, pair.targets, 'TEMPLATE', template.id)
   const presenceOfLook = (look: LookSummary): EffectPresence =>
-    into.kind === 'look'
-      ? 'none'
-      : lookOwn
-        ? lookIsApplied(applied ?? [], look.id)
-          ? 'all'
-          : 'none'
-        : lookLayerPresence(applied ?? [], pair.targets, look.id)
+    into.kind === 'programmer' && lookOwn
+      ? lookIsApplied(applied ?? [], look.id)
+        ? 'all'
+        : 'none'
+      : pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
 
   const total = library === 'looks' ? (looks?.length ?? 0) : (templates?.length ?? 0)
   const offered = library === 'looks' ? (looks?.length ?? 0) : fitting.length
@@ -404,7 +410,9 @@ export function ApplyPicker({
           <span className="min-w-0 truncate">
             {into.kind === 'look'
               ? `Click writes into ${into.lookName} · hold or right-click for more`
-              : 'Click puts a layer on · ⌥click sets values · hold or right-click for more'}
+              : into.kind === 'cue'
+                ? `Click puts a layer on in ${into.cueLabel}, or takes it off${library === 'palettes' ? " · ⌥click sets a value palette's values" : ''} · hold or right-click for more`
+                : 'Click puts a layer on · ⌥click sets values · hold or right-click for more'}
           </span>
         )}
         <span className="ml-auto shrink-0 tabular-nums">
@@ -660,7 +668,9 @@ function LookPad({
             reason ??
             (into.kind === 'look'
               ? 'Looks don’t nest — focus Local to press one'
-              : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`)
+              : into.kind === 'cue'
+                ? `Click to put “${look.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
+                : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`)
           }
           className={padClass(presence, reason)}
         >
@@ -693,6 +703,10 @@ function LookPad({
  * editor has landed any move its floor still held: the press's replacement would take heads off
  * other Local effects, which a press into a Look must not do (§3.2 rule 6). An effect palette goes in
  * through `usePress`'s own Look arm.
+ *
+ * **In the cue editor** the bare effect is `FxPicker`'s draft arm (show-cue-editing plan D17): a tap
+ * stores the effect in the cue and runs nothing, another tap swaps it, and there is no *Edit* — the
+ * FX tab edits a stored effect. An effect palette goes on as a cue layer.
  */
 function EffectsArm({
   projectId,
@@ -717,6 +731,10 @@ function EffectsArm({
   const options = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, options)
   const look = usePressLook(options)
+  const cue = usePressInCue(options)
+  // The cue's draft this session picked, on the selection it was picked over — what a second tap
+  // swaps (show-cue-editing plan D17). A tap over another selection adds afresh.
+  const [picked, setPicked] = useState<{ effect: CueAdHocEffect; over: string } | null>(null)
   const [absorb] = useAbsorbLookEffectsMutation()
   const { fixtures } = useFixtureLookup()
   const { data: groups } = useGroupListQuery()
@@ -726,6 +744,8 @@ function EffectsArm({
   const { data: library } = useEffectLibraryQuery()
   const stopEffect = useStopEffect()
   const target = useMemo(() => effectTargetOf(pair.targets, fixtures, groups), [pair.targets, fixtures, groups])
+  const over = selectionKeyOf(pair.targets)
+  const swapping = picked != null && picked.over === over ? picked.effect : null
   const [current, setCurrent] = useState<AuditionedEffect | null>(null)
   const [editing, setEditing] = useState(false)
   const live = current != null ? ((active ?? []).find((e) => e.id === current.effectId) ?? null) : null
@@ -753,6 +773,7 @@ function EffectsArm({
       session.current.finished = false
       setCurrent(null)
       setEditing(false)
+      setPicked(null)
       return
     }
     finish()
@@ -791,12 +812,33 @@ function EffectsArm({
         )}
         <span className="min-w-0 truncate">
           on {heads} head{heads === 1 ? '' : 's'}
-          {into.kind === 'look' ? ` · into ${into.lookName}` : ' · Local'}
+          {into.kind === 'look' ? ` · into ${into.lookName}` : into.kind === 'cue' ? ` · stored in ${into.cueLabel}` : ' · Local'}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
         {target == null ? (
           <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">Select the heads the effect should drive first.</p>
+        ) : cue != null ? (
+          <div className="pt-1">
+            <FxPicker
+              target={target}
+              initialFamily={pickerFamilyForSheet(family)}
+              preferredProperty={property ?? fit.property}
+              draft={{
+                current: swapping == null ? null : { effectType: swapping.effectType, propertyName: swapping.propertyName ?? '' },
+                onPick: (pick) => {
+                  const effect = storedEffectOf(pick, target)
+                  // Taken as picked at once, so a quick second tap swaps it; a write that did not
+                  // land puts back what was picked before, so no later tap swaps a stranger.
+                  const before = picked
+                  setPicked({ effect, over })
+                  void cue.pickEffect(effect, swapping).then((ok) => {
+                    if (!ok) setPicked((now) => (now?.effect === effect ? before : now))
+                  })
+                },
+              }}
+            />
+          </div>
         ) : editing && live != null ? (
           <div className="flex flex-col gap-2 pt-1">
             <Button variant="ghost" size="sm" className="h-7 self-start gap-1 px-1.5 text-xs" onClick={() => setEditing(false)}>
@@ -842,7 +884,7 @@ function EffectsArm({
                   projectId={projectId}
                   template={template}
                   into={into}
-                  presence={into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], pair.targets, template.id)}
+                  presence={pressPresence(into, cue, applied, pair.targets, 'TEMPLATE', template.id)}
                   hasTargets={heads > 0}
                   reason={reason}
                   onGesture={onTemplate}

@@ -24,8 +24,9 @@ import java.util.UUID
  *   the top, so a widening never changes what a higher layer shows.
  *
  * A layer naming **no** targets is the source's own bound rows. Where the caller knows their heads
- * ([Ops.boundHeads] — a per-fixture palette's rows) it is read as naming them, and a subtraction
- * rewrites it to the rest. Where it does not (a Look's), nothing here subtracts from it — except a
+ * ([Ops.boundHeads] — a per-fixture palette's rows, or in a cue the pressed Look's own fixtures) it
+ * is read as naming them, and a subtraction rewrites it to the rest. Where it does not (a Look's in
+ * the programmer), nothing here subtracts from it — except a
  * solo sibling or the record itself under a press that also names none, which is the same gesture
  * and replaces it.
  */
@@ -69,18 +70,13 @@ internal object LayerPress {
         val uuid = ops.sourceUuid(arriving)
         val targets = ops.targets(arriving)
         val pressed = coverage.expand(targets).toSet()
-        val own = layers.filter { ops.sourceUuid(it) == uuid }
-        // The union over every layer of the record: two presses that each covered half the
-        // selection add up to a lit pad, so the press after them reads as "off".
-        val covered = own.flatMapTo(HashSet()) { coverage.expand(held(it, ops)) }
 
-        if (pressed.isEmpty()) {
-            val twin = own.firstOrNull { sameTargets(ops.targets(it), targets) }
-            if (twin != null) return Result.Removed(layers.filterNot { it === twin })
-        } else if (pressed.all { coverage.covers(covered, it) }) {
-            return Result.Removed(
+        when (val arm = arm(layers, uuid, targets, pressed, ops, coverage)) {
+            is Arm.Twin -> return Result.Removed(layers.filterNot { it === arm.layer })
+            Arm.Covered -> return Result.Removed(
                 layers.mapNotNull { if (ops.sourceUuid(it) == uuid) without(it, pressed, ops, coverage) else it },
             )
+            Arm.On -> Unit
         }
 
         var released = 0
@@ -113,6 +109,45 @@ internal object LayerPress {
             return Result.Applied(rewritten.take(newest).filterNotNull() + widened, released)
         }
         return Result.Applied(rewritten.filterNotNull() + arriving, released)
+    }
+
+    /**
+     * Whether a press of [sourceUuid] on [targets] would take the record **off** [layers] — asked
+     * by a door before the press, to test the selection's mask on the on arm only
+     * (`routes/pressArm.kt`). The same decision [press] makes, so the arm a door tests is the arm
+     * the press takes.
+     */
+    fun <L> wouldRelease(layers: List<L>, sourceUuid: UUID, targets: List<CueTargetDto>, ops: Ops<L>, coverage: TargetCoverage): Boolean =
+        arm(layers, sourceUuid, targets, coverage.expand(targets).toSet(), ops, coverage) != Arm.On
+
+    private sealed interface Arm {
+        data object On : Arm
+
+        /** A press naming no targets, and a layer of the record naming none: the same gesture. */
+        class Twin(val layer: Any?) : Arm
+
+        /** The record already covers every pressed head. */
+        data object Covered : Arm
+    }
+
+    /** [pressed] is [targets] expanded to heads. */
+    private fun <L> arm(
+        layers: List<L>,
+        uuid: UUID,
+        targets: List<CueTargetDto>,
+        pressed: Set<CueTargetDto>,
+        ops: Ops<L>,
+        coverage: TargetCoverage,
+    ): Arm {
+        val own = layers.filter { ops.sourceUuid(it) == uuid }
+        if (pressed.isEmpty()) {
+            val twin = own.firstOrNull { sameTargets(ops.targets(it), targets) } ?: return Arm.On
+            return Arm.Twin(twin)
+        }
+        // The union over every layer of the record: two presses that each covered half the
+        // selection add up to a lit pad, so the press after them reads as "off".
+        val covered = own.flatMapTo(HashSet()) { coverage.expand(held(it, ops)) }
+        return if (pressed.all { coverage.covers(covered, it) }) Arm.Covered else Arm.On
     }
 
     /** What [layer] names: its targets, else the heads its bound rows land on, else nothing. */

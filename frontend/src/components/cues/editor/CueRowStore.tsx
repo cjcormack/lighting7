@@ -1,12 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { lookRowKey } from '@/components/programmer/lookRowKey'
-import { fetchLatestCue, usePatchProjectCueMutation, useProjectCueCookedQuery, useProjectCueQuery } from '@/store/cues'
+import { useDispatch } from 'react-redux'
+import type { store } from '@/store'
+import { cuesApi, fetchLatestCue, usePatchProjectCueMutation, usePressCueLayerMutation, useProjectCueCookedQuery, useProjectCueQuery } from '@/store/cues'
+import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { withoutInfrastructure } from '@/lib/infrastructure'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { cueEffectInput, cueLayerInput } from '@/lib/cueUtils'
-import type { CookedRow, Cue, CueAdHocEffect, CueLayer, CueLayerDetail, CuePatchInput, CuePropertyAssignment } from '@/api/cuesApi'
+import type {
+  CookedRow,
+  Cue,
+  CueAdHocEffect,
+  CueLayer,
+  CueLayerDetail,
+  CueLayerPressResponse,
+  CuePatchInput,
+  CuePropertyAssignment,
+} from '@/api/cuesApi'
 import {
   CueRowDraft,
   applyCueRowEntries,
@@ -16,6 +28,8 @@ import {
   rowsWithKeys,
   type CueRowTargetType,
 } from './cueRowDraft'
+import { appendItem, replaceAt } from './cueListEdits'
+import { lastIndexOfDraft } from '@/components/fx/draftEffect'
 
 /**
  * What one save changed, for its Undo: the rows' keys and the rows the cue held under them before
@@ -147,6 +161,7 @@ export const CUE_ROW_SAVE_CEILING_MS = 2000
 
 const EMPTY_ROWS: readonly CookedRow[] = []
 const EMPTY_ASSIGNMENTS: readonly CuePropertyAssignment[] = []
+const EMPTY_EFFECTS: readonly CueAdHocEffect[] = []
 
 export function CueRowStoreProvider({
   projectId,
@@ -170,6 +185,8 @@ export function CueRowStoreProvider({
   } = useProjectCueCookedQuery({ projectId, cueId })
   const { fixtures } = useFixtureLookup()
   const [patchCue] = usePatchProjectCueMutation()
+  const [pressCueLayer] = usePressCueLayerMutation()
+  const dispatch = useDispatch<typeof store.dispatch>()
   const [saveState, setSaveState] = useState<CueRowSaveState>('clean')
   const [canUndo, setCanUndo] = useState(false)
   const toastId = `cue-values-${useId()}`
@@ -223,12 +240,18 @@ export function CueRowStoreProvider({
    * layers and the effects, each its whole list — and send it. The cached cue stands in only when the
    * read fails, so a desk that cannot be read is still written. Answers whether it landed and what
    * [build] said to keep for Undo; null when there was nothing to write.
+   *
+   * [build] may name its own [send] in place of the PATCH — the layer press, whose answer rides back
+   * as `answer`. A refused press is the desk's word on a gesture, toasted already, not a save that
+   * failed, so it leaves the save state as it was — and neither outcome clears a failure before it.
    */
   const enqueue = useCallback(
-    <U,>(build: (latest: Cue) => { body: CuePatchInput; undo: U } | null) => {
+    <U, R = unknown>(build: (latest: Cue) => { body?: CuePatchInput; send?: () => Promise<R>; undo: U } | null) => {
       const writesAtStart = writesRef.current
       const settle = () => setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
-      const run = async (): Promise<{ ok: boolean; undo?: U } | null> => {
+      const settleSend = () =>
+        setSaveState((state) => (state === 'error' ? state : writesRef.current === writesAtStart ? 'clean' : 'dirty'))
+      const run = async (): Promise<{ ok: boolean; undo?: U; answer?: R } | null> => {
         const args = { ...argsRef.current, cueId: entry.cueId }
         let latest: Cue | undefined
         try {
@@ -245,13 +268,18 @@ export function CueRowStoreProvider({
           settle()
           return null
         }
-        setSaveState('saving')
+        if (built.send) setSaveState((state) => (state === 'error' ? state : 'saving'))
+        else setSaveState('saving')
         try {
-          await patchCue({ projectId: args.projectId, cueId: args.cueId, ...built.body }).unwrap()
-          settle()
-          return { ok: true, undo: built.undo }
+          const answer = built.send
+            ? await built.send()
+            : ((await patchCue({ projectId: args.projectId, cueId: args.cueId, ...built.body }).unwrap()) as R)
+          if (built.send) settleSend()
+          else settle()
+          return { ok: true, undo: built.undo, answer }
         } catch {
-          setSaveState('error')
+          if (built.send) settleSend()
+          else setSaveState('error')
           ignoreReportedError()
           return { ok: false }
         }
@@ -407,6 +435,66 @@ export function CueRowStoreProvider({
   )
   const editEffects = useCallback(
     (edit: CueListEdit<CueAdHocEffect>, now = false) => editList('adHocEffects', edit, now),
+    [editList],
+  )
+
+  /**
+   * A palette or a Look pressed into the cue's layers (apply-model plan §3.6): whatever is pending
+   * lands first, then the press goes in the same chain and is one Undo — the layers as they stood.
+   * The desk's answer is the cue as stored, and its layers land in the cache at once.
+   */
+  const pressLayer = useCallback<PressCue['pressLayer']>(
+    async (source, targets, families) => {
+      if (readOnlyRef.current) return null
+      flushRef.current()
+      const args = { ...argsRef.current, cueId: entry.cueId }
+      const result = await enqueue<UndoStep, CueLayerPressResponse>((latest) => ({
+        send: () =>
+          pressCueLayer({
+            projectId: args.projectId,
+            cueId: args.cueId,
+            ...source,
+            targets: targets.map((t) => ({ type: t.type, key: t.key })),
+            ...(families != null && families.length > 0 ? { families: [...families] } : {}),
+          }).unwrap(),
+        undo: { layers: latest.layers.map(cueLayerInput) },
+      }))
+      if (result == null || !result.ok || result.answer == null) return null
+      const answer = result.answer
+      dispatch(
+        cuesApi.util.updateQueryData('projectCue', args, (draftCue) => {
+          draftCue.layers = answer.cue.layers
+        }),
+      )
+      undoRef.current = result.undo!
+      setCanUndo(true)
+      toast(`${labelRef.current} · looks saved`, { id: toastId, action: { label: 'Undo', onClick: () => undo() } })
+      return answer
+    },
+    [entry, enqueue, pressCueLayer, dispatch, toastId, undo],
+  )
+
+  /** *Apply as values* in the cue: each literal an own row, as a cell commit lands one. */
+  const landValues = useCallback<PressCue['landValues']>(
+    (values) => {
+      if (readOnlyRef.current) return 0
+      for (const value of values) setValue(value.target.type === 'group' ? 'group' : 'fixture', value.target.key, value.propertyName, value.value)
+      return values.length
+    },
+    [setValue],
+  )
+
+  /** A bare effect stored in draft — appended, or in place of the one the picker is auditioning. */
+  const pickEffect = useCallback<PressCue['pickEffect']>(
+    (effect, replacing) =>
+      editList<CueAdHocEffect>(
+        'adHocEffects',
+        (stored) => {
+          const at = replacing == null ? -1 : lastIndexOfDraft(stored, replacing)
+          return at < 0 ? appendItem(stored, effect) : replaceAt(stored, at, effect)
+        },
+        true,
+      ),
     [editList],
   )
 
@@ -618,9 +706,30 @@ export function CueRowStoreProvider({
     flush,
   ])
 
+  // Keyed on what the bands read, not on the cue: a value save refetches the cue, and every cell in
+  // the grid reads this context.
+  const layeredKey = (cue?.layers ?? []).flatMap((layer) => (layer.source ? [`${layer.source.kind}:${layer.source.id}`] : [])).join('|')
+  const effects = cue?.adHocEffects ?? EMPTY_EFFECTS
+  const pressCue = useMemo<PressCue>(
+    () => ({
+      projectId,
+      cueId,
+      cueLabel,
+      readOnly,
+      layered: new Set(layeredKey === '' ? [] : layeredKey.split('|')),
+      effects,
+      pressLayer,
+      landValues,
+      pickEffect,
+    }),
+    [projectId, cueId, cueLabel, readOnly, layeredKey, effects, pressLayer, landValues, pickEffect],
+  )
+
   return (
     <CueRowStoreContext.Provider value={value}>
-      <CueRowSaveStateContext.Provider value={saveState}>{children}</CueRowSaveStateContext.Provider>
+      <CueRowSaveStateContext.Provider value={saveState}>
+        <PressCueContext.Provider value={pressCue}>{children}</PressCueContext.Provider>
+      </CueRowSaveStateContext.Provider>
     </CueRowStoreContext.Provider>
   )
 }

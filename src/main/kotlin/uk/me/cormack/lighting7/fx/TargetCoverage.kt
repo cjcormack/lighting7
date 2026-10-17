@@ -53,8 +53,8 @@ class TargetCoverage(private val fixtures: () -> Fixtures?) {
      * replaced by their members); a cell is resolved through `Fixtures` and its key is never parsed,
      * so a key nothing resolves is covered only by itself.
      *
-     * Read by `pressWouldRelease`, `ProgrammerLayerStack.toggle`, [narrow], the desk selection, the
-     * cook's layer filter (`CueComposer.LayerTargets.covers`), and the record path's scope tests
+     * Read by [LayerPress] (the press and its arm, for the programmer's stack and a stored cue's),
+     * [LayerPressRules.paletteHeads], [narrow], the desk selection, the cook's layer filter (`CueComposer.LayerTargets.covers`), and the record path's scope tests
      * (`collectProgrammerEntries`, `targetInScope`, `lookRowInRemit`); `appliedState` reads the same
      * fact through [cells] and [parentOf]. Nothing else, which is the point: the client keeps
      * reading the desk's resolved applied state rather than carrying a copy of this.

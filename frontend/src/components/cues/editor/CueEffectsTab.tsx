@@ -11,7 +11,8 @@ import { EditorReadout } from '@/components/editor/EditorReadout'
 import { EffectSummary } from '@/components/fx/EffectSummary'
 import { fromLookEffect } from '@/components/fx/effectSummaryTypes'
 import { FxEffectFields } from '@/components/fx/FxEffectFields'
-import { FxPicker, type DraftEffectPick, type FxTarget } from '@/components/fx/FxPicker'
+import { FxPicker, type DraftEffectPick } from '@/components/fx/FxPicker'
+import { selectionKeyOf, storedEffectOf } from '@/components/fx/draftEffect'
 import { effectSpeedLabel, secondsLabel } from '@/components/fx/fxConstants'
 import { cueEffectDraftOf, runsWord, withCueEffectDraft, type FxDraft } from '@/components/fx/fxEditorModel'
 import { useEffectScope } from '@/components/fx/useEffectScope'
@@ -255,35 +256,6 @@ function EffectsBody({
       <LookEffects layers={cue.layers} projectId={projectId} library={library} />
     </div>
   )
-}
-
-/** The stored effect a draft pick makes, on the picker's target: one fixture, one group, or the selection as one effect (D3). */
-function storedEffectOf(pick: DraftEffectPick, target: FxTarget): CueAdHocEffect {
-  const where =
-    target.type === 'fixture'
-      ? { targetType: 'fixture' as const, targetKey: target.fixture.key, distribution: 'LINEAR' }
-      : target.type === 'group'
-        ? { targetType: 'group' as const, targetKey: target.group.name, distribution: target.group.defaultDistribution || 'LINEAR' }
-        : { targetType: 'selection' as const, targetKey: selectionKeyOf(target.targets), distribution: 'LINEAR' }
-  return {
-    ...where,
-    effectType: pick.effectType,
-    category: pick.category,
-    propertyName: pick.propertyName,
-    beatDivision: pick.beatDivision,
-    blendMode: pick.blendMode,
-    phaseOffset: 0,
-    elementMode: null,
-    elementFilter: pick.elementFilter ?? null,
-    stepTiming: null,
-    parameters: pick.parameters,
-    ...(pick.speedMasterUuid != null ? { speedMasterUuid: pick.speedMasterUuid } : {}),
-  }
-}
-
-/** A selection's canonical key, as the desk writes it: `[{"key":…,"type":…}]`, keys alphabetical, in order. */
-export function selectionKeyOf(targets: readonly CueTarget[]): string {
-  return JSON.stringify(targets.map((t) => ({ key: t.key, type: t.type })))
 }
 
 function targetFieldsOf(effect: CueAdHocEffect): EffectTargetFields {

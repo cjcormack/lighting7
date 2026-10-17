@@ -89,7 +89,8 @@ export interface FixturesTableProps {
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
    * leaves. The container passes it for the programmer scope only — the two plain lists draw no
    * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
-   * its editor bare rather than reaching for a store it has no project in.
+   * its editor bare rather than reaching for a store it has no project in, except under the cue
+   * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */
   projectId?: number
   /**
@@ -595,7 +596,8 @@ interface RowViewProps {
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
    * leaves. The container passes it for the programmer scope only — the two plain lists draw no
    * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
-   * its editor bare rather than reaching for a store it has no project in.
+   * its editor bare rather than reaching for a store it has no project in, except under the cue
+   * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */
   projectId?: number
   /** See `FixturesTableProps.onSpread`. */
@@ -1217,7 +1219,8 @@ function PropertyCell({
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
    * leaves. The container passes it for the programmer scope only — the two plain lists draw no
    * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
-   * its editor bare rather than reaching for a store it has no project in.
+   * its editor bare rather than reaching for a store it has no project in, except under the cue
+   * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */
   projectId?: number
   /** The colour editor's *Spread…* — see `FixturesTableProps.onSpread`. */

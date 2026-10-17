@@ -193,6 +193,7 @@ class ProgrammerLayerStack(
     private val state: () -> State?,
 ) {
     private val targetCoverage = TargetCoverage { fixtures() }
+    private val pressRules = LayerPressRules(templateRegistry, targetCoverage)
 
     /**
      * Guards the classify-spawn-retract sequence in [syncEffects].
@@ -322,7 +323,7 @@ class ProgrammerLayerStack(
         releaseSiblings: Set<UUID> = emptySet(),
         fadeMs: Long = 0,
     ): ToggleOutcome {
-        val pressTargets = pressTargets(source.uuid, targets)
+        val pressTargets = pressRules.pressTargets(source.uuid, targets)
         val fade = fadeMs.coerceAtLeast(0)
         val arriving = ProgrammerLayer(
             layerId = store.mintLayerId(),
@@ -334,12 +335,9 @@ class ProgrammerLayerStack(
         )
         // Resolved before the mutation: a palette snapshot can open a transaction, which must never
         // run under the layer lock. A stale answer is harmless — it names records and their rows.
-        val replaces = familyReplacements(source)
-        val replacesOn = if (replaces.isEmpty()) null else paletteHeads(source.uuid, pressTargets)
-        val ops = LayerOps(
-            store.layers.filter { it.source.isTemplate && it.targets.isEmpty() }
-                .associate { it.source.uuid to perFixtureRowTargets(it.source.uuid) },
-        )
+        val replaces = pressRules.familyReplacements(source.isTemplate, source.uuid, paletteUuids(store.layers))
+        val replacesOn = if (replaces.isEmpty()) null else pressRules.paletteHeads(source.uuid, pressTargets)
+        val ops = layerOps(store.layers)
         val (next, result) = store.mutateLayers { current ->
             val result = LayerPress.press(current, arriving, ops, targetCoverage, releaseSiblings, replaces, replacesOn)
             renumber(result.layers) to result
@@ -352,50 +350,21 @@ class ProgrammerLayerStack(
     }
 
     /**
-     * The palettes on the stack an *on* press of [source] replaces (apply-model D2, D6): every other
-     * palette of its family and kind. Empty for a Look, and for a palette with no family.
+     * Whether [toggle] of [sourceUuid] on [targets] would take the record *off* — the arm a door asks
+     * before its mask test (`pressWouldRelease`), decided by [LayerPress.wouldRelease] over the
+     * stack as it stands, so it is the arm [toggle] takes.
      */
-    private fun familyReplacements(source: LayerSource): Set<UUID> {
-        if (!source.isTemplate) return emptySet()
-        val kind = paletteKind(source.uuid) ?: return emptySet()
-        return store.layers.asSequence()
-            .filter { it.source.isTemplate && it.source.uuid != source.uuid }
-            .mapTo(HashSet()) { it.source.uuid }
-            .filterTo(HashSet()) { paletteKind(it) == kind }
+    fun wouldRelease(sourceUuid: UUID, targets: List<CueTargetDto>): Boolean {
+        val layers = store.layers
+        return LayerPress.wouldRelease(layers, sourceUuid, pressRules.pressTargets(sourceUuid, targets), layerOps(layers), targetCoverage)
     }
 
-    /**
-     * The targets a press of [sourceUuid] puts on: [targets] as given, except that a per-fixture
-     * palette pressed with none names its own rows' targets — the heads it lands on — so the press,
-     * its family replacement and the pad's ring read one set of heads. `pressWouldRelease` asks it
-     * too, so the arm the doors test is the arm [toggle] takes.
-     */
-    fun pressTargets(sourceUuid: UUID, targets: List<CueTargetDto>): List<CueTargetDto> =
-        if (targets.isNotEmpty()) targets else perFixtureRowTargets(sourceUuid) ?: targets
+    private fun paletteUuids(layers: List<ProgrammerLayer>): Set<UUID> =
+        layers.filter { it.source.isTemplate }.mapTo(HashSet()) { it.source.uuid }
 
-    /** A per-fixture value palette's row targets, distinct; null for any other record. */
-    private fun perFixtureRowTargets(uuid: UUID): List<CueTargetDto>? {
-        val snapshot = templateRegistry().snapshot(uuid) ?: return null
-        if (snapshot.effect != null || snapshot.rows.isEmpty() || snapshot.rows.any { it.isDeferred }) return null
-        return snapshot.rows.mapNotNull { it.target }.distinct().map(::CueTargetDto)
-    }
-
-    /**
-     * The pressed heads a palette lands on, when that is fewer than the press names: a per-fixture
-     * palette's rows name their own heads, so only the pressed heads its rows reach (or the rows'
-     * cells within a pressed parent) are its to take off other palettes. Null — every pressed head —
-     * for a generic palette, an effect palette, and one not loaded.
-     */
-    private fun paletteHeads(uuid: UUID, targets: List<CueTargetDto>): Set<CueTargetDto>? {
-        val rowHeads = targetCoverage.expand(perFixtureRowTargets(uuid) ?: return null).toSet()
-        return coverage(targets).flatMapTo(HashSet()) { head ->
-            if (targetCoverage.covers(rowHeads, head)) listOf(head) else targetCoverage.cells(head).filter { it in rowHeads }
-        }
-    }
-
-    /** A palette's family, and whether it holds an effect rather than values. */
-    private fun paletteKind(uuid: UUID): Pair<PropertyMaskGroup, Boolean>? =
-        templateRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }
+    private fun layerOps(layers: List<ProgrammerLayer>) = LayerOps(
+        pressRules.boundHeads(layers.filter { it.source.isTemplate && it.targets.isEmpty() }.map { it.source.uuid }),
+    )
 
     /**
      * How [LayerPress] reads a programmer layer. [boundHeads] is each per-fixture palette's row
@@ -460,7 +429,7 @@ class ProgrammerLayerStack(
     fun appliedState(layers: List<ProgrammerLayer> = store.layers): List<AppliedSource> {
         val heads = LinkedHashMap<UUID, Pair<LayerSource, MutableSet<CueTargetDto>>>()
         for (layer in layers) {
-            val named = layer.targets.ifEmpty { if (layer.source.isTemplate) perFixtureRowTargets(layer.source.uuid).orEmpty() else emptyList() }
+            val named = layer.targets.ifEmpty { if (layer.source.isTemplate) pressRules.perFixtureRowTargets(layer.source.uuid).orEmpty() else emptyList() }
             if (named.isEmpty()) continue
             heads.getOrPut(layer.source.uuid) { layer.source to LinkedHashSet() }
                 .second += coverage(named)

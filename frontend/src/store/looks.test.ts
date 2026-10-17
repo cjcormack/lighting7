@@ -133,8 +133,8 @@ describe('looks endpoints', () => {
   /**
    * `compatibleLookIds` is computed server-side and rides on the **fixture and group summaries**,
    * not on the Look. So a library mutation that doesn't invalidate those two lists leaves a Look
-   * that exists but is offered nowhere: `LookTogglePicker` omits it and `LayerPicker` disables every
-   * head for it, until something unrelated happens to refetch. The retired `store/fxPresets.ts`
+   * that exists but is offered nowhere: `LookTogglePicker` omits it until something unrelated happens
+   * to refetch. The retired `store/fxPresets.ts`
    * invalidated both for exactly this reason, and the tags were dropped in the port.
    *
    * Asserted behaviourally — a live subscriber refetching — rather than by reading `invalidatesTags`,

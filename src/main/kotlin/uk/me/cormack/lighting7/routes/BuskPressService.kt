@@ -163,6 +163,7 @@ internal object BuskPressService {
 
         return when (val record = plan.record) {
             is PressRecord.Layer -> {
+                var lookPress: LookPressResolution.Ready? = null
                 val pressTargets = when (record) {
                     is PressRecord.Template -> {
                         // A generic template's rows take their targets from the press, so with
@@ -177,35 +178,29 @@ internal object BuskPressService {
                         }
                         targets.map { CueTargetDto(it.type, it.key) }
                     }
-                    is PressRecord.Look -> when (val resolved = resolveLookToggleTargets(targets, record.look)) {
-                        is LookTargetResolution.Refused -> return Outcome.Refused(resolved.message, resolved.code)
-                        is LookTargetResolution.Targets -> resolved.targets
-                    }
+                    // A Look's targets and mask are decided arm first (`resolveLookPress`): an off
+                    // press comes off under any mask, and whatever its targets.
+                    is PressRecord.Look ->
+                        when (val resolved = resolveLookPress(targets, record.look, families) { pressWouldRelease(state, record.source.uuid, it) }) {
+                            is LookPressResolution.Refused -> return Outcome.Refused(resolved.message, resolved.code)
+                            is LookPressResolution.Ready -> resolved.also { lookPress = it }.targets
+                        }
                 }
-                // The mask is about what a press puts *on*; an off press comes off under any mask
-                // (`pressWouldRelease`). Decided here, on the same targets `toggle` will read.
-                val releasing = pressWouldRelease(state, record.source.uuid, pressTargets)
                 // The same dead-pad reading under a mask: a layer the cook would skip whole is
-                // refused rather than lit.
-                if (!releasing && record is PressRecord.Template && families != null && !maskAllows(families, record.family)) {
+                // refused rather than lit — on the *on* arm only (`pressWouldRelease`).
+                if (record is PressRecord.Template && families != null && !maskAllows(families, record.family) &&
+                    !pressWouldRelease(state, record.source.uuid, pressTargets)
+                ) {
                     return Outcome.Refused(
                         templateOutsideMaskMessage(record.source.name, record.family, families),
                         CODE_TEMPLATE_OUTSIDE_MASK,
                     )
                 }
-                // A template's mask is its own family; a Look's is the selection's mask narrowed
-                // to what the Look has, or null when the press carries no mask or is an off press.
-                val lookMask = (record as? PressRecord.Look)?.takeUnless { releasing }?.let { look ->
-                    when (val resolved = resolveLookMask(families, look.look)) {
-                        is LookMaskResolution.Refused -> return Outcome.Refused(resolved.message, resolved.code)
-                        is LookMaskResolution.Masked -> resolved
-                    }
-                }
                 try {
                     val outcome = stack.toggle(
                         source = record.source,
                         targets = pressTargets,
-                        propertyMask = (record as? PressRecord.Template)?.family?.name ?: lookMask?.propertyMask,
+                        propertyMask = (record as? PressRecord.Template)?.family?.name ?: lookPress?.propertyMask,
                         beatDivisionOverride = beatDivision,
                         releaseSiblings = plan.layerSiblings,
                         fadeMs = fadeMs,
@@ -224,7 +219,7 @@ internal object BuskPressService {
                         outcome.released + stopped,
                         // Skips belong to the arm that put the layer on: an off press narrowed or
                         // dropped a layer, and there was nothing to skip.
-                        skippedFamilies = if (outcome.action == "applied") lookMask?.skippedFamilies.orEmpty() else emptyList(),
+                        skippedFamilies = if (outcome.action == "applied") lookPress?.skippedFamilies.orEmpty() else emptyList(),
                     )
                 } catch (e: IllegalStateException) {
                     Outcome.TargetMissing(e.message ?: "Target not found")

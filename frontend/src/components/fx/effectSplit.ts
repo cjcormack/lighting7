@@ -1,6 +1,6 @@
-import type { CueTarget } from '@/api/cuesApi'
+import type { CueAdHocEffect, CueTarget } from '@/api/cuesApi'
 import { isLocalEffect, membersByGroupOf } from '@/components/fixtures-list/cellEffects'
-import { effectAimKeys } from '@/lib/effectTargets'
+import { effectAimKeys, storedEffectTargets } from '@/lib/effectTargets'
 import { headName } from '@/lib/headName'
 import { describeHeads } from '@/lib/replacementNotes'
 import type { ActiveEffect } from '@/store/fixtureFx'
@@ -118,6 +118,30 @@ export function splitScopeOf(
   const covered = heads.filter((head) => covers(selection, head, fixtures))
   if (covered.length === 0 || covered.length === heads.length) return inPlace
   return { heads, covered, coveredLabel: describeHeads(covered.map(name)), totalLabel }
+}
+
+/**
+ * Whether a cue's **stored** effect paints any head [targets] cover — the Effects band's list in the
+ * cue editor, read as [effectReaches] reads a running one.
+ */
+export function storedEffectReaches(
+  effect: Pick<CueAdHocEffect, 'targetType' | 'targetKey' | 'propertyName' | 'elementFilter' | 'elementMode'>,
+  targets: readonly CueTarget[],
+  fixtures: readonly Fixture[],
+): boolean {
+  const painted = effectPaintedHeads(
+    {
+      targetKey: effect.targetKey,
+      isGroupTarget: effect.targetType === 'group',
+      targetType: effect.targetType,
+      targets: effect.targetType === 'selection' ? storedEffectTargets(effect.targetType, effect.targetKey) : null,
+      propertyName: effect.propertyName ?? '',
+      elementFilter: effect.elementFilter,
+      elementMode: effect.elementMode,
+    },
+    fixtures,
+  )
+  return painted.some((head) => covers(targets, head, fixtures))
 }
 
 /** Whether [effect] paints any head [targets] cover — the Effects band's "running on these heads". */

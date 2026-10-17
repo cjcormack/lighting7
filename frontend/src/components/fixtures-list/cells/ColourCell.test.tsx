@@ -54,6 +54,7 @@ vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
 }))
 
 import { ColourCell, colourTargetsOf } from './ColourCell'
+import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 
 const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
 const rgbw = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: chan(4) })
@@ -274,6 +275,40 @@ describe('ColourCell', () => {
 
   it('draws no footer on a cell mounted with no batch — the cue grid’s read-only colour', () => {
     draw({ batch: undefined })
+    expect(document.querySelector('[data-editor-footer]')).toBeNull()
+  })
+
+  it('draws no footer in the cue editor, whose cells record nothing from the stage', () => {
+    draw()
+    expect(document.querySelector('[data-editor-footer]')).not.toBeNull()
+    cleanup()
+    const cue: PressCue = {
+      projectId: 1,
+      cueId: 7,
+      cueLabel: 'Q1',
+      readOnly: false,
+      layered: new Set(),
+      effects: [],
+      pressLayer: vi.fn(),
+      landValues: vi.fn(),
+      pickEffect: vi.fn(() => Promise.resolve(true)),
+    }
+    render(
+      <PressCueContext.Provider value={cue}>
+        <ColourCell
+          value={{ kind: 'colour', isUniform: true, r: 10, g: 20, b: 30, combinedCss: 'rgb(10, 20, 30)' }}
+          resolutions={[RGB]}
+          label="Colour"
+          batch={batch}
+          scopeLabel="Q1"
+          autoOpen
+          keyboardSeed=""
+          onCommit={vi.fn()}
+          onBeginEdit={() => {}}
+        />
+      </PressCueContext.Provider>,
+    )
+    expect(document.querySelector('[data-colour-emitters]')).not.toBeNull()
     expect(document.querySelector('[data-editor-footer]')).toBeNull()
   })
 })

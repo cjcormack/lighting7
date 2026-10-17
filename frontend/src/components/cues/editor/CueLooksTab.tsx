@@ -1,17 +1,22 @@
-import { useCallback, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useMemo, useRef, useState, type RefObject } from 'react'
 import { useNavigate } from 'react-router'
 import { Layers, Palette, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LookStack, type LayerHandlers } from '@/components/looks/LookStack'
-import { AddLayerSheet } from '@/components/programmer/AddLayerSheet'
+import { ApplyPicker } from '@/components/press/ApplyPicker'
+import type { PressPair } from '@/hooks/usePress'
+import type { PaletteFit } from '@/lib/paletteOffer'
+import { targetEmitters, targetFamilies, type WriteTarget } from '@/components/fixtures-list/rowModel'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import type { Fixture } from '@/store/fixtures'
 import { HandCueLayerStrip, type HandCueLayerHost } from '@/components/hand/HandLayerTargets'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
-import type { Cue, CueLayer, CueLayerDetail, CueTarget, LayerSource } from '@/api/cuesApi'
+import type { Cue, CueLayer, CueLayerDetail, CueTarget } from '@/api/cuesApi'
 import { useCueRowStore } from './CueRowStore'
 import { useCueValuesView } from './CueValuesView'
 import { CueEditorIsolation, useRefusedEditKeys } from './editorIsolation'
-import { appendItem, changeDrawn, layerId, moveDrawn, removeDrawn } from './cueListEdits'
+import { changeDrawn, layerId, moveDrawn, removeDrawn } from './cueListEdits'
 
 const NO_SELECTION: readonly CueTarget[] = []
 
@@ -25,9 +30,12 @@ export const NO_VALUES_SELECTION = 'Select fixtures or groups in Values first'
  * reorder keeps each layer's uuid (the desk pairs them by what they apply, §3.4) and a disabled layer
  * is stored. A stored cue write and nothing else (P2): a live cue picks it up on its next first hold.
  *
- * *+ Look* and *+ Palette* open the programmer's add-layer picker on the Values selection, with the
- * layer's timing; a row's *Targets* puts the layer on that selection; *Open* leaves for the Look's (or
- * palette's) library, where a contents edit changes every cue that layers it. Locked, the rows read.
+ * *+ Look* and *+ Palette* open the one picker (`ApplyPicker`, apply-model plan §4.2) on the Values
+ * selection, its presses writing the cue (`usePressCue`): a palette replaces the family's other
+ * palette layers on those heads, and a second press takes it off — the desk's press rule over the
+ * stored layers. A layer's timing and masters are its settings popover's. A row's *Targets* puts the
+ * layer on that selection; *Open* leaves for the Look's (or palette's) library, where a contents edit
+ * changes every cue that layers it. Locked, the rows read.
  */
 export function CueLooksTab({
   cue,
@@ -65,6 +73,7 @@ function LooksBody({
   const store = useCueRowStore()
   const view = useCueValuesView()
   const navigate = useNavigate()
+  const { fixtures } = useFixtureLookup()
   const { data: looks } = useLookListQuery({ projectId })
   const { data: templates } = useTemplateListQuery({ projectId })
   const looksById = useMemo(() => new Map((looks ?? []).map((l) => [l.id, l])), [looks])
@@ -87,20 +96,20 @@ function LooksBody({
    * have moved the cue's layers since the tab drew them.
    */
   const edit = useCallback(
-    (apply: (list: readonly CueLayerDetail[], drawn: readonly CueLayerDetail[]) => CueLayerDetail[] | null) => {
+    (apply: (list: readonly CueLayerDetail[], drawn: readonly CueLayerDetail[]) => CueLayerDetail[] | null, now = true) => {
       if (readOnly || store == null) return Promise.resolve(false)
       const drawn = layers
       const shown = apply(drawn, drawn)
       if (shown == null) return Promise.resolve(false)
       setPending({ base: cue.layers, list: shown })
-      return store.editLayers((stored) => apply(stored, drawn), true)
+      return store.editLayers((stored) => apply(stored, drawn), now)
     },
     [readOnly, store, layers, cue.layers],
   )
 
   const handlers = useMemo<LayerHandlers>(() => {
-    const set = (index: number, patch: Partial<CueLayer>) =>
-      void edit((list, drawn) => changeDrawn(list, drawn, index, layerId, (layer) => ({ ...layer, ...patch })))
+    const set = (index: number, patch: Partial<CueLayer>, now = true) =>
+      void edit((list, drawn) => changeDrawn(list, drawn, index, layerId, (layer) => ({ ...layer, ...patch })), now)
     return {
       onRemove: (index) => void edit((list, drawn) => removeDrawn(list, drawn, index, layerId)),
       onMove: (from, to) => void edit((list, drawn) => moveDrawn(list, drawn, from, to, layerId)),
@@ -110,6 +119,9 @@ function LooksBody({
       onSetPropertyMask: (index, propertyMask) => set(index, { propertyMask }),
       onSetStomp: (index, stomp) => set(index, { stomp }),
       onSetTargets: selection.length > 0 ? (index) => set(index, { targets: selection.map((t) => ({ ...t })) }) : undefined,
+      // Typed timing coalesces on the store's flush; a master pick is one gesture and saves at once.
+      onSetTiming: (index, timing) =>
+        set(index, timing, !('delayMs' in timing || 'intervalMs' in timing || 'randomWindowMs' in timing)),
       onOpenSource: (index) => {
         const source = layers[index]?.source
         if (source == null) return
@@ -124,27 +136,24 @@ function LooksBody({
     [handlers],
   )
 
-  const append = useCallback(
-    (layer: CueLayer) => {
-      const source = sourceOf(layer, looksById, templatesById)
-      return edit((list) => appendItem(list, { ...layer, source }))
-    },
-    [edit, looksById, templatesById],
-  )
-  const add = (layer: CueLayer) => {
-    setAdding(null)
-    void append(layer)
-  }
-  const handHost = useMemo<HandCueLayerHost | undefined>(
-    () => (store == null ? undefined : { targets: selection, append, undo: store.undo }),
-    [store, selection, append],
-  )
+  const pickerPair = useMemo<PressPair>(() => ({ targets: selection, families: null }), [selection])
+  // What the selected heads can take, as the programmer's strip reads its marquee: an offer, never a
+  // refusal — the desk still answers the press.
+  const pickerFit = useMemo<PaletteFit>(() => {
+    const heads = cueWriteTargets(selection, fixtures ?? [])
+    return heads.length === 0 ? { families: null, emitters: null } : { families: targetFamilies(heads), emitters: targetEmitters(heads) }
+  }, [selection, fixtures])
+  const lookRef = useRef<HTMLButtonElement>(null)
+  const paletteRef = useRef<HTMLButtonElement>(null)
+  const handHost = useMemo<HandCueLayerHost | undefined>(() => (store == null ? undefined : { targets: selection }), [store, selection])
 
   const addTitle = (kind: string) =>
     readOnlyReason ??
     (selection.length > 0
-      ? `Add a ${kind} layer on the Values selection (${selection.length})`
-      : `Add a ${kind} layer — choose where it lands, or select in Values first`)
+      ? `Put a ${kind} on as a layer on the Values selection (${selection.length}), or take it off`
+      : kind === 'look'
+        ? 'Put a look on as a layer of its own fixtures — or select in Values first'
+        : 'Put a per-fixture palette on as a layer — select in Values first for the rest')
 
   return (
     <div className="space-y-2" data-cue-looks-tab>
@@ -161,12 +170,30 @@ function LooksBody({
         emptyNote="No looks layered. + Look or + Palette adds one."
         addActions={
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" disabled={readOnly} title={addTitle('look')} onClick={() => setAdding('look')}>
+            <Button
+              ref={lookRef}
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-xs"
+              disabled={readOnly}
+              title={addTitle('look')}
+              aria-expanded={adding === 'look'}
+              onClick={() => setAdding((a) => (a === 'look' ? null : 'look'))}
+            >
               <Plus className="size-3" />
               <Layers className="size-3" />
               Look
             </Button>
-            <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" disabled={readOnly} title={addTitle('palette')} onClick={() => setAdding('template')}>
+            <Button
+              ref={paletteRef}
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-xs"
+              disabled={readOnly}
+              title={addTitle('palette')}
+              aria-expanded={adding === 'template'}
+              onClick={() => setAdding((a) => (a === 'template' ? null : 'template'))}
+            >
               <Plus className="size-3" />
               <Palette className="size-3" />
               Palette
@@ -178,29 +205,49 @@ function LooksBody({
           the running state, and a cue must not gain a layer from a stray tap. It lands on the
           Values selection through this tab's writes, as + Look does. */}
       {!readOnly && <HandCueLayerStrip projectId={projectId} cue={cue} host={handHost} />}
-      <AddLayerSheet
-        open={adding != null}
-        onOpenChange={(open) => {
-          if (!open) setAdding(null)
-        }}
-        projectId={projectId}
-        defaultTargets={selection}
-        kind={adding ?? undefined}
-        onAdd={add}
-      />
+      {adding != null && !readOnly && (
+        <ApplyPicker
+          projectId={projectId}
+          open
+          onOpenChange={(open) => {
+            if (!open) setAdding(null)
+          }}
+          anchorRef={adding === 'look' ? lookRef : paletteRef}
+          library={adding === 'look' ? 'looks' : 'palettes'}
+          pair={pickerPair}
+          fit={pickerFit}
+          offerNew={false}
+        />
+      )}
     </div>
   )
 }
 
-/** The new layer's source, from the library it was picked from — so the row is named before the cue is read again. */
-function sourceOf(
-  layer: CueLayer,
-  looksById: ReadonlyMap<number, { id: number; uuid: string; name: string }>,
-  templatesById: ReadonlyMap<number, { id: number; uuid: string; name: string }>,
-): LayerSource | null {
-  const look = layer.lookId != null ? looksById.get(layer.lookId) : undefined
-  if (look) return { kind: 'LOOK', id: look.id, uuid: look.uuid, name: look.name }
-  const template = layer.templateId != null ? templatesById.get(layer.templateId) : undefined
-  if (template) return { kind: 'TEMPLATE', id: template.id, uuid: template.uuid, name: template.name }
-  return null
+/**
+ * The heads a cue selection names, as the palette offer reads them: a group as its members, a cell
+ * by its element key, a fixture as itself. A key nothing resolves is left out.
+ */
+export function cueWriteTargets(targets: readonly CueTarget[], fixtures: readonly Fixture[]): WriteTarget[] {
+  const out: WriteTarget[] = []
+  for (const target of targets) {
+    if (target.type === 'group') {
+      for (const fixture of fixtures) {
+        if (fixture.groups.includes(target.key)) out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+      }
+      continue
+    }
+    const fixture = fixtures.find((f) => f.key === target.key)
+    if (fixture != null) {
+      out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+      continue
+    }
+    for (const parent of fixtures) {
+      const element = parent.elements?.find((e) => e.key === target.key)
+      if (element != null) {
+        out.push({ key: element.key, properties: element.properties, fixtureKey: parent.key })
+        break
+      }
+    }
+  }
+  return out
 }

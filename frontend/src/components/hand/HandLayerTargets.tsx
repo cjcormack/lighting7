@@ -1,11 +1,11 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useParams } from 'react-router'
 import type { Cue, CueLayer, CueTarget } from '@/api/cuesApi'
 import type { HeldRecord } from '@/api/handApi'
 import { buildCueInput } from '@/lib/cueUtils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import { useWindowPress, useWindowPressPair, type PressSource } from '@/hooks/usePress'
+import { usePress, useWindowPress, useWindowPressPair, type PressSource } from '@/hooks/usePress'
 import { useHandPlace } from '@/store/hand'
 import { HandPlaceStrip, useHandOffer } from './HandTarget'
 
@@ -21,7 +21,8 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * Both send the window's selection pair (`useWindowPressPair`: the desk's while this window follows
  * it, its own when unlinked — apply-model plan §4.1). The programmer's place **is a press**
  * (`usePress`), so it toggles, replaces the palette's family and lands in a focused Look exactly as
- * the strip's tap does; the cue's place appends a layer to the stored cue. The targets mean two
+ * the strip's tap does; so is the cue editor's, which lands in the stored cue through the editor's
+ * `PressCue`, and a cue strip with no editor host appends a layer to the cue. The targets mean two
  * things depending on what is held, and
  * both are the layer model's own: for a **template**, whose rows are generic, the targets are
  * *supplied* — with nothing selected a template layer contributes nothing, which is why the strip
@@ -45,6 +46,8 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * and the cue strip is mounted once per **expanded** cue card, multiplying the same cost by however
  * many the operator has open.
  */
+
+const NO_TARGETS: readonly CueTarget[] = []
 
 /**
  * Which id a held record contributes — **exactly one**, which is the shape both the cue layer and
@@ -79,7 +82,7 @@ function ProgrammerLayerStripBody() {
   const { projectId } = useParams()
   const { press, into } = useWindowPress(Number(projectId))
   const placeFromHand = useHandPlace()
-  const where = into.kind === 'look' ? into.lookName : 'the programmer'
+  const where = into.kind === 'look' ? into.lookName : into.kind === 'cue' ? into.cueLabel : 'the programmer'
 
   const onPlace = useCallback(
     (held: HeldRecord) => {
@@ -131,15 +134,14 @@ export function HandCueLayerStrip({ projectId, cue, host }: { projectId: number;
 }
 
 /**
- * How a host that writes the cue itself places a layer — the cue editor's Looks tab, whose layers
- * go through its own write queue (`CueRowStore`) and land on its Values selection, as its *+ Look*
- * does. Absent, the strip PATCHes the cue it was handed and lands on the window's selection.
+ * How the cue editor's Looks tab places a layer: a press on its Values selection, which the editor's
+ * `PressCue` lands in the cue through the desk's rule (`usePress`), as its *+ Look* does — so the
+ * place toggles and replaces a palette's family like every other door; the editor's own save toast
+ * carries its Undo. Absent, the strip PATCHes
+ * the cue it was handed and lands on the window's selection.
  */
 export interface HandCueLayerHost {
   targets: readonly CueTarget[]
-  /** Append [layer] to the cue's layers; answers whether the write landed. */
-  append: (layer: CueLayer) => Promise<boolean>
-  undo: () => void
 }
 
 function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: Cue; host?: HandCueLayerHost }) {
@@ -147,15 +149,21 @@ function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: C
   const targets = host?.targets ?? windowTargets
   const placeFromHand = useHandPlace()
   const [patchCue] = usePatchProjectCueMutation()
+  const pair = useMemo(() => ({ targets: host?.targets ?? NO_TARGETS, families: null }), [host?.targets])
+  const { press } = usePress(projectId, pair)
 
   const onPlace = useCallback(
     (held: HeldRecord) => {
       if (host != null) {
+        const source = pressSourceOf(held)
+        if (source == null) return
+        const where = cue.cueNumber != null ? `cue ${cue.cueNumber}` : cue.name
         void placeFromHand(held, {
-          where: cue.cueNumber != null ? `cue ${cue.cueNumber}` : cue.name,
-          // A write the store could not land keeps the record held, as a refused mutation does.
-          run: async () => ((await host.append({ ...layerSource(held), targets: [...targets], enabled: true })) ? true : null),
-          undo: host.undo,
+          where,
+          // A refused press is already on screen and answers null, which keeps the record held.
+          run: () => press(source, 'press'),
+          describe: (result, name) =>
+            result === 'off' ? `“${name}” was already on the selection — taken off it` : `“${name}” placed in ${where}`,
         })
         return
       }
@@ -185,7 +193,7 @@ function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: C
             .catch(ignoreReportedError),
       })
     },
-    [cue, projectId, patchCue, placeFromHand, targets, host],
+    [cue, projectId, patchCue, placeFromHand, targets, host, press],
   )
 
   return (

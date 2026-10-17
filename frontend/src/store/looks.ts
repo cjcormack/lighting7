@@ -29,7 +29,7 @@ export function startLooksBridge() {
     // `Fixture` and `GroupList` for the same reason the CRUD mutations carry them:
     // `compatibleLookIds` rides on the fixture and group summaries, so a Look created, copied or
     // deleted on **another** client would otherwise exist here and be offered nowhere —
-    // `LookTogglePicker` omits it and `LayerPicker` disables every head for it. Affordable
+    // `LookTogglePicker` omits it. Affordable
     // precisely because `lookListChanged` is CRUD-only: a contents edit does not fire it (see
     // `looksWsApi`), so this is not on the per-resolution path.
     //

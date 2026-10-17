@@ -346,6 +346,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)
         routeApiRestCueCooked(state)
+        routeApiRestCueLayerPress(state)
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)
         routeApiRestProjectBusk(state)

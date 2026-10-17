@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { targetKey } from '@/lib/targetKey'
 import { handPickUp } from '@/store/hand'
 import { TimingBadge } from '@/components/cues/TimingBadge'
+import { LayerTimingFields, type LayerTiming } from './LayerTimingFields'
 import { AddBtn, RemoveBtn, Section } from './paneChrome'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -80,6 +81,8 @@ export interface LookStackLayer {
   delayMs?: number | null
   intervalMs?: number | null
   randomWindowMs?: number | null
+  speedMasterUuid?: string | null
+  rateSpeedMasterUuid?: string | null
 }
 
 /**
@@ -128,6 +131,12 @@ export interface LayerHandlers {
   onSetTargets?: (index: number) => void
   /** Open the layer's Look or palette in its library. Optional, the cue editor's *Open Look*. */
   onOpenSource?: (index: number) => void
+  /**
+   * A layer's timing and speed or rate master override — the fields moved — in the wide row's layer
+   * settings popover (apply-model plan §11 question 12). Optional: only a cue's layer has playback
+   * to delay against; the programmer's layers fire now (`FU-PRESS-LAYER-MASTER`).
+   */
+  onSetTiming?: (index: number, timing: LayerTiming) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -201,7 +210,8 @@ interface LookStackProps<T extends LookStackLayer> {
  * (`CueLooksTab`) at the wide one; the phone card's and the Prompt Book's read-out
  * (`CueDetailContent`) renders the wide `LayerRow` directly and read-only, outside any stack.
  *
- * Editable here: order, enabled, amount, blend mode, property mask and stomp. A read-only row
+ * Editable here: order, enabled, amount, blend mode, property mask and stomp — and a cue layer's
+ * timing and masters, in the wide row's settings popover ([LayerHandlers.onSetTiming]). A read-only row
  * (the Look editor's live preview, a cue's detail sheet) drops the amount field, the enable toggle
  * and the remove button, and redraws mask, blend and stomp as badges — see [LayerHandlers] for what
  * stomp means.
@@ -529,6 +539,8 @@ export function LayerRow({
               propertyMask={layer.propertyMask ?? null}
               onSetBlendMode={(mode) => handlers?.onSetBlendMode(index, mode)}
               onSetPropertyMask={(mask) => handlers?.onSetPropertyMask(index, mask)}
+              timing={handlers?.onSetTiming != null ? layer : undefined}
+              onSetTiming={(timing) => handlers?.onSetTiming?.(index, timing)}
             />
           )}
 
@@ -1052,11 +1064,16 @@ function LayerBlendMaskPopover({
   propertyMask,
   onSetBlendMode,
   onSetPropertyMask,
+  timing,
+  onSetTiming,
 }: {
   blendMode: string
   propertyMask: string | null
   onSetBlendMode: (blendMode: string) => void
   onSetPropertyMask: (propertyMask: string | null) => void
+  /** The layer's timing and masters, drawn under the blend and mask — a cue layer's only. */
+  timing?: LayerTiming
+  onSetTiming?: (timing: LayerTiming) => void
 }) {
   const families = parsePropertyMask(propertyMask)
   const masked = families.length > 0
@@ -1078,19 +1095,32 @@ function LayerBlendMaskPopover({
             'h-6 shrink-0 px-1.5 text-[10px]',
             masked || nonDefaultBlend ? 'text-foreground' : 'text-muted-foreground',
           )}
-          title="How this layer combines: which attribute families it asserts, and its blend mode"
+          title={
+            timing != null
+              ? 'This layer’s settings: the attribute families it asserts, its blend mode, its timing and its masters'
+              : 'How this layer combines: which attribute families it asserts, and its blend mode'
+          }
         >
           {label}
           {masked && nonDefaultBlend && <span className="ml-1 opacity-70">{blendMode}</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-4">
+      <PopoverContent
+        align="end"
+        className={cn('space-y-4', timing != null ? 'max-h-[min(36rem,var(--radix-popover-content-available-height))] w-72 overflow-y-auto' : 'w-64')}
+      >
         <BlendMaskFields
           blendMode={blendMode}
           propertyMask={propertyMask}
           onSetBlendMode={onSetBlendMode}
           onSetPropertyMask={onSetPropertyMask}
         />
+        {timing != null && onSetTiming != null && (
+          <div className="space-y-1.5 border-t pt-3">
+            <Label className="text-xs">Timing</Label>
+            <LayerTimingFields layer={timing} onChange={onSetTiming} />
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )

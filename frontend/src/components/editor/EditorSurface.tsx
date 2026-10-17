@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils'
 import {
   useEffect,
   useState,
@@ -492,7 +493,7 @@ export function EditorSurface({
       <PopoverContent
         {...{ [SURFACE_ATTR]: 'popover' }}
         align={align}
-        className={contentClassName}
+        className={cn(POPOVER_BOUND_CLASS, contentClassName)}
         onOpenAutoFocus={onOpenAutoFocus}
         updatePositionStrategy={followAnchor ? 'always' : undefined}
         onInteractOutside={
@@ -509,6 +510,13 @@ export function EditorSurface({
     </Popover>
   )
 }
+
+/**
+ * The popover is bounded by the room Radix measures beside its anchor and scrolls inside it: an
+ * editor taller than that room — a colour cell with its bands, low in the cue editor — would
+ * otherwise hang off the window with no way to reach the part outside it.
+ */
+const POPOVER_BOUND_CLASS = 'max-h-[var(--radix-popover-content-available-height)] overflow-y-auto'
 
 /**
  * The cell's trigger, marked with the editor's open state and nothing else.

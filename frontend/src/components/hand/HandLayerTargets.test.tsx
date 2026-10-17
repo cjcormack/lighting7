@@ -76,6 +76,7 @@ import { store } from '@/store/index'
 import { restApi } from '@/store/restApi'
 import type { Cue } from '@/api/cuesApi'
 import { HandCueLayerStrip, HandProgrammerLayerStrip } from './HandLayerTargets'
+import { PressCueContext } from '@/components/press/pressCue'
 import { HandPlaceStrip } from './HandTarget'
 
 /**
@@ -287,22 +288,36 @@ describe('a cue’s stack', () => {
     expect(sent.layers[1]!.targets).toEqual([{ type: 'fixture', key: 'par-4' }])
   })
 
-  it('with a host — the cue editor’s Looks tab — places through the host on its targets, never its own PATCH', async () => {
-    const append = vi.fn((_layer: unknown) => Promise.resolve(true))
-    const undo = vi.fn()
-    const host = { targets: [{ type: 'group' as const, key: 'Front' }], append, undo }
-    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} host={host} />, hold('LOOK'), true)
+  it('with a host — the cue editor’s Looks tab — presses into the cue on its targets, never its own PATCH', async () => {
+    const pressLayer = vi.fn((_source: unknown, _targets: unknown, _families: unknown) =>
+      Promise.resolve({ action: 'applied' as const, cue: {} as never }),
+    )
+    const pressCue = {
+      projectId: 1,
+      cueId: 5,
+      cueLabel: 'Q12',
+      readOnly: false,
+      layered: new Set<string>(),
+      effects: [],
+      pressLayer,
+      landValues: vi.fn(() => 0),
+      pickEffect: vi.fn(() => Promise.resolve(true)),
+    }
+    const host = { targets: [{ type: 'group' as const, key: 'Front' }] }
+    await withHold(
+      <PressCueContext.Provider value={pressCue}>
+        <HandCueLayerStrip projectId={1} cue={cue()} host={host} />
+      </PressCueContext.Provider>,
+      hold('LOOK'),
+      true,
+    )
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
-    await waitFor(() => expect(append).toHaveBeenCalledTimes(1))
-    expect(append.mock.calls[0]![0]).toMatchObject({ lookId: 8, targets: [{ type: 'group', key: 'Front' }], enabled: true })
+    await waitFor(() => expect(pressLayer).toHaveBeenCalledTimes(1))
+    expect(pressLayer).toHaveBeenCalledWith({ lookId: 8 }, [{ type: 'group', key: 'Front' }], null)
     expect(patches).toHaveLength(0)
-    await waitFor(() => expect(toasts).toHaveLength(1))
-    await act(async () => {
-      ;(toasts[0]![1].action as { onClick: () => void }).onClick()
-    })
-    expect(undo).toHaveBeenCalledTimes(1)
+    expect(pressed).toHaveLength(0)
   })
 
   it('draws nothing for a cue in the hand', async () => {

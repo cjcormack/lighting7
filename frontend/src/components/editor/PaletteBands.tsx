@@ -2,21 +2,22 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { templateLayerPresence } from '@/components/busking/lookPresence'
 import { padPresenceClass, templateSwatch } from '@/components/busking/padFace'
 import { targetEmitters, templateTargetsOf, type WriteTarget } from '@/components/fixtures-list/rowModel'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
 import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
 import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { usePress, type PressGesture, type PressPair } from '@/hooks/usePress'
-import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { usePress, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
+import { FAMILY_LABELS, familyForEffectCategory, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { paletteFits, type PaletteFit } from '@/lib/paletteOffer'
 import { templatePropertyFor } from '@/lib/templateIntent'
 import { recentFirst } from '@/lib/templateRecents'
 import { cn } from '@/lib/utils'
 import { isCueEffect } from '@/components/fx/fxEditorModel'
-import { effectReaches } from '@/components/fx/effectSplit'
+import { effectReaches, storedEffectReaches } from '@/components/fx/effectSplit'
+import { useCueBandProject, usePressCue } from '@/components/press/pressCue'
+import { pressPresence } from '@/components/press/pressPresence'
 import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
 import { useStopEffect } from '@/components/fx/useEffectControls'
 import { useActiveEffectsQuery, useEffectLibraryQuery } from '@/store/fixtureFx'
@@ -50,10 +51,11 @@ export function paletteCarries(property: string): boolean {
  *  - **Then** the footer: *Save as palette…* from the cell's values, beside the family's own tools
  *    ([PaletteFooter]).
  *
- * Drawn only where a press has a door: the programmer passes `projectId`, and the plain lists and
- * the cue editor's Values grid pass none — a band press there would reach the programmer (R2 P2), so
- * those cells get their editor alone. A cell whose property no value palette can carry — a speed, a
- * setting — has no Palettes band and no footer, and keeps its Effects band.
+ * Drawn only where a press has a door: the programmer passes `projectId`, and the cue editor's
+ * Values grid lands its presses in the cue (apply-model plan §3.6, `usePressCue`) — there the bands
+ * are drawn and the footer is not, since *Save as palette…* records from the programmer. The plain
+ * lists have neither and draw their editor alone. A cell whose property no value palette can carry —
+ * a speed, a setting — has no Palettes band and no footer, and keeps its Effects band.
  */
 export function PaletteBands({
   projectId,
@@ -85,13 +87,15 @@ export function PaletteBands({
   const pressTargets = useMemo(() => templateTargetsOf(targets), [targets])
   const emitters = useMemo(() => targetEmitters(targets), [targets])
   const families = useMemo(() => [family], [family])
-  if (projectId == null) return <>{children}</>
+  const cueProject = useCueBandProject()
+  const bandProject = projectId ?? cueProject
+  if (bandProject == null) return <>{children}</>
   const carries = palettes && paletteCarries(property)
   return (
     <>
       {carries && (
         <PaletteBand
-          projectId={projectId}
+          projectId={bandProject}
           family={family}
           property={property}
           targets={pressTargets}
@@ -100,8 +104,8 @@ export function PaletteBands({
         />
       )}
       {children}
-      <EffectsBand projectId={projectId} family={family} property={property} targets={pressTargets} families={families} />
-      {carries && <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />}
+      <EffectsBand projectId={bandProject} family={family} property={property} targets={pressTargets} families={families} />
+      {carries && projectId != null && <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />}
     </>
   )
 }
@@ -113,7 +117,8 @@ export function PaletteBands({
  * cell's own family in a cell (§3.2 rule 5), the busk pair's in the busk Colour tab — through
  * `usePress`, with the chip's gestures: tap a tracking layer, ⌥click *Apply as values*, a hold or a
  * right-click the menu. Its chips wear the pad's ring; under a focused Look a teal line says where a
- * press goes instead (*Into Warm wash*) and the rings go, since a Look holds values.
+ * press goes instead (*Into Warm wash*) and the rings go, since a Look holds values. In the cue
+ * editor the line says *Into Q1 · as a layer* and a chip is ringed (partly) where the cue layers it.
  *
  * **The offer is the strip's** (`paletteFits`): the family, every emitter a palette names somewhere
  * in the heads — so a Shehds zone is offered the colour palettes its zone takes — and for a Beam cell
@@ -150,10 +155,12 @@ export function PaletteBand({
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
   const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, pressOptions)
+  const cue = usePressCue()
   const onGesture = useCallback(
     (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
     [press],
   )
+  const presenceOf = (template: TemplateSummary) => pressPresence(into, cue, applied, targets, 'TEMPLATE', template.id)
   const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters, property }), [family, emitters, property])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'value' && paletteFits(t, fit))),
@@ -196,21 +203,14 @@ export function PaletteBand({
           <span className="tabular-nums text-muted-foreground">{offered.length}</span>
         </Button>
       </div>
-      {into.kind === 'look' && (
-        <div
-          data-palette-band-into
-          className="rounded border border-teal-600/30 bg-teal-500/10 px-2 py-1 text-[11px] text-teal-700 dark:text-teal-300"
-        >
-          Into {into.lookName}
-        </div>
-      )}
+      {into.kind !== 'programmer' && <IntoLine into={into} />}
       {offered.length === 0 ? (
         <p className="text-[10px] text-muted-foreground">No {label.toLowerCase()} palette fits these heads</p>
       ) : (
         // Two rows of 28px chips and the gap between them; the rest are a press on *All* away.
         <div className="flex max-h-[62px] flex-wrap gap-1.5 overflow-hidden">
           {offered.map((template) => {
-            const presence = into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id)
+            const presence = presenceOf(template)
             const swatch = templateSwatch(template)
             return (
               <PalettePressButton
@@ -261,6 +261,25 @@ export function PaletteBand({
           scope={scope}
         />
       )}
+    </div>
+  )
+}
+
+/** Where a press goes when it is not the programmer: the focused Look, or the cue being edited. */
+function IntoLine({ into }: { into: Exclude<PressInto, { kind: 'programmer' }> }) {
+  return into.kind === 'look' ? (
+    <div
+      data-palette-band-into
+      className="rounded border border-teal-600/30 bg-teal-500/10 px-2 py-1 text-[11px] text-teal-700 dark:text-teal-300"
+    >
+      Into {into.lookName}
+    </div>
+  ) : (
+    <div
+      data-palette-band-into
+      className="rounded border border-sky-600/30 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-700 dark:text-sky-300"
+    >
+      Into {into.cueLabel} · as a layer
     </div>
   )
 }
@@ -381,6 +400,11 @@ export function usePaletteSave(
  *    /programmer/effects` with the same pair, so a Pulse on a uv cell is masked as Colour (the
  *    family the desk reads off the driven property). Under a focused Look it starts on `/fx/add` and
  *    is absorbed into the Look instead.
+ *
+ * **In the cue editor** (apply-model plan §3.6, session 8) the band is about the cue, not the stage:
+ * it lists the cue's **stored** effects on this property that reach these heads, drawn and not
+ * opened — the FX tab edits them, and no live editor or split is offered — its effect palettes go on
+ * as cue layers, and *+ Effect …* stores a bare effect in the cue in draft, running nothing.
  */
 export function EffectsBand({
   projectId,
@@ -407,10 +431,12 @@ export function EffectsBand({
   const { data: active } = useActiveEffectsQuery()
   const { data: applied } = useProgrammerAppliedQuery()
   const { fixtures } = useFixtureLookup()
+  const pressCue = usePressCue()
   const stopEffect = useStopEffect()
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
   const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, pressOptions)
+  const cue = into.kind === 'cue' ? pressCue : null
   const onGesture = useCallback(
     (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
     [press],
@@ -423,11 +449,23 @@ export function EffectsBand({
   )
   const running = useMemo(
     () =>
-      (active ?? []).filter(
-        (e) => !e.leaving && sameProperty(e.propertyName, property) && effectReaches(e, targets, fixtures ?? []),
-      ),
-    [active, property, targets, fixtures],
+      cue != null
+        ? []
+        : (active ?? []).filter(
+            (e) => !e.leaving && sameProperty(e.propertyName, property) && effectReaches(e, targets, fixtures ?? []),
+          ),
+    [cue, active, property, targets, fixtures],
   )
+  // An effect stored with no property of its own is the desk's to resolve per head, so it is listed
+  // under its family — on any of the family's cells it reaches — rather than guessed at here.
+  const stored = useMemo(() => {
+    if (cue == null) return []
+    return cue.effects.filter((e) =>
+      e.propertyName != null
+        ? sameProperty(e.propertyName, property) && storedEffectReaches(e, targets, fixtures ?? [])
+        : familyForEffectCategory(e.category) === family && storedEffectReaches({ ...e, propertyName: property }, targets, fixtures ?? []),
+    )
+  }, [cue, family, property, targets, fixtures])
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const editAnchor = useRef<HTMLElement | null>(null)
@@ -444,6 +482,9 @@ export function EffectsBand({
         {into.kind === 'look' && (
           <span className="min-w-0 truncate text-[10px] text-teal-700 dark:text-teal-300">into {into.lookName}</span>
         )}
+        {into.kind === 'cue' && (
+          <span className="min-w-0 truncate text-[10px] text-sky-700 dark:text-sky-300">in {into.cueLabel}</span>
+        )}
         <Button
           ref={addRef}
           type="button"
@@ -452,7 +493,11 @@ export function EffectsBand({
           className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-[11px]"
           aria-expanded={pickerOpen}
           disabled={targets.length === 0}
-          title={`A library effect on these heads — Local, taking them off the ${label.toLowerCase()} effects they run`}
+          title={
+            cue != null
+              ? `A library effect on these heads — stored in ${cue.cueLabel}, nothing runs`
+              : `A library effect on these heads — Local, taking them off the ${label.toLowerCase()} effects they run`
+          }
           onClick={() => {
             setPickerMounted(true)
             setPickerOpen((wasOpen) => !wasOpen)
@@ -493,10 +538,25 @@ export function EffectsBand({
           })}
         </div>
       )}
+      {stored.length > 0 && (
+        <div data-effects-band-stored className="flex flex-wrap gap-1.5">
+          {stored.map((effect, index) => (
+            <span
+              key={effect.uuid ?? `${effect.effectType}-${index}`}
+              data-band-stored-effect
+              title={`${effect.effectType} — stored in ${cue?.cueLabel ?? 'this cue'}; edit it in the FX tab`}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-sky-500/50 bg-sky-500/[0.08] px-2 text-xs"
+            >
+              <AudioWaveform className="size-3 shrink-0 text-sky-600 dark:text-sky-300" />
+              <span className="max-w-[9rem] truncate">{effect.effectType}</span>
+            </span>
+          ))}
+        </div>
+      )}
       {offered.length > 0 && (
         <div className="flex max-h-[62px] flex-wrap gap-1.5 overflow-hidden">
           {offered.map((template) => {
-            const presence = into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id)
+            const presence = pressPresence(into, cue, applied, targets, 'TEMPLATE', template.id)
             return (
               <PalettePressButton
                 key={template.id}
@@ -528,8 +588,10 @@ export function EffectsBand({
           })}
         </div>
       )}
-      {running.length === 0 && offered.length === 0 && (
-        <p className="text-[10px] text-muted-foreground">Nothing running on these heads</p>
+      {running.length === 0 && stored.length === 0 && offered.length === 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          {cue != null ? `${cue.cueLabel} runs no effect on these heads` : 'Nothing running on these heads'}
+        </p>
       )}
       {editing != null && (
         <FxEditorPopover

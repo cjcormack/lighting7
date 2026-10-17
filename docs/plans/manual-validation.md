@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S13`](#fu-manual-venue-visit-s13) | on the Plan the movers land where the operator clicks — downstage at head height and in the house above the seats — and *Aim…* in a position cell's popup aims the cell's heads at a typed point | Venue visit S13, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-7`](#fu-manual-venue-visit-r1-7) | Claude, over MCP on a real show, builds a stack that shares a cue with another stack — one cue, two numbered places, an edit showing in both — moves an entry with its number and anchor, and deletes a cue only after naming its pad and asking | Venue visit R1.7, 2026-10-17 |
@@ -129,6 +130,44 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-8`
+
+**What it proves**: *into the cue editor* — venue-visit R3.8, apply-model plan session 8 (§3.6, D7):
+in the cue editor a palette or a Look pressed from a value cell's bands or the Looks tab's picker
+goes on as a layer of the **stored** cue — the programmer's press rule, applied by the desk to the
+cue's layers — and nothing reaches the stage until the cue's next GO; a layer's timing and masters
+are its settings popover's.
+
+**Why it is here**: `CueLayerPressRouteTest` drives the route against mock controllers and the
+frontend tests pin the requests and that no `programmer.*`, `channels.*` or `fx.*` frame leaves the
+editor; nobody has watched a locked, running show's rig stay still under a press from the editor,
+seen the next GO land the layers, or timed a layer's delay set from its popover.
+
+**Test**, on the dev rig with a show running Q3 of *Act 1*, Q4 next, four hexes in a group, colour
+palettes *Red* and *Blue*, a Look *Warm* on the hexes and a second master at a different tempo from
+master 1:
+
+1. **Locked.** Open Q4's card: its Values grid's cells are inert and the Looks tab's *+ Look* and *+
+   Palette* are disabled, saying the show is locked.
+2. **A palette on the cells.** Unlock. In Q4's Values grid select the four hexes' colour cells and
+   open the editor: the popup draws the Palettes band with *Into Q4 · as a layer* and no *Save as
+   palette…*. Press *Red*: the Looks tab lists a *Red* layer on Hex 1–4, its chip ringed — and the
+   hexes on stage stay as Q3 has them (watch the rig and the Channels view). Select Hex 1–2 and press
+   *Blue*: the Looks tab reads *Red* on Hex 3–4 and *Blue* on Hex 1–2. Press *Blue* again: it comes
+   off. Undo from the toast puts the layers back as they were before that press.
+3. **A Look from the picker.** In the Looks tab press *+ Look*, then *Warm* in the picker: a *Warm*
+   layer is added and the picker stays open. Nothing on stage moves.
+4. **A bare effect.** In a hex dimmer cell's popup press *+ Effect…* and tap *Pulse*: Q4's FX tab
+   lists a stored Pulse, and nothing on stage pulses. The cell's Effects band then lists it, without
+   opening it.
+5. **Timing.** In the Looks tab open *Warm*'s settings (the *Mix* button on its row): set a delay of
+   2000 ms and override its speed master to the second master; the row's timing badge reads the
+   2 s delay, and reopening the popover shows the second master.
+6. **GO.** Lock the show and GO into Q4: Blue on Hex 1–2, Red on Hex 3–4, the Pulse running — and
+   *Warm* lands two seconds after the GO, its effects at the second master's tempo.
 
 ---
 
@@ -3129,7 +3168,7 @@ responsive and the rows must not visibly rebuild under the drag; in the network 
 saves should appear with **no** accompanying `GET /fixtures` or `GET /groups`. Then confirm the
 other half still works: with the Look library open beside a second browser, add the first effect of
 a new family to a Look (`+ Effect` with a layer focused) and check it becomes offerable — it must
-appear in `LookTogglePicker` and stop disabling heads in `LayerPicker` without a manual reload.
+appear in `LookTogglePicker` without a manual reload.
 Rename a Look and delete one too; both must still refresh the library. 10 minutes.
 
 ---
