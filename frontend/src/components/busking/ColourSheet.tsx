@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
-import { ColourEditor, emitterHeadCounts, type ColourChannels, type ColourRecentSource } from '@/components/editor/ColourEditor'
+import { ColourEditor, emitterHeadCounts, type ColourChannels, type ColourPaletteSource } from '@/components/editor/ColourEditor'
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
 import { useEditorCramped } from '@/components/editor/EditorSurface'
@@ -26,7 +26,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
  * cells), the **rig order** Pick reads in, the **Spread hand-over**, the live push and its release,
  * and the save sheet. Everything else — the picker, the fields, the emitter rows, the read-out,
- * Pick and its hidden leaves, Recent, the footer — is the editor's, docked.
+ * Pick and its hidden leaves, the Palettes band, the footer — is the editor's, docked.
  *
  * **It writes literals to Local, and only that.** Every drag is `programmer.setColour` per selected
  * target, which is what a palette's *Apply as values* does and what the programmer's colour cell does.
@@ -36,8 +36,8 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * tempo fader's discipline over six bytes.
  *
  * **The family mask is not consulted.** The desk's mask gates *presses*, and a colour drag is a
- * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Recent
- * chip is a *press*, and goes through `usePress` under the mask like any other.
+ * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Palettes
+ * band chip is a *press*, and goes through `usePress` under the mask like any other.
  *
  * **The buffer is seeded from the rig** — the editor's Pick on mount and on every change of heads,
  * retried until they have reported (`pickOnTargets`) — so a single-channel edit means what it
@@ -58,7 +58,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 export interface ColourSheetProps {
   projectId: number
   selectedTargets: Map<string, BuskingTarget>
-  /** The selection's attribute mask, for a Recent press. Null is every attribute. */
+  /** The selection's attribute mask, for a Palettes band press. Null is every attribute. */
   families: AttributeFamily[] | null
   /** Open the Spread tab with *From* set to the current colour. Absent, the button is inert. */
   onSpread?: (from: ColourChannels) => void
@@ -312,8 +312,8 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
     }
   }, [flush])
 
-  const recent = useMemo<ColourRecentSource>(
-    () => ({ projectId, targets: layerTargets, localFamilies: families }),
+  const palettes = useMemo<ColourPaletteSource>(
+    () => ({ projectId, targets: layerTargets, families }),
     [projectId, layerTargets, families],
   )
   const [saving, setSaving] = useState(false)
@@ -341,7 +341,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
         headOrder={headOrder}
         projectId={projectId}
         pickOnTargets
-        recent={recent}
+        palettes={palettes}
         onPick={onPick}
         onSave={onSave}
         onSpread={onSpread}

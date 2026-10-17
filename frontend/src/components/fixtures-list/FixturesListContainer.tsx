@@ -1047,7 +1047,12 @@ export function FixturesListContainer({
   )
   // Held by content for `columnTargets`' reason: `templateTargets` follows `rows`' identity.
   const pressTargets = useContentStable(templateTargets, sameKeys)
-  const press = useMemo(() => ({ targets: pressTargets, askedFamilies: pressAsked }), [pressTargets, pressAsked])
+  const pressFamilies = useContentStable(templateFamilies, (a, b) => familiesKey(a) === familiesKey(b))
+  const pressEmitters = useContentStable(templateEmitters, (a, b) => a.join() === b.join())
+  const press = useMemo(
+    () => ({ targets: pressTargets, askedFamilies: pressAsked, targetFamilies: pressFamilies, targetEmitters: pressEmitters }),
+    [pressTargets, pressAsked, pressFamilies, pressEmitters],
+  )
   const permissionEntry = keys.entry
   const permissionClear = keys.clear
   const marqueeSnapshot = useMemo<MarqueeSnapshot>(
@@ -1551,10 +1556,10 @@ export function FixturesListContainer({
           onCellCommit={handleCellCommit}
           batchFor={batchFor}
           scopeLabel={scopeLabel}
-          // The route's, as a number, for the **programmer alone** — what the colour editor's
-          // leaves, Recent and Save need. All three routes are under `/projects/:projectId`, but the
-          // two plain lists deliberately draw no template strip (§List shell) and Save records from
-          // the programmer, so their colour cells get none of the three, like the strip.
+          // The route's, as a number, for the **programmer alone** — what the popup's Palettes band
+          // and Save, and the colour editor's leaves, need. All three routes are under
+          // `/projects/:projectId`, but the two plain lists deliberately draw no palette strip
+          // (§List shell) and Save records from the programmer, so their cells get none, like the strip.
           projectId={selectionScope === 'programmer' && projectId != null ? Number(projectId) : undefined}
           onSpread={onSpreadFromColour}
           onShowInfo={handleShowInfo}

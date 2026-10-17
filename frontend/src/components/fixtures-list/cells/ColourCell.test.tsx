@@ -7,8 +7,8 @@ import type { CellBatch } from '../rowModel'
 import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
 
 /**
- * The programmer's colour cell as a host of `ColourEditor` (editor-kit plan D10–D12): Recent only
- * in the bottom-sheet form; Save opening the new-template sheet with Colour answered over the
+ * The programmer's colour cell as a host of `ColourEditor` (editor-kit plan D10–D12): the Palettes
+ * band in every form, pressed onto the batch under Colour (apply-model plan §4.3); Save opening the new-template sheet with Colour answered over the
  * marquee's fixtures; Spread… handing the colour to row C's panel as *From*, RGB only, and closing
  * this editor (session 3); the label line in the popover; and
  * no *Applying to N targets* anywhere on it.
@@ -16,12 +16,13 @@ import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
 let templates: unknown[] = []
+const toggle = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve({}) })))
 vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: templates }),
   useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useToggleTemplateMutation: () => [toggle],
 }))
-// A Recent chip is a press (`usePress`): its other routes and the ring's applied state.
+// A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
@@ -47,7 +48,7 @@ vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 
-import { ColourCell, colourTargetsOf, templateTargetsOf } from './ColourCell'
+import { ColourCell, colourTargetsOf } from './ColourCell'
 
 const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
 const rgbw = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: chan(4) })
@@ -150,20 +151,41 @@ describe('ColourCell', () => {
     expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 1 of 3 heads · the rest take RGB only')
   })
 
-  it('draws Recent in the bottom sheet alone: not in the popover, not in the side sheet', () => {
-    draw()
-    expect(document.querySelector('[data-colour-editor-recent]')).toBeNull()
-    cleanup()
-    resetEditorSurfaceMedia()
-    stubMatchMedia({ narrow: true })
-    draw()
-    expect(document.querySelector('[data-colour-editor-recent]')).not.toBeNull()
-    expect(document.querySelectorAll('[data-recent-template]')).toHaveLength(1)
-    cleanup()
-    resetEditorSurfaceMedia()
-    stubMatchMedia({ short: true })
-    draw()
-    expect(document.querySelector('[data-colour-editor-recent]')).toBeNull()
+  it('draws the Palettes band in every form: the popover, the bottom sheet and the side sheet', () => {
+    for (const media of [{}, { narrow: true }, { short: true }]) {
+      stubMatchMedia(media)
+      draw()
+      expect(document.querySelector('[data-palette-band="COLOUR"]')).not.toBeNull()
+      expect(document.querySelectorAll('[data-band-palette]')).toHaveLength(1)
+      cleanup()
+      resetEditorSurfaceMedia()
+    }
+  })
+
+  it('offers a Shehds zone the colour palettes its zone takes, and presses onto the zones under Colour (S1)', async () => {
+    // Two zones of a Shehds, whose colour lives on its cells: the band reads the zones' own emitters
+    // (RGBW), so a palette naming white is offered, and a press names each zone by its element key.
+    const zone = (n: number) => ({ key: `shehds-1.zone-${n}`, properties: [rgbw], fixtureKey: 'shehds-1', cellIndex: n - 1 })
+    templates = [
+      ...templates,
+      { ...(templates[0] as object), id: 3, uuid: 't3', name: 'White Key', requiredEmitters: ['white'] },
+      { ...(templates[0] as object), id: 4, uuid: 't4', name: 'UV Wash', requiredEmitters: ['uv'] },
+    ]
+    draw({ batch: { count: 2, skipped: 0, resolutions: [RGBW, RGBW], targets: [zone(1), zone(2)] } })
+    const chips = [...document.querySelectorAll('[data-band-palette]')].map((chip) => chip.textContent)
+    expect(chips).toEqual(['Warm Amber', 'White Key'])
+    expect(document.querySelector('[data-palette-band-heads]')).toHaveTextContent('shehds-1.zone-1, shehds-1.zone-2')
+    fireEvent.click(screen.getByText('White Key'))
+    expect(toggle).toHaveBeenLastCalledWith({
+      projectId: 1,
+      templateId: 3,
+      targets: [
+        { type: 'fixture', key: 'shehds-1.zone-1' },
+        { type: 'fixture', key: 'shehds-1.zone-2' },
+      ],
+      propertyMask: 'COLOUR',
+      families: ['COLOUR'],
+    })
   })
 
   it('Save as palette… opens the sheet with Colour answered over the marquee’s heads — a cell by its own key', () => {
@@ -176,49 +198,6 @@ describe('ColourCell', () => {
       { type: 'fixture', key: 'par-2' },
       { type: 'fixture', key: 'bar.c2' },
     ])
-  })
-
-  describe('templateTargetsOf', () => {
-    it('keeps each cell by its element key rather than folding it onto the parent (venue-visit plan S1)', () => {
-      expect(
-        templateTargetsOf([
-          { key: 'shehds-1.zone-1', properties: [], fixtureKey: 'shehds-1', cellIndex: 0 },
-          { key: 'shehds-1.zone-3', properties: [], fixtureKey: 'shehds-1', cellIndex: 2 },
-        ]),
-      ).toEqual([
-        { type: 'fixture', key: 'shehds-1.zone-1' },
-        { type: 'fixture', key: 'shehds-1.zone-3' },
-      ])
-    })
-
-    it('names a whole fixture by its own key — the desk fans it to the cells that carry the property', () => {
-      expect(templateTargetsOf([{ key: 'shehds-1', properties: [] }, { key: 'par-1', properties: [] }])).toEqual([
-        { type: 'fixture', key: 'shehds-1' },
-        { type: 'fixture', key: 'par-1' },
-      ])
-    })
-
-    it('drops a cell whose parent is in the batch too, since the parent covers it', () => {
-      expect(
-        templateTargetsOf([
-          { key: 'shehds-1.zone-2', properties: [], fixtureKey: 'shehds-1', cellIndex: 1 },
-          { key: 'shehds-1', properties: [] },
-          { key: 'shehds-2.zone-1', properties: [], fixtureKey: 'shehds-2', cellIndex: 0 },
-        ]),
-      ).toEqual([
-        { type: 'fixture', key: 'shehds-1' },
-        { type: 'fixture', key: 'shehds-2.zone-1' },
-      ])
-    })
-
-    it('dedupes a target named twice', () => {
-      expect(
-        templateTargetsOf([
-          { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
-          { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
-        ]),
-      ).toEqual([{ type: 'fixture', key: 'bar.c1' }])
-    })
   })
 
   it('Spread… hands the RGB to the host as From — no emitter travels — and closes this editor; inert with no host to open', () => {

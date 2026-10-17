@@ -77,7 +77,7 @@ vi.mock('@/store/selection', () => ({
   useSelectionPair: () => (desk.following ? desk.pair : desk.local),
 }))
 
-const { usePress, useWindowPress } = await import('./usePress')
+const { usePress, useWindowPaletteFit, useWindowPress } = await import('./usePress')
 
 const AMBER = {
   id: 1,
@@ -191,7 +191,9 @@ describe('usePress — the pair', () => {
 
   it('on the programmer, is the list’s own — an unlinked window presses what it shows', async () => {
     desk.following = false
-    marquee.current = { press: { targets: [{ type: 'fixture', key: 'par-3' }], askedFamilies: ['INTENSITY'] } }
+    marquee.current = {
+      press: { targets: [{ type: 'fixture', key: 'par-3' }], askedFamilies: ['INTENSITY'], targetFamilies: ['INTENSITY'], targetEmitters: [] },
+    }
     await send({ kind: 'template', template: AMBER }, 'press')
     expect(calls.toggleTemplate).toHaveBeenLastCalledWith(
       expect.objectContaining({ targets: [{ type: 'fixture', key: 'par-3' }], families: ['INTENSITY'] }),
@@ -291,5 +293,24 @@ describe('usePress — a focused Look layer', () => {
     })
     expect(calls.toggleTemplate).toHaveBeenCalled()
     expect(calls.setValue).not.toHaveBeenCalled()
+  })
+})
+
+describe('useWindowPaletteFit — what the rail’s picker offers', () => {
+  const fit = () => renderHook(() => useWindowPaletteFit()).result.current
+
+  it('is the strip’s offer on the programmer: the marquee’s families, else what the heads can take', () => {
+    const targets = [{ type: 'fixture', key: 'hex-1' }]
+    marquee.current = { press: { targets, askedFamilies: ['COLOUR'], targetFamilies: ['COLOUR', 'BEAM'], targetEmitters: ['white'] } }
+    expect(fit()).toEqual({ families: ['COLOUR'], emitters: ['white'] })
+    marquee.current = { press: { targets, askedFamilies: null, targetFamilies: ['COLOUR', 'BEAM'], targetEmitters: ['white'] } }
+    expect(fit()).toEqual({ families: ['COLOUR', 'BEAM'], emitters: ['white'] })
+  })
+
+  it('filters nothing with nothing selected, so a per-fixture palette naming an emitter is still offered', () => {
+    marquee.current = { press: { targets: [], askedFamilies: null, targetFamilies: [], targetEmitters: [] } }
+    expect(fit()).toEqual({ families: null, emitters: null })
+    marquee.current = null
+    expect(fit()).toEqual({ families: null, emitters: null })
   })
 })

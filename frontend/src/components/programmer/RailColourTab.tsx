@@ -6,7 +6,8 @@ import { EditorFooter } from '@/components/editor/EditorFooter'
 import { EditorLabelLine } from '@/components/editor/EditorLabelLine'
 import { headsLine } from '@/components/editor/editorCopy'
 import { useEditorKeyboard } from '@/components/editor/useEditorKeyboard'
-import { colourTargetsOf, templateTargetsOf } from '@/components/fixtures-list/cells/ColourCell'
+import { colourTargetsOf } from '@/components/fixtures-list/cells/ColourCell'
+import { templateTargetsOf } from '@/components/fixtures-list/rowModel'
 import { cellActionCopy } from '@/components/fixtures-list/cellEntry'
 import { useMarquee, type MarqueeSnapshot } from '@/components/fixtures-list/marqueeContext'
 import { batchForTargets, type CellBatch, type WriteTarget } from '@/components/fixtures-list/rowModel'
@@ -54,7 +55,7 @@ import { useClaimedFocus } from './useClaimedFocus'
  * character typed into it as its first keystroke, exactly as the popover would have opened.
  * *Spread…* opens the Spread tab with From set to this colour's RGB (`spreadFrom`).
  *
- * **No Recent** (D11): the tab exists only in the docked arm, where row C's strip is on screen.
+ * **No Palettes band** (D11): the tab exists only in the docked arm, where row C's strip is on screen.
  *
  * Memoised on `projectId`: `ProgrammerRail` re-renders on every desk-selection change (its add-effect
  * offer subscribes to it), and the tab has its own subscription to the marquee for everything else.

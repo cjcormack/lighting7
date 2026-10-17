@@ -14,7 +14,7 @@ import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
  * the targets it hands the editor in rig order, the seed from the rig and its release, nothing
  * written under an empty selection, no mask refusal, and the footer's verbs reaching the editor:
  * Save over the selection as colour, Spread… handing the current colour or drawn inert. The
- * editor's own pieces — the emitter rows and counts, Pick, Recent, the knob — are pinned in
+ * editor's own pieces — the emitter rows and counts, Pick, the Palettes band, the knob — are pinned in
  * `ColourEditor.test.tsx`.
  */
 
@@ -28,7 +28,7 @@ vi.mock('@/store/templates', () => ({
   useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
   useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
-// A Recent chip is a press (`usePress`): its other routes and the ring's applied state, none of
+// A Palettes band chip is a press (`usePress`): its other routes and the ring's applied state, none of
 // which these tests are about.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))

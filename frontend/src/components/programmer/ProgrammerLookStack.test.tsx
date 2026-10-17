@@ -8,8 +8,8 @@ import type { LookSummary } from '@/api/looksApi'
  * The programmer's stack at the rail's dense density: two lines per row, the amount, blend, mask,
  * stomp and remove behind one popover. What is pinned is the index → `layerId` translation
  * through every one of those controls — the popover moved them off the row, and a handler that
- * resolved the wrong row would do so silently. The picker's forwarding, which used to live here
- * behind the stack's own Add button, is `ProgrammerAddLayerSheet.test.tsx`'s now.
+ * resolved the wrong row would do so silently. Adding a layer is the rail's door into the one
+ * picker (`ApplyPicker.test.tsx`).
  */
 const mocks = vi.hoisted(() => ({
   layers: [] as ProgrammerLayer[],

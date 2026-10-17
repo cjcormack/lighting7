@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react'
+import { familyForCategory } from '@/lib/attributeFamily'
 import { Slider } from '@/components/ui/slider'
 import type { CellResolution } from '../columns'
 import type { CellBatch, CellCommit } from '../rowModel'
@@ -9,6 +10,7 @@ import { EditorLabel } from '../../editor/EditorLabel'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
+import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
@@ -33,6 +35,12 @@ interface SliderCellOwnProps {
   batch?: CellBatch
   /** *Local*, or the focused Look's name — the label line's scope. */
   scopeLabel?: string
+  /**
+   * The project, for the popup's Palettes band and *Save as palette…* (apply-model plan §4.3). The
+   * container passes it on the **programmer alone**, as `ColourCell`'s: the plain lists and the cue
+   * editor's Values grid have no press door, so their editor is drawn bare.
+   */
+  projectId?: number
   /**
    * The current scope holds no value here: draw an em-dash instead of the fill bar, but keep
    * `value` as the editor's starting point so a busk begins where the rig is. See `UnsetCellMark`.
@@ -105,6 +113,7 @@ export const SliderCell = memo(function SliderCell({
   label = 'Value',
   batch,
   scopeLabel = 'Local',
+  projectId,
   placeholder,
   disabled = false,
   autoOpen,
@@ -159,8 +168,12 @@ export const SliderCell = memo(function SliderCell({
     `${current} of 255 · ${range.min}–${range.max}` +
     (heads.count > 1 ? (sameRange ? ' on every head' : ' on the first head · ranges differ') : '')
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
+  const family = first.kind === 'slider' ? familyForCategory(first.property.category) : 'INTENSITY'
+  const bandTargets = heads.targets ?? NO_TARGETS
+  const save = usePaletteSave(projectId, family, bandTargets)
 
   return (
+    <>
     <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
@@ -215,35 +228,47 @@ export const SliderCell = memo(function SliderCell({
           column={label}
           chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
         />
-        <div className="space-y-1">
-          {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
-          <EditorLabel>{label}</EditorLabel>
-          <div className="flex items-center gap-2.5">
-            <Slider
-              min={range.min}
-              max={range.max}
-              step={1}
-              value={[current]}
-              onValueChange={([next]) => commit(next)}
-              className="flex-1"
-            />
-            <EditorField
-              label={label}
-              unit="%"
-              min={0}
-              max={100}
-              value={toPct(current)}
-              onCommit={commitPct}
-              seed={numericSeed(keyboardOpen)}
-              className="w-[72px] shrink-0"
-            />
+        <PaletteBands
+          projectId={projectId}
+          family={family}
+          property={first.kind === 'slider' ? first.property.name : ''}
+          targets={bandTargets}
+          onSave={save.onSave}
+        >
+          <div className="space-y-1">
+            {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
+            <EditorLabel>{label}</EditorLabel>
+            <div className="flex items-center gap-2.5">
+              <Slider
+                min={range.min}
+                max={range.max}
+                step={1}
+                value={[current]}
+                onValueChange={([next]) => commit(next)}
+                className="flex-1"
+              />
+              <EditorField
+                label={label}
+                unit="%"
+                min={0}
+                max={100}
+                value={toPct(current)}
+                onCommit={commitPct}
+                seed={numericSeed(keyboardOpen)}
+                className="w-[72px] shrink-0"
+              />
+            </div>
           </div>
-        </div>
-        <EditorReadout>
-          <span>{rangeLine}</span>
-          {skipped && <span>{skipped}</span>}
-        </EditorReadout>
+          <EditorReadout>
+            <span>{rangeLine}</span>
+            {skipped && <span>{skipped}</span>}
+          </EditorReadout>
+        </PaletteBands>
       </div>
     </EditorSurface>
+    {save.sheet}
+    </>
   )
 })
+
+const NO_TARGETS: NonNullable<CellBatch['targets']> = []

@@ -38,15 +38,8 @@ interface LayerPickerProps {
    */
   allowTiming?: boolean
   /**
-   * Open on one library rather than both. The programmer rail's doors — `+ Look` and
-   * `+ Template`, in its footer and behind the strip's `+` menu — are each named for a kind, and
-   * a door that then offered the other kind too would make the name a lie.
-   *
-   * Unset, the first step offers both libraries. No production caller leaves it unset today:
-   * `ProgrammerAddLayerSheet` is the only host and always names a kind, and the cue editor has
-   * had no add-layer gesture since session 2a made a cue read-only. The general form is kept
-   * because it is the shape a future host without kind-named doors would want, not because
-   * anything reaches it.
+   * Open on one library rather than both: a door named for a kind — *+ Look*, *+ Palette* — that
+   * then offered the other kind too would make the name a lie. Unset, the first step offers both.
    */
   kind?: 'look' | 'template'
 }

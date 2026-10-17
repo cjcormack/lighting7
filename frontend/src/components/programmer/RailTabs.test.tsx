@@ -24,7 +24,11 @@ vi.mock('./ProgrammerAddEffect', () => ({
   ProgrammerAddEffectSheet: () => null,
   useProgrammerAddEffect: () => ({ canAdd: true, reason: '', add: () => {} }),
 }))
-vi.mock('./ProgrammerAddLayerSheet', () => ({ ProgrammerAddLayerSheet: () => null }))
+vi.mock('@/components/press/ApplyPicker', () => ({ ApplyPicker: () => null }))
+vi.mock('@/hooks/usePress', () => ({
+  useWindowPressPair: () => ({ targets: [], families: null }),
+  useWindowPaletteFit: () => ({ families: null, emitters: null }),
+}))
 vi.mock('./ProgrammerFxList', () => ({ ProgrammerFxList: () => <div data-testid="fx" /> }))
 vi.mock('./ProgrammerLookStack', () => ({ ProgrammerLookStack: () => <div data-testid="layers" /> }))
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))

@@ -8,6 +8,7 @@ import { useLookRowStore } from '@/components/programmer/LookRowStore'
 import { landValuesInLook } from '@/components/programmer/landValuesInLook'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import type { AttributeFamily } from '@/lib/attributeFamily'
+import type { PaletteFit } from '@/lib/paletteOffer'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
@@ -65,6 +66,26 @@ export function useWindowPressPair(): PressPair {
   )
 }
 
+/**
+ * What the window's heads can take, for a door that offers palettes over [useWindowPressPair] — the
+ * rail's *+ Palette*: on the programmer the strip's own offer (the marquee's families, else what
+ * the heads can take, and their emitters); elsewhere nothing is known, so nothing is filtered.
+ */
+export function useWindowPaletteFit(): PaletteFit {
+  const press = useMarquee()?.press
+  return useMemo(
+    () =>
+      press == null
+        ? NO_FIT
+        : press.targets.length === 0
+          ? NO_FIT
+          : { families: press.askedFamilies ?? press.targetFamilies, emitters: press.targetEmitters },
+    [press],
+  )
+}
+
+const NO_FIT: PaletteFit = { families: null, emitters: null }
+
 /** [usePress] over the window's own pair — for a door that has none of its own (the hand's place). */
 export function useWindowPress(projectId: number, options: PressOptions = {}): Press {
   return usePress(projectId, useWindowPressPair(), options)
@@ -77,7 +98,7 @@ export function useWindowPress(projectId: number, options: PressOptions = {}): P
  * targets and the attribute mask the door is acting on — the window's (`useWindowPress`), a cell
  * batch, a fixture sheet's one target, a cue slot's none; the scope is where the programmer is
  * pointed. This hook sends the one route that combination calls for and reports the answer one way,
- * and every press door — the palette strip and the picker, the colour editor's Recent chips, a busk
+ * and every press door — the palette strip and the picker, the popup's Palettes bands, a busk
  * pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look
  * picker and a cue slot's Look — calls it, so no two surfaces can answer "what does a press do"
  * differently.

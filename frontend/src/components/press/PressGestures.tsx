@@ -6,6 +6,7 @@ import type { EffectPresence } from '@/components/busking/buskingTypes'
 import { useLongPress, type LongPressHandlers } from '@/hooks/useLongPress'
 import type { PressGesture, PressInto } from '@/hooks/usePress'
 import { handPickUp } from '@/store/hand'
+import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
@@ -114,7 +115,7 @@ export function PalettePressButton({
     <Popover modal open={menuOpen} onOpenChange={setMenuOpen}>
       <PopoverAnchor asChild>{children(handlers)}</PopoverAnchor>
       <PopoverContent align="start" className="w-auto min-w-44 p-1">
-        <PressMenuItems
+        <PalettePressMenu
           projectId={projectId}
           template={template}
           into={into}
@@ -131,7 +132,8 @@ export function PalettePressButton({
   )
 }
 
-function PressMenuItems({
+/** A palette's menu: the tap's verb, *Apply as values*, *Pick up*, *Edit palette…*. Mounted only while open. */
+function PalettePressMenu({
   projectId,
   template,
   into,
@@ -149,29 +151,107 @@ function PressMenuItems({
   onDone: () => void
 }) {
   const navigate = useNavigate()
-  const verb = tapVerb(into, presence, hasTargets, !template.isGeneric)
   return (
-    <div role="menu" aria-label={template.name} className="flex flex-col">
+    <PressMenuItems
+      name={template.name}
+      into={into}
+      presence={presence}
+      hasTargets={hasTargets}
+      ownHeads={!template.isGeneric}
+      onGesture={onGesture}
+      onPickUp={() => {
+        onDone()
+        handPickUp('TEMPLATE', template.id)
+      }}
+      onEdit={() => {
+        onDone()
+        navigate(`/projects/${projectId}/palettes?edit=${template.id}`)
+      }}
+      editLabel="Edit palette…"
+    />
+  )
+}
+
+/**
+ * A Look's pad with the same gestures and menu as a palette's — *Put on* or *Take off these heads*,
+ * *Apply as values*, *Pick up* — for the one picker's Looks (apply-model plan §4.2). No *Edit* item:
+ * `/looks` opens no single Look yet. A Look with no targets lands on its own fixtures.
+ */
+export function LookPressButton({
+  look,
+  into,
+  presence,
+  hasTargets = true,
+  onGesture,
+  children,
+}: {
+  look: Pick<LookSummary, 'id' | 'name'>
+  into: PressInto
+  presence: EffectPresence
+  hasTargets?: boolean
+  onGesture: (look: Pick<LookSummary, 'id' | 'name'>, gesture: PressGesture) => void
+  children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const gesture = useCallback((g: PressGesture) => onGesture(look, g), [onGesture, look])
+  const open = useCallback(() => setMenuOpen(true), [])
+  const handlers = usePressGestures(gesture, open)
+  return (
+    <Popover modal open={menuOpen} onOpenChange={setMenuOpen}>
+      <PopoverAnchor asChild>{children(handlers)}</PopoverAnchor>
+      <PopoverContent align="start" className="w-auto min-w-44 p-1">
+        <PressMenuItems
+          name={look.name}
+          into={into}
+          presence={presence}
+          hasTargets={hasTargets}
+          ownHeads
+          onGesture={(g) => {
+            setMenuOpen(false)
+            gesture(g)
+          }}
+          onPickUp={() => {
+            setMenuOpen(false)
+            handPickUp('LOOK', look.id)
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PressMenuItems({
+  name,
+  into,
+  presence,
+  hasTargets,
+  ownHeads,
+  onGesture,
+  onPickUp,
+  onEdit,
+  editLabel,
+}: {
+  name: string
+  into: PressInto
+  presence: EffectPresence
+  hasTargets: boolean
+  /** A press with no targets lands on the record's own heads — a per-fixture palette, a Look. */
+  ownHeads: boolean
+  onGesture: (gesture: PressGesture) => void
+  onPickUp: () => void
+  /** Absent, no edit item: a Look has no address to open it at yet. */
+  onEdit?: () => void
+  editLabel?: string
+}) {
+  const verb = tapVerb(into, presence, hasTargets, ownHeads)
+  return (
+    <div role="menu" aria-label={name} className="flex flex-col">
       <MenuItem icon={verb.gesture === 'off' ? Undo2 : Layers} label={verb.label} onSelect={() => onGesture(verb.gesture)} />
       {into.kind === 'programmer' && (
         <MenuItem icon={ListChecks} label="Apply as values" onSelect={() => onGesture('asValues')} />
       )}
-      <MenuItem
-        icon={Hand}
-        label="Pick up"
-        onSelect={() => {
-          onDone()
-          handPickUp('TEMPLATE', template.id)
-        }}
-      />
-      <MenuItem
-        icon={Pencil}
-        label="Edit palette…"
-        onSelect={() => {
-          onDone()
-          navigate(`/projects/${projectId}/palettes?edit=${template.id}`)
-        }}
-      />
+      <MenuItem icon={Hand} label="Pick up" onSelect={onPickUp} />
+      {onEdit != null && <MenuItem icon={Pencil} label={editLabel ?? 'Edit…'} onSelect={onEdit} />}
     </div>
   )
 }
