@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useRef, useState, type ReactNode } from 'react'
+import { StrictMode, useRef, useState, type ReactNode } from 'react'
 import type { ActiveEffect } from '@/store/fixtureFx'
 import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
@@ -141,6 +141,25 @@ describe('FxEditorPopover — the split editor', () => {
     rerender(<Host running={[FRONT, COPY_1, COPY_2]} selection={SUBSET} />)
     await waitFor(() => expect(document.querySelector('[data-editing="31"]')).toBeTruthy())
     expect(document.querySelector('[data-fx-split]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'move' }))
+    expect(updateFx.mock.calls.map((c) => c[0])).toEqual([31, 32])
+  })
+
+  it('follows the edited copies under StrictMode too, whose doubled effects must not leave the editor thinking it is gone', async () => {
+    const { rerender } = render(
+      <StrictMode>
+        <Host running={[FRONT]} selection={SUBSET} />
+      </StrictMode>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'move' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to Hex 1–2' }))
+    await waitFor(() => expect(splitFx).toHaveBeenCalledTimes(1))
+    rerender(
+      <StrictMode>
+        <Host running={[FRONT, COPY_1, COPY_2]} selection={SUBSET} />
+      </StrictMode>,
+    )
+    await waitFor(() => expect(document.querySelector('[data-editing="31"]')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'move' }))
     expect(updateFx.mock.calls.map((c) => c[0])).toEqual([31, 32])
   })

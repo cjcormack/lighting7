@@ -20,7 +20,7 @@ import java.util.UUID
  * show's records are a venue version's records, and what each pair becomes. A pure function over three
  * row sets — the show's own rows, the version it was detached from (its **origin**) when this desk holds
  * it, and the **target** version — answering an [AttachPlan]. It reads no database and writes nothing:
- * `VenueAttachRows` reads the rows, and the attach (Att.2) writes the plan in one transaction.
+ * `VenueAttachRows` reads the rows, and `VenueAttach` writes the plan in one transaction.
  *
  * **Pairs** (§3.2). Each show record pairs with at most one target record of its kind: by uuid first
  * (a version keeps its records' uuids, so a detached show's rows still share them), then by key — a
@@ -42,7 +42,9 @@ import java.util.UUID
  * A hide refused by the in-use rule (`VENUE_HIDE_IN_USE`: a replaced record, a rigging a visible unit
  * hangs on, a seating a visible seat view sits in) comes in instead, saying why. Parks and machine
  * overrides follow §3.5, parks three ways too: a show park still at the origin's value takes the
- * venue's re-park or unpark since, listed as an output change.
+ * venue's re-park or unpark since, listed as an output change. A park names its universe by number, so
+ * a show park on a universe paired with a venue universe of another number is read, and kept, at the
+ * venue's number (`AttachWrites.parksMoved`).
  *
  * **Blockers** (§3.6): a show record kept with a key, head number or name a visible venue record
  * holds, where that record cannot be hidden, a show universe whose number a venue universe holds
@@ -51,7 +53,7 @@ import java.util.UUID
  *
  * Decisions are answered by id ([UpdateDecisionAnswer], the shape Update takes); an answered decision
  * is applied, so the plan for a request is the plan its POST writes. An id the pairing does not make
- * is left to the caller (P8's address overlaps are judged on the written rig, Att.2).
+ * is left to the caller (P8's address overlaps are judged on the written rig, by `VenueAttach`).
  */
 object VenueAttachPairing {
 
@@ -132,14 +134,14 @@ object VenueAttachPairing {
     /**
      * Pair [show] with [target], three ways against [origin] when it names a version of the same venue
      * that this desk holds (§3.1). [answers] are the review's decisions, by id; [freshUuid] mints the
-     * uuids of kept rows (P5).
+     * uuid a kept row (or a kept patch's placement) of the given uuid takes (P5).
      */
     fun pair(
         show: Rows,
         origin: Version?,
         target: Version,
         answers: List<UpdateDecisionAnswer> = emptyList(),
-        freshUuid: () -> UUID = UUID::randomUUID,
+        freshUuid: (UUID) -> UUID = { UUID.randomUUID() },
     ): AttachPlan {
         val rows = requireNotNull(target.rows) { "The target version's rows" }
         return Pairing(show, origin, target, rows, answers.associate { it.id to it.answer }, freshUuid).run()
@@ -167,7 +169,7 @@ object VenueAttachPairing {
         val target: Version,
         val t: Rows,
         val answers: Map<String, UpdateAnswer>,
-        val freshUuid: () -> UUID,
+        val freshUuid: (UUID) -> UUID,
     ) {
         val originStatus: AttachOriginStatus? = when {
             originVersion == null -> null
@@ -210,6 +212,8 @@ object VenueAttachPairing {
         val incoming = mutableListOf<AttachItemDto>()
         val renames = mutableListOf<AttachRenameDto>()
         val decisions = mutableListOf<AttachDecisionDto>()
+        /** Every decision id asked, including those [build] drops because a clash decided them. */
+        val asked = LinkedHashSet<String>()
         val blockers = mutableListOf<AttachItemDto>()
         val hidesWanted = LinkedHashMap<Pair<AttachKind, UUID>, PlannedHide>()
         val hideRefusals = HashMap<Pair<AttachKind, UUID>, String>()
@@ -230,6 +234,13 @@ object VenueAttachPairing {
         val originToTarget = HashMap<UUID, UUID>()
         /** The origin record each target record was, by target uuid. */
         val targetToOrigin = HashMap<UUID, UUID>()
+
+        /**
+         * A park names its universe by number, so a park on a universe that pairs with a venue universe
+         * of another number is read at the venue's number: show (or origin) universe number → target's.
+         */
+        val showUniverseNumbers = HashMap<Int, Int>()
+        val originUniverseNumbers = HashMap<Int, Int>()
 
         fun run(): AttachPlan {
             pairOrigin()
@@ -261,7 +272,9 @@ object VenueAttachPairing {
                 originToTarget[uuid(a)] = uuid(b)
                 targetToOrigin[uuid(b)] = uuid(a)
             }
-            link(match(origin.universes, t.universes, { it.uuid }, { it.uuid }, { it.number }, { it.number })) { it.uuid }
+            val universes = match(origin.universes, t.universes, { it.uuid }, { it.uuid }, { it.number }, { it.number })
+            link(universes) { it.uuid }
+            universes.forEach { (ou, tu) -> originUniverseNumbers[ou.universe] = tu.universe }
             for (kind in listOf(AttachKind.REGION, AttachKind.RIGGING, AttachKind.ELEMENT, AttachKind.VIEWPOINT)) {
                 link(match(origin.hall(kind), t.hall(kind), { it.uuid }, { it.uuid }, { it.name }, { it.name })) { it.uuid }
             }
@@ -281,6 +294,7 @@ object VenueAttachPairing {
             val pairs = match(show.universes, t.universes, { it.uuid }, { it.uuid }, { it.number }, { it.number })
             for ((s, tu) in pairs) {
                 replace(AttachKind.UNIVERSE, s.id, s.uuid, tu.id, tu.uuid)
+                showUniverseNumbers[s.universe] = tu.universe
                 val what = universeRecord(tu)
                 if (s.number != tu.number) {
                     output += AttachItemDto(AttachKind.UNIVERSE, universeRecord(s), what, "Your universe ${s.number} is the venue's ${tu.number}: its fixtures output there", "CHANGE")
@@ -407,7 +421,7 @@ object VenueAttachPairing {
             }
             if (!takeVenues) {
                 keep(AttachKind.PATCH, s.id, s.uuid, tp.uuid, showRec, venueRec, null)
-                s.placements.forEach { after[it.uuid] = freshUuid() }
+                s.placements.forEach { after[it.uuid] = freshUuid(it.uuid) }
                 keptPatches += s
                 return
             }
@@ -740,33 +754,49 @@ object VenueAttachPairing {
         val hides = mutableListOf<AttachItemDto>()
         var parksInherited = 0
 
+        val parksMoved = LinkedHashMap<ParkAddress, ParkAddress>()
+
         fun parks() {
-            for (address in (show.parks.keys + t.parks.keys).sorted()) {
-                val mine = show.parks[address]
+            fun at(address: ParkAddress, numbers: Map<Int, Int>) = numbers[address.universe]?.let { address.copy(universe = it) } ?: address
+            // The show's parks at the venue's universe numbers, each with the address its row has now.
+            val ours = show.parks.entries.associate { (address, value) -> at(address, showUniverseNumbers) to (address to value) }
+            val originParks = o?.parks?.mapKeys { at(it.key, originUniverseNumbers) }
+            for (address in (ours.keys + t.parks.keys).sorted()) {
+                val (row, mine) = ours[address] ?: (null to null)
                 val venue = t.parks[address]
                 val record = AttachRecordDto(address.toString(), "Park $address")
+                val moved = if (row != null && row != address) " (your $row: its universe is the venue's ${address.universe})" else ""
+                fun keep() {
+                    if (row != null && row != address) parksMoved[row] = address
+                }
                 when {
                     mine != null && mine == venue -> {
-                        parksDropped += address
+                        parksDropped += row!!
                         parksInherited++
                     }
                     // The show's park is still the origin's, so a re-value or unpark since is the venue's (P3).
-                    mine != null && o != null && o.parks[address] == mine -> {
-                        parksDropped += address
+                    mine != null && originParks != null && originParks[address] == mine -> {
+                        parksDropped += row!!
                         output += AttachItemDto(
                             AttachKind.PARK, record, if (venue != null) record else null,
-                            if (venue != null) "The venue re-parked $address at $venue since v${originDto!!.version}: yours, at $mine, takes it"
-                            else "The venue unparked $address since v${originDto!!.version}: yours, at $mine, goes with it",
+                            if (venue != null) "The venue re-parked $address at $venue since v${originDto!!.version}: yours, at $mine, takes it$moved"
+                            else "The venue unparked $address since v${originDto!!.version}: yours, at $mine, goes with it$moved",
                             "CHANGE",
                         )
                     }
-                    mine != null && venue != null -> additions += AttachItemDto(AttachKind.PARK, record, record, "Your park of $address at $mine stays, over the venue's at $venue", "REPARK")
-                    mine != null -> additions += AttachItemDto(AttachKind.PARK, record, null, "Your park of $address at $mine", "ADDITION")
-                    venue != null && (o == null || o.parks[address] != null) -> {
+                    mine != null && venue != null -> {
+                        keep()
+                        additions += AttachItemDto(AttachKind.PARK, record, record, "Your park of $address at $mine stays, over the venue's at $venue$moved", "REPARK")
+                    }
+                    mine != null -> {
+                        keep()
+                        additions += AttachItemDto(AttachKind.PARK, record, null, "Your park of $address at $mine$moved", "ADDITION")
+                    }
+                    venue != null && (originParks == null || originParks[address] != null) -> {
                         releases += address
                         hides += AttachItemDto(
                             AttachKind.PARK, null, record,
-                            if (o == null) "The venue parks $address at $venue: released here, so this show's output stays as it is"
+                            if (originParks == null) "The venue parks $address at $venue: released here, so this show's output stays as it is"
                             else "Unparked in this show since v${originDto!!.version}: the venue's park at $venue is released",
                             "RELEASE",
                         )
@@ -832,7 +862,7 @@ object VenueAttachPairing {
 
         /** *Keep mine*: the target record is hidden and the show's row stays under a fresh uuid (P5). */
         fun keep(kind: AttachKind, showId: Int, showUuid: UUID, targetUuid: UUID, showRec: AttachRecordDto, venueRec: AttachRecordDto, hall: HallRow?) {
-            val uuid = freshUuid()
+            val uuid = freshUuid(showUuid)
             fresh.getOrPut(kind) { LinkedHashMap() }[showId] = uuid
             pairedTargets.getOrPut(kind) { HashSet() } += targetUuid
             after[showUuid] = uuid
@@ -858,6 +888,7 @@ object VenueAttachPairing {
                 throw VenueException.badRequest(CODE_ATTACH_INVALID, "'$given' does not answer '$id': it takes ${answersOffered.joinToString(" | ")}")
             }
             val answer = given ?: default
+            asked += id
             decisions += AttachDecisionDto(id, kind, recordKind, show, venue, message, answersOffered, answer, decided = given != null, bothChanged = bothChanged, rename = rename)
             return answer
         }
@@ -908,6 +939,7 @@ object VenueAttachPairing {
                 incoming = incoming.toList(),
                 renames = renames.toList(),
                 decisions = decisions.toList(),
+                decisionIds = asked.toSet(),
                 blockers = blockers.toList(),
                 writes = AttachWrites(
                     replaced = replaced.mapValues { it.value.toMap() },
@@ -917,6 +949,7 @@ object VenueAttachPairing {
                     hides = finalHides.map { it.kind.hideKind!! to UUID.fromString(it.record.uuid) },
                     releases = releases.toList(),
                     parksDropped = parksDropped.toList(),
+                    parksMoved = parksMoved.toMap(),
                     machineOverridesDropped = machineOverridesDropped.toList(),
                     machineOverridesRekeyed = machineOverridesRekeyed.toMap(),
                     fixtureRenames = renames.filter { it.kind == AttachKind.PATCH }.associate { it.from to it.to },
@@ -1057,6 +1090,8 @@ data class AttachRenameDto(
     val to: String,
     val show: AttachRecordDto,
     val venue: AttachRecordDto,
+    /** Who names [from] — cues, Looks, palettes, bindings and scripts — as the attach's review reads it before writing. */
+    val usedBy: List<UsedByDto> = emptyList(),
 )
 
 /**
@@ -1084,7 +1119,7 @@ data class AttachDecisionDto(
 data class PlannedOverride(val recordUuid: UUID, val facet: PatchFacet, val value: FacetValue, val base: FacetValue)
 
 /**
- * What the attach (Att.2) writes, in §4.2's order. Every show row is named by its id; every venue
+ * What the attach (`VenueAttach`) writes, in §4.2's order. Every show row is named by its id; every venue
  * record by its uuid in the target version.
  */
 data class AttachWrites(
@@ -1101,8 +1136,14 @@ data class AttachWrites(
     val overrides: List<PlannedOverride>,
     val hides: List<Pair<HideKind, UUID>>,
     val releases: List<ParkAddress>,
-    /** The show's parks that go: the venue parks the channel at the same value. */
+    /** The show's parks that go — the venue parks the channel at the same value — by the address their row has. */
     val parksDropped: List<ParkAddress>,
+    /**
+     * The show's parks that stay but move: on a universe that pairs with a venue universe of another
+     * number, row address → the venue's number. A park names its universe by number, so it follows the
+     * fixtures on it.
+     */
+    val parksMoved: Map<ParkAddress, ParkAddress> = emptyMap(),
     /** `machine_overrides` row ids that go: their records resolve against the venue's id now. */
     val machineOverridesDropped: List<Int>,
     /** `machine_overrides` row ids re-keyed to a kept record's fresh uuid. */
@@ -1133,6 +1174,11 @@ data class AttachPlan(
     val incoming: List<AttachItemDto>,
     val renames: List<AttachRenameDto>,
     val decisions: List<AttachDecisionDto>,
+    /**
+     * Every decision id the pairing made — [decisions]' and those a clash then decided, which a review
+     * made with other answers may have listed — so an answer to one is never refused as unknown.
+     */
+    val decisionIds: Set<String>,
     val blockers: List<AttachItemDto>,
     val writes: AttachWrites,
 )

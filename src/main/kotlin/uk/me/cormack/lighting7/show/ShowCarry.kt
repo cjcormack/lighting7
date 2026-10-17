@@ -7,7 +7,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerStore
 /**
  * What a **same-project reload** carries from the show being replaced into its successor
  * (`ProjectManager.switchProject` with the current project's id: a sync pull, a venue Update, Detach,
- * Extract, a venue's Discard). Those rebuild the whole [Show] from the database, because what changed
+ * Extract, Attach, a venue's Discard). Those rebuild the whole [Show] from the database, because what changed
  * underneath can be anything; without a carry the rig went dark and stayed dark until the operator
  * started everything again. With one, the successor starts on the outgoing show's last frame
  * ([values]) and [Show.resume] brings back what was running, crossfading whatever moved.

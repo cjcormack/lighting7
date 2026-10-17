@@ -358,6 +358,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestVenueExtract(state)
         routeApiRestVenueUpdate(state)
         routeApiRestVenueDetach(state)
+        routeApiRestVenueAttach(state)
         // Before the patch routes, so `patches/hidden` is matched as itself.
         routeApiRestShowHides(state)
         routeApiRestPatchFacets(state)

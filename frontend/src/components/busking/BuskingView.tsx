@@ -34,6 +34,7 @@ import {
   useLocalBuskPage,
 } from '@/lib/buskPageFollow'
 import {
+  OVERLAY_SHEET_TAB,
   applyBuskArrival,
   setBuskFocus,
   setBuskSheet,
@@ -113,7 +114,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
  * a row chip, and Rig focus is the whole rig stacked. Below `md` the side sheet is a bottom sheet
  * or a right-hand overlay through `useEditorForm`, opened from the page strip's button onto
- * Colour, since that sheet carries no Speed tab (D7) — Colour, Spread, Effects and Show.
+ * Colour, since that sheet carries no Speed tab (D7) — every tab but Speed.
  *
  * **Three boards, and short beats narrow** (`Phones.dc.html`, `Tablets.dc.html`). `md` says
  * whether this is the desk board or the narrow one; the short-viewport fold — `SHORT_VIEWPORT`,
@@ -510,8 +511,10 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   // it to create a page from (`+ Page` is edit mode's, and *Edit layout* is disabled with none).
   const noPages = pages != null && pages.length === 0
   const shape = editing || noPages ? 'split' : focus
-  // Off the desk board the sheet is an overlay, and these are the tabs it can open onto.
+  // Off the desk board the sheet is an overlay; its *Sheet* button opens onto Colour where the form
+  // offers it, else the first tab it does.
   const overlayTabs = sideSheetTabs(sheetForm)
+  const overlayOpensOn = overlayTabs.find((tab) => tab.id === OVERLAY_SHEET_TAB) ?? overlayTabs[0]
   const docked = board === 'desk'
   // The short board's merged row: the rig strip's pieces lead the page strip while the rig is
   // folded. In Split and Rig focus the band carries them itself, so the row holds only the page.
@@ -591,15 +594,10 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
               size="sm"
               variant="outline"
               className="h-7 text-xs"
-              disabled={overlayTabs.length === 0}
-              title={
-                overlayTabs.length === 0
-                  ? 'Nothing to open here yet'
-                  : `Open the ${overlayTabs[0].label} tab`
-              }
+              disabled={overlayOpensOn == null}
+              title={overlayOpensOn == null ? 'Nothing to open here yet' : `Open the ${overlayOpensOn.label} tab`}
               onClick={() => {
-                const first = overlayTabs[0]
-                if (first != null) setBuskSheet(first.id)
+                if (overlayOpensOn != null) setBuskSheet(overlayOpensOn.id)
               }}
             >
               <PanelBottomOpen className="size-3.5" /> Sheet
