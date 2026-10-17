@@ -8,6 +8,7 @@ import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
 import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
+import { PositionAimTool } from '../../stage3d/PositionAimTool'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
@@ -230,7 +231,14 @@ export const PositionCell = memo(function PositionCell({
           column={label}
           chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
         />
-        <PaletteBands projectId={projectId} family="POSITION" property="position" targets={bandTargets} onSave={save.onSave}>
+        <PaletteBands
+          projectId={projectId}
+          family="POSITION"
+          property="position"
+          targets={bandTargets}
+          onSave={save.onSave}
+          tools={projectId != null ? <PositionAimTool projectId={projectId} targets={bandTargets} /> : undefined}
+        >
           <div className="flex items-start gap-3">
             <XyPad
               x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}

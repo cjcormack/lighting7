@@ -54,6 +54,8 @@ vi.mock('@/components/fx/FxEditorPopover', () => ({
 const applied = vi.hoisted(() => ({ current: [] as unknown[] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied.current }) }))
 vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdit: true }) }))
+// The position popup's *Aim…* (venue-visit plan S13) asks whether the project is on the rig.
+vi.mock('@/store/projects', () => ({ useCurrentProjectQuery: () => ({ data: { id: 1 } }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: vi.fn() }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({
@@ -318,6 +320,9 @@ describe('the Palettes band', () => {
     )
     expect(document.querySelector('[data-palette-band="POSITION"]')).not.toBeNull()
     expect(chips()).toEqual(['Home'])
+    // The footer's tools slot holds *Aim…* (venue-visit plan S13), after the save.
+    const footer = document.querySelector('[data-editor-footer]')!
+    expect([...footer.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Save as palette…', 'Aim…'])
   })
 
   it('opens Save as palette… with the cell’s family over the batch', () => {

@@ -15,7 +15,7 @@ import { SNAP_ANGLE_DEG } from './useShiftHeld'
 import type { SnapGrid } from './edit/useSnapGrid'
 import { SectionEditLayer } from './edit/SectionEditLayer'
 import { createSectionViewStore } from './edit/sectionView'
-import { selectionKey, type SelectIntent, type SelectionRef } from './useStageSelection'
+import { selectionIntentFor, selectionKey, type SelectIntent, type SelectionRef } from './useStageSelection'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
@@ -24,6 +24,8 @@ import { DEFAULT_WORK_LIGHTS, type WorkLights } from './scene/workLights'
 import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { SCENE_ELEMENT_UUID, StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { SceneryPopover } from './SceneryPopover'
+import { PlanAimLayer } from './PlanAimLayer'
+import { houseFloorOf, planAimTakesPointer, roomFootprint, type PlanPoint } from './planAim'
 import { elementAnchorBox, pickedScenery, pressPicks, type SceneHit } from './sceneryPick'
 import { StageConfetti } from './StageConfetti'
 import {
@@ -239,6 +241,11 @@ interface Stage3DProps {
   workLights?: WorkLights
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
+  /**
+   * Aiming on the Plan while it is armed (venue-visit plan S13): on the Plan camera with Edit off,
+   * a layer over the canvas takes the pointer and answers a click with its point in stage metres.
+   */
+  planAim?: { onPoint: (point: PlanPoint) => void; marker: PlanPoint | null } | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
   framingRef?: React.RefObject<StageFraming | null>
   /**
@@ -291,6 +298,7 @@ export function Stage3D({
   boxShadows = DEFAULT_BOX_SHADOWS,
   workLights = DEFAULT_WORK_LIGHTS,
   seatPicking = null,
+  planAim = null,
   framingRef,
   capture = null,
   stats = null,
@@ -331,10 +339,7 @@ export function Stage3D({
 
   const gridSize = Math.max(stageW, stageD) * 1.6
   // Where confetti thrown off the stage's footprint settles: a modelled room's floor, else the deck.
-  const houseFloorZ = useMemo(() => {
-    const rooms = (showScene ? storedElements ?? [] : []).filter((e) => e.kind === 'ROOM' && !e.hidden)
-    return rooms.length > 0 ? Math.min(...rooms.map((e) => e.positionZ ?? 0)) : 0
-  }, [showScene, storedElements])
+  const houseFloorZ = useMemo(() => houseFloorOf(showScene ? storedElements ?? [] : []), [showScene, storedElements])
   // Stable identity: StageEmitters rebuilds its instance buffers when this
   // changes, so it must not be a fresh object every render.
   const stageDims = useMemo(
@@ -379,7 +384,17 @@ export function Stage3D({
   // seat pick armed and nothing being placed. A click R3F hands to `onPointerMissed` found nothing
   // of the rig under it — fixtures and rigging take their own clicks first — so only then is it cast
   // against the drawn elements (`ScenePicker`, inside the canvas), and the nearest surface decides.
-  const pickingScenery = sceneryPopover != null && showScene && !editMode && !placing && capture == null && seatPicking == null
+  // Aiming on the Plan takes the pointer for its own clicks (venue-visit plan S13); see `PlanAimLayer`.
+  const planAiming = planAimTakesPointer({
+    armed: planAim != null,
+    camera,
+    editMode,
+    placing: !!placing,
+    capturing: capture != null,
+    seatPicking: seatPicking != null,
+  })
+  const pickingScenery =
+    sceneryPopover != null && showScene && !editMode && !placing && capture == null && seatPicking == null && !planAiming
   const pickRef = useRef<((clientX: number, clientY: number) => SceneHit[]) | null>(null)
   const [popoverUuid, setPopoverUuid] = useState<string | null>(null)
   useEffect(() => {
@@ -424,6 +439,8 @@ export function Stage3D({
     [layers.haze, showScene, sceneSubset, storedElements],
   )
   const venueBounds = useMemo(() => sceneElementBounds(builds), [builds])
+  // The Plan is fitted to the rooms drawn here as well as the rig — none on a canvas drawing a subset.
+  const roomBounds = useMemo(() => roomFootprint(drawnElements), [drawnElements])
   // Haze degrades before frame rate (`scene/hazeGovernor.ts`): the governor in the canvas steps it.
   const [hazeQuality, setHazeQuality] = useState<HazeQuality>(HAZE_TIERS[0])
   // A render measures nothing and is shown nothing: it never feeds the stats.
@@ -533,10 +550,12 @@ export function Stage3D({
     },
     [onSelectionChange],
   )
+  // ⇧ adds and ⌘ toggles, as on the sections — which is how a view-mode selection holds several
+  // heads to aim together (venue-visit plan S13).
   const handleFixtureClick = useCallback(
-    (patch: FixturePatch) => {
+    (patch: FixturePatch, e?: MouseEvent) => {
       setPopoverUuid(null)
-      onSelectionChange({ kind: 'patch', patchKey: patch.key })
+      onSelectionChange({ kind: 'patch', patchKey: patch.key }, e ? selectionIntentFor(e) : 'replace')
     },
     [onSelectionChange],
   )
@@ -562,7 +581,7 @@ export function Stage3D({
   // hit-testing against the old one.
   useLayoutEffect(() => {
     sectionViewStore.clear()
-  }, [sectionEditing, camera, sectionViewStore])
+  }, [sectionEditing, planAiming, camera, sectionViewStore])
 
   // Hover/click is disabled during placement so the PlacementPlane catches the
   // click. Otherwise meshes are clickable in both edit and view modes — view
@@ -732,7 +751,7 @@ export function Stage3D({
         slot={slot}
         selected={isSelected({ kind: 'patch', patchKey: patch.key })}
         editMode={canEdit}
-        onClick={interactable ? () => handleFixtureClick(patch) : undefined}
+        onClick={interactable ? (_, e) => handleFixtureClick(patch, e) : undefined}
         onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
         reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
@@ -759,7 +778,7 @@ export function Stage3D({
         slot={visiblePatches.length + i}
         selected={isSelected({ kind: 'patch', patchKey: patch.key })}
         editMode={canEdit}
-        onClick={interactable ? () => handleFixtureClick(source) : undefined}
+        onClick={interactable ? (_, e) => handleFixtureClick(source, e) : undefined}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
         travel={capture == null}
       />
@@ -873,11 +892,12 @@ export function Stage3D({
         defaultOrbit={defaultOrbit}
         bounds={sceneBounds}
         beyond={venueBounds}
+        room={roomBounds}
         persist={persistCamera && capture == null}
         oneShot={capture != null}
         controlsRef={orbitRef}
         handleRef={cameraHandleRef}
-        onSectionView={sectionEditing ? sectionViewStore.set : undefined}
+        onSectionView={sectionEditing || planAiming ? sectionViewStore.set : undefined}
       />
       <Controls
         orbitRef={orbitRef}
@@ -979,6 +999,9 @@ export function Stage3D({
           onRiggingPositionChange={onRiggingPositionChange}
           onElementPositionChange={onElementPositionChange}
         />
+      )}
+      {planAiming && planAim != null && !contextLost && (
+        <PlanAimLayer viewStore={sectionViewStore} controls={sectionControls} onPoint={planAim.onPoint} marker={planAim.marker} />
       )}
       {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} hint={caption.hint} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}

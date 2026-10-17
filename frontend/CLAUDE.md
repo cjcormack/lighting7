@@ -584,9 +584,19 @@ besides the docked fixture panel it sits in: a stage coordinate, or a region's c
 height, sent to `POST /programmer/aim` for the selected moving heads — from the single fixture's
 sheet as an *Aim…* popover on its Position row (fixture-fx-sheets session 2; it was a block pinned
 under the panel; on a phone, session 6, the same popover over the phone sheet), or its own docked
-panel for a multi-selection in view mode (tablet width and up), and only on the live project.
+panel for a multi-selection in view mode (tablet width and up; ⇧-click adds a fixture, ⌘-click
+toggles one), and only on the live project.
 The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
-point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
+point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips one line
+per reason (`AimSkips`). **A click on the Plan aims too** (venue-visit plan S13): *Aim on the plan*
+puts the window on the Plan and arms it, `PlanAimLayer` then owns the pointer over the canvas (a
+click is a point in the Plan's metres, a drag pans, Esc stops; the fixture click and the scenery
+popover stand down only while armed), the height is head height above the region under the click
+(else the deck, or the house floor off the stage) or the typed Z, and the aim panel docks for one
+head too until *Done*. Edit disarms it. The Plan is fitted to the drawn room as well as the rig, so
+the house is on it. The programmer's position popup offers
+the same controls as *Aim…* in its footer (§The editor kit). See `docs/stage-vis-engineering.md`
+§"Aiming on the Plan".
 
 **Focus here** (fixture-optics plan session 1) is its sibling on the Focus tab (`StageFocusPanel`):
 for a DMX head whose focus declares a range, on the live project, it sends where the beam lands in
@@ -4078,7 +4088,10 @@ each was:
   it, draft and all — the footer's *Save as palette…* is mounted outside. **The editor**, unchanged. **Below**,
   `PaletteFooter`: *Save as palette…* (not in a venue), whose sheet the cell mounts **outside** its
   surface through `usePaletteSave` — a press in a sheet is an outside press to a popover, which
-  would close the sheet with it. **Drawn only where a press has a door**: the container passes
+  would close the sheet with it — then the family's own tools in its `tools` slot: the position
+  cell's ***Aim…*** (venue-visit plan S13, `stage3d/PositionAimTool.tsx`), `StageAimControls` in a
+  popover over the cell batch's heads, refused with the reason off the rig, in Output, in a focused
+  layer (aim writes Local) and where no head annotates its pan and tilt in degrees. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists and the cue editor's Values grid draw the
   editor bare (R2 P2), and a slider cell whose property no value palette can carry (`paletteCarries`,
   the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
