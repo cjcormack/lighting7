@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.venue.VenueDiff
 import uk.me.cormack.lighting7.venue.VenueVersions
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import org.junit.After
@@ -300,6 +301,48 @@ class ProjectRoundTripTest {
         )
         assertTrue(format.formatVersion >= 34, "a selection target syncs from v34")
         assertTrue(SUPPORTED_FORMAT_VERSION >= 34, "and this desk reads it")
+    }
+
+    /**
+     * v35: a cue's speed masters travel embedded in the cue, each master by uuid, and come back as they
+     * went; a cue that sets none writes no key, and a clone re-points the uuids at the clone's masters.
+     */
+    @Test
+    fun `a cue's speed masters export embedded in their cue and round-trip`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val masters = Files.list(exportDirA.resolve("speedMasters")).use { stream ->
+            stream.toList().map { canonicalDecode(uk.me.cormack.lighting7.sync.dto.SpeedMasterJson.serializer(), Files.readString(it)) }
+        }.associate { it.masterIndex to it.uuid }
+        val cueTexts = Files.list(exportDirA.resolve("cues")).use { stream -> stream.toList().map { Files.readString(it) } }
+        val cue = cueTexts.map { canonicalDecode(CueJson.serializer(), it) }.single { it.name == "open" }
+        assertEquals(listOf(masters.getValue(1) to 132.0, masters.getValue(2) to 96.5), cue.speedMasters.map { it.speedMasterUuid to it.bpm })
+        assertEquals(1, cueTexts.count { "\"speedMasters\"" in it }, "a cue that sets none writes no key")
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.formatVersion >= 35, "a cue's speed masters sync from v35")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 35, "and this desk reads them")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(cue.speedMasters, back.speedMasters)
+
+        val clone = uk.me.cormack.lighting7.sync.ProjectCloner(state).clone(imported.projectId, "Clone", null)
+        transaction(state.database) {
+            val project = uk.me.cormack.lighting7.models.DaoProject[clone.projectId]
+            val cloneMasters = uk.me.cormack.lighting7.models.speedMastersOf(project).associate { it.masterIndex to it.uuid.toString() }
+            val copied = uk.me.cormack.lighting7.models.DaoCue.find {
+                (uk.me.cormack.lighting7.models.DaoCues.project eq project.id) and (uk.me.cormack.lighting7.models.DaoCues.name eq "open")
+            }.single()
+            assertEquals(listOf(cloneMasters.getValue(1), cloneMasters.getValue(2)), copied.speedMasters.map { it.speedMasterUuid })
+        }
     }
 
     /**

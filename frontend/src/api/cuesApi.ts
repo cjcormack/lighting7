@@ -199,6 +199,17 @@ export interface CueTrigger {
   sortOrder?: number
 }
 
+/**
+ * One speed master a cue sets as it comes on (venue-visit plan S16, D20): on every GO into one of
+ * its entries, GO TO and GO BACK included, and every loose press — never a reload. The cue's, not
+ * an entry's, so a shared cue sets the same tempo from every stack; it never tracks.
+ */
+export interface CueSpeedMaster {
+  speedMasterUuid: string
+  /** 20–300, a master's range. */
+  bpm: number
+}
+
 /** Script trigger with resolved name (from API response) */
 export interface CueTriggerDetail {
   triggerType: TriggerType
@@ -267,6 +278,11 @@ export interface Cue {
    * tracked: a later cue carries none of an earlier one's. Optional: the desk omits an empty list.
    */
   events?: CueEvent[]
+  /**
+   * The masters this cue sets on GO, in order — written whole through the cue's own PATCH.
+   * Optional: the desk omits an empty list, and an older desk sends none.
+   */
+  speedMasters?: CueSpeedMaster[]
 }
 
 /** One entry naming a cue — one place it sits in a stack's list. */
@@ -355,6 +371,8 @@ export interface CueInput {
   stomp?: boolean
   /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
   cueType?: CueType
+  /** The whole list; a PUT clears what it is not sent, a PATCH leaves an absent list alone. */
+  speedMasters?: CueSpeedMaster[]
 }
 
 // Partial input for PATCH (inline edits — only send changed fields). The place fields — stack,

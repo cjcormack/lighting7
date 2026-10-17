@@ -125,7 +125,8 @@ class CueStackManager(
      * 5. Start the incoming entry's auto-advance timer if configured
      *
      * When both entries name the same cue (D7) nothing on stage moves, and the follow timer is the
-     * incoming entry's. [fireEvents] false (GO BACK, a reload) fires no events (D15).
+     * incoming entry's. [fireEvents] false (GO BACK, a reload) fires no events (D15). [setTempo]
+     * false (a reload) sets none of the cue's speed masters, which every other GO sets (S16, D20).
      */
     fun activateEntry(
         state: State,
@@ -133,12 +134,13 @@ class CueStackManager(
         entryId: Int,
         scope: CoroutineScope = GlobalScope,
         fireEvents: Boolean = true,
+        setTempo: Boolean = true,
     ): ActivateResult {
         val started = System.nanoTime()
         return Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
             span?.setData("cue.stack_id", stackId)
             span?.setData("cue.entry_id", entryId)
-            activate(state, stackId, entryId, scope, fireEvents)
+            activate(state, stackId, entryId, scope, fireEvents, setTempo)
         }.also { DeskMetrics.global.cueGo.record((System.nanoTime() - started) / 1_000_000.0) }
     }
 
@@ -148,6 +150,7 @@ class CueStackManager(
         entryId: Int,
         scope: CoroutineScope,
         fireEvents: Boolean,
+        setTempo: Boolean,
     ): ActivateResult {
         val cueData = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
@@ -204,6 +207,8 @@ class CueStackManager(
             scope = scope, fireEvents = fireEvents, stackTag = stackId,
             fadeMs = fadeDurationMs, curve = easingCurve, adoptFrom = leavingCueId,
         )
+        // Tempo is state the cue re-asserts on every GO into it, held elsewhere or not (D20).
+        if (setTempo) fxEngine.speedMasters.setCueTempos(cueData.cueLabel, cueData.goSpeedMasters)
         val outgoing = existingState?.takeIf { !refire }?.let {
             holds.release(
                 state, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId),

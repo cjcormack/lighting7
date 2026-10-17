@@ -74,6 +74,13 @@ carries no tempo.
 Masters are persisted per project (`speed_masters` table, portable in sync — the stored bpm
 is the *starting* tempo; live changes write through with a 750 ms trailing debounce).
 
+**A cue can set masters' tempo** (venue-visit plan S16, D20): a cue's `speedMasters` list is written
+to the bank as `MANUAL` tempo writes on every GO into one of its entries and every loose press of it,
+never on a reload's re-GO (`fx/CueTempo.kt`, `docs/cues-engineering.md` §"Speed masters on a cue").
+A tap or a typed tempo afterwards wins until the next cue that sets that master; a follower is
+skipped, as it refuses every tempo write. A master a cue names is a use for the delete guard
+(`cueTempoCount`).
+
 ### Usage routing and follow (time signature)
 
 Two nullable per-master settings, added for the busk view (see

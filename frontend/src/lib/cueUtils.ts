@@ -141,6 +141,8 @@ export function buildCueInput(cue: Cue): CueInput {
     // but a cue can arrive carrying it (sync import, the AI tools, another client) and the PUT
     // route overwrites what it is not sent — so an inline edit must hand it back.
     stomp: cue.stomp,
+    // A PUT clears the list it is not sent, so an inline edit hands it back like stomp.
+    speedMasters: (cue.speedMasters ?? []).map((m) => ({ speedMasterUuid: m.speedMasterUuid, bpm: m.bpm })),
     // Round-tripped so a PUT can't reinterpret a MARKER as a STANDARD cue. (The server ignores
     // cueType on PUT, but sending the truth keeps the payload honest if that ever changes.)
     cueType: cue.cueType,

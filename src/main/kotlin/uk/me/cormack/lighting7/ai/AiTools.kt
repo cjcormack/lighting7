@@ -1190,11 +1190,20 @@ class AiTools(private val state: State) {
             if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
             writes
         }.orEmpty()
+        val speedMasters = input["speedMasters"]?.jsonArray?.let { items ->
+            val problems = mutableListOf<String>()
+            val parsed = transaction(state.database) {
+                parseCueSpeedMasters(items, speedMastersOf(project), emptyList(), "speedMasters", problems)
+            }
+            if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
+            parsed
+        }.orEmpty()
         val cue = transaction(state.database) {
             // A loose cue (cue model plan D1): add_cue_to_stack places it.
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
+                this.speedMasters = speedMasters
             }
             writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
             replaceCueScenery(newCue, scenery)
@@ -1208,13 +1217,19 @@ class AiTools(private val state: State) {
         return ToolExecutionResult(
             success = true,
             description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${assignments.size} values, " +
-                "${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events)",
+                "${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events, " +
+                "${speedMasters.size} speed masters)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
                 put("layerCount", layers.size)
                 put("valueCount", assignments.size)
                 put("adHocEffectCount", adHocEffects.size)
+                if (speedMasters.isNotEmpty()) {
+                    putJsonArray("speedMasters") {
+                        speedMasters.forEach { addJsonObject { put("speedMasterUuid", it.speedMasterUuid); put("bpm", it.bpm) } }
+                    }
+                }
                 values?.let { putValueSkips(it.skipped) }
             }.toString()
         )

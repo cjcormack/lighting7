@@ -84,6 +84,7 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.CueSpeedMasterDto
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
@@ -537,7 +538,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // 3 speed masters with every optional column set to a non-default value — master 1 is
     // the protected global master and would normally sit at its defaults, so the fixture
     // seeds masters 1 and 2 both off-default to keep the canonical-JSON round-trip honest.
-    DaoSpeedMaster.new {
+    val houseMaster = DaoSpeedMaster.new {
         this.project = project
         masterIndex = 1; name = "House Tempo"
         bpm = 128.0; source = SpeedMasterSource.TAP.name
@@ -733,6 +734,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         notes = "house to half, then go"
         stomp = true
         fadeCurve = "SINE_IN_OUT"
+        // v35: the masters it sets on GO — master 1, and a follower, which a GO skips.
+        speedMasters = listOf(CueSpeedMasterDto(houseMaster.uuid.toString(), 132.0), CueSpeedMasterDto(slowMaster.uuid.toString(), 96.5))
     }
     // Its place in show-1 is its entry's (cue model plan session 1): every optional entry field
     // set too — an explicit number and a follow.

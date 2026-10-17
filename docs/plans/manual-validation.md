@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
@@ -114,6 +115,35 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S16`
+
+**What it proves**: *speed masters on a cue at the desk* — venue-visit S16, D20: a cue sets its
+masters' tempo on every GO into it and every press of it, a tap wins until the next cue, and a
+reload sets none.
+
+**Why it is here**: the tests drive the GO paths against a test bank; only a desk shows the strip,
+the beat dots and the running effects move with the tempo, the X-Touch's tempo encoder agreeing, and
+a real sync pull leaving a tapped tempo alone mid-show.
+
+**Test**, on Sleeping Beauty, with an effect running on M2 and one on M1:
+
+1. **Authoring.** In a cue's Cue tab — on its card, in the cue sheet's pane and from the fixture
+   sheet's *on Q12* — add M2 at 96 and M1 at 140. Give the next cue M2 at 128. Lock the show: the tab
+   reads both rows and offers nothing.
+2. **GO, GO BACK, GO TO.** GO into the first cue: the strip reads M2 96 and M1 140 and the effects
+   slow and speed to match. GO: M2 reads 128, M1 stays 140. GO BACK: M2 is 96 again. GO TO the second
+   cue from a third: 128.
+3. **A tap wins.** Tap M2 to about 110 on the strip and on the X-Touch: it holds through a GO into a
+   cue that sets no master, and the next cue that sets M2 moves it.
+4. **Shared and pressed.** *Add to stack…* the first cue into a second stack and GO it there while
+   the first stack still holds it: M2 goes back to 96. Put the cue on a busk pad and press it: the
+   same.
+5. **Followers and a reload.** Make M3 follow M2 at ½ and add it to a cue: the GO goes, M3 keeps
+   following, and the row says it is skipped. Tap M2, then pull Sleeping Beauty from its repo with a
+   change waiting: the show carries across and M2 keeps the tap.
 
 ---
 

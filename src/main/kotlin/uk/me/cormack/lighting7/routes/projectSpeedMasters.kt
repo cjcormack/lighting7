@@ -19,7 +19,9 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.MasterClock
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
@@ -316,6 +318,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                         lookEffectCount = outcome.usage.lookEffects,
                         cueAdHocEffectCount = outcome.usage.cueAdHocEffects,
                         cueLayerCount = outcome.usage.cueLayers,
+                        cueTempoCount = outcome.usage.cueTempos,
                         cueIds = outcome.usage.cueIds,
                         followerNames = outcome.usage.followers,
                     ),
@@ -513,6 +516,8 @@ data class SpeedMasterInUseResponse(
     val cueAdHocEffectCount: Int,
     /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
     val cueLayerCount: Int,
+    /** Cues that set the master's tempo on GO (S16). */
+    val cueTempoCount: Int = 0,
     val cueIds: List<Int>,
     /**
      * Masters that follow this one, by name — a reference like any other, and the one the
@@ -536,13 +541,16 @@ internal data class SpeedMasterUsage(
      * leader to manual), so it gates the delete exactly like a stored effect reference does.
      */
     val followers: List<String> = emptyList(),
+    /** Cues that set this master's tempo on GO (S16): a forced delete leaves them naming it, skipped at GO. */
+    val cueTempos: Int = 0,
 ) {
-    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers + followers.size
+    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers + cueTempos + followers.size
 
     fun describe(): String = buildList {
         if (lookEffects > 0) add("$lookEffects look effect${if (lookEffects == 1) "" else "s"}")
         if (cueAdHocEffects > 0) add("$cueAdHocEffects cue effect${if (cueAdHocEffects == 1) "" else "s"}")
         if (cueLayers > 0) add("$cueLayers cue layer${if (cueLayers == 1) "" else "s"}")
+        if (cueTempos > 0) add("$cueTempos cue${if (cueTempos == 1) "" else "s"} setting its tempo")
         if (followers.isNotEmpty()) add("${followers.joinToString(", ")} following it")
     }.joinToString(" and ")
 
@@ -637,15 +645,24 @@ internal fun speedMasterUsageFor(
         }
         .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
 
+    // A cue's tempos are a JSON list on the cue, so scanned over the project's cues.
+    val tempoCues = HashMap<UUID, MutableList<Int>>()
+    DaoCue.find { DaoCues.project eq project.id }.forEach { cue ->
+        cue.speedMasters.mapNotNull { uuidStrings[it.speedMasterUuid] }.distinct()
+            .forEach { tempoCues.getOrPut(it) { mutableListOf() }.add(cue.id.value) }
+    }
+
     return uuidSet.associateWith { uuid ->
         val adHocCues = adHocRows[uuid] ?: emptyList()
         val layerCues = layerRows[uuid] ?: emptyList()
+        val tempoCueIds = tempoCues[uuid].orEmpty()
         SpeedMasterUsage(
             lookEffects = lookEffectCounts[uuid] ?: 0,
             cueAdHocEffects = adHocCues.size,
             cueLayers = layerCues.size,
-            cueIds = (adHocCues + layerCues).distinct().sorted(),
+            cueIds = (adHocCues + layerCues + tempoCueIds).distinct().sorted(),
             followers = followerNames[uuid].orEmpty().sorted(),
+            cueTempos = tempoCueIds.size,
         )
     }
 }

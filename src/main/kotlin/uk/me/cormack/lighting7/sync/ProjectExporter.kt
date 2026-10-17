@@ -44,6 +44,7 @@ import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
+import uk.me.cormack.lighting7.sync.dto.CueSpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
@@ -265,6 +266,7 @@ class ProjectExporter(private val state: State) {
                     stomp = c.stomp,
                     scenery = cueSceneryOf(c.id).map { it.toJson() },
                     events = cueEventsOf(c.id).map { it.toJson() },
+                    speedMasters = c.speedMasters.map { CueSpeedMasterJson(it.speedMasterUuid, it.bpm) },
                 )
             }
 

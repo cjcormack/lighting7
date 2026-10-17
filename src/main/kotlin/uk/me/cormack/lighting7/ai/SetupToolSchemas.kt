@@ -717,6 +717,7 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
     arrayProp("values", lookValueSchema, "The cue's own values, in create_look's values shape — $CUE_VALUES_NOTE Current project only: they are resolved against the live rig.")
     arrayProp("scenery", sceneryItemSchema(forCue = true), "Scene elements this cue moves on GO — the same shape as create_cue's scenery. $SCENERY_TRACKS_NOTE")
     arrayProp("events", cueEventItemSchema, "One-shot triggers this cue fires after GO — the same shape as create_cue's events. $CUE_EVENTS_NOTE")
+    arrayProp("speedMasters", cueSpeedMasterItemSchema, "The same shape as create_cue's speedMasters. $CUE_SPEED_MASTERS_NOTE")
     put("at", buildJsonObject {
         put("type", "object")
         put("description", "Where the cue is called in the prompt book; anchors it there. Needs a prompt book (get_prompt_book).")
