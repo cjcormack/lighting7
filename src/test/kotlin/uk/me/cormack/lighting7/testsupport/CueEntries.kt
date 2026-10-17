@@ -4,9 +4,10 @@ import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.DaoCueStackEntries
+import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.nextOrdinal
 import java.time.Duration
-import uk.me.cormack.lighting7.models.soleEntryOfCueId
 import uk.me.cormack.lighting7.state.State
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
@@ -48,4 +49,7 @@ fun markerIn(stack: DaoCueStack, label: String, sortOrder: Int? = null): DaoCueS
 
 /** The id of cue [cueId]'s one entry — what reorder, standby and go-to name since entries. */
 fun State.entryIdOf(cueId: Int): Int =
-    transaction(database) { soleEntryOfCueId(cueId)?.id?.value ?: error("cue $cueId is not in exactly one stack") }
+    transaction(database) {
+        DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.limit(2).toList().singleOrNull()?.id?.value
+            ?: error("cue $cueId is not in exactly one stack")
+    }

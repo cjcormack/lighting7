@@ -690,7 +690,7 @@ internal val overrideVenueFixturesTool = ToolDef(
 
 internal val getPromptBookTool = ToolDef(
     name = "get_prompt_book",
-    description = "A project's prompt book: the script PDF's page count and cover pages, every cue anchored on it (with its stack and number) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
+    description = "A project's prompt book: the script PDF's page count and cover pages, every entry anchored on it (its entryId, cue, stack and number — an anchor marks one place of a cue, so a cue in two stacks can be anchored twice) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
     inputSchema = objectSchema {
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
@@ -705,9 +705,10 @@ private val scriptPlaceSchema = objectSchema(required = listOf("pdfPage", "y")) 
     prop("height", "number", "Height as a fraction of the page height. Default 0.03 (about one line).")
 }
 
-private val showCueSchema = objectSchema(required = listOf("name")) {
+private val showCueSchema = objectSchema {
+    prop("cueId", "integer", "Share an existing cue of this project instead of defining one: it plays here too, and editing it changes it in every place. Such a row takes only number, followSeconds and at, which are this place's own.")
     prop("number", "string", "Cue number as the book calls it: '1', '12.5', '14A', 'S1-3'. Unique in the stack. Omit to have the desk number it from its neighbours.")
-    prop("name", "string", "Short name — the stand-by line or the look: 'House to half', 'Dawn'.")
+    prop("name", "string", "Short name — the stand-by line or the look: 'House to half', 'Dawn'. Required unless cueId is given.")
     prop("notes", "string", "The designer's note for the cue: what it looks like, what it's called on, anything the operator needs. This is where lighting notes go when there is no look to layer yet.")
     prop("fadeSeconds", "number", "Crossfade time in seconds. Omit for a snap.")
     prop("fadeCurve", "string", "LINEAR (default), SINE_IN_OUT, CUBIC_IN_OUT, … — an EasingCurve name.")
@@ -730,7 +731,8 @@ internal val buildCueStackTool = ToolDef(
     name = "build_cue_stack",
     description = "Create a cue stack for a show — or append to one — with its cues in running order, from a prompt book and the designer's lighting notes. Each cue carries its number, name, notes, fade and follow times, optional look layers, and optionally the place in the prompt book it is called on. " +
         "Cues can be created before their looks exist: put the intended state in notes, then program them later (record_cue with UPDATE_EXISTING, or create_cue-style layers and values). " +
-        "Everything is validated before anything is written, and a numbered cue cannot be added twice, so a retry after an error is safe. Returns the new cue ids.",
+        "A row may instead name an existing cue by cueId to share it: the same cue then plays from this stack too, with its own number and follow here. " +
+        "Everything is validated before anything is written, and a numbered cue cannot be added twice, so a retry after an error is safe. Returns the cue ids and each row's entryId.",
     inputSchema = objectSchema(required = listOf("cues")) {
         prop("stackName", "string", "Name for a new stack (e.g. 'Act 1', or the show's name). Required unless stackId is given.")
         prop("stackId", "integer", "Append to this existing stack instead of creating one.")
@@ -752,8 +754,10 @@ private val scriptNoteSchema = objectSchema(required = listOf("at")) {
     })
 }
 
-private val anchorSchema = objectSchema(required = listOf("cueId", "at")) {
-    prop("cueId", "integer")
+private val anchorSchema = objectSchema(required = listOf("at")) {
+    prop("entryId", "integer", "The entry anchored — one place of a cue in a stack (get_prompt_book and get_current_state list them). Give this, or stackId and number.")
+    prop("stackId", "integer", "With number: the stack of the entry.")
+    prop("number", "string", "With stackId: the entry's cue number in that stack.")
     put("at", buildJsonObject {
         put("type", "object")
         put("properties", scriptPlaceSchema["properties"]!!)
@@ -763,7 +767,7 @@ private val anchorSchema = objectSchema(required = listOf("cueId", "at")) {
 
 internal val markUpPromptBookTool = ToolDef(
     name = "mark_up_prompt_book",
-    description = "Mark up the current project's prompt book: anchor existing cues to the line they are called on (moving any existing anchor), add notes for the operator, and set how many cover pages precede the script's page 1. " +
+    description = "Mark up the current project's prompt book: anchor cues' entries — each place a cue has in a stack, by entryId or by stackId and number — to the line they are called on (moving any existing anchor), add notes for the operator, and set how many cover pages precede the script's page 1. " +
         "Notes are added, never replaced — check get_prompt_book first so a note is not written twice. Everything is validated before anything is written.",
     inputSchema = objectSchema {
         prop("coverPages", "integer", "PDF pages before the script's printed page 1 (title page, cast list…), so page labels match the script.")
@@ -881,6 +885,43 @@ internal val deleteCueStacksTool = ToolDef(
     },
 )
 
+internal val deleteCuesTool = ToolDef(
+    name = "delete_cues",
+    description = "Delete cues — which nothing else does: removing a cue from a stack, or deleting a stack, leaves the cue. " +
+        "Without force it is refused while anything names one of them, and the answer lists every use: its stack entries, busk pads, cue slots, " +
+        "prompt-book anchors and surface bindings (code CUE_IN_USE). With force each cue goes with its entries (their stacks renumbered), anchors, " +
+        "pads and slots, and lets go of the stage wherever it is live; a binding is left to report its cue missing. All of them or none; dryRun " +
+        "answers the uses and deletes nothing.",
+    inputSchema = objectSchema(required = listOf("cueIds")) {
+        put("cueIds", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+        })
+        prop("force", "boolean", "Delete them with everything that names them. Default false. Only once the operator has agreed to lose those uses.")
+        prop("dryRun", "boolean", "Answer what names each cue and delete nothing. Default false.")
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+    },
+)
+
+internal val copyCuesTool = ToolDef(
+    name = "copy_cues",
+    description = "Copy cues from another project into this one (projectId, else the current project): each copy loose, or a new entry at the end of stackId, unnumbered so the stack numbers it. " +
+        "References are found here as copy_to_project finds them: a Look or palette by name (copied along when this project has none), speed masters by number, scripts by name, a cue event's fixture and a scenery change's element by identity when both projects are on one venue, else by key and type and by name. " +
+        "A fixture or group target this project lacks is kept and reads as missing; an event or scenery change that cannot resolve is left out. Everything that did not come across is listed in `unresolved`. Prompt-book anchors are never copied. " +
+        "Run it with dryRun first: the same copy, rolled back.",
+    inputSchema = objectSchema(required = listOf("fromProjectId", "cueIds")) {
+        prop("fromProjectId", "integer", "The project to copy from (list_projects).")
+        put("cueIds", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+            put("description", "Cue ids in the source, in the order they are placed.")
+        })
+        prop("stackId", "integer", "A stack of this project to place each copy in. Omit to leave them loose.")
+        prop("dryRun", "boolean", "Answer what would be copied and what would not resolve, and keep nothing. Default false.")
+        prop("projectId", "integer", "The project to copy into. $PROJECT_ID_DESCRIPTION")
+    },
+)
+
 internal val setupToolDefs: List<ToolDef> = listOf(
     listProjectsTool,
     createProjectTool,
@@ -891,6 +932,8 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     publishVenueTool,
     copyToProjectTool,
     deleteCueStacksTool,
+    deleteCuesTool,
+    copyCuesTool,
     listFixtureTypesTool,
     getPatchTool,
     patchFixturesTool,

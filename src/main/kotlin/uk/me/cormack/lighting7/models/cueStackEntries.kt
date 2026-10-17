@@ -130,9 +130,9 @@ fun entriesOfStack(stackId: EntityID<Int>): List<DaoCueStackEntry> =
 
 /**
  * The first entry in stack [stackId] that places cue [cueId], in the stack's order — the caller names
- * the stack (cue model plan P7). Only for a caller that still names a cue where the runtime takes an
- * entry (P2): the MCP stack tools until the plan's session 7, a Record into a stack, and the include
- * indicator's number. A cue twice in one stack (D7) is told apart only by its entries.
+ * the stack (cue model plan P7). Only for a caller that names a cue in a stack it supplies: a Record
+ * CREATE's answer and Update's preview labels. A cue twice in one stack (D7) is told apart only by
+ * its entries, so anything that addresses one place takes its entry.
  */
 fun entryInStack(stackId: Int, cueId: Int): DaoCueStackEntry? =
     DaoCueStackEntry.find { (DaoCueStackEntries.stack eq stackId) and (DaoCueStackEntries.cue eq cueId) }
@@ -169,6 +169,14 @@ fun entrySlotsOf(cueIds: Collection<Int>): Map<Int, List<EntrySlot>> {
         .groupBy { it.entry.cueId!! }
         .mapValues { (_, slots) -> slots.sortedWith(showOrder) }
 }
+
+/** One place as a person reads it: the stack and the number, `Act 1 Q14`, or the stack alone. */
+fun EntrySlot.placeLabel(): String =
+    entry.stack.name + entry.cueNumber?.takeIf { it.isNotBlank() }?.let { " Q$it" }.orEmpty()
+
+/** Every place of a cue, `in: Act 1 Q14, Act 2 Q3`, or `loose` for a cue in no stack. */
+fun cuePlacesLabel(slots: List<EntrySlot>): String =
+    if (slots.isEmpty()) "loose" else slots.joinToString(prefix = "in: ") { it.placeLabel() }
 
 /**
  * Where an entry stood in its stack's list, remembered once the entry itself is gone: a stack whose
@@ -212,18 +220,6 @@ data class EntryPlace(
         }
     }
 }
-
-/**
- * [cue]'s entry when it has exactly one, else null: a cue in several stacks, or in none, has no one
- * place, and nothing here picks one (cue model plan P7). Left only for the MCP setup tools and the
- * briefing until the plan's session 7 moves them onto entries; every other caller names its entry or
- * lists them all ([entrySlotsOf]).
- */
-fun soleEntryOf(cue: DaoCue): DaoCueStackEntry? = entriesOfCue(cue).singleOrNull()
-
-/** [soleEntryOf] by id, for a caller holding only the cue's id. */
-fun soleEntryOfCueId(cueId: Int): DaoCueStackEntry? =
-    DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.limit(2).toList().singleOrNull()
 
 /** The ordinal one past [stack]'s last entry — where an appended entry goes. */
 fun nextOrdinal(stack: DaoCueStack): Double = (entriesOf(stack).maxOfOrNull { it.ordinal } ?: 0.0) + 1.0

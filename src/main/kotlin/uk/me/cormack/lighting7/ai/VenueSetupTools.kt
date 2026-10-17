@@ -25,9 +25,20 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.routes.CODE_CUE_IN_USE
+import uk.me.cormack.lighting7.routes.CopyCuesFromRequest
+import uk.me.cormack.lighting7.routes.CopyCuesOutcome
 import uk.me.cormack.lighting7.routes.CueCopier
+import uk.me.cormack.lighting7.routes.DeleteCuesOutcome
+import uk.me.cormack.lighting7.routes.DeleteCuesRequest
+import uk.me.cormack.lighting7.routes.afterCuesDeleted
+import uk.me.cormack.lighting7.routes.announceCuesCopied
 import uk.me.cormack.lighting7.routes.afterAttach
 import uk.me.cormack.lighting7.routes.announceCueStacksDeleted
+import uk.me.cormack.lighting7.routes.copyCuesFrom
+import uk.me.cormack.lighting7.routes.cueInUseMessage
+import uk.me.cormack.lighting7.routes.deleteCuesChecked
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
 import uk.me.cormack.lighting7.routes.deleteCueStackRows
 import uk.me.cormack.lighting7.routes.listedProjects
@@ -46,7 +57,7 @@ import java.util.UUID
 
 /**
  * The venue and cross-project tools (`list_venues`, `extract_venue`, `attach_to_venue`, `publish_venue`,
- * `copy_to_project`, `delete_cue_stacks`): what a model needs to split a hall from the show built in
+ * `copy_to_project`, `copy_cues`, `delete_cue_stacks`, `delete_cues`): what a model needs to split a hall from the show built in
  * it, and to prepare one project while another runs. Split from [SetupTools] for length; its rules
  * hold — validate everything, answer every problem at once, write nothing unless all of it passes.
  *
@@ -301,6 +312,95 @@ internal class VenueSetupTools(private val state: State) {
             DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.any { it.stackId !in stackIds }
         }
         return cueIds.size - elsewhere.size
+    }
+
+    // ─── delete_cues ────────────────────────────────────────────────────
+
+    /** `POST /cues/delete` as a tool (cue model plan D8): the same guard, through [deleteCuesChecked]. */
+    fun deleteCues(input: JsonObject): ToolExecutionResult {
+        val target = state.toolProject(input)
+        val problems = unknownFields(input, listOf("projectId", "cueIds", "force", "dryRun"), "delete_cues").toMutableList()
+        val ids = intList(input, "cueIds", problems)
+        if (ids.isEmpty() && problems.isEmpty()) problems += "cueIds is required: the cues to delete"
+        if (problems.isNotEmpty()) return rejected(problems)
+        val request = DeleteCuesRequest(ids, force = input.bool("force") == true, dryRun = input.bool("dryRun") == true)
+        val projectId = target.project.id.value
+        return when (val outcome = transaction(state.database) { deleteCuesChecked(state, DaoProject[target.project.id], request) }) {
+            is DeleteCuesOutcome.NotFound -> rejected(outcome.missing.map { "no cue $it in project $projectId" })
+            is DeleteCuesOutcome.InUse -> ToolExecutionResult(
+                success = false,
+                description = "Nothing was deleted: ${outcome.uses.size} cue(s) in use",
+                result = buildJsonObject {
+                    put("error", "Nothing was deleted. ${cueInUseMessage(outcome.uses)}")
+                    put("code", CODE_CUE_IN_USE)
+                    put("uses", answerJson.encodeToJsonElement(outcome.uses))
+                }.toString(),
+            )
+            is DeleteCuesOutcome.Done -> {
+                afterCuesDeleted(state, outcome.deletion)
+                val uses = outcome.response.uses
+                success(
+                    if (request.dryRun) {
+                        "Would delete ${ids.size} cue(s); ${uses.size} of them in use" + if (uses.isEmpty()) "" else " — they need force"
+                    } else {
+                        "Deleted ${outcome.response.deleted.size} cue(s)" + if (uses.isEmpty()) "" else ", with what named ${uses.size} of them"
+                    },
+                    buildJsonObject {
+                        put("dryRun", request.dryRun)
+                        putJsonArray("deleted") { outcome.response.deleted.forEach { add(it) } }
+                        put("uses", answerJson.encodeToJsonElement(uses))
+                    },
+                )
+            }
+        }
+    }
+
+    // ─── copy_cues ──────────────────────────────────────────────────────
+
+    /**
+     * `POST /cues/copy-from` as a tool (cue model plan §3.8), on [copyCuesFrom] and its [CueCopier]. The
+     * target is the tool's project, current or not; the holds and the busk pads are the live show's, so
+     * only a copy into the current project restamps the one and announces the other.
+     */
+    fun copyCues(input: JsonObject): ToolExecutionResult {
+        val problems = unknownFields(input, listOf("projectId", "fromProjectId", "cueIds", "stackId", "dryRun"), "copy_cues").toMutableList()
+        if (input.int("fromProjectId") == null) problems += "fromProjectId is required: a project id from list_projects"
+        val ids = intList(input, "cueIds", problems)
+        if (ids.isEmpty() && "cueIds" !in input) problems += "cueIds is required: the source's cues to copy"
+        val stackId = input.int("stackId")
+        if (input["stackId"].let { it != null && it !is JsonNull } && stackId == null) problems += "stackId must be an integer"
+        if (problems.isNotEmpty()) return rejected(problems)
+        val from = state.toolProject(input, "fromProjectId")
+        val target = state.toolProject(input)
+        val dryRun = input.bool("dryRun") == true
+
+        var priorities = emptyMap<Int, Int>()
+        val outcome = transaction(state.database) {
+            val request = CopyCuesFromRequest(from.project.id.value, ids, stackId, dryRun = dryRun)
+            copyCuesFrom(state, DaoProject[target.project.id], request).also { o ->
+                if (o is CopyCuesOutcome.Copied && !dryRun && target.isCurrent) {
+                    o.response.stackId?.let { priorities = stackEntryPriorities(DaoCueStack[it]) }
+                }
+                if (o !is CopyCuesOutcome.Copied || dryRun) TransactionManager.current().rollback()
+            }
+        }
+        val response = when (outcome) {
+            is CopyCuesOutcome.Refused -> return rejected(listOf(outcome.message))
+            is CopyCuesOutcome.Copied -> outcome.response
+        }
+        if (!dryRun) announceCuesCopied(state, response, priorities, live = target.isCurrent)
+        return success(
+            "${if (dryRun) "Checked" else "Copied"} ${response.copied.size} cue(s) into project ${target.project.id.value}" +
+                (response.stackId?.let { ", at the end of stack $it" } ?: ", loose") +
+                if (response.unresolved.isEmpty()) "" else "; ${response.unresolved.size} reference(s) did not resolve",
+            JsonObject(
+                answerJson.encodeToJsonElement(response) as JsonObject +
+                    ("note" to JsonPrimitive(
+                        if (dryRun) "Nothing was written: the ids in copied name nothing. Run it again without dryRun to copy."
+                        else "Copies are new cues with new ids; a copied cue is not shared with its source.",
+                    )),
+            ),
+        )
     }
 
     // ─── copy_to_project ────────────────────────────────────────────────
@@ -569,6 +669,9 @@ internal class VenueSetupTools(private val state: State) {
         row.keys.filter { it !in known }.map { "$where: unknown field '$it' (known: ${known.joinToString()})" }
 
     private companion object {
+        /** An answer DTO in full: an empty list says "none" rather than being left out. */
+        val answerJson = Json { encodeDefaults = true }
+
         fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
         fun JsonObject.int(name: String): Int? = (this[name] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
         fun JsonObject.bool(name: String): Boolean? = (this[name] as? JsonPrimitive)?.booleanOrNull

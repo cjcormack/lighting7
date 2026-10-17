@@ -71,7 +71,8 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         for (tool in listOf(
             "list_projects", "create_project", "switch_project", "list_fixture_types", "get_patch",
             "patch_fixtures", "delete_groups", "set_stage", "place_fixtures", "override_venue_fixtures", "get_prompt_book",
-            "build_cue_stack", "mark_up_prompt_book",
+            "build_cue_stack", "mark_up_prompt_book", "delete_cues", "copy_cues",
+            "add_cue_to_stack", "remove_cue_from_stack", "move_cue_to_stack",
         )) {
             assertTrue(tool in names, "$tool is offered")
         }
@@ -823,6 +824,9 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         )
         assertTrue(result.success, result.result)
         val stackId = result.json()["stackId"]!!.jsonPrimitive.int
+        val rows = result.json()["cues"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf(true, false, false, false, false), rows.map { it["marker"]?.jsonPrimitive?.boolean == true })
+        assertEquals(listOf(false, true, true, true, true), rows.map { "cueId" in it })
 
         transaction(state.database) {
             val entries = entriesOf(DaoCueStack[stackId])
@@ -908,11 +912,27 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertTrue(ok.success, ok.result)
         assertEquals(2, ok.json()["anchorsCreated"]!!.jsonPrimitive.int)
         val cueIds = ok.json()["cues"]!!.jsonArray.map { it.jsonObject["cueId"]!!.jsonPrimitive.int }
+        val entryIds = ok.json()["cues"]!!.jsonArray.map { it.jsonObject["entryId"]!!.jsonPrimitive.int }
+        val stackId = ok.json()["stackId"]!!.jsonPrimitive.int
+
+        // An anchor names an entry; a cue id alone names no place (cue model plan D4).
+        val byCue = call("mark_up_prompt_book", """{"anchors":[{"cueId":${cueIds[0]},"at":{"pdfPage":2,"y":0.4}}]}""")
+        assertFalse(byCue.success)
+        assertTrue(byCue.problems().single().contains("cueId alone names no place"), byCue.result)
+        val unknown = call("mark_up_prompt_book", """{"anchors":[{"stackId":$stackId,"number":"9","at":{"pdfPage":2,"y":0.4}}]}""")
+        assertTrue(unknown.problems().single().contains("no cue numbered '9'"), unknown.result)
+        val twice = call(
+            "mark_up_prompt_book",
+            """{"anchors":[{"entryId":${entryIds[0]},"at":{"pdfPage":2,"y":0.4}},{"stackId":$stackId,"number":"1","at":{"pdfPage":2,"y":0.5}}]}""",
+        )
+        assertTrue(twice.problems().single().contains("anchored twice"), twice.result)
+        val wrongStack = call("mark_up_prompt_book", """{"anchors":[{"entryId":${entryIds[0]},"stackId":999999,"at":{"pdfPage":2,"y":0.4}}]}""")
+        assertTrue(wrongStack.problems().single().contains("not stack 999999"), wrongStack.result)
 
         val markup = call(
             "mark_up_prompt_book",
             """{"coverPages":1,
-                "anchors":[{"cueId":${cueIds[0]},"at":{"pdfPage":2,"y":0.4}}],
+                "anchors":[{"stackId":$stackId,"number":"1","at":{"pdfPage":2,"y":0.4}}],
                 "notes":[{"kind":"NOTE","tone":"SAFETY","text":"Pyro","at":{"pdfPage":4,"y":0.2}},
                          {"kind":"STRIKETHROUGH","at":{"pdfPage":5,"y":0.5,"height":0.2}}]}""",
         )
@@ -939,6 +959,8 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertEquals(10, read["pageCount"]!!.jsonPrimitive.int)
         assertEquals(2, read["anchors"]!!.jsonArray.size)
         assertEquals(2, read["anchors"]!!.jsonArray[0].jsonObject["pdfPage"]!!.jsonPrimitive.int)
+        assertEquals(entryIds[0], read["anchors"]!!.jsonArray[0].jsonObject["entryId"]!!.jsonPrimitive.int)
+        assertEquals(stackId, read["anchors"]!!.jsonArray[0].jsonObject["stackId"]!!.jsonPrimitive.int)
         assertEquals(0, read["unanchoredCueCount"]!!.jsonPrimitive.int)
     }
 

@@ -304,9 +304,10 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
   (`IncludedTarget.entryId`, `POST /programmer/include {cueId, entryId?}`), for the indicator's
   number. Record and Update write the cue, whichever entry: a held scenery state the cue already
   tracks is left out only when it tracks it at **every** one of its entries
-  (`writeHeldSceneryIntoCue`), and a loose cue compares against the bases. `soleEntryOf` — a cue's
-  entry only while it has exactly one — is left only for the MCP briefing and `mark_up_prompt_book`,
-  until the plan's session 7 moves them onto entries.
+  (`writeHeldSceneryIntoCue`), and a loose cue compares against the bases. The MCP tools name an
+  entry too, by `entryId` or the stack's `number` (§"MCP tools"); nothing reads a cue's "only"
+  entry any more. `entryInStack` — a cue's first entry in a stack the caller names — is left for
+  Record CREATE's answer and Update's preview labels.
 - **An entry's number and follow** are written on the entry: `PATCH /cue-stacks/{id}/entries/{entryId}`
   `{cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`, the fields present only, answering the entry's
   row. A typed number is explicit (409 if another cue entry of the stack has it explicitly, as on `add-cue` and `POST /cues`), a blank
@@ -334,7 +335,7 @@ are null for a shared cue read without one, or a loose cue. `NewCue` takes an op
 **In the sync archive** (`formatVersion` 32, cue model plan session 3; `docs/sync-engineering.md`
 §"Version 32"): `cues/{uuid}.json` is what the cue is — name, fade, notes, stomp, scenery, events —
 and nothing about where it sits. Each entry is its own record, `cueStackEntries/{uuid}.json`, written
-from the entry rows directly (never through `soleEntryOf`), so a cue several entries name, or none,
+from the entry rows directly, so a cue several entries name, or none,
 travels as it is. An older archive's cue file still carried its one place, which the importer turns
 into an entry named with the cue's uuid; a MARKER cue becomes the marker entry under its own uuid
 (which is why the session-1 migration gave a marker entry its marker cue's uuid), and a cue with no
@@ -504,8 +505,9 @@ on a cue"). The cue editor's **Cue** tab edits it (`frontend/CLAUDE.md` §"The c
 ## Copying
 
 **One cue copier** (`routes/cueCopier.kt`, cue model plan §3.8, D9, D18) makes every copy of a cue:
-*Duplicate* within a project, `POST /cues/copy-from` from another project, and MCP's
-`copy_to_project`, which copies whole stacks through it. A copy is a new cue with fresh uuids and the
+*Duplicate* within a project, `POST /cues/copy-from` from another project and MCP's `copy_cues`, which
+share `copyCuesFrom` (`routes/cueCopyFrom.kt`), and MCP's `copy_to_project`, which copies whole
+stacks through it. A copy is a new cue with fresh uuids and the
 source's name, holding everything the source holds — fade, curve, notes, stomp, its speed masters,
 layers, own rows, effects, script hooks, scenery and events. Within one project every reference is
 kept as it is. Across projects each is resolved **in the target**:
@@ -590,14 +592,27 @@ cue model plan session 5). `components/cues/CueForm.tsx` is gone.
 
 ## MCP tools
 
-Three tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
+The cue tools (`ai/AiTools.kt` and the setup tools, offered over MCP — `docs/mcp-engineering.md`)
+name a cue by its id and a **place** by entry: `entryId`, or the stack's `number` (cue model plan
+§3.10). A cue may be shared, so the tools that run or edit a place never take a cue id for it:
 - `create_cue` — Create a named cue with layers (a Look, or a palette by `paletteId`), its own
-  `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects
+  `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects.
+  Loose unless `stackId` (with `number` and `after`) also places it; the answer's `entry` is the place
 - `apply_cue` — Take a **loose hold** on a saved cue by ID (§"Apply Semantics"): live above every
   stack, newest on top, no stack moved. Optional `replaceAll` lets every other loose hold go first;
   stacks are never touched.
 - `stop_cue` — Let the cue's loose hold go. It comes off unless a running stack also holds it; other
   running cues are unaffected.
+- `delete_cues` — `{cueIds, force?, dryRun?, projectId?}`: §"Delete" through `deleteCuesChecked`,
+  which `POST /cues/delete` also calls. Without `force` it is refused `CUE_IN_USE` with every use
+  (`uses`: entries, pads, slots, anchors, bindings); `dryRun` answers the uses and deletes nothing
+- `copy_cues` — `{fromProjectId, cueIds, stackId?, dryRun?, projectId?}`: §"Copying" into the
+  tool's project, answering `copied` and `unresolved` as the route does. A target that is not current
+  is written as stored; only the current project's holds are restamped and its pads announced
+
+The stack tools (`add_cue_to_stack`, `remove_cue_from_stack`, `move_cue_to_stack`,
+`activate_cue_stack`, `set_standby`) are in `docs/cue-stacks-engineering.md` §"MCP tools";
+`build_cue_stack` shares a cue a row names by `cueId`, and `mark_up_prompt_book` anchors an entry.
 
 Plus the three programmer gestures, which is how a cue gets *authored* rather than described:
 `record_cue` (the programmer into a cue, in any `RecordMode` — CREATE / MERGE / UPDATE_EXISTING / REMOVE), `include_into_programmer`
@@ -609,10 +624,12 @@ include-target bookkeeping decide which rows get overwritten, so there is exactl
 `create_palette` completes the set: the named, referenceable value an effect parameter points at
 with `tmpl:{uuid}`.
 
-The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning cue names and counts for the current project.
+The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning each cue's name, counts and `entries` (its places, empty for a loose cue), and `cue_holds`, what holds each live cue.
 
 The MCP `instructions` and `describe_rig` (`ai/RigBriefing.kt`) describe:
 - Multiple concurrent cues, applied alongside one another
+- Each cue's places, `in: Act 1 Q14, Act 2 Q3` or `loose`; that a cue may be shared; and that only
+  `delete_cues` deletes one
 - Colour palettes, listed with their uuids under `palettes`, and the `tmpl:{uuid}` grammar an
   effect parameter uses to name one
 - Active effects display includes `cueId` for each effect

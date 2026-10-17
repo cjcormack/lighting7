@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-7`](#fu-manual-venue-visit-r1-7) | Claude, over MCP on a real show, builds a stack that shares a cue with another stack — one cue, two numbered places, an edit showing in both — moves an entry with its number and anchor, and deletes a cue only after naming its pad and asking | Venue visit R1.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
@@ -126,6 +127,28 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-7`
+
+**What it proves**: *the MCP cue tools* — venue-visit R1.7, cue model plan session 7: a model names a
+cue's place by its number in the stack, shares a cue rather than copying it, and deletes one only
+through the guard.
+
+**Why it is here**: the tests call the tools directly; only a Claude client connected to the desk shows
+a model reading `in:` lines, choosing the entry by number, and stopping at `CUE_IN_USE` to ask.
+
+**Test**, on Sleeping Beauty, with Claude connected over MCP:
+
+1. **Share.** Ask Claude to build an *Encore* stack whose second cue is Act 1's Q14, shared, not
+   copied. The Show view lists Q14's cue in both stacks; `describe_rig` reads `in: Act 1 Q14, Encore Q2`.
+   Change its fade in the cue editor: both places show the new fade.
+2. **By number.** Ask Claude to stand by Encore Q2 and GO: the shared cue fires from Encore.
+3. **Move.** Ask Claude to move an anchored Act 1 cue to Encore: its number and follow come with it,
+   and the Prompt Book's anchor still opens it.
+4. **Delete.** Put a cue on a busk pad and ask Claude to delete it: it names the pad and the entries
+   and asks before forcing. Say yes: the pad and the entries go.
 
 ---
 
