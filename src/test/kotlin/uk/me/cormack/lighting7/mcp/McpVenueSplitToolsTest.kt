@@ -203,6 +203,44 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `copy_cues copies cues from another show, a dry run writing nothing`() {
+        val live = currentId()
+        val showId = seedVenueReadyShow(state)
+        val open = transaction(state.database) {
+            DaoCue.find { (DaoCues.project eq showId) and (DaoCues.name eq "open") }.single().id.value
+        }
+        val stack = ok("build_cue_stack", """{"stackName":"Copies","cues":[{"number":"1","name":"Preset"}]}""")["stackId"]!!.jsonPrimitive.content.toInt()
+        fun liveCues() = transaction(state.database) { DaoCue.find { DaoCues.project eq live }.count() }
+        val before = liveCues()
+
+        val dry = ok("copy_cues", """{"fromProjectId":$showId,"cueIds":[$open],"stackId":$stack,"dryRun":true}""")
+        assertEquals("true", dry["dryRun"]!!.jsonPrimitive.content)
+        assertEquals(open, dry["copied"]!!.jsonArray.single().jsonObject["fromCueId"]!!.jsonPrimitive.content.toInt())
+        assertNotNull(dry["unresolved"], "the answer lists what would not resolve, empty or not")
+        assertEquals(before, liveCues(), "a dry run writes nothing")
+        transaction(state.database) { assertEquals(1, entriesOf(DaoCueStack[stack]).size) }
+
+        val copied = ok("copy_cues", """{"fromProjectId":$showId,"cueIds":[$open],"stackId":$stack}""")["copied"]!!.jsonArray.single().jsonObject
+        val copy = copied["cueId"]!!.jsonPrimitive.content.toInt()
+        transaction(state.database) {
+            assertEquals(live, DaoCue[copy].project.id.value)
+            assertEquals("open", DaoCue[copy].name)
+            assertEquals(copied["entryId"]!!.jsonPrimitive.content.toInt(), entriesOf(DaoCueStack[stack]).last().id.value)
+        }
+
+        // Into a project that is not current, loose.
+        val other = ok("create_project", """{"name":"Copy target"}""")["projectId"]!!.jsonPrimitive.content.toInt()
+        val loose = ok("copy_cues", """{"projectId":$other,"fromProjectId":$showId,"cueIds":[$open]}""")["copied"]!!.jsonArray.single().jsonObject
+        assertNull(loose["entryId"]?.takeIf { it.toString() != "null" })
+        transaction(state.database) { assertEquals(other, DaoCue[loose["cueId"]!!.jsonPrimitive.content.toInt()].project.id.value) }
+
+        val refused = call("copy_cues", """{"fromProjectId":$showId,"cueIds":[999999]}""")
+        assertFalse(refused.success)
+        assertTrue("no cue 999999" in refused.result, refused.result)
+        assertEquals(live, currentId(), "nothing switched project")
+    }
+
+    @Test
     fun `the setup tools read and write a project that is not current`() {
         val live = currentId()
         val (showId, _) = extracted()

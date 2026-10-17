@@ -27,6 +27,11 @@ export interface SectionControls {
   fit(): void
 }
 
+/** Pointer travel that promotes a press on a section into a pan. */
+export const PAN_THRESHOLD_PX = 4
+/** One wheel notch, or one press of the HUD's zoom buttons. */
+export const ZOOM_PER_WHEEL_NOTCH = 1.15
+
 /** A tiny store the section camera writes and the DOM layer over the canvas reads. */
 export interface SectionViewStore {
   get(): SectionView | null

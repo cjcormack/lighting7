@@ -584,9 +584,19 @@ besides the docked fixture panel it sits in: a stage coordinate, or a region's c
 height, sent to `POST /programmer/aim` for the selected moving heads — from the single fixture's
 sheet as an *Aim…* popover on its Position row (fixture-fx-sheets session 2; it was a block pinned
 under the panel; on a phone, session 6, the same popover over the phone sheet), or its own docked
-panel for a multi-selection in view mode (tablet width and up), and only on the live project.
+panel for a multi-selection in view mode (tablet width and up; ⇧-click adds a fixture, ⌘-click
+toggles one), and only on the live project.
 The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
-point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
+point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips one line
+per reason (`AimSkips`). **A click on the Plan aims too** (venue-visit plan S13): *Aim on the plan*
+puts the window on the Plan and arms it, `PlanAimLayer` then owns the pointer over the canvas (a
+click is a point in the Plan's metres, a drag pans, Esc stops; the fixture click and the scenery
+popover stand down only while armed), the height is head height above the region under the click
+(else the deck, or the house floor off the stage) or the typed Z, and the aim panel docks for one
+head too until *Done*. Edit disarms it. The Plan is fitted to the drawn room as well as the rig, so
+the house is on it. The programmer's position popup offers
+the same controls as *Aim…* in its footer (§The editor kit). See `docs/stage-vis-engineering.md`
+§"Aiming on the Plan".
 
 **Focus here** (fixture-optics plan session 1) is its sibling on the Focus tab (`StageFocusPanel`):
 for a DMX head whose focus declares a range, on the live project, it sends where the beam lands in
@@ -4130,11 +4140,14 @@ each was:
   it, draft and all — the footer's *Save as palette…* is mounted outside. **The editor**, unchanged. **Below**,
   `PaletteFooter`: *Save as palette…* (not in a venue), whose sheet the cell mounts **outside** its
   surface through `usePaletteSave` — a press in a sheet is an outside press to a popover, which
-  would close the sheet with it. **Drawn only where a press has a door**: the container passes
+  would close the sheet with it — then the family's own tools in its `tools` slot: the position
+  cell's ***Aim…*** (venue-visit plan S13, `stage3d/PositionAimTool.tsx`), `StageAimControls` in a
+  popover over the cell batch's heads, refused with the reason off the rig, in Output, in a focused
+  layer (aim writes Local) and where no head annotates its pan and tilt in degrees. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists draw the editor bare; the cue editor's
   Values grid passes none either but its presses land in the cue (`PressCue`, below), so its cells
-  draw both bands and no footer — *Save as palette…* records from the programmer. A slider cell whose
-  property no value palette can carry (`paletteCarries`,
+  draw both bands and no footer — *Save as palette…* records from the programmer, and *Aim…* writes
+  Local. A slider cell whose property no value palette can carry (`paletteCarries`,
   the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
   (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
   carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
@@ -6988,7 +7001,7 @@ group's *Settings*, which takes its words. The table:
 | Export… | an admin | copy |
 | Update venue to vN… | a show on a venue it is behind | venue |
 | Detach from venue… | a show on a venue this desk holds at its pinned version | venue |
-| Attach to venue… | a standalone show — a disabled slot until `venue-attach-plan.md` builds it | venue |
+| Attach to venue… | a standalone show; opens `AttachVenueSheet` | venue |
 | Extract a venue… | an admin, a standalone show | venue |
 | History · Publish vN… | an admin on a venue; Publish refused with nothing to publish | venue |
 | Delete… | a show, or an admin on a venue; refused on the project on the rig | danger |
@@ -7002,8 +7015,38 @@ predicates are what is offered, never a permission: the desk refuses whatever it
 `projectActions.test.ts` pins the table per kind, role and state; `ProjectActionPlaces.test.tsx`
 renders the four places and pins that the card, the home's ⋮ and ⌘K offer one set — a venue's too,
 to an admin and an operator — that a show whose venue is missing offers no working *Make current*
-in any of them, and that ⌘K's *History* and *Publish vN…* for a viewed venue carry their reasons and
-open the band's sheets.
+in any of them, that ⌘K's *History* and *Publish vN…* for a viewed venue carry their reasons and
+open the band's sheets, and that *Attach to venue…* opens its sheet from all four doors.
+
+**Attach to venue…** (venue-attach plan §5, D1–D4; `components/venue/AttachVenueSheet.tsx`, the rules
+in `lib/venueAttach.ts`) is Detach in reverse, on Update's shell and rows (`VenueReviewParts.tsx`,
+which `VenueUpdateSheet` draws from too). It opens on the venue the show was detached from — first in
+the list and marked *Detached from here*, from the project list's `detachedFrom` — at its installed
+version, offering the version the show left beside it while the desk holds it. One line says whether
+matching is three-way (*Using v7, the version TCH Test left.*) or not: no origin, or the desk's own
+reason from `origin.detail` for one it lacks or one of another venue. The review is the attach rolled
+back on the desk: `GET …/venue/attach` with no answers, the same `POST` as a dry run with some
+(`venueAttachReview`, a query so the last review stays drawn while the next reads), re-read 250 ms
+after the last answer (a run of presses is one dry run, each a whole attach rolled back on the desk's
+one connection) because answering one decision can retire another — an identity's *Take venue's*
+retires the group decisions its members made — or take an answer off one. The desk refuses such an
+answer by name (`ATTACH_INVALID`, two sentences `VenueAttachTest` pins), and the sheet drops it
+(`staleAnswerIdOf`) and reads again; any other failed read holds *Attach* back, since the review on
+screen is not the one for the answers given. The review is grouped
+Output (*Attaching changes no output.*, else changes output then drawing only), From the venue (the
+counts it inherits), Overrides (drift rows with *Keep mine* / *Take venue's*), Decisions (identity with
+its rename's reach — who names the key, by record: *in 8 cues, 1 Look*; scripts said apart, never
+rewritten — hall and groups, each with its default pressed, and P8's overlaps, which must be
+answered: a dry run sends *Re-address mine* bare and the desk picks the free start, and the attach
+sends the start the last review suggested, the address on the button), Comes in from the venue and
+Hidden in this show (without an origin each incoming record has *Hide in this show*, the `HIDE`
+decision, matched by kind and record; none on a hide the desk refused),
+Yours, Will point at nothing, blockers and the desk's notes; an attach behind on output says it
+opens held, or, on the rig, runs against its pin. *Attach* waits for every overlap and no blocker,
+collapses to its progress — the sheet held open until the desk answers — and closes on the show's
+home. `attachVenue` is a silent endpoint; the
+sheet draws a refusal and keeps the answers. Detach's confirm says the version it leaves is
+remembered.
 
 ### A project's home
 
@@ -7017,7 +7060,7 @@ and it leads with status. A show's is below; a venue's follows it. The header (`
   drawing only or up to date, red for a version not on this desk — with the banner's own actions,
   `VenueBehindActions` (*Review update*, *Run against v7…* while held on the rig, *Hold output*
   while running against; the banner keeps *Later*), and *Open venue*. A standalone show reads *No
-  venue* beside the attach slot.
+  venue* beside *Attach to venue…*, which is the ⋮'s action, so it opens the same sheet.
 - **Sync**, for an admin only, since every cloud-sync route is an admin's: *Synced · owner/repo · 2
   min ago* or *Not synced*, and *Sync now* through `useSyncNow` (`components/cloudSync/`), the hook
   the Sync tab's Status panel presses too. Its toasts share the global toaster's id, so a run and

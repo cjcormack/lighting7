@@ -2066,7 +2066,9 @@ heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` MC
 a `dryRun`) is the same call. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
 `routes/programmerAim.kt` reads the placements, converts to DMX and writes the programmer as owner
 `WEB`, like a spread — so Record captures an aim, Blind previews it and Clear releases it. The
-Stage view's docked fixture panel (and its multi-select aim panel, in view mode) is the UI.
+Stage view's fixture sheet (its *Aim…* popover), its docked aim panel and a click on its Plan
+(venue-visit plan S13), and the programmer's position popup (*Aim…*), are the UI, all one call
+with a typed or clicked point.
 
 The solve is the **inverse of the Stage view's drawing**, not of a model of real yokes, so a head
 the desk aims is drawn with its beam through the point. The view places the body at the patch's
@@ -2784,6 +2786,12 @@ as a publish does for a running show); one not live opens held next time, as any
 Either role, as Detach; a venue and a version are refused by the write guard, and an admin's on a venue,
 or a show already on one, is 409 `NOT_A_STANDALONE_SHOW`. **Sync.** No `formatVersion` change: the attach
 writes hides, overrides, releases and the pin, which sync already carries, and clears the origin.
+**The sheet** is the frontend's `AttachVenueSheet` (frontend CLAUDE.md §"The app bar and the switcher"):
+it reads the review again with the answers so far after every answer, because an answer can retire
+another decision — an identity taken as the venue's retires the group decisions its members made — or
+take an answer off one, and drops an answer the desk refuses on either count (`No decision '…' in this
+attach`, `'…' does not answer '…'`, both sentences pinned here). A dry run sends *Re-address mine*
+without a start, so the desk picks the free one it suggests; the attach sends that suggestion.
 `VenueAttachTest` checks P2's round trip — detach, then attach at the same version: the effective rig,
 the parks, the hides, overrides and releases, and the output from one programmer state, all as before —
 and each blocker, overlap, rename and refusal; `VenueAttachPairingTest` pins the pairing's cases.

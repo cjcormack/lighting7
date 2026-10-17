@@ -315,13 +315,12 @@ class RigBriefing(private val state: State) {
 
         // Existing cues
         val cues = transaction(state.database) {
-            DaoCue.find { DaoCues.project eq project.id }
-                .map {
-                    // Its stack when it has exactly one entry; a shared or loose cue shows none until the
-                    // cue model plan's session 7 lists every place.
-                    val stackInfo = soleEntryOf(it)?.let { e -> " [stack: ${e.stack.name}]" }.orEmpty()
-                    "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
-                }
+            val all = DaoCue.find { DaoCues.project eq project.id }.toList()
+            val places = entrySlotsOf(all.map { it.id.value })
+            all.map {
+                "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects) — " +
+                    cuePlacesLabel(places[it.id.value].orEmpty())
+            }
         }
         if (cues.isNotEmpty()) {
             sb.appendLine("## Existing Cues")
@@ -336,9 +335,12 @@ class RigBriefing(private val state: State) {
                 .orderBy(DaoCueStacks.name to SortOrder.ASC)
                 .map { stack ->
                     val activeCueId = manager.getActiveCueId(stack.id.value)
-                    val stackCues = entriesOf(stack)
-                        .mapNotNull { e -> e.cue?.let { "${it.name} (id=${it.id.value})" } }
-                    val activeStr = if (activeCueId != null) " [ACTIVE, cueId=$activeCueId]" else ""
+                    val stackCues = entriesOf(stack).mapNotNull { e ->
+                        e.cue?.let { "${e.cueNumber?.let { n -> "Q$n " }.orEmpty()}${it.name} (cue ${it.id.value}, entry ${e.id.value})" }
+                    }
+                    val activeStr = activeCueId?.let {
+                        " [ACTIVE, cueId=$it, entryId=${manager.getActiveEntryId(stack.id.value)}]"
+                    }.orEmpty()
                     "**${stack.name}** (id=${stack.id.value}, ${stackCues.size} cues, loop=${stack.loop})$activeStr → ${stackCues.joinToString(" → ").ifEmpty { "(empty)" }}"
                 }
         }
@@ -373,10 +375,11 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
         sb.appendLine("- **Cues**: A cue is an ordered stack of layers — each applying a look, or a palette by paletteId (a generic one needs layer targets) — plus its own local values (create_cue / build_cue_stack's `values`, in create_look's grammar) and ad-hoc effects. Multiple cues can run concurrently. apply_cue holds a cue loose — live above every running stack, the newest apply on top — without moving any stack; applying a cue already held loose only puts it back on top. stop_cue lets that hold go, and the cue comes off unless a running stack also holds it (stop a stack with deactivate_cue_stack). apply_cue with replaceAll=true lets every other loose cue go first; stacks are never touched. Looks are read fresh at apply time, so edits to a look are always reflected.")
         sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted on a beat effect means the master whose `usage` matches the effect's family when one is tagged, else master 1; omitted on a wall-clock effect means unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with beat divisions. A master with `followNum`/`followDen` set follows another master (`followTargetUuid`, or Master 1 when absent) at that ratio: it ticks — and beats — in step with that master, its tempo is derived, set_bpm on it is refused, and the way to move it is to retune the master it follows.")
-        sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then run it with go_cue_stack — one GO fires whatever is on deck, and starts the stack if it is stopped. Use advance_cue_stack for BACKWARD and activate_cue_stack to jump to a named cue. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Multiple stacks can be active simultaneously.")
+        sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack (or create_cue / build_cue_stack straight into it), then run it with go_cue_stack — one GO fires whatever is on deck, and starts the stack if it is stopped. Use advance_cue_stack for BACKWARD and activate_cue_stack to jump to an entry. Stacks support looping (wraps at end). Each place in a stack is an **entry**, with its own number and its own follow (auto-advance after a delay); the cue's fade and curve are the cue's. Multiple stacks can be active simultaneously.")
+        sb.appendLine("- **A cue may be shared, and delete is explicit**: one cue can sit in several stacks, or twice in one, or in none (loose — Existing Cues says `loose`, or `in:` each place). Editing the cue changes it everywhere it plays. So a tool names a place by **entry** — `entryId`, or the stack's `number` (unique in its stack; the cue id alone is ambiguous) — in activate_cue_stack, set_standby, remove_cue_from_stack, move_cue_to_stack, include_into_programmer and the prompt book's anchors; a cue's own edits name the cue. add_cue_to_stack (or a build_cue_stack row naming cueId) shares a cue into a stack; move_cue_to_stack moves one entry whole, its number, follow and prompt-book anchor with it; remove_cue_from_stack takes a place away and never deletes the cue, nor does deleting a stack. Deleting cues is delete_cues alone, refused while anything names them (entries, busk pads, cue slots, anchors, bindings) unless forced — ask the operator before forcing. copy_cues copies cues from another show, resolving their looks, palettes, masters and fixtures there.")
         sb.appendLine("- **The programmer, and how work gets saved**: the programmer is the manual overlay on top of whatever is running — what busking writes, and what set_programmer (plain values — a level, a colour, a position, a gobo; a fixed state is always a value, never an effect), apply_palette, apply_look, aim_fixtures and move_scenery write through. clear_programmer clears it, all of it or just some fixtures and groups; set_blind takes it off stage while it keeps everything, so a state can be built and recorded unseen. record_cue puts it into a cue (CREATE a new one, or MERGE / UPDATE_EXISTING / REMOVE against an existing one), record_look into a Look the same way. The round trip in the other direction is include_into_programmer, which loads a cue or look back in as an edit buffer, then update_from_programmer, which writes back **only what changed** — that is what leaves the rest of the cue, palette references included, alone. Call update_from_programmer with preview=true first if you are unsure what the programmer is sitting on top of.")
         sb.appendLine("- **One-shot triggers and cue events**: a fixture listed with one-shot triggers (a confetti cannon) spends something physical when it fires, so its triggers are never a value — no look, palette, cue row, effect or programmer value can name one, and the desk refuses it by name. A cue fires one through its **events** (create_cue / build_cue_stack's `events`, or set_cue_events): a tube and an offset after GO. Events fire on GO into their cue only — never tracked, never on GO TO a later cue, never previewed — and only while the operator has armed the desk; unarmed, they are skipped and announced. Arming and firing a tube outright are the operator's, at the desk, and no tool offers them — but the arm is the operator's consent to the show's events, so while the desk is armed a GO you make (go_cue_stack, apply_cue) fires its cue's events as a GO at the desk would.")
-        sb.appendLine("- **Standby and GO**: what the next GO fires is the desk's, not the caller's — an armed standby if one is set, else the cue after the live one. set_standby arms (or, with no cueId, disarms) it without moving a light, so \"stand by cue 5\" and \"go\" stay two gestures; get_current_state's `cue_run` reports what each stack has on deck.")
+        sb.appendLine("- **Standby and GO**: what the next GO fires is the desk's, not the caller's — an armed standby if one is set, else the cue after the live one. set_standby arms an entry (or, naming none, disarms) without moving a light, so \"stand by cue 5\" and \"go\" stay two gestures; get_current_state's `cue_run` reports what each stack has on deck.")
 
         return sb.toString()
     }

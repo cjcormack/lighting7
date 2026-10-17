@@ -62,6 +62,8 @@ class AiTools(private val state: State) {
         deactivateCueStackTool,
         advanceCueStackTool,
         addCueToStackTool,
+        removeCueFromStackTool,
+        moveCueToStackTool,
         setStandbyTool,
         goCueStackTool,
         recordCueTool,
@@ -104,6 +106,8 @@ class AiTools(private val state: State) {
                 "deactivate_cue_stack" -> executeDeactivateCueStack(input)
                 "advance_cue_stack" -> executeAdvanceCueStack(input)
                 "add_cue_to_stack" -> executeAddCueToStack(input)
+                "remove_cue_from_stack" -> executeRemoveCueFromStack(input)
+                "move_cue_to_stack" -> executeMoveCueToStack(input)
                 "set_standby" -> executeSetStandby(input)
                 "go_cue_stack" -> executeGoCueStack(input)
                 "record_cue" -> executeRecordCue(input)
@@ -525,7 +529,7 @@ class AiTools(private val state: State) {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             ?: setOf(
                 "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
-                "palettes", "cues", "cue_stacks", "cue_run", "programmer", "selection", "windows",
+                "palettes", "cues", "cue_stacks", "cue_run", "cue_holds", "programmer", "selection", "windows",
                 "parked",
             )
 
@@ -681,15 +685,27 @@ class AiTools(private val state: State) {
             if ("cues" in include) {
                 val project = state.projectManager.currentProject
                 val cues = transaction(state.database) {
-                    DaoCue.find { DaoCues.project eq project.id }
-                        .map { cue ->
-                            buildJsonObject {
-                                put("id", cue.id.value)
-                                put("name", cue.name)
-                                put("layerCount", cue.layers.count())
-                                put("adHocEffectCount", cue.adHocEffects.count())
+                    val all = DaoCue.find { DaoCues.project eq project.id }.toList()
+                    // Every place each cue has (cue model plan §3.10): a shared cue lists several, a loose one none.
+                    val places = entrySlotsOf(all.map { it.id.value })
+                    all.map { cue ->
+                        buildJsonObject {
+                            put("id", cue.id.value)
+                            put("name", cue.name)
+                            put("layerCount", cue.layers.count())
+                            put("adHocEffectCount", cue.adHocEffects.count())
+                            putJsonArray("entries") {
+                                places[cue.id.value].orEmpty().forEach { slot ->
+                                    addJsonObject {
+                                        put("entryId", slot.entry.id.value)
+                                        put("stackId", slot.entry.stackId)
+                                        put("stackName", slot.entry.stack.name)
+                                        slot.entry.cueNumber?.let { put("number", it) }
+                                    }
+                                }
                             }
                         }
+                    }
                 }
                 put("cues", buildJsonArray { cues.forEach { add(it) } })
             }
@@ -711,6 +727,7 @@ class AiTools(private val state: State) {
                                 put("cueCount", cueCount)
                                 put("loop", stack.loop)
                                 put("isActive", activeCueId != null)
+                                manager.getActiveEntryId(stack.id.value)?.let { put("activeEntryId", it) }
                                 activeCueId?.let { put("activeCueId", it) }
                             }
                         }
@@ -733,14 +750,45 @@ class AiTools(private val state: State) {
                     for (frame in frames) {
                         addJsonObject {
                             put("stackId", frame.stackId)
+                            frame.activeEntryId?.let { put("activeEntryId", it) }
                             frame.activeCueId?.let { put("activeCueId", it) }
+                            frame.nextEntryId?.let { put("nextEntryId", it) }
                             frame.nextCueId?.let { put("nextCueId", it) }
+                            frame.standbyEntryId?.let { put("standbyEntryId", it) }
                             put("nextIsArmed", frame.nextIsArmed)
                             frame.fadeDurationMs?.let { put("fadeDurationMs", it) }
                             // Only present while a fade is actually running.
                             frame.fadeElapsedMs?.let { put("fadeElapsedMs", it) }
                             put("autoAdvance", frame.autoAdvance)
                             frame.autoAdvanceDelayMs?.let { put("autoAdvanceDelayMs", it) }
+                        }
+                    }
+                })
+            }
+
+            if ("cue_holds" in include) {
+                // What holds every live cue (cue model plan P3) — the frame `cueHolds.state` carries. A
+                // cue live in two places is one contribution, held until its last hold lets go.
+                val frame = state.cueHoldsFrame.value
+                put("cueHolds", buildJsonArray {
+                    if (frame.projectId == state.projectManager.currentProject.id.value) {
+                        for (cue in frame.cues) {
+                            addJsonObject {
+                                put("cueId", cue.cueId)
+                                put("priority", cue.priority)
+                                cue.stackId?.let { put("stackId", it) }
+                                if (cue.edited) put("editedSinceGo", true)
+                                putJsonArray("holds") {
+                                    for (hold in cue.holds) {
+                                        addJsonObject {
+                                            when (hold) {
+                                                is CueHold.Stack -> { put("kind", "STACK"); put("stackId", hold.stackId); put("entryId", hold.entryId) }
+                                                is CueHold.Loose -> put("kind", "LOOSE")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 })
@@ -1159,6 +1207,10 @@ class AiTools(private val state: State) {
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val adHocArray = input["adHocEffects"]?.jsonArray
+        val stackId = input.present("stackId")?.let { it.jsonPrimitive.intOrNull ?: return errorResult("stackId must be an integer") }
+        if (stackId == null && (input.present("number") != null || input.present("after") != null)) {
+            return errorResult("number and after place the cue in a stack: give stackId too, or leave them out for a loose cue")
+        }
 
         val project = state.projectManager.currentProject
         val layers = parseCueLayers(input["layers"]?.jsonArray)
@@ -1198,8 +1250,12 @@ class AiTools(private val state: State) {
             if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
             parsed
         }.orEmpty()
-        val cue = transaction(state.database) {
-            // A loose cue (cue model plan D1): add_cue_to_stack places it.
+        var refusal: String? = null
+        var priorities = emptyMap<Int, Int>()
+        val created = transaction(state.database) {
+            // Checked before the cue exists, so a refused placement writes nothing.
+            val placement = stackId?.let { id -> placementIn(id, project, input) { refusal = it } ?: return@transaction null }
+            // Loose unless placed (cue model plan D1).
             val newCue = DaoCue.new {
                 this.name = name
                 this.project = project
@@ -1208,20 +1264,28 @@ class AiTools(private val state: State) {
             writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
-            newCue
+            val entry = placement?.let { placeCueInStack(it.stack, newCue, cueNumber = it.number, position = it.position) }
+            if (placement != null) priorities = stackEntryPriorities(placement.stack)
+            newCue.id.value to entry?.let { buildJsonObject { putEntry(it) } }
+        } ?: return errorResult(refusal ?: "Cue stack $stackId not found")
+        val (cueId, entry) = created
+        if (stackId != null) {
+            announceEntryAdded(state, stackId, priorities)
+        } else {
+            state.show.fixtures.cueListChanged()
+            state.show.fixtures.cueStackListChanged()
         }
-        state.show.fixtures.cueListChanged()
-        state.show.fixtures.cueStackListChanged()
 
-        val cueId = cue.id.value
         return ToolExecutionResult(
             success = true,
             description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${assignments.size} values, " +
                 "${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events, " +
-                "${speedMasters.size} speed masters)",
+                "${speedMasters.size} speed masters)" +
+                (entry?.let { e -> " in stack $stackId" + (e["number"]?.jsonPrimitive?.content?.let { " as Q$it" } ?: "") } ?: ", loose"),
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
+                entry?.let { put("entry", it) }
                 put("layerCount", layers.size)
                 put("valueCount", assignments.size)
                 put("adHocEffectCount", adHocEffects.size)
@@ -1570,17 +1634,13 @@ class AiTools(private val state: State) {
 
     private fun executeActivateCueStack(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
-        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+        val entryId = namedEntryId(input, stackId, refuseCueId = true).getOrElse { return errorResult(it.message!!) }
 
         val manager = state.show.cueStackManager
-        // No cue named: `activateAtFirstCue`, not a hand-rolled "first row" query. It skips
-        // marker cues and fires an armed standby when there is one, so arming cue 5 pre-show and
+        // No entry named: `activateAtFirstCue`, not a hand-rolled "first row" query. It skips
+        // markers and fires an armed standby when there is one, so arming cue 5 pre-show and
         // then activating starts at 5 — which the local query silently got wrong.
-        val result = if (cueId != null) {
-            // The tool still names a cue (cue model plan §3.10 moves it to an entry); the GO lands on
-            // its first entry in the stack it names.
-            val entryId = transaction(state.database) { entryInStack(stackId, cueId)?.id?.value }
-                ?: return errorResult("Cue $cueId is not in stack $stackId")
+        val result = if (entryId != null) {
             try {
                 manager.activateEntry(state, stackId, entryId)
             } catch (e: IllegalArgumentException) {
@@ -1599,6 +1659,7 @@ class AiTools(private val state: State) {
             description = "Activated stack $stackId at cue '${result.cueName}' (${result.effectCount} effects)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
+                put("entryId", result.entryId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("effectCount", result.effectCount)
@@ -1659,15 +1720,12 @@ class AiTools(private val state: State) {
      */
     private fun executeSetStandby(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
-        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+        val entryId = namedEntryId(input, stackId, refuseCueId = true).getOrElse { return errorResult(it.message!!) }
 
         val manager = state.show.cueStackManager
         val runState = manager.runState
         try {
-            if (cueId != null) {
-                // The tool names a cue (§3.10 moves it to an entry): its first entry in the stack.
-                val entryId = transaction(state.database) { entryInStack(stackId, cueId)?.id?.value }
-                    ?: return errorResult("Cue $cueId is not in stack $stackId")
+            if (entryId != null) {
                 runState.setStandby(state, stackId, entryId)
             } else {
                 runState.clearStandby(state, stackId)
@@ -1681,19 +1739,20 @@ class AiTools(private val state: State) {
         val next = runState.effectiveNext(state, stackId)
         val nextCueId = next?.cueId
         val nextCueName = nextCueId?.let { id -> transaction(state.database) { DaoCue.findById(id)?.name } }
+        val activeEntryId = manager.getActiveEntryId(stackId)
 
         return ToolExecutionResult(
             success = true,
-            description = if (cueId != null) {
-                // Arming the cue that is already live is not an error, but it does not do what
+            description = if (entryId != null) {
+                // Arming the entry that is already live is not an error, but it does not do what
                 // "stand by cue 5" sounds like: `nextFrom` ignores a standby equal to the
                 // active entry, so the next GO advances past it. Say so rather than promising a
                 // fire the run state then contradicts.
-                if (cueId == manager.getActiveCueId(stackId)) {
-                    "Cue $cueId is already live on stack $stackId — the next GO advances to " +
+                if (entryId == activeEntryId) {
+                    "Entry $entryId is already live on stack $stackId — the next GO advances to " +
                         (nextCueName?.let { "'$it' (id=$nextCueId)" } ?: "nothing")
                 } else {
-                    "Armed cue $cueId on stack $stackId — the next GO fires it"
+                    "Armed entry $entryId on stack $stackId — the next GO fires it"
                 }
             } else {
                 "Disarmed stack $stackId — the next GO fires " +
@@ -1701,8 +1760,10 @@ class AiTools(private val state: State) {
             },
             result = buildJsonObject {
                 put("stackId", stackId)
+                activeEntryId?.let { put("activeEntryId", it) }
                 manager.getActiveCueId(stackId)?.let { put("activeCueId", it) }
-                cueId?.let { put("standbyCueId", it) }
+                entryId?.let { put("standbyEntryId", it) }
+                next?.let { put("nextEntryId", it.entryId) }
                 nextCueId?.let { put("nextCueId", it) }
                 nextCueName?.let { put("nextCueName", it) }
             }.toString()
@@ -1751,43 +1812,142 @@ class AiTools(private val state: State) {
     private fun executeAddCueToStack(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
-        val sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull
-
-        var priorities = emptyMap<Int, Int>()
-        val result = transaction(state.database) {
-            val stack = DaoCueStack.findById(stackId)
-                ?: return@transaction null to "Cue stack not found: $stackId"
-            val cue = DaoCue.findById(cueId)
-                ?: return@transaction null to "Cue not found: $cueId"
-
-            if (stack.project.id != state.projectManager.currentProject.id || cue.project.id != stack.project.id) {
-                return@transaction null to "Cue $cueId and stack $stackId must both be in the current project"
-            }
-            if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Stack $stackId is a separator"
-            // A new entry: a cue in another stack is shared, never moved (cue model plan D1).
-            placeCueInStack(stack, cue, position = sortOrder)
-            // The positions after it moved, and a live cue's priority is its position.
-            priorities = stackEntryPriorities(stack)
-
-            cue.name to null
+        if (input.present("sortOrder") != null) {
+            return errorResult("sortOrder is gone: name the entry the cue goes after with after ({entryId} or {number}), or leave it out to append")
         }
 
-        val (cueName, error) = result
-        if (error != null) return errorResult(error)
-        state.show.cueStackManager.holds.restampEntries(priorities)
+        val project = state.projectManager.currentProject
+        var refusal: String? = null
+        var priorities = emptyMap<Int, Int>()
+        val added = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
+                ?: run { refusal = "Cue $cueId is not in the current project"; return@transaction null }
+            val placement = placementIn(stackId, project, input) { refusal = it } ?: return@transaction null
+            // A new entry: a cue in another stack is shared, never moved (cue model plan D1).
+            val entry = placeCueInStack(placement.stack, cue, cueNumber = placement.number, position = placement.position)
+            // The positions after it moved, and a live cue's priority is its position.
+            priorities = stackEntryPriorities(placement.stack)
+            cue.name to buildJsonObject { putEntry(entry) }
+        } ?: return errorResult(refusal ?: "Failed to add cue $cueId to stack $stackId")
+        announceEntryAdded(state, stackId, priorities)
 
-        state.show.fixtures.cueStackListChanged()
-        state.show.fixtures.cueListChanged()
+        val (cueName, entry) = added
+        return ToolExecutionResult(
+            success = true,
+            description = "Added cue '$cueName' (id=$cueId) to stack $stackId as entry ${entry["entryId"]}" +
+                (entry["number"]?.jsonPrimitive?.content?.let { ", Q$it" } ?: ""),
+            result = buildJsonObject {
+                put("cueName", cueName)
+                entry.forEach { (key, value) -> put(key, value) }
+            }.toString()
+        )
+    }
+
+    private fun executeRemoveCueFromStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val project = state.projectManager.currentProject
+        var refusal: String? = null
+        data class Removed(val entry: JsonObject, val removal: EntryRemoval, val placesLeft: Long)
+        val removed = transaction(state.database) {
+            val entry = currentStackEntry(stackId, input) { refusal = it } ?: return@transaction null
+            val described = buildJsonObject { putEntry(entry); put("cueName", entry.displayName) }
+            val cueId = entry.cueId!!
+            val removal = removeEntries(state, project, listOf(entry))
+            Removed(described, removal, DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.count())
+        } ?: return errorResult(refusal ?: "Entry not found")
+        val (entry, removal, placesLeft) = removed
+        announceEntriesRemoved(state, removal, stackId)
 
         return ToolExecutionResult(
             success = true,
-            description = "Added cue '$cueName' (id=$cueId) to stack $stackId",
+            description = "Removed entry ${entry["entryId"]} ('${entry["cueName"]?.jsonPrimitive?.content}') from stack $stackId — " +
+                if (placesLeft > 0) "the cue keeps its $placesLeft other place(s)" else "the cue is now loose",
             result = buildJsonObject {
-                put("stackId", stackId)
-                put("cueId", cueId)
-                put("cueName", cueName)
+                put("removed", entry)
+                put("cueLeftLoose", placesLeft == 0L)
+                put("anchorsRemoved", removal.anchorsRemoved)
             }.toString()
         )
+    }
+
+    private fun executeMoveCueToStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val toStackId = input["toStackId"]?.jsonPrimitive?.intOrNull ?: return errorResult("Missing 'toStackId'")
+        val project = state.projectManager.currentProject
+        var refusal: String? = null
+        val moved = transaction(state.database) {
+            val entry = currentStackEntry(stackId, input) { refusal = it } ?: return@transaction null
+            when (val outcome = moveEntryChecked(state, project, entry, toStackId)) {
+                is EntryMoveOutcome.Refused -> { refusal = outcome.message; null }
+                is EntryMoveOutcome.Moved -> outcome.move to buildJsonObject { putEntry(entry); put("cueName", entry.displayName) }
+            }
+        } ?: return errorResult(refusal ?: "Entry not found")
+        val (move, entry) = moved
+        announceEntryMoved(state, move)
+
+        return ToolExecutionResult(
+            success = true,
+            description = "Moved entry ${move.entryId} from stack ${move.fromStackId} to the end of stack ${move.toStackId}" +
+                (entry["number"]?.jsonPrimitive?.content?.let { ", as Q$it" } ?: "") +
+                (if (move.anchored) ", its prompt-book anchor with it" else ""),
+            result = buildJsonObject {
+                put("fromStackId", move.fromStackId)
+                put("entry", entry)
+                put("anchored", move.anchored)
+            }.toString()
+        )
+    }
+
+    /** Where create_cue and add_cue_to_stack put a new entry: [stack], its explicit [number], at [position]. */
+    private class Placement(val stack: DaoCueStack, val number: String?, val position: Int?)
+
+    /**
+     * Stack [stackId] of [project] and [input]'s `number` and `after` for a new entry in it, checked
+     * before anything is written; null after [problem]. Inside a transaction.
+     */
+    private fun placementIn(stackId: Int, project: DaoProject, input: JsonObject, problem: (String) -> Unit): Placement? {
+        val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
+            ?: run { problem("Cue stack $stackId is not in the current project"); return null }
+        if (stack.type == CueStackType.SEPARATOR.name) { problem("Stack $stackId is a separator"); return null }
+        val number = input.present("number")?.let { raw ->
+            cueNumberText(raw) ?: run { problem("number must be the cue number as the stack shows it, e.g. \"14\""); return null }
+        }
+        if (number != null) {
+            if (number.length > MAX_CUE_NUMBER_LENGTH) { problem("number must be at most $MAX_CUE_NUMBER_LENGTH characters"); return null }
+            explicitNumberClash(stack, number)?.let { problem(it); return null }
+        }
+        val position = input.present("after")?.let { raw ->
+            val after = raw as? JsonObject ?: run { problem("after must name an entry: {\"entryId\": …} or {\"number\": …}"); return null }
+            val ref = EntryRef.of(after, "after", problem) ?: return null
+            if (ref.isEmpty) { problem("after must name an entry: {\"entryId\": …} or {\"number\": …}"); return null }
+            val entry = findStackEntry(stack, ref, "after", problem, markers = true) ?: return null
+            entriesOf(stack).indexOfFirst { it.id == entry.id } + 1
+        }
+        return Placement(stack, number, position)
+    }
+
+    /** The entry of current-project stack [stackId] that [input] names, or null after [problem]. Inside a transaction. */
+    private fun currentStackEntry(stackId: Int, input: JsonObject, problem: (String) -> Unit): DaoCueStackEntry? {
+        val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == state.projectManager.currentProject.id }
+            ?: run { problem("Cue stack $stackId is not in the current project"); return null }
+        val ref = EntryRef.of(input, "entry", problem) ?: return null
+        if (ref.isEmpty) { problem("name the entry by entryId or by number"); return null }
+        return findStackEntry(stack, ref, "entry", problem)
+    }
+
+    /**
+     * The entry [input] names in current-project stack [stackId], by `entryId` or `number`; null when it
+     * names none. With [refuseCueId] a `cueId` is refused by name: a cue may be in a stack twice (D7),
+     * so only its entry says which place.
+     */
+    private fun namedEntryId(input: JsonObject, stackId: Int, refuseCueId: Boolean = false): Result<Int?> {
+        if (refuseCueId && input.present("cueId") != null) {
+            return Result.failure(IllegalArgumentException("name the entry by entryId or by its number in the stack, not by cueId: a cue may sit in a stack more than once"))
+        }
+        if (input.present("entryId") == null && input.present("number") == null) return Result.success(null)
+        var refusal: String? = null
+        val entryId = transaction(state.database) { currentStackEntry(stackId, input) { refusal = it }?.id?.value }
+        return entryId?.let { Result.success(it) } ?: Result.failure(IllegalArgumentException(refusal ?: "Entry not found"))
     }
 
     // ─── Programmer: Record / Include / Update ─────────────────────────────
@@ -1851,6 +2011,18 @@ class AiTools(private val state: State) {
 
     private fun executeInclude(input: JsonObject): ToolExecutionResult {
         val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+        // The entry a cue is included from, for the indicator (cue model plan §3.5): by id, or by a
+        // stack's number; `performProgrammerInclude` checks it places the cue.
+        val namesEntry = listOf("entryId", "number", "stackId").any { input.present(it) != null }
+        if (namesEntry && input.present("cueId") == null) {
+            return errorResult("entryId, stackId and number name the entry a cue is included from: give cueId too")
+        }
+        var refusal: String? = null
+        val entryId = if (!namesEntry) null else {
+            transaction(state.database) {
+                findProjectEntry(state.projectManager.currentProject, input, "entry") { refusal = it }?.id?.value
+            } ?: return errorResult(refusal ?: "Entry not found")
+        }
 
         val result = performProgrammerInclude(
             state,
@@ -1861,6 +2033,7 @@ class AiTools(private val state: State) {
             fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull ?: 0L,
             includeFx = input["includeFx"]?.jsonPrimitive?.booleanOrNull ?: true,
             targets = input["targets"]?.jsonArray?.let(::parseTargets),
+            entryId = entryId,
         )
 
         return when (result) {
@@ -1872,6 +2045,7 @@ class AiTools(private val state: State) {
                 result = buildJsonObject {
                     put("kind", "CUE")
                     put("cueId", result.cueData.cueId)
+                    entryId?.let { put("entryId", it) }
                     put("name", result.cueData.cueName)
                     put("entriesWritten", result.outcome.entriesWritten)
                     put("fxSpawned", result.outcome.fxSpawned)

@@ -42,6 +42,7 @@ export type ProjectDialog =
   | 'export'
   | 'update-venue'
   | 'detach'
+  | 'attach'
   | 'extract'
   | 'history'
   | 'publish'
@@ -77,9 +78,6 @@ export interface ProjectAction {
   destructive?: boolean
   run: () => void
 }
-
-/** What the attach slot says until `venue-attach-plan.md` builds it. */
-export const ATTACH_NOT_BUILT = 'Not available yet'
 
 const ON_THE_RIG_DELETE = 'It’s on the rig: make another project current first'
 
@@ -123,7 +121,7 @@ export function projectActions(
     action('export', 'Export…', 'copy', isAdmin, () => host.open('export')),
     action('update-venue', `Update venue to v${behindTo ?? ''}…`, 'venue', behindTo != null, () => host.open('update-venue')),
     action('detach', 'Detach from venue…', 'venue', venueHere, () => host.open('detach')),
-    action('attach', 'Attach to venue…', 'venue', standalone, () => {}, ATTACH_NOT_BUILT),
+    action('attach', 'Attach to venue…', 'venue', standalone, () => host.open('attach')),
     action('extract', 'Extract a venue…', 'venue', isAdmin && standalone, () => host.open('extract')),
     action('history', 'History', 'venue', isVenue && isAdmin, () => host.open('history'), venueHistory ? null : 'Reading the history…'),
     action(

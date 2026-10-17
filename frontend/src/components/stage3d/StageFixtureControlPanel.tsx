@@ -6,7 +6,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { FixtureSheet } from '@/components/fixtureSheet/FixtureSheet'
 import { PhoneSheet } from '@/components/fixtureSheet/PhoneSheet'
 import type { SheetHost } from '@/components/fixtureSheet/sheetContext'
-import { StageAimControls, isAimable } from './StageAimControls'
+import { StageAimControls, isAimable, type AimDraft } from './StageAimControls'
 import { StageFocusPanel } from './StageFocusPanel'
 import { useVisiblePatchListQuery } from '@/store/patches'
 import { useLanternIndex } from '@/hooks/useLanternIndex'
@@ -18,6 +18,8 @@ interface StageFixtureControlsProps {
   projectId: number
   /** Whether that project is the live one; aiming and *Focus here* write the programmer, so only then. */
   canAim: boolean
+  /** *Aim on the plan* in the *Aim…* popover, where the route can take a click on the Plan. */
+  onAimOnPlan?: (draft: AimDraft) => void
   onClose: () => void
 }
 
@@ -31,7 +33,7 @@ interface StageFixtureControlsProps {
  *
  * Both hosts are the same body (`StageFixtureSheet`) with the Stage's two extras, Focus and *Aim…*.
  */
-export function StageFixtureControls({ patchKey, projectId, canAim, onClose }: StageFixtureControlsProps) {
+export function StageFixtureControls({ patchKey, projectId, canAim, onAimOnPlan, onClose }: StageFixtureControlsProps) {
   const form = useEditorForm()
   // What the phone sheet draws: the fixture, held through the close — the selection clears at once,
   // and Radix animates the sheet out for 300ms, which would otherwise draw the bare fallback.
@@ -40,7 +42,13 @@ export function StageFixtureControls({ patchKey, projectId, canAim, onClose }: S
 
   if (form === 'popover') {
     return patchKey != null ? (
-      <StageFixtureControlPanel patchKey={patchKey} projectId={projectId} canAim={canAim} onClose={onClose} />
+      <StageFixtureControlPanel
+        patchKey={patchKey}
+        projectId={projectId}
+        canAim={canAim}
+        onAimOnPlan={onAimOnPlan}
+        onClose={onClose}
+      />
     ) : null
   }
   return (
@@ -72,6 +80,7 @@ export function StageFixtureControlPanel({
   patchKey,
   projectId,
   canAim,
+  onAimOnPlan,
   onClose,
 }: StageFixtureControlsProps & { patchKey: string }) {
   return (
@@ -85,7 +94,7 @@ export function StageFixtureControlPanel({
         <X className="size-4" />
       </button>
       <div className="flex min-h-0 flex-1 flex-col">
-        <StageFixtureSheet patchKey={patchKey} projectId={projectId} canAim={canAim} host="stage" />
+        <StageFixtureSheet patchKey={patchKey} projectId={projectId} canAim={canAim} onAimOnPlan={onAimOnPlan} host="stage" />
       </div>
     </aside>
   )
@@ -100,11 +109,13 @@ function StageFixtureSheet({
   patchKey,
   projectId,
   canAim,
+  onAimOnPlan,
   host,
 }: {
   patchKey: string
   projectId: number
   canAim: boolean
+  onAimOnPlan?: (draft: AimDraft) => void
   host: Extract<SheetHost, 'stage' | 'phone'>
 }) {
   const { fixtureByKey, typeByKey } = useFixtureLookup()
@@ -144,7 +155,12 @@ function StageFixtureSheet({
       }
       aim={
         canAim && isAimable(fixture) ? (
-          <StageAimControls key={patchKey} projectId={projectId} fixtureKeys={[patchKey]} />
+          <StageAimControls
+            key={patchKey}
+            projectId={projectId}
+            fixtureKeys={[patchKey]}
+            plan={onAimOnPlan != null ? { armed: false, onArm: onAimOnPlan } : undefined}
+          />
         ) : undefined
       }
     />

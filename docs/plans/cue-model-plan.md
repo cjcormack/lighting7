@@ -607,7 +607,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   `CopyCueDialog` line under UI Components (that dialog is already gone) and §"Speed masters on a
   cue"'s sentence on the REST copy go. `fixtures-engineering.md` §"Shows on a venue".
 
-### Session 7 — the MCP tools (backend)
+### Session 7 — the MCP tools (backend) — done, `f9f1a17b`
 
 - §3.10, with the briefing (`RigBriefing.keyConcepts`) rewritten for shared cues and explicit delete
   (session 2 wrote the loose hold's part).

@@ -596,7 +596,8 @@ interface FixtureModelProps {
   slot: number
   selected: boolean
   editMode?: boolean
-  onClick?: (group: Group) => void
+  /** A click on the body; the event says whether ⇧ or ⌘ extends a selection. */
+  onClick?: (group: Group, event: MouseEvent) => void
   /** Called when this fixture becomes the edit-mode selection target, so the
    *  parent can bind TransformControls to its group. Lets picker-based and
    *  click-based selection share the same gizmo wiring. */
@@ -975,7 +976,7 @@ export function FixtureModel({
     <group
       ref={groupRef}
       position={fixturePos}
-      onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group, e.nativeEvent) } : undefined}
       onPointerOver={onClick ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={onClick ? () => setHovered(false) : undefined}
     >

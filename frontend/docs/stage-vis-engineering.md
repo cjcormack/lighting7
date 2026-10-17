@@ -1532,8 +1532,17 @@ Four rules:
   cut. Session 3's venue is what the planes will cut through — the ceiling in plan, the balcony in
   front, the stage-left wall in side.
 - **A section refits itself until the operator moves it** — to the canvas as it resizes, and to the
-  rig as its lists arrive — and then it is theirs. *Frame* slides it **within** the plane, so framing
+  rig (and on the Plan the room) as their lists arrive — and then it is theirs. *Frame* slides it **within** the plane, so framing
   never changes what is cut.
+- **The Plan is fitted to the room as well as the rig** (venue-visit plan S13): its centre and size
+  take in the drawn rooms' own footprint (`orthoSection`'s `room`, `planAim.ts`'s `roomFootprint` —
+  each `ROOM`'s turned `widthM × depthM`, not the padded collider bounds `beyond` is), so the house
+  and the walls are on the Plan to be clicked. Only the fit moves: the plane stays the rig's, and
+  Front and Side are fitted to the rig as before. It follows what the canvas draws: turning the
+  Venue layer off refits an unmoved Plan to the rig, the Positions panel's plan (drapes and the Set
+  only) has no room and fits the rig, and a `render_view` of the Plan frames the room as the Stage
+  view does. A hall bigger than its stage draws the rig smaller when the Plan first opens, Edit
+  included.
 - **Each camera is a plain three.js object made the default through the store**, not drei's
   `<PerspectiveCamera makeDefault>`. drei's orthographic camera allocates a render target for a
   feature this never uses, and R3F sizes a default camera only on the *next* resize, so
@@ -1569,6 +1578,43 @@ remount already on Eye keeps it. The seed reads the orbit pose **noted in memory
 (`noteOrbitPose`), not storage: the eye's seed is read in the render that mounts it, before the
 orbit rig's unmount has flushed its pending write, so storage can be a move behind. An embedded camera (the Positions panel's plan) passes
 `persistCamera={false}` and never touches the Stage view's.
+
+### Aiming on the Plan
+
+Venue-visit plan S13. A click on the Plan aims the selected moving heads there: the desk solves pan and
+tilt from the point (`POST /programmer/aim`, lighting7 `docs/fixtures-engineering.md` §"Aiming a head
+at a point"), as *Aim at point* always has; this side only says where the point is.
+
+- **It is an armed mode.** *Aim on the plan* — in the fixture sheet's *Aim…* popover and the docked
+  aim panel — puts the window on the Plan and arms it (`Stage.tsx`'s `planAimArmed`). While armed,
+  `PlanAimLayer` is DOM over the canvas, as the section edit layer is, and owns the pointer: a click
+  is a point, a drag pans, the wheel zooms, and nothing reaches the fixture click, the scenery
+  popover or the camera's controls; a second finger makes the press a pinch, never a point. Unarmed,
+  every click is what it was, and *Sit in a seat…* is withheld while armed. Esc (taken on the
+  document after any open popover's, so a held record stays in the hand), *Done*, another camera,
+  Edit, a selection with nothing aimable or a change of project disarms it. It is a view-mode
+  gesture on the live project at tablet width and up, where the aim panel docks; the phone keeps the
+  popover's typed point.
+- **The click is a point in the Plan's metres.** The Plan reports where it looks to the same
+  `SectionViewStore` the edit layer reads (`onSectionView` is wired while aiming as well as while
+  editing), and the layer resolves a pointer from the canvas's live centre (`offsetToSection`), then
+  `planPointOf` — X is `h`, Y is `−v`. `PlanAimLayer.test.tsx` pins the mapping, a point far off
+  the rig, the pan and the zoom.
+- **The height is the controls'.** *Head height* (the default) is 1.7 m above the top of the region
+  under the click — the highest where regions overlap, `regionUnder` over the section editor's own
+  outline test — or, off every region, above the deck on the stage's footprint and the house floor
+  off it (`floorUnder`, the lowest shown room's `positionZ`, the confetti's floor); *At Z* is the
+  typed Z, and typing a Z chooses it. Seating rake is not read. The point lands in the X, Y and Z
+  fields, which stay the numeric entry for a point off the drawing, and Enter in one aims.
+- **One aim in flight.** Clicks come faster than the desk answers, so the controls send one request
+  at a time and only the newest click waits; an answer is shown only when nothing newer is waiting.
+- **The aim panel docks for one head too while armed**: the fixture sheet's popover would close at
+  the first click on the canvas, so it hands what it held (point, region, height) to the docked
+  panel as its seed. *Done* gives the sheet back. A ring marks the last point sent, and the desk's
+  skips read one line per reason (`skipsByReason`, `AimSkips`), in every host.
+- **Several heads**: a ⇧-click on a fixture adds it to the view's selection and a ⌘-click toggles it
+  (`selectionIntentFor`, the sections' rule), which is how a view-mode selection holds several movers
+  for the docked aim panel.
 
 ### Saved views and seats (session 2)
 

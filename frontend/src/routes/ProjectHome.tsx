@@ -9,6 +9,7 @@ import { ProjectHomeHeader } from '@/components/projectHome/ProjectHomeHeader'
 import { VenueShows, VenueStatus } from '@/components/projectHome/VenueHome'
 import { BEHIND_ICON_CLASS, BEHIND_TONE_CLASS, VenueBehindActions } from '@/components/venue/VenueBehindBanner'
 import type { ProjectDetail } from '@/api/projectApi'
+import type { ProjectAction } from '@/lib/projectActions'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { liveCuesOf, looseCuesOf, venueLineOf } from '@/lib/projectHome'
 import { cn } from '@/lib/utils'
@@ -72,7 +73,7 @@ export default function ProjectHome() {
 }
 
 /** One line per fact: Venue, Sync (an admin's) and, on the rig, Live. */
-function StatusBlock({ project, attach }: { project: ProjectDetail; attach?: { label: string; reason: string | null } }) {
+function StatusBlock({ project, attach }: { project: ProjectDetail; attach?: ProjectAction }) {
   const isAdmin = useIsNavAdmin()
   return (
     <dl className="divide-y rounded-lg border bg-card text-sm" data-project-status="">
@@ -83,7 +84,8 @@ function StatusBlock({ project, attach }: { project: ProjectDetail; attach?: { l
   )
 }
 
-function VenueRow({ project, attach }: { project: ProjectDetail; attach?: { label: string; reason: string | null } }) {
+/** A standalone show's line runs *Attach to venue…*, the same action the ⋮ carries. */
+function VenueRow({ project, attach }: { project: ProjectDetail; attach?: ProjectAction }) {
   const navigate = useNavigate()
   const hold = useVenueHold()
   const line = venueLineOf(project, hold)
@@ -95,10 +97,10 @@ function VenueRow({ project, attach }: { project: ProjectDetail; attach?: { labe
         actions={
           attach && (
             <>
-              <Button variant="outline" size="sm" className="h-7" disabled>
+              <Button variant="outline" size="sm" className="h-7" disabled={!attach.enabled} onClick={attach.run}>
                 {attach.label}
               </Button>
-              {attach.reason && <span className="text-xs text-muted-foreground">{attach.reason}</span>}
+              {!attach.enabled && attach.reason && <span className="text-xs text-muted-foreground">{attach.reason}</span>}
             </>
           )
         }

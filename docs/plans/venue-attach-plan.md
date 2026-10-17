@@ -479,8 +479,15 @@ Each session is one PR (P1).
   - `docs/mcp-engineering.md`;
   - CLAUDE.md's Show-on-a-venue endpoints and its §Venues paragraph.
 
-### Session 3 — The sheet
+### Session 3 — The sheet — done, `b8736de`
 
+- **As built** (2026-10-17): a rename's reach counts the records that name the key — *in 8 cues, 1
+  Look* — since `usedBy` lists records, not rows, and scripts are said apart. The version offered is the
+  installed one and, while the desk holds it, the one the show left. The review is read again 250 ms after
+  the last answer, and an answer the desk refuses as one it no longer takes (`No decision '…'`, `'…' does
+  not answer '…'`, both pinned by `VenueAttachTest`) is dropped and the review read again. A dry run sends
+  *Re-address mine* without a start, so the desk picks the free one it suggests; the attach sends that
+  suggestion. Update's rows moved into `VenueReviewParts.tsx`, which both sheets draw from.
 - §5: `AttachVenueSheet`, the entry points, and the Detach dialog's line.
 - **The entry points** (§7): an `attach` dialog in `ProjectDialog`, mounted by `ProjectActionDialogs`
   (`components/projectActions/ProjectActions.tsx`) beside Detach's; the action's `run` opens it, and

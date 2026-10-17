@@ -11,7 +11,9 @@ import type { VenueHistory } from '@/api/venueApi'
  * Projects card's ⋮, the home's ⋮ and ⌘K's Project group offer the same set for one project — a
  * venue's too, to an admin and an operator — and a show whose venue version is not on this desk
  * offers no working *Make current* in any of the four, the switcher included. ⌘K's *History* and
- * *Publish vN…* for a viewed venue carry their reasons and open the sheets the band opens.
+ * *Publish vN…* for a viewed venue carry their reasons and open the sheets the band opens. A
+ * standalone show's *Attach to venue…* opens its sheet from the card, the home's ⋮ and Venue line,
+ * and ⌘K (venue-attach plan §8 Session 3).
  */
 
 let projects: ProjectSummary[] = []
@@ -98,6 +100,9 @@ vi.mock('@/components/cloudSync/ImportFromRemoteDialog', () => ({ AddRemoteProje
 vi.mock('@/components/venue/ExtractVenueSheet', () => ({ ExtractVenueSheet: () => null }))
 vi.mock('@/components/venue/VenueUpdateSheet', () => ({ VenueUpdateSheet: () => null }))
 vi.mock('@/components/venue/DetachVenueDialog', () => ({ DetachVenueDialog: () => null }))
+vi.mock('@/components/venue/AttachVenueSheet', () => ({
+  AttachVenueSheet: ({ open, showName }: { open: boolean; showName: string }) => (open ? <div data-testid="attach-sheet">{showName}</div> : null),
+}))
 vi.mock('@/components/venue/RunAgainstDialog', () => ({ RunAgainstDialog: () => null }))
 vi.mock('@/components/venue/VenueHistorySheet', () => ({
   VenueHistorySheet: ({ open }: { open: boolean }) => (open ? <div data-testid="history-sheet" /> : null),
@@ -340,5 +345,47 @@ describe('the switcher takes the rig group only', () => {
     expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Open', 'Make current'])
     const onRig = document.querySelector('[data-switcher-row="18"]') as HTMLElement
     expect(within(onRig).getAllByRole('button').map((b) => b.textContent)).toEqual(['Open'])
+  })
+})
+
+describe('Attach to venue… opens the sheet', () => {
+  const attachItem = (root: ParentNode) => root.querySelector('[data-project-action="attach"]') as HTMLElement
+
+  it('from the Projects card', () => {
+    render(
+      <MemoryRouter>
+        <Projects />
+      </MemoryRouter>,
+    )
+    const item = attachItem(openMenu(screen.getByRole('button', { name: 'Default actions' })))
+    expect(item.hasAttribute('data-disabled')).toBe(false)
+    fireEvent.click(item)
+    expect(screen.getByTestId('attach-sheet').textContent).toBe('Default')
+  })
+
+  it('from the home’s ⋮', () => {
+    drawHome(STANDALONE)
+    fireEvent.click(attachItem(openMenu(screen.getByRole('button', { name: 'Default actions' }))))
+    expect(screen.getByTestId('attach-sheet').textContent).toBe('Default')
+  })
+
+  it('from the home’s Venue line', () => {
+    drawHome(STANDALONE)
+    const venue = document.querySelector('[data-status-row="venue"]') as HTMLElement
+    fireEvent.click(within(venue).getByRole('button', { name: 'Attach to venue…' }))
+    expect(screen.getByTestId('attach-sheet').textContent).toBe('Default')
+  })
+
+  it('from ⌘K', () => {
+    viewed = STANDALONE.id
+    const item = attachItem(openPalette())
+    expect(item.getAttribute('aria-disabled')).toBe('false')
+    fireEvent.click(item)
+    expect(screen.getByTestId('attach-sheet').textContent).toBe('Default')
+  })
+
+  it('and is not offered on a show already on a venue', () => {
+    viewed = BEHIND.id
+    expect(attachItem(openPalette())).toBeNull()
   })
 })
