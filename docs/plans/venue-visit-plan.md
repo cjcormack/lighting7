@@ -293,6 +293,9 @@ a one-line row here.
   S11 and S15; Rig and output folded; Apply opened next; P5's claiming rule; no manual check run).
 - ~~K2 — after R1.4~~ — done, `fff3addb` (plans corrected for the shared cue, R1.3, R4.2 and Nav.1;
   R1.4's gaps to R2.3, R2.4 and `FU-BUSK-PAD-STALE-NUMBER`; the Cues lane folded; no manual check run).
+- ~~K3 — after twelve more~~ — done, `d9cb8382` (plans corrected for R3.1–R3.4, R4.3, R4.6, R4.7,
+  R2.3, R2.4 and Nav.2–Nav.4; R1.6's and Att.3's needs met; six questions for Chris in the bodies; no
+  manual check run).
 
 ### Research and design — done
 
