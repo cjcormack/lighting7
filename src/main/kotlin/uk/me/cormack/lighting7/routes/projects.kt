@@ -25,8 +25,10 @@ import uk.me.cormack.lighting7.auth.adminOnly
 import uk.me.cormack.lighting7.auth.requireAdmin
 import uk.me.cormack.lighting7.venue.SeatingPresets
 import uk.me.cormack.lighting7.venue.ShowBehind
+import uk.me.cormack.lighting7.venue.DetachedFromDto
 import uk.me.cormack.lighting7.venue.VenueBehind
 import uk.me.cormack.lighting7.venue.VenueException
+import uk.me.cormack.lighting7.venue.VenuePins
 import uk.me.cormack.lighting7.venue.VenueRigGuard
 import uk.me.cormack.lighting7.venue.VenueVersions
 import uk.me.cormack.lighting7.models.*
@@ -461,6 +463,8 @@ data class ProjectListDto(
     val parks: Int = 0,
     /** *Make rig safe*'s blackout holds on the project, so it opens dark when made current again. Runtime only. */
     val safeBlackout: Boolean = false,
+    /** Where a standalone show was detached from (venue-attach plan D1); absent for any other project. */
+    val detachedFrom: DetachedFromDto? = null,
 )
 
 /**
@@ -519,6 +523,8 @@ data class ProjectDetailDto(
     val kind: ProjectKind = ProjectKind.SHOW,
     /** The venue a show sits on (venue plan session 3); absent for a standalone show and a venue. */
     val venue: ProjectVenueDto? = null,
+    /** Where a standalone show was detached from (venue-attach plan D1); absent for any other project. */
+    val detachedFrom: DetachedFromDto? = null,
 )
 
 @Serializable
@@ -585,6 +591,7 @@ private fun DaoProject.toListDto(state: State) = ProjectListDto(
     venueSummary = venueSummaryDto(),
     parks = VenueParks.of(id).effective.size,
     safeBlackout = state.safeBlackoutHeld(id.value),
+    detachedFrom = detachedFromDto(),
 )
 
 /** A venue's card, or null for anything else. Counts read the installed version (the draft before v1). Inside a transaction. */
@@ -623,7 +630,15 @@ internal fun DaoProject.toDetailDto(state: State): ProjectDetailDto {
         stageHeightM = stage.heightM,
         kind = kind,
         venue = venueDto(state),
+        detachedFrom = detachedFromDto(),
     )
+}
+
+/** This show's origin, or null when it records none. The venue is named when it is on this desk. Inside a transaction. */
+internal fun DaoProject.detachedFromDto(): DetachedFromDto? {
+    val (uuid, version) = detachedFrom() ?: return null
+    val venue = VenuePins.venueOf(uuid)
+    return DetachedFromDto(uuid.toString(), version, venue?.id?.value, venue?.name)
 }
 
 /**

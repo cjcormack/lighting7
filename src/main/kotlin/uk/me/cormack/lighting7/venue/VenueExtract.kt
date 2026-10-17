@@ -217,6 +217,9 @@ class VenueExtract(private val state: State) {
         // The pin, then every link the show still holds into the moved rows, onto v1's.
         show.venueUuid = venueUuid
         show.venueVersion = 1
+        // A show that extracts a venue is on it now, not detached from another.
+        show.detachedFromVenueUuid = null
+        show.detachedFromVersion = null
         val repointed = VenueLinks.repointAll(show.id, venue.id, snapshot)
         val dangling = repointed.filterValues { it.unmatched.isNotEmpty() }
         if (dangling.isNotEmpty()) {
