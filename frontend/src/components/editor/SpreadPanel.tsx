@@ -247,8 +247,8 @@ interface SpreadPanelProps {
   /**
    * The colour endpoint's editor — `ColourEditor`, handed in by the two hosts that draw a colour
    * endpoint (the busk tab and the programmer's row C). A component rather than an import because
-   * this panel is **store-free** and the editor is not: its hidden appearance leaves and its Recent
-   * chips reach the store, and the patch list, the cue sheet and the DMX sheet mount this panel
+   * this panel is **store-free** and the editor is not: its hidden appearance leaves and its Palettes
+   * band reach the store, and the patch list, the cue sheet and the DMX sheet mount this panel
    * without one. A host with no colour plan passes nothing and never draws the branch.
    */
   colourEditor?: ComponentType<ColourEditorProps>

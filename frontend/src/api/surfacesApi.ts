@@ -106,6 +106,16 @@ export interface GrandMasterFaderTarget {
   type: "grandMasterFader"
 }
 
+/**
+ * Set a cue stack's effect size (lighting7 effects plan D10) from a fader / encoder: 0..127 across
+ * 0–100 %. The desk stamps `stackUuid` from `stackId` on write, as on the stack buttons.
+ */
+export interface StackEffectSizeTarget {
+  type: "stackEffectSize"
+  stackId: number
+  stackUuid?: string | null
+}
+
 export interface SetBankTarget {
   type: "setBank"
   deviceTypeKey: string
@@ -357,6 +367,7 @@ export type BindingTarget =
   | BlackoutTarget
   | GrandMasterToggleTarget
   | GrandMasterFaderTarget
+  | StackEffectSizeTarget
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget

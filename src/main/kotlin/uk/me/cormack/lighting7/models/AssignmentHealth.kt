@@ -47,7 +47,7 @@ sealed class AssignmentHealth {
     data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
 
     /**
-     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` binding
+     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackEffectSize` binding
      * no longer exists in the project. Control-surface-only.
      */
     @Serializable

@@ -24,10 +24,10 @@ import { useReplacementNotes } from './useReplacementNotes'
  * looked different here would be describing one structure twice.
  *
  * **Rows only, since session 3 of the space plan.** The stack used to carry its own section chrome
- * — a LAYERS heading, a count, an Add button, the precedence paragraph and the `AddLayerSheet` —
+ * — a LAYERS heading, a count, an Add button, the precedence paragraph and an add-layer sheet —
  * and the rail stacked that above a second, separately-headed FX band. The rail is one list now:
  * its header carries both counts, its `VALUES · top wins` label states the precedence rule, and
- * its footer owns adding (`ProgrammerAddLayerSheet`). What is left here is the translation from
+ * its footer owns adding (`ApplyPicker`, on the selection). What is left here is the translation from
  * a row's position to the layer the desk knows, which is the part only this component can do.
  *
  * Every mutation is a fire-and-forget WS op answered by the whole `programmer.layerState`

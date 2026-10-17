@@ -46,9 +46,16 @@ export interface MarqueeSnapshot {
   /**
    * Where a press from this window lands — the palette strip's own targets (`templateTargetsFor`)
    * — and the families the marquee names, null for rows alone. `usePress`'s pair on the
-   * programmer, so a door outside the list (the rail's hand place) presses what the strip would.
+   * programmer, so a door outside the list (the rail's hand place, *+ Look*, *+ Palette*) presses
+   * what the strip would. `targetFamilies` and `targetEmitters` are what those heads can take, the
+   * strip's offer, so the rail's picker offers what its `All · n` does.
    */
-  press: { targets: readonly CueTarget[]; askedFamilies: readonly AttributeFamily[] | null }
+  press: {
+    targets: readonly CueTarget[]
+    askedFamilies: readonly AttributeFamily[] | null
+    targetFamilies: readonly AttributeFamily[]
+    targetEmitters: readonly string[]
+  }
 }
 
 export interface MarqueeStore {

@@ -15,7 +15,7 @@ export const ATTRIBUTE_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'POS
 /**
  * The template library's family chips, and its dividers under *All* — Intensity · Colour · Position
  * · Beam (library-sheets plan §3.2), the order an operator builds a state in rather than
- * [ATTRIBUTE_FAMILIES]' declaration order. Shared by `/palettes` and `TemplatePicker`, which mount
+ * [ATTRIBUTE_FAMILIES]' declaration order. Shared by `/palettes` and `ApplyPicker`, which mount
  * the same `PartitionChips`.
  */
 export const TEMPLATE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']

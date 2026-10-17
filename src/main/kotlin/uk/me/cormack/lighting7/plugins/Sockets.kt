@@ -156,6 +156,7 @@ fun Application.configureSockets(state: State) {
             setupProjectSubscriptions(scope)
             setupSurfaceSubscriptions(scope)
             setupGrandMasterSubscriptions(scope)
+            setupStackEffectSizeSubscriptions(scope)
             setupSelectionSubscriptions(scope)
             setupBuskSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)
@@ -216,5 +217,6 @@ private suspend fun dispatch(scope: SocketScope, message: InMessage) {
         is WindowsInMessage -> handleWindows(scope, message)
         is BuskInMessage -> handleBusk(scope, message)
         is GrandMasterInMessage -> handleGrandMaster(scope, message)
+        is StackEffectSizeInMessage -> handleStackEffectSize(scope, message)
     }
 }

@@ -283,6 +283,21 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `StackEffectSize passes the fader's value and its stack to the stack's size, and ignores a press`() {
+        val actions = RecordingActions()
+        val target = BindingTarget.StackEffectSize(stackId = 4, stackUuid = "00000000-0000-0000-0000-000000000004")
+        val router = buildRouter(actions, listOf(binding(1, "enc-1", target), binding(2, "btn-3", target)))
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteStackEffectSize(4, "00000000-0000-0000-0000-000000000004", 64u)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
     fun `a button press on a BPM target is ignored rather than jumping the tempo`() {
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterBpm())))
@@ -943,6 +958,9 @@ private class RecordingActions : SurfaceActions {
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
     override fun writeGrandMaster(midiValue7Bit: UByte) { calls += RecordedCall.WriteGrandMaster(midiValue7Bit) }
+    override fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
+        calls += RecordedCall.WriteStackEffectSize(stackId, stackUuid, midiValue7Bit)
+    }
     override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
         calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
     }
@@ -1009,6 +1027,7 @@ private sealed class RecordedCall {
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
     data class WriteGrandMaster(val value: UByte) : RecordedCall()
+    data class WriteStackEffectSize(val stackId: Int, val stackUuid: String?, val value: UByte) : RecordedCall()
     data class ApplyLook(val lookUuid: String) : RecordedCall()
     data class PressTemplate(val templateUuid: String) : RecordedCall()
     data class PressPad(val padUuid: String) : RecordedCall()

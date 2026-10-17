@@ -82,6 +82,7 @@ const CONTINUOUS_KINDS: TargetKind[] = [
   "selectionProperty",
   "speedMasterBpm",
   "grandMasterFader",
+  "stackEffectSize",
 ]
 const BUTTON_KINDS: TargetKind[] = [
   "flash",
@@ -131,6 +132,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
   grandMasterFader: "Grand Master — fader",
+  stackEffectSize: "Cue stack — FX size",
   setBank: "Set bank",
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
@@ -562,15 +564,20 @@ function TargetBody({
     )
   }
   if (
-    (kind === "cueStackGo" || kind === "cueStackBack" || kind === "cueStackPause") &&
-    (value.type === "cueStackGo" || value.type === "cueStackBack" || value.type === "cueStackPause")
+    (kind === "cueStackGo" || kind === "cueStackBack" || kind === "cueStackPause" || kind === "stackEffectSize") &&
+    (value.type === "cueStackGo" ||
+      value.type === "cueStackBack" ||
+      value.type === "cueStackPause" ||
+      value.type === "stackEffectSize")
   ) {
     return (
       <div className="space-y-1.5">
         <Label className="text-xs">Cue stack</Label>
         <Select
           value={String(value.stackId)}
-          onValueChange={(v) => onChange({ ...value, stackId: Number(v) })}
+          // The uuid is cleared with the id: it wins over the id at dispatch, so keeping the old
+          // stack's would leave the binding on that stack. The desk stamps the new one on save.
+          onValueChange={(v) => onChange({ ...value, stackId: Number(v), stackUuid: null })}
         >
           <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
           <SelectContent>
@@ -967,6 +974,8 @@ function defaultForKind(
       return { type: "grandMasterToggle" }
     case "grandMasterFader":
       return { type: "grandMasterFader" }
+    case "stackEffectSize":
+      return { type: "stackEffectSize", stackId: stacks[0]?.id ?? 0 }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
     // `dimmer` is `EncoderBankState.DEFAULT_PROPERTY` and the one property every rig has, so both

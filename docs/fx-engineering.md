@@ -747,8 +747,8 @@ effects plan's P2); the editor only writes the three fields.
 - **Size** (D2), 0–1: how much of the effect reaches the stage over what is underneath. It is a
   **weight applied after the blend**, per channel (P3): `out = before + (blended − before) × w`,
   where `before` is what the property already holds this pass — the reset baseline and any
-  lower-priority effect already applied — and `w = size × envelope` (`FxInstance.weight`), clamped
-  to 0–1. A Replace dimmer at 50 % therefore sits halfway between the level underneath and the
+  lower-priority effect already applied — and `w = size × envelope × stackSize`
+  (`FxInstance.weight`, `FxEngine.weightOf`), clamped to 0–1. A Replace dimmer at 50 % therefore sits halfway between the level underneath and the
   effect, never at half the effect's raw value; an Around movement (`ADDITIVE` about 128) has its
   offset scaled, so a circle at 50 % has half its radius about the position underneath; a colour is
   weighed channel by channel, white, amber and UV included. `FxTarget.applyValueToFixture` takes the
@@ -757,8 +757,8 @@ effects plan's P2); the editor only writes the three fields.
   At weight 0 nothing is written. A size outside 0–1 is refused at every write boundary
   (`EffectSpecCoercion.Strict.sizeProblem`); a stored one is clamped with a warn. Size stops at
   100 % (`FU-FX-SIZE-OVER-100`).
-- **The envelope** is the runtime factor of the weight a fade moves (effects plan §3.5, session 4),
-  and session 5's stack size multiplies in beside it. It **does not scale the effect's raw output**:
+- **The envelope** is the runtime factor of the weight a fade moves (effects plan §3.5, session 4);
+  a stack's effect size (below) multiplies in beside it. It **does not scale the effect's raw output**:
   `FxOutput.scaled()` is gone, and with it the scaling that dropped an `OVERRIDE` effect to 0. It is
   `FxInstance.envelope`, an immutable `EffectEnvelope` (`fx/EffectEnvelope.kt`) — a level, or a ramp
   from one level to another over a duration on an `EasingCurve`, read on the clock wherever the weight
@@ -789,6 +789,25 @@ effects plan's P2); the editor only writes the three fields.
   dynamics, so a fade or a retirement racing the swap reaches both; a retired instance an edit swapped
   in is removed by the next sweep. The envelope is never stored and never recorded: Record takes the
   row's own size.
+- **A stack's effect size** (D10, session 5): a cue stack's runtime weight on its effects, 0–1,
+  100 % at load — the third factor of `w`. `StackEffectSizes` (`fx/StackEffectSizes.kt`) is owned by
+  the show's `CueStackManager` and handed to the engine (`FxEngine.stackEffectSizes`), so a project
+  switch starts every stack at full; a same-project reload carries it (`ShowCarry.stackEffectSizes`,
+  restored before the reload's GOs, a stack the reload removed dropped) and a stack delete forgets
+  it. Nothing is stored. **Which stack weighs an instance** is the stack of its cue's **highest**
+  hold, 100 % under a loose hold (§11 question 21): `weighingStackOf` reads it off the instance's
+  `priority`, which `CueHolds` restamps whenever the top hold changes and retags when a cue adopts an
+  instance or takes one back — never `FxInstance.cueStackId`, the first hold's tag. A **leaving**
+  instance keeps its cue and priority, so it shrinks from the size of the stack that let it go rather
+  than jumping to full as its fade starts. Programmer, manual and Include effects own no cue and are
+  never weighed. The weight is read per pass (one map read, none at all while every stack is at
+  full), and provenance is re-sent on every change of a size (`CueStackManager.setEffectSize`), since
+  a discrete output — a setting, a step — flips on stage at a weight of one half. On the wire: `GET/PUT
+  /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` (400 `STACK_EFFECT_SIZE_INVALID` outside 0–1,
+  404 for another project's stack, current project only, both roles — a runtime gesture on a venue),
+  the `stackEffectSize.state` / `.set` frames (`docs/websocket-engineering.md` §"Stack effect size")
+  and the MIDI `stackEffectSize` fader (`docs/midi-control-surface-engineering.md`). The frontend's
+  *FX size* slider sits on the stack's row in the Show view and in the phone runner.
 - **Direction** (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, applied to each member's phase after the
   spread (§3.3 step 6, `EffectDirection.apply`): Backward is `1 − p`, kept inside `[0, 1)` so an
   effect indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on

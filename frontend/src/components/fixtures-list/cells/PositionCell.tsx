@@ -7,6 +7,7 @@ import { EditorSurface, type CellClickBehaviour } from '../../editor/EditorSurfa
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
+import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
@@ -22,6 +23,8 @@ interface PositionCellOwnProps {
   batch?: CellBatch
   /** *Local*, or the focused Look's name — the label line's scope. */
   scopeLabel?: string
+  /** The project, for the popup's Palettes band and *Save as palette…* — see `SliderCell`. */
+  projectId?: number
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
   /**
@@ -92,6 +95,7 @@ export const PositionCell = memo(function PositionCell({
   label = 'Position',
   batch,
   scopeLabel = 'Local',
+  projectId,
   placeholder,
   disabled = false,
   autoOpen,
@@ -168,8 +172,11 @@ export const PositionCell = memo(function PositionCell({
       ? `DMX ${value.pan} · ${value.tilt}`
       : `DMX ${value.pan} · ${value.tilt} · ${ranges.panMin}–${ranges.panMax} · ${ranges.tiltMin}–${ranges.tiltMax}`
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
+  const bandTargets = heads.targets ?? NO_TARGETS
+  const save = usePaletteSave(projectId, 'POSITION', bandTargets)
 
   return (
+    <>
     <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
@@ -223,34 +230,40 @@ export const PositionCell = memo(function PositionCell({
           column={label}
           chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
         />
-        <div className="flex items-start gap-3">
-          <XyPad
-            x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-            y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-            onChange={commitPad}
-          />
-          <div className="min-w-0 flex-1 space-y-2">
-            <ValueFieldRow
-              label="Pan"
-              min={CENTRE_MIN}
-              max={CENTRE_MAX}
-              value={panShown}
-              onChange={commitPan}
-              seed={numericSeed(keyboardOpen)}
+        <PaletteBands projectId={projectId} family="POSITION" property="position" targets={bandTargets} onSave={save.onSave}>
+          <div className="flex items-start gap-3">
+            <XyPad
+              x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+              y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+              onChange={commitPad}
             />
-            <ValueFieldRow label="Tilt" min={CENTRE_MIN} max={CENTRE_MAX} value={tiltShown} onChange={commitTilt} />
+            <div className="min-w-0 flex-1 space-y-2">
+              <ValueFieldRow
+                label="Pan"
+                min={CENTRE_MIN}
+                max={CENTRE_MAX}
+                value={panShown}
+                onChange={commitPan}
+                seed={numericSeed(keyboardOpen)}
+              />
+              <ValueFieldRow label="Tilt" min={CENTRE_MIN} max={CENTRE_MAX} value={tiltShown} onChange={commitTilt} />
+            </div>
           </div>
-        </div>
-        <EditorReadout>
-          <span>{bytesLine}</span>
-          {heads.count > 1 && !sameRanges && <span>ranges differ</span>}
-          {!value.isUniform && <span className="ml-auto">heads differ</span>}
-          {skipped && <span>{skipped}</span>}
-        </EditorReadout>
+          <EditorReadout>
+            <span>{bytesLine}</span>
+            {heads.count > 1 && !sameRanges && <span>ranges differ</span>}
+            {!value.isUniform && <span className="ml-auto">heads differ</span>}
+            {skipped && <span>{skipped}</span>}
+          </EditorReadout>
+        </PaletteBands>
       </div>
     </EditorSurface>
+    {save.sheet}
+    </>
   )
 })
+
+const NO_TARGETS: NonNullable<CellBatch['targets']> = []
 
 /**
  * The 120px pan/tilt pad: a drag writes both axes, as normalised fractions the cell maps into

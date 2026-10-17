@@ -440,12 +440,12 @@ ends on time too).
 ### The envelope is a weight, not a scale
 
 `FxOutput.scaled()` is gone (effects plan session 1). `intensityMultiplier` is the **envelope**, one
-factor of the weight `FxInstance.weight` applies after the blend — `out = before + (blended − before)
-× size × envelope` — so an envelope going to 0 hands the property back to what is underneath rather
+factor of the weight applied after the blend — `out = before + (blended − before)
+× size × envelope × stackSize`, the last the cue stack's runtime effect size (effects plan D10) — so an envelope going to 0 hands the property back to what is underneath rather
 than driving an `OVERRIDE` to 0. See `docs/fx-engineering.md` §"Size, direction and N-shot".
 
 Applied in the target, after the blend: `calculateEffectOutput` returns the raw output, and each of
-the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxInstance.weight`). Both the beat and wall-clock passes share those three, differing only in
+the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxEngine.weightOf`, which is `FxInstance.weight` with the stack's size). Both the beat and wall-clock passes share those three, differing only in
 the `PhaseSource` they hand them:
 1. `processFixtureEffect` — direct fixture
 2. `processGroupEffect` — group member direct
