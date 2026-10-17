@@ -129,6 +129,7 @@ export function PaletteBand({
   targets,
   families,
   emitters,
+  scope,
   className,
 }: {
   projectId: number
@@ -140,12 +141,15 @@ export function PaletteBand({
   families: readonly AttributeFamily[] | null
   /** The bundled emitters the heads have, for the offer. */
   emitters: readonly string[]
+  /** `usePress`'s scope — the busk tabs pass `'programmer'`: they write Local whatever the grid is pointed at. */
+  scope?: 'window' | 'programmer'
   className?: string
 }) {
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: applied } = useProgrammerAppliedQuery()
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
-  const { press, into } = usePress(projectId, pair)
+  const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
+  const { press, into } = usePress(projectId, pair, pressOptions)
   const onGesture = useCallback(
     (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
     [press],
@@ -254,6 +258,7 @@ export function PaletteBand({
           pair={pair}
           fit={fit}
           offerNew={false}
+          scope={scope}
         />
       )}
     </div>
@@ -292,15 +297,19 @@ export function PaletteFooter({
   canSave,
   onSave,
   tools,
+  className,
 }: {
   projectId: number
   canSave: boolean
   onSave?: () => void
   tools?: ReactNode
+  /** A docked host's own padding — the busk tabs' `px-3 py-2`. */
+  className?: string
 }) {
   const { isVenue } = useVenueMode(projectId)
   return (
     <EditorFooter
+      className={className}
       save={
         isVenue ? undefined : (
           <Button
@@ -379,6 +388,7 @@ export function EffectsBand({
   property,
   targets,
   families,
+  scope,
   className,
 }: {
   projectId: number
@@ -388,6 +398,8 @@ export function EffectsBand({
   targets: readonly TemplateTarget[]
   /** The press's mask. */
   families: readonly AttributeFamily[] | null
+  /** `usePress`'s scope — the busk tabs pass `'programmer'`. */
+  scope?: 'window' | 'programmer'
   className?: string
 }) {
   const { data: templates } = useTemplateListQuery({ projectId })
@@ -397,7 +409,8 @@ export function EffectsBand({
   const { fixtures } = useFixtureLookup()
   const stopEffect = useStopEffect()
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
-  const { press, into } = usePress(projectId, pair)
+  const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
+  const { press, into } = usePress(projectId, pair, pressOptions)
   const onGesture = useCallback(
     (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
     [press],
@@ -543,6 +556,7 @@ export function EffectsBand({
           pair={pair}
           fit={fit}
           offerNew={false}
+          scope={scope}
         />
       )}
     </div>

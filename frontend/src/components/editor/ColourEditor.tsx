@@ -83,6 +83,8 @@ export interface ColourPaletteSource {
   targets: readonly TemplateTarget[]
   /** The press's mask: *Colour* in the programmer's cell (the cell's own family), the busk pair's in its tab. */
   families: readonly AttributeFamily[] | null
+  /** `usePress`'s scope — the busk tab passes `'programmer'`: it writes Local whatever the grid is pointed at. */
+  scope?: 'window' | 'programmer'
 }
 
 export interface ColourEditorProps {
@@ -168,8 +170,8 @@ export interface ColourEditorProps {
   /** The Palettes band. Absent, none is drawn. */
   palettes?: ColourPaletteSource
   /**
-   * The Effects band, below the editor (apply-model plan §4.3) — the programmer's cell popup. Absent,
-   * none is drawn: the busk Colour tab's effects are its Effects tab's.
+   * The Effects band, below the editor (apply-model plan §4.3) — the programmer's cell popup, and
+   * docked under the Palettes band in the busk Colour tab. Absent, none is drawn.
    */
   effects?: ColourPaletteSource
   /** Draw the footer — *Save as template… · Pick · Spread…*. Default true; the fixture sheet passes false. */
@@ -660,6 +662,7 @@ export function ColourEditor({
         targets={palettes.targets}
         families={palettes.families}
         emitters={available}
+        scope={palettes.scope}
         className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
       />
     )
@@ -671,6 +674,8 @@ export function ColourEditor({
         property="rgbColour"
         targets={effects.targets}
         families={effects.families}
+        scope={effects.scope}
+        className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
       />
     )
   // A chip is a palette press — a write — so read-only takes it out of reach with the controls.
@@ -681,6 +686,14 @@ export function ColourEditor({
       </div>
     ) : (
       band
+    )
+  const effectsSection =
+    effectsBand != null && readOnly ? (
+      <div inert className="opacity-50">
+        {effectsBand}
+      </div>
+    ) : (
+      effectsBand
     )
 
   // The footer: the save first, then Pick and Spread…, the busk Colour tab's shape. **One line,
@@ -741,7 +754,7 @@ export function ColourEditor({
     return (
       <div ref={contentRef} onKeyDown={onKeyDown} data-colour-editor={compact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col">
         {leaves}
-        {/* The tab's one scroller: the picker, its read-out, the Palettes band. The picker row is padded to the
+        {/* The tab's one scroller: the picker, its read-out, the two bands. The picker row is padded to the
             knob's half-width on **every** side a scroller clips — the knob is react-colorful's own
             28px (its injected stylesheet lands after `index.css`, so the 20px rule there loses),
             and at 0% it hangs 14px past the square. The top was `pt-3`, 2px short, so a knob at
@@ -755,6 +768,7 @@ export function ColourEditor({
             {readout}
           </div>
           {bandSection}
+          {effectsSection}
         </div>
         {footerRow}
       </div>
@@ -768,13 +782,7 @@ export function ColourEditor({
       {bandSection}
       {controls}
       {readout}
-      {effectsBand != null && readOnly ? (
-        <div inert className="opacity-50">
-          {effectsBand}
-        </div>
-      ) : (
-        effectsBand
-      )}
+      {effectsSection}
       {footerRow}
     </div>
   )

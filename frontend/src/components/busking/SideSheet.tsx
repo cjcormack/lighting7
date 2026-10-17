@@ -1,5 +1,5 @@
 import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
-import { AudioWaveform, ChevronRight, Gauge, Palette, Play, Waves, type LucideIcon } from 'lucide-react'
+import { Aperture, AudioWaveform, ChevronRight, Gauge, Move, Palette, Play, SunMedium, Waves, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -15,8 +15,7 @@ import {
   SIDE_PANEL_ENTER_CLASS,
   SIDE_PANEL_HEADER_BUTTON_CLASS,
   SIDE_PANEL_OVERLAY_CLASS,
-  BUSK_TAB_WORDS_FROM,
-  tabWordClass,
+  buskTabWordClass,
   usePanelEnter,
   useSidePanelResize,
 } from '@/components/sheet/sidePanel'
@@ -34,12 +33,15 @@ import { BLIND_NAME_SUFFIX, BlindDot } from './BlindMarks'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { SpreadSheet, type SpreadSeed } from './SpreadSheet'
 import { EffectsSheet } from './EffectsSheet'
+import { BeamSheet, LevelSheet, PositionSheet } from './FamilySheets'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
- * The busk view's **side sheet** — one rail, five tabs, one fold, one fact (busk-further plan
- * D7; `Sheets.dc.html` is the authority on the sheet's layout, `ShowTab.dc.html` on the fourth tab
- * and the strip's fold).
+ * The busk view's **side sheet** — one rail, eight tabs, one fold, one fact (busk-further plan
+ * D7; `Sheets.dc.html` is the authority on the sheet's layout, `ShowTab.dc.html` on the Show tab
+ * and the strip's fold). The tabs are **Level · Colour · Position · Beam · Spread · Effects · Speed
+ * · Show** (apply-model plan §4.5, D10): a tab per family first, each the per-property popup's body
+ * over the busk selection, then the tools.
  *
  * **Speed is `BuskSpeedRail`**, mounted here and nowhere else in play mode — filling the sheet's
  * width and drawing no heading since 2026-09-21. **Colour is `ColourSheet`** (D8): the colour
@@ -50,16 +52,19 @@ import type { BuskingTarget } from './buskingTypes'
  * leave this view — its strip, two cards collapsed by default, BACK · GO as the tab's static footer
  * the way Colour and Spread keep their verbs. **Effects is `EffectsSheet`** (fixture-fx-sheets plan
  * D20), between Spread and Show: what runs on the selection, edited live, a pad's effect as the
- * running instance only. `LIVE_SHEET_TABS` in `lib/buskWindow.ts` is still the one list — a sixth
- * tab would be hidden there until it landed, because a tab that opens onto nothing is a promise
- * the desk cannot keep.
+ * running instance only, with *+ Effect…* and the split edit. **Level, Position and Beam are
+ * `FamilySheets.tsx`'s**: the family's Palettes band, the
+ * editor, the Effects band and *Save as palette…*, the Colour tab's shape in the other three
+ * families. `LIVE_SHEET_TABS` in `lib/buskWindow.ts` is still the one list — a new tab would be
+ * hidden there until it landed, because a tab that opens onto nothing is a promise the desk cannot
+ * keep.
  *
- * **The tab strip folds its words to glyphs below 460px of sheet** (D3's 400 until the fifth tab,
- * `BUSK_TAB_WORDS_FROM`): the strip is its own `@container`, every tab keeps its glyph, and below
- * it only the **open** tab keeps its word — the
- * fold strip's own vocabulary, so the sheet's 320px floor holds with five tabs, the mode toggle and
- * the fold chevron on one row. **The fold shows the live cue number under the Show glyph** (D4),
- * from the server cursor the bar read — so a folded sheet still says what is on stage.
+ * **The tab strip is glyphs, and only the open tab gains its word, from 380px of sheet**
+ * (`buskTabWordClass`): eight worded tabs want ~610px, past the panel's 480 ceiling, so no width
+ * words them all. The strip is its own `@container`, every tab keeps its glyph and its name as a title, and the
+ * sheet's 320px floor holds eight 26px glyphs, the mode toggle and the fold chevron on one row.
+ * **The fold shows the live cue number under the Show glyph** (D4), from the server cursor the bar
+ * read — so a folded sheet still says what is on stage.
  *
  * **The Colour tab's *Spread to a second colour…* button opens Spread with *From* set.** The hand-over is a
  * `SpreadSeed` held by whichever host mounts the two tabs — they are never mounted together, so
@@ -78,8 +83,8 @@ import type { BuskingTarget } from './buskingTypes'
  * board (`BuskingView`'s `board`), where a docked 288px rail would leave the page a bank four pads
  * wide: the sheet is `SideSheetOverlay`, a bottom sheet on an upright phone and a right-hand
  * overlay where the viewport is short, through `useEditorForm`'s three forms — the fold
- * decides the form, the window decides the tab — and it carries **Colour · Spread · Effects · Show
- * and still no Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the
+ * decides the form, the window decides the tab — and it carries **every tab but Speed** (D6):
+ * Speed was withheld there because the ShowBar had the tempo chip, and the
  * Show tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. It
  * opens from the page strip's button onto Colour.
  *
@@ -101,25 +106,30 @@ interface TabSpec {
 }
 
 export const SIDE_SHEET_TABS: readonly TabSpec[] = [
-  { id: 'speed', label: 'Speed', icon: Gauge },
+  { id: 'level', label: 'Level', icon: SunMedium },
   { id: 'colour', label: 'Colour', icon: Palette },
+  { id: 'position', label: 'Position', icon: Move },
+  { id: 'beam', label: 'Beam', icon: Aperture },
   { id: 'spread', label: 'Spread', icon: Waves },
   { id: 'effects', label: 'Effects', icon: AudioWaveform },
+  { id: 'speed', label: 'Speed', icon: Gauge },
   { id: 'show', label: 'Show', icon: Play },
 ]
 
 /**
- * A tab's word on either strip: drawn at 460px of sheet and up (`BUSK_TAB_WORDS_FROM` — 400 held
- * four tabs, five measure 455 with the chrome), and below that only on the open
- * tab (D3) — the shared panel chrome's rule, in `components/sheet/sidePanel.ts` since the rail took
- * a tab strip of its own; re-exported here, where the sheet's tests read it. The strip's
- * **unpadded wrapper** is the `@container`, so 400 is 400 of the sheet — what the operator dragged
- * it to, or the overlay's own width — and not the window's. The overlay strip takes the same rule:
- * three worded tabs measure ~291px, which overran the right-hand form while it was 288 and ran
- * under `SheetContent`'s close cross; at that form's 320 they are folded anyway, and end well
- * clear of it.
+ * A tab's word on either strip: the open tab's only, from 380px of sheet (`buskTabWordClass`, in
+ * `components/sheet/sidePanel.ts` beside the rail's rule; re-exported here, where the sheet's tests
+ * read it). The strip's **unpadded wrapper** is the `@container`, so 380 is 380 of the sheet — what
+ * the operator dragged it to, or the overlay's own width — and not the window's. The overlay strip
+ * takes the same rule: its right-hand form is 320, so there every tab is a glyph, clear of
+ * `SheetContent`'s close cross; an upright phone's bottom sheet is wide enough for the open word.
  */
-export { tabWordClass }
+export { buskTabWordClass }
+
+/** A tab's name, its word or its glyph's: Show's carries blind — the dot is aria-hidden (`BlindMarks.tsx`). */
+function tabName(tab: TabSpec, blind: boolean): string {
+  return tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label
+}
 
 /**
  * Which tabs a sheet offers in a given form: the landed ones, docked; the landed ones **minus
@@ -137,7 +147,7 @@ export function sideSheetTabs(form: 'docked' | EditorForm): readonly TabSpec[] {
 export interface SideSheetProps {
   projectId: number
   selectedTargets: Map<string, BuskingTarget>
-  /** The selection's attribute mask, for the Colour tab's header pill. Null is every attribute. */
+  /** The selection's attribute mask, which the tabs' presses carry. Null is every attribute. */
   families: AttributeFamily[] | null
   /** The route's transport and bar state, for the Show tab and the fold's live cue. */
   show: ShowTabSource
@@ -186,8 +196,8 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
   }
   const panel = (
     <DockedSideSheet openId={open.id} enter={enter} overlay={overlay}>
-      {/* The strip's unpadded wrapper is the `@container`, so the tab words fold at 460px of
-          sheet exactly (D3, `tabWordClass`) — on the padded row itself they would fold 24px early. */}
+      {/* The strip's unpadded wrapper is the `@container`, so the open tab's word comes at 380px
+          of sheet exactly (`buskTabWordClass`) — on the padded row itself it would come 24px late. */}
       <div className="@container shrink-0">
         <div role="tablist" aria-label="Side sheet" className={cn(CHROME_ROW_CLASS, 'gap-0.5')}>
           {/* **The tabs are what gives, and the two buttons never do.** The group takes the row's
@@ -203,15 +213,16 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
                 type="button"
                 role="tab"
                 aria-selected={tab.id === open.id}
-                // The name is the label whatever the width (below 460 a non-open tab's word is
-                // `display: none`, which would leave the name to whatever else is inside), and
+                // The name is the label whatever the width (a tab's word is `display: none` but
+                // the open one's from 380, which would leave the name to whatever else is inside), and
                 // on Show it carries blind — the dot is aria-hidden (`BlindMarks.tsx`).
-                aria-label={tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label}
+                aria-label={tabName(tab, blind)}
+                title={tabName(tab, blind)}
                 onClick={() => setBuskSheet(tab.id)}
-                // `px-2`, not the 10px it was: at 10px the row came to more than the column has,
-                // which the browser pays for by eating the gutter.
+                // `px-1.5`, a 26px glyph: eight tabs, the mode toggle and the chevron fit the 320
+                // floor at that, and at `px-2` they came to more than the column has.
                 className={cn(
-                  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
+                  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors',
                   tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -219,7 +230,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
                   <tab.icon className="size-3.5" />
                   {tab.id === 'show' && <BlindDot />}
                 </span>
-                <span className={tabWordClass(tab.id === open.id, BUSK_TAB_WORDS_FROM)}>{tab.label}</span>
+                <span className={buskTabWordClass(tab.id === open.id)}>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -241,6 +252,9 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
           has one line down its side, not two stacked on the same pixel. */}
       <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
         {open.id === 'speed' && <BuskSpeedRail />}
+        {open.id === 'level' && <LevelSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
+        {open.id === 'position' && <PositionSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
+        {open.id === 'beam' && <BeamSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
         {open.id === 'colour' && (
           <ColourSheet projectId={projectId} selectedTargets={selectedTargets} families={families} onSpread={onSpread} />
         )}
@@ -253,7 +267,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
             onSeedConsumed={onSeedConsumed}
           />
         )}
-        {open.id === 'effects' && <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} />}
+        {open.id === 'effects' && <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
         {open.id === 'show' && <ShowTab projectId={projectId} show={show} />}
       </div>
     </DockedSideSheet>
@@ -293,11 +307,10 @@ const SHEET_WIDTH_KEY = 'busk.sheet.width'
  * it. The default is the minimum, so the sheet opens at the narrowest width that is honest; it was
  * 288, which is below the floor and is clamped up on read for any desk that stored it.
  *
- * The strip holds **five** tabs since the fixture-fx-sheets plan's Effects tab (D20), and 320
- * still holds only because of `tabWordClass`: below 460px of sheet every tab but the open one is
- * its glyph, so the row at the floor is four glyph tabs (30 each), one worded tab (~77), the toggle
- * and the chevron — 243px of strip, measured. Four worded tabs wanted ~375, which is what D3's 400
- * was measured for; five want 378 of strip, 455 of sheet, so the busk strip's words wait for 460.
+ * The strip holds **eight** tabs, and 320 still holds only because no closed tab draws its word and each is a 26px glyph (`px-1.5`): at the floor the eight
+ * take 222px of the 244 the toggle and the chevron leave the group, measured in headless Chromium
+ * against the built stylesheet. The open tab's word waits for 380 (`buskTabWordClass`), where
+ * the widest, *Position*, makes the eight 275 of 304.
  */
 const SHEET_MIN_WIDTH = 320
 const SHEET_DEFAULT_WIDTH = 320
@@ -361,9 +374,9 @@ function DockedSideSheet({
 /**
  * The sheet off the desk board — below `md`, and on the short board — as a bottom sheet or a
  * right-hand sheet. Open while `busk.sheet` names a tab this form offers; closing writes `none`,
- * the same fact the fold chevron writes. It carries Colour, Spread, Effects and Show (D6, D20); Colour is the tab
- * the page strip's button opens onto, and on the short board the two editors take their compact
- * layout, since that form exists for a viewport with no height.
+ * the same fact the fold chevron writes. It carries every tab but Speed (D6); Colour is the tab
+ * the page strip's button opens onto (`OVERLAY_SHEET_TAB`), and on the short board the Colour and
+ * Spread editors take their compact layout, since that form exists for a viewport with no height.
  */
 export function SideSheetOverlay({ projectId, selectedTargets, families, show }: SideSheetProps) {
   const form = useEditorForm()
@@ -386,10 +399,11 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
           <SheetTitle>{open?.label ?? 'Side sheet'}</SheetTitle>
           <SheetDescription>The busk view’s side sheet</SheetDescription>
         </SheetHeader>
-        {/* The unpadded wrapper is the `@container`, as on the docked strip: three worded tabs
-            are ~291px, and the right-hand form is 320 with `SheetContent`'s close cross drawn over
-            its top-right corner — so below 460 of sheet the tabs are glyphs but the open one
-            (`tabWordClass`), and the group clips its own end rather than pushing anything out. */}
+        {/* The unpadded wrapper is the `@container`, as on the docked strip: the right-hand form
+            is 320 with `SheetContent`'s close cross drawn over its top-right corner, so there the
+            seven tabs are 32px glyphs, and the open one gains its word from 380 of sheet — an
+            upright phone's bottom sheet (`buskTabWordClass`). The group clips its own end rather
+            than pushing anything out. */}
         <div className="@container shrink-0">
           <div
             role="tablist"
@@ -406,10 +420,11 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
                   type="button"
                   role="tab"
                   aria-selected={tab.id === open?.id}
-                  aria-label={tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label}
+                  aria-label={tabName(tab, blind)}
+                  title={tabName(tab, blind)}
                   onClick={() => setBuskSheet(tab.id)}
                   className={cn(
-                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-semibold',
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-semibold',
                     tab.id === open?.id ? 'bg-muted text-foreground' : 'text-muted-foreground',
                   )}
                 >
@@ -417,12 +432,27 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
                     <tab.icon className="size-4" />
                     {tab.id === 'show' && <BlindDot />}
                   </span>
-                  <span className={tabWordClass(tab.id === open?.id, BUSK_TAB_WORDS_FROM)}>{tab.label}</span>
+                  <span className={buskTabWordClass(tab.id === open?.id)}>{tab.label}</span>
                 </button>
               ))}
             </div>
           </div>
         </div>
+        {open?.id === 'level' && (
+          <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
+            <LevelSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+          </div>
+        )}
+        {open?.id === 'position' && (
+          <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
+            <PositionSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+          </div>
+        )}
+        {open?.id === 'beam' && (
+          <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
+            <BeamSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+          </div>
+        )}
         {open?.id === 'colour' && (
           <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
             <ColourSheet
@@ -448,7 +478,7 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
         )}
         {open?.id === 'effects' && (
           <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
-            <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} />
+            <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
           </div>
         )}
         {open?.id === 'show' && (

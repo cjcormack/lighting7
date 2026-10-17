@@ -57,22 +57,21 @@ import { relinkBuskPage, showingBuskPage, unlinkBuskPage, useBuskPageFollow, use
  */
 
 export type BuskFocus = 'split' | 'pads' | 'rig'
-export type BuskSheet = 'none' | 'speed' | 'colour' | 'spread' | 'effects' | 'show'
+export type BuskSheet = 'none' | 'level' | 'colour' | 'position' | 'beam' | 'spread' | 'effects' | 'speed' | 'show'
 /** A tab the sheet can open onto — every sheet value but the fold. */
 export type BuskSheetTab = Exclude<BuskSheet, 'none'>
 
 export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
-export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread', 'effects', 'show']
+export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show']
 
 /**
- * The tabs that have landed — all five, since the fixture-fx-sheets plan's session 5 lit
- * **Effects** (D20) between Spread and Show, the way Show had landed in the busk-chrome plan's
- * session A. The list stays the one gate rather than collapsing into [BUSK_SHEETS]: a tab is
- * hidden here until its session, because a tab with an empty state is a promise the desk cannot
- * keep, and a fact naming a hidden tab draws the fold. Adding a tab here lights it in the sheet's
- * strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
+ * The tabs that have landed — all eight, in the strip's order: a tab per family — **Level**,
+ * **Colour**, **Position**, **Beam** (apply-model plan D10, §4.5) — ahead of the tools. The list stays the one gate rather than collapsing into [BUSK_SHEETS]: a tab is hidden
+ * here until its session, because a tab with an empty state is a promise the desk cannot keep, and
+ * a fact naming a hidden tab draws the fold. Adding a tab here lights it in the sheet's strip, the
+ * fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread', 'effects', 'show']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_HEIGHT_KEY = 'busk.rigHeight'
@@ -95,12 +94,13 @@ const SHEET_DOCKS = '(min-width: 1024px)'
 const RAIL_DRAWN = '(min-width: 768px)'
 
 /**
- * The tab an overlay unfolds onto when nothing but Speed has been open: the overlay's tab list
+ * The tab an overlay opens onto — the page strip's *Sheet* button — and unfolds onto when nothing
+ * but Speed has been open: the overlay's tab list
  * strips Speed (D7 — it was the ShowBar's chip there, and since the busk-chrome plan's session A it
  * is the Show tab's strip's, `SpeedMastersChip`), so a toggle that remembered only Speed would open
  * a sheet that finds no tab — fold to fold, the dead door the memory exists to prevent.
  */
-const OVERLAY_SHEET_TAB: BuskSheetTab = 'colour'
+export const OVERLAY_SHEET_TAB: BuskSheetTab = 'colour'
 
 export function isBuskFocus(value: unknown): value is BuskFocus {
   return typeof value === 'string' && (BUSK_FOCUSES as readonly string[]).includes(value)

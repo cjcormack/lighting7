@@ -21,6 +21,9 @@ import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
+const groupList = vi.hoisted(() => () => ({
+  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
+}))
 vi.mock('sonner', () => ({ toast }))
 
 vi.mock('@/store/templates', () => ({
@@ -31,7 +34,12 @@ vi.mock('@/store/templates', () => ({
 // A Palettes band chip is a press (`usePress`): its other routes and the ring's applied state, none of
 // which these tests are about.
 // A refused absorb into a focused Look takes the effects it started off again.
-vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/fixtureFx', () => ({
+  useRemoveFxMutation: () => [vi.fn()],
+  useEffectLibraryQuery: () => ({ data: [] }),
+  useActiveEffectsQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()], useGroupListQuery: groupList }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
@@ -102,11 +110,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
     typeByKey: new Map(),
   }),
 }))
-vi.mock('@/store/groups', () => ({
-  useGroupListQuery: () => ({
-    data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
-  }),
-}))
+
 vi.mock('@/store/patches', () => ({
   usePatchListQuery: () => ({ data: fixtures.map((f, i) => ({ id: i + 1, key: f.key, displayName: f.name })) }),
 }))
@@ -315,6 +319,10 @@ describe('the footer’s verbs reach the editor', () => {
     const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(names[0]).toMatch(/Save as palette/)
     expect(names).toContain('Spread to a second colour…')
+    // The two bands sit at the foot of the scroller, under the picker: Palettes, then Effects.
+    const palettes = scroller.querySelector('[data-palette-band="COLOUR"]')!
+    const effects = scroller.querySelector('[data-effects-band="COLOUR"]')!
+    expect(palettes.compareDocumentPosition(effects) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('opens the new-palette sheet over the selection as colour', () => {

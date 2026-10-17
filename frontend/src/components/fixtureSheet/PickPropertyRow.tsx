@@ -467,15 +467,9 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
   const { openRowId } = useFixtureSheet()
   const open = openRowId === openKey(PICK_HEAD, pickRow.row)
   const { source, parked, readOnly } = usePickRowState(pickRow)
-  const refs = useMemo(() => heads.flatMap((h) => [h.row.resolution.pan, h.row.resolution.tilt]), [heads])
-  const values = useChannelValues(refs)
-  const pans = heads.map((_, i) => values[i * 2] ?? 0)
-  const tilts = heads.map((_, i) => values[i * 2 + 1] ?? 0)
-  const lead = heads[0].row.resolution
   const targets = useMemo(() => heads.map((h) => ({ key: h.key, resolution: h.row.resolution })), [heads])
-  const write1 = (commit: Extract<CellCommit, { kind: 'position' }> | ((r: PositionResolution) => Extract<CellCommit, { kind: 'position' }>), typed: boolean) =>
+  const onCommit = (commit: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) =>
     writePickPosition(write, targets, commit, typed ? getProgrammerFadeMs() : undefined)
-  const mixed = new Set(pans).size > 1 || new Set(tilts).size > 1
   return (
     <PickFrame
       pickRow={pickRow}
@@ -485,74 +479,86 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
       parked={parked}
       trailing={<OpenToggle row={pickRow.row} headKey={PICK_HEAD} label={pickRow.row.label} />}
     >
-      <div className="flex min-w-0 flex-1 items-start gap-2">
-        <div className="relative shrink-0">
-          <PositionPad
-            size={open ? 120 : 64}
-            pan={norm(pans[0], lead.panMin, lead.panMax)}
-            tilt={norm(tilts[0], lead.tiltMin, lead.tiltMax)}
-            readOnly={readOnly}
-            // The point lands on each head's own range, so a pick of two models moves alike.
-            onMove={(x, y) =>
-              write1(
-                (r) => ({
-                  kind: 'position',
-                  pan: Math.round(r.panMin + x * (r.panMax - r.panMin)),
-                  tilt: Math.round(r.tiltMin + y * (r.tiltMax - r.tiltMin)),
-                }),
-                false,
-              )
-            }
-          />
-          {/* Every other picked head as a hollow dot, so a spread pick reads as one. */}
-          {heads.slice(1).map((h, i) => (
-            <span
-              key={h.key}
-              aria-hidden
-              data-testid="position-head-dot"
-              className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary"
-              style={{
-                left: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(pans[i + 1], h.row.resolution.panMin, h.row.resolution.panMax)))})`,
-                top: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(tilts[i + 1], h.row.resolution.tiltMin, h.row.resolution.tiltMax)))})`,
-              }}
-            />
-          ))}
-        </div>
-        {open ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <AxisControl
-              label="Pan"
-              byte={pans[0]}
-              min={lead.panMin}
-              max={lead.panMax}
-              readOnly={readOnly}
-              onCommit={(c, typed) => write1(c, typed)}
-              axis="pan"
-            />
-            <AxisControl
-              label="Tilt"
-              byte={tilts[0]}
-              min={lead.tiltMin}
-              max={lead.tiltMax}
-              readOnly={readOnly}
-              onCommit={(c, typed) => write1(c, typed)}
-              axis="tilt"
-            />
-            {mixed && <p className="text-[10.5px] text-muted-foreground">The heads differ; a value set here lands on all {heads.length}.</p>}
-          </div>
-        ) : (
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
-            <span>
-              <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
-              {rangeText(pans, heads.map((h) => ({ min: h.row.resolution.panMin, max: h.row.resolution.panMax })))}
-            </span>
-            <span>
-              <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
-              {rangeText(tilts, heads.map((h) => ({ min: h.row.resolution.tiltMin, max: h.row.resolution.tiltMax })))}
-            </span>
-          </div>
-        )}
-      </div>
+      <PickPositionControls heads={targets} open={open} readOnly={readOnly} onCommit={onCommit} />
     </PickFrame>
+  )
+}
+
+type PositionCommit = Extract<CellCommit, { kind: 'position' }>
+
+/**
+ * Pan and tilt over a pick of heads: the XY pad, each other head a hollow dot on it so a spread pick
+ * reads as one, and — [open] — the two axes, else their read-out. A point on the pad lands on each
+ * head's own range, so a pick of two models moves alike. The fixture sheet's pick row and the busk
+ * sheet's Position tab both draw it; [onCommit] says where the write goes.
+ */
+export function PickPositionControls({
+  heads,
+  open,
+  readOnly,
+  onCommit,
+}: {
+  heads: readonly { key: string; resolution: PositionResolution }[]
+  open: boolean
+  readOnly: boolean
+  onCommit: (commit: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) => void
+}) {
+  const refs = useMemo(() => heads.flatMap((h) => [h.resolution.pan, h.resolution.tilt]), [heads])
+  const values = useChannelValues(refs)
+  const pans = heads.map((_, i) => values[i * 2] ?? 0)
+  const tilts = heads.map((_, i) => values[i * 2 + 1] ?? 0)
+  const lead = heads[0].resolution
+  const mixed = new Set(pans).size > 1 || new Set(tilts).size > 1
+  return (
+    <div className="flex min-w-0 flex-1 items-start gap-2">
+      <div className="relative shrink-0">
+        <PositionPad
+          size={open ? 120 : 64}
+          pan={norm(pans[0], lead.panMin, lead.panMax)}
+          tilt={norm(tilts[0], lead.tiltMin, lead.tiltMax)}
+          readOnly={readOnly}
+          onMove={(x, y) =>
+            onCommit(
+              (r) => ({
+                kind: 'position',
+                pan: Math.round(r.panMin + x * (r.panMax - r.panMin)),
+                tilt: Math.round(r.tiltMin + y * (r.tiltMax - r.tiltMin)),
+              }),
+              false,
+            )
+          }
+        />
+        {heads.slice(1).map((h, i) => (
+          <span
+            key={h.key}
+            aria-hidden
+            data-testid="position-head-dot"
+            className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary"
+            style={{
+              left: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(pans[i + 1], h.resolution.panMin, h.resolution.panMax)))})`,
+              top: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(tilts[i + 1], h.resolution.tiltMin, h.resolution.tiltMax)))})`,
+            }}
+          />
+        ))}
+      </div>
+      {open ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <AxisControl label="Pan" byte={pans[0]} min={lead.panMin} max={lead.panMax} readOnly={readOnly} onCommit={onCommit} axis="pan" />
+          <AxisControl label="Tilt" byte={tilts[0]} min={lead.tiltMin} max={lead.tiltMax} readOnly={readOnly} onCommit={onCommit} axis="tilt" />
+          {mixed && <p className="text-[10.5px] text-muted-foreground">The heads differ; a value set here lands on all {heads.length}.</p>}
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
+          <span>
+            <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
+            {rangeText(pans, heads.map((h) => ({ min: h.resolution.panMin, max: h.resolution.panMax })))}
+          </span>
+          <span>
+            <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
+            {rangeText(tilts, heads.map((h) => ({ min: h.resolution.tiltMin, max: h.resolution.tiltMax })))}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
