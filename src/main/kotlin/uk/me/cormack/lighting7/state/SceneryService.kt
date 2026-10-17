@@ -401,9 +401,19 @@ class SceneryService(private val state: State) {
      * published or remembered. Read on the caller's thread (a request, outside any transaction),
      * with [lock] held only to snapshot what it compares against.
      */
-    fun preview(stackId: Int, entryId: Int, cueId: Int): List<PreviewEntry> {
+    fun preview(stackId: Int, entryId: Int, cueId: Int): List<PreviewEntry> =
+        previewWith(stackId, cueId) { Track.Stack(stackId, entryId, cueId, it) }
+
+    /**
+     * [preview] for a loose press of [cueId] (`GET cues/{id}/preview`): the cue joins as its own
+     * one-cue track, as of now, on top of every stack and press.
+     */
+    fun previewLoose(cueId: Int): List<PreviewEntry> =
+        previewWith(looseKey(cueId), cueId) { Track.Loose(cueId, it) }
+
+    private fun previewWith(trackKey: Int, cueId: Int, track: (seq: Long) -> Track): List<PreviewEntry> {
         val (live, current) = synchronized(lock) {
-            liveCues().toMutableMap().also { it[stackId] = Track.Stack(stackId, entryId, cueId, seq + 1) } to entries
+            liveCues().toMutableMap().also { it[trackKey] = track(seq + 1) } to entries
         }
         val input = load(live, state.programmerScenery.readForResolve(takeReleases = false).first, current.keys) ?: return emptyList()
         val now = System.currentTimeMillis()
@@ -417,7 +427,7 @@ class SceneryService(private val state: State) {
             val prev = current[r.element.uuid]
             val was = prev?.state ?: r.element.base
             val from = prev?.let { displayedAt(it, now) } ?: was
-            val duration = if (was == r.state) 0 else durationFor(r, was, mapOf(stackId to cueId))
+            val duration = if (was == r.state) 0 else durationFor(r, was, mapOf(trackKey to cueId))
             PreviewEntry(r.element.uuid, r.state, from, duration)
         }
     }

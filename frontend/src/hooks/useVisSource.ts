@@ -15,13 +15,14 @@ import { createSyncStore, sessionStorageArea } from '../lib/syncStore'
  * one value per browser profile (`localStorage`); a window with nothing of its own yet starts from
  * whatever that value was, so a desk keeps the source it had on the first load after the change.
  */
-export type VisSource = 'output' | 'outputProgrammer' | 'programmer' | 'nextGo'
+export type VisSource = 'output' | 'outputProgrammer' | 'programmer' | 'nextGo' | 'edit'
 
 export const VIS_SOURCES: readonly VisSource[] = [
   'output',
   'outputProgrammer',
   'programmer',
   'nextGo',
+  'edit',
 ]
 
 export const DEFAULT_VIS_SOURCE: VisSource = 'output'
@@ -31,6 +32,7 @@ export const VIS_SOURCE_LABELS: Record<VisSource, string> = {
   outputProgrammer: 'Output + Programmer',
   programmer: 'Programmer only',
   nextGo: 'Next GO',
+  edit: 'Cue in edit',
 }
 
 export const VIS_SOURCE_HINTS: Record<VisSource, string> = {
@@ -43,6 +45,8 @@ export const VIS_SOURCE_HINTS: Record<VisSource, string> = {
   // is carried by an effect previews as nothing. The other one — nothing is previewed at all
   // unless the show is running — is live state, so it comes from `useNextGoStatus` instead.
   nextGo: 'What the next GO would look like, over live output. Cue values only.',
+  // Set from a cue editor's *Show on stage*, never picked cold: it needs a cue to draw.
+  edit: 'The cue open in an editor, as it is stored, over live output. Cue values only — nothing is sent.',
 }
 
 const STORAGE_KEY = 'stage.source'
@@ -77,6 +81,81 @@ function makeStore() {
 
 let store = makeStore()
 
+/**
+ * The cue `edit` draws (show-cue-editing plan §3.7, D13): an **entry**, previewed in its stack's
+ * context as a GO onto it would land, or a **cue** opened from no entry — a loose one, or one in
+ * several places opened in the Cues table's sheet — previewed as a loose press. Per window beside
+ * the source, in `sessionStorage`, and announced with it as `editEntry` / `editCue`.
+ */
+export type EditTarget = { kind: 'entry'; entryId: number } | { kind: 'cue'; cueId: number }
+
+/** The `viewOptions` keys the edit target rides as, beside `source: 'edit'`. */
+export const VIEW_OPTION_EDIT_ENTRY = 'editEntry'
+export const VIEW_OPTION_EDIT_CUE = 'editCue'
+
+const EDIT_TARGET_KEY = 'stage.editTarget'
+
+function isId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+function parseEditTargetValue(parsed: unknown): EditTarget | null {
+  const p = parsed as Partial<{ kind: string; entryId: unknown; cueId: unknown }> | null
+  if (p?.kind === 'entry' && isId(p.entryId)) return { kind: 'entry', entryId: p.entryId }
+  if (p?.kind === 'cue' && isId(p.cueId)) return { kind: 'cue', cueId: p.cueId }
+  return null
+}
+
+function makeEditTargetStore() {
+  return createSyncStore<EditTarget | null>({
+    key: EDIT_TARGET_KEY,
+    fallback: null,
+    parse: parseEditTargetValue,
+    storage: sessionStorageArea,
+  })
+}
+
+let editTargetStore = makeEditTargetStore()
+
+/** This window's edit target, re-rendering on a move. Meaningful only while the source is `edit`. */
+export function useEditTarget(): EditTarget | null {
+  return useSyncExternalStore(editTargetStore.subscribe, editTargetStore.getSnapshot, editTargetStore.getServerSnapshot)
+}
+
+export function editTarget(): EditTarget | null {
+  return editTargetStore.getSnapshot()
+}
+
+export function sameEditTarget(a: EditTarget | null, b: EditTarget | null): boolean {
+  if (a == null || b == null) return a === b
+  return a.kind === 'entry' ? b.kind === 'entry' && a.entryId === b.entryId : b.kind === 'cue' && a.cueId === b.cueId
+}
+
+/** Point this window at [target]: the target first, so no reader sees `edit` with the old one. */
+export function showCueOnStage(target: EditTarget): void {
+  editTargetStore.set(target)
+  store.set('edit')
+}
+
+/** The target as its `viewOptions` keys — one of the two, as a string. */
+export function editTargetOptions(target: EditTarget): Record<string, string> {
+  return target.kind === 'entry'
+    ? { [VIEW_OPTION_EDIT_ENTRY]: String(target.entryId) }
+    : { [VIEW_OPTION_EDIT_CUE]: String(target.cueId) }
+}
+
+/**
+ * The target a frame or a link names, or null — an entry beats a cue, and a value that is not a
+ * positive whole id is no target, so `source: 'edit'` beside it is not applied.
+ */
+export function parseEditTargetOptions(get: (key: string) => string | null | undefined): EditTarget | null {
+  const id = (raw: string | null | undefined) => (raw != null && /^[1-9][0-9]*$/.test(raw) ? Number(raw) : null)
+  const entryId = id(get(VIEW_OPTION_EDIT_ENTRY))
+  if (entryId != null && isId(entryId)) return { kind: 'entry', entryId }
+  const cueId = id(get(VIEW_OPTION_EDIT_CUE))
+  return cueId != null && isId(cueId) ? { kind: 'cue', cueId } : null
+}
+
 /** The current vis source, re-rendering every reader when it changes. */
 export function useVisSource(): VisSource {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
@@ -98,4 +177,6 @@ export function setVisSource(next: VisSource): void {
 export function resetVisSourceStore(): void {
   store.reset()
   store = makeStore()
+  editTargetStore.reset()
+  editTargetStore = makeEditTargetStore()
 }

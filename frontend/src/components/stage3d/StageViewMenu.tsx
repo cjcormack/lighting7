@@ -231,7 +231,9 @@ function ViewTab({
           aria-label="Source"
           className="grid h-auto w-full grid-cols-2 gap-1 bg-transparent p-0"
         >
-          {VIS_SOURCES.map((source) => (
+          {/* *Cue in edit* only while this window shows one: it needs a cue, which a cue editor's
+              *Show on stage* supplies (show-cue-editing plan §3.7). */}
+          {VIS_SOURCES.filter((source) => source !== 'edit' || visSource === 'edit').map((source) => (
             <ToggleGroupItem key={source} value={source} className={OPTION_CLASS} title={VIS_SOURCE_LABELS[source]}>
               <span aria-hidden className={RADIO_CLASS} />
               <span className="truncate">{VIS_SOURCE_LABELS[source]}</span>

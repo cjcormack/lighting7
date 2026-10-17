@@ -516,7 +516,7 @@ says palette). All of them have merged.
 - **Docs:** `cue-stacks-engineering.md` §"Runtime", `websocket-engineering.md` (`cueHolds.state`),
   CLAUDE.md's cue endpoints.
 
-### Session 8 — Show on stage (frontend + preview)
+### Session 8 — Show on stage (frontend + preview) — done, `0a62d3c`
 
 - §3.7: the `edit` source, its announce keys, the Screens sheet's Source segment, the toggle in the
   header; the preview route for a cue with no entry (R1.2's takes only an `entryId`).

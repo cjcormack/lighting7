@@ -18,7 +18,7 @@ import {
   stageViewpoint,
   type SavedViewpointRef,
 } from './stageViewpoint'
-import { resetVisSourceStore, visSource } from '../hooks/useVisSource'
+import { editTarget, resetVisSourceStore, setVisSource, visSource } from '../hooks/useVisSource'
 import {
   resetWorkLightsStore,
   setWorkLights,
@@ -272,5 +272,38 @@ describe('the camera poses', () => {
     expect(readEyePose()).toBeNull()
     window.sessionStorage.setItem(EYE_POSE_KEY, '{nope')
     expect(readEyePose()).toBeNull()
+  })
+})
+
+describe('the cue in edit as a source (show-cue-editing plan §3.7)', () => {
+  it('is applied only beside the cue it draws, an entry before a cue', () => {
+    expect(applyStageViewOptions({ source: 'edit' })).toEqual({})
+    expect(visSource()).toBe('output')
+    expect(applyStageViewOptions({ source: 'edit', editEntry: 'x' })).toEqual({})
+    expect(applyStageViewOptions({ source: 'edit', editEntry: '170' })).toEqual({ source: 'edit', editTarget: { kind: 'entry', entryId: 170 } })
+    expect(visSource()).toBe('edit')
+    expect(applyStageViewOptions({ source: 'edit', editCue: '40' })).toEqual({ source: 'edit', editTarget: { kind: 'cue', cueId: 40 } })
+    expect(editTarget()).toEqual({ kind: 'cue', cueId: 40 })
+    expect(applyStageViewOptions({ source: 'output' })).toEqual({ source: 'output' })
+  })
+
+  it('is carried by ?source=edit&editEntry= on arrival, and both are stripped', () => {
+    const next = consumeLaunchStageOptions(new URLSearchParams('window=Hall&source=edit&editEntry=170'))
+    expect(visSource()).toBe('edit')
+    expect(editTarget()).toEqual({ kind: 'entry', entryId: 170 })
+    expect(next?.toString()).toBe('window=Hall')
+  })
+
+  it('announces its cue inside the source’s keys, and edit with no cue as the Output it draws', () => {
+    expect(stageViewOptions('plan', 'edit', 'off', { kind: 'entry', entryId: 170 })).toEqual({
+      viewpoint: 'plan',
+      source: 'edit',
+      editEntry: '170',
+      workLights: 'off',
+    })
+    expect(stageViewOptions('plan', 'edit', 'off', { kind: 'cue', cueId: 40 })).toMatchObject({ editCue: '40' })
+    expect(stageViewOptions('plan', 'nextGo', 'off', { kind: 'cue', cueId: 40 })).toEqual({ viewpoint: 'plan', source: 'nextGo', workLights: 'off' })
+    setVisSource('edit')
+    expect(stageViewOptions('plan', visSource(), 'off', null)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'off' })
   })
 })

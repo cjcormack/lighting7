@@ -664,6 +664,17 @@ element with `from` (where it is drawn now) and the `durationMs` the GO would mo
 `channels` it is whole: an element absent shows its base. It comes from the same resolver the GO
 runs (`SceneryService.preview`), so a preview and the GO that follows cannot disagree.
 
+**A cue with no entry has its own preview**, `GET /cues/{id}/preview` (`previewLooseCue`, beside
+`previewCueLook` in `routes/cuePreview.kt`, show-cue-editing plan §3.7). The Stage view's *Cue in
+edit* draws a loose cue, or a cue opened from none of its places, through it. It composes the cue as
+stored, as a loose press would land it on its first hold: at `CueHolds.nextLoosePriority()`, above
+every stack and every earlier press, and over every published cue but its own rows, since a press
+releases nothing. `SceneryService.previewLoose` adds the cue as its own one-cue track. Both routes
+share one composition (`composePreview`), so neither can drift from the other or from the GO or first
+press that brings the cue on (`CuePreviewRouteTest`). A press of a cue already held only restamps it
+and keeps its published rows (§"Edited since GO and Update stage"), while the preview draws the stored
+edit, which is what *Cue in edit* wants. 404 for a cue the project lacks.
+
 ## Scenery
 
 A cue, a stack and a Look can each carry **scenery changes** — an element of the scene document and

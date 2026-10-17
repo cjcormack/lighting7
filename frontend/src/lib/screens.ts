@@ -29,9 +29,10 @@ export function newWindowUrl(name: string, view: string = '/', origin: string = 
  * parameter at boot rather than on the view. Opened on another device it arrives as drawn:
  * `?window=` names it (fresh id, this name), `?page=` unlinks it onto that page, `?focus=` /
  * `?sheet=` set its shape, `?immersive=on` hides the app around it. A Stage row adds its
- * `viewpoint` (stage-view plan session 1), its `source` (session 3) and its `workLights` (stage-view
- * menu plan D8), which the Stage view applies on arrival and strips. A view whose options carry
- * none of the seven copies the plain link.
+ * `viewpoint` (stage-view plan session 1), its `source` (session 3) — with its `editEntry` or
+ * `editCue` while that is *Cue in edit* (show-cue-editing plan §3.7) — and its `workLights`
+ * (stage-view menu plan D8), which the Stage view applies on arrival and strips. A view whose options
+ * carry none of them copies the plain link.
  */
 export function windowSetupUrl(
   name: string,
@@ -40,7 +41,7 @@ export function windowSetupUrl(
   origin: string = window.location.origin,
 ): string {
   let url = newWindowUrl(name, view, origin)
-  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'workLights', 'table', 'immersive']) {
+  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'editEntry', 'editCue', 'workLights', 'table', 'immersive']) {
     const value = options?.[key]
     if (value == null || value === '') continue
     if (key === 'immersive' && value !== 'on') continue

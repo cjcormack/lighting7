@@ -505,7 +505,7 @@ function EnumOption({
         // plan D20), and at a 375px phone *Show* was clipped. One line wherever it fits.
         className="h-auto min-h-7 min-w-0 flex-wrap justify-start gap-0.5 p-0.5"
       >
-        {option.values.map((v) => {
+        {[...option.values, ...(option.whileShown ?? []).filter((v) => v === value)].map((v) => {
           // The wire's spelling unless the descriptor says otherwise — the Chrome segment says
           // *App · Immersive* over `off` | `on` (busk-chrome plan D9). A wire spelling is
           // capitalised for the row; a descriptor's own label is drawn as written, so *This
