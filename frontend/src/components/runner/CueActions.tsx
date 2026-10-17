@@ -53,13 +53,18 @@ export interface CueActionRow {
   cueNumber: string | null
   entryId: number | null
   stackId: number | null
+  /**
+   * How many places the cue has, where the host drew the cue rather than one of its places (the
+   * Cues table): a cue in several reaches this set with no entry, which is not the same as loose.
+   */
+  placeCount?: number
 }
 
 /**
  * Where the set is drawn: the card's strip under its collapsed row, the cue sheet's selection bar,
- * or the phone card's ⋯ menu.
+ * the phone card's ⋯ menu, or the Cues table's selection bar.
  */
-export type CueActionsHost = 'strip' | 'bar' | 'menu'
+export type CueActionsHost = 'strip' | 'bar' | 'menu' | 'table'
 
 /** A one-record action over several rows says why it is off. */
 export const ONE_CUE_REASON = 'One cue at a time — select a single cue'
@@ -69,7 +74,8 @@ const DEFAULT_LOCKED_REASON = 'Locked — this project cannot be edited from her
 /**
  * The words each host folds to glyphs, widest first: the stack group, then Load and Record, then
  * the split button last. Rungs are the host's container, measured in the app — the card for the
- * strip, the cue sheet's bar for the bar. Literal classes, so Tailwind emits them.
+ * strip, the cue sheet's bar for the bar, the Cues table's bar for the table. Literal classes, so
+ * Tailwind emits them.
  */
 const FOLDS: Record<Exclude<CueActionsHost, 'menu'>, { stack: string; programmer: string; split: string }> = {
   // The card's content box: the strip worded needs 835 + the strip's 24px gutter, 611 with the
@@ -86,6 +92,14 @@ const FOLDS: Record<Exclude<CueActionsHost, 'menu'>, { stack: string; programmer
     stack: 'hidden @[1456px]:inline',
     programmer: 'hidden @[1240px]:inline',
     split: 'hidden @[1056px]:inline',
+  },
+  // The Cues table's bar, measured with a Notes cell selected — the counts, Set · Clear and their
+  // hints beside the set: worded the set fits from 1025, stack-folded from 805, and Load and Record
+  // folded from 625, each rung ~45 over for longer counts (2026-10-17).
+  table: {
+    stack: 'hidden @[1072px]:inline',
+    programmer: 'hidden @[848px]:inline',
+    split: 'hidden @[672px]:inline',
   },
 }
 
@@ -111,8 +125,9 @@ interface CueActionsProps {
 }
 
 /**
- * **One cue action set, three hosts** (show-cue-editing plan §5, D6, D8, D9): the card's strip, the
- * cue sheet's selection bar and the phone card's ⋯ menu all draw this, so the three cannot drift.
+ * **One cue action set, four hosts** (show-cue-editing plan §5, D6, D8, D9): the card's strip, the
+ * cue sheet's selection bar, the phone card's ⋯ menu and the Cues table's bar all draw this, so the
+ * four cannot drift.
  *
  * - **The split button follows the show** (D6). Stopped, its face is *Edit in programmer* — Include,
  *   then the programmer — with *Blind edit in programmer* in its menu; running, the two swap, and the
@@ -122,7 +137,8 @@ interface CueActionsProps {
  *   off, effects included (D7).
  * - **Load** Includes and stays; its title says whether that is live or blind. **Record…** opens the
  *   Record sheet on the cue. **Duplicate** is `POST /cues/{id}/duplicate`, the copy appended to the
- *   end of its stack (D12) and opened; over several rows, each in row order. **Remove from stack**
+ *   end of its stack (D12) and opened — loose without one, and never opened from the table, which
+ *   lists it; over several rows, each in row order. **Remove from stack**
  *   deletes the entry and keeps the cue. **Delete…** is the D8 confirm, one for all the rows.
  *   **⋯** holds *Add to stack…*, *Move to stack…* — the entry whole, number, follow and anchor with
  *   it — and *Copy link*.
@@ -220,7 +236,11 @@ export function CueActions({
     }
     setDuplicating(false)
     const copy = copies[0]
-    if (rows.length === 1 && copy != null) {
+    // The table lists the copy itself, so it stays where it is.
+    if (host === 'table') {
+      if (copies.length === 1) toast.success(`Duplicated as “${copy.name}”${copy.stackId == null ? ', in no stack' : ''}`)
+      else if (copies.length > 1) toast.success(`Duplicated ${copies.length} cues`)
+    } else if (rows.length === 1 && copy != null) {
       if (copy.entryId != null && copy.stackId != null) {
         navigate(`/projects/${projectId}/show/stacks/${copy.stackId}?cue=${copy.cueId}&entry=${copy.entryId}`)
       } else {
@@ -288,17 +308,23 @@ export function CueActions({
   // ── Why each action is off, or null when it is on ──
   const lockReason = lockedOut ? lockedReason : null
   const oneReason = rows.length > 1 ? ONE_CUE_REASON : null
+  // A cue drawn whole (the Cues table) in several places names no entry to remove or move.
+  const severalPlaces = rows.some((r) => r.entryId == null && (r.placeCount ?? 0) > 1)
+  const severalReason = 'In several places — open it in the stack to change one'
+  const unplacedReason = severalPlaces ? severalReason : 'Not in a stack'
   const reasons = {
     edit: lockReason ?? oneReason,
     blind: oneReason,
     load: lockReason ?? oneReason,
     record: lockReason ?? oneReason,
     duplicate: lockReason ?? (duplicating ? 'Duplicating…' : null),
-    remove: lockReason ?? (placed.length === 0 ? 'Not in a stack' : null),
+    remove: lockReason ?? (severalPlaces ? severalReason : placed.length === 0 ? unplacedReason : null),
     delete: lockReason,
     add: lockReason ?? (runnable.length === 0 ? 'No stack to add it to' : null),
-    move: lockReason ?? (placed.length === 0 ? 'Not in a stack' : moveChoices.length === 0 ? 'No other stack' : null),
-    link: lockReason ?? oneReason ?? (one?.entryId == null ? 'Not in a stack' : null),
+    move:
+      lockReason ??
+      (severalPlaces ? severalReason : placed.length === 0 ? unplacedReason : moveChoices.length === 0 ? 'No other stack' : null),
+    link: lockReason ?? oneReason ?? (one?.entryId == null ? unplacedReason : null),
   }
 
   const blindFace = running
@@ -347,7 +373,12 @@ export function CueActions({
       key: 'duplicate',
       label: 'Duplicate',
       icon: <Copy className="size-3.5" />,
-      title: rows.length > 1 ? 'Copy each cue to the end of its stack' : 'Copy this cue to the end of its stack and open it',
+      title:
+        host === 'table'
+          ? 'Copy each cue to the end of its stack, or in no stack where it has none or several'
+          : rows.length > 1
+            ? 'Copy each cue to the end of its stack'
+            : 'Copy this cue to the end of its stack and open it',
       onSelect: guarded(() => void duplicate()),
       reason: reasons.duplicate,
     },
@@ -461,7 +492,7 @@ export function CueActions({
   return (
     // 4px between controls on the bar, which carries the cell verbs too and is otherwise 12px short
     // at 600 of sheet, just above where the Show view becomes the phone runner.
-    <div className={cn('flex shrink-0 items-center', host === 'bar' ? 'gap-1' : 'gap-1.5', className)} data-cue-actions={host}>
+    <div className={cn('flex shrink-0 items-center', host === 'strip' ? 'gap-1.5' : 'gap-1', className)} data-cue-actions={host}>
       {/* The split button: the face, then its menu holding the other edit. */}
       <div className="inline-flex shrink-0" data-split-face={face.key}>
         <Button

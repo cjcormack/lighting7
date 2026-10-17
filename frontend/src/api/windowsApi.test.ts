@@ -44,7 +44,7 @@ describe('the announce', () => {
     for (const view of WINDOW_VIEWS) {
       const path = `/projects/1${view.segment}`
       const frame = announceFrame({ ...ME, view: path, viewOptions: announcedViewOptions(windowViewOf(path), busk, 'on') })
-      if (view.id === 'looks' || view.id === 'templates') {
+      if (view.id === 'looks' || view.id === 'cues' || view.id === 'templates') {
         expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows'])
         continue
       }
