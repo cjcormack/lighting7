@@ -148,7 +148,6 @@ internal fun performProgrammerRecord(
     }
 
     if (written == null) return RecordCoreResult.Failure(error ?: "Cue not found", notFound = true)
-    state.show.cueStackManager.holds.restampEntries(priorities)
 
     val republished = republishCueIfLive(state, written.outcome.cueId)
 
@@ -163,11 +162,14 @@ internal fun performProgrammerRecord(
         written = scenery && mode != RecordMode.REMOVE && written.outcome.scenery.warnings.isEmpty(),
     )
 
-    state.show.fixtures.cueListChanged()
-    // A CREATE changes stack membership; a scenery row changes the stack list's
-    // `CueStackCueEntry.scenery`.
+    // A scenery row changes the stack list's `CueStackCueEntry.scenery`.
     val sceneryMoved = written.outcome.scenery.written + written.outcome.scenery.removed > 0
-    if (written.outcome.created || sceneryMoved) state.show.fixtures.cueStackListChanged()
+    if (mode == RecordMode.CREATE && cueStackId != null) {
+        announceEntriesPlaced(state, cueStackId, priorities)
+    } else {
+        state.show.fixtures.cueListChanged()
+        if (written.outcome.created || sceneryMoved) state.show.fixtures.cueStackListChanged()
+    }
 
     return RecordCoreResult.Ok(
         outcome = written.outcome,

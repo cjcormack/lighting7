@@ -863,7 +863,12 @@ the entry names, kept for every reader that only asks which cue.
 
 Fired from `CueStackManager`, not from the routes, so *every* path reports: REST, the MIDI
 surface's GO binding, a cue-edit live apply, and the auto-advance timer (which previously moved
-the rig with no client ever being told). `setupBroadcastSubscriptions` also sends one frame per
+the rig with no client ever being told). The stack-list writes are the exception, because they can
+change an active stack's next entry without a transition: every handler that places, reorders or
+sorts a cue entry ends in `announceEntriesPlaced` (`routes/projectCueStacks.kt`), a move in
+`announceEntryMoved` and a removal in `afterEntriesRemoved`, and each publishes the stack's run
+state when it is active, as the stack's PUT does, since its loop decides what follows the last
+entry. A marker is never a stack's next, so adding or removing one publishes nothing. `setupBroadcastSubscriptions` also sends one frame per
 stack in `stacksWithRunState()` on connect, so a session that opens mid-fade animates the
 remainder instead of nothing. The snapshot is read *after* the listener is registered, so a GO
 landing in between is never missed — but that GO can then reach the socket twice, and every frame
@@ -965,9 +970,10 @@ by name.
 does, and the setup tool `build_cue_stack` (`ai/SetupTools.kt`) a row naming `cueId` to share one;
 a row that does may carry only the entry's own `number`, `followSeconds` and `at` (an empty list, blank
 text or `false` beside them is ignored). `create_cue`, `add_cue_to_stack`, `remove_cue_from_stack` and
-`move_cue_to_stack` end in the REST route's announcement (`announceEntryAdded`,
-`announceEntriesRemoved`, `announceEntryMoved`), and `build_cue_stack` and `copy_cues` announce the
-stack's pads when they write the current project, so a busk pad's numbers follow.
+`move_cue_to_stack` end in the REST route's announcement (`announceEntriesPlaced`,
+`announceEntriesRemoved`, `announceEntryMoved`), and `build_cue_stack` and `copy_cues` into a stack
+end in `announceEntriesPlaced` when they write the current project, so a busk pad's numbers and a
+live stack's next follow.
 
 The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and the live cue and entry, `cue_run` alongside it for the run state of every stack that has one — `activeEntryId`, the armed-or-positional `nextEntryId` / `nextCueId`, `standbyEntryId`, `nextIsArmed`, and the live fade — and `cue_holds`, what holds each live cue (a stack's entry or a loose hold), from `cueHolds.state`'s frame. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Its `cues` list each cue's `entries`. Active effects include `cueStackId`. Auto-advance is an entry's and the crossfade a cue's, set on the entry and the cue editor's Cue tab or by `build_cue_stack`.
 
